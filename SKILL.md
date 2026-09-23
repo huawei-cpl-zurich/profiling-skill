@@ -1,0 +1,84 @@
+---
+name: ascend-profiling
+description: Profile AscendC C++ or Catlass DSL kernels on Ascend 950/A5 with msprof, interpret PMU and timeline evidence correctly, and extract compact remote evidence without downloading vendor report trees.
+---
+
+# Ascend 950/A5 profiling
+
+Use this skill for A5 kernel timing, PMU diagnosis, sampled utilization, or
+instruction/pipe timeline analysis. It is intentionally target-specific: do
+not apply its event IDs, ceilings, or formulas to another Ascend product.
+
+Use the configured TLA integration checkout (`TLA_ROOT`) and its checked-in
+BZ-A5 wrappers. Read that checkout's `AGENTS.md` and `$bz-a5` guidance before
+launching work. Never substitute direct SSH, SCP, Docker, or an ad-hoc CANN
+environment.
+
+## Choose evidence by question
+
+1. Run the workload normally and check its full result before profiling.
+2. For a performance comparison, select a healthy idle device and preserve a
+   minimally instrumented timing run. Profiled durations are diagnostic.
+3. Capture `BasicInfo` first and bind later captures to the exact exported
+   kernel name.
+4. Use `PipeUtilization` for whole-task pipeline composition. Add `Memory`,
+   `MemoryL0`, `MemoryUB`, `L2Cache`, or `ResourceConflictRatio` only for the
+   suspected bottleneck; keep counter groups in separate comparable replays.
+5. Use `PipeTimeline` when simultaneous cross-pipe timing matters. Use one
+   `InstrTimeline` replay per pipe for instruction names, PCs, and durations.
+6. Use application-level sample PMU for AIC/AIV temporal bubbles, frequency,
+   and load balance across a long repeated burst. At 100 Hz it does not resolve
+   a single microsecond-scale kernel.
+
+Read [A5 metric semantics](references/a5-metric-semantics.md) before comparing
+PMU values. Read [A5 timeline semantics](references/a5-timeline-semantics.md)
+before aligning traces, assigning phases, or interpreting sampled data.
+
+## Profile through supported routes
+
+For Catlass DSL, use the mandatory adapter:
+
+```bash
+"$TLA_ROOT/execution-profiles/catlass-validation.sh" --profile bz-a5 \
+  --operation codex-<task>-<metric> profile \
+  --catlass-src worktrees/catlass/<task> --device <physical-device> \
+  --metric PipeUtilization --kernel-name <exact-name> \
+  --warm-up 0 --launch-count 1 --experiment <name> -- \
+  python <workload.py> --device <physical-device>
+```
+
+For an AscendC C++ application, use the BZ diagnostic wrapper:
+
+```bash
+"$TLA_ROOT/execution-profiles/bz-a5/diagnose-kernels.sh" \
+  --device <physical-device> --implementation ascendc \
+  --kernel-name <exact-name> --metric PipeUtilization \
+  --experiment <name> -- <executable> <arguments>
+```
+
+For `InstrTimeline`, pass one supported instruction pipe per capture. Under
+`msprof`, pass the selected physical device to both the wrapper and the
+application. Preserve warmup, launch count, input, binary/source identity,
+frequency, device, and capture order in every comparison.
+
+## Extract before transfer
+
+Keep the full msprof tree on BZ-A5. Stage this skill's `scripts/` directory,
+then run the relevant Python helpers against the retained tree:
+
+- `summarize_sample_pmu.py` reads `msprof*.db` and emits compact AIC/AIV JSON,
+  Markdown, and compressed normalized rows.
+- `summarize_timelines.py` normalizes a simultaneous PipeTimeline and separate
+  instruction traces without inventing cross-replay overlap.
+- `curate_profile.py` filters exact-kernel CSVs, incorporates generated
+  summaries, inventories and hashes evidence, and creates a deterministic
+  `summary` or `analysis` archive.
+
+Use `collect_profile.sh` locally to run the curator remotely and download one
+verified archive through the configured wrappers. Use `--dry-run` to inspect
+the route. Never recursively download the vendor profiler tree for routine
+analysis; retain it remotely for later forensics.
+
+The FlashAttention three-way and phase campaigns in the configured TLA
+integration checkout are validated worked examples, not required APIs:
+`scripts/profile-fa1-three-way.sh` and `scripts/profile-fa1-phases.sh`.

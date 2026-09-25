@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -371,7 +373,7 @@ def test_run_cli_uses_private_frozen_controller_bundle(
                         "--output", str(tmp_path / "out"), "--python", sys.executable,
                         "--codex", "fake-codex", "--dry-run"])
     assert campaign.main() == 0
-    assert observed["command"][1] == str((tmp_path / "out/controller/experimentctl.py").resolve())
+    assert observed["command"][1] == str((tmp_path / "out/controller/scripts/experimentctl.py").resolve())
     assert observed["command"][3] == str((tmp_path / "out/controller/controller.json").resolve())
     assert observed["command"][0] == campaign.shutil.which(sys.executable)
     assert observed["kwargs"]["codex"] == "fake-codex"
@@ -403,7 +405,8 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
     assert written["version"] == 2
     assert not any(str(tmp_path) in json.dumps(value)
                    for value in [written["controller"]])
-    assert (output.parent / written["controller"]["bundle"] / "benchmark_backend.py").is_file()
+    assert (output.parent / written["controller"]["bundle"] / "scripts/benchmark_backend.py").is_file()
+    assert (output.parent / written["controller"]["bundle"] / "benchmarks/gdn/baseline.py").is_file()
     assert len(written["cells"]) == 6
     sandbox = campaign.prepare_cell(written, written["cells"][0], tmp_path / "runs")
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
@@ -595,9 +598,13 @@ def test_private_bundle_executes_after_relocation_and_ignores_source_mutation(tm
 
 
 def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
+    client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
+              "--adapter-json", '["/approved/adapter"]',
+              "--state-dir", "/private/job-state"]
     config = tmp_path / "cells.json"
     config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": [
-        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn"
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", json.dumps(client),
     ]}}}}))
     output = tmp_path / "campaign.json"
     binding = campaign.freeze_controller_bundle(
@@ -607,9 +614,57 @@ def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
     )
     bundled = json.loads((tmp_path / binding["bundle"] / "controller.json").read_text())
     assert bundled["cells"]["cell"]["backend"]["command"][:2] == [
-        "{python}", "{bundle}/benchmark_backend.py"
+        "{python}", "{bundle}/scripts/benchmark_backend.py"
     ]
+    command = bundled["cells"]["cell"]["backend"]["command"]
+    frozen_client = json.loads(command[command.index("--job-client-json") + 1])
+    assert frozen_client[:2] == ["{python}", "{bundle}/scripts/gz_a3_job_client.py"]
+    assert frozen_client[2:] == client[2:]
     assert str(ROOT) not in json.dumps(bundled)
+
+
+def test_staged_backend_uses_complete_closure_after_source_is_removed(tmp_path: Path):
+    source = tmp_path / "disposable-source"
+    shutil.copytree(ROOT / "scripts", source / "scripts")
+    shutil.copytree(ROOT / "benchmarks", source / "benchmarks")
+    adapter = tmp_path / "adapter.py"
+    adapter.write_text("#!/usr/bin/env python3\nimport sys\nprint('controlled adapter failure')\nsys.exit(9)\n")
+    adapter.chmod(0o755)
+    client = [sys.executable, str(source / "scripts/gz_a3_job_client.py"),
+              "--adapter-json", json.dumps([str(adapter)]),
+              "--state-dir", str(tmp_path / "job-state")]
+    config = tmp_path / "controller.json"
+    config.write_text(json.dumps({"cells": {"gdn-cannbot": {
+        "device": 0, "benchmark": "gdn", "development_cases": [40],
+        "all_cases": list(range(50)), "backend": {"command": [
+            sys.executable, str(source / "scripts/benchmark_backend.py"),
+            "--benchmark", "gdn", "--candidate", "candidate.py",
+            "--job-client-json", json.dumps(client),
+        ], "timeout_seconds": 10},
+    }}}))
+    manifest_path = tmp_path / "campaign.json"
+    binding = campaign.freeze_controller_bundle(
+        manifest_path, config,
+        [sys.executable, str(source / "scripts/experimentctl.py"), "--config",
+         str(config.resolve()), "--cell", "{cell_id}"],
+    )
+    manifest = {"version": 2, "controller": binding}
+    manifest_path.write_text(json.dumps(manifest))
+    run_root = tmp_path / "run"
+    command, _ = campaign.stage_controller(manifest, manifest_path, run_root, sys.executable)
+    shutil.rmtree(source)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "candidate.py").write_text("# candidate\n")
+    result = subprocess.run(
+        [*(value.replace("{cell_id}", "gdn-cannbot") for value in command),
+         "rank", "--benchmark", "gdn", "--warmups", "0", "--repeats", "1"],
+        cwd=workspace, text=True, capture_output=True, check=False,
+    )
+    response = json.loads(result.stdout)
+    assert response["status"] == "infrastructure_error", response
+    assert "controlled adapter failure" in response["diagnostics"]
+    assert "required candidate or frozen benchmark file is missing" not in response["diagnostics"]
 
 
 def test_resume_rejects_private_bundle_drift_before_launch(tmp_path: Path):
@@ -625,3 +680,15 @@ def test_resume_rejects_private_bundle_drift_before_launch(tmp_path: Path):
     with pytest.raises(campaign.CampaignError, match="bundle drifted"):
         run_campaign(manifest, root, launcher, resume=True)
     assert launcher.calls == []
+
+
+@pytest.mark.parametrize("mode", ["missing", "drift"])
+def test_stage_rejects_missing_or_drifted_frozen_benchmark_asset(tmp_path: Path, mode: str):
+    manifest, manifest_path = fixture(tmp_path)
+    asset = manifest_path.parent / manifest["controller"]["bundle"] / "benchmarks/gdn/cases.jsonl"
+    if mode == "missing":
+        asset.unlink()
+    else:
+        asset.write_text("changed after freeze\n")
+    with pytest.raises(campaign.CampaignError, match="bundle (file set )?drifted"):
+        campaign.stage_controller(manifest, manifest_path, tmp_path / "run", sys.executable)

@@ -11,7 +11,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable, Protocol
@@ -339,18 +339,19 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                 raise CampaignError("wave exceeds max_parallel")
             failures = []
             with ThreadPoolExecutor(max_workers=manifest["max_parallel"]) as executor:
-                futures = [
-                    (cell, executor.submit(launcher.launch, sandbox, cell))
+                futures = {
+                    executor.submit(launcher.launch, sandbox, cell): cell
                     for cell, sandbox in prepared
-                ]
-            for cell, future in futures:
-                try:
-                    result = future.result()
-                except BaseException as error:
-                    failures.append(error)
-                else:
-                    ledger["cells"].append({"cell": cell, "result": result})
-                    checkpoint()
+                }
+                for future in as_completed(futures):
+                    cell = futures[future]
+                    try:
+                        result = future.result()
+                    except BaseException as error:
+                        failures.append(error)
+                    else:
+                        ledger["cells"].append({"cell": cell, "result": result})
+                        checkpoint()
             if failures:
                 raise failures[0]
         ledger["status"] = "complete"

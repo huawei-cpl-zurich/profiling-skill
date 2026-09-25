@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,11 +25,99 @@ def load_runner():
     return module
 
 
+def load_client():
+    spec = importlib.util.spec_from_file_location("gz_a3_job_client", CLIENT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_runner_classifies_source_and_triton_compilation_failures():
     module = load_runner()
     assert module.classify(NameError("name 'tl' is not defined")) == "compile_error"
     assert module.classify(RuntimeError("Triton compilation failed at candidate.py:17")) == "compile_error"
     assert module.classify(RuntimeError("device kernel launch failed")) == "runtime_error"
+
+
+class Marker:
+    def __init__(self, value):
+        self.value = value
+        self.npu_calls = 0
+
+    def clone(self):
+        return Marker(self.value)
+
+    def npu(self):
+        self.npu_calls += 1
+        return self
+
+
+def frozen_module(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_actual_gdn_loader_preserves_original_case_seed():
+    runner = load_runner()
+    baseline = frozen_module(ROOT / "benchmarks/gdn/baseline.py", "gdn_selection")
+    baseline._normalized_tensor = lambda _spec, seed: Marker(seed)
+    baseline._random_tensor = lambda _spec, seed, _scale=0.15: Marker(seed)
+    baseline._gate_tensor = lambda _spec, seed, _raw: Marker(seed)
+    baseline._beta_tensor = lambda _spec, seed, _raw: Marker(seed)
+    values = runner.selected_inputs(baseline, ROOT / "benchmarks/gdn/cases.jsonl", 40)
+    assert [item.value for item in values[:8]] == list(range(362, 370))
+    assert all(item.npu_calls == 1 for item in values[:8])
+
+
+def test_actual_bsa_loader_uses_index_seed_and_moves_tensors_to_npu():
+    runner = load_runner()
+    baseline = frozen_module(ROOT / "benchmarks/bsa/baseline.py", "bsa_selection")
+    seeds = []
+
+    class Tensor(Marker):
+        def uniform_(self, *_args): return self
+        def item(self): return 0.25
+        def cumsum(self, _dim): return self
+        def __iter__(self): return iter(self.value if isinstance(self.value, list) else [0])
+        def __getitem__(self, _key): return self
+        def __setitem__(self, _key, _value): pass
+
+    fake = SimpleNamespace(
+        float16="f16", bfloat16="bf16", int32="i32", bool="bool",
+        manual_seed=lambda seed: seeds.append(seed), rand=lambda *_a: Tensor(0.25),
+        empty=lambda shape, **_kw: Tensor(shape), normal=lambda _m, _s, shape, **_kw: Tensor(shape),
+        tensor=lambda value, **_kw: Tensor(value), zeros=lambda *shape, **_kw: Tensor(shape),
+        randperm=lambda size: Tensor(list(range(size))),
+    )
+    baseline.torch = fake
+    values = runner.selected_inputs(baseline, ROOT / "benchmarks/bsa/cases.jsonl", 47)
+    assert seeds == [3454]
+    assert all(item.npu_calls == 1 for item in values[:8])
+
+
+def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monkeypatch, tmp_path: Path):
+    runner = load_runner()
+    baseline = SimpleNamespace(Model=lambda: lambda *_args: 3)
+    candidate = SimpleNamespace(Model=lambda: lambda *_args: 3)
+    monkeypatch.setattr(runner, "load", lambda _path, name: baseline if name == "frozen_baseline" else candidate)
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext, npu=SimpleNamespace(synchronize=lambda: None), Tensor=()))
+    job = {"benchmark": "gdn", "action": "measure", "device": 0, "case": 0,
+           "phase": "sample", "baseline": "baseline.py", "candidate": "candidate.py",
+           "case_spec": str(tmp_path / "cases.jsonl")}
+    (tmp_path / "cases.jsonl").write_text("{}\n")
+    monkeypatch.setattr(runner, "selected_inputs", lambda *_args: (_ for _ in ()).throw(ValueError("bad baseline")))
+    assert runner.execute(job)["status"] == "infrastructure_error"
+    events = []
+    monkeypatch.setattr(runner, "selected_inputs", lambda *_args: [Marker(1)])
+    original_clone = runner.clone
+    monkeypatch.setattr(runner, "clone", lambda value: events.append("clone") or original_clone(value))
+    monkeypatch.setattr(runner.time, "perf_counter_ns", lambda: events.append("timer") or len(events))
+    assert runner.execute(job)["status"] == "ok"
+    assert events.index("clone") < events.index("timer")
 
 
 def fake_adapter(tmp_path: Path) -> Path:
@@ -135,3 +226,25 @@ def test_same_content_reuses_state_and_receipts(tmp_path: Path):
     assert first.returncode == second.returncode == 0
     assert one["artifacts"]["request_digest"] == two["artifacts"]["request_digest"]
     assert len(list((tmp_path / "state").iterdir())) == 1
+
+
+def test_digest_ignores_caller_checkout_in_profile_driver(tmp_path: Path):
+    client = load_client()
+    job, _config = inputs(tmp_path)
+    job["profiling"]["driver"] = "/first/checkout/scripts/profile_a3.py"
+    first = client.prepare(job, tmp_path / "state-a", RUNNER, ROOT / "scripts/profile_a3.py")[1]
+    job["profiling"]["driver"] = "/other/checkout/scripts/profile_a3.py"
+    second = client.prepare(job, tmp_path / "state-b", RUNNER, ROOT / "scripts/profile_a3.py")[1]
+    assert first == second
+
+
+def test_partial_retained_fetch_is_quarantined_and_refetched(tmp_path: Path):
+    first, result = run(tmp_path)
+    assert first.returncode == 0
+    state = tmp_path / "state" / result["artifacts"]["request_digest"]
+    shutil.rmtree(state / "result")
+    (state / "result.tar").write_bytes(b"partial")
+    second, recovered = run(tmp_path)
+    assert second.returncode == 0
+    assert recovered["status"] == "ok"
+    assert list(state.glob("result.invalid-*.tar"))

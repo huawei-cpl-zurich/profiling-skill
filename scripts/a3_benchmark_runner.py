@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -43,6 +44,45 @@ def clone(value):
     return value
 
 
+def to_npu(value):
+    if hasattr(value, "npu"):
+        return value.npu()
+    if isinstance(value, list):
+        return [to_npu(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(to_npu(item) for item in value)
+    if isinstance(value, dict):
+        return {key: to_npu(item) for key, item in value.items()}
+    return value
+
+
+def selected_inputs(baseline, case_spec: Path, case_index: int):
+    cases = [json.loads(line) for line in case_spec.read_text(encoding="utf-8-sig").splitlines() if line]
+    selected = cases[case_index]
+    sentinel = object()
+    old_enumerate = getattr(baseline, "enumerate", sentinel)
+    old_open = getattr(baseline, "open", sentinel)
+    old_loader = getattr(baseline, "_load_cases", sentinel)
+    baseline.enumerate = lambda values: ((case_index, item) for item in values)
+    try:
+        if old_loader is not sentinel:
+            baseline._load_cases = lambda: [selected]
+        elif hasattr(baseline, "_json_path"):
+            baseline.open = lambda *_args, **_kwargs: io.StringIO(json.dumps(selected) + "\n")
+        else:
+            raise RuntimeError("frozen baseline has no supported case loader")
+        groups = baseline.get_input_groups()
+        if len(groups) != 1:
+            raise RuntimeError("selected baseline loader did not return exactly one input group")
+        return to_npu(groups[0])
+    finally:
+        for name, value in (("enumerate", old_enumerate), ("open", old_open), ("_load_cases", old_loader)):
+            if value is sentinel:
+                baseline.__dict__.pop(name, None)
+            else:
+                setattr(baseline, name, value)
+
+
 def compare(actual, expected) -> tuple[bool, float]:
     import torch
     if actual is None or expected is None:
@@ -75,8 +115,11 @@ def identity(job: dict) -> dict:
 
 
 def execute(job: dict) -> dict:
-    import torch
     bound = identity(job)
+    try:
+        import torch
+    except BaseException as exc:
+        return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound}
     try:
         baseline = load(Path(job["baseline"]), "frozen_baseline")
     except BaseException as exc:
@@ -86,29 +129,34 @@ def execute(job: dict) -> dict:
     except BaseException as exc:
         return {"status": "compile_error", "diagnostics": diagnostic(exc), **bound}
     cases = job["cases"] if job["action"] == "check" else [job["case"]]
-    try:
-        all_specs = baseline._load_cases()
-    except BaseException as exc:
-        return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound}
     evidence = []
     for case in cases:
         try:
-            # Avoid materializing all fifty large NPU cases concurrently. The
-            # frozen loader remains the sole input constructor; only its case
-            # source is narrowed for this invocation.
-            baseline._load_cases = lambda selected=all_specs[case]: [selected]
-            inputs = baseline.get_input_groups()[0]
+            inputs = selected_inputs(baseline, Path(job["case_spec"]), case)
+            reference_inputs = clone(inputs)
             with torch.no_grad():
-                expected = baseline.Model()(*clone(inputs))
+                expected = baseline.Model()(*reference_inputs)
+                torch.npu.synchronize()
+        except BaseException as exc:
+            return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound,
+                    "case_evidence": evidence}
+        try:
+            candidate_inputs = clone(inputs)
+            candidate_model = candidate.Model()
+            with torch.no_grad():
                 torch.npu.synchronize()
                 started = time.perf_counter_ns()
-                actual = candidate.Model()(*clone(inputs))
+                actual = candidate_model(*candidate_inputs)
                 torch.npu.synchronize()
                 elapsed_us = (time.perf_counter_ns() - started) / 1000.0
         except BaseException as exc:
             return {"status": classify(exc), "diagnostics": diagnostic(exc), **bound,
                     "case_evidence": evidence}
-        passed, max_abs = compare(actual, expected)
+        try:
+            passed, max_abs = compare(actual, expected)
+        except BaseException as exc:
+            return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound,
+                    "case_evidence": evidence}
         evidence.append({"case": case, "passed": passed, "max_abs_error": max_abs,
                          "host_elapsed_us": elapsed_us})
         if not passed:

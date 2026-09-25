@@ -82,7 +82,9 @@ def prepare(job: dict, root: Path, runner: Path, profiler: Path) -> tuple[Path, 
     if any(not path.is_file() for path in files):
         raise ClientError("a required candidate or frozen benchmark file is missing")
     request = json.loads(json.dumps(job))
-    request.update(candidate="candidate.py", baseline="baseline.py", case_spec="cases.jsonl")
+    request.update(candidate="candidate.py", baseline="baseline.py", case_spec="baseline.json")
+    if request["action"] == "profile":
+        request["profiling"]["driver"] = "profile_a3.py"
     key = digest_request(request, files)
     stage = root / key / "payload"
     if not stage.exists():
@@ -142,7 +144,9 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
     expected = receipt.get("result_sha256")
     if not result_dir.exists():
         if result_tar.exists() and hashlib.sha256(result_tar.read_bytes()).hexdigest() != expected:
-            raise ClientError("retained result archive does not match the run receipt")
+            actual = hashlib.sha256(result_tar.read_bytes()).hexdigest()
+            quarantine = state / f"result.invalid-{actual[:12]}.tar"
+            result_tar.replace(quarantine)
         if not result_tar.exists():
             fetch = call(args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-fetch-{key[:16]}",
                          "fetch-bundle-result", "--run-receipt", str(run_receipt), "--transfer-receipt", str(transfer),

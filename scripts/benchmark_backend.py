@@ -58,6 +58,14 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         allowed = ALL_CASES if action == "measure" else spec["development_cases"]
         if isinstance(case, bool) or case not in allowed:
             return None, response("infrastructure_error", f"invalid {action} case")
+        if action == "measure" and raw.get("phase") not in {"warmup", "sample"}:
+            return None, response("infrastructure_error", "measure phase must be warmup or sample")
+        if action == "profile" and (
+            isinstance(raw.get("round"), bool)
+            or not isinstance(raw.get("round"), int)
+            or raw["round"] < 1
+        ):
+            return None, response("infrastructure_error", "profile round must be a positive integer")
     else:
         expected = ALL_CASES if raw.get("scope") == "full" else spec["development_cases"]
         if raw.get("cases") != expected:
@@ -99,7 +107,10 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         job.update(cases=request["cases"], scope=request.get("scope"), round=request.get("round"))
     else:
         job.update(case=request["case"], iteration=request.get("iteration"))
+        if action == "measure":
+            job["phase"] = request["phase"]
         if action == "profile":
+            job["round"] = request["round"]
             if kernel_name is None:
                 raise ValueError("profile job requires a kernel selector")
             job["profiling"] = {
@@ -122,7 +133,10 @@ def identity_fields(job: dict[str, Any]) -> dict[str, Any]:
         fields.update(cases=job["cases"], scope=job["scope"])
     else:
         fields["case"] = job["case"]
+    if job["action"] == "measure":
+        fields["phase"] = job["phase"]
     if job["action"] == "profile":
+        fields["round"] = job["round"]
         fields["kernel_name"] = job["profiling"]["kernel_name"]
     return fields
 
@@ -171,35 +185,51 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--benchmark", choices=sorted(BENCHMARKS), required=True)
     parser.add_argument("--candidate", type=Path, default=Path("candidate.py"))
     parser.add_argument("--candidate-manifest", type=Path)
-    parser.add_argument("--job-client", nargs="+", required=True)
+    parser.add_argument("--job-client-json", required=True,
+                        help="JSON string array containing the executable and exact arguments")
     parser.add_argument("--timeout", type=int, default=3600)
     return parser.parse_args()
+
+
+def parse_command(value: str) -> list[str]:
+    try:
+        command = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"invalid --job-client-json: {error}") from error
+    if not isinstance(command, list) or not command or not all(isinstance(item, str) and item for item in command):
+        raise ValueError("--job-client-json must be a non-empty JSON string array")
+    return command
 
 
 def main() -> int:
     args = parse_args()
     root = Path(__file__).resolve().parents[1]
     try:
-        raw = json.load(sys.stdin)
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        result = response("infrastructure_error", f"invalid controller JSON: {error}")
+        command = parse_command(args.job_client_json)
+    except ValueError as error:
+        result = response("infrastructure_error", str(error))
     else:
-        request, error = validate_request(raw, args.benchmark)
-        if error:
-            result = error
-        elif not args.candidate.is_file():
-            result = response("compile_error", f"candidate source does not exist: {args.candidate}")
+        try:
+            raw = json.load(sys.stdin)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            result = response("infrastructure_error", f"invalid controller JSON: {error}")
         else:
-            kernel_name = None
-            if request["action"] == "profile":
-                manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
-                kernel_name, result = load_kernel_selector(manifest)
-            if kernel_name is not None or request["action"] != "profile":
-                result = invoke(
-                    args.job_client,
-                    make_job(request, args.benchmark, args.candidate, root, kernel_name),
-                    args.timeout,
-                )
+            request, error = validate_request(raw, args.benchmark)
+            if error:
+                result = error
+            elif not args.candidate.is_file():
+                result = response("compile_error", f"candidate source does not exist: {args.candidate}")
+            else:
+                kernel_name = None
+                if request["action"] == "profile":
+                    manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
+                    kernel_name, result = load_kernel_selector(manifest)
+                if kernel_name is not None or request["action"] != "profile":
+                    result = invoke(
+                        command,
+                        make_job(request, args.benchmark, args.candidate, root, kernel_name),
+                        args.timeout,
+                    )
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

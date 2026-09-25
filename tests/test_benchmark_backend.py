@@ -34,9 +34,13 @@ print("client diagnostic", file=sys.stderr)
 identity = {k: job[k] for k in ("benchmark", "action", "device")}
 if job["action"] == "check": identity.update(cases=job["cases"], scope=job["scope"])
 else: identity["case"] = job["case"]
-if job["action"] == "profile": identity["kernel_name"] = job["profiling"]["kernel_name"]
+if job["action"] == "measure": identity["phase"] = job["phase"]
+if job["action"] == "profile":
+    identity["round"] = job["round"]
+    identity["kernel_name"] = job["profiling"]["kernel_name"]
 if mode == "wrong_identity": identity["case"] = 49
 if mode == "wrong_check": identity["scope"] = "development"
+if mode == "wrong_round": identity["round"] = 2
 if mode == "echo":
     print(json.dumps({"status": "ok", "diagnostics": "", "job": job,
                       "latency_us": 12.5, "passed": True,
@@ -44,7 +48,7 @@ if mode == "echo":
 elif mode in {"compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
     print(json.dumps({"status": mode, "diagnostics": mode + " details",
                       "handle": "gz-a3:job-2", **identity}))
-elif mode in {"wrong_identity", "wrong_check"}:
+elif mode in {"wrong_identity", "wrong_check", "wrong_round"}:
     print(json.dumps({"status": "ok", "diagnostics": "wrong case evidence",
                       "latency_us": 12.5, "handle": "gz-a3:job-3", **identity}))
 else:
@@ -59,6 +63,10 @@ def request(benchmark="gdn", action="profile", **extra):
                "device": 0 if benchmark == "gdn" else 1}
     if action in {"profile", "measure"}:
         default.update(case=40 if benchmark == "gdn" else 47, iteration=0)
+        if action == "profile":
+            default["round"] = 1
+        else:
+            default["phase"] = "sample"
     else:
         module = load_backend()
         default.update(cases=module.ALL_CASES, scope="full", round=3)
@@ -75,7 +83,7 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
     client = fake_client(tmp_path)
     return subprocess.run(
         [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
-         "--job-client", str(client)], input=json.dumps(payload), text=True,
+         "--job-client-json", json.dumps([str(client), "--profile", "gz-a3"])], input=json.dumps(payload), text=True,
         capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
 
 
@@ -123,6 +131,7 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
     assert job["runtime"] == "py311-torch"
     assert (job["device"], job["logical_device"]) == (0, 0)
     assert job["case"] == 40
+    assert job["round"] == 1
     assert job["reference_revision"] == "a42c54b916189500e2f7cb47640980f230f2eb65"
     assert job["profiling"] == {
         "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
@@ -165,6 +174,30 @@ def test_check_result_identity_includes_cases_and_scope(tmp_path: Path):
     assert result["evidence"]["cases"] == list(range(50))
 
 
+def test_measure_phase_is_preserved_as_result_identity(tmp_path: Path):
+    run = run_backend(tmp_path, request(action="measure", phase="warmup"), mode="echo")
+    result = json.loads(run.stdout)
+    assert result["job"]["phase"] == "warmup"
+    assert result["phase"] == "warmup"
+
+
+def test_profile_round_mismatch_preserves_evidence(tmp_path: Path):
+    result = json.loads(run_backend(tmp_path, request(round=3), mode="wrong_round").stdout)
+    assert result["status"] == "infrastructure_error"
+    assert "identity mismatch for round" in result["diagnostics"]
+    assert result["evidence"]["round"] == 2
+
+
+@pytest.mark.parametrize("payload,message", [
+    (request(action="measure", phase="other"), "measure phase"),
+    (request(round=0), "profile round"),
+])
+def test_measure_phase_and_profile_round_are_validated(tmp_path: Path, payload: dict, message: str):
+    result = json.loads(run_backend(tmp_path, payload).stdout)
+    assert result["status"] == "infrastructure_error"
+    assert message in result["diagnostics"]
+
+
 @pytest.mark.parametrize("change,message", [
     ({"device": 1}, "device binding"),
     ({"case": 0}, "invalid profile case"),
@@ -189,7 +222,7 @@ def test_missing_candidate_is_compile_failure(tmp_path: Path):
     client = fake_client(tmp_path)
     run = subprocess.run(
         [sys.executable, str(BACKEND), "--benchmark", "gdn", "--candidate", str(tmp_path / "missing.py"),
-         "--job-client", str(client)], input=json.dumps(request()), text=True, capture_output=True, check=False)
+         "--job-client-json", json.dumps([str(client)])], input=json.dumps(request()), text=True, capture_output=True, check=False)
     result = json.loads(run.stdout)
     assert result["status"] == "compile_error"
     assert "does not exist" in result["diagnostics"]
@@ -200,7 +233,7 @@ def test_missing_or_invalid_kernel_manifest_is_compile_failure(tmp_path: Path):
     candidate.write_text("# candidate\n")
     client = fake_client(tmp_path)
     command = [sys.executable, str(BACKEND), "--benchmark", "gdn", "--candidate", str(candidate),
-               "--job-client", str(client)]
+               "--job-client-json", json.dumps([str(client)])]
     missing = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
     assert json.loads(missing.stdout)["status"] == "compile_error"
     candidate.with_suffix(".manifest.json").write_text(json.dumps({"schema": "wrong", "kernel_name": "x"}))
@@ -210,7 +243,9 @@ def test_missing_or_invalid_kernel_manifest_is_compile_failure(tmp_path: Path):
 
 def test_generator_emits_exact_controller_cells(tmp_path: Path):
     output = tmp_path / "cells.json"
-    subprocess.run([sys.executable, str(GENERATOR), "--job-client", "/bin/true", "--output", str(output)], check=True)
+    encoded_client = json.dumps(["/opt/job-client", "--profile", "gz-a3", "--flag=value"])
+    subprocess.run([sys.executable, str(GENERATOR), "--job-client-json", encoded_client,
+                    "--output", str(output)], check=True)
     cells = json.loads(output.read_text())["cells"]
     assert set(cells) == {
         "gdn-cannbot", "gdn-project-cannbot", "gdn-project-only",
@@ -221,3 +256,5 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
     assert (cells["gdn-cannbot"]["device"], cells["bsa-cannbot"]["device"]) == (0, 1)
     assert cells["gdn-project-cannbot"]["all_cases"] == list(range(50))
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
+    command = cells["gdn-cannbot"]["backend"]["command"]
+    assert command[command.index("--job-client-json") + 1] == encoded_client

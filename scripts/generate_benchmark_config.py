@@ -16,7 +16,8 @@ TREATMENTS = ("cannbot", "project-cannbot", "project-only")
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--job-client", nargs="+", required=True)
+    parser.add_argument("--job-client-json", required=True,
+                        help="JSON string array containing the executable and exact arguments")
     parser.add_argument("--candidate", default="candidate.py")
     parser.add_argument("--candidate-manifest", default="candidate.manifest.json")
     parser.add_argument("--output", type=Path)
@@ -36,7 +37,7 @@ def main() -> int:
                     "command": [sys.executable, str(backend), "--benchmark", benchmark,
                                 "--candidate", args.candidate,
                                 "--candidate-manifest", args.candidate_manifest,
-                                "--job-client", *args.job_client],
+                                "--job-client-json", args.job_client_json],
                     "timeout_seconds": 3700,
                 },
             }

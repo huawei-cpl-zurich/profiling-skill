@@ -5,6 +5,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).parents[1]
 CLI = ROOT / "scripts" / "experimentctl.py"
@@ -30,9 +32,19 @@ if mode == "infra":
 case = request.get("case", 0)
 iteration = request.get("iteration", 0)
 latency = (case + 1) * 10 + iteration
-print(json.dumps({"status":"ok", "device":request["device"],
-                  "handle":f"gz-a3:{request['action']}-{case}-{iteration}",
-                  "latency_us":latency, "passed":True}))
+response = {"status":"ok", "device":request["device"],
+            "handle":f"gz-a3:{request['action']}-{case}-{iteration}",
+            "latency_us":latency, "passed":True}
+if iteration == 1 and mode.startswith("latency-"):
+    response["diagnostics"] = "msprof output had no valid duration"
+    value = mode.removeprefix("latency-")
+    if value == "missing":
+        del response["latency_us"]
+    elif value == "nan":
+        response["latency_us"] = float("nan")
+    else:
+        response["latency_us"] = int(value)
+print(json.dumps(response))
 '''
 
 
@@ -113,6 +125,16 @@ def test_infrastructure_and_invalid_protocol_are_discardable(tmp_path: Path):
     process, result, _ = run(other, "check", mode="bad-json")
     assert process.returncode == 3
     assert "invalid backend response" in result["diagnostics"]
+
+
+@pytest.mark.parametrize("mode", ["latency-missing", "latency-nan", "latency-0", "latency--1"])
+def test_invalid_latency_preserves_collected_handles_and_diagnostics(tmp_path: Path, mode: str):
+    process, result, _ = run(tmp_path, "profile", "--repeats", "3", mode=mode)
+    assert process.returncode == 3
+    assert result["status"] == "infrastructure_error"
+    assert result["handles"] == ["gz-a3:profile-4-0", "gz-a3:profile-4-1"]
+    assert "backend returned invalid latency" in result["diagnostics"]
+    assert "msprof output had no valid duration" in result["diagnostics"]
 
 
 def test_bad_cell_or_benchmark_is_configuration_error(tmp_path: Path):

@@ -27,8 +27,20 @@ class ConfigError(Exception):
     pass
 
 
-def failure(kind: str, diagnostics: str, **extra: Any) -> dict[str, Any]:
-    return {"status": kind, "diagnostics": diagnostics, "handles": [], **extra}
+def failure(
+    kind: str,
+    diagnostics: str,
+    handles: list[str] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    return {"status": kind, "diagnostics": diagnostics, "handles": handles or [], **extra}
+
+
+def invalid_latency(result: dict[str, Any], handles: list[str]) -> dict[str, Any]:
+    diagnostics = "backend returned invalid latency"
+    if result.get("diagnostics"):
+        diagnostics += f"\n{result['diagnostics']}"
+    return failure("infrastructure_error", diagnostics, handles=handles)
 
 
 def read_cell(path: Path, cell_id: str) -> dict[str, Any]:
@@ -131,11 +143,7 @@ def rank(cell: dict[str, Any], warmups: int, repeats: int) -> dict[str, Any]:
                 if not math.isfinite(latency) or latency <= 0:
                     raise ValueError
             except (KeyError, TypeError, ValueError):
-                return merge_failure(
-                    failure("infrastructure_error", "backend returned invalid latency", handles=handles),
-                    "rank",
-                    cell,
-                )
+                return merge_failure(invalid_latency(result, handles), "rank", cell)
             samples.append(latency)
         rows.append({"case": case, "median_us": statistics.median(samples), "samples_us": samples})
     rows.sort(key=lambda row: (-row["median_us"], row["case"]))
@@ -168,11 +176,7 @@ def profile(cell: dict[str, Any], repeats: int, round_number: int | None) -> dic
                 if not math.isfinite(latency) or latency <= 0:
                     raise ValueError
             except (KeyError, TypeError, ValueError):
-                return merge_failure(
-                    failure("infrastructure_error", "backend returned invalid latency", handles=handles),
-                    "profile",
-                    cell,
-                )
+                return merge_failure(invalid_latency(result, handles), "profile", cell)
             samples.append(latency)
         rows.append({"case": case, "median_us": statistics.median(samples), "samples_us": samples})
     score = math.exp(sum(math.log(row["median_us"]) for row in rows) / len(rows))

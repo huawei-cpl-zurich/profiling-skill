@@ -7,6 +7,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import shlex
 import signal
@@ -75,8 +76,10 @@ def summarize(
                     raise InvalidCapture(
                         f"non-numeric {duration_field!r} in {path}: {raw.get(duration_field)!r}"
                     ) from exc
-                if duration < 0:
-                    raise InvalidCapture(f"negative duration in {path}: {duration}")
+                if not math.isfinite(duration) or duration <= 0:
+                    raise InvalidCapture(
+                        f"duration must be positive and finite in {path}: {duration}"
+                    )
                 rows.append({"kernel_name": name, "duration_us": duration})
                 accepted += 1
             sources.append(
@@ -155,6 +158,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     output = args.output.resolve()
+    if output.exists() and not output.is_dir():
+        print(f"error: output path is not a directory: {output}", file=sys.stderr)
+        return 2
     if output.exists() and any(output.iterdir()):
         print(f"error: output directory is not empty: {output}", file=sys.stderr)
         return 2

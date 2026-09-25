@@ -684,3 +684,40 @@ def test_a3_profile_refuses_to_mix_with_existing_evidence(tmp_path: Path):
     assert result.returncode == 2
     assert "output directory is not empty" in result.stderr
     assert (output / "old.json").read_text() == "{}\n"
+
+
+def test_a3_summary_rejects_nonpositive_and_nonfinite_durations(tmp_path: Path):
+    module = load("profile_a3")
+    for index, value in enumerate(("0", "-1", "nan", "inf", "-inf")):
+        raw = tmp_path / str(index)
+        raw.mkdir()
+        (raw / "OpBasicInfo.csv").write_text(
+            f"Op Name,Task Duration(us)\nkernel,{value}\n"
+        )
+        try:
+            module.summarize(raw, "kernel", warm_up=0, launch_count=1)
+        except module.InvalidCapture as error:
+            assert "duration must be positive and finite" in str(error)
+        else:
+            raise AssertionError(f"invalid duration {value} unexpectedly accepted")
+
+
+def test_a3_profile_rejects_file_as_output_path(tmp_path: Path):
+    output = tmp_path / "capture"
+    output.write_text("not a directory\n")
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--",
+            "python3",
+            "case.py",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
+    assert "output path is not a directory" in result.stderr
+    assert output.read_text() == "not a directory\n"

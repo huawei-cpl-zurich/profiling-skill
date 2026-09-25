@@ -10,6 +10,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+# Triton resolves JIT annotations from the function's module globals.  Keep the
+# optional import at module scope, while still allowing contract discovery on
+# controller hosts where Triton is not installed.
+try:
+    import triton
+    import triton.language as tl
+except ModuleNotFoundError:
+    triton = None
+    tl = None
+
+
 KERNEL_NAME = "streaming_matmul_add_kernel"
 SEED = 20260925
 RTOL = 2e-2
@@ -43,46 +54,7 @@ CASES = (
 CASE_BY_NAME = {case.name: case for case in CASES}
 
 
-def contract() -> dict:
-    return {
-        "schema_version": 1,
-        "benchmark": "streaming-matmul-add",
-        "operation": "output = lhs @ rhs + bias",
-        "kernel_name": KERNEL_NAME,
-        "seed": SEED,
-        "dtype": "float16",
-        "accumulator_dtype": "float32",
-        "tolerances": {"rtol": RTOL, "atol": ATOL},
-        "cases": [asdict(case) for case in CASES],
-    }
-
-
-def classify_exception(exc: BaseException) -> str:
-    """Classify candidate failures without depending on Triton internals."""
-    identity = f"{type(exc).__module__}.{type(exc).__name__}".lower()
-    text = str(exc).lower()
-    compile_words = ("compile", "compiler", "codegen", "lowering", "semantic")
-    if any(word in identity or word in text for word in compile_words):
-        return "compilation"
-    return "runtime"
-
-
-def emit(payload: dict, output: Path | None) -> None:
-    encoded = json.dumps(payload, sort_keys=True)
-    if output:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(encoded + "\n", encoding="utf-8")
-    print(encoded)
-
-
-def run(case: Case, launches: int) -> dict:
-    # Imports are intentionally delayed: contract discovery works on controller
-    # hosts that do not have the pinned A3 runtime installed.
-    import torch
-    import torch_npu  # noqa: F401
-    import triton
-    import triton.language as tl
-
+if triton is not None:
     @triton.jit
     def streaming_matmul_add_kernel(
         lhs,
@@ -121,6 +93,49 @@ def run(case: Case, launches: int) -> dict:
         result = accumulator + tl.load(bias + cols, mask=cols < n, other=0.0)[None, :]
         offsets = rows[:, None] * n + cols[None, :]
         tl.store(output + offsets, result, mask=(rows[:, None] < m) & (cols[None, :] < n))
+else:
+    streaming_matmul_add_kernel = None
+
+
+def contract() -> dict:
+    return {
+        "schema_version": 1,
+        "benchmark": "streaming-matmul-add",
+        "operation": "output = lhs @ rhs + bias",
+        "kernel_name": KERNEL_NAME,
+        "seed": SEED,
+        "dtype": "float16",
+        "accumulator_dtype": "float32",
+        "tolerances": {"rtol": RTOL, "atol": ATOL},
+        "cases": [asdict(case) for case in CASES],
+    }
+
+
+def classify_exception(exc: BaseException) -> str:
+    """Classify candidate failures without depending on Triton internals."""
+    identity = f"{type(exc).__module__}.{type(exc).__name__}".lower()
+    text = str(exc).lower()
+    compile_words = ("compile", "compiler", "codegen", "lowering", "semantic")
+    if any(word in identity or word in text for word in compile_words):
+        return "compilation"
+    return "runtime"
+
+
+def emit(payload: dict, output: Path | None) -> None:
+    encoded = json.dumps(payload, sort_keys=True)
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(encoded + "\n", encoding="utf-8")
+    print(encoded)
+
+
+def run(case: Case, launches: int) -> dict:
+    # Torch imports remain delayed so contract discovery works on controllers.
+    import torch
+    import torch_npu  # noqa: F401
+
+    if streaming_matmul_add_kernel is None:
+        raise RuntimeError("triton is not installed")
 
     torch.manual_seed(SEED)
     lhs_cpu = torch.randn((case.m, case.k), dtype=torch.float16)

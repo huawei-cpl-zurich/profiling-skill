@@ -2,6 +2,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 
@@ -64,6 +65,21 @@ def test_exception_classification_is_machine_readable():
 
     assert module.classify_exception(CompilerError("bad IR")) == "compilation"
     assert module.classify_exception(RuntimeError("device launch failed")) == "runtime"
+
+
+def test_kernel_definition_resolves_triton_annotations_from_module_globals(monkeypatch):
+    fake_triton = types.ModuleType("triton")
+    fake_language = types.ModuleType("triton.language")
+    fake_language.constexpr = object()
+    fake_triton.language = fake_language
+    fake_triton.jit = lambda function: function
+    monkeypatch.setitem(sys.modules, "triton", fake_triton)
+    monkeypatch.setitem(sys.modules, "triton.language", fake_language)
+
+    module = load_module()
+
+    assert module.tl is fake_language
+    assert module.streaming_matmul_add_kernel.__name__ == module.KERNEL_NAME
 
 
 def test_cli_rejects_ambiguous_or_invalid_invocations():

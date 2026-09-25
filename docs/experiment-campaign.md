@@ -86,7 +86,7 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --output /absolute/campaign-inputs/cannbot-freeze
 
 python "$ABS_REPOSITORY/scripts/generate_benchmark_config.py" \
-  --job-client-json '["<absolute-production-gz-a3-job-client>"]' \
+  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/gz_a3_job_client.py","--adapter-json","[\"/absolute/orchestration/execution-profiles/catlass-validation.sh\"]","--state-dir","/absolute/campaign-state/gz-a3-jobs"]' \
   --candidate candidate.py \
   --candidate-manifest candidate.manifest.json \
   --output /absolute/campaign-inputs/controller.json
@@ -144,11 +144,12 @@ agents must each retrieve an injected compilation diagnostic, repair the
 kernel, pass all correctness cases, and complete profiling without an
 infrastructure failure.
 
-The control's native A3 gate is currently pending because the managed GitHub
-proxy prevented staging its branch into the one-shot runtime. This is an
-environment gate, not a kernel result. Do not start or claim measured
-experiments until the branch is available through the managed profile and the
-three-agent readiness gate passes.
+Mutable candidates are staged with `gz_a3_job_client.py` through the neutral
+profile adapter's content-addressed managed-bundle actions. Upload, command,
+and result-transfer receipts live below the configured private state
+directory. Repeating an identical request resumes those receipts and never
+submits a duplicate command. The client has no raw SSH, SCP, Docker, or
+remote-agent route.
 
 Production accepts only a version 2 controller-bound manifest. Before any
 cell starts, it verifies the runtime and bundle, copies the bundle into the
@@ -157,12 +158,11 @@ controller command from that private copy. Resume reuses and verifies the
 same copy. Changes to the original config or repository scripts after staging
 cannot affect later waves.
 
-There is currently no checked-in production GZ-A3 job client for
-`benchmark_backend.py`. The placeholder used by config generation cannot run
-a benchmark, so production execution is blocked and is not yet reproducible.
-Do not substitute ad hoc SSH, Docker, transfer, or remote-agent calls. A future
-job client must use the checked-in `$gz-a3` profile and preserve durable job
-handles.
+The checked-in production client returns candidate compilation, runtime, and
+correctness failures as counted results, including compiler tracebacks. A
+profile/device/service/transfer failure is an infrastructure exclusion. Every
+successful profile response binds the exact case and kernel name and includes
+compact `msprof op` evidence plus the durable `gz-a3:<job-id>` handle.
 
 Once those gates are implemented, first exercise the exact frozen manifest
 with `--dry-run`. Dry-run preparation uses host temporary roots named
@@ -257,10 +257,8 @@ campaign manifest actually records before aggregating results. Until the
 controller config and command are manifest-bound, operators must retain and
 compare them separately; a changed value defines a new campaign.
 
-Three operational gates remain:
+Two operational gates remain:
 
-- no checked-in production GZ-A3 JSON job client and source-staging route yet
-  connects `benchmark_backend.py` to the managed profile;
 - the streaming matmul-add native A3 gate is still pending;
 - three fresh agents have not yet completed the required readiness runs.
 

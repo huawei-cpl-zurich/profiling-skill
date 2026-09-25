@@ -66,9 +66,9 @@ def fixture(tmp_path: Path):
     }
     (frozen / "freeze.json").write_text(json.dumps(record, sort_keys=True))
     controller_config = tmp_path / "controller.json"
-    controller_config.write_text('{"version":1}\n')
+    controller_config.write_text('{"schema_version":1,"cells":{}}\n')
     controller_command = [
-        "python", "/opt/campaign/scripts/experimentctl.py", "--config",
+        sys.executable, str(ROOT / "scripts" / "experimentctl.py"), "--config",
         str(controller_config.resolve()), "--cell", "{cell_id}",
     ]
     manifest_path = tmp_path / "campaign.json"
@@ -80,13 +80,14 @@ def fixture(tmp_path: Path):
 
 
 def run_campaign(manifest, root, launcher, on_wave=None, resume=False):
-    binding = manifest["controller"]
-    config = Path(binding["config"]["path"])
-    command = [argument.replace("{controller_config}", str(config))
-               for argument in binding["command_argv"]]
+    root.mkdir(parents=True, exist_ok=True)
+    manifest_path = Path(manifest["prompt"]["path"]).parent / "campaign.json"
+    command, evidence = campaign.stage_controller(
+        manifest, manifest_path, root, sys.executable, resume=resume,
+    )
     return campaign.run_campaign(
         manifest, root, launcher, on_wave, resume,
-        controller_config=config, controller_command=command,
+        controller_evidence=evidence, controller_bundle=root / "controller",
     )
 
 
@@ -351,11 +352,10 @@ def test_freeze_resolves_then_copies_only_regular_selected_skills(tmp_path: Path
     assert any("checkout" in call for call in calls)
 
 
-def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_options(
+def test_run_cli_uses_private_frozen_controller_bundle(
     tmp_path: Path, monkeypatch, capsys,
 ):
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text("{}")
+    document, manifest = fixture(tmp_path / "source")
     observed = {}
 
     class FakeProductionLauncher:
@@ -367,13 +367,13 @@ def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_opt
                         types.SimpleNamespace(ProductionLauncher=FakeProductionLauncher))
     monkeypatch.setattr(campaign, "run_campaign",
                         lambda document, output, value, **kwargs: {"status": "dry-run"})
-    command = ["python", "scripts/experimentctl.py", "--config", "/host/cells.json",
-               "--cell", "{cell_id}"]
     monkeypatch.setattr(sys, "argv", ["campaign.py", "run", "--manifest", str(manifest),
-                        "--output", str(tmp_path / "out"), "--controller-json",
-                        json.dumps(command), "--codex", "fake-codex", "--dry-run"])
+                        "--output", str(tmp_path / "out"), "--python", sys.executable,
+                        "--codex", "fake-codex", "--dry-run"])
     assert campaign.main() == 0
-    assert observed["command"] == command
+    assert observed["command"][1] == str((tmp_path / "out/controller/experimentctl.py").resolve())
+    assert observed["command"][3] == str((tmp_path / "out/controller/controller.json").resolve())
+    assert observed["command"][0] == campaign.shutil.which(sys.executable)
     assert observed["kwargs"]["codex"] == "fake-codex"
     assert observed["kwargs"]["dry_run"] is True
     assert json.loads(capsys.readouterr().out)["status"] == "dry-run"
@@ -382,11 +382,10 @@ def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_opt
 def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkeypatch, capsys):
     manifest, _ = fixture(tmp_path / "source")
     output = tmp_path / "nested" / "campaign.json"
-    controller_config = manifest["controller"]["config"]["path"]
-    controller_command = [
-        argument.replace("{controller_config}", controller_config)
-        for argument in manifest["controller"]["command_argv"]
-    ]
+    controller_config = tmp_path / "source/campaign.controller/controller.json"
+    controller_command = [sys.executable, str(ROOT / "scripts/experimentctl.py"),
+                          "--config", str(controller_config.resolve()),
+                          "--cell", "{cell_id}"]
     monkeypatch.setattr(sys, "argv", [
         "campaign.py", "generate-manifest",
         "--prompt", manifest["prompt"]["path"],
@@ -394,13 +393,17 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
         "--bsa-baseline", manifest["baselines"]["bsa"]["path"],
         "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
         "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
-        "--controller-config", controller_config,
+        "--controller-config", str(controller_config),
         "--controller-json", json.dumps(controller_command),
         "--output", str(output), "--rounds", "3", "--request-budget", "12",
     ])
     assert campaign.main() == 0
     written = json.loads(output.read_text())
     assert written == json.loads(capsys.readouterr().out)
+    assert written["version"] == 2
+    assert not any(str(tmp_path) in json.dumps(value)
+                   for value in [written["controller"]])
+    assert (output.parent / written["controller"]["bundle"] / "benchmark_backend.py").is_file()
     assert len(written["cells"]) == 6
     sandbox = campaign.prepare_cell(written, written["cells"][0], tmp_path / "runs")
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
@@ -414,9 +417,7 @@ def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
             {name: Path(value["path"]) for name, value in manifest["baselines"].items()},
             Path(manifest["skill_sources"]["ascend-profiling"]["path"]),
             Path(manifest["skill_sources"]["cannbot"]["path"]),
-            Path(manifest["controller"]["config"]["path"]),
-            [argument.replace("{controller_config}", manifest["controller"]["config"]["path"])
-             for argument in manifest["controller"]["command_argv"]], rounds=0,
+            tmp_path / "controller.json", [], rounds=0,
         )
 
 
@@ -449,9 +450,9 @@ def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Pat
     assert len(ledger["cells"]) == 6
     assert all(entry["result"]["dry_run"] for entry in ledger["cells"])
     assert not (tmp_path / "runs" / "attempts").exists()
-    production = run_campaign(manifest, tmp_path / "runs", RecordingLauncher())
+    production = run_campaign(manifest, tmp_path / "production", RecordingLauncher())
     assert production["status"] == "complete"
-    assert (tmp_path / "runs" / "attempts").is_dir()
+    assert (tmp_path / "production" / "attempts").is_dir()
 
 
 def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: Path):
@@ -495,58 +496,71 @@ def test_resume_runs_only_infrastructure_cells_in_fresh_sandbox(tmp_path: Path):
     assert not ledger["reschedule"]
 
 
-@pytest.mark.parametrize("drift", ["config", "command"])
-def test_controller_drift_is_rejected_before_prepare_or_launch(tmp_path: Path, drift: str):
+def test_production_rejects_legacy_unbound_manifest_before_launch(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
-    binding = manifest["controller"]
-    config = Path(binding["config"]["path"])
-    command = [argument.replace("{controller_config}", str(config))
-               for argument in binding["command_argv"]]
-    if drift == "config":
-        config.write_text('{"version":2}\n')
-    else:
-        command[0] = "python-different"
+    manifest.pop("controller")
+    manifest["version"] = 1
     launcher = RecordingLauncher()
-    root = tmp_path / "runs"
-    with pytest.raises(campaign.CampaignError, match="controller (config drifted|command)"):
-        campaign.run_campaign(
-            manifest, root, launcher, controller_config=config,
-            controller_command=command,
-        )
+    with pytest.raises(campaign.CampaignError, match="version 2 controller-bound"):
+        campaign.run_campaign(manifest, tmp_path / "runs", launcher)
     assert launcher.calls == []
-    assert not (root / "attempts").exists()
 
 
-def test_controller_binding_replays_from_relocated_config_and_rejects_resume_drift(tmp_path: Path):
-    manifest, _ = fixture(tmp_path / "source")
-    source = Path(manifest["controller"]["config"]["path"])
-    relocated = tmp_path / "relocated" / "cells.json"
-    relocated.parent.mkdir()
-    relocated.write_bytes(source.read_bytes())
-    command = [argument.replace("{controller_config}", str(relocated.resolve()))
-               for argument in manifest["controller"]["command_argv"]]
-
-    class OneFlake(RecordingLauncher):
-        def launch(self, sandbox, cell):
-            result = super().launch(sandbox, cell)
-            if cell["cell_id"] == "gdn-cannbot":
-                result["status"] = "infrastructure_error"
-            return result
-
-    root = tmp_path / "runs"
-    ledger = campaign.run_campaign(
-        manifest, root, OneFlake(), controller_config=relocated,
-        controller_command=command,
+def test_private_bundle_executes_after_relocation_and_ignores_source_mutation(tmp_path: Path):
+    manifest, manifest_path = fixture(tmp_path / "source")
+    root = tmp_path / "relocated-run"
+    root.mkdir()
+    command, evidence = campaign.stage_controller(
+        manifest, manifest_path, root, sys.executable,
     )
-    assert ledger["controller"]["config_sha256"] == campaign.digest_file(relocated)
-    assert ledger["controller"]["command_argv"] == manifest["controller"]["command_argv"]
-    assert str(relocated) not in json.dumps(ledger["controller"])
+    help_result = __import__("subprocess").run(
+        [command[0], command[1], "--help"], capture_output=True, text=True,
+    )
+    assert help_result.returncode == 0
+    assert "--config" in help_result.stdout
 
-    relocated.write_text("drift\n")
+    source_config = manifest_path.parent / manifest["controller"]["bundle"] / "controller.json"
+    def mutate_source(wave):
+        if wave == 2:
+            source_config.write_text("source changed after staging\n")
+
+    ledger = campaign.run_campaign(
+        manifest, root, RecordingLauncher(), mutate_source,
+        controller_evidence=evidence, controller_bundle=root / "controller",
+    )
+    assert ledger["status"] == "complete"
+    assert ledger["controller"]["command_argv"] == manifest["controller"]["command_argv"]
+    assert str(tmp_path) not in json.dumps(ledger["controller"])
+
+
+def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
+    config = tmp_path / "cells.json"
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn"
+    ]}}}}))
+    output = tmp_path / "campaign.json"
+    binding = campaign.freeze_controller_bundle(
+        output, config,
+        [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+         str(config.resolve()), "--cell", "{cell_id}"],
+    )
+    bundled = json.loads((tmp_path / binding["bundle"] / "controller.json").read_text())
+    assert bundled["cells"]["cell"]["backend"]["command"][:2] == [
+        "{python}", "{bundle}/benchmark_backend.py"
+    ]
+    assert str(ROOT) not in json.dumps(bundled)
+
+
+def test_resume_rejects_private_bundle_drift_before_launch(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    root = tmp_path / "runs"
+    run_campaign(manifest, root, type("Flaky", (RecordingLauncher,), {
+        "launch": lambda self, sandbox, cell: {"status": "infrastructure_error"}
+    })())
+    private_config = root / "controller/controller.json"
+    private_config.chmod(0o644)
+    private_config.write_text("drift\n")
     launcher = RecordingLauncher()
-    with pytest.raises(campaign.CampaignError, match="controller config drifted"):
-        campaign.run_campaign(
-            manifest, root, launcher, resume=True, controller_config=relocated,
-            controller_command=command,
-        )
+    with pytest.raises(campaign.CampaignError, match="bundle drifted"):
+        run_campaign(manifest, root, launcher, resume=True)
     assert launcher.calls == []

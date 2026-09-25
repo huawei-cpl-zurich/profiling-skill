@@ -113,11 +113,13 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --request-budget 12
 ```
 
-Manifest generation hashes the controller configuration and a normalized
-controller argv template. Campaign launch rejects changed config bytes or a
-different command before preparing any session, including on resume. The
-ledger retains those digests and normalized argv without recording the
-machine-specific config path. The generated controller config contains all
+Manifest generation creates a version 2 manifest and a sibling controller
+bundle containing the normalized config, `experimentctl.py`, and
+`benchmark_backend.py`. It hashes all three files, the path-independent argv
+template, and the Python implementation, version, and executable bytes.
+Backend commands in the config are rewritten to bundle-relative templates.
+The manifest and ledger therefore contain no controller host paths. The
+generated controller config contains all
 six cell IDs, hard-binding their benchmark,
 treatment, device, five development cases, all 50 correctness cases, and
 backend command. Preserve generated JSON files as campaign evidence; never
@@ -148,11 +150,12 @@ environment gate, not a kernel result. Do not start or claim measured
 experiments until the branch is available through the managed profile and the
 three-agent readiness gate passes.
 
-The production launch has no implicit backend. Supply the generated cell
-controller as a JSON string array through `--controller-json`; placeholders
-are expanded per cell. Because the host controller runs with the candidate
-workspace as its working directory, the `experimentctl.py` and controller
-config arguments must be absolute, resolved host paths.
+Production accepts only a version 2 controller-bound manifest. Before any
+cell starts, it verifies the runtime and bundle, copies the bundle into the
+campaign's private evidence directory, makes it read-only, and constructs the
+controller command from that private copy. Resume reuses and verifies the
+same copy. Changes to the original config or repository scripts after staging
+cannot affect later waves.
 
 There is currently no checked-in production GZ-A3 job client for
 `benchmark_backend.py`. The placeholder used by config generation cannot run
@@ -174,14 +177,14 @@ attempt directories and replaces the dry-run ledger state.
 python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --python /absolute/frozen/python \
   --forbid /absolute/host-skill-root \
   --dry-run
 
 python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --python /absolute/frozen/python \
   --forbid /absolute/host-skill-root
 ```
 

@@ -14,3 +14,6 @@ Each case specification contains exactly 50 cases. `baseline.json` is a
 byte-for-byte compatibility copy of `cases.jsonl`, because the pinned Python
 loaders resolve their case file from the Python module stem. Experiment
 candidates are separate files; do not modify these baselines during a run.
+
+The three-treatment, six-cell protocol and reproducible launch procedure are
+documented in [`docs/experiment-campaign.md`](../docs/experiment-campaign.md).

@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -62,6 +63,8 @@ def digest_tree(root: Path, exclude: tuple[str, ...] = ()) -> str:
     for path in sorted(paths):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(b"\0")
+        digest.update(f"{stat.S_IMODE(path.stat().st_mode) & 0o111:o}".encode())
+        digest.update(b"\0")
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
@@ -80,7 +83,7 @@ def copy_regular_tree(source: Path, destination: Path) -> None:
             (destination / relative).mkdir(exist_ok=True)
         elif item.is_file():
             (destination / relative).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(item, destination / relative)
+            shutil.copy2(item, destination / relative)
         else:
             raise CampaignError(f"special file forbidden in skill bundle: {relative}")
 
@@ -314,23 +317,49 @@ class CommandLauncher:
 def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                  on_wave: Callable[[int], None] | None = None) -> dict:
     """Run fixed waves; launcher implementations may execute each pair concurrently."""
+    root.mkdir(parents=True, exist_ok=True)
     ledger = {"version": 1, "status": "running", "cells": []}
+    ledger_path = root / "ledger.json"
+
+    def checkpoint() -> None:
+        temporary = ledger_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+        temporary.replace(ledger_path)
+
+    checkpoint()
     by_wave = {wave: [] for wave in range(1, 4)}
     for cell in manifest["cells"]:
         by_wave[cell["wave"]].append(cell)
-    for wave in range(1, 4):
-        if on_wave:
-            on_wave(wave)
-        prepared = [(cell, prepare_cell(manifest, cell, root)) for cell in by_wave[wave]]
-        if len(prepared) > manifest["max_parallel"]:
-            raise CampaignError("wave exceeds max_parallel")
-        with ThreadPoolExecutor(max_workers=manifest["max_parallel"]) as executor:
-            futures = [executor.submit(launcher.launch, sandbox, cell) for cell, sandbox in prepared]
-        for (cell, _), future in zip(prepared, futures):
-            result = future.result()
-            ledger["cells"].append({"cell": cell, "result": result})
-    ledger["status"] = "complete"
-    (root / "ledger.json").write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+    try:
+        for wave in range(1, 4):
+            if on_wave:
+                on_wave(wave)
+            prepared = [(cell, prepare_cell(manifest, cell, root)) for cell in by_wave[wave]]
+            if len(prepared) > manifest["max_parallel"]:
+                raise CampaignError("wave exceeds max_parallel")
+            failures = []
+            with ThreadPoolExecutor(max_workers=manifest["max_parallel"]) as executor:
+                futures = [
+                    (cell, executor.submit(launcher.launch, sandbox, cell))
+                    for cell, sandbox in prepared
+                ]
+            for cell, future in futures:
+                try:
+                    result = future.result()
+                except BaseException as error:
+                    failures.append(error)
+                else:
+                    ledger["cells"].append({"cell": cell, "result": result})
+                    checkpoint()
+            if failures:
+                raise failures[0]
+        ledger["status"] = "complete"
+        checkpoint()
+    except BaseException as error:
+        ledger["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+        ledger["failure"] = {"type": type(error).__name__, "message": str(error)}
+        checkpoint()
+        raise
     return ledger
 
 

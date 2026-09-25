@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -132,6 +133,21 @@ def test_copy_regular_tree_rejects_symlinks(tmp_path: Path):
         campaign.copy_regular_tree(source, tmp_path / "target")
 
 
+def test_copy_preserves_executable_mode_and_digest_detects_mode_drift(tmp_path: Path):
+    source = tree(tmp_path / "source")
+    script = source / "collect_profile.sh"
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(0o755)
+    expected = campaign.digest_tree(source)
+    destination = tmp_path / "destination"
+    campaign.copy_regular_tree(source, destination)
+    copied = destination / script.name
+    assert os.access(copied, os.X_OK)
+    assert campaign.digest_tree(destination) == expected
+    copied.chmod(0o644)
+    assert campaign.digest_tree(destination) != expected
+
+
 class RecordingLauncher:
     def __init__(self):
         self.calls = []
@@ -153,6 +169,61 @@ def test_campaign_runs_fixed_waves_and_writes_structured_ledger(tmp_path: Path):
     assert len({call[0] for call in launcher.calls}) == 6
     assert ledger["status"] == "complete"
     assert json.loads((run_root / "ledger.json").read_text()) == ledger
+
+
+def test_ledger_checkpoints_completed_cells_and_failure(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class FailingLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            if cell["cell_id"] == "gdn-project-cannbot":
+                raise RuntimeError("launcher failed")
+            return super().launch(sandbox, cell)
+
+    run_root = tmp_path / "runs"
+    run_root.mkdir()
+    with pytest.raises(RuntimeError, match="launcher failed"):
+        campaign.run_campaign(manifest, run_root, FailingLauncher())
+    ledger = json.loads((run_root / "ledger.json").read_text())
+    assert ledger["status"] == "failed"
+    assert ledger["failure"]["type"] == "RuntimeError"
+    assert {entry["cell"]["wave"] for entry in ledger["cells"]} == {1, 2}
+    assert len(ledger["cells"]) == 3
+
+
+def test_ledger_persists_interrupted_status(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class InterruptedLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            if cell["cell_id"] == "gdn-cannbot":
+                raise KeyboardInterrupt()
+            return super().launch(sandbox, cell)
+
+    run_root = tmp_path / "runs"
+    with pytest.raises(KeyboardInterrupt):
+        campaign.run_campaign(manifest, run_root, InterruptedLauncher())
+    ledger = json.loads((run_root / "ledger.json").read_text())
+    assert ledger["status"] == "interrupted"
+    assert ledger["failure"]["type"] == "KeyboardInterrupt"
+
+
+def test_between_wave_source_drift_is_rejected_and_checkpointed(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    project = Path(manifest["skill_sources"]["ascend-profiling"]["path"])
+
+    def mutate_before_wave(wave):
+        if wave == 2:
+            (project / "SKILL.md").write_text("between-wave drift")
+
+    run_root = tmp_path / "runs"
+    run_root.mkdir()
+    with pytest.raises(campaign.CampaignError, match="project profiling skill drifted"):
+        campaign.run_campaign(manifest, run_root, RecordingLauncher(), mutate_before_wave)
+    ledger = json.loads((run_root / "ledger.json").read_text())
+    assert ledger["status"] == "failed"
+    assert len(ledger["cells"]) == 2
+    assert all(entry["cell"]["wave"] == 1 for entry in ledger["cells"])
 
 
 def test_all_treatments_expose_exact_skill_manifests(tmp_path: Path):

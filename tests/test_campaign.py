@@ -454,6 +454,32 @@ def test_infrastructure_cell_is_retained_for_explicit_reschedule(tmp_path: Path)
     assert all(entry["result"]["attempt_id"] == "kept" for entry in ledger["cells"])
 
 
+def test_each_concurrent_infrastructure_result_checkpoints_its_reschedule(
+        tmp_path: Path, monkeypatch):
+    manifest, _ = fixture(tmp_path)
+    snapshots = []
+    original_replace = campaign.Path.replace
+
+    def capture_replace(path, target):
+        snapshots.append(json.loads(path.read_text()))
+        return original_replace(path, target)
+
+    class InfrastructureLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            return {"status": "infrastructure_error", "attempt_id": cell["cell_id"]}
+
+    monkeypatch.setattr(campaign.Path, "replace", capture_replace)
+    run_campaign(manifest, tmp_path / "runs", InfrastructureLauncher())
+
+    first_wave = {cell["cell_id"] for cell in manifest["cells"] if cell["wave"] == 1}
+    after_last_future = next(
+        snapshot for snapshot in snapshots
+        if snapshot["status"] == "running"
+        and {entry["cell"]["cell_id"] for entry in snapshot["cells"]} == first_wave
+    )
+    assert set(after_last_future["reschedule"]) == first_wave
+
+
 def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
 

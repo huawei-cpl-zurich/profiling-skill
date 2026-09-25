@@ -122,3 +122,43 @@ def test_cli_persists_same_failure_payload(monkeypatch, capsys, tmp_path: Path):
         "--case", "correctness-01-square-tail", "--json-output", str(output)
     ]) == 1
     assert json.loads(capsys.readouterr().out) == json.loads(output.read_text())
+
+
+def test_non_finite_error_metrics_are_strict_json(monkeypatch, capsys):
+    module = load_module()
+
+    def fail(_case, _launches):
+        return {
+            "status": "failure",
+            "failure": {
+                "kind": "correctness",
+                **module.error_metrics(float("nan"), float("inf")),
+            },
+        }
+
+    monkeypatch.setattr(module, "run", fail)
+    assert module.main(["--case", "correctness-00-tiny"]) == 1
+    encoded = capsys.readouterr().out
+    assert "NaN" not in encoded
+    assert "Infinity" not in encoded
+    assert json.loads(encoded)["failure"] == {
+        "kind": "correctness",
+        "max_abs_error": None,
+        "max_rel_error": None,
+        "non_finite": ["max_abs_error", "max_rel_error"],
+    }
+
+
+def test_process_control_exceptions_propagate(monkeypatch):
+    module = load_module()
+
+    def interrupt(_case, _launches):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(module, "run", interrupt)
+    try:
+        module.main(["--case", "correctness-00-tiny"])
+    except KeyboardInterrupt:
+        pass
+    else:
+        raise AssertionError("KeyboardInterrupt was converted into a candidate failure")

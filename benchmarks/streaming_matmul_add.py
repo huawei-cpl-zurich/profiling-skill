@@ -125,11 +125,28 @@ def classify_exception(exc: BaseException) -> str:
 
 
 def emit(payload: dict, output: Path | None) -> None:
-    encoded = json.dumps(payload, sort_keys=True)
+    # JSON consumed by the experiment controller must remain RFC-compliant;
+    # Python's default NaN/Infinity extensions are not portable JSON.
+    encoded = json.dumps(payload, sort_keys=True, allow_nan=False)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(encoded + "\n", encoding="utf-8")
     print(encoded)
+
+
+def error_metrics(max_abs: float, max_rel: float) -> dict:
+    """Represent numeric errors without emitting non-standard JSON values."""
+    metrics = {}
+    non_finite = []
+    for name, value in (("max_abs_error", max_abs), ("max_rel_error", max_rel)):
+        if math.isfinite(value):
+            metrics[name] = value
+        else:
+            metrics[name] = None
+            non_finite.append(name)
+    if non_finite:
+        metrics["non_finite"] = non_finite
+    return metrics
 
 
 def run(case: Case, launches: int) -> dict:
@@ -159,7 +176,7 @@ def run(case: Case, launches: int) -> dict:
             BLOCK_M=block_m, BLOCK_N=block_n, BLOCK_K=block_k,
         )
         torch.npu.synchronize()
-    except BaseException as exc:
+    except Exception as exc:
         return {
             "status": "failure",
             "failure": {"kind": classify_exception(exc), "message": str(exc)},
@@ -170,14 +187,14 @@ def run(case: Case, launches: int) -> dict:
     max_abs = float(difference.max())
     denominator = expected.abs().clamp_min(ATOL)
     max_rel = float((difference / denominator).max())
+    metrics = error_metrics(max_abs, max_rel)
     if not torch.allclose(observed, expected, rtol=RTOL, atol=ATOL):
         return {
             "status": "failure",
             "failure": {
                 "kind": "correctness",
                 "message": "output differs from fp32 CPU reference",
-                "max_abs_error": max_abs,
-                "max_rel_error": max_rel,
+                **metrics,
             },
         }
 
@@ -192,7 +209,7 @@ def run(case: Case, launches: int) -> dict:
             )
             torch.npu.synchronize()
             samples.append((time.perf_counter_ns() - started) / 1_000)
-    except BaseException as exc:
+    except Exception as exc:
         return {
             "status": "failure",
             "failure": {"kind": "runtime", "message": str(exc)},
@@ -203,7 +220,7 @@ def run(case: Case, launches: int) -> dict:
         "case": asdict(case),
         "launches": launches,
         "host_observed_us": samples,
-        "correctness": {"max_abs_error": max_abs, "max_rel_error": max_rel},
+        "correctness": metrics,
     }
 
 
@@ -232,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     base = {"schema_version": 1, "benchmark": "streaming-matmul-add"}
     try:
         result = run(case, args.launches)
-    except BaseException as exc:
+    except Exception as exc:
         result = {
             "status": "failure",
             "failure": {"kind": classify_exception(exc), "message": str(exc)},

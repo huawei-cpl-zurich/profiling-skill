@@ -48,6 +48,20 @@ def sandbox(tmp_path: Path) -> Path:
     return root
 
 
+def production_cell(cell_id: str = "gdn-project-only") -> dict:
+    return {
+        "cell_id": cell_id, "benchmark": "gdn", "device": 0,
+        "rounds": 3, "request_budget": 12,
+        "development_cases": [40, 49, 47, 46, 45],
+        "all_cases": list(range(50)),
+    }
+
+
+def identified(document: dict, cell: dict, operation: str) -> dict:
+    return {"operation": operation, "cell": cell["cell_id"],
+            "benchmark": cell["benchmark"], "device": cell["device"], **document}
+
+
 def test_bwrap_argv_mounts_only_workspace_minimal_state_and_readonly_auth(tmp_path: Path):
     instance = launcher_fixture(tmp_path)
     root = sandbox(tmp_path)
@@ -141,11 +155,15 @@ def test_controller_client_forwards_exit_and_streams(tmp_path: Path, capsys):
 def test_three_round_persistent_session_uses_fixed_model_and_prompt(tmp_path: Path, monkeypatch):
     instance = launcher_fixture(tmp_path)
     root = sandbox(tmp_path)
+    cell = production_cell()
     calls = []
+    budget_limits = []
 
     class FakeBudget:
-        used = 4
-        def __init__(self, *args, **kwargs): pass
+        used = 12
+        rejected = 0
+        command = ("controller",)
+        def __init__(self, *args, **kwargs): budget_limits.append(args[2])
         def __enter__(self): return self
         def __exit__(self, *args): pass
 
@@ -153,20 +171,43 @@ def test_three_round_persistent_session_uses_fixed_model_and_prompt(tmp_path: Pa
         calls.append((argv, kwargs))
         if argv[-2:] and "sh" in argv:
             return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[-3:] == ["check", "--scope", "full"]:
+            return subprocess.CompletedProcess(
+                argv, 0, json.dumps({"status": "ok", "passed": True,
+                                     "cases": list(range(50)), "handles": ["gz-a3:check"],
+                                     "operation": "check", "cell": cell["cell_id"],
+                                     "benchmark": "gdn", "device": 0}), ""
+            )
+        if argv[-5:] == ["profile", "--repeats", "3", "--round", "3"]:
+            profile = {"status": "ok", "repeats": 3,
+                       "handles": [f"gz-a3:p{i}" for i in range(15)],
+                       "cases": [{"case": i, "samples_us": [1.0, 1.1, 1.2]}
+                                 for i in cell["development_cases"]],
+                       "operation": "profile", "cell": cell["cell_id"],
+                       "benchmark": "gdn", "device": 0}
+            return subprocess.CompletedProcess(argv, 0, json.dumps(profile), "")
         output = json.dumps({"type": "thread.started", "thread_id": "thread-123"}) + "\n"
         return subprocess.CompletedProcess(argv, 0, output, "")
 
     monkeypatch.setattr(launcher, "BudgetController", FakeBudget)
     monkeypatch.setattr(launcher.subprocess, "run", fake_run)
-    result = instance.launch(root, {"rounds": 3, "request_budget": 12})
-    codex_calls = calls[1:]
+    result = instance.launch(root, cell)
+    codex_calls = [call for call in calls if "/runtime/node/bin/codex" in call[0]]
     assert len(codex_calls) == 3
     assert codex_calls[0][1]["input"] == "identical prompt\n"
     assert all("gpt-5.6-sol" in call[0] for call in codex_calls)
     assert all('model_reasoning_effort="low"' in call[0] for call in codex_calls)
     assert all("thread-123" in call[0] for call in codex_calls[1:])
     assert all("--ignore-rules" not in call[0] for call in codex_calls)
-    assert result["rounds_completed"] == 3 and result["controller_requests"] == 4
+    assert result["rounds_completed"] == 3
+    assert result["agent_controller_requests"] == 12
+    assert result["controller_requests"] == 14
+    assert result["status"] == "complete"
+    assert budget_limits == [12]
+    assert result["terminal_evidence"]["check"]["result"]["handles"] == ["gz-a3:check"]
+    terminal_calls = [call for call in calls if call[0][0] == "controller"]
+    assert terminal_calls[1][1]["timeout"] < terminal_calls[0][1]["timeout"]
+    assert terminal_calls[1][0][-5:] == ["profile", "--repeats", "3", "--round", "3"]
 
 
 def test_controller_binds_cells_and_maps_candidate_workspace_paths(tmp_path: Path):
@@ -219,14 +260,13 @@ def test_dry_run_builds_plan_without_starting_bwrap_or_reading_auth(tmp_path: Pa
     assert "secret-token" not in json.dumps(result)
 
 
-def test_retry_uses_fresh_attempt_state(tmp_path: Path):
+def test_dry_run_does_not_create_attempt_state(tmp_path: Path):
     instance = launcher_fixture(tmp_path, dry_run=True)
     root = sandbox(tmp_path)
     first = instance.launch(root, {"rounds": 3, "request_budget": 12})
     second = instance.launch(root, {"rounds": 3, "request_budget": 12})
     assert first["attempt_id"] != second["attempt_id"]
-    assert (root / ".launcher-attempts" / first["attempt_id"] / "codex-state").is_dir()
-    assert (root / ".launcher-attempts" / second["attempt_id"] / "codex-state").is_dir()
+    assert not (root / ".launcher-attempts").exists()
 
 
 def test_nonzero_codex_turn_is_retained_as_infrastructure_error(tmp_path: Path, monkeypatch):
@@ -235,6 +275,7 @@ def test_nonzero_codex_turn_is_retained_as_infrastructure_error(tmp_path: Path, 
 
     class FakeBudget:
         used = 1
+        rejected = 0
         def __init__(self, *args, **kwargs): pass
         def __enter__(self): return self
         def __exit__(self, *args): pass
@@ -255,6 +296,125 @@ def test_nonzero_codex_turn_is_retained_as_infrastructure_error(tmp_path: Path, 
     assert result["rounds_completed"] == 0
     assert result["turns"] == [{"round": 1, "exit_code": 17,
                                 "stdout": "partial output", "stderr": "transport lost"}]
+
+
+@pytest.mark.parametrize(
+    ("check_document", "profile_document", "expected"),
+    [
+        ({"status": "candidate_error", "diagnostics": "wrong answer", "handles": ["gz-a3:c"]},
+         {"status": "ok", "repeats": 3, "handles": [f"gz-a3:p{i}" for i in range(15)],
+          "cases": [{"case": i, "samples_us": [1, 2, 3]} for i in range(5)]}, "candidate_error"),
+        ({"status": "ok", "passed": True, "cases": list(range(50)), "handles": ["gz-a3:c"]},
+         {"status": "ok", "repeats": 3, "cases": []}, "infrastructure_error"),
+        ({"status": "infrastructure_error", "diagnostics": "device busy",
+          "handles": ["gz-a3:observe-this"]},
+         {"status": "ok", "repeats": 3, "handles": [f"gz-a3:p{i}" for i in range(15)],
+          "cases": [{"case": i, "samples_us": [1, 2, 3]} for i in range(5)]}, "infrastructure_error"),
+    ],
+)
+def test_noop_agent_requires_host_terminal_gates(
+    tmp_path: Path, monkeypatch, check_document, profile_document, expected,
+):
+    instance = launcher_fixture(tmp_path)
+    root = sandbox(tmp_path)
+    cell = production_cell("gdn")
+    check_document.setdefault("cases", cell["all_cases"])
+    check_document = identified(check_document, cell, "check")
+    profile_document = identified(profile_document, cell, "profile")
+
+    class FakeBudget:
+        used = 0
+        rejected = 0
+        command = ("controller",)
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+    def fake_run(argv, **kwargs):
+        if "sh" in argv[-3:]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[-3:] == ["check", "--scope", "full"]:
+            return subprocess.CompletedProcess(argv, 2, json.dumps(check_document), "")
+        if argv[-5:] == ["profile", "--repeats", "3", "--round", "3"]:
+            return subprocess.CompletedProcess(argv, 0, json.dumps(profile_document), "")
+        event = json.dumps({"type": "thread.started", "thread_id": "noop-thread"}) + "\n"
+        return subprocess.CompletedProcess(argv, 0, event, "")
+
+    monkeypatch.setattr(launcher, "BudgetController", FakeBudget)
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
+    result = instance.launch(root, cell)
+    assert result["rounds_completed"] == 3
+    assert result["status"] == expected
+    assert (root / ".launcher-attempts" / result["attempt_id"]
+            / "terminal-check.json").is_file()
+    if check_document.get("handles"):
+        assert result["terminal_evidence"]["check"]["result"]["handles"] == check_document["handles"]
+    if check_document["status"] != "ok":
+        assert "profile" not in result["terminal_evidence"]
+        assert result["controller_requests"] == 1
+    else:
+        assert result["controller_requests"] == 2
+
+
+def test_budget_exhaustion_is_counted_candidate_failure(tmp_path: Path, monkeypatch):
+    instance = launcher_fixture(tmp_path)
+    root = sandbox(tmp_path)
+
+    class ExhaustedBudget:
+        used = 12
+        rejected = 1
+        command = ("controller",)
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+    def fake_run(argv, **kwargs):
+        if "sh" in argv[-3:]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        event = json.dumps({"type": "thread.started", "thread_id": "budget-thread"}) + "\n"
+        return subprocess.CompletedProcess(argv, 0, event, "")
+
+    monkeypatch.setattr(launcher, "BudgetController", ExhaustedBudget)
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
+    result = instance.launch(root, {"cell_id": "gdn", "device": 0,
+                                    "rounds": 3, "request_budget": 12})
+    assert result["status"] == "candidate_error"
+    assert result["failure_type"] == "request_budget_exhausted"
+    assert result["controller_requests"] == 12
+    assert "terminal_evidence" not in result
+
+
+def test_terminal_gate_requires_exact_identity_and_case_sequences():
+    cell = production_cell()
+    check = identified({"status": "ok", "passed": True, "handles": ["gz-a3:c"],
+                        "cases": cell["all_cases"]}, cell, "check")
+    assert launcher.ProductionLauncher._gate_status(check, cell, "check") == ("complete", "")
+    wrong_identity = {**check, "device": 1}
+    assert launcher.ProductionLauncher._gate_status(wrong_identity, cell, "check")[0] == "infrastructure_error"
+    reordered = {**check, "cases": list(reversed(cell["all_cases"]))}
+    assert launcher.ProductionLauncher._gate_status(reordered, cell, "check")[0] == "infrastructure_error"
+
+    profile = identified({
+        "status": "ok", "repeats": 3,
+        "handles": [f"gz-a3:p{i}" for i in range(15)],
+        "cases": [{"case": case, "samples_us": [1, 2, 3]}
+                  for case in cell["development_cases"]],
+    }, cell, "profile")
+    assert launcher.ProductionLauncher._gate_status(profile, cell, "profile") == ("complete", "")
+    duplicate = {**profile, "cases": [*profile["cases"][:-1], profile["cases"][0]]}
+    assert launcher.ProductionLauncher._gate_status(duplicate, cell, "profile")[0] == "infrastructure_error"
+    malformed_samples = {
+        **profile,
+        "cases": [{**row, "samples_us": 1.0} if index == 0 else row
+                  for index, row in enumerate(profile["cases"])],
+    }
+    assert launcher.ProductionLauncher._gate_status(
+        malformed_samples, cell, "profile"
+    )[0] == "infrastructure_error"
+    duplicate_handles = {**profile, "handles": ["gz-a3:same"] * 15}
+    assert launcher.ProductionLauncher._gate_status(
+        duplicate_handles, cell, "profile"
+    )[0] == "infrastructure_error"
 
 
 def test_missing_auth_or_bwrap_fails_without_reading_credentials(tmp_path: Path):

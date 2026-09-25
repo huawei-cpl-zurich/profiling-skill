@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -18,6 +19,8 @@ from typing import Callable, Protocol
 
 
 BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1}
+DEVELOPMENT_CASES = {"gdn": [40, 49, 47, 46, 45], "bsa": [47, 46, 49, 44, 43]}
+ALL_CASES = list(range(50))
 WAVES = (
     (("gdn", "cannbot"), ("bsa", "project-cannbot")),
     (("gdn", "project-cannbot"), ("bsa", "project-only")),
@@ -147,6 +150,8 @@ class Cell:
     wave: int
     rounds: int
     request_budget: int
+    development_cases: list[int]
+    all_cases: list[int]
 
 
 def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
@@ -157,6 +162,7 @@ def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
                 Cell(
                     f"{benchmark}-{treatment}", benchmark, treatment,
                     BENCHMARK_DEVICE[benchmark], wave, rounds, request_budget,
+                    DEVELOPMENT_CASES[benchmark], ALL_CASES,
                 )
             )
     return result
@@ -165,6 +171,8 @@ def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
 def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                    project_skill: Path, cannbot_freeze: Path,
                    rounds: int = 3, request_budget: int = 12) -> dict:
+    if rounds < 1 or request_budget < 1:
+        raise CampaignError("rounds and request budget must be positive")
     missing = {name for name in BENCHMARK_DEVICE if name not in baselines}
     if missing:
         raise CampaignError(f"missing baselines: {', '.join(sorted(missing))}")
@@ -192,6 +200,7 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
         "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
         "max_parallel": 2,
     }
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
     return document
 
@@ -319,11 +328,25 @@ class CommandLauncher:
 
 
 def run_campaign(manifest: dict, root: Path, launcher: Launcher,
-                 on_wave: Callable[[int], None] | None = None) -> dict:
+                 on_wave: Callable[[int], None] | None = None,
+                 resume: bool = False) -> dict:
     """Run fixed waves; launcher implementations may execute each pair concurrently."""
     root.mkdir(parents=True, exist_ok=True)
-    ledger = {"version": 1, "status": "running", "cells": []}
     ledger_path = root / "ledger.json"
+    dry_run = bool(getattr(launcher, "dry_run", False))
+    if ledger_path.exists() and resume:
+        ledger = json.loads(ledger_path.read_text())
+        target_ids = set(ledger.get("reschedule", []))
+        if not target_ids:
+            raise CampaignError("ledger has no infrastructure cells to reschedule")
+        ledger.pop("failure", None)
+        ledger["reschedule"] = []
+        ledger["status"] = "running"
+    elif ledger_path.exists() and json.loads(ledger_path.read_text()).get("status") != "dry_run":
+        raise CampaignError("campaign ledger already exists; use --resume")
+    else:
+        ledger = {"version": 1, "status": "running", "cells": []}
+        target_ids = {cell["cell_id"] for cell in manifest["cells"]}
 
     def checkpoint() -> None:
         temporary = ledger_path.with_suffix(".json.tmp")
@@ -333,15 +356,21 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
     checkpoint()
     by_wave = {wave: [] for wave in range(1, 4)}
     for cell in manifest["cells"]:
-        by_wave[cell["wave"]].append(cell)
+        if cell["cell_id"] in target_ids:
+            by_wave[cell["wave"]].append(cell)
     try:
+        saw_dry_run = False
         for wave in range(1, 4):
             if on_wave:
                 on_wave(wave)
-            prepared = [(cell, prepare_cell(manifest, cell, root)) for cell in by_wave[wave]]
+            if not by_wave[wave]:
+                continue
+            attempt_root = (Path(tempfile.mkdtemp(prefix="campaign-dry-run-")) if dry_run
+                            else root / "attempts" / f"wave-{wave}-{uuid.uuid4().hex}")
+            prepared = [(cell, prepare_cell(manifest, cell, attempt_root))
+                        for cell in by_wave[wave]]
             if len(prepared) > manifest["max_parallel"]:
                 raise CampaignError("wave exceeds max_parallel")
-            failures = []
             with ThreadPoolExecutor(max_workers=manifest["max_parallel"]) as executor:
                 futures = {
                     executor.submit(launcher.launch, sandbox, cell): cell
@@ -352,17 +381,40 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                     try:
                         result = future.result()
                     except BaseException as error:
-                        failures.append(error)
+                        if isinstance(error, KeyboardInterrupt):
+                            raise
+                        result = {
+                            "status": "infrastructure_error",
+                            "failure_type": "launcher_exception",
+                            "diagnostics": f"{type(error).__name__}: {error}",
+                        }
+                        ledger["cells"].append({"cell": cell, "result": result})
+                        ledger.setdefault("reschedule", []).append(cell["cell_id"])
+                        checkpoint()
                     else:
                         ledger["cells"].append({"cell": cell, "result": result})
                         checkpoint()
-                        if result.get("exit_code") != 0 or result.get("rounds_completed") != 3:
-                            failures.append(CampaignError(
-                                f"cell {cell['cell_id']} did not complete three Codex rounds"
-                            ))
-            if failures:
-                raise failures[0]
-        ledger["status"] = "complete"
+                        status = result.get("status")
+                        if status is None:
+                            status = ("complete" if result.get("exit_code") == 0
+                                      and result.get("rounds_completed") == 3
+                                      else "infrastructure_error")
+                        if status == "dry_run":
+                            saw_dry_run = True
+                            continue
+                        if status == "infrastructure_error":
+                            ledger.setdefault("reschedule", []).append(cell["cell_id"])
+            if dry_run:
+                shutil.rmtree(attempt_root)
+        if saw_dry_run:
+            ledger["status"] = "dry_run"
+        elif ledger.get("reschedule"):
+            ledger["status"] = "needs_reschedule"
+        elif any(entry["result"].get("status") == "candidate_error"
+                 for entry in ledger["cells"]):
+            ledger["status"] = "completed_with_candidate_failures"
+        else:
+            ledger["status"] = "complete"
         checkpoint()
     except BaseException as error:
         ledger["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
@@ -378,6 +430,15 @@ def main() -> int:
     freeze = sub.add_parser("freeze-cannbot")
     freeze.add_argument("--repository", required=True)
     freeze.add_argument("--output", type=Path, required=True)
+    generate = sub.add_parser("generate-manifest", help="freeze all campaign inputs in a manifest")
+    generate.add_argument("--prompt", type=Path, required=True)
+    generate.add_argument("--gdn-baseline", type=Path, required=True)
+    generate.add_argument("--bsa-baseline", type=Path, required=True)
+    generate.add_argument("--project-skill", type=Path, required=True)
+    generate.add_argument("--cannbot-freeze", type=Path, required=True)
+    generate.add_argument("--output", type=Path, required=True)
+    generate.add_argument("--rounds", type=int, default=3)
+    generate.add_argument("--request-budget", type=int, default=12)
     check = sub.add_parser("preflight")
     check.add_argument("--manifest", type=Path, required=True)
     check.add_argument("--sandbox", type=Path, required=True)
@@ -389,9 +450,19 @@ def main() -> int:
     run.add_argument("--codex", default="codex")
     run.add_argument("--forbid", type=Path, action="append", default=[])
     run.add_argument("--dry-run", action="store_true")
+    run.add_argument("--resume", action="store_true",
+                     help="run only infrastructure cells listed for reschedule")
     args = parser.parse_args()
     if args.command == "freeze-cannbot":
         print(json.dumps(freeze_cannbot(args.repository, args.output), sort_keys=True))
+    elif args.command == "generate-manifest":
+        document = write_manifest(
+            args.output, args.prompt,
+            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline},
+            args.project_skill, args.cannbot_freeze,
+            args.rounds, args.request_budget,
+        )
+        print(json.dumps(document, sort_keys=True))
     elif args.command == "preflight":
         print(json.dumps(preflight(json.loads(args.manifest.read_text()), args.sandbox), sort_keys=True))
     else:
@@ -405,7 +476,7 @@ def main() -> int:
         launcher = ProductionLauncher(controller, codex=args.codex,
                                       forbidden_paths=args.forbid, dry_run=args.dry_run)
         print(json.dumps(run_campaign(
-            json.loads(args.manifest.read_text()), args.output, launcher,
+            json.loads(args.manifest.read_text()), args.output, launcher, resume=args.resume,
         ), sort_keys=True))
     return 0
 

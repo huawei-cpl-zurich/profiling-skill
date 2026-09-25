@@ -532,24 +532,23 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                         ledger.setdefault("reschedule", []).append(cell["cell_id"])
                         checkpoint()
                     else:
-                        ledger["cells"].append({"cell": cell, "result": result})
-                        checkpoint()
                         status = result.get("status")
                         if status is None:
                             status = ("complete" if result.get("exit_code") == 0
                                       and result.get("rounds_completed") == 3
                                       else "infrastructure_error")
+                        ledger["cells"].append({"cell": cell, "result": result})
                         if status == "dry_run":
                             saw_dry_run = True
-                            continue
-                        if status == "infrastructure_error":
+                        elif status == "infrastructure_error":
                             ledger.setdefault("reschedule", []).append(cell["cell_id"])
+                        checkpoint()
             if dry_run:
                 shutil.rmtree(attempt_root)
-        if saw_dry_run:
-            ledger["status"] = "dry_run"
-        elif ledger.get("reschedule"):
+        if ledger.get("reschedule"):
             ledger["status"] = "needs_reschedule"
+        elif saw_dry_run:
+            ledger["status"] = "dry_run"
         elif any(entry["result"].get("status") == "candidate_error"
                  for entry in ledger["cells"]):
             ledger["status"] = "completed_with_candidate_failures"

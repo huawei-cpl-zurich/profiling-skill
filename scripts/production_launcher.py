@@ -11,6 +11,7 @@ import shlex
 import socket
 import socketserver
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -126,7 +127,7 @@ class ProductionLauncher:
     def __init__(self, controller_command: Sequence[str], *, codex: str = "codex",
                  bwrap: str = "bwrap", auth_home: Path | None = None,
                  timeout_seconds: int = 3600, forbidden_paths: Sequence[Path] = (),
-                 dry_run: bool = False):
+                 dry_run: bool = False, resolv_conf: Path = Path("/etc/resolv.conf")):
         self.controller_command = tuple(controller_command)
         self.codex = Path(shutil.which(codex) or codex).resolve()
         self.bwrap = shutil.which(bwrap) or bwrap
@@ -134,6 +135,7 @@ class ProductionLauncher:
         self.timeout_seconds = timeout_seconds
         self.forbidden_paths = tuple(Path(path).resolve() for path in forbidden_paths)
         self.dry_run = dry_run
+        self.resolv_conf = resolv_conf
         if not Path(self.bwrap).exists() or not self.codex.exists():
             raise LaunchError("Bubblewrap and Codex executables are required")
         if not (self.auth_home / "auth.json").is_file():
@@ -145,6 +147,28 @@ class ProductionLauncher:
             if (parent / "bin" / "node").is_file() and (parent / "lib" / "node_modules").is_dir():
                 return parent
         return self.codex.parent
+
+    def _resolver_mounts(self) -> list[str]:
+        """Expose only a systemd-resolved file needed by /etc/resolv.conf."""
+        if not self.resolv_conf.is_symlink():
+            if not self.resolv_conf.is_file():
+                raise LaunchError("host resolver configuration is unavailable")
+            return []
+        link = Path(os.readlink(self.resolv_conf))
+        destination = link if link.is_absolute() else Path("/etc") / link
+        destination = Path(os.path.normpath(destination))
+        allowed = Path("/run/systemd/resolve")
+        if not destination.is_relative_to(allowed):
+            raise LaunchError(f"unsupported resolver target: {destination}")
+        try:
+            source = self.resolv_conf.resolve(strict=True)
+        except (FileNotFoundError, RuntimeError) as error:
+            raise LaunchError("host resolver target is unavailable") from error
+        if not source.is_file():
+            raise LaunchError(f"host resolver target is unavailable: {source}")
+        command = ["--dir", "/run", "--dir", "/run/systemd", "--dir", str(allowed)]
+        command += ["--ro-bind", str(source), str(destination)]
+        return command
 
     def _base_command(self, sandbox: Path, attempt: Path) -> list[str]:
         workspace = (sandbox / "workspace").resolve()
@@ -160,6 +184,7 @@ class ProductionLauncher:
         for source in ("/usr", "/bin", "/lib", "/lib64", "/etc"):
             if Path(source).exists():
                 command += ["--ro-bind", source, source]
+        command += self._resolver_mounts()
         command += [
             "--dir", "/home", "--dir", "/home/agent", "--dir", "/runtime",
             "--dir", "/experiment", "--bind", str(workspace), "/workspace",
@@ -179,13 +204,29 @@ class ProductionLauncher:
         checks = ["test -r /codex-home/auth.json", "test -d /workspace/.agents/skills"]
         for path in self.forbidden_paths:
             checks.append(f"test ! -e {shlex.quote(str(path))}")
-        checks += ["test ! -e /codex-home/skills", "test ! -e /codex-home/plugins"]
+        dns_check = (
+            "import socket; "
+            "result=socket.getaddrinfo('api.openai.com',443,type=socket.SOCK_STREAM); "
+            "assert result"
+        )
+        checks += [
+            "test ! -e /codex-home/skills", "test ! -e /codex-home/plugins",
+            "test -r /etc/resolv.conf", f"python3 -c {shlex.quote(dns_check)}",
+        ]
         run = subprocess.run(
             [*base, "--bind", str(socket_dir), "/experiment-state", "sh", "-ceu", ";".join(checks)],
             text=True, capture_output=True, check=False,
         )
         if run.returncode:
             raise LaunchError(f"outer isolation preflight failed: {run.stderr.strip()}")
+
+    def _environment_preflight(self, sandbox: Path) -> None:
+        """Run the real sandbox and DNS checks without creating campaign evidence."""
+        with tempfile.TemporaryDirectory(prefix="campaign-preflight-") as temporary:
+            root = Path(temporary)
+            socket_dir = root / "controller-state"
+            socket_dir.mkdir(mode=0o700)
+            self._preflight(self._base_command(sandbox, root / "attempt"), socket_dir)
 
     @staticmethod
     def _session_id(output: str) -> str:
@@ -281,6 +322,7 @@ class ProductionLauncher:
         attempt_id = f"attempt-{uuid.uuid4().hex}"
         attempt = sandbox / ".launcher-attempts" / attempt_id
         if self.dry_run:
+            self._environment_preflight(sandbox)
             return {
                 "exit_code": 0, "dry_run": True, "rounds": 3, "rounds_completed": 0,
                 "request_budget": 12,

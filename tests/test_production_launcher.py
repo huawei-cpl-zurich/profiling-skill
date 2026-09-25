@@ -77,6 +77,39 @@ def test_bwrap_argv_mounts_only_workspace_minimal_state_and_readonly_auth(tmp_pa
     assert argv[argv.index("--setenv") + 1:argv.index("--setenv") + 3] == ["HOME", "/home/agent"]
 
 
+def test_bwrap_mounts_only_systemd_resolver_target_from_host_run(tmp_path: Path):
+    fake_root = tmp_path / "host"
+    resolver = fake_root / "run" / "systemd" / "resolve" / "stub-resolv.conf"
+    resolver.parent.mkdir(parents=True)
+    resolver.write_text("nameserver 127.0.0.53\n")
+    etc = fake_root / "etc"
+    etc.mkdir()
+    resolv_conf = etc / "resolv.conf"
+    resolv_conf.symlink_to("../run/systemd/resolve/stub-resolv.conf")
+    instance = launcher_fixture(tmp_path / "fixture", resolv_conf=resolv_conf)
+
+    mounts = instance._resolver_mounts()
+
+    assert mounts == [
+        "--dir", "/run", "--dir", "/run/systemd", "--dir", "/run/systemd/resolve",
+        "--ro-bind", str(resolver), "/run/systemd/resolve/stub-resolv.conf",
+    ]
+    assert "--ro-bind" in mounts
+    assert "/run" not in mounts[mounts.index("--ro-bind") + 1:]
+
+
+def test_missing_systemd_resolver_target_fails_before_agent_start(tmp_path: Path):
+    fake_root = tmp_path / "host"
+    etc = fake_root / "etc"
+    etc.mkdir(parents=True)
+    resolv_conf = etc / "resolv.conf"
+    resolv_conf.symlink_to("../run/systemd/resolve/stub-resolv.conf")
+    instance = launcher_fixture(tmp_path / "fixture", resolv_conf=resolv_conf)
+
+    with pytest.raises(launcher.LaunchError, match="resolver target is unavailable"):
+        instance._base_command(sandbox(tmp_path / "cell"), tmp_path / "attempt")
+
+
 def test_preflight_checks_auth_local_skills_and_forbidden_host_paths(tmp_path: Path, monkeypatch):
     forbidden = tmp_path / "orchestration"
     forbidden.mkdir()
@@ -248,16 +281,19 @@ def test_launch_rejects_noncanonical_limits_before_codex(tmp_path: Path):
         instance.launch(sandbox(tmp_path), {"rounds": 2, "request_budget": 12})
 
 
-def test_dry_run_builds_plan_without_starting_bwrap_or_reading_auth(tmp_path: Path, monkeypatch):
+def test_dry_run_builds_plan_after_real_isolation_and_dns_preflight(tmp_path: Path, monkeypatch):
     instance = launcher_fixture(tmp_path, dry_run=True)
-    monkeypatch.setattr(
-        launcher.subprocess, "run",
-        lambda *a, **k: pytest.fail("dry-run must not start a process"),
-    )
+    calls = []
+    def fake_run(argv, **kwargs):
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
     result = instance.launch(sandbox(tmp_path), {"rounds": 3, "request_budget": 12})
     assert result["dry_run"] is True
     assert result["rounds"] == 3 and result["request_budget"] == 12
     assert "secret-token" not in json.dumps(result)
+    assert len(calls) == 1
+    assert "api.openai.com" in calls[0][-1]
 
 
 def test_dry_run_does_not_create_attempt_state(tmp_path: Path):

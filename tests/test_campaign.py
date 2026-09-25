@@ -188,13 +188,15 @@ def test_ledger_checkpoints_completed_cells_and_failure(tmp_path: Path):
 
     run_root = tmp_path / "runs"
     run_root.mkdir()
-    with pytest.raises(RuntimeError, match="launcher failed"):
-        campaign.run_campaign(manifest, run_root, FailingLauncher())
+    result = campaign.run_campaign(manifest, run_root, FailingLauncher())
     ledger = json.loads((run_root / "ledger.json").read_text())
-    assert ledger["status"] == "failed"
-    assert ledger["failure"]["type"] == "RuntimeError"
-    assert {entry["cell"]["wave"] for entry in ledger["cells"]} == {1, 2}
-    assert len(ledger["cells"]) == 3
+    assert result["status"] == "needs_reschedule"
+    failed = next(entry for entry in ledger["cells"]
+                  if entry["cell"]["cell_id"] == "gdn-project-cannbot")
+    assert failed["result"]["failure_type"] == "launcher_exception"
+    assert "RuntimeError: launcher failed" in failed["result"]["diagnostics"]
+    assert ledger["reschedule"] == ["gdn-project-cannbot"]
+    assert len(ledger["cells"]) == 6
 
 
 def test_incomplete_launcher_result_is_evidence_then_fails_ledger(tmp_path: Path):
@@ -205,11 +207,10 @@ def test_incomplete_launcher_result_is_evidence_then_fails_ledger(tmp_path: Path
             return {"exit_code": 9, "rounds_completed": 1, "stderr": "transport failed"}
 
     run_root = tmp_path / "runs"
-    with pytest.raises(campaign.CampaignError, match="did not complete three"):
-        campaign.run_campaign(manifest, run_root, IncompleteLauncher())
+    result = campaign.run_campaign(manifest, run_root, IncompleteLauncher())
     ledger = json.loads((run_root / "ledger.json").read_text())
-    assert ledger["status"] == "failed"
-    assert len(ledger["cells"]) == 2
+    assert result["status"] == "needs_reschedule"
+    assert len(ledger["cells"]) == 6
     assert all(entry["result"]["stderr"] == "transport failed" for entry in ledger["cells"])
 
 
@@ -346,7 +347,8 @@ def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_opt
 
     monkeypatch.setitem(sys.modules, "production_launcher",
                         types.SimpleNamespace(ProductionLauncher=FakeProductionLauncher))
-    monkeypatch.setattr(campaign, "run_campaign", lambda document, output, value: {"status": "dry-run"})
+    monkeypatch.setattr(campaign, "run_campaign",
+                        lambda document, output, value, **kwargs: {"status": "dry-run"})
     command = ["python", "scripts/experimentctl.py", "--config", "/host/cells.json",
                "--cell", "{cell_id}"]
     monkeypatch.setattr(sys, "argv", ["campaign.py", "run", "--manifest", str(manifest),
@@ -357,3 +359,109 @@ def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_opt
     assert observed["kwargs"]["codex"] == "fake-codex"
     assert observed["kwargs"]["dry_run"] is True
     assert json.loads(capsys.readouterr().out)["status"] == "dry-run"
+
+
+def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkeypatch, capsys):
+    manifest, _ = fixture(tmp_path / "source")
+    output = tmp_path / "nested" / "campaign.json"
+    monkeypatch.setattr(sys, "argv", [
+        "campaign.py", "generate-manifest",
+        "--prompt", manifest["prompt"]["path"],
+        "--gdn-baseline", manifest["baselines"]["gdn"]["path"],
+        "--bsa-baseline", manifest["baselines"]["bsa"]["path"],
+        "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
+        "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
+        "--output", str(output), "--rounds", "3", "--request-budget", "12",
+    ])
+    assert campaign.main() == 0
+    written = json.loads(output.read_text())
+    assert written == json.loads(capsys.readouterr().out)
+    assert len(written["cells"]) == 6
+    sandbox = campaign.prepare_cell(written, written["cells"][0], tmp_path / "runs")
+    assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
+
+
+def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    with pytest.raises(campaign.CampaignError, match="must be positive"):
+        campaign.write_manifest(
+            tmp_path / "bad.json", Path(manifest["prompt"]["path"]),
+            {name: Path(value["path"]) for name, value in manifest["baselines"].items()},
+            Path(manifest["skill_sources"]["ascend-profiling"]["path"]),
+            Path(manifest["skill_sources"]["cannbot"]["path"]), rounds=0,
+        )
+
+
+def test_infrastructure_cell_is_retained_for_explicit_reschedule(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class InfrastructureLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            return {"status": "infrastructure_error", "attempt_id": "kept",
+                    "terminal_evidence": {"check": {"handles": ["gz-a3:durable"]}}}
+
+    result = campaign.run_campaign(manifest, tmp_path / "runs", InfrastructureLauncher())
+    ledger = json.loads((tmp_path / "runs" / "ledger.json").read_text())
+    assert result["status"] == "needs_reschedule"
+    assert set(ledger["reschedule"]) == {cell["cell_id"] for cell in manifest["cells"]}
+    assert all(entry["result"]["attempt_id"] == "kept" for entry in ledger["cells"])
+
+
+def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class DryRunLauncher(RecordingLauncher):
+        dry_run = True
+        def launch(self, sandbox, cell):
+            return {"status": "dry_run", "dry_run": True, "rounds_completed": 0,
+                    "attempt_id": f"plan-{cell['cell_id']}"}
+
+    ledger = campaign.run_campaign(manifest, tmp_path / "runs", DryRunLauncher())
+    assert ledger["status"] == "dry_run"
+    assert len(ledger["cells"]) == 6
+    assert all(entry["result"]["dry_run"] for entry in ledger["cells"])
+    assert not (tmp_path / "runs" / "attempts").exists()
+    production = campaign.run_campaign(manifest, tmp_path / "runs", RecordingLauncher())
+    assert production["status"] == "complete"
+    assert (tmp_path / "runs" / "attempts").is_dir()
+
+
+def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class CandidateLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            if cell["cell_id"] == "gdn-cannbot":
+                return {"status": "candidate_error", "failure_type": "compile_error"}
+            return {"status": "complete", "rounds_completed": 3}
+
+    ledger = campaign.run_campaign(manifest, tmp_path / "runs", CandidateLauncher())
+    assert ledger["status"] == "completed_with_candidate_failures"
+    assert len(ledger["cells"]) == 6
+    assert "reschedule" not in ledger or not ledger["reschedule"]
+
+
+def test_resume_runs_only_infrastructure_cells_in_fresh_sandbox(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    failed_id = "gdn-project-cannbot"
+
+    class FirstLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            self.calls.append((sandbox, cell.copy()))
+            if cell["cell_id"] == failed_id:
+                return {"status": "infrastructure_error", "diagnostics": "flaky"}
+            return {"status": "complete"}
+
+    first = FirstLauncher()
+    root = tmp_path / "runs"
+    ledger = campaign.run_campaign(manifest, root, first)
+    assert ledger["status"] == "needs_reschedule"
+    original_sandbox = next(path for path, cell in first.calls if cell["cell_id"] == failed_id)
+
+    second = RecordingLauncher()
+    ledger = campaign.run_campaign(manifest, root, second, resume=True)
+    assert ledger["status"] == "complete"
+    assert [cell["cell_id"] for _, cell in second.calls] == [failed_id]
+    assert second.calls[0][0] != original_sandbox
+    assert len(ledger["cells"]) == 7
+    assert not ledger["reschedule"]

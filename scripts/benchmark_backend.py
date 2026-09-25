@@ -35,6 +35,7 @@ BENCHMARKS = {
 ALL_CASES = list(range(50))
 VALID_ACTIONS = {"measure", "check", "profile"}
 VALID_RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
+MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 
 
 def response(status: str, diagnostics: str, **values: Any) -> dict[str, Any]:
@@ -64,7 +65,21 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
     return raw, None
 
 
-def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Path) -> dict[str, Any]:
+def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]:
+    try:
+        manifest = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        return None, response("compile_error", f"cannot load candidate kernel manifest {path}: {error}")
+    if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:
+        return None, response("compile_error", f"candidate kernel manifest requires schema {MANIFEST_SCHEMA!r}")
+    kernel_name = manifest.get("kernel_name")
+    if not isinstance(kernel_name, str) or not kernel_name.strip() or kernel_name != kernel_name.strip():
+        return None, response("compile_error", "candidate kernel manifest requires a non-empty trimmed kernel_name")
+    return kernel_name, None
+
+
+def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Path,
+             kernel_name: str | None = None) -> dict[str, Any]:
     spec = BENCHMARKS[benchmark]
     action = request["action"]
     job = {
@@ -85,6 +100,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
     else:
         job.update(case=request["case"], iteration=request.get("iteration"))
         if action == "profile":
+            if kernel_name is None:
+                raise ValueError("profile job requires a kernel selector")
             job["profiling"] = {
                 "driver": str((root / "scripts/profile_a3.py").resolve()),
                 "tool": "msprof op",
@@ -93,9 +110,21 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
                 "warm_up": 3,
                 "launch_count": 1,
                 "replay_mode": "kernel",
-                "kernel_selector_source": "candidate-manifest",
+                "kernel_name": kernel_name,
+                "driver_arguments": ["--kernel-name", kernel_name],
             }
     return job
+
+
+def identity_fields(job: dict[str, Any]) -> dict[str, Any]:
+    fields = {name: job[name] for name in ("benchmark", "action", "device")}
+    if job["action"] == "check":
+        fields.update(cases=job["cases"], scope=job["scope"])
+    else:
+        fields["case"] = job["case"]
+    if job["action"] == "profile":
+        fields["kernel_name"] = job["profiling"]["kernel_name"]
+    return fields
 
 
 def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, Any]:
@@ -126,6 +155,14 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
     if run.returncode and status == "ok":
         return response("infrastructure_error", f"job client exited {run.returncode} after success\n{diagnostics}".strip(),
                         handle=result.get("handle"))
+    mismatches = [name for name, expected in identity_fields(job).items() if result.get(name) != expected]
+    if mismatches:
+        return response(
+            "infrastructure_error",
+            f"job result identity mismatch for {', '.join(mismatches)}\n{diagnostics}".strip(),
+            handle=result.get("handle"),
+            evidence=result,
+        )
     return result
 
 
@@ -133,6 +170,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", choices=sorted(BENCHMARKS), required=True)
     parser.add_argument("--candidate", type=Path, default=Path("candidate.py"))
+    parser.add_argument("--candidate-manifest", type=Path)
     parser.add_argument("--job-client", nargs="+", required=True)
     parser.add_argument("--timeout", type=int, default=3600)
     return parser.parse_args()
@@ -152,7 +190,16 @@ def main() -> int:
         elif not args.candidate.is_file():
             result = response("compile_error", f"candidate source does not exist: {args.candidate}")
         else:
-            result = invoke(args.job_client, make_job(request, args.benchmark, args.candidate, root), args.timeout)
+            kernel_name = None
+            if request["action"] == "profile":
+                manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
+                kernel_name, result = load_kernel_selector(manifest)
+            if kernel_name is not None or request["action"] != "profile":
+                result = invoke(
+                    args.job_client,
+                    make_job(request, args.benchmark, args.candidate, root, kernel_name),
+                    args.timeout,
+                )
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

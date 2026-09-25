@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import ast
 import json
 import subprocess
 import sys
@@ -12,6 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "scripts" / "benchmark_backend.py"
 GENERATOR = ROOT / "scripts" / "generate_benchmark_config.py"
+MANIFEST_SCHEMA_TEXT = "profiling-skill/candidate-kernel/v1"
 
 
 def load_backend():
@@ -29,13 +31,22 @@ import json, os, sys
 job = json.load(sys.stdin)
 mode = os.environ.get("FAKE_MODE", "ok")
 print("client diagnostic", file=sys.stderr)
+identity = {k: job[k] for k in ("benchmark", "action", "device")}
+if job["action"] == "check": identity.update(cases=job["cases"], scope=job["scope"])
+else: identity["case"] = job["case"]
+if job["action"] == "profile": identity["kernel_name"] = job["profiling"]["kernel_name"]
+if mode == "wrong_identity": identity["case"] = 49
+if mode == "wrong_check": identity["scope"] = "development"
 if mode == "echo":
     print(json.dumps({"status": "ok", "diagnostics": "", "job": job,
                       "latency_us": 12.5, "passed": True,
-                      "device": job["device"], "handle": "gz-a3:job-1"}))
+                      "handle": "gz-a3:job-1", **identity}))
 elif mode in {"compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
     print(json.dumps({"status": mode, "diagnostics": mode + " details",
-                      "handle": "gz-a3:job-2", "device": job["device"]}))
+                      "handle": "gz-a3:job-2", **identity}))
+elif mode in {"wrong_identity", "wrong_check"}:
+    print(json.dumps({"status": "ok", "diagnostics": "wrong case evidence",
+                      "latency_us": 12.5, "handle": "gz-a3:job-3", **identity}))
 else:
     print("not-json")
 """)
@@ -58,6 +69,9 @@ def request(benchmark="gdn", action="profile", **extra):
 def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
+    candidate.with_suffix(".manifest.json").write_text(json.dumps({
+        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "candidate_kernel"
+    }))
     client = fake_client(tmp_path)
     return subprocess.run(
         [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
@@ -79,6 +93,25 @@ def test_pinned_assets_are_exact_and_have_fifty_cases():
         files = [ROOT / spec["asset"], ROOT / spec["cases"]]
         assert tuple(hashlib.sha256(path.read_bytes()).hexdigest() for path in files) == hashes
         assert len([line for line in files[1].read_text(encoding="utf-8-sig").splitlines() if line]) == 50
+        compatibility = files[0].with_suffix(".json")
+        assert compatibility.read_bytes() == files[1].read_bytes()
+
+
+def extracted_function(path: Path, name: str):
+    tree = ast.parse(path.read_text())
+    node = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name)
+    namespace = {"os": __import__("os"), "json": json, "__file__": str(path)}
+    exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), "exec"), namespace)
+    return namespace[name]
+
+
+def test_pinned_loaders_resolve_compatible_case_names_and_parse_fifty():
+    gdn = ROOT / "benchmarks/gdn/baseline.py"
+    assert len(extracted_function(gdn, "_load_cases")()) == 50
+    bsa = ROOT / "benchmarks/bsa/baseline.py"
+    resolved = Path(extracted_function(bsa, "_json_path")())
+    assert resolved == bsa.with_suffix(".json")
+    assert len([json.loads(line) for line in resolved.read_text(encoding="utf-8-sig").splitlines() if line]) == 50
 
 
 def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
@@ -94,7 +127,8 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
     assert job["profiling"] == {
         "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
         "tool": "msprof op", "captures": 1, "aic_metrics": "BasicInfo", "warm_up": 3,
-        "launch_count": 1, "replay_mode": "kernel", "kernel_selector_source": "candidate-manifest",
+        "launch_count": 1, "replay_mode": "kernel", "kernel_name": "candidate_kernel",
+        "driver_arguments": ["--kernel-name", "candidate_kernel"],
     }
     assert result["handle"] == "gz-a3:job-1"
     assert "client diagnostic" in result["diagnostics"]
@@ -113,6 +147,22 @@ def test_environment_failure_is_separate(tmp_path: Path):
     result = json.loads(run_backend(tmp_path, request(), mode="infrastructure_error").stdout)
     assert result["status"] == "infrastructure_error"
     assert result["handle"] == "gz-a3:job-2"
+
+
+def test_job_result_identity_mismatch_preserves_evidence(tmp_path: Path):
+    result = json.loads(run_backend(tmp_path, request(), mode="wrong_identity").stdout)
+    assert result["status"] == "infrastructure_error"
+    assert "identity mismatch for case" in result["diagnostics"]
+    assert result["handle"] == "gz-a3:job-3"
+    assert result["evidence"]["diagnostics"] == "wrong case evidence\nclient diagnostic"
+    assert result["evidence"]["case"] == 49
+
+
+def test_check_result_identity_includes_cases_and_scope(tmp_path: Path):
+    result = json.loads(run_backend(tmp_path, request(action="check"), mode="wrong_check").stdout)
+    assert result["status"] == "infrastructure_error"
+    assert "identity mismatch for scope" in result["diagnostics"]
+    assert result["evidence"]["cases"] == list(range(50))
 
 
 @pytest.mark.parametrize("change,message", [
@@ -145,11 +195,29 @@ def test_missing_candidate_is_compile_failure(tmp_path: Path):
     assert "does not exist" in result["diagnostics"]
 
 
+def test_missing_or_invalid_kernel_manifest_is_compile_failure(tmp_path: Path):
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("# candidate\n")
+    client = fake_client(tmp_path)
+    command = [sys.executable, str(BACKEND), "--benchmark", "gdn", "--candidate", str(candidate),
+               "--job-client", str(client)]
+    missing = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
+    assert json.loads(missing.stdout)["status"] == "compile_error"
+    candidate.with_suffix(".manifest.json").write_text(json.dumps({"schema": "wrong", "kernel_name": "x"}))
+    invalid = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
+    assert MANIFEST_SCHEMA_TEXT in json.loads(invalid.stdout)["diagnostics"]
+
+
 def test_generator_emits_exact_controller_cells(tmp_path: Path):
     output = tmp_path / "cells.json"
     subprocess.run([sys.executable, str(GENERATOR), "--job-client", "/bin/true", "--output", str(output)], check=True)
     cells = json.loads(output.read_text())["cells"]
-    assert cells["gdn"]["development_cases"] == [40, 49, 47, 46, 45]
-    assert cells["bsa"]["development_cases"] == [47, 46, 49, 44, 43]
-    assert (cells["gdn"]["device"], cells["bsa"]["device"]) == (0, 1)
-    assert cells["gdn"]["all_cases"] == list(range(50))
+    assert set(cells) == {
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-only",
+        "bsa-cannbot", "bsa-project-cannbot", "bsa-project-only",
+    }
+    assert cells["gdn-cannbot"]["development_cases"] == [40, 49, 47, 46, 45]
+    assert cells["bsa-project-only"]["development_cases"] == [47, 46, 49, 44, 43]
+    assert (cells["gdn-cannbot"]["device"], cells["bsa-cannbot"]["device"]) == (0, 1)
+    assert cells["gdn-project-cannbot"]["all_cases"] == list(range(50))
+    assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"

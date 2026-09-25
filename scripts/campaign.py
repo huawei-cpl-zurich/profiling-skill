@@ -601,7 +601,10 @@ def main() -> int:
     elif args.command == "generate-manifest":
         try:
             controller = json.loads(args.controller_json)
-        except json.JSONDecodeError as error:
+            if (not isinstance(controller, list) or not controller
+                    or not all(isinstance(value, str) and value for value in controller)):
+                raise ValueError("expected a nonempty JSON array of nonempty strings")
+        except (json.JSONDecodeError, ValueError) as error:
             parser.error(f"--controller-json must be a JSON string array: {error}")
         document = write_manifest(
             args.output, args.prompt,

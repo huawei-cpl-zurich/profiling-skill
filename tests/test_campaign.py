@@ -409,6 +409,24 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
 
 
+@pytest.mark.parametrize("value", [{}, 7, "command", [], ["python", 3], [""]])
+def test_generate_manifest_cli_rejects_non_string_array_controller_json(
+    tmp_path: Path, monkeypatch, capsys, value,
+):
+    monkeypatch.setattr(sys, "argv", [
+        "campaign.py", "generate-manifest", "--prompt", "missing-prompt",
+        "--gdn-baseline", "missing-gdn", "--bsa-baseline", "missing-bsa",
+        "--project-skill", "missing-skill", "--cannbot-freeze", "missing-freeze",
+        "--controller-config", "missing-config", "--controller-json", json.dumps(value),
+        "--output", str(tmp_path / "campaign.json"),
+    ])
+    with pytest.raises(SystemExit) as raised:
+        campaign.main()
+    assert raised.value.code == 2
+    assert "--controller-json must be a JSON string array" in capsys.readouterr().err
+    assert not (tmp_path / "campaign.json").exists()
+
+
 def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
     with pytest.raises(campaign.CampaignError, match="must be positive"):

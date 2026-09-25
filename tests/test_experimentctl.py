@@ -88,6 +88,24 @@ def run(tmp_path: Path, *arguments: str, mode: str = "ok"):
     return process, json.loads(process.stdout), tmp_path / "requests.jsonl"
 
 
+def test_bundle_placeholders_resolve_to_runtime_and_config_directory(tmp_path: Path):
+    backend = tmp_path / "backend.py"
+    backend.write_text(BACKEND)
+    config, env = setup(tmp_path)
+    document = json.loads(config.read_text())
+    document["cells"]["gdn-skill"]["backend"]["command"] = [
+        "{python}", "{bundle}/backend.py"
+    ]
+    config.write_text(json.dumps(document))
+    process = subprocess.run(
+        ["python3", str(CLI), "--config", str(config), "--cell", "gdn-skill",
+         "check", "--scope", "development"],
+        text=True, capture_output=True, env=env,
+    )
+    assert process.returncode == 0
+    assert json.loads(process.stdout)["status"] == "ok"
+
+
 def requests(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines()]
 

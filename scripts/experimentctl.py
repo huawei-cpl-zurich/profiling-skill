@@ -63,6 +63,9 @@ def read_cell(path: Path, cell_id: str) -> dict[str, Any]:
         raise ConfigError("cell device must be a non-negative integer")
     if not isinstance(command, list) or not command or not all(isinstance(x, str) for x in command):
         raise ConfigError("backend.command must be a non-empty string array")
+    bundle = str(path.resolve().parent)
+    command = [argument.replace("{python}", sys.executable).replace("{bundle}", bundle)
+               for argument in command]
     timeout = cell.get("backend", {}).get("timeout_seconds", 900)
     if (
         isinstance(timeout, bool)
@@ -75,7 +78,7 @@ def read_cell(path: Path, cell_id: str) -> dict[str, Any]:
         values = cell.get(field)
         if not isinstance(values, list) or not values or not all(isinstance(x, int) and x >= 0 for x in values):
             raise ConfigError(f"{field} must be a non-empty array of case indices")
-    return {**cell, "id": cell_id}
+    return {**cell, "backend": {**cell["backend"], "command": command}, "id": cell_id}
 
 
 def invoke(cell: dict[str, Any], action: str, **payload: Any) -> dict[str, Any]:

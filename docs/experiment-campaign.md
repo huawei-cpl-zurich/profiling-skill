@@ -106,17 +106,24 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --bsa-baseline /absolute/campaign-inputs/baselines/bsa \
   --project-skill "$ABS_REPOSITORY" \
   --cannbot-freeze /absolute/campaign-inputs/cannbot-freeze \
+  --controller-config /absolute/campaign-inputs/controller.json \
+  --controller-json '["python","/absolute/approved/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
   --output /absolute/campaign-inputs/campaign.json \
   --rounds 3 \
   --request-budget 12
 ```
 
-The generated controller config contains all six cell IDs, hard-binding their
-benchmark, treatment, device, five development cases, all 50 correctness
-cases, and backend command. Preserve it alongside the campaign manifest as
-campaign evidence; never hand-edit either file. The campaign manifest does not
-currently bind or hash the controller config or the supplied controller
-command; that missing binding remains a reproducibility blocker.
+Manifest generation creates a version 2 manifest and a sibling controller
+bundle containing the normalized config, `experimentctl.py`, and
+`benchmark_backend.py`. It hashes all three files, the path-independent argv
+template, and the Python implementation, version, and executable bytes.
+Backend commands in the config are rewritten to bundle-relative templates.
+The manifest and ledger therefore contain no controller host paths. The
+generated controller config contains all
+six cell IDs, hard-binding their benchmark,
+treatment, device, five development cases, all 50 correctness cases, and
+backend command. Preserve generated JSON files as campaign evidence; never
+hand-edit them.
 
 The scheduler uses three fixed two-cell waves so no more than two agents run
 at once and each benchmark stays on its assigned NPU:
@@ -143,11 +150,12 @@ environment gate, not a kernel result. Do not start or claim measured
 experiments until the branch is available through the managed profile and the
 three-agent readiness gate passes.
 
-The production launch has no implicit backend. Supply the generated cell
-controller as a JSON string array through `--controller-json`; placeholders
-are expanded per cell. Because the host controller runs with the candidate
-workspace as its working directory, the `experimentctl.py` and controller
-config arguments must be absolute, resolved host paths.
+Production accepts only a version 2 controller-bound manifest. Before any
+cell starts, it verifies the runtime and bundle, copies the bundle into the
+campaign's private evidence directory, makes it read-only, and constructs the
+controller command from that private copy. Resume reuses and verifies the
+same copy. Changes to the original config or repository scripts after staging
+cannot affect later waves.
 
 There is currently no checked-in production GZ-A3 job client for
 `benchmark_backend.py`. The placeholder used by config generation cannot run
@@ -169,14 +177,14 @@ attempt directories and replaces the dry-run ledger state.
 python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --python /absolute/frozen/python \
   --forbid /absolute/host-skill-root \
   --dry-run
 
 python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --python /absolute/frozen/python \
   --forbid /absolute/host-skill-root
 ```
 
@@ -226,7 +234,7 @@ directories; it neither repeats successful cells nor candidate failures.
 python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --python /absolute/frozen/python \
   --forbid /absolute/host-skill-root \
   --resume
 ```
@@ -234,8 +242,8 @@ python "$ABS_REPOSITORY/scripts/campaign.py" run \
 The complete evidence set to preserve across the ledger and its referenced
 artifacts is:
 
-- campaign manifest and its recorded hashes, plus the unbound controller
-  config and exact controller command used;
+- campaign manifest and its recorded hashes, plus the private frozen
+  controller bundle, normalized command template, and runtime identity;
 - prompt, baseline, project-skill, and frozen-CANNBot hashes and CANNBot commit;
 - cell, treatment, model configuration, session and attempt IDs;
 - physical device, controller request count, remote job handles, diagnostics,

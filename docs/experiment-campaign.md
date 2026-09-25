@@ -1,6 +1,7 @@
 # A3 profiling experiment campaign
 
-This runbook defines the reproducible measured campaign. It has six cells:
+This runbook defines the intended measured campaign and identifies the gates
+that still prevent a reproducible production run. The design has six cells:
 three profiling treatments for each of the pinned GDN and BSA kernels. It does
 not include the streaming matmul-add development control, and no measured
 campaign has started yet.
@@ -56,9 +57,9 @@ The treatments are:
 
 `campaign.py preflight` verifies the prompt, baseline, skill manifests, skill
 hashes, plugin-support presence, and the absence of symlinks before launch.
-The opaque controller socket is the only route from an isolated agent to
-kernel checking or profiling; the agent cannot see its implementation or the
-other treatments.
+The production launcher exposes an opaque controller socket as the only route
+from an isolated agent to its host controller command; the agent cannot see
+that implementation or the other treatments.
 
 ## Freeze and configure
 
@@ -72,18 +73,20 @@ python scripts/campaign.py freeze-cannbot \
   --output "$CANNBOT_FREEZE"
 
 python scripts/generate_benchmark_config.py \
-  --job-client-json '["<checked-in-gz-a3-job-client>"]' \
+  --job-client-json '["<absolute-production-gz-a3-job-client>"]' \
   --candidate candidate.py \
   --candidate-manifest candidate.manifest.json \
   --output "$CONTROLLER_CONFIG"
 ```
 
-Create the manifest with `campaign.write_manifest(...)`, passing the one
-frozen prompt, the `gdn` and `bsa` baseline directories, the project skill
-root, and the frozen CANNBot directory. The generated controller config has
-all six cell IDs and hard-binds their benchmark, treatment, device, five
-development cases, all 50 correctness cases, and backend command. Preserve
-both generated JSON files as campaign evidence; never hand-edit them.
+Manifest generation currently has no checked-in command-line interface.
+`write_manifest` is an internal Python API used by the tests, not a production
+operator command. A supported manifest-generation CLI must be added before a
+campaign can be frozen reproducibly. The generated controller config does
+have a CLI and contains all six cell IDs, hard-binding their benchmark,
+treatment, device, five development cases, all 50 correctness cases, and
+backend command. Preserve generated JSON files as campaign evidence; never
+hand-edit them.
 
 The scheduler uses three fixed two-cell waves so no more than two agents run
 at once and each benchmark stays on its assigned NPU:
@@ -112,43 +115,68 @@ three-agent readiness gate passes.
 
 The production launch has no implicit backend. Supply the generated cell
 controller as a JSON string array through `--controller-json`; placeholders
-are expanded per cell. First exercise the exact frozen manifest with
-`--dry-run`, then remove that flag for production:
+are expanded per cell. Because the host controller runs with the candidate
+workspace as its working directory, the `experimentctl.py` and controller
+config arguments must be absolute, resolved host paths.
+
+There is currently no checked-in production GZ-A3 job client for
+`benchmark_backend.py`. The placeholder used by config generation cannot run
+a benchmark, so production execution is blocked and is not yet reproducible.
+Do not substitute ad hoc SSH, Docker, transfer, or remote-agent calls. A future
+job client must use the checked-in `$gz-a3` profile and preserve durable job
+handles.
+
+Once those gates are implemented, first exercise the exact frozen manifest
+with `--dry-run` in a disposable output directory. A dry run creates all six
+cell directories, so production must use a different, fresh output directory;
+removing `--dry-run` while reusing its directory will fail the fresh-sandbox
+check. Both `$DISPOSABLE_DRY_RUN_OUTPUT` and `$PRODUCTION_OUTPUT` must be
+absent before their respective invocations, and they must resolve to different
+paths.
 
 ```bash
 python scripts/campaign.py run \
   --manifest "$CAMPAIGN_MANIFEST" \
-  --output "$CAMPAIGN_OUTPUT" \
-  --controller-json '["python","scripts/experimentctl.py","--config","<controller-config>","--cell","{cell_id}"]' \
+  --output "$DISPOSABLE_DRY_RUN_OUTPUT" \
+  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"$ABS_CONTROLLER_CONFIG\",\"--cell\",\"{cell_id}\"]" \
   --forbid "$HOST_SKILL_ROOT" \
   --dry-run
 ```
 
 Each cell is one persistent Codex session with exactly three optimization
 rounds, at most 12 controller requests, and a 60-minute wall-clock limit.
-Compilation and the first launch are outside latency samples. Development
-checks use the five pinned cases; a successful candidate must pass the final
-50-case correctness check.
+The controller and benchmark adapter support development checks against the
+five pinned cases and full checks against all 50 cases. However,
+`run_campaign` currently checks only launcher exit status and three completed
+rounds; it does not enforce a final all-50 correctness result or require
+profile evidence before marking a cell complete. That enforcement is a
+production blocker.
 
-Performance is collected with `msprof op`. For each development case the
-controller requests three captures, reports their median kernel latency, and
-computes the cell score as the geometric mean of the five case medians. The
-kernel name comes from the candidate manifest and is passed explicitly to
-`msprof`; host-observed timing is diagnostic only and is not the score.
+The implemented profiling interface uses `msprof op`. When explicitly
+invoked with `experimentctl.py profile --repeats 3`, it requests three
+captures for each development case, reports their median kernel latency, and
+computes the score as the geometric mean of the five case medians. The kernel
+name comes from the candidate manifest and is passed explicitly to `msprof`;
+host-observed timing is diagnostic only and is not the score. The scheduler
+does not yet prove that an agent invoked this interface or retain its result
+as required cell evidence.
 
 ## Failures, evidence, and replay
 
-Compilation, runtime, correctness, request-budget, and time-budget failures
-belong to the candidate and count in success-rate results. Transport or
+The intended analysis counts compilation, runtime, correctness,
+request-budget, and time-budget failures as candidate failures. Transport or
 service failures, unhealthy or lost devices, model-service failures, and a
-profiler failure also reproduced by a known-good canary are infrastructure
-failures. Exclude those attempts, retain their evidence, and reschedule the
-same cell in a new sandbox. Never submit a duplicate merely because observing
-a durable `gz-a3:<job-id>` was interrupted; resume that handle through the
-checked-in profile.
+profiler failure also reproduced by a known-good canary are intended as
+infrastructure exclusions. The current scheduler does not classify all of
+these outcomes, run the canary, or reschedule excluded attempts. Automating
+that policy is another production gate. Never manually resubmit merely because
+observing a durable `gz-a3:<job-id>` was interrupted; resume that handle
+through the checked-in profile.
 
 `ledger.json` is atomically checkpointed after every completed cell and on
-failure or interruption. Preserve it together with:
+failure or interruption, but currently contains only cell metadata and the
+raw launcher result. Once the production gates are implemented, the complete
+evidence set to preserve across the ledger and its referenced artifacts is:
 
 - campaign and controller manifests and their hashes;
 - prompt, baseline, project-skill, and frozen-CANNBot hashes and CANNBot commit;
@@ -157,9 +185,11 @@ failure or interruption. Preserve it together with:
   correctness outcomes, and `msprof op` evidence;
 - exclusion classification and the replacement attempt, when applicable.
 
-To replay, use the same frozen directories and manifests, choose a fresh
-campaign output directory, and invoke the same production command. First run
-`campaign.py preflight` on any retained cell sandbox that is being audited.
-Compare manifest hashes before aggregating results; a changed prompt,
+After the production gates above are implemented, replay will use the same
+frozen directories and manifests with a fresh campaign output directory and
+the same production command. `campaign.py preflight` can audit a retained cell
+sandbox. Compare manifest hashes before aggregating results; a changed prompt,
 baseline, skill bundle, controller config, or CANNBot freeze defines a new
-campaign rather than a replay.
+campaign rather than a replay. Until manifest generation, the GZ-A3 job client,
+result enforcement, and exclusion/rescheduling are implemented, the battery
+is a tested scaffold rather than a reproducible measured experiment.

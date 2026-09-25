@@ -15,6 +15,15 @@ Select an eligible physical device through that profile; the one-shot job
 exposes it to the application as logical device 0. Do not use direct SSH,
 Docker, or a raw remote-agent client.
 
+The repository contains an internal managed-bundle engine for a future
+profile-owned mutable-source route. Its `--client` and `--remote` options are
+integration APIs, not agent-facing authorization. Until the neutral `$gz-a3`
+adapter exposes and documents that route, mutable-source transfer remains
+unavailable: do not invoke the engine directly or use raw `scp`, SSH, Docker,
+or a raw remote-agent client. The dependent adapter integration must retain
+durable handle observation, content verification, fixed profile-owned remote
+roots, and the prohibition on target fallback.
+
 For reproducible kernel latency, run the correctness-checked workload through
 `scripts/profile_a3.py`. It performs a bounded `msprof op` `BasicInfo` capture
 and emits compact JSON with device-task durations and source hashes. Prefer an

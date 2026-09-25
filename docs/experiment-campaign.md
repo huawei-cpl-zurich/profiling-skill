@@ -67,13 +67,25 @@ Use a new output directory for every freeze and campaign. The examples use
 placeholders deliberately; machine-specific locations and credentials must
 not enter the manifest or repository.
 
+Set `ABS_REPOSITORY` to an operator-approved, frozen operational checkout and
+validate that it is absolute before running any command. It must not be the
+managed canonical checkout or a task implementation worktree: those locations
+remain subject to the workspace's no-build/no-run and task-isolation rules.
+
 ```bash
-python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/campaign.py \
+ABS_REPOSITORY=/absolute/approved/profiling-skill
+case "$ABS_REPOSITORY" in /*) ;; *) exit 2 ;; esac
+test -f "$ABS_REPOSITORY/scripts/campaign.py"
+test -f "$ABS_REPOSITORY/scripts/experimentctl.py"
+```
+
+```bash
+python "$ABS_REPOSITORY/scripts/campaign.py" \
   freeze-cannbot \
   --repository https://gitcode.com/cann/cannbot-skills.git \
   --output /absolute/campaign-inputs/cannbot-freeze
 
-python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/generate_benchmark_config.py \
+python "$ABS_REPOSITORY/scripts/generate_benchmark_config.py" \
   --job-client-json '["<absolute-production-gz-a3-job-client>"]' \
   --candidate candidate.py \
   --candidate-manifest candidate.manifest.json \
@@ -87,12 +99,12 @@ Replace only the external artifact roots with absolute paths on the campaign
 host; do not use relative paths.
 
 ```bash
-python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/campaign.py \
+python "$ABS_REPOSITORY/scripts/campaign.py" \
   generate-manifest \
   --prompt /absolute/campaign-inputs/prompt.md \
   --gdn-baseline /absolute/campaign-inputs/baselines/gdn \
   --bsa-baseline /absolute/campaign-inputs/baselines/bsa \
-  --project-skill /home/m00933363/repos/profiling-skill/canonical/profiling-skill \
+  --project-skill "$ABS_REPOSITORY" \
   --cannbot-freeze /absolute/campaign-inputs/cannbot-freeze \
   --output /absolute/campaign-inputs/campaign.json \
   --rounds 3 \
@@ -101,8 +113,10 @@ python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/c
 
 The generated controller config contains all six cell IDs, hard-binding their
 benchmark, treatment, device, five development cases, all 50 correctness
-cases, and backend command. Preserve both generated JSON files as campaign
-evidence; never hand-edit them.
+cases, and backend command. Preserve it alongside the campaign manifest as
+campaign evidence; never hand-edit either file. The campaign manifest does not
+currently bind or hash the controller config or the supplied controller
+command; that missing binding remains a reproducibility blocker.
 
 The scheduler uses three fixed two-cell waves so no more than two agents run
 at once and each benchmark stays on its assigned NPU:
@@ -143,25 +157,27 @@ job client must use the checked-in `$gz-a3` profile and preserve durable job
 handles.
 
 Once those gates are implemented, first exercise the exact frozen manifest
-with `--dry-run`. Dry-run cell sandboxes use temporary directories and are
-removed after validation, while the ledger records all six planned cells with
-status `dry_run`. The production invocation may therefore safely reuse the
-same campaign output root; it creates fresh attempt directories and replaces
-the dry-run ledger state.
+with `--dry-run`. Dry-run preparation uses host temporary roots named
+`campaign-dry-run-*`, outside the campaign output root; interrupted runs can
+leave those roots behind for inspection, and operators are responsible for
+retention or cleanup under their site's artifact policy. The ledger records
+all six planned cells with status `dry_run`. The production invocation may
+safely reuse the same campaign output root because production creates fresh
+attempt directories and replaces the dry-run ledger state.
 
 ```bash
-python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/campaign.py run \
+python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json '["python","/home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
-  --forbid /home/m00933363/repos/profiling-skill/.agents/skills \
+  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --forbid /absolute/host-skill-root \
   --dry-run
 
-python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/campaign.py run \
+python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json '["python","/home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
-  --forbid /home/m00933363/repos/profiling-skill/.agents/skills
+  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --forbid /absolute/host-skill-root
 ```
 
 Each cell is one persistent Codex session with exactly three optimization
@@ -207,37 +223,43 @@ retained, and their cell IDs alone are placed in `reschedule`. An explicit
 directories; it neither repeats successful cells nor candidate failures.
 
 ```bash
-python /home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/campaign.py run \
+python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json '["python","/home/m00933363/repos/profiling-skill/canonical/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
-  --forbid /home/m00933363/repos/profiling-skill/.agents/skills \
+  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --forbid /absolute/host-skill-root \
   --resume
 ```
 
 The complete evidence set to preserve across the ledger and its referenced
 artifacts is:
 
-- campaign and controller manifests and their hashes;
+- campaign manifest and its recorded hashes, plus the unbound controller
+  config and exact controller command used;
 - prompt, baseline, project-skill, and frozen-CANNBot hashes and CANNBot commit;
 - cell, treatment, model configuration, session and attempt IDs;
 - physical device, controller request count, remote job handles, diagnostics,
   correctness outcomes, and `msprof op` evidence;
 - exclusion classification and the replacement attempt, when applicable.
 
-Replay uses the same frozen directories and manifests with a fresh campaign
-output directory and the same production command. `campaign.py preflight` can
-audit a retained cell sandbox. Compare manifest hashes before aggregating
-results; a changed prompt, baseline, skill bundle, controller config, or
-CANNBot freeze defines a new campaign rather than a replay.
+Replay uses the same frozen directories and campaign manifest with a fresh
+campaign output directory and the same production command. `campaign.py
+preflight` can audit a retained cell sandbox. Compare the hashes that the
+campaign manifest actually records before aggregating results. Until the
+controller config and command are manifest-bound, operators must retain and
+compare them separately; a changed value defines a new campaign.
 
-The remaining blockers are operational, not scheduler features:
+Three operational gates remain:
 
 - no checked-in production GZ-A3 JSON job client and source-staging route yet
   connects `benchmark_backend.py` to the managed profile;
 - the streaming matmul-add native A3 gate is still pending;
-- three fresh agents have not yet completed the required readiness runs; and
-- consequently, no measured six-cell campaign has run.
+- three fresh agents have not yet completed the required readiness runs.
 
-Until those four gates are cleared, the battery remains a functionally tested
+In addition, the controller config and exact controller command are not yet
+bound and hashed by the campaign manifest, which is a scheduler-level
+reproducibility blocker. No measured six-cell campaign has run; that is the
+current outcome, not a fourth gate.
+
+Until those gates are cleared, the battery remains a functionally tested
 scaffold rather than a completed reproducible measurement.

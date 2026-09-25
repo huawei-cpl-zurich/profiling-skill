@@ -42,7 +42,7 @@ def test_contract_is_deterministic_and_has_fixed_case_sets(tmp_path: Path):
         "performance-medium",
         "performance-large",
     ]
-    assert contract["kernel_name"] == "streaming_matmul_add_kernel"
+    assert contract["kernel_name"] == "streaming_matmul_add_kernel_mix_aic"
     assert contract["seed"] == 20260925
     assert contract["tolerances"] == {"atol": 0.02, "rtol": 0.02}
 
@@ -79,7 +79,7 @@ def test_kernel_definition_resolves_triton_annotations_from_module_globals(monke
     module = load_module()
 
     assert module.tl is fake_language
-    assert module.streaming_matmul_add_kernel.__name__ == module.KERNEL_NAME
+    assert module.streaming_matmul_add_kernel.__name__ == module.PYTHON_KERNEL_NAME
 
 
 def test_cli_rejects_ambiguous_or_invalid_invocations():

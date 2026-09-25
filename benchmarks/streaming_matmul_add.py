@@ -21,7 +21,10 @@ except ModuleNotFoundError:
     tl = None
 
 
-KERNEL_NAME = "streaming_matmul_add_kernel"
+PYTHON_KERNEL_NAME = "streaming_matmul_add_kernel"
+# Triton-Ascend 3.2 exports the mixed AI-core implementation under this exact
+# name. Experiment tooling passes this selector directly to ``msprof op``.
+KERNEL_NAME = "streaming_matmul_add_kernel_mix_aic"
 SEED = 20260925
 RTOL = 2e-2
 ATOL = 2e-2

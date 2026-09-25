@@ -28,8 +28,9 @@ def fixture(tmp_path: Path):
     bsa = tree(tmp_path / "bsa", "bsa")
     project = tree(tmp_path / "project", "project")
     frozen = tmp_path / "frozen"
-    tree(frozen / "cannbot-triton", "triton")
-    tree(frozen / "ops-profiling", "ops")
+    for skill in (*campaign.CANNBOT_TRITON_SKILLS, "ops-profiling"):
+        tree(frozen / "skills" / skill, skill)
+    tree(frozen / "support" / "triton-op-generator", "support")
     manifest_path = tmp_path / "campaign.json"
     manifest = campaign.write_manifest(
         manifest_path, prompt, {"gdn": gdn, "bsa": bsa}, project, frozen
@@ -57,7 +58,13 @@ def test_prepare_cell_copies_exact_inputs_and_treatment_skills(tmp_path: Path):
     metadata = campaign.preflight(manifest, sandbox)
     assert metadata["prompt_sha256"] == manifest["prompt"]["sha256"]
     assert metadata["baseline_sha256"] == manifest["baselines"][cell["benchmark"]]["sha256"]
-    assert set(metadata["skills"]) == {"cannbot-triton", "ascend-profiling"}
+    assert set(metadata["skills"]) == {
+        *campaign.CANNBOT_TRITON_SKILLS, "ascend-profiling"
+    }
+    assert "ops-profiling" not in metadata["skills"]
+    assert (sandbox / "workspace" / ".cannbot" / "triton-op-generator").is_dir()
+    assert (sandbox / "workspace" / ".agents" / "skills").is_dir()
+    assert not (sandbox / ".agents").exists()
     assert not any(path.is_symlink() for path in sandbox.rglob("*"))
 
 
@@ -73,11 +80,11 @@ def test_preflight_rejects_wrong_skill_and_mutated_inputs(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
     cell = next(c for c in manifest["cells"] if c["treatment"] == "project-only")
     sandbox = campaign.prepare_cell(manifest, cell, tmp_path / "runs")
-    tree(sandbox / ".agents" / "skills" / "ops-profiling", "leak")
+    tree(sandbox / "workspace" / ".agents" / "skills" / "ops-profiling", "leak")
     with pytest.raises(campaign.CampaignError, match="skill isolation mismatch"):
         campaign.preflight(manifest, sandbox)
-    (sandbox / ".agents" / "skills" / "ops-profiling" / "SKILL.md").unlink()
-    (sandbox / ".agents" / "skills" / "ops-profiling").rmdir()
+    (sandbox / "workspace" / ".agents" / "skills" / "ops-profiling" / "SKILL.md").unlink()
+    (sandbox / "workspace" / ".agents" / "skills" / "ops-profiling").rmdir()
     (sandbox / "PROMPT.md").write_text("different")
     with pytest.raises(campaign.CampaignError, match="prompt hash mismatch"):
         campaign.preflight(manifest, sandbox)
@@ -113,10 +120,41 @@ def test_campaign_runs_fixed_waves_and_writes_structured_ledger(tmp_path: Path):
     assert json.loads((run_root / "ledger.json").read_text()) == ledger
 
 
+def test_all_treatments_expose_exact_skill_manifests(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    for cell in manifest["cells"]:
+        sandbox = campaign.prepare_cell(manifest, cell, tmp_path / cell["cell_id"])
+        visible = {
+            path.name
+            for path in (sandbox / "workspace" / ".agents" / "skills").iterdir()
+        }
+        assert visible == set(campaign.TREATMENT_SKILLS[cell["treatment"]])
+        profilers = visible & {"ops-profiling", "ascend-profiling"}
+        expected = "ops-profiling" if cell["treatment"] == "cannbot" else "ascend-profiling"
+        assert profilers == {expected}
+
+
+def test_command_launcher_preserves_codex_home_and_uses_workspace(tmp_path: Path, monkeypatch):
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed.update(kwargs)
+        return type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setenv("CODEX_HOME", "/real/authenticated/codex-home")
+    monkeypatch.setattr(campaign.subprocess, "run", fake_run)
+    sandbox = tmp_path / "cell"
+    (sandbox / "workspace").mkdir(parents=True)
+    campaign.CommandLauncher(["codex", "exec"]).launch(sandbox, campaign.cells()[0].__dict__)
+    assert observed["cwd"] == sandbox / "workspace"
+    assert observed["env"]["CODEX_HOME"] == "/real/authenticated/codex-home"
+
+
 def test_freeze_resolves_then_copies_only_regular_selected_skills(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
-    tree(source / "plugin" / "cannbot-triton", "triton")
-    tree(source / "ops" / "ops-profiling", "ops")
+    for name, relative in campaign.CANNBOT_SKILL_SOURCES.items():
+        tree(source / relative, name)
+    tree(source / campaign.CANNBOT_SUPPORT_SOURCE, "support")
     commit = "a" * 40
     calls = []
 
@@ -129,12 +167,10 @@ def test_freeze_resolves_then_copies_only_regular_selected_skills(tmp_path: Path
 
     monkeypatch.setattr(campaign.subprocess, "run", fake_run)
     output = tmp_path / "freeze"
-    record = campaign.freeze_cannbot(
-        "https://example.invalid/cannbot.git", output,
-        ["plugin/cannbot-triton", "ops/ops-profiling"],
-    )
+    record = campaign.freeze_cannbot("https://example.invalid/cannbot.git", output)
     assert record["commit"] == commit
-    assert set(record["skills"]) == {"cannbot-triton", "ops-profiling"}
-    assert (output / "cannbot-triton" / "SKILL.md").read_text() == "triton"
+    assert set(record["skills"]) == set(campaign.CANNBOT_SKILL_SOURCES)
+    assert (output / "skills" / "triton-op-coding" / "SKILL.md").read_text() == "triton-op-coding"
+    assert (output / "support" / "triton-op-generator" / "SKILL.md").read_text() == "support"
     assert calls[0][0:2] == ["git", "ls-remote"]
     assert any("checkout" in call for call in calls)

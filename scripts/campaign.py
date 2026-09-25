@@ -13,7 +13,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Protocol
+from typing import Callable, Protocol
 
 
 BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1}
@@ -22,9 +22,21 @@ WAVES = (
     (("gdn", "project-cannbot"), ("bsa", "project-only")),
     (("gdn", "project-only"), ("bsa", "cannbot")),
 )
+CANNBOT_TRITON_SKILLS = (
+    "triton-task-extractor",
+    "triton-op-designer",
+    "triton-op-coding",
+    "triton-op-verifier",
+    "triton-latency-optimizer",
+    "triton-simulator-optimizer",
+)
+CANNBOT_SKILL_SOURCES = {
+    name: f"ops/{name}" for name in (*CANNBOT_TRITON_SKILLS, "ops-profiling")
+}
+CANNBOT_SUPPORT_SOURCE = "plugins-official/triton-op-generator"
 TREATMENT_SKILLS = {
-    "cannbot": ("cannbot-triton", "ops-profiling"),
-    "project-cannbot": ("cannbot-triton", "ascend-profiling"),
+    "cannbot": (*CANNBOT_TRITON_SKILLS, "ops-profiling"),
+    "project-cannbot": (*CANNBOT_TRITON_SKILLS, "ascend-profiling"),
     "project-only": ("ascend-profiling",),
 }
 
@@ -37,9 +49,13 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def digest_tree(root: Path) -> str:
+def digest_tree(root: Path, exclude: tuple[str, ...] = ()) -> str:
     digest = hashlib.sha256()
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    paths = (
+        path for path in root.rglob("*")
+        if path.is_file() and path.relative_to(root).parts[0] not in exclude
+    )
+    for path in sorted(paths):
         digest.update(path.relative_to(root).as_posix().encode())
         digest.update(b"\0")
         digest.update(path.read_bytes())
@@ -78,21 +94,29 @@ def resolve_master(repo_url: str) -> str:
     return fields[0]
 
 
-def freeze_cannbot(repo_url: str, destination: Path, skill_paths: Iterable[str]) -> dict:
-    """Resolve master, checkout exactly that commit, and freeze selected trees."""
+def freeze_cannbot(repo_url: str, destination: Path) -> dict:
+    """Freeze the exact Triton plugin skill and support layout from master."""
     commit = resolve_master(repo_url)
     with tempfile.TemporaryDirectory(prefix="cannbot-freeze-") as temporary:
         checkout = Path(temporary) / "checkout"
         subprocess.run(["git", "clone", "--no-checkout", repo_url, str(checkout)], check=True)
         subprocess.run(["git", "-C", str(checkout), "checkout", "--detach", commit], check=True)
         destination.mkdir(parents=True, exist_ok=False)
+        skills = destination / "skills"
+        skills.mkdir()
         hashes = {}
-        for relative in skill_paths:
-            source = checkout / relative
-            name = Path(relative).name
-            copy_regular_tree(source, destination / name)
-            hashes[name] = digest_tree(destination / name)
-    record = {"repository": repo_url, "commit": commit, "skills": hashes}
+        for name, relative in CANNBOT_SKILL_SOURCES.items():
+            copy_regular_tree(checkout / relative, skills / name)
+            hashes[name] = digest_tree(skills / name)
+        support = destination / "support" / "triton-op-generator"
+        support.parent.mkdir()
+        copy_regular_tree(checkout / CANNBOT_SUPPORT_SOURCE, support)
+    record = {
+        "repository": repo_url,
+        "commit": commit,
+        "skills": hashes,
+        "support": {"triton-op-generator": digest_tree(support)},
+    }
     (destination / "freeze.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
     return record
 
@@ -148,28 +172,37 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
 def _skill_source(manifest: dict, skill: str) -> Path:
     if skill == "ascend-profiling":
         return Path(manifest["skill_sources"][skill])
-    return Path(manifest["skill_sources"]["cannbot"]) / skill
+    return Path(manifest["skill_sources"]["cannbot"]) / "skills" / skill
 
 
 def prepare_cell(manifest: dict, cell: dict, campaigns_root: Path) -> Path:
     sandbox = campaigns_root / cell["cell_id"]
     if sandbox.exists():
         raise CampaignError(f"fresh sandbox required: {sandbox}")
-    (sandbox / ".agents" / "skills").mkdir(parents=True)
+    sandbox.mkdir(parents=True)
+    workspace = sandbox / "workspace"
     shutil.copyfile(manifest["prompt"]["path"], sandbox / "PROMPT.md")
     copy_regular_tree(
         Path(manifest["baselines"][cell["benchmark"]]["path"]),
-        sandbox / "workspace",
+        workspace,
     )
+    skill_root = workspace / ".agents" / "skills"
+    skill_root.mkdir(parents=True)
     skill_hashes = {}
     for skill in TREATMENT_SKILLS[cell["treatment"]]:
-        target = sandbox / ".agents" / "skills" / skill
+        target = skill_root / skill
         copy_regular_tree(_skill_source(manifest, skill), target)
         skill_hashes[skill] = digest_tree(target)
+    if cell["treatment"] != "project-only":
+        copy_regular_tree(
+            Path(manifest["skill_sources"]["cannbot"])
+            / "support" / "triton-op-generator",
+            workspace / ".cannbot" / "triton-op-generator",
+        )
     metadata = {
         "cell": cell,
         "prompt_sha256": digest_file(sandbox / "PROMPT.md"),
-        "baseline_sha256": digest_tree(sandbox / "workspace"),
+        "baseline_sha256": manifest["baselines"][cell["benchmark"]]["sha256"],
         "skills": skill_hashes,
     }
     (sandbox / "cell.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
@@ -181,7 +214,8 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
     metadata = json.loads((sandbox / "cell.json").read_text())
     cell = metadata["cell"]
     expected = set(TREATMENT_SKILLS[cell["treatment"]])
-    skill_root = sandbox / ".agents" / "skills"
+    workspace = sandbox / "workspace"
+    skill_root = workspace / ".agents" / "skills"
     actual = {path.name for path in skill_root.iterdir()}
     if actual != expected:
         raise CampaignError(f"skill isolation mismatch: expected {sorted(expected)}, got {sorted(actual)}")
@@ -190,8 +224,11 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
     if digest_file(sandbox / "PROMPT.md") != manifest["prompt"]["sha256"]:
         raise CampaignError("prompt hash mismatch")
     expected_baseline = manifest["baselines"][cell["benchmark"]]["sha256"]
-    if digest_tree(sandbox / "workspace") != expected_baseline:
+    if digest_tree(workspace, (".agents", ".cannbot")) != expected_baseline:
         raise CampaignError("baseline hash mismatch")
+    support = workspace / ".cannbot" / "triton-op-generator"
+    if (cell["treatment"] == "project-only") == support.exists():
+        raise CampaignError("CANNBot support isolation mismatch")
     for forbidden in ("siblings", "orchestration", "global-skills"):
         if (sandbox / forbidden).exists():
             raise CampaignError(f"forbidden root visible: {forbidden}")
@@ -214,14 +251,13 @@ class CommandLauncher:
         self.command = command
 
     def launch(self, sandbox: Path, cell: dict) -> dict:
-        environment = {
-            "PATH": os.environ.get("PATH", ""),
+        environment = os.environ.copy()
+        environment.update({
             "CAMPAIGN_CELL": cell["cell_id"],
             "CAMPAIGN_DEVICE": str(cell["device"]),
             "CAMPAIGN_ROUNDS": str(cell["rounds"]),
             "CAMPAIGN_REQUEST_BUDGET": str(cell["request_budget"]),
-            "CODEX_HOME": str((sandbox / ".agents").resolve()),
-        }
+        })
         result = subprocess.run(
             self.command, cwd=sandbox / "workspace", env=environment,
             text=True, capture_output=True,
@@ -258,13 +294,12 @@ def main() -> int:
     freeze = sub.add_parser("freeze-cannbot")
     freeze.add_argument("--repository", required=True)
     freeze.add_argument("--output", type=Path, required=True)
-    freeze.add_argument("--skill", action="append", required=True)
     check = sub.add_parser("preflight")
     check.add_argument("--manifest", type=Path, required=True)
     check.add_argument("--sandbox", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "freeze-cannbot":
-        print(json.dumps(freeze_cannbot(args.repository, args.output, args.skill), sort_keys=True))
+        print(json.dumps(freeze_cannbot(args.repository, args.output), sort_keys=True))
     else:
         print(json.dumps(preflight(json.loads(args.manifest.read_text()), args.sandbox), sort_keys=True))
     return 0

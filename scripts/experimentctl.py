@@ -55,6 +55,14 @@ def read_cell(path: Path, cell_id: str) -> dict[str, Any]:
         raise ConfigError("cell device must be a non-negative integer")
     if not isinstance(command, list) or not command or not all(isinstance(x, str) for x in command):
         raise ConfigError("backend.command must be a non-empty string array")
+    timeout = cell.get("backend", {}).get("timeout_seconds", 900)
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout <= 0
+    ):
+        raise ConfigError("backend.timeout_seconds must be a positive finite number")
     for field in ("development_cases", "all_cases"):
         values = cell.get(field)
         if not isinstance(values, list) or not values or not all(isinstance(x, int) and x >= 0 for x in values):
@@ -92,23 +100,31 @@ def invoke(cell: dict[str, Any], action: str, **payload: Any) -> dict[str, Any]:
         if run.stderr:
             detail += f"; stderr={run.stderr}"
         return failure("infrastructure_error", detail)
-    status = response.get("status")
-    if status not in VALID_STATUSES:
-        return failure("infrastructure_error", f"backend returned invalid status {status!r}")
-    response["status"] = "candidate_error" if status in CANDIDATE_STATUSES else status
-    response["failure_type"] = status if status in CANDIDATE_STATUSES else None
     diagnostics = str(response.get("diagnostics", ""))
     if run.stderr:
         diagnostics = f"{diagnostics}\n{run.stderr}".strip()
+    handles = [str(response["handle"])] if response.get("handle") else []
+    status = response.get("status")
+    if status not in VALID_STATUSES:
+        detail = f"backend returned invalid status {status!r}"
+        if diagnostics:
+            detail += f"\n{diagnostics}"
+        return failure("infrastructure_error", detail, handles=handles)
+    response["status"] = "candidate_error" if status in CANDIDATE_STATUSES else status
+    response["failure_type"] = status if status in CANDIDATE_STATUSES else None
     response["diagnostics"] = diagnostics
-    response["handles"] = [str(response["handle"])] if response.get("handle") else []
+    response["handles"] = handles
     if run.returncode and response["status"] == "ok":
         return failure(
             "infrastructure_error",
             f"backend exited {run.returncode} after reporting success\n{diagnostics}".strip(),
+            handles=handles,
         )
     if response.get("device", cell["device"]) != cell["device"]:
-        return failure("infrastructure_error", "backend result did not match hard-bound device")
+        detail = "backend result did not match hard-bound device"
+        if diagnostics:
+            detail += f"\n{diagnostics}"
+        return failure("infrastructure_error", detail, handles=handles)
     return response
 
 
@@ -157,6 +173,21 @@ def rank(cell: dict[str, Any], warmups: int, repeats: int) -> dict[str, Any]:
 def check(cell: dict[str, Any], scope: str, round_number: int | None) -> dict[str, Any]:
     cases = cell["all_cases" if scope == "full" else "development_cases"]
     result = invoke(cell, "check", cases=cases, scope=scope, round=round_number)
+    if result["status"] == "ok" and result.get("passed") is not True:
+        diagnostics = result.get("diagnostics", "")
+        if result.get("passed") is False:
+            result = failure(
+                "candidate_error",
+                f"correctness check failed\n{diagnostics}".strip(),
+                handles=result["handles"],
+                failure_type="correctness_error",
+            )
+        else:
+            result = failure(
+                "infrastructure_error",
+                f"backend check response requires boolean passed\n{diagnostics}".strip(),
+                handles=result["handles"],
+            )
     result.setdefault("cases", cases)
     return merge_failure(result, "check", cell)
 

@@ -35,6 +35,17 @@ latency = (case + 1) * 10 + iteration
 response = {"status":"ok", "device":request["device"],
             "handle":f"gz-a3:{request['action']}-{case}-{iteration}",
             "latency_us":latency, "passed":True}
+if mode in {"invalid-status", "nonzero-ok", "wrong-device"}:
+    response["handle"] = "gz-a3:protocol"
+    response["diagnostics"] = "backend diagnostic"
+    print("backend stderr", file=sys.stderr)
+if mode == "invalid-status": response["status"] = "unknown"
+if mode == "wrong-device": response["device"] += 1
+if request["action"] == "check" and mode.startswith("passed-"):
+    value = mode.removeprefix("passed-")
+    if value == "missing": del response["passed"]
+    elif value == "false": response["passed"] = False
+    else: response["passed"] = value
 if iteration == 1 and mode.startswith("latency-"):
     response["diagnostics"] = "msprof output had no valid duration"
     value = mode.removeprefix("latency-")
@@ -45,6 +56,7 @@ if iteration == 1 and mode.startswith("latency-"):
     else:
         response["latency_us"] = int(value)
 print(json.dumps(response))
+if mode == "nonzero-ok": raise SystemExit(6)
 '''
 
 
@@ -147,3 +159,47 @@ def test_bad_cell_or_benchmark_is_configuration_error(tmp_path: Path):
     assert process.returncode == 4
     assert result["status"] == "config_error"
     assert not (tmp_path / "requests.jsonl").exists()
+
+
+@pytest.mark.parametrize("timeout", [True, "10", None, 0, -1, float("inf"), float("nan")])
+def test_invalid_timeout_is_configuration_error(tmp_path: Path, timeout):
+    config, env = setup(tmp_path)
+    document = json.loads(config.read_text())
+    document["cells"]["gdn-skill"]["backend"]["timeout_seconds"] = timeout
+    config.write_text(json.dumps(document))
+    process = subprocess.run(
+        ["python3", str(CLI), "--config", str(config), "--cell", "gdn-skill", "check"],
+        text=True, capture_output=True, env=env,
+    )
+    result = json.loads(process.stdout)
+    assert process.returncode == 4
+    assert result["status"] == "config_error"
+    assert "positive finite number" in result["diagnostics"]
+    assert not (tmp_path / "requests.jsonl").exists()
+
+
+def test_check_false_is_candidate_correctness_failure(tmp_path: Path):
+    process, result, _ = run(tmp_path, "check", mode="passed-false")
+    assert process.returncode == 2
+    assert result["status"] == "candidate_error"
+    assert result["failure_type"] == "correctness_error"
+    assert result["handles"] == ["gz-a3:check-0-0"]
+
+
+@pytest.mark.parametrize("mode", ["passed-missing", "passed-string"])
+def test_check_requires_boolean_passed(tmp_path: Path, mode: str):
+    process, result, _ = run(tmp_path, "check", mode=mode)
+    assert process.returncode == 3
+    assert result["status"] == "infrastructure_error"
+    assert result["handles"] == ["gz-a3:check-0-0"]
+    assert "requires boolean passed" in result["diagnostics"]
+
+
+@pytest.mark.parametrize("mode", ["invalid-status", "nonzero-ok", "wrong-device"])
+def test_protocol_failures_preserve_backend_evidence(tmp_path: Path, mode: str):
+    process, result, _ = run(tmp_path, "profile", mode=mode)
+    assert process.returncode == 3
+    assert result["status"] == "infrastructure_error"
+    assert result["handles"] == ["gz-a3:protocol"]
+    assert "backend diagnostic" in result["diagnostics"]
+    assert "backend stderr" in result["diagnostics"]

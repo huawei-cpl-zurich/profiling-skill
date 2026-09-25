@@ -373,11 +373,27 @@ def main() -> int:
     check = sub.add_parser("preflight")
     check.add_argument("--manifest", type=Path, required=True)
     check.add_argument("--sandbox", type=Path, required=True)
+    run = sub.add_parser("run", help="run the frozen campaign in outer-isolated Codex sessions")
+    run.add_argument("--manifest", type=Path, required=True)
+    run.add_argument("--output", type=Path, required=True)
+    run.add_argument("--controller", nargs="+", required=True)
+    run.add_argument("--codex", default="codex")
+    run.add_argument("--forbid", type=Path, action="append", default=[])
+    run.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.command == "freeze-cannbot":
         print(json.dumps(freeze_cannbot(args.repository, args.output), sort_keys=True))
-    else:
+    elif args.command == "preflight":
         print(json.dumps(preflight(json.loads(args.manifest.read_text()), args.sandbox), sort_keys=True))
+    else:
+        from production_launcher import ProductionLauncher
+        launcher = ProductionLauncher(
+            args.controller, codex=args.codex, forbidden_paths=args.forbid,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps(run_campaign(
+            json.loads(args.manifest.read_text()), args.output, launcher,
+        ), sort_keys=True))
     return 0
 
 

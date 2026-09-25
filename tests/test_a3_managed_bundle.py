@@ -48,6 +48,27 @@ def test_bundle_is_deterministic_and_manifest_records_behavior(tmp_path: Path) -
     assert manifest["archive_sha256"] == BUNDLE.sha256_file(first)
 
 
+def test_bundle_archives_stable_snapshot_when_source_changes_after_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = make_sources(tmp_path)
+    original = BUNDLE.canonical_json
+    mutated = False
+
+    def mutate_after_snapshot(value):
+        nonlocal mutated
+        encoded = original(value)
+        if isinstance(value, list) and not mutated:
+            (root / "run.sh").write_text("changed after snapshot\n")
+            mutated = True
+        return encoded
+
+    monkeypatch.setattr(BUNDLE, "canonical_json", mutate_after_snapshot)
+    archive, manifest = create(root, tmp_path / "out")
+    destination = tmp_path / "extracted"
+    BUNDLE.verify_extract(archive, destination, manifest["root_digest"], manifest["archive_sha256"], 20, 10_000)
+    assert mutated
+    assert (destination / "run.sh").read_text() == "#!/bin/sh\npython pkg/kernel.py\n"
+
+
 def test_verify_extract_checks_hash_and_sets_read_only_modes(tmp_path: Path) -> None:
     archive, manifest = create(make_sources(tmp_path), tmp_path / "out")
     destination = tmp_path / "extracted"
@@ -115,6 +136,22 @@ def test_verify_rejects_undeclared_and_nonregular_members(tmp_path: Path) -> Non
     corrupt = tmp_path / "link.tar"
     rewrite_tar(archive, corrupt, lambda name, data, kind: (name, data, "symlink" if name.endswith("kernel.py") else kind))
     with pytest.raises(BUNDLE.BundleError, match="non-regular archive member"):
+        BUNDLE.verify_extract(corrupt, tmp_path / "dest", None, BUNDLE.sha256_file(corrupt), 20, 10_000)
+
+
+def test_verify_rejects_duplicate_relative_manifest_paths(tmp_path: Path) -> None:
+    archive, _ = create(make_sources(tmp_path), tmp_path / "out")
+    corrupt = tmp_path / "duplicate.tar"
+
+    def duplicate(name, data, kind):
+        if name == "bundle-manifest.json":
+            manifest = json.loads(data)
+            manifest["files"][1]["path"] = manifest["files"][0]["path"]
+            data = BUNDLE.canonical_json(manifest)
+        return name, data, kind
+
+    rewrite_tar(archive, corrupt, duplicate)
+    with pytest.raises(BUNDLE.BundleError, match="duplicate manifest path"):
         BUNDLE.verify_extract(corrupt, tmp_path / "dest", None, BUNDLE.sha256_file(corrupt), 20, 10_000)
 
 

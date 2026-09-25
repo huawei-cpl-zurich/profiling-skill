@@ -106,8 +106,6 @@ def collect_files(root: Path, includes: Iterable[str], max_files: int, max_bytes
     return [
         {
             "path": rel,
-            "size": path.stat().st_size,
-            "sha256": sha256_file(path),
             "executable": bool(path.stat().st_mode & 0o111),
             "_source": path,
         }
@@ -117,35 +115,55 @@ def collect_files(root: Path, includes: Iterable[str], max_files: int, max_bytes
 
 def create_bundle(root: Path, includes: Iterable[str], output_dir: Path, max_files: int, max_bytes: int) -> tuple[Path, dict[str, Any]]:
     entries = collect_files(root, includes, max_files, max_bytes)
-    public_entries = [{key: value for key, value in item.items() if key != "_source"} for item in entries]
-    root_digest = hashlib.sha256(canonical_json(public_entries)).hexdigest()
-    manifest = {
-        "protocol": PROTOCOL,
-        "root_digest": root_digest,
-        "file_count": len(entries),
-        "total_bytes": sum(item["size"] for item in entries),
-        "files": public_entries,
-    }
     output_dir.mkdir(parents=True, exist_ok=True)
-    archive = output_dir / f"{root_digest}.tar"
-    with tarfile.open(archive, "w", format=tarfile.PAX_FORMAT) as tar:
-        payload = canonical_json(manifest)
-        header = tarfile.TarInfo("bundle-manifest.json")
-        header.size, header.mode, header.mtime, header.uid, header.gid = len(payload), 0o444, 0, 0, 0
-        header.uname = header.gname = ""
-        import io
-        tar.addfile(header, io.BytesIO(payload))
+    snapshot_root = Path(tempfile.mkdtemp(prefix=".bundle-snapshot-", dir=output_dir))
+    try:
+        total = 0
         for item in entries:
-            header = tar.gettarinfo(str(item["_source"]), arcname=f'payload/{item["path"]}')
-            header.mode = 0o555 if item["executable"] else 0o444
-            header.mtime, header.uid, header.gid = 0, 0, 0
+            snapshot = snapshot_root.joinpath(*PurePosixPath(item["path"]).parts)
+            snapshot.parent.mkdir(parents=True, exist_ok=True)
+            digest = hashlib.sha256()
+            descriptor = os.open(item["_source"], os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            try:
+                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                    raise BundleError(f"source stopped being a regular file: {item['path']}")
+                with os.fdopen(descriptor, "rb", closefd=False) as source, snapshot.open("wb") as target:
+                    while chunk := source.read(1024 * 1024):
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise BundleError(f"byte limit exceeded while snapshotting: {total} > {max_bytes}")
+                        target.write(chunk)
+                        digest.update(chunk)
+            finally:
+                os.close(descriptor)
+            item["size"] = snapshot.stat().st_size
+            item["sha256"] = digest.hexdigest()
+            item["_source"] = snapshot
+        public_entries = [{key: value for key, value in item.items() if key != "_source"} for item in entries]
+        root_digest = hashlib.sha256(canonical_json(public_entries)).hexdigest()
+        manifest = {"protocol": PROTOCOL, "root_digest": root_digest, "file_count": len(entries), "total_bytes": total, "files": public_entries}
+        archive = output_dir / f"{root_digest}.tar"
+        with tarfile.open(archive, "w", format=tarfile.PAX_FORMAT) as tar:
+            payload = canonical_json(manifest)
+            header = tarfile.TarInfo("bundle-manifest.json")
+            header.size, header.mode, header.mtime, header.uid, header.gid = len(payload), 0o444, 0, 0, 0
             header.uname = header.gname = ""
-            with item["_source"].open("rb") as stream:
-                tar.addfile(header, stream)
-    # This is the wire-manifest value. It cannot be embedded in the archive's
-    # own manifest without making that archive self-referential.
-    manifest["archive_sha256"] = sha256_file(archive)
-    return archive, manifest
+            import io
+            tar.addfile(header, io.BytesIO(payload))
+            for item in entries:
+                header = tar.gettarinfo(str(item["_source"]), arcname=f'payload/{item["path"]}')
+                header.mode = 0o555 if item["executable"] else 0o444
+                header.mtime, header.uid, header.gid = 0, 0, 0
+                header.uname = header.gname = ""
+                with item["_source"].open("rb") as stream:
+                    tar.addfile(header, stream)
+        # This is the wire-manifest value. It cannot be embedded in the
+        # archive's own manifest without making that archive self-referential.
+        manifest["archive_sha256"] = sha256_file(archive)
+        return archive, manifest
+    finally:
+        import shutil
+        shutil.rmtree(snapshot_root, ignore_errors=True)
 
 
 def _load_manifest(tar: tarfile.TarFile) -> dict[str, Any]:

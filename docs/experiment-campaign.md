@@ -234,7 +234,7 @@ directories; it neither repeats successful cells nor candidate failures.
 python "$ABS_REPOSITORY/scripts/campaign.py" run \
   --manifest /absolute/campaign-inputs/campaign.json \
   --output /absolute/campaign-results/run-001 \
-  --controller-json "[\"python\",\"$ABS_REPOSITORY/scripts/experimentctl.py\",\"--config\",\"/absolute/campaign-inputs/controller.json\",\"--cell\",\"{cell_id}\"]" \
+  --python /absolute/frozen/python \
   --forbid /absolute/host-skill-root \
   --resume
 ```
@@ -242,8 +242,8 @@ python "$ABS_REPOSITORY/scripts/campaign.py" run \
 The complete evidence set to preserve across the ledger and its referenced
 artifacts is:
 
-- campaign manifest and its recorded hashes, plus the unbound controller
-  config and exact controller command used;
+- campaign manifest and its recorded hashes, plus the private frozen
+  controller bundle, normalized command template, and runtime identity;
 - prompt, baseline, project-skill, and frozen-CANNBot hashes and CANNBot commit;
 - cell, treatment, model configuration, session and attempt IDs;
 - physical device, controller request count, remote job handles, diagnostics,

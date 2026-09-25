@@ -468,9 +468,9 @@ def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Pat
     assert len(ledger["cells"]) == 6
     assert all(entry["result"]["dry_run"] for entry in ledger["cells"])
     assert not (tmp_path / "runs" / "attempts").exists()
-    production = run_campaign(manifest, tmp_path / "production", RecordingLauncher())
+    production = run_campaign(manifest, tmp_path / "runs", RecordingLauncher())
     assert production["status"] == "complete"
-    assert (tmp_path / "production" / "attempts").is_dir()
+    assert (tmp_path / "runs" / "attempts").is_dir()
 
 
 def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: Path):

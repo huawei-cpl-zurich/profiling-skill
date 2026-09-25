@@ -8,9 +8,32 @@ import json
 import sqlite3
 import subprocess
 import tarfile
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
+
+
+def fake_msprof(path: Path, body: str, *, returncode: int = 0, success=True) -> Path:
+    script = path / "msprof"
+    script.write_text(
+        "#!/usr/bin/env python3\n"
+        "import csv\n"
+        "import pathlib\n"
+        "import sys\n"
+        "output = next(x.split('=', 1)[1] for x in sys.argv if x.startswith('--output='))\n"
+        "target = pathlib.Path(output) / 'OPPROF_test' / 'kernel' / '0'\n"
+        "target.mkdir(parents=True)\n"
+        + textwrap.dedent(body).rstrip()
+        + "\n"
+        + (f"print({SUCCESS_LINE!r})\n" if success else "print('profiler stopped')\n")
+        + f"raise SystemExit({returncode})\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
+SUCCESS_LINE = "Profiling running finished. All task success."
 
 
 def load(name: str):
@@ -503,3 +526,161 @@ def test_collection_dry_run_routes_by_implementation(tmp_path: Path):
     )
     assert "catlass-validation.sh" in dsl.stdout
     assert "--profile bz-a5" in dsl.stdout
+
+
+def test_a3_profile_runs_basic_info_and_emits_compact_evidence(tmp_path: Path):
+    msprof = fake_msprof(
+        tmp_path,
+        """\
+with (target / 'OpBasicInfo_1.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['Op Name', 'Task Duration(us)', 'Pid'])
+    writer.writeheader()
+    writer.writerows([
+        {'Op Name': 'wanted', 'Task Duration(us)': '12.0', 'Pid': '98'},
+        {'Op Name': 'wanted', 'Task Duration(us)': '8.0', 'Pid': '98'},
+        {'Op Name': 'other', 'Task Duration(us)': '99.0', 'Pid': '98'},
+    ])
+""",
+    )
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--kernel-name",
+            "wanted",
+            "--warm-up",
+            "3",
+            "--launch-count",
+            "2",
+            "--msprof",
+            str(msprof),
+            "--",
+            "python3",
+            "case.py",
+            "--case",
+            "47",
+        ],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    evidence = json.loads(result.stdout)
+    assert evidence["status"] == "success"
+    assert evidence["target_family"] == "Ascend-A2-A3"
+    assert evidence["protocol"] == {
+        "warm_up": 3,
+        "launch_count": 2,
+        "replay_mode": "kernel",
+        "kernel_selector": "wanted",
+    }
+    assert evidence["kernels"] == [
+        {
+            "name": "wanted",
+            "samples": 2,
+            "duration_us": {"min": 8.0, "median": 10.0, "p90": 12.0, "max": 12.0},
+            "sample_values_us": [12.0, 8.0],
+        }
+    ]
+    assert evidence["application"] == ["python3", "case.py", "--case", "47"]
+    assert json.loads((output / "evidence.json").read_text()) == evidence
+    assert len(evidence["sources"][0]["sha256"]) == 64
+
+
+def test_a3_profile_rejects_success_without_matching_kernel(tmp_path: Path):
+    msprof = fake_msprof(
+        tmp_path,
+        """\
+with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['Op Name', 'Task Duration(us)'])
+    writer.writeheader()
+    writer.writerow({'Op Name': 'other', 'Task Duration(us)': '4.0'})
+""",
+    )
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--kernel-name",
+            "wanted",
+            "--msprof",
+            str(msprof),
+            "--",
+            "python3",
+            "case.py",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 1
+    evidence = json.loads(result.stdout)
+    assert evidence["status"] == "failure"
+    assert evidence["failure"]["kind"] == "profiling"
+    assert "matching 'wanted'" in evidence["failure"]["message"]
+    assert (output / "msprof.log").read_text().endswith(SUCCESS_LINE + "\n")
+
+
+def test_a3_profile_preserves_nonzero_profiler_failure(tmp_path: Path):
+    msprof = fake_msprof(tmp_path, "pass", returncode=17, success=False)
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--msprof",
+            str(msprof),
+            "--",
+            "python3",
+            "broken.py",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    evidence = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert evidence["failure"]["msprof_returncode"] == 17
+    assert evidence["failure"]["message"] == "msprof exited with status 17"
+    assert "profiler stopped" in (output / "msprof.log").read_text()
+
+
+def test_a3_summary_reports_multiple_kernels_separately(tmp_path: Path):
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "OpBasicInfo.csv").write_text(
+        "Op Name,Task Duration(us)\nfirst,2.5\nsecond,7.5\n"
+    )
+    module = load("profile_a3")
+    evidence = module.summarize(raw, None, warm_up=0, launch_count=1)
+    assert [(item["name"], item["duration_us"]["median"]) for item in evidence["kernels"]] == [
+        ("first", 2.5),
+        ("second", 7.5),
+    ]
+
+
+def test_a3_profile_refuses_to_mix_with_existing_evidence(tmp_path: Path):
+    output = tmp_path / "capture"
+    output.mkdir()
+    (output / "old.json").write_text("{}\n")
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--",
+            "python3",
+            "case.py",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 2
+    assert "output directory is not empty" in result.stderr
+    assert (output / "old.json").read_text() == "{}\n"

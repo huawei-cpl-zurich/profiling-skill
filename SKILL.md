@@ -1,9 +1,32 @@
 ---
 name: ascend-profiling
-description: Profile AscendC C++ or Catlass DSL kernels on Ascend 950/A5 with msprof, interpret PMU and timeline evidence correctly, and extract compact remote evidence without downloading vendor report trees.
+description: Profile Triton kernels on Ascend A2/A3 or AscendC and Catlass kernels on Ascend 950/A5 with msprof, producing compact target-correct evidence without mixing product-specific metrics.
 ---
 
-# Ascend 950/A5 profiling
+# Ascend kernel profiling
+
+Select the target before collecting or interpreting evidence. Product-specific
+metrics are not portable.
+
+## A2/A3 Triton timing
+
+Use the repository's `$gz-a3` profile and its native `py311-torch` runtime.
+Select an eligible physical device through that profile; the one-shot job
+exposes it to the application as logical device 0. Do not use direct SSH,
+Docker, or a raw remote-agent client.
+
+For reproducible kernel latency, run the correctness-checked workload through
+`scripts/profile_a3.py`. It performs a bounded `msprof op` `BasicInfo` capture
+and emits compact JSON with device-task durations and source hashes. Prefer an
+exact exported kernel name for timing; an unfiltered capture can select a
+framework setup operator instead. Run independent captures for repetitions and use
+their median; do not use profiled Python wall time.
+
+Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
+JSON contract, acceptance rules, and interpretation boundaries. Preserve the
+full transcript so compilation and runtime errors remain actionable.
+
+## Ascend 950/A5 diagnosis
 
 Use this skill for A5 kernel timing, PMU diagnosis, sampled utilization, or
 instruction/pipe timeline analysis. It is intentionally target-specific: do

@@ -15,6 +15,21 @@ Select an eligible physical device through that profile; the one-shot job
 exposes it to the application as logical device 0. Do not use direct SSH,
 Docker, or a raw remote-agent client.
 
+Mutable candidate sources may be sent to A3 only through the profile-owned
+managed bundle actions on the neutral `$gz-a3` adapter. `stage` accepts an
+explicit source root and allowlisted paths, creates a deterministic
+content-addressed archive, and records its durable managed-transfer receipt.
+`run-bundle` verifies and extracts that exact archive into a fresh one-shot
+directory before running it. `fetch-bundle-result` retrieves only a declared
+result through the managed transfer service. Resume the handles in their
+receipts after interrupted observation; never upload or submit a duplicate.
+
+This is a narrow exception to the no-transfer boundary. It does not authorize
+raw `scp`, SSH, Docker access, a raw remote-agent client, arbitrary remote
+destinations, symlinks, special files, or target fallback. The adapter uses
+`scripts/a3_managed_bundle.py` for packaging, verification, and managed result
+fetching; callers must not invoke its transport operations directly.
+
 For reproducible kernel latency, run the correctness-checked workload through
 `scripts/profile_a3.py`. It performs a bounded `msprof op` `BasicInfo` capture
 and emits compact JSON with device-task durations and source hashes. Prefer an

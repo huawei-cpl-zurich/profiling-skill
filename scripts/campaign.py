@@ -57,6 +57,27 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def normalize_controller_command(command: list[str], controller_config: Path) -> list[str]:
+    """Return an argv template whose config binding is independent of its host path."""
+    if not command or not all(isinstance(argument, str) and argument for argument in command):
+        raise CampaignError("controller command must be a nonempty JSON string array")
+    resolved = str(controller_config.resolve())
+    normalized = ["{controller_config}" if argument == resolved else argument for argument in command]
+    if normalized.count("{controller_config}") != 1:
+        raise CampaignError("controller command must reference the resolved controller config exactly once")
+    return normalized
+
+
+def controller_binding(controller_config: Path, command: list[str]) -> dict:
+    normalized = normalize_controller_command(command, controller_config)
+    encoded = json.dumps(normalized, separators=(",", ":"), ensure_ascii=False).encode()
+    return {
+        "config": {"path": str(controller_config.resolve()), "sha256": digest_file(controller_config)},
+        "command_argv": normalized,
+        "command_sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+
+
 def digest_tree(root: Path, exclude: tuple[str, ...] = ()) -> str:
     digest = hashlib.sha256()
     paths = (
@@ -170,6 +191,7 @@ def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
 
 def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                    project_skill: Path, cannbot_freeze: Path,
+                   controller_config: Path, controller_command: list[str],
                    rounds: int = 3, request_budget: int = 12) -> dict:
     if rounds < 1 or request_budget < 1:
         raise CampaignError("rounds and request budget must be positive")
@@ -197,6 +219,7 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                 "freeze_sha256": digest_file(freeze_file),
             },
         },
+        "controller": controller_binding(controller_config, controller_command),
         "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
         "max_parallel": 2,
     }
@@ -209,6 +232,31 @@ def _skill_source(manifest: dict, skill: str) -> Path:
     if skill == "ascend-profiling":
         return Path(manifest["skill_sources"][skill]["path"])
     return Path(manifest["skill_sources"]["cannbot"]["path"]) / "skills" / skill
+
+
+def verify_controller(manifest: dict, controller_config: Path,
+                      controller_command: list[str]) -> dict:
+    expected = manifest.get("controller")
+    if not isinstance(expected, dict):
+        raise CampaignError("manifest has no frozen controller binding")
+    actual = controller_binding(controller_config, controller_command)
+    if actual["config"]["sha256"] != expected.get("config", {}).get("sha256"):
+        raise CampaignError("controller config drifted after manifest freeze")
+    if actual["command_argv"] != expected.get("command_argv") or \
+            actual["command_sha256"] != expected.get("command_sha256"):
+        raise CampaignError("controller command does not match frozen template")
+    return {
+        "config_sha256": actual["config"]["sha256"],
+        "command_argv": actual["command_argv"],
+        "command_sha256": actual["command_sha256"],
+    }
+
+
+def config_argument(command: list[str]) -> Path:
+    positions = [index for index, value in enumerate(command) if value == "--config"]
+    if len(positions) != 1 or positions[0] + 1 >= len(command):
+        raise CampaignError("controller command must contain exactly one --config argument")
+    return Path(command[positions[0] + 1])
 
 
 def verify_frozen_sources(manifest: dict) -> None:
@@ -329,13 +377,24 @@ class CommandLauncher:
 
 def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                  on_wave: Callable[[int], None] | None = None,
-                 resume: bool = False) -> dict:
+                 resume: bool = False, controller_config: Path | None = None,
+                 controller_command: list[str] | None = None) -> dict:
     """Run fixed waves; launcher implementations may execute each pair concurrently."""
     root.mkdir(parents=True, exist_ok=True)
     ledger_path = root / "ledger.json"
     dry_run = bool(getattr(launcher, "dry_run", False))
+    frozen_controller = manifest.get("controller")
+    if frozen_controller is not None:
+        if controller_config is None or controller_command is None:
+            raise CampaignError("frozen controller config and command are required")
+        verified_controller = verify_controller(manifest, controller_config, controller_command)
+    else:
+        # Compatibility for programmatic test launchers; production manifests always bind one.
+        verified_controller = None
     if ledger_path.exists() and resume:
         ledger = json.loads(ledger_path.read_text())
+        if ledger.get("controller") != verified_controller:
+            raise CampaignError("controller binding does not match existing ledger")
         target_ids = set(ledger.get("reschedule", []))
         if not target_ids:
             raise CampaignError("ledger has no infrastructure cells to reschedule")
@@ -346,6 +405,8 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
         raise CampaignError("campaign ledger already exists; use --resume")
     else:
         ledger = {"version": 1, "status": "running", "cells": []}
+        if verified_controller is not None:
+            ledger["controller"] = verified_controller
         target_ids = {cell["cell_id"] for cell in manifest["cells"]}
 
     def checkpoint() -> None:
@@ -436,6 +497,9 @@ def main() -> int:
     generate.add_argument("--bsa-baseline", type=Path, required=True)
     generate.add_argument("--project-skill", type=Path, required=True)
     generate.add_argument("--cannbot-freeze", type=Path, required=True)
+    generate.add_argument("--controller-config", type=Path, required=True)
+    generate.add_argument("--controller-json", required=True,
+                          help="frozen JSON argv; must contain the resolved controller config")
     generate.add_argument("--output", type=Path, required=True)
     generate.add_argument("--rounds", type=int, default=3)
     generate.add_argument("--request-budget", type=int, default=12)
@@ -456,10 +520,15 @@ def main() -> int:
     if args.command == "freeze-cannbot":
         print(json.dumps(freeze_cannbot(args.repository, args.output), sort_keys=True))
     elif args.command == "generate-manifest":
+        try:
+            controller = json.loads(args.controller_json)
+        except json.JSONDecodeError as error:
+            parser.error(f"--controller-json must be a JSON string array: {error}")
         document = write_manifest(
             args.output, args.prompt,
             {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline},
             args.project_skill, args.cannbot_freeze,
+            args.controller_config, controller,
             args.rounds, args.request_budget,
         )
         print(json.dumps(document, sort_keys=True))
@@ -477,6 +546,7 @@ def main() -> int:
                                       forbidden_paths=args.forbid, dry_run=args.dry_run)
         print(json.dumps(run_campaign(
             json.loads(args.manifest.read_text()), args.output, launcher, resume=args.resume,
+            controller_config=config_argument(controller), controller_command=controller,
         ), sort_keys=True))
     return 0
 

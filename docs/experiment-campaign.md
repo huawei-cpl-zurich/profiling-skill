@@ -106,17 +106,22 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --bsa-baseline /absolute/campaign-inputs/baselines/bsa \
   --project-skill "$ABS_REPOSITORY" \
   --cannbot-freeze /absolute/campaign-inputs/cannbot-freeze \
+  --controller-config /absolute/campaign-inputs/controller.json \
+  --controller-json '["python","/absolute/approved/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
   --output /absolute/campaign-inputs/campaign.json \
   --rounds 3 \
   --request-budget 12
 ```
 
-The generated controller config contains all six cell IDs, hard-binding their
-benchmark, treatment, device, five development cases, all 50 correctness
-cases, and backend command. Preserve it alongside the campaign manifest as
-campaign evidence; never hand-edit either file. The campaign manifest does not
-currently bind or hash the controller config or the supplied controller
-command; that missing binding remains a reproducibility blocker.
+Manifest generation hashes the controller configuration and a normalized
+controller argv template. Campaign launch rejects changed config bytes or a
+different command before preparing any session, including on resume. The
+ledger retains those digests and normalized argv without recording the
+machine-specific config path. The generated controller config contains all
+six cell IDs, hard-binding their benchmark,
+treatment, device, five development cases, all 50 correctness cases, and
+backend command. Preserve generated JSON files as campaign evidence; never
+hand-edit them.
 
 The scheduler uses three fixed two-cell waves so no more than two agents run
 at once and each benchmark stays on its assigned NPU:

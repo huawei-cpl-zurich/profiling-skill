@@ -65,11 +65,29 @@ def fixture(tmp_path: Path):
         },
     }
     (frozen / "freeze.json").write_text(json.dumps(record, sort_keys=True))
+    controller_config = tmp_path / "controller.json"
+    controller_config.write_text('{"version":1}\n')
+    controller_command = [
+        "python", "/opt/campaign/scripts/experimentctl.py", "--config",
+        str(controller_config.resolve()), "--cell", "{cell_id}",
+    ]
     manifest_path = tmp_path / "campaign.json"
     manifest = campaign.write_manifest(
-        manifest_path, prompt, {"gdn": gdn, "bsa": bsa}, project, frozen
+        manifest_path, prompt, {"gdn": gdn, "bsa": bsa}, project, frozen,
+        controller_config, controller_command,
     )
     return manifest, manifest_path
+
+
+def run_campaign(manifest, root, launcher, on_wave=None, resume=False):
+    binding = manifest["controller"]
+    config = Path(binding["config"]["path"])
+    command = [argument.replace("{controller_config}", str(config))
+               for argument in binding["command_argv"]]
+    return campaign.run_campaign(
+        manifest, root, launcher, on_wave, resume,
+        controller_config=config, controller_command=command,
+    )
 
 
 def test_fixed_schedule_has_six_fresh_balanced_cells():
@@ -169,7 +187,7 @@ def test_campaign_runs_fixed_waves_and_writes_structured_ledger(tmp_path: Path):
     waves = []
     run_root = tmp_path / "runs"
     run_root.mkdir()
-    ledger = campaign.run_campaign(manifest, run_root, launcher, waves.append)
+    ledger = run_campaign(manifest, run_root, launcher, waves.append)
     assert waves == [1, 2, 3]
     assert sorted(call[1]["wave"] for call in launcher.calls) == [1, 1, 2, 2, 3, 3]
     assert len({call[0] for call in launcher.calls}) == 6
@@ -188,7 +206,7 @@ def test_ledger_checkpoints_completed_cells_and_failure(tmp_path: Path):
 
     run_root = tmp_path / "runs"
     run_root.mkdir()
-    result = campaign.run_campaign(manifest, run_root, FailingLauncher())
+    result = run_campaign(manifest, run_root, FailingLauncher())
     ledger = json.loads((run_root / "ledger.json").read_text())
     assert result["status"] == "needs_reschedule"
     failed = next(entry for entry in ledger["cells"]
@@ -207,7 +225,7 @@ def test_incomplete_launcher_result_is_evidence_then_fails_ledger(tmp_path: Path
             return {"exit_code": 9, "rounds_completed": 1, "stderr": "transport failed"}
 
     run_root = tmp_path / "runs"
-    result = campaign.run_campaign(manifest, run_root, IncompleteLauncher())
+    result = run_campaign(manifest, run_root, IncompleteLauncher())
     ledger = json.loads((run_root / "ledger.json").read_text())
     assert result["status"] == "needs_reschedule"
     assert len(ledger["cells"]) == 6
@@ -225,7 +243,7 @@ def test_ledger_persists_interrupted_status(tmp_path: Path):
 
     run_root = tmp_path / "runs"
     with pytest.raises(KeyboardInterrupt):
-        campaign.run_campaign(manifest, run_root, InterruptedLauncher())
+        run_campaign(manifest, run_root, InterruptedLauncher())
     ledger = json.loads((run_root / "ledger.json").read_text())
     assert ledger["status"] == "interrupted"
     assert ledger["failure"]["type"] == "KeyboardInterrupt"
@@ -242,7 +260,7 @@ def test_between_wave_source_drift_is_rejected_and_checkpointed(tmp_path: Path):
     run_root = tmp_path / "runs"
     run_root.mkdir()
     with pytest.raises(campaign.CampaignError, match="project profiling skill drifted"):
-        campaign.run_campaign(manifest, run_root, RecordingLauncher(), mutate_before_wave)
+        run_campaign(manifest, run_root, RecordingLauncher(), mutate_before_wave)
     ledger = json.loads((run_root / "ledger.json").read_text())
     assert ledger["status"] == "failed"
     assert len(ledger["cells"]) == 2
@@ -364,6 +382,11 @@ def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_opt
 def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkeypatch, capsys):
     manifest, _ = fixture(tmp_path / "source")
     output = tmp_path / "nested" / "campaign.json"
+    controller_config = manifest["controller"]["config"]["path"]
+    controller_command = [
+        argument.replace("{controller_config}", controller_config)
+        for argument in manifest["controller"]["command_argv"]
+    ]
     monkeypatch.setattr(sys, "argv", [
         "campaign.py", "generate-manifest",
         "--prompt", manifest["prompt"]["path"],
@@ -371,6 +394,8 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
         "--bsa-baseline", manifest["baselines"]["bsa"]["path"],
         "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
         "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
+        "--controller-config", controller_config,
+        "--controller-json", json.dumps(controller_command),
         "--output", str(output), "--rounds", "3", "--request-budget", "12",
     ])
     assert campaign.main() == 0
@@ -388,7 +413,10 @@ def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
             tmp_path / "bad.json", Path(manifest["prompt"]["path"]),
             {name: Path(value["path"]) for name, value in manifest["baselines"].items()},
             Path(manifest["skill_sources"]["ascend-profiling"]["path"]),
-            Path(manifest["skill_sources"]["cannbot"]["path"]), rounds=0,
+            Path(manifest["skill_sources"]["cannbot"]["path"]),
+            Path(manifest["controller"]["config"]["path"]),
+            [argument.replace("{controller_config}", manifest["controller"]["config"]["path"])
+             for argument in manifest["controller"]["command_argv"]], rounds=0,
         )
 
 
@@ -400,7 +428,7 @@ def test_infrastructure_cell_is_retained_for_explicit_reschedule(tmp_path: Path)
             return {"status": "infrastructure_error", "attempt_id": "kept",
                     "terminal_evidence": {"check": {"handles": ["gz-a3:durable"]}}}
 
-    result = campaign.run_campaign(manifest, tmp_path / "runs", InfrastructureLauncher())
+    result = run_campaign(manifest, tmp_path / "runs", InfrastructureLauncher())
     ledger = json.loads((tmp_path / "runs" / "ledger.json").read_text())
     assert result["status"] == "needs_reschedule"
     assert set(ledger["reschedule"]) == {cell["cell_id"] for cell in manifest["cells"]}
@@ -416,12 +444,12 @@ def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Pat
             return {"status": "dry_run", "dry_run": True, "rounds_completed": 0,
                     "attempt_id": f"plan-{cell['cell_id']}"}
 
-    ledger = campaign.run_campaign(manifest, tmp_path / "runs", DryRunLauncher())
+    ledger = run_campaign(manifest, tmp_path / "runs", DryRunLauncher())
     assert ledger["status"] == "dry_run"
     assert len(ledger["cells"]) == 6
     assert all(entry["result"]["dry_run"] for entry in ledger["cells"])
     assert not (tmp_path / "runs" / "attempts").exists()
-    production = campaign.run_campaign(manifest, tmp_path / "runs", RecordingLauncher())
+    production = run_campaign(manifest, tmp_path / "runs", RecordingLauncher())
     assert production["status"] == "complete"
     assert (tmp_path / "runs" / "attempts").is_dir()
 
@@ -435,7 +463,7 @@ def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: P
                 return {"status": "candidate_error", "failure_type": "compile_error"}
             return {"status": "complete", "rounds_completed": 3}
 
-    ledger = campaign.run_campaign(manifest, tmp_path / "runs", CandidateLauncher())
+    ledger = run_campaign(manifest, tmp_path / "runs", CandidateLauncher())
     assert ledger["status"] == "completed_with_candidate_failures"
     assert len(ledger["cells"]) == 6
     assert "reschedule" not in ledger or not ledger["reschedule"]
@@ -454,14 +482,71 @@ def test_resume_runs_only_infrastructure_cells_in_fresh_sandbox(tmp_path: Path):
 
     first = FirstLauncher()
     root = tmp_path / "runs"
-    ledger = campaign.run_campaign(manifest, root, first)
+    ledger = run_campaign(manifest, root, first)
     assert ledger["status"] == "needs_reschedule"
     original_sandbox = next(path for path, cell in first.calls if cell["cell_id"] == failed_id)
 
     second = RecordingLauncher()
-    ledger = campaign.run_campaign(manifest, root, second, resume=True)
+    ledger = run_campaign(manifest, root, second, resume=True)
     assert ledger["status"] == "complete"
     assert [cell["cell_id"] for _, cell in second.calls] == [failed_id]
     assert second.calls[0][0] != original_sandbox
     assert len(ledger["cells"]) == 7
     assert not ledger["reschedule"]
+
+
+@pytest.mark.parametrize("drift", ["config", "command"])
+def test_controller_drift_is_rejected_before_prepare_or_launch(tmp_path: Path, drift: str):
+    manifest, _ = fixture(tmp_path)
+    binding = manifest["controller"]
+    config = Path(binding["config"]["path"])
+    command = [argument.replace("{controller_config}", str(config))
+               for argument in binding["command_argv"]]
+    if drift == "config":
+        config.write_text('{"version":2}\n')
+    else:
+        command[0] = "python-different"
+    launcher = RecordingLauncher()
+    root = tmp_path / "runs"
+    with pytest.raises(campaign.CampaignError, match="controller (config drifted|command)"):
+        campaign.run_campaign(
+            manifest, root, launcher, controller_config=config,
+            controller_command=command,
+        )
+    assert launcher.calls == []
+    assert not (root / "attempts").exists()
+
+
+def test_controller_binding_replays_from_relocated_config_and_rejects_resume_drift(tmp_path: Path):
+    manifest, _ = fixture(tmp_path / "source")
+    source = Path(manifest["controller"]["config"]["path"])
+    relocated = tmp_path / "relocated" / "cells.json"
+    relocated.parent.mkdir()
+    relocated.write_bytes(source.read_bytes())
+    command = [argument.replace("{controller_config}", str(relocated.resolve()))
+               for argument in manifest["controller"]["command_argv"]]
+
+    class OneFlake(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            result = super().launch(sandbox, cell)
+            if cell["cell_id"] == "gdn-cannbot":
+                result["status"] = "infrastructure_error"
+            return result
+
+    root = tmp_path / "runs"
+    ledger = campaign.run_campaign(
+        manifest, root, OneFlake(), controller_config=relocated,
+        controller_command=command,
+    )
+    assert ledger["controller"]["config_sha256"] == campaign.digest_file(relocated)
+    assert ledger["controller"]["command_argv"] == manifest["controller"]["command_argv"]
+    assert str(relocated) not in json.dumps(ledger["controller"])
+
+    relocated.write_text("drift\n")
+    launcher = RecordingLauncher()
+    with pytest.raises(campaign.CampaignError, match="controller config drifted"):
+        campaign.run_campaign(
+            manifest, root, launcher, resume=True, controller_config=relocated,
+            controller_command=command,
+        )
+    assert launcher.calls == []

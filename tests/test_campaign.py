@@ -623,6 +623,28 @@ def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
     assert str(ROOT) not in json.dumps(bundled)
 
 
+def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_path: Path):
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn"]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="requires a JSON job-client"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+    assert not list(tmp_path.glob(".campaign.controller.*"))
+
+    client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
+              "--adapter-json", '["/approved/adapter"]',
+              "--state-dir", "/private/job-state"]
+    backend.extend(["--job-client-json", json.dumps(client)])
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    binding = campaign.freeze_controller_bundle(output, config, controller)
+    assert (tmp_path / binding["bundle"] / "controller.json").is_file()
+
+
 def test_staged_backend_uses_complete_closure_after_source_is_removed(tmp_path: Path):
     source = tmp_path / "disposable-source"
     shutil.copytree(ROOT / "scripts", source / "scripts")

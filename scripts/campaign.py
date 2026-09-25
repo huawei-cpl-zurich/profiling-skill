@@ -112,49 +112,55 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
     destination = manifest_path.parent / bundle_name
     if destination.exists():
         raise CampaignError(f"controller bundle already exists: {destination}")
-    destination.mkdir(parents=True)
-    bundled_scripts = destination / "scripts"
-    bundled_scripts.mkdir()
-    for name, source in required_scripts.items():
-        shutil.copy2(source, bundled_scripts / name)
-    for name, source in required_assets.items():
-        target = destination / "benchmarks" / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{bundle_name}.", dir=manifest_path.parent))
     try:
-        config = json.loads(controller_config.read_text())
-        cells_document = config["cells"]
-        for cell in cells_document.values():
-            backend_command = cell["backend"]["command"]
-            if (len(backend_command) < 2
-                    or Path(backend_command[1]).resolve() != required_scripts["benchmark_backend.py"].resolve()):
-                raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
-            try:
-                client_index = backend_command.index("--job-client-json") + 1
-                client_command = json.loads(backend_command[client_index])
-            except (ValueError, IndexError, json.JSONDecodeError) as error:
-                raise CampaignError("controller backend requires a JSON job-client command") from error
-            expected_client = required_scripts["gz_a3_job_client.py"].resolve()
-            if (not isinstance(client_command, list) or len(client_command) < 2
-                    or not all(isinstance(value, str) and value for value in client_command)
-                    or Path(client_command[1]).resolve() != expected_client):
-                raise CampaignError("controller config must invoke gz_a3_job_client.py")
-            client_command[0:2] = ["{python}", "{bundle}/scripts/gz_a3_job_client.py"]
-            backend_command[client_index] = json.dumps(client_command, separators=(",", ":"))
-            backend_command[0:2] = ["{python}", "{bundle}/scripts/benchmark_backend.py"]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
-        raise CampaignError(f"invalid controller config: {error}") from error
-    (destination / "controller.json").write_text(
-        json.dumps(config, indent=2, sort_keys=True) + "\n"
-    )
-    files = _regular_file_hashes(destination)
-    template = ["{python}", "{bundle}/scripts/experimentctl.py", "--config",
-                "{bundle}/controller.json", "--cell", "{cell_id}"]
-    encoded = json.dumps(template, separators=(",", ":")).encode()
-    return {"bundle": bundle_name, "files": files,
-            "command_argv": template,
-            "command_sha256": hashlib.sha256(encoded).hexdigest(),
-            "runtime": _runtime_identity(executable)}
+        bundled_scripts = temporary / "scripts"
+        bundled_scripts.mkdir()
+        for name, source in required_scripts.items():
+            shutil.copy2(source, bundled_scripts / name)
+        for name, source in required_assets.items():
+            target = temporary / "benchmarks" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        try:
+            config = json.loads(controller_config.read_text())
+            cells_document = config["cells"]
+            for cell in cells_document.values():
+                backend_command = cell["backend"]["command"]
+                if (len(backend_command) < 2
+                        or Path(backend_command[1]).resolve() != required_scripts["benchmark_backend.py"].resolve()):
+                    raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
+                try:
+                    client_index = backend_command.index("--job-client-json") + 1
+                    client_command = json.loads(backend_command[client_index])
+                except (ValueError, IndexError, json.JSONDecodeError) as error:
+                    raise CampaignError("controller backend requires a JSON job-client command") from error
+                expected_client = required_scripts["gz_a3_job_client.py"].resolve()
+                if (not isinstance(client_command, list) or len(client_command) < 2
+                        or not all(isinstance(value, str) and value for value in client_command)
+                        or Path(client_command[1]).resolve() != expected_client):
+                    raise CampaignError("controller config must invoke gz_a3_job_client.py")
+                client_command[0:2] = ["{python}", "{bundle}/scripts/gz_a3_job_client.py"]
+                backend_command[client_index] = json.dumps(client_command, separators=(",", ":"))
+                backend_command[0:2] = ["{python}", "{bundle}/scripts/benchmark_backend.py"]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
+            raise CampaignError(f"invalid controller config: {error}") from error
+        (temporary / "controller.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        )
+        files = _regular_file_hashes(temporary)
+        template = ["{python}", "{bundle}/scripts/experimentctl.py", "--config",
+                    "{bundle}/controller.json", "--cell", "{cell_id}"]
+        encoded = json.dumps(template, separators=(",", ":")).encode()
+        binding = {"bundle": bundle_name, "files": files,
+                   "command_argv": template,
+                   "command_sha256": hashlib.sha256(encoded).hexdigest(),
+                   "runtime": _runtime_identity(executable)}
+        os.replace(temporary, destination)
+        return binding
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
 
 
 def digest_tree(root: Path, exclude: tuple[str, ...] = ()) -> str:

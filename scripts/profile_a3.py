@@ -26,6 +26,14 @@ class InvalidCapture(RuntimeError):
     pass
 
 
+def text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def sha256(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as stream:
@@ -186,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     env = os.environ.copy()
     env.setdefault("ASCEND_RT_VISIBLE_DEVICES", "0")
+    start_error: OSError | None = None
     try:
         process = subprocess.Popen(
             command,
@@ -204,11 +213,22 @@ def main(argv: list[str] | None = None) -> int:
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             remainder, _ = process.communicate()
-        transcript = (exc.stdout or "") + (remainder or "") + "\nprofile timed out\n"
+        # A second communicate() returns the complete buffered transcript on
+        # supported Python versions. Fall back to TimeoutExpired.stdout only
+        # when it does not, and normalize because that field may be bytes even
+        # when Popen used text=True.
+        transcript = text(remainder) or text(exc.stdout)
+        transcript += "\nprofile timed out\n"
         returncode = 124
+    except OSError as exc:
+        start_error = exc
+        transcript = f"msprof could not start: {exc}\n"
+        returncode = 127
     log.write_text(transcript)
 
     try:
+        if start_error is not None:
+            raise InvalidCapture(f"msprof could not start: {start_error}")
         if returncode != 0:
             raise InvalidCapture(f"msprof exited with status {returncode}")
         if SUCCESS_LINE not in transcript:

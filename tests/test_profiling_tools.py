@@ -721,3 +721,67 @@ def test_a3_profile_rejects_file_as_output_path(tmp_path: Path):
     assert result.returncode == 2
     assert "output path is not a directory" in result.stderr
     assert output.read_text() == "not a directory\n"
+
+
+def test_a3_profile_timeout_writes_nonduplicated_failure_evidence(tmp_path: Path):
+    msprof = tmp_path / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import time\n"
+        "print('partial transcript', flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    msprof.chmod(0o755)
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--timeout",
+            "1",
+            "--msprof",
+            str(msprof),
+            "--",
+            "python3",
+            "case.py",
+        ],
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+    evidence = json.loads(result.stdout)
+    log = (output / "msprof.log").read_text()
+    assert result.returncode == 1
+    assert evidence["failure"]["msprof_returncode"] == 124
+    assert evidence["failure"]["message"] == "msprof exited with status 124"
+    assert log.count("partial transcript") == 1
+    assert log.endswith("profile timed out\n")
+    assert json.loads((output / "evidence.json").read_text()) == evidence
+
+
+def test_a3_profile_missing_msprof_writes_failure_evidence(tmp_path: Path):
+    output = tmp_path / "capture"
+    missing = tmp_path / "missing-msprof"
+    result = subprocess.run(
+        [
+            "python3",
+            str(ROOT / "scripts/profile_a3.py"),
+            "--output",
+            str(output),
+            "--msprof",
+            str(missing),
+            "--",
+            "python3",
+            "case.py",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    evidence = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert evidence["failure"]["msprof_returncode"] == 127
+    assert evidence["failure"]["message"].startswith("msprof could not start:")
+    assert "missing-msprof" in (output / "msprof.log").read_text()
+    assert json.loads((output / "evidence.json").read_text()) == evidence

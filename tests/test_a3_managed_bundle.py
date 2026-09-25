@@ -45,12 +45,13 @@ def test_bundle_is_deterministic_and_manifest_records_behavior(tmp_path: Path) -
     assert manifest["file_count"] == 2
     assert [item["path"] for item in manifest["files"]] == ["pkg/kernel.py", "run.sh"]
     assert [item["executable"] for item in manifest["files"]] == [False, True]
+    assert manifest["archive_sha256"] == BUNDLE.sha256_file(first)
 
 
 def test_verify_extract_checks_hash_and_sets_read_only_modes(tmp_path: Path) -> None:
     archive, manifest = create(make_sources(tmp_path), tmp_path / "out")
     destination = tmp_path / "extracted"
-    actual = BUNDLE.verify_extract(archive, destination, manifest["root_digest"], 20, 10_000)
+    actual = BUNDLE.verify_extract(archive, destination, manifest["root_digest"], manifest["archive_sha256"], 20, 10_000)
     assert actual == manifest
     assert (destination / "pkg/kernel.py").read_text() == "print('kernel')\n"
     assert stat.S_IMODE((destination / "pkg/kernel.py").stat().st_mode) == 0o444
@@ -106,7 +107,7 @@ def test_verify_rejects_corrupt_content(tmp_path: Path) -> None:
     corrupt = tmp_path / "corrupt.tar"
     rewrite_tar(archive, corrupt, lambda name, data, kind: (name, b"bad" if name.endswith("kernel.py") else data, kind))
     with pytest.raises(BUNDLE.BundleError, match="content verification failed"):
-        BUNDLE.verify_extract(corrupt, tmp_path / "dest", None, 20, 10_000)
+        BUNDLE.verify_extract(corrupt, tmp_path / "dest", None, BUNDLE.sha256_file(corrupt), 20, 10_000)
 
 
 def test_verify_rejects_undeclared_and_nonregular_members(tmp_path: Path) -> None:
@@ -114,7 +115,7 @@ def test_verify_rejects_undeclared_and_nonregular_members(tmp_path: Path) -> Non
     corrupt = tmp_path / "link.tar"
     rewrite_tar(archive, corrupt, lambda name, data, kind: (name, data, "symlink" if name.endswith("kernel.py") else kind))
     with pytest.raises(BUNDLE.BundleError, match="non-regular archive member"):
-        BUNDLE.verify_extract(corrupt, tmp_path / "dest", None, 20, 10_000)
+        BUNDLE.verify_extract(corrupt, tmp_path / "dest", None, BUNDLE.sha256_file(corrupt), 20, 10_000)
 
 
 def fake_client(tmp_path: Path) -> tuple[Path, Path]:
@@ -128,9 +129,15 @@ with pathlib.Path(os.environ['FAKE_LOG']).open('a') as f: f.write(json.dumps(arg
 if args[:2] == ['transfer','upload'] or args[:2] == ['transfer','download']:
  print(json.dumps({'id':'transfer-123'}))
 elif args[:2] == ['transfer','status']:
- print(json.dumps({'id':'transfer-123','status':'succeeded'}))
+ receipt=os.environ.get('RECEIPT_TO_CHECK')
+ if receipt:
+  saved=json.loads(pathlib.Path(receipt).read_text())
+  assert saved['state'] == 'submitted' and saved['transfer_handle'] == 'transfer-123'
+ status=os.environ.get('FAKE_STATUS','succeeded')
+ if status == 'observer-error': print('listener unavailable',file=sys.stderr); raise SystemExit(8)
+ print(json.dumps({'id':'transfer-123','status':status}))
 elif args[:2] == ['transfer','fetch']:
- pathlib.Path(args[args.index('--dst')+1]).write_bytes(b'result')
+ pathlib.Path(args[args.index('--dst')+1]).write_bytes(os.environ.get('FAKE_FETCH','result').encode())
  print(json.dumps({'state':'fetched'}))
 else: raise SystemExit(9)
 """
@@ -147,7 +154,7 @@ def test_stage_uploads_content_addressed_bundle_and_writes_receipt(tmp_path: Pat
     root = make_sources(tmp_path)
     client, log = fake_client(tmp_path)
     receipt = tmp_path / "receipt.json"
-    env = {**os.environ, "FAKE_LOG": str(log)}
+    env = {**os.environ, "FAKE_LOG": str(log), "RECEIPT_TO_CHECK": str(receipt)}
     result = run_cli(["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "pkg", "--include", "run.sh", "--receipt", str(receipt), "--poll-interval", "0.01"], env)
     assert result.returncode == 0, result.stderr
     data = json.loads(receipt.read_text())
@@ -164,10 +171,11 @@ def test_download_and_fetch_use_managed_client(tmp_path: Path) -> None:
     env = {**os.environ, "FAKE_LOG": str(log)}
     receipt = tmp_path / "download.json"
     digest = "a" * 64
-    requested = run_cli(["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", f"results/profiling-workloads/{digest}/result.tar", "--receipt", str(receipt), "--poll-interval", "0.01"], env)
+    result_sha = BUNDLE.hashlib.sha256(b"result").hexdigest()
+    requested = run_cli(["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", f"results/profiling-workloads/{digest}/result.tar", "--expected-sha256", result_sha, "--receipt", str(receipt), "--poll-interval", "0.01"], env)
     assert requested.returncode == 0, requested.stderr
     output = tmp_path / "result.tar"
-    fetched = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--poll-interval", "0.01"], env)
+    fetched = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--expected-sha256", result_sha, "--poll-interval", "0.01"], env)
     assert fetched.returncode == 0, fetched.stderr
     assert output.read_bytes() == b"result"
     calls = [json.loads(line) for line in log.read_text().splitlines()]
@@ -175,15 +183,29 @@ def test_download_and_fetch_use_managed_client(tmp_path: Path) -> None:
     assert calls[-1][:2] == ["transfer", "fetch"]
 
 
+def test_download_resume_observes_existing_handle_without_resubmission(tmp_path: Path) -> None:
+    client, log = fake_client(tmp_path)
+    receipt = tmp_path / "download.json"
+    digest = "a" * 64
+    result_sha = BUNDLE.hashlib.sha256(b"result").hexdigest()
+    command = ["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", f"results/profiling-workloads/{digest}/result.tar", "--expected-sha256", result_sha, "--receipt", str(receipt), "--poll-interval", "0.01"]
+    first = run_cli(command, {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "observer-error"})
+    second = run_cli(command, {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "succeeded"})
+    assert first.returncode == 2
+    assert second.returncode == 0, second.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert sum(call[:2] == ["transfer", "download"] for call in calls) == 1
+
+
 @pytest.mark.parametrize("remote_path", ["/tmp/result.tar", "results/other/result.tar", "results/profiling-workloads/not-a-digest/result.tar", f"results/profiling-workloads/{'a' * 64}/../result.tar"])
 def test_download_rejects_paths_outside_managed_results(tmp_path: Path, remote_path: str) -> None:
     client, log = fake_client(tmp_path)
-    result = run_cli(["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", remote_path, "--receipt", str(tmp_path / "receipt.json")], {**os.environ, "FAKE_LOG": str(log)})
+    result = run_cli(["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", remote_path, "--expected-sha256", "a" * 64, "--receipt", str(tmp_path / "receipt.json")], {**os.environ, "FAKE_LOG": str(log)})
     assert result.returncode == 2
     assert not log.exists()
 
 
-def test_failed_transfer_does_not_write_receipt(tmp_path: Path) -> None:
+def test_failed_transfer_persists_terminal_receipt(tmp_path: Path) -> None:
     root = make_sources(tmp_path)
     client = tmp_path / "client.py"
     client.write_text("#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps({'id':'x','status':'failed'}))\n")
@@ -192,4 +214,76 @@ def test_failed_transfer_does_not_write_receipt(tmp_path: Path) -> None:
     result = run_cli(["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "run.sh", "--receipt", str(receipt), "--poll-interval", "0.01"], os.environ.copy())
     assert result.returncode == 2
     assert "ended with status failed" in result.stderr
-    assert not receipt.exists()
+    assert json.loads(receipt.read_text())["state"] == "failed"
+
+
+def test_observation_failure_persists_receipt_and_resume_never_uploads_twice(tmp_path: Path) -> None:
+    root = make_sources(tmp_path)
+    client, log = fake_client(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    command = ["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "run.sh", "--receipt", str(receipt), "--poll-interval", "0.01"]
+    interrupted = run_cli(command, {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "observer-error"})
+    assert interrupted.returncode == 2
+    assert json.loads(receipt.read_text())["state"] == "observation-unavailable"
+    resumed = run_cli(command, {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "succeeded"})
+    assert resumed.returncode == 0, resumed.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert sum(call[:2] == ["transfer", "upload"] for call in calls) == 1
+    assert json.loads(receipt.read_text())["state"] == "succeeded"
+
+
+def test_timeout_persists_observation_receipt(tmp_path: Path) -> None:
+    root = make_sources(tmp_path)
+    client, log = fake_client(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    result = run_cli(["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "run.sh", "--receipt", str(receipt), "--timeout", "1", "--poll-interval", "0.01"], {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "running"})
+    assert result.returncode == 2
+    assert "observation timed out" in result.stderr
+    assert json.loads(receipt.read_text())["state"] == "observation-unavailable"
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert sum(call[:2] == ["transfer", "upload"] for call in calls) == 1
+
+
+@pytest.mark.parametrize("terminal", ["cancelled", "rejected"])
+def test_terminal_states_are_persisted_without_resubmission(tmp_path: Path, terminal: str) -> None:
+    root = make_sources(tmp_path)
+    client, log = fake_client(tmp_path)
+    receipt = tmp_path / "receipt.json"
+    command = ["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "run.sh", "--receipt", str(receipt), "--poll-interval", "0.01"]
+    first = run_cli(command, {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": terminal})
+    second = run_cli(command, {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "succeeded"})
+    assert first.returncode == second.returncode == 2
+    assert json.loads(receipt.read_text())["state"] == terminal
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert sum(call[:2] == ["transfer", "upload"] for call in calls) == 1
+
+
+def test_archive_hash_fails_before_extract_and_leaves_no_destination(tmp_path: Path) -> None:
+    archive, manifest = create(make_sources(tmp_path), tmp_path / "out")
+    destination = tmp_path / "destination"
+    with pytest.raises(BUNDLE.BundleError, match="archive SHA-256 mismatch"):
+        BUNDLE.verify_extract(archive, destination, manifest["root_digest"], "0" * 64, 20, 10_000)
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".destination.extract-*"))
+
+
+def test_corrupt_member_never_publishes_partial_tree_and_retry_succeeds(tmp_path: Path) -> None:
+    archive, manifest = create(make_sources(tmp_path), tmp_path / "out")
+    corrupt = tmp_path / "corrupt.tar"
+    rewrite_tar(archive, corrupt, lambda name, data, kind: (name, b"bad" if name.endswith("run.sh") else data, kind))
+    destination = tmp_path / "destination"
+    with pytest.raises(BUNDLE.BundleError, match="content verification failed"):
+        BUNDLE.verify_extract(corrupt, destination, manifest["root_digest"], BUNDLE.sha256_file(corrupt), 20, 10_000)
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".destination.extract-*"))
+    BUNDLE.verify_extract(archive, destination, manifest["root_digest"], manifest["archive_sha256"], 20, 10_000)
+    assert (destination / "run.sh").exists()
+
+
+def test_fetch_hash_mismatch_does_not_publish_output(tmp_path: Path) -> None:
+    client, log = fake_client(tmp_path)
+    output = tmp_path / "result.tar"
+    result = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--expected-sha256", "0" * 64, "--poll-interval", "0.01"], {**os.environ, "FAKE_LOG": str(log)})
+    assert result.returncode == 2
+    assert "fetched result SHA-256 mismatch" in result.stderr
+    assert not output.exists()

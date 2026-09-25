@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 import sys
@@ -25,6 +24,16 @@ DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 
 class BundleError(RuntimeError):
     pass
+
+
+class ObservationUnavailable(BundleError):
+    pass
+
+
+class TransferEnded(BundleError):
+    def __init__(self, job_id: str, state: str):
+        self.state = state
+        super().__init__(f"managed transfer {job_id} ended with status {state}")
 
 
 def canonical_json(value: Any) -> bytes:
@@ -133,6 +142,9 @@ def create_bundle(root: Path, includes: Iterable[str], output_dir: Path, max_fil
             header.uname = header.gname = ""
             with item["_source"].open("rb") as stream:
                 tar.addfile(header, stream)
+    # This is the wire-manifest value. It cannot be embedded in the archive's
+    # own manifest without making that archive self-referential.
+    manifest["archive_sha256"] = sha256_file(archive)
     return archive, manifest
 
 
@@ -150,9 +162,27 @@ def _load_manifest(tar: tarfile.TarFile) -> dict[str, Any]:
     return manifest
 
 
-def verify_extract(archive: Path, destination: Path, expected_digest: str | None, max_files: int, max_bytes: int) -> dict[str, Any]:
-    if destination.exists() and any(destination.iterdir()):
-        raise BundleError("destination must be absent or empty")
+def verify_extract(archive: Path, destination: Path, expected_digest: str | None, expected_archive_sha256: str, max_files: int, max_bytes: int) -> dict[str, Any]:
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_archive_sha256) or sha256_file(archive) != expected_archive_sha256:
+        raise BundleError("archive SHA-256 mismatch")
+    if destination.exists():
+        raise BundleError("destination already exists")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{destination.name}.extract-", dir=destination.parent))
+    published = False
+    try:
+        manifest = _verify_extract_into(archive, temporary, expected_digest, max_files, max_bytes)
+        os.replace(temporary, destination)
+        published = True
+        manifest["archive_sha256"] = expected_archive_sha256
+        return manifest
+    finally:
+        if not published:
+            import shutil
+            shutil.rmtree(temporary, ignore_errors=True)
+
+
+def _verify_extract_into(archive: Path, destination: Path, expected_digest: str | None, max_files: int, max_bytes: int) -> dict[str, Any]:
     with tarfile.open(archive, "r:") as tar:
         manifest = _load_manifest(tar)
         files = manifest.get("files")
@@ -160,13 +190,15 @@ def verify_extract(archive: Path, destination: Path, expected_digest: str | None
             raise BundleError("invalid manifest file list or file limit exceeded")
         public_entries: list[dict[str, Any]] = []
         expected_members: dict[str, dict[str, Any]] = {}
+        relative_paths: set[str] = set()
         total = 0
         for item in files:
             if not isinstance(item, dict):
                 raise BundleError("invalid manifest entry")
             rel = _safe_relative(str(item.get("path", ""))).as_posix()
-            if rel in expected_members:
+            if rel in relative_paths:
                 raise BundleError(f"duplicate manifest path: {rel}")
+            relative_paths.add(rel)
             normalized = {"path": rel, "size": item.get("size"), "sha256": item.get("sha256"), "executable": item.get("executable")}
             if not isinstance(normalized["size"], int) or normalized["size"] < 0:
                 raise BundleError(f"invalid size for {rel}")
@@ -185,7 +217,6 @@ def verify_extract(archive: Path, destination: Path, expected_digest: str | None
         actual = tar.getmembers()[1:]
         if len(actual) != len(expected_members):
             raise BundleError("archive member set differs from manifest")
-        destination.mkdir(parents=True, exist_ok=True)
         for member in actual:
             item = expected_members.pop(member.name, None)
             if item is None or not member.isfile():
@@ -198,7 +229,7 @@ def verify_extract(archive: Path, destination: Path, expected_digest: str | None
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
             target.chmod(0o555 if item["executable"] else 0o444)
-    return manifest
+        return manifest
 
 
 def run_client(client: Path, prefix: list[str], args: list[str]) -> dict[str, Any]:
@@ -214,14 +245,17 @@ def run_client(client: Path, prefix: list[str], args: list[str]) -> dict[str, An
 def wait_transfer(client: Path, prefix: list[str], job_id: str, timeout: int, poll: float) -> dict[str, Any]:
     started = time.monotonic()
     while True:
-        status = run_client(client, prefix, ["transfer", "status", "--job-id", job_id])
+        try:
+            status = run_client(client, prefix, ["transfer", "status", "--job-id", job_id])
+        except BundleError as exc:
+            raise ObservationUnavailable(f"could not observe managed transfer {job_id}: {exc}") from exc
         state = status.get("status")
         if state == "succeeded":
             return status
-        if state in ("failed", "cancelled"):
-            raise BundleError(f"managed transfer {job_id} ended with status {state}")
+        if state in ("failed", "cancelled", "rejected"):
+            raise TransferEnded(job_id, state)
         if time.monotonic() - started >= timeout:
-            raise BundleError(f"managed transfer {job_id} did not finish within {timeout}s")
+            raise ObservationUnavailable(f"managed transfer {job_id} observation timed out after {timeout}s")
         time.sleep(poll)
 
 
@@ -232,38 +266,92 @@ def atomic_json(path: Path, value: Any) -> None:
     os.replace(temporary, path)
 
 
+def load_matching_receipt(path: Path, expected: dict[str, Any]) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        receipt = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise BundleError(f"existing receipt is invalid: {path}") from exc
+    if not isinstance(receipt, dict) or any(receipt.get(key) != value for key, value in expected.items()):
+        raise BundleError("existing receipt does not match this transfer")
+    if not receipt.get("transfer_handle"):
+        raise BundleError("existing receipt has no transfer handle")
+    return receipt
+
+
+def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: list[str], timeout: int, poll: float) -> dict[str, Any]:
+    if receipt.get("state") == "succeeded":
+        return receipt
+    if receipt.get("state") in ("failed", "cancelled", "rejected"):
+        raise BundleError(f"managed transfer {receipt['transfer_handle']} already ended with status {receipt['state']}")
+    try:
+        wait_transfer(client, prefix, str(receipt["transfer_handle"]), timeout, poll)
+    except TransferEnded as exc:
+        receipt["state"] = exc.state
+        atomic_json(path, receipt)
+        raise
+    except ObservationUnavailable:
+        receipt["state"] = "observation-unavailable"
+        atomic_json(path, receipt)
+        raise
+    receipt["state"] = "succeeded"
+    atomic_json(path, receipt)
+    return receipt
+
+
 def command_stage(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory(prefix="a3-bundle-") as temp:
         archive, manifest = create_bundle(Path(args.source_root), args.include, Path(temp), args.max_files, args.max_bytes)
         remote_path = f"incoming/profiling-workloads/{manifest['root_digest']}/bundle.tar"
-        response = run_client(Path(args.client), args.client_arg, ["transfer", "upload", "--remote", args.remote, "--src", str(archive), "--dst", remote_path])
-        job_id = str(response.get("id", ""))
-        if not job_id:
-            raise BundleError("managed upload returned no job id")
-        wait_transfer(Path(args.client), args.client_arg, job_id, args.timeout, args.poll_interval)
-        receipt = {"protocol": PROTOCOL, "root_digest": manifest["root_digest"], "remote_path": remote_path, "transfer_handle": job_id, "state": "succeeded", "manifest": manifest}
-        atomic_json(Path(args.receipt), receipt)
+        receipt_path = Path(args.receipt)
+        identity = {"protocol": PROTOCOL, "kind": "upload", "remote": args.remote, "root_digest": manifest["root_digest"], "archive_sha256": manifest["archive_sha256"], "remote_path": remote_path}
+        receipt = load_matching_receipt(receipt_path, identity)
+        if receipt is None:
+            response = run_client(Path(args.client), args.client_arg, ["transfer", "upload", "--remote", args.remote, "--src", str(archive), "--dst", remote_path])
+            job_id = str(response.get("id", ""))
+            if not job_id:
+                raise BundleError("managed upload returned no job id")
+            receipt = {**identity, "transfer_handle": job_id, "state": "submitted", "manifest": manifest}
+            atomic_json(receipt_path, receipt)
+        receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval)
         print(canonical_json(receipt).decode(), end="")
 
 
 def command_request_download(args: argparse.Namespace) -> None:
     remote_path = safe_result_path(args.remote_path)
-    response = run_client(Path(args.client), args.client_arg, ["transfer", "download", "--remote", args.remote, "--src", remote_path])
-    job_id = str(response.get("id", ""))
-    if not job_id:
-        raise BundleError("managed download returned no job id")
-    wait_transfer(Path(args.client), args.client_arg, job_id, args.timeout, args.poll_interval)
-    receipt = {"protocol": PROTOCOL, "remote_path": remote_path, "transfer_handle": job_id, "state": "succeeded"}
-    atomic_json(Path(args.receipt), receipt)
+    if not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
+        raise BundleError("expected result SHA-256 must be 64 lowercase hexadecimal characters")
+    receipt_path = Path(args.receipt)
+    identity = {"protocol": PROTOCOL, "kind": "download", "remote": args.remote, "remote_path": remote_path, "expected_sha256": args.expected_sha256}
+    receipt = load_matching_receipt(receipt_path, identity)
+    if receipt is None:
+        response = run_client(Path(args.client), args.client_arg, ["transfer", "download", "--remote", args.remote, "--src", remote_path])
+        job_id = str(response.get("id", ""))
+        if not job_id:
+            raise BundleError("managed download returned no job id")
+        receipt = {**identity, "transfer_handle": job_id, "state": "submitted"}
+        atomic_json(receipt_path, receipt)
+    receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval)
     print(canonical_json(receipt).decode(), end="")
 
 
 def command_fetch(args: argparse.Namespace) -> None:
+    if not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
+        raise BundleError("expected result SHA-256 must be 64 lowercase hexadecimal characters")
     wait_transfer(Path(args.client), args.client_arg, args.handle, args.timeout, args.poll_interval)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    run_client(Path(args.client), args.client_arg, ["transfer", "fetch", "--job-id", args.handle, "--dst", str(output)])
-    print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "output": str(output), "state": "succeeded"}).decode(), end="")
+    with tempfile.NamedTemporaryFile(prefix=f".{output.name}.fetch-", dir=output.parent, delete=False) as temporary:
+        temporary_path = Path(temporary.name)
+    try:
+        run_client(Path(args.client), args.client_arg, ["transfer", "fetch", "--job-id", args.handle, "--dst", str(temporary_path)])
+        if sha256_file(temporary_path) != args.expected_sha256:
+            raise BundleError("fetched result SHA-256 mismatch")
+        os.replace(temporary_path, output)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "expected_sha256": args.expected_sha256, "output": str(output), "state": "succeeded"}).decode(), end="")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -286,17 +374,20 @@ def parser() -> argparse.ArgumentParser:
     verify.add_argument("--archive", required=True)
     verify.add_argument("--destination", required=True)
     verify.add_argument("--expected-digest")
+    verify.add_argument("--expected-archive-sha256", required=True)
     verify.add_argument("--max-files", type=int, default=DEFAULT_MAX_FILES)
     verify.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
-    verify.set_defaults(function=lambda a: print(canonical_json(verify_extract(Path(a.archive), Path(a.destination), a.expected_digest, a.max_files, a.max_bytes)).decode(), end=""))
+    verify.set_defaults(function=lambda a: print(canonical_json(verify_extract(Path(a.archive), Path(a.destination), a.expected_digest, a.expected_archive_sha256, a.max_files, a.max_bytes)).decode(), end=""))
     download = sub.add_parser("request-download", parents=[common])
     download.add_argument("--remote", required=True)
     download.add_argument("--remote-path", required=True)
+    download.add_argument("--expected-sha256", required=True)
     download.add_argument("--receipt", required=True)
     download.set_defaults(function=command_request_download)
     fetch = sub.add_parser("fetch", parents=[common])
     fetch.add_argument("--handle", required=True)
     fetch.add_argument("--output", required=True)
+    fetch.add_argument("--expected-sha256", required=True)
     fetch.set_defaults(function=command_fetch)
     return result
 

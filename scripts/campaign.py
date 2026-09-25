@@ -48,6 +48,18 @@ TREATMENT_SKILLS = {
     ),
     "project-only": ("ascend-profiling",),
 }
+CONTROLLER_SCRIPTS = (
+    "experimentctl.py",
+    "benchmark_backend.py",
+    "gz_a3_job_client.py",
+    "a3_benchmark_runner.py",
+    "profile_a3.py",
+)
+CONTROLLER_BENCHMARK_ASSETS = tuple(
+    f"{benchmark}/{name}"
+    for benchmark in ("gdn", "bsa")
+    for name in ("baseline.py", "baseline.json", "cases.jsonl")
+)
 
 
 class CampaignError(RuntimeError):
@@ -86,39 +98,69 @@ def _parse_controller_command(command: list[str], controller_config: Path) -> tu
 def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                              command: list[str]) -> dict:
     executable, script = _parse_controller_command(command, controller_config)
-    backend = script.with_name("benchmark_backend.py")
-    if not backend.is_file():
-        raise CampaignError("benchmark_backend.py must be beside experimentctl.py")
+    scripts = script.parent
+    repository = scripts.parent
+    required_scripts = {name: scripts / name for name in CONTROLLER_SCRIPTS}
+    benchmark_root = repository / "benchmarks"
+    required_assets = {name: benchmark_root / name for name in CONTROLLER_BENCHMARK_ASSETS}
+    missing = [name for name, path in {**required_scripts, **required_assets}.items()
+               if not path.is_file() or path.is_symlink()]
+    if missing:
+        detail = ", ".join(missing)
+        raise CampaignError(f"controller runtime closure is incomplete: {detail}")
     bundle_name = f"{manifest_path.stem}.controller"
     destination = manifest_path.parent / bundle_name
     if destination.exists():
         raise CampaignError(f"controller bundle already exists: {destination}")
-    destination.mkdir(parents=True)
-    shutil.copy2(script, destination / "experimentctl.py")
-    shutil.copy2(backend, destination / "benchmark_backend.py")
+    temporary = Path(tempfile.mkdtemp(prefix=f".{bundle_name}.", dir=manifest_path.parent))
     try:
-        config = json.loads(controller_config.read_text())
-        cells_document = config["cells"]
-        for cell in cells_document.values():
-            backend_command = cell["backend"]["command"]
-            if (len(backend_command) < 2
-                    or Path(backend_command[1]).resolve() != backend.resolve()):
-                raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
-            backend_command[0:2] = ["{python}", "{bundle}/benchmark_backend.py"]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
-        raise CampaignError(f"invalid controller config: {error}") from error
-    (destination / "controller.json").write_text(
-        json.dumps(config, indent=2, sort_keys=True) + "\n"
-    )
-    files = {name: digest_file(destination / name) for name in (
-        "controller.json", "experimentctl.py", "benchmark_backend.py")}
-    template = ["{python}", "{bundle}/experimentctl.py", "--config",
-                "{bundle}/controller.json", "--cell", "{cell_id}"]
-    encoded = json.dumps(template, separators=(",", ":")).encode()
-    return {"bundle": bundle_name, "files": files,
-            "command_argv": template,
-            "command_sha256": hashlib.sha256(encoded).hexdigest(),
-            "runtime": _runtime_identity(executable)}
+        bundled_scripts = temporary / "scripts"
+        bundled_scripts.mkdir()
+        for name, source in required_scripts.items():
+            shutil.copy2(source, bundled_scripts / name)
+        for name, source in required_assets.items():
+            target = temporary / "benchmarks" / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        try:
+            config = json.loads(controller_config.read_text())
+            cells_document = config["cells"]
+            for cell in cells_document.values():
+                backend_command = cell["backend"]["command"]
+                if (len(backend_command) < 2
+                        or Path(backend_command[1]).resolve() != required_scripts["benchmark_backend.py"].resolve()):
+                    raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
+                try:
+                    client_index = backend_command.index("--job-client-json") + 1
+                    client_command = json.loads(backend_command[client_index])
+                except (ValueError, IndexError, json.JSONDecodeError) as error:
+                    raise CampaignError("controller backend requires a JSON job-client command") from error
+                expected_client = required_scripts["gz_a3_job_client.py"].resolve()
+                if (not isinstance(client_command, list) or len(client_command) < 2
+                        or not all(isinstance(value, str) and value for value in client_command)
+                        or Path(client_command[1]).resolve() != expected_client):
+                    raise CampaignError("controller config must invoke gz_a3_job_client.py")
+                client_command[0:2] = ["{python}", "{bundle}/scripts/gz_a3_job_client.py"]
+                backend_command[client_index] = json.dumps(client_command, separators=(",", ":"))
+                backend_command[0:2] = ["{python}", "{bundle}/scripts/benchmark_backend.py"]
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
+            raise CampaignError(f"invalid controller config: {error}") from error
+        (temporary / "controller.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n"
+        )
+        files = _regular_file_hashes(temporary)
+        template = ["{python}", "{bundle}/scripts/experimentctl.py", "--config",
+                    "{bundle}/controller.json", "--cell", "{cell_id}"]
+        encoded = json.dumps(template, separators=(",", ":")).encode()
+        binding = {"bundle": bundle_name, "files": files,
+                   "command_argv": template,
+                   "command_sha256": hashlib.sha256(encoded).hexdigest(),
+                   "runtime": _runtime_identity(executable)}
+        os.replace(temporary, destination)
+        return binding
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
 
 
 def digest_tree(root: Path, exclude: tuple[str, ...] = ()) -> str:
@@ -153,6 +195,21 @@ def copy_regular_tree(source: Path, destination: Path) -> None:
             shutil.copy2(item, destination / relative)
         else:
             raise CampaignError(f"special file forbidden in skill bundle: {relative}")
+
+
+def _regular_file_hashes(root: Path) -> dict[str, str]:
+    if not root.is_dir() or root.is_symlink():
+        raise CampaignError(f"controller bundle is not a regular directory: {root}")
+    files: dict[str, str] = {}
+    for item in sorted(root.rglob("*")):
+        relative = item.relative_to(root).as_posix()
+        if item.is_symlink():
+            raise CampaignError(f"symlink forbidden in controller bundle: {relative}")
+        if item.is_file():
+            files[relative] = digest_file(item)
+        elif not item.is_dir():
+            raise CampaignError(f"special file forbidden in controller bundle: {relative}")
+    return files
 
 
 def resolve_master(repo_url: str) -> str:
@@ -295,11 +352,21 @@ def verify_controller_schema(manifest: dict, allow_unbound: bool = False) -> dic
 
 
 def _verify_bundle(root: Path, binding: dict) -> None:
-    if set(binding["files"]) != {"controller.json", "experimentctl.py", "benchmark_backend.py"}:
-        raise CampaignError("controller bundle file set is invalid")
+    try:
+        actual = _regular_file_hashes(root)
+    except (OSError, CampaignError) as error:
+        raise CampaignError(f"frozen controller bundle is invalid: {error}") from error
+    if set(actual) != set(binding["files"]):
+        raise CampaignError("frozen controller bundle file set drifted")
     for name, expected in binding["files"].items():
-        if digest_file(root / name) != expected:
+        if actual[name] != expected:
             raise CampaignError(f"frozen controller bundle drifted: {name}")
+
+
+def _make_tree_read_only(root: Path) -> None:
+    for item in sorted(root.rglob("*"), reverse=True):
+        item.chmod(0o555 if item.is_dir() else 0o444)
+    root.chmod(0o555)
 
 
 def stage_controller(manifest: dict, manifest_path: Path, campaign_root: Path,
@@ -326,9 +393,7 @@ def stage_controller(manifest: dict, manifest_path: Path, campaign_root: Path,
                 raise CampaignError("private controller evidence already exists")
         else:
             copy_regular_tree(source, evidence)
-            for item in evidence.iterdir():
-                item.chmod(0o555 if item.is_dir() else 0o444)
-            evidence.chmod(0o555)
+            _make_tree_read_only(evidence)
     _verify_bundle(evidence, binding)
     command = [argument.replace("{python}", shutil.which(executable) or executable)
                .replace("{bundle}", str(evidence.resolve()))

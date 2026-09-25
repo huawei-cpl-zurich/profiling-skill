@@ -113,12 +113,15 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --request-budget 12
 ```
 
-Manifest generation creates a version 2 manifest and a sibling controller
-bundle containing the normalized config, `experimentctl.py`, and
-`benchmark_backend.py`. It hashes all three files, the path-independent argv
-template, and the Python implementation, version, and executable bytes.
-Backend commands in the config are rewritten to bundle-relative templates.
-The manifest and ledger therefore contain no controller host paths. The
+Manifest generation creates a version 2 manifest and a sibling, self-contained
+controller bundle. The bundle preserves `scripts/` and `benchmarks/` layout and
+contains the controller, benchmark adapter, managed GZ-A3 job client, remote
+runner, profiler, and pinned GDN/BSA assets. Every regular file is declared and
+hashed recursively alongside the path-independent controller argv and Python
+runtime identity. Backend and nested job-client commands are rewritten to
+bundle-relative templates; only the approved neutral-adapter argv and private,
+writable job-state directory remain external. The manifest and ledger therefore
+contain no mutable operational-checkout script paths. The
 generated controller config contains all
 six cell IDs, hard-binding their benchmark,
 treatment, device, five development cases, all 50 correctness cases, and
@@ -153,10 +156,12 @@ remote-agent route.
 
 Production accepts only a version 2 controller-bound manifest. Before any
 cell starts, it verifies the runtime and bundle, copies the bundle into the
-campaign's private evidence directory, makes it read-only, and constructs the
+campaign's private evidence directory, makes the complete tree read-only, and constructs the
 controller command from that private copy. Resume reuses and verifies the
 same copy. Changes to the original config or repository scripts after staging
-cannot affect later waves.
+cannot affect later waves; missing, added, or changed bundled assets stop the
+campaign before launch. Mutable transfer receipts and job results remain in the
+configured external state directory rather than the controller evidence tree.
 
 The checked-in production client returns candidate compilation, runtime, and
 correctness failures as counted results, including compiler tracebacks. A

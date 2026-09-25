@@ -13,7 +13,7 @@ CLI = ROOT / "scripts" / "experimentctl.py"
 
 
 BACKEND = r'''#!/usr/bin/env python3
-import json, os, sys
+import json, os, sys, time
 request = json.load(sys.stdin)
 with open(os.environ["REQUEST_LOG"], "a") as stream:
     stream.write(json.dumps(request) + "\n")
@@ -21,6 +21,10 @@ mode = os.environ.get("BACKEND_MODE", "ok")
 if mode == "bad-json":
     print("not json")
     raise SystemExit()
+if mode == "timeout":
+    print("partial compiler stdout", flush=True)
+    print("partial compiler stderr", file=sys.stderr, flush=True)
+    time.sleep(5)
 if mode == "compile":
     print(json.dumps({"status":"compile_error", "device":request["device"],
                       "handle":"gz-a3:compile", "diagnostics":"error: invalid operands\nsource.py:17"}))
@@ -203,3 +207,20 @@ def test_protocol_failures_preserve_backend_evidence(tmp_path: Path, mode: str):
     assert result["handles"] == ["gz-a3:protocol"]
     assert "backend diagnostic" in result["diagnostics"]
     assert "backend stderr" in result["diagnostics"]
+
+
+def test_timeout_preserves_partial_stdout_and_stderr(tmp_path: Path):
+    config, env = setup(tmp_path)
+    document = json.loads(config.read_text())
+    document["cells"]["gdn-skill"]["backend"]["timeout_seconds"] = 0.1
+    config.write_text(json.dumps(document))
+    env["BACKEND_MODE"] = "timeout"
+    process = subprocess.run(
+        ["python3", str(CLI), "--config", str(config), "--cell", "gdn-skill", "check"],
+        text=True, capture_output=True, env=env,
+    )
+    result = json.loads(process.stdout)
+    assert process.returncode == 3
+    assert result["status"] == "infrastructure_error"
+    assert result["diagnostics"].count("partial compiler stdout") == 1
+    assert result["diagnostics"].count("partial compiler stderr") == 1

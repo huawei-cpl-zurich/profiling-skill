@@ -43,6 +43,14 @@ def invalid_latency(result: dict[str, Any], handles: list[str]) -> dict[str, Any
     return failure("infrastructure_error", diagnostics, handles=handles)
 
 
+def output_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
 def read_cell(path: Path, cell_id: str) -> dict[str, Any]:
     try:
         document = json.loads(path.read_text())
@@ -89,7 +97,17 @@ def invoke(cell: dict[str, Any], action: str, **payload: Any) -> dict[str, Any]:
             timeout=timeout,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except subprocess.TimeoutExpired as error:
+        fragments = []
+        for value in (error.stdout, error.stderr):
+            text = output_text(value).strip()
+            if text and text not in fragments:
+                fragments.append(text)
+        detail = f"backend transport failed: timed out after {timeout} seconds"
+        if fragments:
+            detail += "\n" + "\n".join(fragments)
+        return failure("infrastructure_error", detail)
+    except OSError as error:
         return failure("infrastructure_error", f"backend transport failed: {error}")
     try:
         response = json.loads(run.stdout)

@@ -22,15 +22,45 @@ def tree(path: Path, content: str = "content") -> Path:
 
 
 def fixture(tmp_path: Path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     prompt = tmp_path / "prompt.md"
     prompt.write_text("same prompt\n")
     gdn = tree(tmp_path / "gdn", "gdn")
     bsa = tree(tmp_path / "bsa", "bsa")
     project = tree(tmp_path / "project", "project")
     frozen = tmp_path / "frozen"
-    for skill in (*campaign.CANNBOT_TRITON_SKILLS, "ops-profiling"):
+    for skill in (
+        *campaign.CANNBOT_TRITON_SKILLS,
+        *campaign.CANNBOT_DEPENDENCIES,
+        "ops-profiling",
+    ):
         tree(frozen / "skills" / skill, skill)
     tree(frozen / "support" / "triton-op-generator", "support")
+    designer = frozen / "skills" / "triton-op-designer"
+    (designer / "SKILL.md").write_text(
+        "@../npu-arch/references/hardware.md\n"
+        "@../../plugins-official/triton-op-generator/template/linear.md\n"
+    )
+    npu_references = frozen / "skills" / "npu-arch" / "references"
+    npu_references.mkdir()
+    (npu_references / "hardware.md").write_text("hardware")
+    templates = frozen / "support" / "triton-op-generator" / "template"
+    templates.mkdir()
+    (templates / "linear.md").write_text("linear")
+    record = {
+        "repository": "https://example.invalid/cannbot.git",
+        "commit": "a" * 40,
+        "skills": {
+            path.name: campaign.digest_tree(path)
+            for path in (frozen / "skills").iterdir()
+        },
+        "support": {
+            "triton-op-generator": campaign.digest_tree(
+                frozen / "support" / "triton-op-generator"
+            )
+        },
+    }
+    (frozen / "freeze.json").write_text(json.dumps(record, sort_keys=True))
     manifest_path = tmp_path / "campaign.json"
     manifest = campaign.write_manifest(
         manifest_path, prompt, {"gdn": gdn, "bsa": bsa}, project, frozen
@@ -59,10 +89,15 @@ def test_prepare_cell_copies_exact_inputs_and_treatment_skills(tmp_path: Path):
     assert metadata["prompt_sha256"] == manifest["prompt"]["sha256"]
     assert metadata["baseline_sha256"] == manifest["baselines"][cell["benchmark"]]["sha256"]
     assert set(metadata["skills"]) == {
-        *campaign.CANNBOT_TRITON_SKILLS, "ascend-profiling"
+        *campaign.CANNBOT_TRITON_SKILLS,
+        *campaign.CANNBOT_DEPENDENCIES,
+        "ascend-profiling",
     }
     assert "ops-profiling" not in metadata["skills"]
-    assert (sandbox / "workspace" / ".cannbot" / "triton-op-generator").is_dir()
+    assert (
+        sandbox / "workspace" / ".agents" / "plugins-official"
+        / "triton-op-generator"
+    ).is_dir()
     assert (sandbox / "workspace" / ".agents" / "skills").is_dir()
     assert not (sandbox / ".agents").exists()
     assert not any(path.is_symlink() for path in sandbox.rglob("*"))
@@ -134,6 +169,32 @@ def test_all_treatments_expose_exact_skill_manifests(tmp_path: Path):
         assert profilers == {expected}
 
 
+def test_cannbot_relative_skill_dependencies_resolve_in_workspace(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    cell = next(c for c in manifest["cells"] if c["treatment"] == "cannbot")
+    sandbox = campaign.prepare_cell(manifest, cell, tmp_path / "runs")
+    designer = sandbox / "workspace" / ".agents" / "skills" / "triton-op-designer"
+    assert (designer / "../npu-arch/references/hardware.md").resolve().is_file()
+    assert (
+        designer
+        / "../../plugins-official/triton-op-generator/template/linear.md"
+    ).resolve().is_file()
+
+
+def test_prepare_rejects_project_and_cannbot_drift(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    project = Path(manifest["skill_sources"]["ascend-profiling"]["path"])
+    (project / "SKILL.md").write_text("drift")
+    with pytest.raises(campaign.CampaignError, match="project profiling skill drifted"):
+        campaign.prepare_cell(manifest, manifest["cells"][0], tmp_path / "project-drift")
+
+    manifest, _ = fixture(tmp_path / "second")
+    frozen = Path(manifest["skill_sources"]["cannbot"]["path"])
+    (frozen / "skills" / "triton-op-coding" / "SKILL.md").write_text("drift")
+    with pytest.raises(campaign.CampaignError, match="frozen CANNBot skill drifted"):
+        campaign.prepare_cell(manifest, manifest["cells"][0], tmp_path / "cannbot-drift")
+
+
 def test_command_launcher_preserves_codex_home_and_uses_workspace(tmp_path: Path, monkeypatch):
     observed = {}
 
@@ -145,9 +206,11 @@ def test_command_launcher_preserves_codex_home_and_uses_workspace(tmp_path: Path
     monkeypatch.setattr(campaign.subprocess, "run", fake_run)
     sandbox = tmp_path / "cell"
     (sandbox / "workspace").mkdir(parents=True)
+    (sandbox / "PROMPT.md").write_text("identical experiment prompt\n")
     campaign.CommandLauncher(["codex", "exec"]).launch(sandbox, campaign.cells()[0].__dict__)
     assert observed["cwd"] == sandbox / "workspace"
     assert observed["env"]["CODEX_HOME"] == "/real/authenticated/codex-home"
+    assert observed["input"] == (sandbox / "PROMPT.md").read_text()
 
 
 def test_freeze_resolves_then_copies_only_regular_selected_skills(tmp_path: Path, monkeypatch):

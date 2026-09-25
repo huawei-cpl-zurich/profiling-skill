@@ -30,13 +30,17 @@ CANNBOT_TRITON_SKILLS = (
     "triton-latency-optimizer",
     "triton-simulator-optimizer",
 )
+CANNBOT_DEPENDENCIES = ("npu-arch",)
 CANNBOT_SKILL_SOURCES = {
-    name: f"ops/{name}" for name in (*CANNBOT_TRITON_SKILLS, "ops-profiling")
+    name: f"ops/{name}"
+    for name in (*CANNBOT_TRITON_SKILLS, *CANNBOT_DEPENDENCIES, "ops-profiling")
 }
 CANNBOT_SUPPORT_SOURCE = "plugins-official/triton-op-generator"
 TREATMENT_SKILLS = {
-    "cannbot": (*CANNBOT_TRITON_SKILLS, "ops-profiling"),
-    "project-cannbot": (*CANNBOT_TRITON_SKILLS, "ascend-profiling"),
+    "cannbot": (*CANNBOT_TRITON_SKILLS, *CANNBOT_DEPENDENCIES, "ops-profiling"),
+    "project-cannbot": (
+        *CANNBOT_TRITON_SKILLS, *CANNBOT_DEPENDENCIES, "ascend-profiling"
+    ),
     "project-only": ("ascend-profiling",),
 }
 
@@ -121,6 +125,16 @@ def freeze_cannbot(repo_url: str, destination: Path) -> dict:
     return record
 
 
+def validate_freeze_record(record: dict) -> None:
+    if set(record.get("skills", {})) != set(CANNBOT_SKILL_SOURCES):
+        raise CampaignError("CANNBot freeze does not contain the complete skill bundle")
+    if set(record.get("support", {})) != {"triton-op-generator"}:
+        raise CampaignError("CANNBot freeze does not contain plugin support")
+    commit = record.get("commit", "")
+    if len(commit) != 40 or any(character not in "0123456789abcdef" for character in commit):
+        raise CampaignError("CANNBot freeze has an invalid commit")
+
+
 @dataclass(frozen=True)
 class Cell:
     cell_id: str
@@ -151,6 +165,9 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
     missing = {name for name in BENCHMARK_DEVICE if name not in baselines}
     if missing:
         raise CampaignError(f"missing baselines: {', '.join(sorted(missing))}")
+    freeze_file = cannbot_freeze / "freeze.json"
+    freeze = json.loads(freeze_file.read_text())
+    validate_freeze_record(freeze)
     document = {
         "version": 1,
         "prompt": {"path": str(prompt.resolve()), "sha256": digest_file(prompt)},
@@ -159,8 +176,15 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
             for name, value in sorted(baselines.items())
         },
         "skill_sources": {
-            "ascend-profiling": str(project_skill.resolve()),
-            "cannbot": str(cannbot_freeze.resolve()),
+            "ascend-profiling": {
+                "path": str(project_skill.resolve()),
+                "sha256": digest_tree(project_skill),
+            },
+            "cannbot": {
+                "path": str(cannbot_freeze.resolve()),
+                "freeze": freeze,
+                "freeze_sha256": digest_file(freeze_file),
+            },
         },
         "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
         "max_parallel": 2,
@@ -171,11 +195,33 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
 
 def _skill_source(manifest: dict, skill: str) -> Path:
     if skill == "ascend-profiling":
-        return Path(manifest["skill_sources"][skill])
-    return Path(manifest["skill_sources"]["cannbot"]) / "skills" / skill
+        return Path(manifest["skill_sources"][skill]["path"])
+    return Path(manifest["skill_sources"]["cannbot"]["path"]) / "skills" / skill
+
+
+def verify_frozen_sources(manifest: dict) -> None:
+    project = manifest["skill_sources"]["ascend-profiling"]
+    if digest_tree(Path(project["path"])) != project["sha256"]:
+        raise CampaignError("project profiling skill drifted after manifest freeze")
+    frozen = manifest["skill_sources"]["cannbot"]
+    root = Path(frozen["path"])
+    freeze_file = root / "freeze.json"
+    if digest_file(freeze_file) != frozen["freeze_sha256"]:
+        raise CampaignError("CANNBot freeze record drifted after manifest freeze")
+    record = json.loads(freeze_file.read_text())
+    if record != frozen["freeze"]:
+        raise CampaignError("CANNBot freeze record does not match manifest")
+    validate_freeze_record(record)
+    for name, expected in record["skills"].items():
+        if digest_tree(root / "skills" / name) != expected:
+            raise CampaignError(f"frozen CANNBot skill drifted: {name}")
+    support = root / "support" / "triton-op-generator"
+    if digest_tree(support) != record["support"]["triton-op-generator"]:
+        raise CampaignError("frozen CANNBot plugin support drifted")
 
 
 def prepare_cell(manifest: dict, cell: dict, campaigns_root: Path) -> Path:
+    verify_frozen_sources(manifest)
     sandbox = campaigns_root / cell["cell_id"]
     if sandbox.exists():
         raise CampaignError(f"fresh sandbox required: {sandbox}")
@@ -195,9 +241,9 @@ def prepare_cell(manifest: dict, cell: dict, campaigns_root: Path) -> Path:
         skill_hashes[skill] = digest_tree(target)
     if cell["treatment"] != "project-only":
         copy_regular_tree(
-            Path(manifest["skill_sources"]["cannbot"])
+            Path(manifest["skill_sources"]["cannbot"]["path"])
             / "support" / "triton-op-generator",
-            workspace / ".cannbot" / "triton-op-generator",
+            workspace / ".agents" / "plugins-official" / "triton-op-generator",
         )
     metadata = {
         "cell": cell,
@@ -224,9 +270,9 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
     if digest_file(sandbox / "PROMPT.md") != manifest["prompt"]["sha256"]:
         raise CampaignError("prompt hash mismatch")
     expected_baseline = manifest["baselines"][cell["benchmark"]]["sha256"]
-    if digest_tree(workspace, (".agents", ".cannbot")) != expected_baseline:
+    if digest_tree(workspace, (".agents",)) != expected_baseline:
         raise CampaignError("baseline hash mismatch")
-    support = workspace / ".cannbot" / "triton-op-generator"
+    support = workspace / ".agents" / "plugins-official" / "triton-op-generator"
     if (cell["treatment"] == "project-only") == support.exists():
         raise CampaignError("CANNBot support isolation mismatch")
     for forbidden in ("siblings", "orchestration", "global-skills"):
@@ -260,7 +306,7 @@ class CommandLauncher:
         })
         result = subprocess.run(
             self.command, cwd=sandbox / "workspace", env=environment,
-            text=True, capture_output=True,
+            input=(sandbox / "PROMPT.md").read_text(), text=True, capture_output=True,
         )
         return {"exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
 

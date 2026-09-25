@@ -243,11 +243,14 @@ def prepare_cell(manifest: dict, cell: dict, campaigns_root: Path) -> Path:
         copy_regular_tree(_skill_source(manifest, skill), target)
         skill_hashes[skill] = digest_tree(target)
     if cell["treatment"] != "project-only":
-        copy_regular_tree(
-            Path(manifest["skill_sources"]["cannbot"]["path"])
-            / "support" / "triton-op-generator",
-            workspace / ".agents" / "plugins-official" / "triton-op-generator",
-        )
+        support_source = (Path(manifest["skill_sources"]["cannbot"]["path"])
+                          / "support" / "triton-op-generator")
+        copy_regular_tree(support_source,
+                          workspace / ".agents" / "plugins-official" / "triton-op-generator")
+        for name in ("AGENTS.md", "config.json"):
+            if (workspace / name).exists():
+                raise CampaignError(f"baseline conflicts with CANNBot workspace file: {name}")
+            shutil.copy2(support_source / name, workspace / name)
     metadata = {
         "cell": cell,
         "prompt_sha256": digest_file(sandbox / "PROMPT.md"),
@@ -273,7 +276,8 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
     if digest_file(sandbox / "PROMPT.md") != manifest["prompt"]["sha256"]:
         raise CampaignError("prompt hash mismatch")
     expected_baseline = manifest["baselines"][cell["benchmark"]]["sha256"]
-    if digest_tree(workspace, (".agents",)) != expected_baseline:
+    injected = (".agents", "AGENTS.md", "config.json") if cell["treatment"] != "project-only" else (".agents",)
+    if digest_tree(workspace, injected) != expected_baseline:
         raise CampaignError("baseline hash mismatch")
     support = workspace / ".agents" / "plugins-official" / "triton-op-generator"
     if (cell["treatment"] == "project-only") == support.exists():
@@ -352,6 +356,10 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                     else:
                         ledger["cells"].append({"cell": cell, "result": result})
                         checkpoint()
+                        if result.get("exit_code") != 0 or result.get("rounds_completed") != 3:
+                            failures.append(CampaignError(
+                                f"cell {cell['cell_id']} did not complete three Codex rounds"
+                            ))
             if failures:
                 raise failures[0]
         ledger["status"] = "complete"
@@ -376,7 +384,8 @@ def main() -> int:
     run = sub.add_parser("run", help="run the frozen campaign in outer-isolated Codex sessions")
     run.add_argument("--manifest", type=Path, required=True)
     run.add_argument("--output", type=Path, required=True)
-    run.add_argument("--controller", nargs="+", required=True)
+    run.add_argument("--controller-json", required=True,
+                     help="JSON string array; supports {cell_id}, {device}, {workspace}")
     run.add_argument("--codex", default="codex")
     run.add_argument("--forbid", type=Path, action="append", default=[])
     run.add_argument("--dry-run", action="store_true")
@@ -387,10 +396,14 @@ def main() -> int:
         print(json.dumps(preflight(json.loads(args.manifest.read_text()), args.sandbox), sort_keys=True))
     else:
         from production_launcher import ProductionLauncher
-        launcher = ProductionLauncher(
-            args.controller, codex=args.codex, forbidden_paths=args.forbid,
-            dry_run=args.dry_run,
-        )
+        try:
+            controller = json.loads(args.controller_json)
+            if not isinstance(controller, list) or not all(isinstance(x, str) for x in controller):
+                raise ValueError
+        except (json.JSONDecodeError, ValueError) as error:
+            parser.error(f"--controller-json must be a JSON string array: {error}")
+        launcher = ProductionLauncher(controller, codex=args.codex,
+                                      forbidden_paths=args.forbid, dry_run=args.dry_run)
         print(json.dumps(run_campaign(
             json.loads(args.manifest.read_text()), args.output, launcher,
         ), sort_keys=True))

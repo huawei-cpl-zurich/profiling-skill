@@ -13,6 +13,7 @@ import socketserver
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Sequence
 
@@ -34,9 +35,10 @@ class _RequestHandler(socketserver.StreamRequestHandler):
                     response = {"exit_code": 75, "stdout": "", "stderr": "remote request budget exhausted\n"}
                 else:
                     owner.used += 1
+                    mapped = owner.map_arguments(arguments)
                     run = subprocess.run(
-                        [*owner.command, *arguments], text=True, capture_output=True,
-                        timeout=owner.timeout, check=False,
+                        [*owner.command, *mapped], text=True, capture_output=True,
+                        timeout=owner.timeout, check=False, cwd=owner.workspace,
                     )
                     response = {
                         "exit_code": run.returncode, "stdout": run.stdout,
@@ -51,17 +53,41 @@ class BudgetController:
     """Host-side opaque controller endpoint with an atomic request limit."""
 
     def __init__(self, socket_path: Path, command: Sequence[str], limit: int,
-                 timeout: float = 900):
+                 workspace: Path, cell: dict, timeout: float = 900):
         if not command or limit < 1:
             raise LaunchError("controller command and positive request limit are required")
         self.socket_path = socket_path
-        self.command = tuple(command)
+        self.workspace = workspace.resolve()
+        fields = {
+            "cell_id": str(cell["cell_id"]), "device": str(cell["device"]),
+            "workspace": str(self.workspace),
+        }
+        self.command = tuple(part.format_map(fields) for part in command)
         self.limit = limit
         self.timeout = timeout
         self.used = 0
         self.lock = threading.Lock()
         self.server: socketserver.UnixStreamServer | None = None
         self.thread: threading.Thread | None = None
+
+    def map_arguments(self, arguments: Sequence[str]) -> list[str]:
+        """Translate only sandbox-workspace paths into this cell's host tree."""
+        mapped = []
+        for argument in arguments:
+            prefix, separator, value = argument.partition("=")
+            candidate = value if separator else argument
+            if candidate == "/workspace" or candidate.startswith("/workspace/"):
+                relative = Path(candidate).relative_to("/workspace")
+                host = (self.workspace / relative).resolve()
+                if not host.is_relative_to(self.workspace):
+                    raise ValueError("workspace path escaped its cell")
+                replacement = str(host)
+                mapped.append(f"{prefix}={replacement}" if separator else replacement)
+            elif candidate.startswith("/"):
+                raise ValueError("absolute paths outside /workspace are forbidden")
+            else:
+                mapped.append(argument)
+        return mapped
 
     def __enter__(self) -> "BudgetController":
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
@@ -118,10 +144,10 @@ class ProductionLauncher:
                 return parent
         return self.codex.parent
 
-    def _base_command(self, sandbox: Path) -> list[str]:
+    def _base_command(self, sandbox: Path, attempt: Path) -> list[str]:
         workspace = (sandbox / "workspace").resolve()
-        state = (sandbox / "codex-state").resolve()
-        state.mkdir(mode=0o700, exist_ok=False)
+        state = (attempt / "codex-state").resolve()
+        state.mkdir(mode=0o700, parents=True)
         (state / "auth.json").touch(mode=0o600)
         runtime = self._runtime_mount()
         script = Path(__file__).resolve()
@@ -175,19 +201,27 @@ class ProductionLauncher:
             raise LaunchError("production cells require three rounds and a 12-request budget")
         started = time.monotonic()
         deadline = started + self.timeout_seconds
-        base = self._base_command(sandbox)
+        attempt_id = f"attempt-{uuid.uuid4().hex}"
+        attempt = sandbox / ".launcher-attempts" / attempt_id
+        base = self._base_command(sandbox, attempt)
         if self.dry_run:
             return {
-                "exit_code": 0, "dry_run": True, "rounds": 3,
+                "exit_code": 0, "dry_run": True, "rounds": 3, "rounds_completed": 3,
                 "request_budget": 12, "outer_command": base,
+                "attempt_id": attempt_id,
                 "prompt_sha256": __import__("hashlib").sha256(
                     (sandbox / "PROMPT.md").read_bytes()
                 ).hexdigest(),
             }
-        socket_dir = (sandbox / "controller-state").resolve()
+        # AF_UNIX paths are limited to roughly 108 bytes; campaign roots can be
+        # deeply nested, so use a short unique host directory per attempt.
+        socket_dir = Path("/tmp") / f"profctl-{uuid.uuid4().hex[:12]}"
+        socket_dir.mkdir(mode=0o700)
         socket_path = socket_dir / "controller.sock"
         outputs: list[dict] = []
-        with BudgetController(socket_path, self.controller_command, 12) as controller:
+        with BudgetController(
+            socket_path, self.controller_command, 12, sandbox / "workspace", cell,
+        ) as controller:
             self._preflight(base, socket_dir)
             session_id = ""
             for round_number in range(1, 4):
@@ -197,7 +231,7 @@ class ProductionLauncher:
                 if round_number == 1:
                     codex_args = [
                         "/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config",
-                        "--ignore-rules", "--skip-git-repo-check",
+                        "--skip-git-repo-check",
                         "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
                         "-c", 'model_reasoning_effort="low"', "-C", "/workspace", "-",
                     ]
@@ -205,7 +239,7 @@ class ProductionLauncher:
                 else:
                     codex_args = [
                         "/runtime/node/bin/codex", "exec", "resume", "--json",
-                        "--ignore-user-config", "--ignore-rules",
+                        "--ignore-user-config",
                         "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
                         "-c", 'model_reasoning_effort="low"', session_id, "-",
                     ]
@@ -221,11 +255,15 @@ class ProductionLauncher:
                     break
                 if round_number == 1:
                     session_id = self._session_id(run.stdout)
+        socket_dir.rmdir()
+        exit_code = outputs[-1]["exit_code"]
+        rounds_completed = sum(item["exit_code"] == 0 for item in outputs)
         return {
-            "exit_code": outputs[-1]["exit_code"], "session_id": session_id,
-            "rounds_completed": sum(item["exit_code"] == 0 for item in outputs),
+            "exit_code": exit_code, "session_id": session_id,
+            "rounds_completed": rounds_completed,
+            "status": "complete" if exit_code == 0 and rounds_completed == 3 else "infrastructure_error",
             "controller_requests": controller.used, "turns": outputs,
-            "elapsed_seconds": time.monotonic() - started,
+            "elapsed_seconds": time.monotonic() - started, "attempt_id": attempt_id,
         }
 
 

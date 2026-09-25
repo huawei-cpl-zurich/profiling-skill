@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,8 @@ def fixture(tmp_path: Path):
     ):
         tree(frozen / "skills" / skill, skill)
     tree(frozen / "support" / "triton-op-generator", "support")
+    (frozen / "support" / "triton-op-generator" / "AGENTS.md").write_text("cannbot rules")
+    (frozen / "support" / "triton-op-generator" / "config.json").write_text("{}")
     designer = frozen / "skills" / "triton-op-designer"
     (designer / "SKILL.md").write_text(
         "@../npu-arch/references/hardware.md\n"
@@ -100,6 +103,8 @@ def test_prepare_cell_copies_exact_inputs_and_treatment_skills(tmp_path: Path):
         / "triton-op-generator"
     ).is_dir()
     assert (sandbox / "workspace" / ".agents" / "skills").is_dir()
+    assert (sandbox / "workspace" / "AGENTS.md").read_text() == "cannbot rules"
+    assert (sandbox / "workspace" / "config.json").read_text() == "{}"
     assert not (sandbox / ".agents").exists()
     assert not any(path.is_symlink() for path in sandbox.rglob("*"))
 
@@ -154,7 +159,8 @@ class RecordingLauncher:
 
     def launch(self, sandbox, cell):
         self.calls.append((sandbox, cell.copy()))
-        return {"exit_code": 0, "session_id": f"session-{cell['cell_id']}"}
+        return {"exit_code": 0, "rounds_completed": 3,
+                "session_id": f"session-{cell['cell_id']}"}
 
 
 def test_campaign_runs_fixed_waves_and_writes_structured_ledger(tmp_path: Path):
@@ -189,6 +195,22 @@ def test_ledger_checkpoints_completed_cells_and_failure(tmp_path: Path):
     assert ledger["failure"]["type"] == "RuntimeError"
     assert {entry["cell"]["wave"] for entry in ledger["cells"]} == {1, 2}
     assert len(ledger["cells"]) == 3
+
+
+def test_incomplete_launcher_result_is_evidence_then_fails_ledger(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class IncompleteLauncher(RecordingLauncher):
+        def launch(self, sandbox, cell):
+            return {"exit_code": 9, "rounds_completed": 1, "stderr": "transport failed"}
+
+    run_root = tmp_path / "runs"
+    with pytest.raises(campaign.CampaignError, match="did not complete three"):
+        campaign.run_campaign(manifest, run_root, IncompleteLauncher())
+    ledger = json.loads((run_root / "ledger.json").read_text())
+    assert ledger["status"] == "failed"
+    assert len(ledger["cells"]) == 2
+    assert all(entry["result"]["stderr"] == "transport failed" for entry in ledger["cells"])
 
 
 def test_ledger_persists_interrupted_status(tmp_path: Path):
@@ -308,3 +330,30 @@ def test_freeze_resolves_then_copies_only_regular_selected_skills(tmp_path: Path
     assert (output / "support" / "triton-op-generator" / "SKILL.md").read_text() == "support"
     assert calls[0][0:2] == ["git", "ls-remote"]
     assert any("checkout" in call for call in calls)
+
+
+def test_run_cli_accepts_structured_experimentctl_command_without_swallowing_options(
+    tmp_path: Path, monkeypatch, capsys,
+):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}")
+    observed = {}
+
+    class FakeProductionLauncher:
+        def __init__(self, command, **kwargs):
+            observed["command"] = command
+            observed["kwargs"] = kwargs
+
+    monkeypatch.setitem(sys.modules, "production_launcher",
+                        types.SimpleNamespace(ProductionLauncher=FakeProductionLauncher))
+    monkeypatch.setattr(campaign, "run_campaign", lambda document, output, value: {"status": "dry-run"})
+    command = ["python", "scripts/experimentctl.py", "--config", "/host/cells.json",
+               "--cell", "{cell_id}"]
+    monkeypatch.setattr(sys, "argv", ["campaign.py", "run", "--manifest", str(manifest),
+                        "--output", str(tmp_path / "out"), "--controller-json",
+                        json.dumps(command), "--codex", "fake-codex", "--dry-run"])
+    assert campaign.main() == 0
+    assert observed["command"] == command
+    assert observed["kwargs"]["codex"] == "fake-codex"
+    assert observed["kwargs"]["dry_run"] is True
+    assert json.loads(capsys.readouterr().out)["status"] == "dry-run"

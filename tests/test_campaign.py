@@ -499,6 +499,23 @@ def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Pat
     assert (tmp_path / "runs" / "attempts").is_dir()
 
 
+def test_dry_run_infrastructure_failure_takes_precedence(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    failed_id = "bsa-project-cannbot"
+
+    class MixedDryRunLauncher(RecordingLauncher):
+        dry_run = True
+        def launch(self, sandbox, cell):
+            if cell["cell_id"] == failed_id:
+                return {"status": "infrastructure_error", "diagnostics": "DNS failed"}
+            return {"status": "dry_run", "dry_run": True, "rounds_completed": 0}
+
+    ledger = run_campaign(manifest, tmp_path / "runs", MixedDryRunLauncher())
+
+    assert ledger["status"] == "needs_reschedule"
+    assert ledger["reschedule"] == [failed_id]
+
+
 def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
 

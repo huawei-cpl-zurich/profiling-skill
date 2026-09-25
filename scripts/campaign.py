@@ -545,10 +545,10 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                         checkpoint()
             if dry_run:
                 shutil.rmtree(attempt_root)
-        if saw_dry_run:
-            ledger["status"] = "dry_run"
-        elif ledger.get("reschedule"):
+        if ledger.get("reschedule"):
             ledger["status"] = "needs_reschedule"
+        elif saw_dry_run:
+            ledger["status"] = "dry_run"
         elif any(entry["result"].get("status") == "candidate_error"
                  for entry in ledger["cells"]):
             ledger["status"] = "completed_with_candidate_failures"

@@ -80,6 +80,7 @@ def fixture(tmp_path: Path):
         manifest_path, prompt, {"gdn": gdn, "bsa": bsa, "matmul": matmul},
         project, guarded, frozen,
         controller_config, controller_command,
+        guarded_revision="b" * 40,
     )
     return manifest, manifest_path
 
@@ -400,6 +401,7 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
         "--matmul-baseline", manifest["baselines"]["matmul"]["path"],
         "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
         "--guarded-skill", manifest["skill_sources"]["triton-guarded-kernel"]["path"],
+        "--guarded-skill-revision", "b" * 40,
         "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
         "--controller-config", str(controller_config),
         "--controller-json", json.dumps(controller_command),
@@ -428,6 +430,7 @@ def test_generate_manifest_cli_rejects_non_string_array_controller_json(
         "--gdn-baseline", "missing-gdn", "--bsa-baseline", "missing-bsa",
         "--matmul-baseline", "missing-matmul",
         "--project-skill", "missing-skill", "--guarded-skill", "missing-guarded",
+        "--guarded-skill-revision", "b" * 40,
         "--cannbot-freeze", "missing-freeze",
         "--controller-config", "missing-config", "--controller-json", json.dumps(value),
         "--output", str(tmp_path / "campaign.json"),
@@ -448,7 +451,7 @@ def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
             Path(manifest["skill_sources"]["ascend-profiling"]["path"]),
             Path(manifest["skill_sources"]["triton-guarded-kernel"]["path"]),
             Path(manifest["skill_sources"]["cannbot"]["path"]),
-            tmp_path / "controller.json", [], rounds=0,
+            tmp_path / "controller.json", [], rounds=0, guarded_revision="b" * 40,
         )
 
 
@@ -548,22 +551,74 @@ def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: P
 
 
 def test_performance_is_normalized_by_bracketing_calibration(tmp_path: Path):
-    manifest, _ = fixture(tmp_path)
+    result = {
+        "status": "complete", "device": 1,
+        "calibration": {"devices": {
+            "0": {"before": {"latency_us": 16.0}, "after": {"latency_us": 25.0}},
+            "1": {"before": {"latency_us": 4.0}, "after": {"latency_us": 9.0}},
+        }},
+        "terminal_evidence": {"profile": {"result": {"geomean_us": 12.0}}},
+    }
+    normalized = campaign.normalize_performance(result)
+    assert normalized is not None
+    assert normalized["reference_us"] == pytest.approx(6.0)
+    assert normalized["canonical_reference_us"] == pytest.approx(20.0)
+    assert normalized["normalized_latency_us"] == pytest.approx(40.0)
 
-    class CalibratedLauncher(RecordingLauncher):
+
+def test_wave_calibrates_all_devices_around_agents_and_retains_records(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    events = []
+
+    class CalibratingLauncher(RecordingLauncher):
+        def calibrate(self, sandbox, cell, phase, wave):
+            events.append((phase, wave, cell["device"]))
+            latency = 10.0 + cell["device"]
+            if phase == "after":
+                latency *= 1.05
+            return {
+                "status": "complete", "timestamp": f"{phase}-{wave}-{cell['device']}",
+                "evidence_path": f"/{phase}-{wave}-{cell['device']}.json",
+                "result": {"latency_us": latency,
+                           "handles": [f"gz-a3:{phase}-{wave}-{cell['device']}"],
+                           "selector": "streaming_matmul_add_kernel_mix_aic"},
+            }
+
         def launch(self, sandbox, cell):
+            events.append(("launch", cell["wave"], cell["device"]))
             return {
                 "status": "complete", "rounds_completed": 3,
-                "calibration": {"before_us": 4.0, "after_us": 9.0},
                 "terminal_evidence": {
-                    "profile": {"result": {"geomean_us": 12.0}}
+                    "profile": {"result": {"geomean_us": 20.0}}
                 },
             }
 
-    ledger = run_campaign(manifest, tmp_path / "runs", CalibratedLauncher())
-    normalized = ledger["cells"][0]["normalized_performance"]
-    assert normalized["reference_us"] == pytest.approx(6.0)
-    assert normalized["normalized_ratio"] == pytest.approx(2.0)
+    ledger = run_campaign(manifest, tmp_path / "runs", CalibratingLauncher())
+    for wave in (1, 2, 3):
+        positions = [index for index, event in enumerate(events) if event[1] == wave]
+        wave_events = [events[index][0] for index in positions]
+        assert wave_events[:4] == ["before"] * 4
+        assert wave_events[-4:] == ["after"] * 4
+        assert {event[2] for event in events if event[:2] == ("before", wave)} == set(range(4))
+    assert set(ledger["calibrations"]) == {"1", "2", "3"}
+    assert all(entry["outcome"] == "success" for entry in ledger["cells"])
+    assert all("normalized_performance" in entry for entry in ledger["cells"])
+
+
+def test_calibration_drift_invalidates_whole_wave_as_infrastructure(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class DriftingLauncher(RecordingLauncher):
+        def calibrate(self, sandbox, cell, phase, wave):
+            latency = 10.0 if phase == "before" else 12.0
+            return {"status": "complete", "timestamp": phase, "evidence_path": "/evidence",
+                    "result": {"latency_us": latency, "handles": ["gz-a3:cal"],
+                               "selector": "streaming_matmul_add_kernel_mix_aic"}}
+
+    ledger = run_campaign(manifest, tmp_path / "runs", DriftingLauncher())
+    assert ledger["status"] == "needs_reschedule"
+    assert set(ledger["reschedule"]) == {cell["cell_id"] for cell in manifest["cells"]}
+    assert all(entry["outcome"] == "infra_discarded" for entry in ledger["cells"])
 
 
 @pytest.mark.parametrize(
@@ -604,7 +659,7 @@ def test_resume_runs_only_infrastructure_cells_in_fresh_sandbox(tmp_path: Path):
     assert ledger["status"] == "complete"
     assert [cell["cell_id"] for _, cell in second.calls] == [failed_id]
     assert second.calls[0][0] != original_sandbox
-    assert len(ledger["cells"]) == 7
+    assert len(ledger["cells"]) == 10
     assert not ledger["reschedule"]
 
 

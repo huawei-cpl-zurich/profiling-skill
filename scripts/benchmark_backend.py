@@ -62,7 +62,7 @@ BENCHMARKS = {
         },
     },
 }
-VALID_ACTIONS = {"measure", "check", "profile"}
+VALID_ACTIONS = {"measure", "check", "profile", "calibrate"}
 VALID_RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
 MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 
@@ -84,6 +84,13 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
             or raw["device"] not in range(4)):
         return None, response("infrastructure_error", "request requires physical device 0-3")
     action = raw["action"]
+    if action == "calibrate":
+        if raw.get("phase") not in {"before", "after"}:
+            return None, response("infrastructure_error", "calibration phase must be before or after")
+        if (isinstance(raw.get("wave"), bool) or not isinstance(raw.get("wave"), int)
+                or raw["wave"] < 1):
+            return None, response("infrastructure_error", "calibration wave must be positive")
+        return raw, None
     if action in {"measure", "profile"}:
         case = raw.get("case")
         allowed = spec["all_cases"] if action == "measure" else spec["development_cases"]
@@ -252,6 +259,24 @@ def main() -> int:
             request, error = validate_request(raw, args.benchmark)
             if error:
                 result = error
+            elif request["action"] == "calibrate":
+                calibration_request = {
+                    "action": "profile", "device": request["device"],
+                    "case": 7, "iteration": 0, "round": request["wave"],
+                }
+                calibration = root / "benchmarks/matmul/calibration.py"
+                result = invoke(
+                    command,
+                    make_job(calibration_request, "matmul", calibration, root,
+                             "streaming_matmul_add_kernel_mix_aic"),
+                    args.timeout,
+                )
+                result.update(
+                    action="calibrate", benchmark=args.benchmark,
+                    device=request["device"], phase=request["phase"],
+                    wave=request["wave"],
+                    selector="streaming_matmul_add_kernel_mix_aic",
+                )
             elif not args.candidate.is_file():
                 result = response("compile_error", f"candidate source does not exist: {args.candidate}")
             else:

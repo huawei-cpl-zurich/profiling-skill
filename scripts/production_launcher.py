@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -250,7 +251,9 @@ class ProductionLauncher:
         if any(document.get(key) != value for key, value in identity.items()):
             return "infrastructure_error", "controller response identity mismatch"
         status = document.get("status")
-        expected_cases = cell["development_cases" if operation == "profile" else "all_cases"]
+        expected_cases = cell.get(
+            "development_cases" if operation == "profile" else "all_cases", []
+        )
         if operation == "check" and document.get("cases") != expected_cases:
             return "infrastructure_error", "full check cases do not match configured sequence"
         if status != "ok":
@@ -259,7 +262,18 @@ class ProductionLauncher:
             return "infrastructure_error", str(
                 document.get("diagnostics", f"controller returned status {status!r}")
             )
-        if operation == "profile":
+        if operation == "calibrate":
+            handles = document.get("handles")
+            latency = document.get("latency_us")
+            if (not isinstance(latency, (int, float)) or isinstance(latency, bool)
+                    or latency <= 0):
+                return "infrastructure_error", "calibration latency is invalid"
+            if (not isinstance(handles, list) or len(handles) != 1
+                    or not isinstance(handles[0], str) or not handles[0]):
+                return "infrastructure_error", "calibration requires one durable handle"
+            if document.get("selector") != "streaming_matmul_add_kernel_mix_aic":
+                return "infrastructure_error", "calibration selector mismatch"
+        elif operation == "profile":
             rows = document.get("cases")
             handles = document.get("handles")
             if document.get("repeats") != 3 or not isinstance(rows, list):
@@ -319,6 +333,22 @@ class ProductionLauncher:
         path = attempt / f"terminal-{name}.json"
         path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
         evidence["evidence_path"] = str(path)
+        return evidence
+
+    def calibrate(self, sandbox: Path, cell: dict, phase: str, wave: int) -> dict:
+        """Run one opaque, host-owned calibration through the frozen controller."""
+        attempt = sandbox / ".launcher-attempts" / f"calibration-{phase}-{wave}-{cell['device']}"
+        attempt.mkdir(parents=True, exist_ok=False)
+        fields = {
+            "cell_id": str(cell["cell_id"]), "device": str(cell["device"]),
+            "workspace": str((sandbox / "workspace").resolve()),
+        }
+        command = tuple(part.format_map(fields) for part in self.controller_command)
+        evidence = self._terminal_gate(
+            command, ("calibrate", "--phase", phase, "--wave", str(wave)),
+            sandbox / "workspace", attempt, "calibrate", self.timeout_seconds, cell,
+        )
+        evidence["timestamp"] = datetime.now(timezone.utc).isoformat()
         return evidence
 
     def launch(self, sandbox: Path, cell: dict) -> dict:

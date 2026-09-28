@@ -62,6 +62,32 @@ def identified(document: dict, cell: dict, operation: str) -> dict:
             "benchmark": cell["benchmark"], "device": cell["device"], **document}
 
 
+def test_host_calibration_uses_controller_and_retains_evidence(tmp_path: Path, monkeypatch):
+    instance = launcher_fixture(tmp_path)
+    root = sandbox(tmp_path)
+    cell = production_cell()
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed["cwd"] = kwargs["cwd"]
+        document = identified({
+            "status": "ok", "latency_us": 17.5, "handles": ["gz-a3:cal"],
+            "selector": "streaming_matmul_add_kernel_mix_aic",
+        }, cell, "calibrate")
+        return type("Result", (), {"returncode": 0, "stdout": json.dumps(document),
+                                    "stderr": ""})()
+
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
+    evidence = instance.calibrate(root, cell, "before", 2)
+    assert observed["command"][-5:] == ["calibrate", "--phase", "before", "--wave", "2"]
+    assert observed["cwd"] == root / "workspace"
+    assert evidence["status"] == "complete"
+    assert evidence["result"]["handles"] == ["gz-a3:cal"]
+    assert evidence["timestamp"].endswith("+00:00")
+    assert Path(evidence["evidence_path"]).is_file()
+
+
 def test_bwrap_argv_mounts_only_workspace_minimal_state_and_readonly_auth(tmp_path: Path):
     instance = launcher_fixture(tmp_path)
     root = sandbox(tmp_path)

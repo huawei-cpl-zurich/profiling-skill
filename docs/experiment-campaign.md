@@ -1,10 +1,10 @@
 # A3 profiling experiment campaign
 
 This runbook defines the intended measured campaign and identifies the gates
-that still prevent a reproducible production run. The design has six cells:
-three profiling treatments for each of the pinned GDN and BSA kernels. It does
-not include the streaming matmul-add development control, and no measured
-campaign has started yet.
+that prevent an invalid production run. The design has nine cells: three skill
+treatments for each of GDN, BSA, and the streaming matmul-add control. No
+measured campaign starts until the campaign PR is merged and devices 0-3 pass
+managed preflight.
 
 ## Frozen inputs
 
@@ -23,6 +23,7 @@ seven synchronized timing repetitions of every case:
 | --- | --- | ---: | --- |
 | GDN | `30_ChunkGatedDeltaRule.py` | 0 | 40, 49, 47, 46, 45 |
 | BSA | `54_BlockSparseAttnFwd.py` | 1 | 47, 46, 49, 44, 43 |
+| Matmul | `streaming_matmul_add.py` | 0-3 | 7, 8, 9 |
 
 All 50 cases remain the final correctness gate. A submitted GZ-A3 job sees
 its selected physical device as logical device 0.
@@ -52,8 +53,8 @@ The treatments are:
   support, plus CANNBot `ops-profiling`.
 - `project-cannbot`: the same complete CANNBot Triton set, dependency and
   plugin support, but project `ascend-profiling` replaces `ops-profiling`.
-- `project-only`: project `ascend-profiling` only; no CANNBot skills or plugin
-  support are visible.
+- `project-guarded`: project `ascend-profiling` plus the frozen
+  `triton-guarded-kernel`; no CANNBot skills or plugin support are visible.
 
 `campaign.py preflight` verifies the prompt, baseline, skill manifests, skill
 hashes, plugin-support presence, and the absence of symlinks before launch.
@@ -104,7 +105,10 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --prompt /absolute/campaign-inputs/prompt.md \
   --gdn-baseline /absolute/campaign-inputs/baselines/gdn \
   --bsa-baseline /absolute/campaign-inputs/baselines/bsa \
+  --matmul-baseline /absolute/campaign-inputs/baselines/matmul \
   --project-skill "$ABS_REPOSITORY" \
+  --guarded-skill /absolute/cpl-skills/skills/triton-guarded-kernel \
+  --guarded-skill-revision 7fe1230a68487a954a479c5c1ed4473b760c7ac6 \
   --cannbot-freeze /absolute/campaign-inputs/cannbot-freeze \
   --controller-config /absolute/campaign-inputs/controller.json \
   --controller-json '["python","/absolute/approved/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
@@ -116,26 +120,31 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
 Manifest generation creates a version 2 manifest and a sibling, self-contained
 controller bundle. The bundle preserves `scripts/` and `benchmarks/` layout and
 contains the controller, benchmark adapter, managed GZ-A3 job client, remote
-runner, profiler, and pinned GDN/BSA assets. Every regular file is declared and
+runner, profiler, and all three pinned benchmark assets. Every regular file is declared and
 hashed recursively alongside the path-independent controller argv and Python
 runtime identity. Backend and nested job-client commands are rewritten to
 bundle-relative templates; only the approved neutral-adapter argv and private,
 writable job-state directory remain external. The manifest and ledger therefore
 contain no mutable operational-checkout script paths. The
-generated controller config contains all
-six cell IDs, hard-binding their benchmark,
-treatment, device, five development cases, all 50 correctness cases, and
+generated controller config contains all nine cell IDs, hard-binding their benchmark,
+treatment, device, benchmark-specific development and correctness cases, and
 backend command. Preserve generated JSON files as campaign evidence; never
 hand-edit them.
 
-The scheduler uses three fixed two-cell waves so no more than two agents run
-at once and each benchmark stays on its assigned NPU:
+The scheduler uses fixed 4/4/1 waves with no device collision:
 
-| Wave | NPU 0 | NPU 1 |
-| ---: | --- | --- |
-| 1 | `gdn-cannbot` | `bsa-project-cannbot` |
-| 2 | `gdn-project-cannbot` | `bsa-project-only` |
-| 3 | `gdn-project-only` | `bsa-cannbot` |
+| Wave | NPU 0 | NPU 1 | NPU 2 | NPU 3 |
+| ---: | --- | --- | --- | --- |
+| 1 | `gdn-cannbot` | `bsa-cannbot` | `matmul-cannbot` | `bsa-project-guarded` |
+| 2 | `matmul-project-guarded` | `gdn-project-cannbot` | `bsa-project-cannbot` | `matmul-project-cannbot` |
+| 3 | — | — | `gdn-project-guarded` | — |
+
+Immediately before and after every wave, the host profiles frozen matmul case 7
+on all four devices through the same managed `msprof op` route. Drift above the
+frozen threshold (10% by default), missing handles, or invalid latency discards
+and reschedules the whole wave. Results retain raw latency and report
+`raw_candidate_latency * C0 / Cd`, where each `C` is the geometric mean of its
+device's bracketing calibration and device 0 is canonical.
 
 ## Readiness and production launch
 
@@ -174,7 +183,7 @@ with `--dry-run`. Dry-run preparation uses host temporary roots named
 `campaign-dry-run-*`, outside the campaign output root; interrupted runs can
 leave those roots behind for inspection, and operators are responsible for
 retention or cleanup under their site's artifact policy. The ledger records
-all six planned cells with status `dry_run`. The production invocation may
+all nine planned cells with status `dry_run`. The production invocation may
 safely reuse the same campaign output root because production creates fresh
 attempt directories and replaces the dry-run ledger state.
 
@@ -269,7 +278,7 @@ Two operational gates remain:
 
 In addition, the controller config and exact controller command are not yet
 bound and hashed by the campaign manifest, which is a scheduler-level
-reproducibility blocker. No measured six-cell campaign has run; that is the
+reproducibility blocker. No measured nine-cell campaign has run; that is the
 current outcome, not a fourth gate.
 
 Until those gates are cleared, the battery remains a functionally tested

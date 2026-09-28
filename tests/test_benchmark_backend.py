@@ -88,6 +88,19 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
         capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
 
 
+def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
+    payload = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
+               "device": 3, "phase": "before", "wave": 2}
+    result = json.loads(run_backend(tmp_path, payload).stdout)
+    assert result["status"] == "ok"
+    assert result["action"] == "calibrate"
+    assert result["device"] == 3
+    assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
+    assert result["job"]["case"] == 7
+    assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
+    assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+
+
 def test_pinned_repository_assets_are_exact_and_have_fifty_cases():
     module = load_backend()
     expected = {
@@ -288,7 +301,7 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
     assert cells["gdn-project-cannbot"]["all_cases"] == list(range(50))
     assert cells["matmul-project-guarded"]["development_cases"] == [7, 8, 9]
     assert cells["matmul-project-guarded"]["all_cases"] == list(range(10))
-    assert cells["matmul-project-only"]["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
+    assert cells["matmul-project-guarded"]["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]
     assert command[command.index("--job-client-json") + 1] == encoded_client

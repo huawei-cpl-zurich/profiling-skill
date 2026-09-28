@@ -73,6 +73,30 @@ def test_campaign_assets_preserve_the_control_contract():
     }
 
 
+def test_campaign_baseline_resets_the_control_seed_for_nonzero_cases():
+    import torch
+
+    spec = importlib.util.spec_from_file_location(
+        "streaming_matmul_campaign_baseline", MATMUL / "baseline.py"
+    )
+    baseline = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(baseline)
+    cases = [json.loads(line) for line in (MATMUL / "cases.jsonl").read_text().splitlines()]
+    for case_index in (1, 6):
+        case = cases[case_index]
+        baseline._load_cases = lambda selected=case: [selected]
+        observed = baseline.get_input_groups()[0]
+        generator = torch.Generator().manual_seed(baseline.SEED)
+        expected = [
+            torch.randn((case["m"], case["k"]), generator=generator, dtype=torch.float16),
+            torch.randn((case["k"], case["n"]), generator=generator, dtype=torch.float16),
+            torch.randn((case["n"],), generator=generator, dtype=torch.float16),
+        ]
+        assert all(torch.equal(actual, wanted)
+                   for actual, wanted in zip(observed, expected))
+
+
 def test_exception_classification_is_machine_readable():
     module = load_module()
 

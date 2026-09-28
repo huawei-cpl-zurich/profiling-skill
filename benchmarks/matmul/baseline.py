@@ -23,9 +23,12 @@ def _load_cases():
 
 def get_input_groups():
     groups = []
-    for case_index, case in enumerate(_load_cases()):
+    for case in _load_cases():
         generator = torch.Generator()
-        generator.manual_seed(SEED + case_index)
+        # The standalone control resets the global seed for every invocation.
+        # Use a private generator to preserve that byte-identical input stream
+        # without perturbing the runner's global RNG.
+        generator.manual_seed(SEED)
         lhs = torch.randn((case["m"], case["k"]), generator=generator,
                           dtype=torch.float16)
         rhs = torch.randn((case["k"], case["n"]), generator=generator,

@@ -116,7 +116,8 @@ def identity(job: dict) -> dict:
 
 def execute(job: dict) -> dict:
     bound = identity(job)
-    tolerances = job.get("tolerances")
+    # Protocol v1 jobs predating benchmark-specific tolerances used 1e-2.
+    tolerances = job.get("tolerances", {"rtol": 1e-2, "atol": 1e-2})
     if (not isinstance(tolerances, dict)
             or any(isinstance(tolerances.get(name), bool)
                    or not isinstance(tolerances.get(name), (int, float))

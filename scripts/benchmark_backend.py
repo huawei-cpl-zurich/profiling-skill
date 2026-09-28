@@ -18,6 +18,8 @@ from typing import Any
 
 
 PINNED_REVISION = "a42c54b916189500e2f7cb47640980f230f2eb65"
+MATMUL_REVISION = "9e39c8d3ee94ebd657ad4a9ee031718665b43efa"
+MATMUL_SOURCE_SHA256 = "c877d1db26a820bc861c756d47bd94c60a7c737a3addbaf5844d04081653e250"
 BENCHMARKS = {
     "gdn": {
         "device": 0,
@@ -26,6 +28,11 @@ BENCHMARKS = {
         "tolerances": {"rtol": 1e-2, "atol": 1e-2},
         "asset": "benchmarks/gdn/baseline.py",
         "cases": "benchmarks/gdn/cases.jsonl",
+        "reference": {
+            "kind": "git",
+            "revision": PINNED_REVISION,
+            "path": "npu_benchmark/level4/30_ChunkGatedDeltaRule.py",
+        },
     },
     "bsa": {
         "device": 1,
@@ -34,6 +41,11 @@ BENCHMARKS = {
         "tolerances": {"rtol": 1e-2, "atol": 1e-2},
         "asset": "benchmarks/bsa/baseline.py",
         "cases": "benchmarks/bsa/cases.jsonl",
+        "reference": {
+            "kind": "git",
+            "revision": PINNED_REVISION,
+            "path": "npu_benchmark/level4/54_BlockSparseAttnFwd.py",
+        },
     },
     "matmul": {
         "device": 2,
@@ -42,6 +54,12 @@ BENCHMARKS = {
         "tolerances": {"rtol": 2e-2, "atol": 2e-2},
         "asset": "benchmarks/matmul/baseline.py",
         "cases": "benchmarks/matmul/cases.jsonl",
+        "reference": {
+            "kind": "repository-file",
+            "revision": MATMUL_REVISION,
+            "path": "benchmarks/streaming_matmul_add.py",
+            "sha256": MATMUL_SOURCE_SHA256,
+        },
     },
 }
 VALID_ACTIONS = {"measure", "check", "profile"}
@@ -113,8 +131,11 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         "baseline": str((root / spec["asset"]).resolve()),
         "case_spec": str((root / spec["cases"]).resolve()),
         "tolerances": spec["tolerances"],
-        "reference_revision": PINNED_REVISION,
+        "reference": spec["reference"],
     }
+    # Preserve the established field for the two externally pinned benchmarks.
+    if spec["reference"]["kind"] == "git":
+        job["reference_revision"] = spec["reference"]["revision"]
     if action == "check":
         job.update(cases=request["cases"], scope=request.get("scope"), round=request.get("round"))
     else:

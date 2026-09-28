@@ -134,6 +134,11 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
     assert job["case"] == 40
     assert job["round"] == 1
     assert job["reference_revision"] == "a42c54b916189500e2f7cb47640980f230f2eb65"
+    assert job["reference"] == {
+        "kind": "git",
+        "revision": "a42c54b916189500e2f7cb47640980f230f2eb65",
+        "path": "npu_benchmark/level4/30_ChunkGatedDeltaRule.py",
+    }
     assert job["tolerances"] == {"rtol": 1e-2, "atol": 1e-2}
     assert job["profiling"] == {
         "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
@@ -232,6 +237,13 @@ def test_matmul_uses_ten_cases_and_its_frozen_numerical_contract(tmp_path: Path)
     assert job["device"] == 2
     assert job["cases"] == list(range(10))
     assert job["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
+    assert "reference_revision" not in job
+    assert job["reference"] == {
+        "kind": "repository-file",
+        "revision": "9e39c8d3ee94ebd657ad4a9ee031718665b43efa",
+        "path": "benchmarks/streaming_matmul_add.py",
+        "sha256": "c877d1db26a820bc861c756d47bd94c60a7c737a3addbaf5844d04081653e250",
+    }
     assert Path(job["baseline"]) == ROOT / "benchmarks/matmul/baseline.py"
 
 

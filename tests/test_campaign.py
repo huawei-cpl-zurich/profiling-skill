@@ -407,6 +407,7 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
                    for value in [written["controller"]])
     assert (output.parent / written["controller"]["bundle"] / "scripts/benchmark_backend.py").is_file()
     assert (output.parent / written["controller"]["bundle"] / "benchmarks/gdn/baseline.py").is_file()
+    assert (output.parent / written["controller"]["bundle"] / "benchmarks/matmul/cases.jsonl").is_file()
     assert len(written["cells"]) == 6
     sandbox = campaign.prepare_cell(written, written["cells"][0], tmp_path / "runs")
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
@@ -645,7 +646,7 @@ def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_pat
     assert (tmp_path / binding["bundle"] / "controller.json").is_file()
 
 
-def test_staged_backend_uses_complete_closure_after_source_is_removed(tmp_path: Path):
+def test_staged_matmul_backend_uses_complete_closure_after_source_is_removed(tmp_path: Path):
     source = tmp_path / "disposable-source"
     shutil.copytree(ROOT / "scripts", source / "scripts")
     shutil.copytree(ROOT / "benchmarks", source / "benchmarks")
@@ -656,11 +657,11 @@ def test_staged_backend_uses_complete_closure_after_source_is_removed(tmp_path: 
               "--adapter-json", json.dumps([str(adapter)]),
               "--state-dir", str(tmp_path / "job-state")]
     config = tmp_path / "controller.json"
-    config.write_text(json.dumps({"cells": {"gdn-cannbot": {
-        "device": 0, "benchmark": "gdn", "development_cases": [40],
-        "all_cases": list(range(50)), "backend": {"command": [
+    config.write_text(json.dumps({"cells": {"matmul-cannbot": {
+        "device": 2, "benchmark": "matmul", "development_cases": [7, 8, 9],
+        "all_cases": list(range(10)), "backend": {"command": [
             sys.executable, str(source / "scripts/benchmark_backend.py"),
-            "--benchmark", "gdn", "--candidate", "candidate.py",
+            "--benchmark", "matmul", "--candidate", "candidate.py",
             "--job-client-json", json.dumps(client),
         ], "timeout_seconds": 10},
     }}}))
@@ -679,8 +680,8 @@ def test_staged_backend_uses_complete_closure_after_source_is_removed(tmp_path: 
     workspace.mkdir()
     (workspace / "candidate.py").write_text("# candidate\n")
     result = subprocess.run(
-        [*(value.replace("{cell_id}", "gdn-cannbot") for value in command),
-         "rank", "--benchmark", "gdn", "--warmups", "0", "--repeats", "1"],
+        [*(value.replace("{cell_id}", "matmul-cannbot") for value in command),
+         "rank", "--benchmark", "matmul", "--warmups", "0", "--repeats", "1"],
         cwd=workspace, text=True, capture_output=True, check=False,
     )
     response = json.loads(result.stdout)

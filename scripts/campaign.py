@@ -57,7 +57,7 @@ CONTROLLER_SCRIPTS = (
 )
 CONTROLLER_BENCHMARK_ASSETS = tuple(
     f"{benchmark}/{name}"
-    for benchmark in ("gdn", "bsa")
+    for benchmark in ("gdn", "bsa", "matmul")
     for name in ("baseline.py", "baseline.json", "cases.jsonl")
 )
 

@@ -109,7 +109,7 @@ def test_actual_bsa_loader_uses_index_seed_and_moves_tensors_to_npu():
     assert all(item.npu_calls == 1 for item in values[:8])
 
 
-def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monkeypatch, tmp_path: Path):
+def test_protocol_v1_default_tolerance_and_reference_setup_failure(monkeypatch, tmp_path: Path):
     runner = load_runner()
     baseline = SimpleNamespace(Model=lambda: lambda *_args: 3)
     candidate = SimpleNamespace(Model=lambda: lambda *_args: 3)
@@ -117,8 +117,7 @@ def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monke
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext, npu=SimpleNamespace(synchronize=lambda: None), Tensor=()))
     job = {"benchmark": "gdn", "action": "measure", "device": 0, "case": 0,
            "phase": "sample", "baseline": "baseline.py", "candidate": "candidate.py",
-           "case_spec": str(tmp_path / "cases.jsonl"),
-           "tolerances": {"rtol": 1e-2, "atol": 1e-2}}
+           "case_spec": str(tmp_path / "cases.jsonl")}
     (tmp_path / "cases.jsonl").write_text("{}\n")
     monkeypatch.setattr(runner, "selected_inputs", lambda *_args: (_ for _ in ()).throw(ValueError("bad baseline")))
     assert runner.execute(job)["status"] == "infrastructure_error"
@@ -127,7 +126,8 @@ def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monke
     original_clone = runner.clone
     monkeypatch.setattr(runner, "clone", lambda value: events.append("clone") or original_clone(value))
     monkeypatch.setattr(runner.time, "perf_counter_ns", lambda: events.append("timer") or len(events))
-    assert runner.execute(job)["status"] == "ok"
+    result = runner.execute(job)
+    assert result["status"] == "ok"
     assert events.index("clone") < events.index("timer")
 
 

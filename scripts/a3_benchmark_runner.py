@@ -83,14 +83,14 @@ def selected_inputs(baseline, case_spec: Path, case_index: int):
                 setattr(baseline, name, value)
 
 
-def compare(actual, expected) -> tuple[bool, float]:
+def compare(actual, expected, *, rtol: float, atol: float) -> tuple[bool, float]:
     import torch
     if actual is None or expected is None:
         return actual is expected, 0.0
     if isinstance(actual, (tuple, list)) and isinstance(expected, (tuple, list)):
         if len(actual) != len(expected):
             return False, float("inf")
-        results = [compare(a, e) for a, e in zip(actual, expected)]
+        results = [compare(a, e, rtol=rtol, atol=atol) for a, e in zip(actual, expected)]
         return all(item[0] for item in results), max((item[1] for item in results), default=0.0)
     if not isinstance(actual, torch.Tensor) or not isinstance(expected, torch.Tensor):
         return actual == expected, 0.0
@@ -98,7 +98,7 @@ def compare(actual, expected) -> tuple[bool, float]:
         return False, float("inf")
     delta = (actual.float() - expected.float()).abs()
     error = float(delta.max().cpu()) if delta.numel() else 0.0
-    return bool(torch.allclose(actual.float(), expected.float(), rtol=1e-2, atol=1e-2)), error
+    return bool(torch.allclose(actual.float(), expected.float(), rtol=rtol, atol=atol)), error
 
 
 def identity(job: dict) -> dict:
@@ -116,6 +116,13 @@ def identity(job: dict) -> dict:
 
 def execute(job: dict) -> dict:
     bound = identity(job)
+    tolerances = job.get("tolerances")
+    if (not isinstance(tolerances, dict)
+            or any(isinstance(tolerances.get(name), bool)
+                   or not isinstance(tolerances.get(name), (int, float))
+                   or tolerances[name] < 0 for name in ("rtol", "atol"))):
+        return {"status": "infrastructure_error",
+                "diagnostics": "job requires non-negative numeric rtol and atol", **bound}
     try:
         import torch
     except BaseException as exc:
@@ -153,7 +160,7 @@ def execute(job: dict) -> dict:
             return {"status": classify(exc), "diagnostics": diagnostic(exc), **bound,
                     "case_evidence": evidence}
         try:
-            passed, max_abs = compare(actual, expected)
+            passed, max_abs = compare(actual, expected, **tolerances)
         except BaseException as exc:
             return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound,
                     "case_evidence": evidence}

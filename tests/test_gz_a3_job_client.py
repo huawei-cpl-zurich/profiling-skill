@@ -40,6 +40,16 @@ def test_runner_classifies_source_and_triton_compilation_failures():
     assert module.classify(RuntimeError("device kernel launch failed")) == "runtime_error"
 
 
+def test_runner_applies_the_job_specific_tolerance_contract():
+    import torch
+
+    runner = load_runner()
+    expected = torch.tensor([1.0])
+    actual = torch.tensor([1.015])
+    assert runner.compare(actual, expected, rtol=1e-2, atol=0)[0] is False
+    assert runner.compare(actual, expected, rtol=2e-2, atol=0)[0] is True
+
+
 class Marker:
     def __init__(self, value):
         self.value = value
@@ -107,7 +117,8 @@ def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monke
     monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(no_grad=nullcontext, npu=SimpleNamespace(synchronize=lambda: None), Tensor=()))
     job = {"benchmark": "gdn", "action": "measure", "device": 0, "case": 0,
            "phase": "sample", "baseline": "baseline.py", "candidate": "candidate.py",
-           "case_spec": str(tmp_path / "cases.jsonl")}
+           "case_spec": str(tmp_path / "cases.jsonl"),
+           "tolerances": {"rtol": 1e-2, "atol": 1e-2}}
     (tmp_path / "cases.jsonl").write_text("{}\n")
     monkeypatch.setattr(runner, "selected_inputs", lambda *_args: (_ for _ in ()).throw(ValueError("bad baseline")))
     assert runner.execute(job)["status"] == "infrastructure_error"

@@ -1,0 +1,10 @@
+{"name":"correctness-00-tiny","kind":"correctness","m":1,"n":1,"k":1}
+{"name":"correctness-01-square-tail","kind":"correctness","m":33,"n":33,"k":31}
+{"name":"correctness-02-m-tail","kind":"correctness","m":65,"n":32,"k":64}
+{"name":"correctness-03-n-tail","kind":"correctness","m":32,"n":71,"k":64}
+{"name":"correctness-04-k-tail","kind":"correctness","m":64,"n":64,"k":97}
+{"name":"correctness-05-wide","kind":"correctness","m":37,"n":113,"k":79}
+{"name":"correctness-06-tall","kind":"correctness","m":129,"n":29,"k":131}
+{"name":"performance-small","kind":"performance","m":256,"n":256,"k":256}
+{"name":"performance-medium","kind":"performance","m":1024,"n":1024,"k":1024}
+{"name":"performance-large","kind":"performance","m":2048,"n":2048,"k":2048}

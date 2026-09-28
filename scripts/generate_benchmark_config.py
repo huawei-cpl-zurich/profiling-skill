@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from benchmark_backend import ALL_CASES, BENCHMARKS
+from benchmark_backend import BENCHMARKS
 
 
 TREATMENTS = ("cannbot", "project-cannbot", "project-only")
@@ -32,7 +32,8 @@ def main() -> int:
                 "treatment": treatment,
                 "device": spec["device"],
                 "development_cases": spec["development_cases"],
-                "all_cases": ALL_CASES,
+                "all_cases": spec["all_cases"],
+                "tolerances": spec["tolerances"],
                 "backend": {
                     "command": [sys.executable, str(backend), "--benchmark", benchmark,
                                 "--candidate", args.candidate,

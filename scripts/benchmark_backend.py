@@ -22,17 +22,28 @@ BENCHMARKS = {
     "gdn": {
         "device": 0,
         "development_cases": [40, 49, 47, 46, 45],
+        "all_cases": list(range(50)),
+        "tolerances": {"rtol": 1e-2, "atol": 1e-2},
         "asset": "benchmarks/gdn/baseline.py",
         "cases": "benchmarks/gdn/cases.jsonl",
     },
     "bsa": {
         "device": 1,
         "development_cases": [47, 46, 49, 44, 43],
+        "all_cases": list(range(50)),
+        "tolerances": {"rtol": 1e-2, "atol": 1e-2},
         "asset": "benchmarks/bsa/baseline.py",
         "cases": "benchmarks/bsa/cases.jsonl",
     },
+    "matmul": {
+        "device": 2,
+        "development_cases": [7, 8, 9],
+        "all_cases": list(range(10)),
+        "tolerances": {"rtol": 2e-2, "atol": 2e-2},
+        "asset": "benchmarks/matmul/baseline.py",
+        "cases": "benchmarks/matmul/cases.jsonl",
+    },
 }
-ALL_CASES = list(range(50))
 VALID_ACTIONS = {"measure", "check", "profile"}
 VALID_RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
 MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
@@ -55,7 +66,7 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
     action = raw["action"]
     if action in {"measure", "profile"}:
         case = raw.get("case")
-        allowed = ALL_CASES if action == "measure" else spec["development_cases"]
+        allowed = spec["all_cases"] if action == "measure" else spec["development_cases"]
         if isinstance(case, bool) or case not in allowed:
             return None, response("infrastructure_error", f"invalid {action} case")
         if action == "measure" and raw.get("phase") not in {"warmup", "sample"}:
@@ -67,7 +78,7 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         ):
             return None, response("infrastructure_error", "profile round must be a positive integer")
     else:
-        expected = ALL_CASES if raw.get("scope") == "full" else spec["development_cases"]
+        expected = spec["all_cases"] if raw.get("scope") == "full" else spec["development_cases"]
         if raw.get("cases") != expected:
             return None, response("infrastructure_error", "check cases are not the exact configured sequence")
     return raw, None
@@ -101,6 +112,7 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         "candidate": str(candidate.resolve()),
         "baseline": str((root / spec["asset"]).resolve()),
         "case_spec": str((root / spec["cases"]).resolve()),
+        "tolerances": spec["tolerances"],
         "reference_revision": PINNED_REVISION,
     }
     if action == "check":

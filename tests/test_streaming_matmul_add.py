@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "benchmarks" / "streaming_matmul_add.py"
+MATMUL = ROOT / "benchmarks" / "matmul"
 
 
 def load_module():
@@ -55,6 +56,21 @@ def test_cases_cover_dimension_tails_and_multiple_k_tiles():
     assert any(case.k % 32 for case in correctness)
     assert any(case.k > 32 for case in correctness)
     assert len({(case.m, case.n, case.k) for case in correctness}) == 7
+
+
+def test_campaign_assets_preserve_the_control_contract():
+    module = load_module()
+    cases = [json.loads(line) for line in (MATMUL / "cases.jsonl").read_text().splitlines()]
+    assert (MATMUL / "baseline.json").read_bytes() == (MATMUL / "cases.jsonl").read_bytes()
+    assert [(case["name"], case["m"], case["n"], case["k"], case["kind"])
+            for case in cases] == [
+        (case.name, case.m, case.n, case.k, case.kind) for case in module.CASES
+    ]
+    manifest = json.loads((MATMUL / "candidate.manifest.json").read_text())
+    assert manifest == {
+        "schema": "profiling-skill/candidate-kernel/v1",
+        "kernel_name": module.KERNEL_NAME,
+    }
 
 
 def test_exception_classification_is_machine_readable():

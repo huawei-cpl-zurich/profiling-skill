@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "benchmarks" / "streaming_matmul_add.py"
+MATMUL = ROOT / "benchmarks" / "matmul"
 
 
 def load_module():
@@ -55,6 +56,45 @@ def test_cases_cover_dimension_tails_and_multiple_k_tiles():
     assert any(case.k % 32 for case in correctness)
     assert any(case.k > 32 for case in correctness)
     assert len({(case.m, case.n, case.k) for case in correctness}) == 7
+
+
+def test_campaign_assets_preserve_the_control_contract():
+    module = load_module()
+    cases = [json.loads(line) for line in (MATMUL / "cases.jsonl").read_text().splitlines()]
+    assert (MATMUL / "baseline.json").read_bytes() == (MATMUL / "cases.jsonl").read_bytes()
+    assert [(case["name"], case["m"], case["n"], case["k"], case["kind"])
+            for case in cases] == [
+        (case.name, case.m, case.n, case.k, case.kind) for case in module.CASES
+    ]
+    manifest = json.loads((MATMUL / "candidate.manifest.json").read_text())
+    assert manifest == {
+        "schema": "profiling-skill/candidate-kernel/v1",
+        "kernel_name": module.KERNEL_NAME,
+    }
+
+
+def test_campaign_baseline_resets_the_control_seed_for_nonzero_cases():
+    import torch
+
+    spec = importlib.util.spec_from_file_location(
+        "streaming_matmul_campaign_baseline", MATMUL / "baseline.py"
+    )
+    baseline = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(baseline)
+    cases = [json.loads(line) for line in (MATMUL / "cases.jsonl").read_text().splitlines()]
+    for case_index in (1, 6):
+        case = cases[case_index]
+        baseline._load_cases = lambda selected=case: [selected]
+        observed = baseline.get_input_groups()[0]
+        generator = torch.Generator().manual_seed(baseline.SEED)
+        expected = [
+            torch.randn((case["m"], case["k"]), generator=generator, dtype=torch.float16),
+            torch.randn((case["k"], case["n"]), generator=generator, dtype=torch.float16),
+            torch.randn((case["n"],), generator=generator, dtype=torch.float16),
+        ]
+        assert all(torch.equal(actual, wanted)
+                   for actual, wanted in zip(observed, expected))
 
 
 def test_exception_classification_is_machine_readable():

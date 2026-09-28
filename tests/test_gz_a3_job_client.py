@@ -40,6 +40,16 @@ def test_runner_classifies_source_and_triton_compilation_failures():
     assert module.classify(RuntimeError("device kernel launch failed")) == "runtime_error"
 
 
+def test_runner_applies_the_job_specific_tolerance_contract():
+    import torch
+
+    runner = load_runner()
+    expected = torch.tensor([1.0])
+    actual = torch.tensor([1.015])
+    assert runner.compare(actual, expected, rtol=1e-2, atol=0)[0] is False
+    assert runner.compare(actual, expected, rtol=2e-2, atol=0)[0] is True
+
+
 class Marker:
     def __init__(self, value):
         self.value = value
@@ -99,7 +109,7 @@ def test_actual_bsa_loader_uses_index_seed_and_moves_tensors_to_npu():
     assert all(item.npu_calls == 1 for item in values[:8])
 
 
-def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monkeypatch, tmp_path: Path):
+def test_protocol_v1_default_tolerance_and_reference_setup_failure(monkeypatch, tmp_path: Path):
     runner = load_runner()
     baseline = SimpleNamespace(Model=lambda: lambda *_args: 3)
     candidate = SimpleNamespace(Model=lambda: lambda *_args: 3)
@@ -116,7 +126,8 @@ def test_reference_setup_failure_is_infrastructure_and_clones_before_timer(monke
     original_clone = runner.clone
     monkeypatch.setattr(runner, "clone", lambda value: events.append("clone") or original_clone(value))
     monkeypatch.setattr(runner.time, "perf_counter_ns", lambda: events.append("timer") or len(events))
-    assert runner.execute(job)["status"] == "ok"
+    result = runner.execute(job)
+    assert result["status"] == "ok"
     assert events.index("clone") < events.index("timer")
 
 

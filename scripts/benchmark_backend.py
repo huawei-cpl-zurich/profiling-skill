@@ -79,8 +79,10 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         return None, response("infrastructure_error", "unsupported controller protocol or action")
     if raw.get("benchmark") != benchmark:
         return None, response("infrastructure_error", "request benchmark does not match adapter")
-    if raw.get("device") != spec["device"]:
-        return None, response("infrastructure_error", "request violates benchmark device binding")
+    if (isinstance(raw.get("device"), bool)
+            or not isinstance(raw.get("device"), int)
+            or raw["device"] not in range(4)):
+        return None, response("infrastructure_error", "request requires physical device 0-3")
     action = raw["action"]
     if action in {"measure", "profile"}:
         case = raw.get("case")
@@ -124,7 +126,7 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         "profile": "gz-a3",
         "runtime": "py311-torch",
         "benchmark": benchmark,
-        "device": spec["device"],
+        "device": request["device"],
         "logical_device": 0,
         "action": action,
         "candidate": str(candidate.resolve()),

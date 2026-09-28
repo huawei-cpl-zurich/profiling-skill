@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate controller cells for the two pinned A3 benchmarks."""
+"""Generate controller cells for the nine-cell A3 campaign."""
 
 from __future__ import annotations
 
@@ -11,7 +11,18 @@ from pathlib import Path
 from benchmark_backend import BENCHMARKS
 
 
-TREATMENTS = ("cannbot", "project-cannbot", "project-only")
+TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+CELL_DEVICE = {
+    ("gdn", "cannbot"): 0,
+    ("gdn", "project-cannbot"): 1,
+    ("gdn", "project-guarded"): 2,
+    ("bsa", "cannbot"): 1,
+    ("bsa", "project-cannbot"): 2,
+    ("bsa", "project-guarded"): 3,
+    ("matmul", "cannbot"): 2,
+    ("matmul", "project-cannbot"): 3,
+    ("matmul", "project-guarded"): 0,
+}
 
 
 def main() -> int:
@@ -30,7 +41,7 @@ def main() -> int:
             cells[cell_id] = {
                 "benchmark": benchmark,
                 "treatment": treatment,
-                "device": spec["device"],
+                "device": CELL_DEVICE[(benchmark, treatment)],
                 "development_cases": spec["development_cases"],
                 "all_cases": spec["all_cases"],
                 "tolerances": spec["tolerances"],

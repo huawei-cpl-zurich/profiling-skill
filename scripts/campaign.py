@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import shutil
 import stat
@@ -19,14 +20,31 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 
-BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1}
-DEVELOPMENT_CASES = {"gdn": [40, 49, 47, 46, 45], "bsa": [47, 46, 49, 44, 43]}
-ALL_CASES = list(range(50))
+BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1, "matmul": 2}
+DEVELOPMENT_CASES = {
+    "gdn": [40, 49, 47, 46, 45],
+    "bsa": [47, 46, 49, 44, 43],
+    "matmul": [7, 8, 9],
+}
+ALL_CASES = {"gdn": list(range(50)), "bsa": list(range(50)), "matmul": list(range(10))}
 WAVES = (
-    (("gdn", "cannbot"), ("bsa", "project-cannbot")),
-    (("gdn", "project-cannbot"), ("bsa", "project-only")),
-    (("gdn", "project-only"), ("bsa", "cannbot")),
+    (("gdn", "cannbot"), ("bsa", "cannbot"),
+     ("matmul", "cannbot"), ("bsa", "project-guarded")),
+    (("gdn", "project-cannbot"), ("bsa", "project-cannbot"),
+     ("matmul", "project-cannbot"), ("matmul", "project-guarded")),
+    (("gdn", "project-guarded"),),
 )
+CELL_DEVICE = {
+    ("gdn", "cannbot"): 0,
+    ("gdn", "project-cannbot"): 1,
+    ("gdn", "project-guarded"): 2,
+    ("bsa", "cannbot"): 1,
+    ("bsa", "project-cannbot"): 2,
+    ("bsa", "project-guarded"): 3,
+    ("matmul", "cannbot"): 2,
+    ("matmul", "project-cannbot"): 3,
+    ("matmul", "project-guarded"): 0,
+}
 CANNBOT_TRITON_SKILLS = (
     "triton-task-extractor",
     "triton-op-designer",
@@ -46,7 +64,7 @@ TREATMENT_SKILLS = {
     "project-cannbot": (
         *CANNBOT_TRITON_SKILLS, *CANNBOT_DEPENDENCIES, "ascend-profiling"
     ),
-    "project-only": ("ascend-profiling",),
+    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
 }
 CONTROLLER_SCRIPTS = (
     "experimentctl.py",
@@ -64,6 +82,53 @@ CONTROLLER_BENCHMARK_ASSETS = tuple(
 
 class CampaignError(RuntimeError):
     pass
+
+
+CANDIDATE_OUTCOMES = {"compile_error", "runtime_error", "correctness_error"}
+
+
+def classify_outcome(result: dict) -> str:
+    """Map launcher details onto the experiment's disjoint outcome taxonomy."""
+    status = result.get("status")
+    if status == "complete":
+        return "success"
+    if status == "infrastructure_error":
+        return "infra_discarded"
+    if status == "candidate_error":
+        failure = result.get("failure_type")
+        if failure in CANDIDATE_OUTCOMES:
+            return failure
+        terminal = result.get("terminal_evidence", {})
+        for gate in ("check", "profile"):
+            document = terminal.get(gate, {}).get("result", {})
+            if document.get("failure_type") in CANDIDATE_OUTCOMES:
+                return document["failure_type"]
+        return "runtime_error"
+    if status == "dry_run":
+        return "dry_run"
+    return "infra_discarded"
+
+
+def normalize_performance(result: dict) -> dict | None:
+    """Normalize a profile geomean by bracketing calibration measurements."""
+    try:
+        calibration = result["calibration"]
+        before = float(calibration["before_us"])
+        after = float(calibration["after_us"])
+        profile = float(result["terminal_evidence"]["profile"]["result"]["geomean_us"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) and value > 0 for value in (before, after, profile)):
+        return None
+    reference = math.sqrt(before * after)
+    return {
+        "method": "profile_geomean_over_bracketing_calibration_geomean",
+        "before_us": before,
+        "after_us": after,
+        "reference_us": reference,
+        "profile_geomean_us": profile,
+        "normalized_ratio": profile / reference,
+    }
 
 
 def digest_file(path: Path) -> str:
@@ -282,15 +347,15 @@ def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
             result.append(
                 Cell(
                     f"{benchmark}-{treatment}", benchmark, treatment,
-                    BENCHMARK_DEVICE[benchmark], wave, rounds, request_budget,
-                    DEVELOPMENT_CASES[benchmark], ALL_CASES,
+                    CELL_DEVICE[(benchmark, treatment)], wave, rounds, request_budget,
+                    DEVELOPMENT_CASES[benchmark], ALL_CASES[benchmark],
                 )
             )
     return result
 
 
 def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
-                   project_skill: Path, cannbot_freeze: Path,
+                   project_skill: Path, guarded_skill: Path, cannbot_freeze: Path,
                    controller_config: Path, controller_command: list[str],
                    rounds: int = 3, request_budget: int = 12) -> dict:
     if rounds < 1 or request_budget < 1:
@@ -314,6 +379,10 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                 "path": str(project_skill.resolve()),
                 "sha256": digest_tree(project_skill),
             },
+            "triton-guarded-kernel": {
+                "path": str(guarded_skill.resolve()),
+                "sha256": digest_tree(guarded_skill),
+            },
             "cannbot": {
                 "path": str(cannbot_freeze.resolve()),
                 "freeze": freeze,
@@ -322,14 +391,14 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
         },
         "controller": freeze_controller_bundle(path, controller_config, controller_command),
         "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
-        "max_parallel": 2,
+        "max_parallel": 4,
     }
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
     return document
 
 
 def _skill_source(manifest: dict, skill: str) -> Path:
-    if skill == "ascend-profiling":
+    if skill in {"ascend-profiling", "triton-guarded-kernel"}:
         return Path(manifest["skill_sources"][skill]["path"])
     return Path(manifest["skill_sources"]["cannbot"]["path"]) / "skills" / skill
 
@@ -404,9 +473,10 @@ def stage_controller(manifest: dict, manifest_path: Path, campaign_root: Path,
 
 
 def verify_frozen_sources(manifest: dict) -> None:
-    project = manifest["skill_sources"]["ascend-profiling"]
-    if digest_tree(Path(project["path"])) != project["sha256"]:
-        raise CampaignError("project profiling skill drifted after manifest freeze")
+    for name in ("ascend-profiling", "triton-guarded-kernel"):
+        project = manifest["skill_sources"][name]
+        if digest_tree(Path(project["path"])) != project["sha256"]:
+            raise CampaignError(f"project skill drifted after manifest freeze: {name}")
     frozen = manifest["skill_sources"]["cannbot"]
     root = Path(frozen["path"])
     freeze_file = root / "freeze.json"
@@ -443,7 +513,7 @@ def prepare_cell(manifest: dict, cell: dict, campaigns_root: Path) -> Path:
         target = skill_root / skill
         copy_regular_tree(_skill_source(manifest, skill), target)
         skill_hashes[skill] = digest_tree(target)
-    if cell["treatment"] != "project-only":
+    if cell["treatment"] != "project-guarded":
         support_source = (Path(manifest["skill_sources"]["cannbot"]["path"])
                           / "support" / "triton-op-generator")
         copy_regular_tree(support_source,
@@ -477,11 +547,12 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
     if digest_file(sandbox / "PROMPT.md") != manifest["prompt"]["sha256"]:
         raise CampaignError("prompt hash mismatch")
     expected_baseline = manifest["baselines"][cell["benchmark"]]["sha256"]
-    injected = (".agents", "AGENTS.md", "config.json") if cell["treatment"] != "project-only" else (".agents",)
+    injected = ((".agents", "AGENTS.md", "config.json")
+                if cell["treatment"] != "project-guarded" else (".agents",))
     if digest_tree(workspace, injected) != expected_baseline:
         raise CampaignError("baseline hash mismatch")
     support = workspace / ".agents" / "plugins-official" / "triton-op-generator"
-    if (cell["treatment"] == "project-only") == support.exists():
+    if (cell["treatment"] == "project-guarded") == support.exists():
         raise CampaignError("CANNBot support isolation mismatch")
     for forbidden in ("siblings", "orchestration", "global-skills"):
         if (sandbox / forbidden).exists():
@@ -557,13 +628,14 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
         temporary.replace(ledger_path)
 
     checkpoint()
-    by_wave = {wave: [] for wave in range(1, 4)}
+    wave_ids = sorted({cell["wave"] for cell in manifest["cells"]})
+    by_wave = {wave: [] for wave in wave_ids}
     for cell in manifest["cells"]:
         if cell["cell_id"] in target_ids:
             by_wave[cell["wave"]].append(cell)
     try:
         saw_dry_run = False
-        for wave in range(1, 4):
+        for wave in wave_ids:
             if binding is not None:
                 _verify_bundle(controller_bundle, binding)
             if on_wave:
@@ -593,7 +665,8 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                             "failure_type": "launcher_exception",
                             "diagnostics": f"{type(error).__name__}: {error}",
                         }
-                        ledger["cells"].append({"cell": cell, "result": result})
+                        ledger["cells"].append({"cell": cell, "result": result,
+                                                "outcome": classify_outcome(result)})
                         ledger.setdefault("reschedule", []).append(cell["cell_id"])
                         checkpoint()
                     else:
@@ -602,7 +675,13 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                             status = ("complete" if result.get("exit_code") == 0
                                       and result.get("rounds_completed") == 3
                                       else "infrastructure_error")
-                        ledger["cells"].append({"cell": cell, "result": result})
+                            result["status"] = status
+                        entry = {"cell": cell, "result": result,
+                                 "outcome": classify_outcome(result)}
+                        normalized = normalize_performance(result)
+                        if normalized is not None:
+                            entry["normalized_performance"] = normalized
+                        ledger["cells"].append(entry)
                         if status == "dry_run":
                             saw_dry_run = True
                         elif status == "infrastructure_error":
@@ -638,7 +717,9 @@ def main() -> int:
     generate.add_argument("--prompt", type=Path, required=True)
     generate.add_argument("--gdn-baseline", type=Path, required=True)
     generate.add_argument("--bsa-baseline", type=Path, required=True)
+    generate.add_argument("--matmul-baseline", type=Path, required=True)
     generate.add_argument("--project-skill", type=Path, required=True)
+    generate.add_argument("--guarded-skill", type=Path, required=True)
     generate.add_argument("--cannbot-freeze", type=Path, required=True)
     generate.add_argument("--controller-config", type=Path, required=True)
     generate.add_argument("--controller-json", required=True,
@@ -672,8 +753,9 @@ def main() -> int:
             parser.error(f"--controller-json must be a JSON string array: {error}")
         document = write_manifest(
             args.output, args.prompt,
-            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline},
-            args.project_skill, args.cannbot_freeze,
+            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline,
+             "matmul": args.matmul_baseline},
+            args.project_skill, args.guarded_skill, args.cannbot_freeze,
             args.controller_config, controller,
             args.rounds, args.request_budget,
         )

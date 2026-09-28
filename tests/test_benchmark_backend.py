@@ -206,7 +206,7 @@ def test_measure_phase_and_profile_round_are_validated(tmp_path: Path, payload: 
 
 
 @pytest.mark.parametrize("change,message", [
-    ({"device": 1}, "device binding"),
+    ({"device": 4}, "physical device 0-3"),
     ({"case": 0}, "invalid profile case"),
     ({"benchmark": "bsa"}, "does not match"),
 ])
@@ -277,16 +277,17 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
                     "--output", str(output)], check=True)
     cells = json.loads(output.read_text())["cells"]
     assert set(cells) == {
-        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-only",
-        "bsa-cannbot", "bsa-project-cannbot", "bsa-project-only",
-        "matmul-cannbot", "matmul-project-cannbot", "matmul-project-only",
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+        "bsa-cannbot", "bsa-project-cannbot", "bsa-project-guarded",
+        "matmul-cannbot", "matmul-project-cannbot", "matmul-project-guarded",
     }
     assert cells["gdn-cannbot"]["development_cases"] == [40, 49, 47, 46, 45]
-    assert cells["bsa-project-only"]["development_cases"] == [47, 46, 49, 44, 43]
+    assert cells["bsa-project-guarded"]["development_cases"] == [47, 46, 49, 44, 43]
     assert (cells["gdn-cannbot"]["device"], cells["bsa-cannbot"]["device"]) == (0, 1)
+    assert cells["bsa-project-guarded"]["device"] == 3
     assert cells["gdn-project-cannbot"]["all_cases"] == list(range(50))
-    assert cells["matmul-project-only"]["development_cases"] == [7, 8, 9]
-    assert cells["matmul-project-only"]["all_cases"] == list(range(10))
+    assert cells["matmul-project-guarded"]["development_cases"] == [7, 8, 9]
+    assert cells["matmul-project-guarded"]["all_cases"] == list(range(10))
     assert cells["matmul-project-only"]["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]

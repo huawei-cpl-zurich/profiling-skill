@@ -281,6 +281,13 @@ class ProductionLauncher:
             return "infrastructure_error", "full check did not retain a durable handle"
         return "complete", ""
 
+    @staticmethod
+    def _candidate_failure_type(evidence: dict) -> str:
+        failure = evidence.get("result", {}).get("failure_type")
+        if failure in {"compile_error", "runtime_error", "correctness_error"}:
+            return failure
+        return "runtime_error"
+
     def _terminal_gate(self, command: Sequence[str], arguments: Sequence[str],
                        workspace: Path, attempt: Path, name: str,
                        timeout: float, cell: dict) -> dict:
@@ -421,7 +428,7 @@ class ProductionLauncher:
                               failure_type="terminal_infrastructure_failure")
             else:
                 result.update(status="candidate_error",
-                              failure_type="terminal_candidate_failure")
+                              failure_type=self._candidate_failure_type(check))
             return result
         profile = self._terminal_gate(
             controller.command, ("profile", "--repeats", "3", "--round", "3"),
@@ -435,7 +442,8 @@ class ProductionLauncher:
             result.update(status="infrastructure_error",
                           failure_type="terminal_infrastructure_failure")
         else:
-            result.update(status="candidate_error", failure_type="terminal_candidate_failure")
+            result.update(status="candidate_error",
+                          failure_type=self._candidate_failure_type(profile))
         return result
 
 

@@ -25,8 +25,9 @@ seven synchronized timing repetitions of every case:
 | BSA | `54_BlockSparseAttnFwd.py` | 1 | 47, 46, 49, 44, 43 |
 | Matmul | `streaming_matmul_add.py` | 0-3 | 7, 8, 9 |
 
-All 50 cases remain the final correctness gate. A submitted GZ-A3 job sees
-its selected physical device as logical device 0.
+GDN and BSA retain all 50 cases as their final correctness gates; matmul uses
+its 10 frozen cases. A submitted GZ-A3 job sees its selected physical device
+as logical device 0.
 
 Immediately before freezing a measured campaign, `freeze-cannbot` resolves
 the current `master` of the configured CANNBot repository, checks out that
@@ -211,11 +212,13 @@ failures are retained as candidate failures; they do not abort later cells or
 waves. After three successful agent rounds, the host issues two additional
 terminal requests outside the 12-request agent budget. It first runs exactly
 `check --scope full`, which must identify the operation, cell, benchmark, and
-device, report the configured 50 cases in order, set `passed=true`, and retain
+device, report the configured benchmark-specific full case set in order (50
+for GDN/BSA and 10 for matmul), set `passed=true`, and retain
 at least one durable handle. It then runs exactly
 `profile --repeats 3 --round 3`, which must carry the same exact identity,
-report the five configured development cases in order, retain three samples
-per case and 15 distinct durable handles, and report three repeats. A cell is
+report the configured development cases in order, retain three samples per
+case and exactly three distinct durable handles per case (15 for GDN/BSA and
+9 for matmul), and report three repeats. A cell is
 complete only after both host gates pass; their full JSON, stdout, stderr,
 diagnostics, handles, and artifact paths are retained under the attempt and in
 `ledger.json`.
@@ -267,19 +270,9 @@ artifacts is:
 Replay uses the same frozen directories and campaign manifest with a fresh
 campaign output directory and the same production command. `campaign.py
 preflight` can audit a retained cell sandbox. Compare the hashes that the
-campaign manifest actually records before aggregating results. Until the
-controller config and command are manifest-bound, operators must retain and
-compare them separately; a changed value defines a new campaign.
-
-Two operational gates remain:
-
-- the streaming matmul-add native A3 gate is still pending;
-- three fresh agents have not yet completed the required readiness runs.
-
-In addition, the controller config and exact controller command are not yet
-bound and hashed by the campaign manifest, which is a scheduler-level
-reproducibility blocker. No measured nine-cell campaign has run; that is the
-current outcome, not a fourth gate.
-
-Until those gates are cleared, the battery remains a functionally tested
-scaffold rather than a completed reproducible measurement.
+campaign manifest records before aggregating results. The controller config,
+bundle closure, command template, Python runtime identity, benchmarks, prompt,
+and skill trees are all manifest-bound. Native matmul calibration has passed
+on A3 with its exact selector. The remaining operational gate is successful
+preflight of devices 0-3 immediately before measured work. No measured
+nine-cell campaign has run yet.

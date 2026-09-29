@@ -265,11 +265,13 @@ def main() -> int:
                     "case": 7, "iteration": 0, "round": request["wave"],
                 }
                 calibration = root / "benchmarks/matmul/calibration.py"
+                job = make_job(calibration_request, "matmul", calibration, root,
+                               "streaming_matmul_add_kernel_mix_aic")
+                # This opaque field deliberately participates in the managed
+                # request digest without changing the runner's profile schema.
+                job["calibration_phase"] = request["phase"]
                 result = invoke(
-                    command,
-                    make_job(calibration_request, "matmul", calibration, root,
-                             "streaming_matmul_add_kernel_mix_aic"),
-                    args.timeout,
+                    command, job, args.timeout,
                 )
                 result.update(
                     action="calibrate", benchmark=args.benchmark,

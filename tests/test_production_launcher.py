@@ -479,6 +479,25 @@ def test_terminal_gate_requires_exact_identity_and_case_sequences():
     )[0] == "infrastructure_error"
 
 
+def test_matmul_terminal_profile_accepts_three_cases_and_nine_unique_handles():
+    cell = {
+        "cell_id": "matmul-project-guarded", "benchmark": "matmul", "device": 0,
+        "development_cases": [7, 8, 9], "all_cases": list(range(10)),
+    }
+    profile = identified({
+        "status": "ok", "repeats": 3,
+        "handles": [f"gz-a3:matmul-{index}" for index in range(9)],
+        "cases": [{"case": case, "samples_us": [1, 2, 3]}
+                  for case in cell["development_cases"]],
+    }, cell, "profile")
+    assert launcher.ProductionLauncher._gate_status(profile, cell, "profile") == (
+        "complete", ""
+    )
+    assert launcher.ProductionLauncher._gate_status(
+        {**profile, "handles": profile["handles"] + ["gz-a3:extra"]}, cell, "profile"
+    )[0] == "infrastructure_error"
+
+
 def test_missing_auth_or_bwrap_fails_without_reading_credentials(tmp_path: Path):
     runtime = tmp_path / "node"
     executable(runtime / "bin" / "node", "#!/bin/sh\nexit 0\n")

@@ -99,6 +99,7 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["device"] == 3
     assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
     assert result["job"]["case"] == 7
+    assert result["job"]["calibration_phase"] == "before"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
     assert result["job"]["profiling"]["kernel_name"] == result["selector"]
 

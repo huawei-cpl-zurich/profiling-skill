@@ -276,7 +276,8 @@ class ProductionLauncher:
         elif operation == "profile":
             rows = document.get("cases")
             handles = document.get("handles")
-            if document.get("repeats") != 3 or not isinstance(rows, list):
+            repeats = document.get("repeats")
+            if repeats != 3 or not isinstance(rows, list):
                 return "infrastructure_error", "profile response has incomplete case evidence"
             case_ids = [row.get("case") for row in rows if isinstance(row, dict)]
             if case_ids != expected_cases or len(set(case_ids)) != len(expected_cases):
@@ -285,9 +286,10 @@ class ProductionLauncher:
                    or not isinstance(row.get("samples_us"), list)
                    or len(row["samples_us"]) != 3 for row in rows):
                 return "infrastructure_error", "profile response has incomplete captures"
-            if (not isinstance(handles, list) or len(handles) != 15
+            expected_handles = len(expected_cases) * repeats
+            if (not isinstance(handles, list) or len(handles) != expected_handles
                     or any(not isinstance(handle, str) or not handle for handle in handles)
-                    or len(set(handles)) != 15):
+                    or len(set(handles)) != expected_handles):
                 return "infrastructure_error", "profile response has incomplete durable handles"
         elif document.get("passed") is not True:
             return "infrastructure_error", "full check did not report passed=true"

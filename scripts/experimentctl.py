@@ -19,7 +19,9 @@ from typing import Any
 
 
 EXIT = {"ok": 0, "candidate_error": 2, "infrastructure_error": 3, "config_error": 4}
-CANDIDATE_STATUSES = {"compile_error", "runtime_error", "correctness_error", "candidate_error"}
+CANDIDATE_STATUSES = {
+    "submission_error", "compile_error", "runtime_error", "correctness_error", "candidate_error",
+}
 VALID_STATUSES = CANDIDATE_STATUSES | {"ok", "infrastructure_error"}
 
 

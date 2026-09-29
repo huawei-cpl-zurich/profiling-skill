@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -24,6 +25,38 @@ class LaunchError(RuntimeError):
     pass
 
 
+CONTROLLER_USAGE = """usage:
+  $EXPERIMENT_CONTROLLER help
+  $EXPERIMENT_CONTROLLER budget
+  $EXPERIMENT_CONTROLLER check --scope development --round 1
+  $EXPERIMENT_CONTROLLER check --scope development --round 2
+  $EXPERIMENT_CONTROLLER check --scope full --round 3
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round 1
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round 2
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round 3
+"""
+AGENT_MODEL = {"name": "gpt-5.6-sol", "reasoning_effort": "low"}
+
+
+def controller_help_payload() -> dict:
+    """Return the canonical, immutable agent-facing help document."""
+    return {"status": "ok", "operation": "help", "usage": CONTROLLER_USAGE,
+            "billed": False}
+
+
+def controller_contract(request_budget: int) -> dict:
+    """Return reproducibility metadata derived from the live help payload."""
+    help_payload = controller_help_payload()
+    encoded = json.dumps(help_payload, sort_keys=True, separators=(",", ":")).encode()
+    return {"request_budget": request_budget, "help": help_payload,
+            "help_sha256": hashlib.sha256(encoded).hexdigest()}
+
+
+def _local_response(document: dict, exit_code: int = 0) -> dict:
+    return {"exit_code": exit_code,
+            "stdout": json.dumps(document, sort_keys=True) + "\n", "stderr": ""}
+
+
 class _RequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         owner: BudgetController = self.server.owner  # type: ignore[attr-defined]
@@ -33,8 +66,25 @@ class _RequestHandler(socketserver.StreamRequestHandler):
             if not isinstance(arguments, list) or not all(isinstance(x, str) for x in arguments):
                 raise ValueError("arguments must be a string array")
             with owner.lock:
-                if owner.used >= owner.limit:
-                    owner.rejected += 1
+                error = owner.validate_agent_arguments(arguments)
+                if arguments == ["help"]:
+                    response = _local_response(controller_help_payload())
+                elif arguments == ["budget"]:
+                    response = _local_response({
+                        "status": "ok", "operation": "budget", "limit": owner.limit,
+                        "used": owner.used, "remaining": owner.limit - owner.used,
+                        "over_budget_requests": owner.over_budget_requests,
+                        "invalid_requests": owner.invalid_requests, "billed": False,
+                    })
+                elif error:
+                    owner.invalid_requests += 1
+                    response = _local_response({
+                        "status": "config_error", "operation": "usage",
+                        "diagnostics": error, "usage": CONTROLLER_USAGE,
+                        "billed": False,
+                    }, 4)
+                elif owner.used >= owner.limit:
+                    owner.over_budget_requests += 1
                     response = {"exit_code": 75, "stdout": "", "stderr": "remote request budget exhausted\n"}
                 else:
                     owner.used += 1
@@ -69,10 +119,36 @@ class BudgetController:
         self.limit = limit
         self.timeout = timeout
         self.used = 0
-        self.rejected = 0
+        self.invalid_requests = 0
+        self.over_budget_requests = 0
         self.lock = threading.Lock()
         self.server: socketserver.UnixStreamServer | None = None
         self.thread: threading.Thread | None = None
+
+    @property
+    def rejected(self) -> int:
+        """Compatibility alias for budget rejections."""
+        return self.over_budget_requests
+
+    @staticmethod
+    def validate_agent_arguments(arguments: Sequence[str]) -> str | None:
+        """Accept only the documented agent API; host gates bypass this endpoint."""
+        if list(arguments) in (["help"], ["budget"]):
+            return None
+        if len(arguments) == 5 and arguments[0] == "check":
+            scope, round_number = arguments[2], arguments[4]
+            if arguments[1] == "--scope" and arguments[3] == "--round":
+                if ((scope == "development" and round_number in {"1", "2"})
+                        or (scope == "full" and round_number == "3")):
+                    return None
+        if len(arguments) == 5 and arguments[:3] == ["profile", "--repeats", "3"]:
+            if arguments[3] == "--round" and arguments[4] in {"1", "2", "3"}:
+                return None
+        forbidden = {"--config", "--cell", "--candidate", "--device"}
+        found = sorted({item.split("=", 1)[0] for item in arguments} & forbidden)
+        if found:
+            return f"host-bound arguments are forbidden: {', '.join(found)}"
+        return "unsupported controller command or arguments"
 
     def map_arguments(self, arguments: Sequence[str]) -> list[str]:
         """Translate only sandbox-workspace paths into this cell's host tree."""
@@ -128,7 +204,9 @@ class ProductionLauncher:
     def __init__(self, controller_command: Sequence[str], *, codex: str = "codex",
                  bwrap: str = "bwrap", auth_home: Path | None = None,
                  timeout_seconds: int = 3600, forbidden_paths: Sequence[Path] = (),
-                 dry_run: bool = False, resolv_conf: Path = Path("/etc/resolv.conf")):
+                 dry_run: bool = False, resolv_conf: Path = Path("/etc/resolv.conf"),
+                 agent_interface: dict | None = None,
+                 agent_model: dict | None = None):
         self.controller_command = tuple(controller_command)
         self.codex = Path(shutil.which(codex) or codex).resolve()
         self.bwrap = shutil.which(bwrap) or bwrap
@@ -137,6 +215,16 @@ class ProductionLauncher:
         self.forbidden_paths = tuple(Path(path).resolve() for path in forbidden_paths)
         self.dry_run = dry_run
         self.resolv_conf = resolv_conf
+        self.agent_interface = agent_interface or controller_contract(18)
+        self.agent_model = agent_model or AGENT_MODEL.copy()
+        try:
+            expected_interface = controller_contract(self.agent_interface["request_budget"])
+        except (KeyError, TypeError) as error:
+            raise LaunchError("frozen agent controller interface is invalid") from error
+        if self.agent_interface != expected_interface:
+            raise LaunchError("live agent controller contract does not match frozen manifest")
+        if self.agent_model != AGENT_MODEL:
+            raise LaunchError("live agent model configuration does not match frozen manifest")
         if not Path(self.bwrap).exists() or not self.codex.exists():
             raise LaunchError("Bubblewrap and Codex executables are required")
         if not (self.auth_home / "auth.json").is_file():
@@ -300,7 +388,7 @@ class ProductionLauncher:
     @staticmethod
     def _candidate_failure_type(evidence: dict) -> str:
         failure = evidence.get("result", {}).get("failure_type")
-        if failure in {"compile_error", "runtime_error", "correctness_error"}:
+        if failure in {"submission_error", "compile_error", "runtime_error", "correctness_error"}:
             return failure
         return "runtime_error"
 
@@ -356,8 +444,8 @@ class ProductionLauncher:
         return evidence
 
     def launch(self, sandbox: Path, cell: dict) -> dict:
-        if cell.get("rounds") != 3 or cell.get("request_budget") != 12:
-            raise LaunchError("production cells require three rounds and a 12-request budget")
+        if cell.get("rounds") != 3 or cell.get("request_budget") != 18:
+            raise LaunchError("production cells require three rounds and an 18-request budget")
         started = time.monotonic()
         deadline = started + self.timeout_seconds
         attempt_id = f"attempt-{uuid.uuid4().hex}"
@@ -366,7 +454,7 @@ class ProductionLauncher:
             self._environment_preflight(sandbox)
             return {
                 "exit_code": 0, "dry_run": True, "rounds": 3, "rounds_completed": 0,
-                "request_budget": 12,
+                "request_budget": 18,
                 "status": "dry_run",
                 "attempt_id": attempt_id,
                 "prompt_sha256": __import__("hashlib").sha256(
@@ -382,7 +470,7 @@ class ProductionLauncher:
         outputs: list[dict] = []
         timed_out = False
         with BudgetController(
-            socket_path, self.controller_command, 12, sandbox / "workspace", cell,
+            socket_path, self.controller_command, 18, sandbox / "workspace", cell,
         ) as controller:
             self._preflight(base, socket_dir)
             session_id = ""
@@ -397,16 +485,18 @@ class ProductionLauncher:
                     codex_args = [
                         "/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config",
                         "--skip-git-repo-check",
-                        "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
-                        "-c", 'model_reasoning_effort="low"', "-C", "/workspace", "-",
+                        "--dangerously-bypass-approvals-and-sandbox", "-m", self.agent_model["name"],
+                        "-c", f'model_reasoning_effort="{self.agent_model["reasoning_effort"]}"',
+                        "-C", "/workspace", "-",
                     ]
                     prompt = (sandbox / "PROMPT.md").read_text()
                 else:
                     codex_args = [
                         "/runtime/node/bin/codex", "exec", "resume", "--json",
                         "--ignore-user-config",
-                        "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
-                        "-c", 'model_reasoning_effort="low"', session_id, "-",
+                        "--dangerously-bypass-approvals-and-sandbox", "-m", self.agent_model["name"],
+                        "-c", f'model_reasoning_effort="{self.agent_model["reasoning_effort"]}"',
+                        session_id, "-",
                     ]
                     prompt = f"Continue optimization round {round_number} using the same experiment contract.\n"
                 try:
@@ -436,13 +526,19 @@ class ProductionLauncher:
             "agent_controller_requests": controller.used,
             "controller_requests": controller.used, "turns": outputs,
             "elapsed_seconds": time.monotonic() - started, "attempt_id": attempt_id,
+            "controller_usage": {
+                "limit": getattr(controller, "limit", 18), "billed": controller.used,
+                "invalid_requests": getattr(controller, "invalid_requests", 0),
+                "over_budget_requests": getattr(controller, "over_budget_requests",
+                                                getattr(controller, "rejected", 0)),
+            },
+            "budget_exhausted": bool(getattr(controller, "over_budget_requests",
+                                               getattr(controller, "rejected", 0))),
         }
-        if getattr(controller, "rejected", 0) or timed_out:
-            result.update(status="candidate_error",
-                          failure_type=("request_budget_exhausted" if getattr(controller, "rejected", 0)
-                                        else "time_exhausted"))
+        if timed_out:
+            result.update(status="candidate_error", failure_type="time_exhausted")
             return result
-        if exit_code != 0 or rounds_completed != 3:
+        if ((exit_code != 0 or rounds_completed != 3) and not result["budget_exhausted"]):
             result.update(status="infrastructure_error", failure_type="codex_process_error")
             return result
 

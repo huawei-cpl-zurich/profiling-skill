@@ -326,26 +326,27 @@ def test_matmul_uses_ten_cases_and_its_frozen_numerical_contract(tmp_path: Path)
     assert Path(job["baseline"]) == ROOT / "benchmarks/matmul/baseline.py"
 
 
-def test_missing_candidate_is_compile_failure(tmp_path: Path):
+def test_missing_candidate_is_submission_failure(tmp_path: Path):
     client = fake_client(tmp_path)
     run = subprocess.run(
         [sys.executable, str(BACKEND), "--benchmark", "gdn", "--candidate", str(tmp_path / "missing.py"),
          "--job-client-json", json.dumps([str(client)])], input=json.dumps(request()), text=True, capture_output=True, check=False)
     result = json.loads(run.stdout)
-    assert result["status"] == "compile_error"
+    assert result["status"] == "submission_error"
     assert "does not exist" in result["diagnostics"]
 
 
-def test_missing_or_invalid_kernel_manifest_is_compile_failure(tmp_path: Path):
+def test_missing_or_invalid_kernel_manifest_is_submission_failure(tmp_path: Path):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
     client = fake_client(tmp_path)
     command = [sys.executable, str(BACKEND), "--benchmark", "gdn", "--candidate", str(candidate),
                "--job-client-json", json.dumps([str(client)])]
     missing = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
-    assert json.loads(missing.stdout)["status"] == "compile_error"
+    assert json.loads(missing.stdout)["status"] == "submission_error"
     candidate.with_suffix(".manifest.json").write_text(json.dumps({"schema": "wrong", "kernel_name": "x"}))
     invalid = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
+    assert json.loads(invalid.stdout)["status"] == "submission_error"
     assert MANIFEST_SCHEMA_TEXT in json.loads(invalid.stdout)["diagnostics"]
 
 

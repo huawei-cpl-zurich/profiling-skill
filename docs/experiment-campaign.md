@@ -230,6 +230,11 @@ complete only after both host gates pass; their full JSON, stdout, stderr,
 diagnostics, handles, and artifact paths are retained under the attempt and in
 `ledger.json`.
 
+The first Codex turn receives the canonical prompt and is explicitly limited
+to Round 1. The two resume turns each name exactly one current round and require
+the agent to stop before beginning a later round. This preserves one persistent
+session without allowing a single turn to consume multiple experimental rounds.
+
 The implemented profiling interface uses `msprof op`. The terminal profile
 gate requests three captures for each development case, reports their median
 kernel latency, and computes the score as the geometric mean of the five case

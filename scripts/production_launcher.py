@@ -498,7 +498,11 @@ class ProductionLauncher:
                         "-c", f'model_reasoning_effort="{self.agent_model["reasoning_effort"]}"',
                         session_id, "-",
                     ]
-                    prompt = f"Continue optimization round {round_number} using the same experiment contract.\n"
+                    prompt = (
+                        f"Continue optimization Round {round_number} using the same experiment "
+                        f"contract. Execute only Round {round_number} now, then stop and return "
+                        "control to the host. Do not begin or perform any later round in this turn.\n"
+                    )
                 try:
                     run = subprocess.run(
                         [*base, "--bind", str(socket_dir), "/experiment-state", *codex_args],

@@ -25,9 +25,11 @@ if mode == "timeout":
     print("partial compiler stdout", flush=True)
     print("partial compiler stderr", file=sys.stderr, flush=True)
     time.sleep(5)
-if mode == "compile":
-    print(json.dumps({"status":"compile_error", "device":request["device"],
-                      "handle":"gz-a3:compile", "diagnostics":"error: invalid operands\nsource.py:17"}))
+if mode in {"submission", "compile", "runtime", "correctness", "candidate"}:
+    failure = mode + "_error"
+    print(json.dumps({"status":failure, "device":request["device"],
+                      "handle":f"gz-a3:{mode}",
+                      "diagnostics":f"{mode} diagnostic"}))
     raise SystemExit(7)
 if mode == "infra":
     print(json.dumps({"status":"infrastructure_error", "device":request["device"],
@@ -171,7 +173,27 @@ def test_compile_failure_counts_and_preserves_diagnostics(tmp_path: Path):
     assert result["status"] == "candidate_error"
     assert result["failure_type"] == "compile_error"
     assert result["handles"] == ["gz-a3:compile"]
-    assert "invalid operands\nsource.py:17" in result["diagnostics"]
+    assert result["diagnostics"] == "compile diagnostic"
+
+
+@pytest.mark.parametrize(
+    "mode,failure_type",
+    [
+        ("submission", "submission_error"),
+        ("compile", "compile_error"),
+        ("runtime", "runtime_error"),
+        ("correctness", "correctness_error"),
+        ("candidate", "candidate_error"),
+    ],
+)
+def test_candidate_failures_share_public_status_and_preserve_failure_type(
+    tmp_path: Path, mode: str, failure_type: str,
+):
+    process, result, _ = run(tmp_path, "check", mode=mode)
+    assert process.returncode == 2
+    assert result["status"] == "candidate_error"
+    assert result["failure_type"] == failure_type
+    assert result["diagnostics"] == f"{mode} diagnostic"
 
 
 def test_infrastructure_and_invalid_protocol_are_discardable(tmp_path: Path):

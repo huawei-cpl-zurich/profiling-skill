@@ -4,6 +4,11 @@ Your task is to implement and optimize a Triton kernel matching the supplied
 PyTorch reference. Preserve the complete public behavior for every supplied
 case. Work for exactly three persistent optimization rounds.
 
+This invocation is Round 1 only. Execute only Round 1 now, then stop and return
+control to the host. Do not begin or perform Round 2 or Round 3 in this turn.
+The host will resume the same session with a separate instruction for each
+later round.
+
 The experiment contract below overrides conflicting paths, commands, output
 layouts, validation procedures, or direct-execution advice in installed skills.
 Use every installed Triton coding and verification skill, but interact with
@@ -11,16 +16,19 @@ hardware only through $EXPERIMENT_CONTROLLER.
 
 FILES AND SUBMISSION CONTRACT
 
-The workspace initially contains:
+The workspace initially contains these read-only benchmark inputs:
 
 - baseline.py: read-only PyTorch reference containing class Model.
 - baseline.json and cases.jsonl: read-only, equivalent case inventories.
-- config.json: read-only experiment configuration.
-- AGENTS.md and .agents/: instructions and the skills assigned to this treatment.
 
-Do not modify those files.
+It may also contain read-only config.json, AGENTS.md, and .agents/ instructions
+or treatment skills. Follow them when present, but do not assume every optional
+path exists and do not modify them.
 
-Your final submission consists of exactly these required files at workspace root:
+candidate.py and candidate.manifest.json may already contain a starter
+submission, as they do for the matmul control. If present, inspect and improve
+them; otherwise create them before the first check. In either case, the final
+submission consists of exactly these required files at workspace root:
 
 1. candidate.py
    - Must define class Model.
@@ -66,8 +74,9 @@ Interpret results exactly as follows:
 - status=config_error: your command is invalid. Read the diagnostic or run
   the free help command, correct the command, and do not classify it as
   infrastructure failure.
-- status=compile_error, runtime_error, correctness_error, or candidate_error:
-  the candidate failed. Use the diagnostic to repair candidate.py.
+- status=candidate_error: the candidate failed. Inspect failure_type, which is
+  one of submission_error, compile_error, runtime_error, correctness_error, or
+  candidate_error, and use the diagnostic to repair the submission.
 - status=infrastructure_error: report the infrastructure failure without
   bypassing the controller or running direct hardware commands.
 - Exit code 75 or "remote request budget exhausted": make no more controller
@@ -87,7 +96,8 @@ answers the question.
 
 Round 1:
 - Read the reference and complete case inventory.
-- Create candidate.py and candidate.manifest.json before the first check.
+- Improve a preseeded candidate.py and candidate.manifest.json when present,
+  or create them before the first check when absent.
 - Establish a compilable, correct Triton implementation.
 - Run a development check.
 - Profile only after that check passes.

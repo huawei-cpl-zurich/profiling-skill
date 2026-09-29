@@ -239,6 +239,14 @@ def profile(cell: dict[str, Any], repeats: int, round_number: int | None) -> dic
     )
 
 
+def calibrate(cell: dict[str, Any], phase: str, wave: int) -> dict[str, Any]:
+    result = invoke(cell, "calibrate", phase=phase, wave=wave)
+    if result.get("status") != "ok":
+        result["status"] = "infrastructure_error"
+        result["failure_type"] = "calibration_failure"
+    return merge_failure(result, "calibrate", cell)
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     root.add_argument("--config", required=True, type=Path)
@@ -254,6 +262,9 @@ def parser() -> argparse.ArgumentParser:
     profile_parser = commands.add_parser("profile")
     profile_parser.add_argument("--repeats", type=int, default=3)
     profile_parser.add_argument("--round", type=int)
+    calibration = commands.add_parser("calibrate")
+    calibration.add_argument("--phase", choices=("before", "after"), required=True)
+    calibration.add_argument("--wave", type=int, required=True)
     return root
 
 
@@ -270,8 +281,12 @@ def main() -> int:
             output = rank(cell, args.warmups, args.repeats)
         elif args.command == "check":
             output = check(cell, args.scope, args.round)
-        else:
+        elif args.command == "profile":
             output = profile(cell, args.repeats, args.round)
+        else:
+            if args.wave < 1:
+                raise ConfigError("calibration wave must be positive")
+            output = calibrate(cell, args.phase, args.wave)
     except ConfigError as error:
         output = failure("config_error", str(error))
     print(json.dumps(output, sort_keys=True))

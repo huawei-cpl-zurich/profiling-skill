@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib.util
 import ast
 import json
+import shutil
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -86,6 +88,64 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
         [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
          "--job-client-json", json.dumps([str(client), "--profile", "gz-a3"])], input=json.dumps(payload), text=True,
         capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
+
+
+def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
+    payload = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
+               "device": 3, "phase": "before", "wave": 2}
+    result = json.loads(run_backend(tmp_path, payload).stdout)
+    assert result["status"] == "ok"
+    assert result["action"] == "calibrate"
+    assert result["device"] == 3
+    assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
+    assert result["job"]["case"] == 7
+    assert result["job"]["calibration_phase"] == "before"
+    assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
+    assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+
+
+def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(
+    tmp_path: Path, monkeypatch,
+):
+    relocated = tmp_path / "staged" / "candidate.py"
+    relocated.parent.mkdir()
+    shutil.copyfile(ROOT / "benchmarks/matmul/calibration.py", relocated)
+    launches = []
+
+    class JitKernel:
+        def __getitem__(self, grid):
+            return lambda *args, **kwargs: launches.append((grid, args, kwargs))
+
+    fake_triton = types.ModuleType("triton")
+    fake_triton.jit = lambda function: JitKernel()
+    fake_triton.cdiv = lambda value, block: (value + block - 1) // block
+    fake_language = types.ModuleType("triton.language")
+    fake_language.constexpr = int
+    fake_language.float32 = "float32"
+    fake_triton.language = fake_language
+    fake_torch = types.ModuleType("torch")
+    fake_torch.float32 = "float32"
+    output = object()
+    fake_torch.empty = lambda *args, **kwargs: output
+    fake_nn = types.ModuleType("torch.nn")
+    fake_nn.Module = object
+    fake_torch.nn = fake_nn
+    monkeypatch.setitem(sys.modules, "triton", fake_triton)
+    monkeypatch.setitem(sys.modules, "triton.language", fake_language)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "torch.nn", fake_nn)
+
+    spec = importlib.util.spec_from_file_location("relocated_calibration", relocated)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    tensor = lambda shape: types.SimpleNamespace(shape=shape, device="npu:0")
+    actual = module.Model().forward(tensor((256, 256)), tensor((256, 256)), tensor((256,)))
+
+    assert actual is output
+    assert module.KERNEL_NAME == "streaming_matmul_add_kernel_mix_aic"
+    assert launches[0][0] == (8, 8)
+    assert launches[0][2] == {"BLOCK_M": 32, "BLOCK_N": 32, "BLOCK_K": 32}
 
 
 def test_pinned_repository_assets_are_exact_and_have_fifty_cases():
@@ -206,7 +266,7 @@ def test_measure_phase_and_profile_round_are_validated(tmp_path: Path, payload: 
 
 
 @pytest.mark.parametrize("change,message", [
-    ({"device": 1}, "device binding"),
+    ({"device": 4}, "physical device 0-3"),
     ({"case": 0}, "invalid profile case"),
     ({"benchmark": "bsa"}, "does not match"),
 ])
@@ -277,17 +337,18 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
                     "--output", str(output)], check=True)
     cells = json.loads(output.read_text())["cells"]
     assert set(cells) == {
-        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-only",
-        "bsa-cannbot", "bsa-project-cannbot", "bsa-project-only",
-        "matmul-cannbot", "matmul-project-cannbot", "matmul-project-only",
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+        "bsa-cannbot", "bsa-project-cannbot", "bsa-project-guarded",
+        "matmul-cannbot", "matmul-project-cannbot", "matmul-project-guarded",
     }
     assert cells["gdn-cannbot"]["development_cases"] == [40, 49, 47, 46, 45]
-    assert cells["bsa-project-only"]["development_cases"] == [47, 46, 49, 44, 43]
+    assert cells["bsa-project-guarded"]["development_cases"] == [47, 46, 49, 44, 43]
     assert (cells["gdn-cannbot"]["device"], cells["bsa-cannbot"]["device"]) == (0, 1)
+    assert cells["bsa-project-guarded"]["device"] == 3
     assert cells["gdn-project-cannbot"]["all_cases"] == list(range(50))
-    assert cells["matmul-project-only"]["development_cases"] == [7, 8, 9]
-    assert cells["matmul-project-only"]["all_cases"] == list(range(10))
-    assert cells["matmul-project-only"]["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
+    assert cells["matmul-project-guarded"]["development_cases"] == [7, 8, 9]
+    assert cells["matmul-project-guarded"]["all_cases"] == list(range(10))
+    assert cells["matmul-project-guarded"]["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]
     assert command[command.index("--job-client-json") + 1] == encoded_client

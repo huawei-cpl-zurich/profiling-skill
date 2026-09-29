@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import shutil
 import stat
@@ -19,14 +20,31 @@ from pathlib import Path
 from typing import Callable, Protocol
 
 
-BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1}
-DEVELOPMENT_CASES = {"gdn": [40, 49, 47, 46, 45], "bsa": [47, 46, 49, 44, 43]}
-ALL_CASES = list(range(50))
+BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1, "matmul": 2}
+DEVELOPMENT_CASES = {
+    "gdn": [40, 49, 47, 46, 45],
+    "bsa": [47, 46, 49, 44, 43],
+    "matmul": [7, 8, 9],
+}
+ALL_CASES = {"gdn": list(range(50)), "bsa": list(range(50)), "matmul": list(range(10))}
 WAVES = (
-    (("gdn", "cannbot"), ("bsa", "project-cannbot")),
-    (("gdn", "project-cannbot"), ("bsa", "project-only")),
-    (("gdn", "project-only"), ("bsa", "cannbot")),
+    (("gdn", "cannbot"), ("bsa", "cannbot"),
+     ("matmul", "cannbot"), ("bsa", "project-guarded")),
+    (("gdn", "project-cannbot"), ("bsa", "project-cannbot"),
+     ("matmul", "project-cannbot"), ("matmul", "project-guarded")),
+    (("gdn", "project-guarded"),),
 )
+CELL_DEVICE = {
+    ("gdn", "cannbot"): 0,
+    ("gdn", "project-cannbot"): 1,
+    ("gdn", "project-guarded"): 2,
+    ("bsa", "cannbot"): 1,
+    ("bsa", "project-cannbot"): 2,
+    ("bsa", "project-guarded"): 3,
+    ("matmul", "cannbot"): 2,
+    ("matmul", "project-cannbot"): 3,
+    ("matmul", "project-guarded"): 0,
+}
 CANNBOT_TRITON_SKILLS = (
     "triton-task-extractor",
     "triton-op-designer",
@@ -46,7 +64,7 @@ TREATMENT_SKILLS = {
     "project-cannbot": (
         *CANNBOT_TRITON_SKILLS, *CANNBOT_DEPENDENCIES, "ascend-profiling"
     ),
-    "project-only": ("ascend-profiling",),
+    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
 }
 CONTROLLER_SCRIPTS = (
     "experimentctl.py",
@@ -60,10 +78,66 @@ CONTROLLER_BENCHMARK_ASSETS = tuple(
     for benchmark in ("gdn", "bsa", "matmul")
     for name in ("baseline.py", "baseline.json", "cases.jsonl")
 )
+CONTROLLER_EXTRA_ASSETS = ("streaming_matmul_add.py", "matmul/calibration.py")
 
 
 class CampaignError(RuntimeError):
     pass
+
+
+CANDIDATE_OUTCOMES = {"compile_error", "runtime_error", "correctness_error"}
+
+
+def classify_outcome(result: dict) -> str:
+    """Map launcher details onto the experiment's disjoint outcome taxonomy."""
+    status = result.get("status")
+    if status == "complete":
+        return "success"
+    if status == "infrastructure_error":
+        return "infra_discarded"
+    if status == "candidate_error":
+        failure = result.get("failure_type")
+        if failure in CANDIDATE_OUTCOMES:
+            return failure
+        terminal = result.get("terminal_evidence", {})
+        for gate in ("check", "profile"):
+            document = terminal.get(gate, {}).get("result", {})
+            if document.get("failure_type") in CANDIDATE_OUTCOMES:
+                return document["failure_type"]
+        return "runtime_error"
+    if status == "dry_run":
+        return "dry_run"
+    return "infra_discarded"
+
+
+def normalize_performance(result: dict) -> dict | None:
+    """Normalize a profile geomean by bracketing calibration measurements."""
+    try:
+        calibration = result["calibration"]
+        device = str(result["device"])
+        local = calibration["devices"][device]
+        canonical = calibration["devices"]["0"]
+        before = float(local["before"]["latency_us"])
+        after = float(local["after"]["latency_us"])
+        canonical_before = float(canonical["before"]["latency_us"])
+        canonical_after = float(canonical["after"]["latency_us"])
+        profile = float(result["terminal_evidence"]["profile"]["result"]["geomean_us"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) and value > 0 for value in
+               (before, after, canonical_before, canonical_after, profile)):
+        return None
+    reference = math.sqrt(before * after)
+    canonical_reference = math.sqrt(canonical_before * canonical_after)
+    return {
+        "method": "raw_latency_times_device0_over_local_bracketing_geomean",
+        "before_us": before,
+        "after_us": after,
+        "reference_us": reference,
+        "profile_geomean_us": profile,
+        "canonical_reference_us": canonical_reference,
+        "normalized_latency_us": profile * canonical_reference / reference,
+    }
 
 
 def digest_file(path: Path) -> str:
@@ -102,7 +176,8 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
     repository = scripts.parent
     required_scripts = {name: scripts / name for name in CONTROLLER_SCRIPTS}
     benchmark_root = repository / "benchmarks"
-    required_assets = {name: benchmark_root / name for name in CONTROLLER_BENCHMARK_ASSETS}
+    required_assets = {name: benchmark_root / name for name in
+                       (*CONTROLLER_BENCHMARK_ASSETS, *CONTROLLER_EXTRA_ASSETS)}
     missing = [name for name, path in {**required_scripts, **required_assets}.items()
                if not path.is_file() or path.is_symlink()]
     if missing:
@@ -282,19 +357,28 @@ def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
             result.append(
                 Cell(
                     f"{benchmark}-{treatment}", benchmark, treatment,
-                    BENCHMARK_DEVICE[benchmark], wave, rounds, request_budget,
-                    DEVELOPMENT_CASES[benchmark], ALL_CASES,
+                    CELL_DEVICE[(benchmark, treatment)], wave, rounds, request_budget,
+                    DEVELOPMENT_CASES[benchmark], ALL_CASES[benchmark],
                 )
             )
     return result
 
 
 def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
-                   project_skill: Path, cannbot_freeze: Path,
+                   project_skill: Path, guarded_skill: Path, cannbot_freeze: Path,
                    controller_config: Path, controller_command: list[str],
-                   rounds: int = 3, request_budget: int = 12) -> dict:
+                   rounds: int = 3, request_budget: int = 12,
+                   guarded_revision: str = "", calibration_max_drift: float = 0.10) -> dict:
     if rounds < 1 or request_budget < 1:
         raise CampaignError("rounds and request budget must be positive")
+    if (len(guarded_revision) != 40
+            or any(character not in "0123456789abcdef" for character in guarded_revision)):
+        raise CampaignError("guarded skill revision must be a full lowercase Git commit")
+    if (not isinstance(calibration_max_drift, (int, float))
+            or isinstance(calibration_max_drift, bool)
+            or not math.isfinite(calibration_max_drift)
+            or calibration_max_drift <= 0):
+        raise CampaignError("calibration max drift must be positive and finite")
     path.parent.mkdir(parents=True, exist_ok=True)
     missing = {name for name in BENCHMARK_DEVICE if name not in baselines}
     if missing:
@@ -314,6 +398,12 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                 "path": str(project_skill.resolve()),
                 "sha256": digest_tree(project_skill),
             },
+            "triton-guarded-kernel": {
+                "path": str(guarded_skill.resolve()),
+                "sha256": digest_tree(guarded_skill),
+                "repository": "https://github.com/huawei-cpl-zurich/cpl-skills.git",
+                "revision": guarded_revision,
+            },
             "cannbot": {
                 "path": str(cannbot_freeze.resolve()),
                 "freeze": freeze,
@@ -322,14 +412,17 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
         },
         "controller": freeze_controller_bundle(path, controller_config, controller_command),
         "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
-        "max_parallel": 2,
+        "max_parallel": 4,
+        "calibration": {"devices": [0, 1, 2, 3], "case": 7,
+                        "selector": "streaming_matmul_add_kernel_mix_aic",
+                        "max_drift_fraction": calibration_max_drift},
     }
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
     return document
 
 
 def _skill_source(manifest: dict, skill: str) -> Path:
-    if skill == "ascend-profiling":
+    if skill in {"ascend-profiling", "triton-guarded-kernel"}:
         return Path(manifest["skill_sources"][skill]["path"])
     return Path(manifest["skill_sources"]["cannbot"]["path"]) / "skills" / skill
 
@@ -404,9 +497,10 @@ def stage_controller(manifest: dict, manifest_path: Path, campaign_root: Path,
 
 
 def verify_frozen_sources(manifest: dict) -> None:
-    project = manifest["skill_sources"]["ascend-profiling"]
-    if digest_tree(Path(project["path"])) != project["sha256"]:
-        raise CampaignError("project profiling skill drifted after manifest freeze")
+    for name in ("ascend-profiling", "triton-guarded-kernel"):
+        project = manifest["skill_sources"][name]
+        if digest_tree(Path(project["path"])) != project["sha256"]:
+            raise CampaignError(f"project skill drifted after manifest freeze: {name}")
     frozen = manifest["skill_sources"]["cannbot"]
     root = Path(frozen["path"])
     freeze_file = root / "freeze.json"
@@ -443,7 +537,7 @@ def prepare_cell(manifest: dict, cell: dict, campaigns_root: Path) -> Path:
         target = skill_root / skill
         copy_regular_tree(_skill_source(manifest, skill), target)
         skill_hashes[skill] = digest_tree(target)
-    if cell["treatment"] != "project-only":
+    if cell["treatment"] != "project-guarded":
         support_source = (Path(manifest["skill_sources"]["cannbot"]["path"])
                           / "support" / "triton-op-generator")
         copy_regular_tree(support_source,
@@ -477,11 +571,12 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
     if digest_file(sandbox / "PROMPT.md") != manifest["prompt"]["sha256"]:
         raise CampaignError("prompt hash mismatch")
     expected_baseline = manifest["baselines"][cell["benchmark"]]["sha256"]
-    injected = (".agents", "AGENTS.md", "config.json") if cell["treatment"] != "project-only" else (".agents",)
+    injected = ((".agents", "AGENTS.md", "config.json")
+                if cell["treatment"] != "project-guarded" else (".agents",))
     if digest_tree(workspace, injected) != expected_baseline:
         raise CampaignError("baseline hash mismatch")
     support = workspace / ".agents" / "plugins-official" / "triton-op-generator"
-    if (cell["treatment"] == "project-only") == support.exists():
+    if (cell["treatment"] == "project-guarded") == support.exists():
         raise CampaignError("CANNBot support isolation mismatch")
     for forbidden in ("siblings", "orchestration", "global-skills"):
         if (sandbox / forbidden).exists():
@@ -494,6 +589,8 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
 
 class Launcher(Protocol):
     def launch(self, sandbox: Path, cell: dict) -> dict: ...
+
+    def calibrate(self, sandbox: Path, cell: dict, phase: str, wave: int) -> dict: ...
 
 
 class CommandLauncher:
@@ -557,13 +654,76 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
         temporary.replace(ledger_path)
 
     checkpoint()
-    by_wave = {wave: [] for wave in range(1, 4)}
+    wave_ids = sorted({cell["wave"] for cell in manifest["cells"]})
+    by_wave = {wave: [] for wave in wave_ids}
     for cell in manifest["cells"]:
         if cell["cell_id"] in target_ids:
             by_wave[cell["wave"]].append(cell)
+
+    def calibrate_wave(sandbox: Path, wave: int, phase: str) -> dict[str, dict]:
+        representatives = {
+            device: next(cell for cell in manifest["cells"] if cell["device"] == device)
+            for device in manifest["calibration"]["devices"]
+        }
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(launcher.calibrate, sandbox, cell, phase, wave): device
+                for device, cell in representatives.items()
+            }
+            records = {}
+            for future in as_completed(futures):
+                device = futures[future]
+                try:
+                    records[str(device)] = future.result()
+                except BaseException as error:
+                    if isinstance(error, KeyboardInterrupt):
+                        raise
+                    records[str(device)] = {
+                        "status": "infrastructure_error",
+                        "diagnostics": f"{type(error).__name__}: {error}",
+                    }
+            return records
+
+    def calibration_summary(before: dict, after: dict) -> tuple[dict, str | None]:
+        devices, invalid = {}, []
+        threshold = manifest["calibration"]["max_drift_fraction"]
+        for device in manifest["calibration"]["devices"]:
+            key = str(device)
+            phases = {"before": before[key], "after": after[key]}
+            compact = {}
+            values = []
+            phase_handles = []
+            for phase, evidence in phases.items():
+                result = evidence.get("result", {})
+                latency = result.get("latency_us")
+                handles = result.get("handles", [])
+                compact[phase] = {
+                    "status": evidence.get("status"), "latency_us": latency,
+                    "handles": handles,
+                    "timestamp": evidence.get("timestamp"),
+                    "selector": result.get("selector"),
+                    "evidence_path": evidence.get("evidence_path"),
+                }
+                if (evidence.get("status") != "complete"
+                        or not isinstance(latency, (int, float))
+                        or isinstance(latency, bool) or not math.isfinite(latency)
+                        or latency <= 0):
+                    invalid.append(f"device {device} {phase} calibration failed")
+                else:
+                    values.append(float(latency))
+                phase_handles.append(set(handles) if isinstance(handles, list) else set())
+            if len(phase_handles) == 2 and phase_handles[0] & phase_handles[1]:
+                invalid.append(f"device {device} calibration reused a durable handle")
+            if len(values) == 2:
+                drift = abs(values[1] / values[0] - 1.0)
+                compact["drift_fraction"] = drift
+                if drift > threshold:
+                    invalid.append(f"device {device} calibration drift {drift:.6f} exceeds {threshold:.6f}")
+            devices[key] = compact
+        return {"devices": devices, "max_drift_fraction": threshold}, "; ".join(invalid) or None
     try:
         saw_dry_run = False
-        for wave in range(1, 4):
+        for wave in wave_ids:
             if binding is not None:
                 _verify_bundle(controller_bundle, binding)
             if on_wave:
@@ -576,38 +736,75 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                         for cell in by_wave[wave]]
             if len(prepared) > manifest["max_parallel"]:
                 raise CampaignError("wave exceeds max_parallel")
-            with ThreadPoolExecutor(max_workers=manifest["max_parallel"]) as executor:
-                futures = {
-                    executor.submit(launcher.launch, sandbox, cell): cell
-                    for cell, sandbox in prepared
-                }
-                for future in as_completed(futures):
-                    cell = futures[future]
-                    try:
-                        result = future.result()
-                    except BaseException as error:
-                        if isinstance(error, KeyboardInterrupt):
-                            raise
-                        result = {
-                            "status": "infrastructure_error",
-                            "failure_type": "launcher_exception",
-                            "diagnostics": f"{type(error).__name__}: {error}",
-                        }
-                        ledger["cells"].append({"cell": cell, "result": result})
-                        ledger.setdefault("reschedule", []).append(cell["cell_id"])
-                        checkpoint()
-                    else:
-                        status = result.get("status")
-                        if status is None:
-                            status = ("complete" if result.get("exit_code") == 0
-                                      and result.get("rounds_completed") == 3
-                                      else "infrastructure_error")
-                        ledger["cells"].append({"cell": cell, "result": result})
-                        if status == "dry_run":
-                            saw_dry_run = True
-                        elif status == "infrastructure_error":
-                            ledger.setdefault("reschedule", []).append(cell["cell_id"])
-                        checkpoint()
+            calibration_before = None
+            if not dry_run and hasattr(launcher, "calibrate"):
+                calibration_before = calibrate_wave(prepared[0][1], wave, "before")
+            wave_results = []
+            before_failed = (calibration_before is not None and any(
+                evidence.get("status") != "complete"
+                for evidence in calibration_before.values()
+            ))
+            if before_failed:
+                wave_results = [(cell, {"status": "infrastructure_error",
+                                        "failure_type": "calibration_failure"})
+                                for cell, _ in prepared]
+            else:
+                with ThreadPoolExecutor(max_workers=manifest["max_parallel"]) as executor:
+                    futures = {
+                        executor.submit(launcher.launch, sandbox, cell): cell
+                        for cell, sandbox in prepared
+                    }
+                    for future in as_completed(futures):
+                        cell = futures[future]
+                        try:
+                            result = future.result()
+                        except BaseException as error:
+                            if isinstance(error, KeyboardInterrupt):
+                                raise
+                            result = {
+                                "status": "infrastructure_error",
+                                "failure_type": "launcher_exception",
+                                "diagnostics": f"{type(error).__name__}: {error}",
+                            }
+                            wave_results.append((cell, result))
+                        else:
+                            status = result.get("status")
+                            if status is None:
+                                status = ("complete" if result.get("exit_code") == 0
+                                          and result.get("rounds_completed") == 3
+                                          else "infrastructure_error")
+                                result["status"] = status
+                            wave_results.append((cell, result))
+            calibration = None
+            calibration_error = None
+            if calibration_before is not None:
+                after = calibrate_wave(prepared[0][1], wave, "after")
+                calibration, calibration_error = calibration_summary(calibration_before, after)
+                ledger.setdefault("calibrations", {})[str(wave)] = calibration
+            for cell, result in wave_results:
+                if calibration is not None:
+                    result["device"] = cell["device"]
+                    result["calibration"] = calibration
+                if calibration_error:
+                    result = {
+                        "status": "infrastructure_error",
+                        "failure_type": "calibration_failure",
+                        "diagnostics": calibration_error,
+                        "discarded_result": result,
+                        "device": cell["device"], "calibration": calibration,
+                    }
+                status = result["status"]
+                entry = {"cell": cell, "result": result,
+                         "outcome": classify_outcome(result)}
+                normalized = normalize_performance(result)
+                if normalized is not None:
+                    entry["normalized_performance"] = normalized
+                ledger["cells"].append(entry)
+                if status == "dry_run":
+                    saw_dry_run = True
+                elif status == "infrastructure_error":
+                    ledger.setdefault("reschedule", []).append(cell["cell_id"])
+                checkpoint()
             if dry_run:
                 shutil.rmtree(attempt_root)
         if ledger.get("reschedule"):
@@ -638,7 +835,10 @@ def main() -> int:
     generate.add_argument("--prompt", type=Path, required=True)
     generate.add_argument("--gdn-baseline", type=Path, required=True)
     generate.add_argument("--bsa-baseline", type=Path, required=True)
+    generate.add_argument("--matmul-baseline", type=Path, required=True)
     generate.add_argument("--project-skill", type=Path, required=True)
+    generate.add_argument("--guarded-skill", type=Path, required=True)
+    generate.add_argument("--guarded-skill-revision", required=True)
     generate.add_argument("--cannbot-freeze", type=Path, required=True)
     generate.add_argument("--controller-config", type=Path, required=True)
     generate.add_argument("--controller-json", required=True,
@@ -646,6 +846,7 @@ def main() -> int:
     generate.add_argument("--output", type=Path, required=True)
     generate.add_argument("--rounds", type=int, default=3)
     generate.add_argument("--request-budget", type=int, default=12)
+    generate.add_argument("--calibration-max-drift", type=float, default=0.10)
     check = sub.add_parser("preflight")
     check.add_argument("--manifest", type=Path, required=True)
     check.add_argument("--sandbox", type=Path, required=True)
@@ -672,10 +873,12 @@ def main() -> int:
             parser.error(f"--controller-json must be a JSON string array: {error}")
         document = write_manifest(
             args.output, args.prompt,
-            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline},
-            args.project_skill, args.cannbot_freeze,
+            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline,
+             "matmul": args.matmul_baseline},
+            args.project_skill, args.guarded_skill, args.cannbot_freeze,
             args.controller_config, controller,
-            args.rounds, args.request_budget,
+            args.rounds, args.request_budget, args.guarded_skill_revision,
+            args.calibration_max_drift,
         )
         print(json.dumps(document, sort_keys=True))
     elif args.command == "preflight":

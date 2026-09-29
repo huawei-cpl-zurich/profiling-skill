@@ -146,6 +146,9 @@ if action == "stage":
  Path(os.environ["FAKE_ROOT"]).write_text(str(root))
 elif action == "run-bundle":
  receipt=Path(value("--run-receipt")); root=Path(os.environ["FAKE_ROOT"]).read_text(); root=Path(root)
+ run_id=value("--run-id")
+ if os.environ.get("FAKE_RUN_LOG"):
+  with open(os.environ["FAKE_RUN_LOG"],"a") as stream: stream.write(run_id+"\n")
  job=json.loads((root/"job.json").read_text()); mode=os.environ.get("FAKE_MODE","ok")
  identity={k:job[k] for k in ("benchmark","action","device")}
  if job["action"]=="check": identity.update(cases=job["cases"],scope=job["scope"])
@@ -167,7 +170,8 @@ elif action == "run-bundle":
    stream.add(out/"profile/evidence.json",arcname="profile/evidence.json")
    stream.add(out/"profile/msprof.log",arcname="profile/msprof.log")
  sha=hashlib.sha256(archive.read_bytes()).hexdigest()
- receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"run","state":"succeeded","command_handle":"command-1","result_sha256":sha,"result_path":"results/x/result.tar"}))
+ handle="command-"+run_id if os.environ.get("FAKE_RUN_LOG") else "command-1"
+ receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"run","state":"succeeded","command_handle":handle,"result_sha256":sha,"result_path":"results/x/result.tar"}))
 elif action == "fetch-bundle-result":
  shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
 ''')
@@ -237,6 +241,29 @@ def test_same_content_reuses_state_and_receipts(tmp_path: Path):
     assert first.returncode == second.returncode == 0
     assert one["artifacts"]["request_digest"] == two["artifacts"]["request_digest"]
     assert len(list((tmp_path / "state").iterdir())) == 1
+
+
+def test_calibration_phases_create_distinct_digests_run_ids_and_results(tmp_path: Path):
+    job, config = inputs(tmp_path)
+    run_log = tmp_path / "run-ids.txt"
+    config["env"]["FAKE_MODE"] = "ok"
+    config["env"]["FAKE_RUN_LOG"] = str(run_log)
+    results = []
+    for phase in ("before", "after"):
+        request = {**job, "calibration_phase": phase}
+        process = subprocess.run(
+            config["command"], input=json.dumps(request), text=True,
+            capture_output=True, env=config["env"], check=False,
+        )
+        assert process.returncode == 0
+        results.append(json.loads(process.stdout))
+
+    digests = [result["artifacts"]["request_digest"] for result in results]
+    run_ids = run_log.read_text().splitlines()
+    assert len(set(digests)) == len(set(run_ids)) == 2
+    assert run_ids == [digest[:24] for digest in digests]
+    assert results[0]["handle"] != results[1]["handle"]
+    assert len(list((tmp_path / "state").iterdir())) == 2
 
 
 def test_digest_ignores_caller_checkout_in_profile_driver(tmp_path: Path):

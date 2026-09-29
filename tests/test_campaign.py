@@ -28,10 +28,12 @@ def tree(path: Path, content: str = "content") -> Path:
 def fixture(tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     prompt = tmp_path / "prompt.md"
-    prompt.write_text("same prompt\n")
+    prompt.write_bytes((ROOT / "prompts/kernel-optimization.md").read_bytes())
     gdn = tree(tmp_path / "gdn", "gdn")
     bsa = tree(tmp_path / "bsa", "bsa")
+    matmul = tree(tmp_path / "matmul", "matmul")
     project = tree(tmp_path / "project", "project")
+    guarded = tree(tmp_path / "guarded", "guarded")
     frozen = tmp_path / "frozen"
     for skill in (
         *campaign.CANNBOT_TRITON_SKILLS,
@@ -75,8 +77,10 @@ def fixture(tmp_path: Path):
     ]
     manifest_path = tmp_path / "campaign.json"
     manifest = campaign.write_manifest(
-        manifest_path, prompt, {"gdn": gdn, "bsa": bsa}, project, frozen,
+        manifest_path, prompt, {"gdn": gdn, "bsa": bsa, "matmul": matmul},
+        project, guarded, frozen,
         controller_config, controller_command,
+        guarded_revision="b" * 40,
     )
     return manifest, manifest_path
 
@@ -93,16 +97,17 @@ def run_campaign(manifest, root, launcher, on_wave=None, resume=False):
     )
 
 
-def test_fixed_schedule_has_six_fresh_balanced_cells():
+def test_fixed_schedule_has_nine_cells_in_collision_free_four_four_one_waves():
     cells = campaign.cells()
-    assert len(cells) == 6
-    assert [[c.benchmark for c in cells if c.wave == wave] for wave in range(1, 4)] == [
-        ["gdn", "bsa"], ["gdn", "bsa"], ["gdn", "bsa"]
-    ]
-    assert {c.treatment for c in cells if c.benchmark == "gdn"} == set(
-        campaign.TREATMENT_SKILLS
-    )
-    assert all(c.device == (0 if c.benchmark == "gdn" else 1) for c in cells)
+    assert len(cells) == 9
+    assert [sum(c.wave == wave for c in cells) for wave in range(1, 4)] == [4, 4, 1]
+    for wave in range(1, 4):
+        devices = [c.device for c in cells if c.wave == wave]
+        assert len(devices) == len(set(devices))
+    assert all({c.treatment for c in cells if c.benchmark == benchmark}
+               == set(campaign.TREATMENT_SKILLS)
+               for benchmark in campaign.BENCHMARK_DEVICE)
+    assert {(c.benchmark, c.treatment): c.device for c in cells} == campaign.CELL_DEVICE
     assert all(c.rounds == 3 and c.request_budget == 12 for c in cells)
 
 
@@ -140,7 +145,7 @@ def test_prepare_rejects_reused_session_folder(tmp_path: Path):
 
 def test_preflight_rejects_wrong_skill_and_mutated_inputs(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
-    cell = next(c for c in manifest["cells"] if c["treatment"] == "project-only")
+    cell = next(c for c in manifest["cells"] if c["treatment"] == "project-guarded")
     sandbox = campaign.prepare_cell(manifest, cell, tmp_path / "runs")
     tree(sandbox / "workspace" / ".agents" / "skills" / "ops-profiling", "leak")
     with pytest.raises(campaign.CampaignError, match="skill isolation mismatch"):
@@ -192,8 +197,8 @@ def test_campaign_runs_fixed_waves_and_writes_structured_ledger(tmp_path: Path):
     run_root.mkdir()
     ledger = run_campaign(manifest, run_root, launcher, waves.append)
     assert waves == [1, 2, 3]
-    assert sorted(call[1]["wave"] for call in launcher.calls) == [1, 1, 2, 2, 3, 3]
-    assert len({call[0] for call in launcher.calls}) == 6
+    assert sorted(call[1]["wave"] for call in launcher.calls) == [1, 1, 1, 1, 2, 2, 2, 2, 3]
+    assert len({call[0] for call in launcher.calls}) == 9
     assert ledger["status"] == "complete"
     assert json.loads((run_root / "ledger.json").read_text()) == ledger
 
@@ -217,7 +222,7 @@ def test_ledger_checkpoints_completed_cells_and_failure(tmp_path: Path):
     assert failed["result"]["failure_type"] == "launcher_exception"
     assert "RuntimeError: launcher failed" in failed["result"]["diagnostics"]
     assert ledger["reschedule"] == ["gdn-project-cannbot"]
-    assert len(ledger["cells"]) == 6
+    assert len(ledger["cells"]) == 9
 
 
 def test_incomplete_launcher_result_is_evidence_then_fails_ledger(tmp_path: Path):
@@ -231,7 +236,7 @@ def test_incomplete_launcher_result_is_evidence_then_fails_ledger(tmp_path: Path
     result = run_campaign(manifest, run_root, IncompleteLauncher())
     ledger = json.loads((run_root / "ledger.json").read_text())
     assert result["status"] == "needs_reschedule"
-    assert len(ledger["cells"]) == 6
+    assert len(ledger["cells"]) == 9
     assert all(entry["result"]["stderr"] == "transport failed" for entry in ledger["cells"])
 
 
@@ -262,11 +267,11 @@ def test_between_wave_source_drift_is_rejected_and_checkpointed(tmp_path: Path):
 
     run_root = tmp_path / "runs"
     run_root.mkdir()
-    with pytest.raises(campaign.CampaignError, match="project profiling skill drifted"):
+    with pytest.raises(campaign.CampaignError, match="project skill drifted.*ascend-profiling"):
         run_campaign(manifest, run_root, RecordingLauncher(), mutate_before_wave)
     ledger = json.loads((run_root / "ledger.json").read_text())
     assert ledger["status"] == "failed"
-    assert len(ledger["cells"]) == 2
+    assert len(ledger["cells"]) == 4
     assert all(entry["cell"]["wave"] == 1 for entry in ledger["cells"])
 
 
@@ -300,7 +305,7 @@ def test_prepare_rejects_project_and_cannbot_drift(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
     project = Path(manifest["skill_sources"]["ascend-profiling"]["path"])
     (project / "SKILL.md").write_text("drift")
-    with pytest.raises(campaign.CampaignError, match="project profiling skill drifted"):
+    with pytest.raises(campaign.CampaignError, match="project skill drifted.*ascend-profiling"):
         campaign.prepare_cell(manifest, manifest["cells"][0], tmp_path / "project-drift")
 
     manifest, _ = fixture(tmp_path / "second")
@@ -393,7 +398,10 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
         "--prompt", manifest["prompt"]["path"],
         "--gdn-baseline", manifest["baselines"]["gdn"]["path"],
         "--bsa-baseline", manifest["baselines"]["bsa"]["path"],
+        "--matmul-baseline", manifest["baselines"]["matmul"]["path"],
         "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
+        "--guarded-skill", manifest["skill_sources"]["triton-guarded-kernel"]["path"],
+        "--guarded-skill-revision", "b" * 40,
         "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
         "--controller-config", str(controller_config),
         "--controller-json", json.dumps(controller_command),
@@ -408,7 +416,7 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
     assert (output.parent / written["controller"]["bundle"] / "scripts/benchmark_backend.py").is_file()
     assert (output.parent / written["controller"]["bundle"] / "benchmarks/gdn/baseline.py").is_file()
     assert (output.parent / written["controller"]["bundle"] / "benchmarks/matmul/cases.jsonl").is_file()
-    assert len(written["cells"]) == 6
+    assert len(written["cells"]) == 9
     sandbox = campaign.prepare_cell(written, written["cells"][0], tmp_path / "runs")
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
 
@@ -420,7 +428,10 @@ def test_generate_manifest_cli_rejects_non_string_array_controller_json(
     monkeypatch.setattr(sys, "argv", [
         "campaign.py", "generate-manifest", "--prompt", "missing-prompt",
         "--gdn-baseline", "missing-gdn", "--bsa-baseline", "missing-bsa",
-        "--project-skill", "missing-skill", "--cannbot-freeze", "missing-freeze",
+        "--matmul-baseline", "missing-matmul",
+        "--project-skill", "missing-skill", "--guarded-skill", "missing-guarded",
+        "--guarded-skill-revision", "b" * 40,
+        "--cannbot-freeze", "missing-freeze",
         "--controller-config", "missing-config", "--controller-json", json.dumps(value),
         "--output", str(tmp_path / "campaign.json"),
     ])
@@ -438,8 +449,9 @@ def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
             tmp_path / "bad.json", Path(manifest["prompt"]["path"]),
             {name: Path(value["path"]) for name, value in manifest["baselines"].items()},
             Path(manifest["skill_sources"]["ascend-profiling"]["path"]),
+            Path(manifest["skill_sources"]["triton-guarded-kernel"]["path"]),
             Path(manifest["skill_sources"]["cannbot"]["path"]),
-            tmp_path / "controller.json", [], rounds=0,
+            tmp_path / "controller.json", [], rounds=0, guarded_revision="b" * 40,
         )
 
 
@@ -495,7 +507,7 @@ def test_dry_run_checkpoints_all_cells_without_claiming_completion(tmp_path: Pat
 
     ledger = run_campaign(manifest, tmp_path / "runs", DryRunLauncher())
     assert ledger["status"] == "dry_run"
-    assert len(ledger["cells"]) == 6
+    assert len(ledger["cells"]) == 9
     assert all(entry["result"]["dry_run"] for entry in ledger["cells"])
     assert not (tmp_path / "runs" / "attempts").exists()
     production = run_campaign(manifest, tmp_path / "runs", RecordingLauncher())
@@ -531,8 +543,100 @@ def test_candidate_failure_is_counted_and_does_not_abort_later_waves(tmp_path: P
 
     ledger = run_campaign(manifest, tmp_path / "runs", CandidateLauncher())
     assert ledger["status"] == "completed_with_candidate_failures"
-    assert len(ledger["cells"]) == 6
+    assert len(ledger["cells"]) == 9
     assert "reschedule" not in ledger or not ledger["reschedule"]
+    failed = next(entry for entry in ledger["cells"]
+                  if entry["cell"]["cell_id"] == "gdn-cannbot")
+    assert failed["outcome"] == "compile_error"
+
+
+def test_performance_is_normalized_by_bracketing_calibration(tmp_path: Path):
+    result = {
+        "status": "complete", "device": 1,
+        "calibration": {"devices": {
+            "0": {"before": {"latency_us": 16.0}, "after": {"latency_us": 25.0}},
+            "1": {"before": {"latency_us": 4.0}, "after": {"latency_us": 9.0}},
+        }},
+        "terminal_evidence": {"profile": {"result": {"geomean_us": 12.0}}},
+    }
+    normalized = campaign.normalize_performance(result)
+    assert normalized is not None
+    assert normalized["reference_us"] == pytest.approx(6.0)
+    assert normalized["canonical_reference_us"] == pytest.approx(20.0)
+    assert normalized["normalized_latency_us"] == pytest.approx(40.0)
+
+
+def test_wave_calibrates_all_devices_around_agents_and_retains_records(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    events = []
+
+    class CalibratingLauncher(RecordingLauncher):
+        def calibrate(self, sandbox, cell, phase, wave):
+            events.append((phase, wave, cell["device"]))
+            latency = 10.0 + cell["device"]
+            if phase == "after":
+                latency *= 1.05
+            return {
+                "status": "complete", "timestamp": f"{phase}-{wave}-{cell['device']}",
+                "evidence_path": f"/{phase}-{wave}-{cell['device']}.json",
+                "result": {"latency_us": latency,
+                           "handles": [f"gz-a3:{phase}-{wave}-{cell['device']}"],
+                           "selector": "streaming_matmul_add_kernel_mix_aic"},
+            }
+
+        def launch(self, sandbox, cell):
+            events.append(("launch", cell["wave"], cell["device"]))
+            return {
+                "status": "complete", "rounds_completed": 3,
+                "terminal_evidence": {
+                    "profile": {"result": {"geomean_us": 20.0}}
+                },
+            }
+
+    ledger = run_campaign(manifest, tmp_path / "runs", CalibratingLauncher())
+    for wave in (1, 2, 3):
+        positions = [index for index, event in enumerate(events) if event[1] == wave]
+        wave_events = [events[index][0] for index in positions]
+        assert wave_events[:4] == ["before"] * 4
+        assert wave_events[-4:] == ["after"] * 4
+        assert {event[2] for event in events if event[:2] == ("before", wave)} == set(range(4))
+    assert set(ledger["calibrations"]) == {"1", "2", "3"}
+    assert all(entry["outcome"] == "success" for entry in ledger["cells"])
+    assert all("normalized_performance" in entry for entry in ledger["cells"])
+
+
+def test_calibration_drift_invalidates_whole_wave_as_infrastructure(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+
+    class DriftingLauncher(RecordingLauncher):
+        def calibrate(self, sandbox, cell, phase, wave):
+            latency = 10.0 if phase == "before" else 12.0
+            return {"status": "complete", "timestamp": phase, "evidence_path": "/evidence",
+                    "result": {"latency_us": latency, "handles": ["gz-a3:cal"],
+                               "selector": "streaming_matmul_add_kernel_mix_aic"}}
+
+    ledger = run_campaign(manifest, tmp_path / "runs", DriftingLauncher())
+    assert ledger["status"] == "needs_reschedule"
+    assert set(ledger["reschedule"]) == {cell["cell_id"] for cell in manifest["cells"]}
+    assert all(entry["outcome"] == "infra_discarded" for entry in ledger["cells"])
+    assert all("reused a durable handle" in entry["result"]["diagnostics"]
+               for entry in ledger["cells"])
+
+
+@pytest.mark.parametrize(
+    ("result", "outcome"),
+    [
+        ({"status": "complete"}, "success"),
+        ({"status": "infrastructure_error"}, "infra_discarded"),
+        ({"status": "candidate_error", "failure_type": "runtime_error"},
+         "runtime_error"),
+        ({"status": "candidate_error", "terminal_evidence": {
+            "check": {"result": {"failure_type": "correctness_error"}}
+        }}, "correctness_error"),
+    ],
+)
+def test_outcome_taxonomy(result, outcome):
+    assert campaign.classify_outcome(result) == outcome
 
 
 def test_resume_runs_only_infrastructure_cells_in_fresh_sandbox(tmp_path: Path):
@@ -557,7 +661,7 @@ def test_resume_runs_only_infrastructure_cells_in_fresh_sandbox(tmp_path: Path):
     assert ledger["status"] == "complete"
     assert [cell["cell_id"] for _, cell in second.calls] == [failed_id]
     assert second.calls[0][0] != original_sandbox
-    assert len(ledger["cells"]) == 7
+    assert len(ledger["cells"]) == 10
     assert not ledger["reschedule"]
 
 

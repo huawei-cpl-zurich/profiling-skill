@@ -25,5 +25,5 @@ Generated controller configurations include matmul and its files are part of
 the frozen controller closure. The campaign scheduling change separately adds
 isolated matmul agent cells to the measured wave plan.
 
-The three-treatment, six-cell protocol and reproducible launch procedure are
+The three-treatment, nine-cell protocol and reproducible launch procedure are
 documented in [`docs/experiment-campaign.md`](../docs/experiment-campaign.md).

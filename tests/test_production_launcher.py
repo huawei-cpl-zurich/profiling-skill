@@ -62,6 +62,32 @@ def identified(document: dict, cell: dict, operation: str) -> dict:
             "benchmark": cell["benchmark"], "device": cell["device"], **document}
 
 
+def test_host_calibration_uses_controller_and_retains_evidence(tmp_path: Path, monkeypatch):
+    instance = launcher_fixture(tmp_path)
+    root = sandbox(tmp_path)
+    cell = production_cell()
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed["cwd"] = kwargs["cwd"]
+        document = identified({
+            "status": "ok", "latency_us": 17.5, "handles": ["gz-a3:cal"],
+            "selector": "streaming_matmul_add_kernel_mix_aic",
+        }, cell, "calibrate")
+        return type("Result", (), {"returncode": 0, "stdout": json.dumps(document),
+                                    "stderr": ""})()
+
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
+    evidence = instance.calibrate(root, cell, "before", 2)
+    assert observed["command"][-5:] == ["calibrate", "--phase", "before", "--wave", "2"]
+    assert observed["cwd"] == root / "workspace"
+    assert evidence["status"] == "complete"
+    assert evidence["result"]["handles"] == ["gz-a3:cal"]
+    assert evidence["timestamp"].endswith("+00:00")
+    assert Path(evidence["evidence_path"]).is_file()
+
+
 def test_bwrap_argv_mounts_only_workspace_minimal_state_and_readonly_auth(tmp_path: Path):
     instance = launcher_fixture(tmp_path)
     root = sandbox(tmp_path)
@@ -450,6 +476,25 @@ def test_terminal_gate_requires_exact_identity_and_case_sequences():
     duplicate_handles = {**profile, "handles": ["gz-a3:same"] * 15}
     assert launcher.ProductionLauncher._gate_status(
         duplicate_handles, cell, "profile"
+    )[0] == "infrastructure_error"
+
+
+def test_matmul_terminal_profile_accepts_three_cases_and_nine_unique_handles():
+    cell = {
+        "cell_id": "matmul-project-guarded", "benchmark": "matmul", "device": 0,
+        "development_cases": [7, 8, 9], "all_cases": list(range(10)),
+    }
+    profile = identified({
+        "status": "ok", "repeats": 3,
+        "handles": [f"gz-a3:matmul-{index}" for index in range(9)],
+        "cases": [{"case": case, "samples_us": [1, 2, 3]}
+                  for case in cell["development_cases"]],
+    }, cell, "profile")
+    assert launcher.ProductionLauncher._gate_status(profile, cell, "profile") == (
+        "complete", ""
+    )
+    assert launcher.ProductionLauncher._gate_status(
+        {**profile, "handles": profile["handles"] + ["gz-a3:extra"]}, cell, "profile"
     )[0] == "infrastructure_error"
 
 

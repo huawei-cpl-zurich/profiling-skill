@@ -62,7 +62,7 @@ BENCHMARKS = {
         },
     },
 }
-VALID_ACTIONS = {"measure", "check", "profile"}
+VALID_ACTIONS = {"measure", "check", "profile", "calibrate"}
 VALID_RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
 MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 
@@ -79,9 +79,18 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         return None, response("infrastructure_error", "unsupported controller protocol or action")
     if raw.get("benchmark") != benchmark:
         return None, response("infrastructure_error", "request benchmark does not match adapter")
-    if raw.get("device") != spec["device"]:
-        return None, response("infrastructure_error", "request violates benchmark device binding")
+    if (isinstance(raw.get("device"), bool)
+            or not isinstance(raw.get("device"), int)
+            or raw["device"] not in range(4)):
+        return None, response("infrastructure_error", "request requires physical device 0-3")
     action = raw["action"]
+    if action == "calibrate":
+        if raw.get("phase") not in {"before", "after"}:
+            return None, response("infrastructure_error", "calibration phase must be before or after")
+        if (isinstance(raw.get("wave"), bool) or not isinstance(raw.get("wave"), int)
+                or raw["wave"] < 1):
+            return None, response("infrastructure_error", "calibration wave must be positive")
+        return raw, None
     if action in {"measure", "profile"}:
         case = raw.get("case")
         allowed = spec["all_cases"] if action == "measure" else spec["development_cases"]
@@ -124,7 +133,7 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         "profile": "gz-a3",
         "runtime": "py311-torch",
         "benchmark": benchmark,
-        "device": spec["device"],
+        "device": request["device"],
         "logical_device": 0,
         "action": action,
         "candidate": str(candidate.resolve()),
@@ -250,6 +259,26 @@ def main() -> int:
             request, error = validate_request(raw, args.benchmark)
             if error:
                 result = error
+            elif request["action"] == "calibrate":
+                calibration_request = {
+                    "action": "profile", "device": request["device"],
+                    "case": 7, "iteration": 0, "round": request["wave"],
+                }
+                calibration = root / "benchmarks/matmul/calibration.py"
+                job = make_job(calibration_request, "matmul", calibration, root,
+                               "streaming_matmul_add_kernel_mix_aic")
+                # This opaque field deliberately participates in the managed
+                # request digest without changing the runner's profile schema.
+                job["calibration_phase"] = request["phase"]
+                result = invoke(
+                    command, job, args.timeout,
+                )
+                result.update(
+                    action="calibrate", benchmark=args.benchmark,
+                    device=request["device"], phase=request["phase"],
+                    wave=request["wave"],
+                    selector="streaming_matmul_add_kernel_mix_aic",
+                )
             elif not args.candidate.is_file():
                 result = response("compile_error", f"candidate source does not exist: {args.candidate}")
             else:

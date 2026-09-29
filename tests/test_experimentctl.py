@@ -110,6 +110,28 @@ def requests(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines()]
 
 
+def test_calibration_is_forwarded_as_host_owned_operation(tmp_path: Path):
+    process, document, log = run(
+        tmp_path, "calibrate", "--phase", "before", "--wave", "2"
+    )
+    assert process.returncode == 0
+    assert document["operation"] == "calibrate"
+    assert document["latency_us"] == 10
+    assert requests(log) == [{
+        "protocol_version": 1, "action": "calibrate", "cell": "gdn-skill",
+        "benchmark": "gdn", "device": 1, "phase": "before", "wave": 2,
+    }]
+
+
+def test_calibration_candidate_failure_is_infrastructure(tmp_path: Path):
+    process, document, _ = run(
+        tmp_path, "calibrate", "--phase", "after", "--wave", "1", mode="compile"
+    )
+    assert process.returncode == 3
+    assert document["status"] == "infrastructure_error"
+    assert document["failure_type"] == "calibration_failure"
+
+
 def test_rank_is_warmed_repeated_sorted_and_device_bound(tmp_path: Path):
     process, result, log = run(tmp_path, "rank", "--benchmark", "gdn", "--warmups", "2", "--repeats", "3")
     assert process.returncode == 0

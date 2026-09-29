@@ -92,7 +92,8 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
 
 def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     payload = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
-               "device": 3, "phase": "before", "wave": 2}
+               "device": 3, "phase": "before", "wave": 2,
+               "attempt_id": "wave-2-first"}
     result = json.loads(run_backend(tmp_path, payload).stdout)
     assert result["status"] == "ok"
     assert result["action"] == "calibrate"
@@ -100,8 +101,26 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
     assert result["job"]["case"] == 7
     assert result["job"]["calibration_phase"] == "before"
+    assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
     assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+
+
+def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):
+    base = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
+            "device": 3, "phase": "before", "wave": 2}
+    first_root, second_root = tmp_path / "first", tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = json.loads(run_backend(
+        first_root, {**base, "attempt_id": "wave-2-first"}
+    ).stdout)
+    second = json.loads(run_backend(
+        second_root, {**base, "attempt_id": "wave-2-retry"}
+    ).stdout)
+    assert first["job"]["calibration_attempt_id"] == "wave-2-first"
+    assert second["job"]["calibration_attempt_id"] == "wave-2-retry"
+    assert first["job"] != second["job"]
 
 
 def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(

@@ -90,6 +90,10 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         if (isinstance(raw.get("wave"), bool) or not isinstance(raw.get("wave"), int)
                 or raw["wave"] < 1):
             return None, response("infrastructure_error", "calibration wave must be positive")
+        if not isinstance(raw.get("attempt_id"), str) or not raw["attempt_id"].strip():
+            return None, response(
+                "infrastructure_error", "calibration attempt identity must be non-empty"
+            )
         return raw, None
     if action in {"measure", "profile"}:
         case = raw.get("case")
@@ -270,6 +274,7 @@ def main() -> int:
                 # This opaque field deliberately participates in the managed
                 # request digest without changing the runner's profile schema.
                 job["calibration_phase"] = request["phase"]
+                job["calibration_attempt_id"] = request["attempt_id"]
                 result = invoke(
                     command, job, args.timeout,
                 )

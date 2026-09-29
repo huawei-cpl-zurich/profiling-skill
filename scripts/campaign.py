@@ -692,12 +692,14 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
             phases = {"before": before[key], "after": after[key]}
             compact = {}
             values = []
+            phase_handles = []
             for phase, evidence in phases.items():
                 result = evidence.get("result", {})
                 latency = result.get("latency_us")
+                handles = result.get("handles", [])
                 compact[phase] = {
                     "status": evidence.get("status"), "latency_us": latency,
-                    "handles": result.get("handles", []),
+                    "handles": handles,
                     "timestamp": evidence.get("timestamp"),
                     "selector": result.get("selector"),
                     "evidence_path": evidence.get("evidence_path"),
@@ -709,6 +711,9 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                     invalid.append(f"device {device} {phase} calibration failed")
                 else:
                     values.append(float(latency))
+                phase_handles.append(set(handles) if isinstance(handles, list) else set())
+            if len(phase_handles) == 2 and phase_handles[0] & phase_handles[1]:
+                invalid.append(f"device {device} calibration reused a durable handle")
             if len(values) == 2:
                 drift = abs(values[1] / values[0] - 1.0)
                 compact["drift_fraction"] = drift

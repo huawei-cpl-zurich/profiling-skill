@@ -619,6 +619,8 @@ def test_calibration_drift_invalidates_whole_wave_as_infrastructure(tmp_path: Pa
     assert ledger["status"] == "needs_reschedule"
     assert set(ledger["reschedule"]) == {cell["cell_id"] for cell in manifest["cells"]}
     assert all(entry["outcome"] == "infra_discarded" for entry in ledger["cells"])
+    assert all("reused a durable handle" in entry["result"]["diagnostics"]
+               for entry in ledger["cells"])
 
 
 @pytest.mark.parametrize(

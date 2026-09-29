@@ -13,7 +13,9 @@ The candidate baselines come from
 `a42c54b916189500e2f7cb47640980f230f2eb65`. The checked-in copies and case
 files live under `benchmarks/gdn` and `benchmarks/bsa`. Every cell for a given
 benchmark starts from the same byte-identical baseline and receives the same
-byte-identical prompt. `scripts/campaign.py` records SHA-256 digests for both
+byte-identical prompt. `prompts/kernel-optimization.md` is the canonical prompt;
+copy it byte-for-byte and never customize it by benchmark or treatment.
+`scripts/campaign.py` records SHA-256 digests for both the prompt and baseline
 in the campaign manifest and checks them before every wave.
 
 The development cases are the five longest cases from three warm-ups and
@@ -103,7 +105,7 @@ host; do not use relative paths.
 ```bash
 python "$ABS_REPOSITORY/scripts/campaign.py" \
   generate-manifest \
-  --prompt /absolute/campaign-inputs/prompt.md \
+  --prompt "$ABS_REPOSITORY/prompts/kernel-optimization.md" \
   --gdn-baseline /absolute/campaign-inputs/baselines/gdn \
   --bsa-baseline /absolute/campaign-inputs/baselines/bsa \
   --matmul-baseline /absolute/campaign-inputs/baselines/matmul \
@@ -115,7 +117,7 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --controller-json '["python","/absolute/approved/profiling-skill/scripts/experimentctl.py","--config","/absolute/campaign-inputs/controller.json","--cell","{cell_id}"]' \
   --output /absolute/campaign-inputs/campaign.json \
   --rounds 3 \
-  --request-budget 12
+  --request-budget 18
 ```
 
 Manifest generation creates a version 2 manifest and a sibling, self-contained
@@ -204,13 +206,18 @@ python "$ABS_REPOSITORY/scripts/campaign.py" run \
 ```
 
 Each cell is one persistent Codex session with exactly three optimization
-rounds, a budget of 12 agent controller requests, and a 60-minute wall-clock
-limit. Thus a successful cell can issue all 12 budgeted agent requests plus
-the two mandatory host-owned terminal gates (14 controller executions total).
-Candidate compilation, runtime, correctness, request-budget, and time-budget
-failures are retained as candidate failures; they do not abort later cells or
-waves. After three successful agent rounds, the host issues two additional
-terminal requests outside the 12-request agent budget. It first runs exactly
+rounds, a budget of 18 billed agent controller requests, and a 60-minute
+wall-clock limit. Local `help` and `budget` requests are free. Invalid
+controller arguments are rejected before billing. Thus a successful cell can
+issue all 18 billed agent requests plus the two mandatory host-owned terminal
+gates (20 billed or host-owned controller executions total), as well as any
+number of free local introspection requests. Candidate compilation, runtime,
+correctness, and time-budget failures are retained as candidate failures; they
+do not abort later cells or waves. Exhausting the request budget is recorded as
+metadata and prevents further agent requests, but does not suppress the
+host-owned terminal gates or invalidate a candidate that passes them. After
+three agent rounds, the host issues two terminal requests outside the
+18-request agent budget. It first runs exactly
 `check --scope full`, which must identify the operation, cell, benchmark, and
 device, report the configured benchmark-specific full case set in order (50
 for GDN/BSA and 10 for matmul), set `passed=true`, and retain
@@ -233,10 +240,12 @@ to profile during its optimization turns.
 
 ## Failures, evidence, and replay
 
-Compilation, runtime, correctness, request-budget, and time-budget failures
-count as candidate failures. Transport or service failures, unhealthy or lost
-devices, model-service failures, and terminal-gate protocol or transport
-failures are infrastructure exclusions. Never manually resubmit merely
+Compilation, runtime, correctness, and time-budget failures count as candidate
+failures. Request-budget exhaustion is retained as experiment metadata; the
+host still judges the frozen submission through its terminal gates. Transport
+or service failures, unhealthy or lost devices, model-service failures, and
+terminal-gate protocol or transport failures are infrastructure exclusions.
+Never manually resubmit merely
 because observing a durable `gz-a3:<job-id>` was interrupted; resume that
 handle through the checked-in profile.
 
@@ -259,7 +268,9 @@ python "$ABS_REPOSITORY/scripts/campaign.py" run \
 The complete evidence set to preserve across the ledger and its referenced
 artifacts is:
 
-- campaign manifest and its recorded hashes, plus the private frozen
+- campaign manifest and its recorded hashes, including the canonical prompt
+  SHA-256, configured request budget, and exact controller-help text or digest,
+  plus the private frozen
   controller bundle, normalized command template, and runtime identity;
 - prompt, baseline, project-skill, and frozen-CANNBot hashes and CANNBot commit;
 - cell, treatment, model configuration, session and attempt IDs;
@@ -270,7 +281,9 @@ artifacts is:
 Replay uses the same frozen directories and campaign manifest with a fresh
 campaign output directory and the same production command. `campaign.py
 preflight` can audit a retained cell sandbox. Compare the hashes that the
-campaign manifest records before aggregating results. The controller config,
+campaign manifest records before aggregating results. Also compare the frozen
+18-request budget and controller-help metadata so a replay cannot silently use
+a different agent-facing protocol. The controller config,
 bundle closure, command template, Python runtime identity, benchmarks, prompt,
 and skill trees are all manifest-bound. Native matmul calibration has passed
 on A3 with its exact selector. The remaining operational gate is successful

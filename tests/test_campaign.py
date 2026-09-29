@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -25,7 +26,7 @@ def tree(path: Path, content: str = "content") -> Path:
     return path
 
 
-def fixture(tmp_path: Path):
+def fixture(tmp_path: Path, request_budget: int = 18):
     tmp_path.mkdir(parents=True, exist_ok=True)
     prompt = tmp_path / "prompt.md"
     prompt.write_bytes((ROOT / "prompts/kernel-optimization.md").read_bytes())
@@ -80,6 +81,7 @@ def fixture(tmp_path: Path):
         manifest_path, prompt, {"gdn": gdn, "bsa": bsa, "matmul": matmul},
         project, guarded, frozen,
         controller_config, controller_command,
+        request_budget=request_budget,
         guarded_revision="b" * 40,
     )
     return manifest, manifest_path
@@ -150,6 +152,33 @@ def test_prepare_cell_copies_exact_inputs_and_treatment_skills(tmp_path: Path):
     assert (sandbox / "workspace" / "config.json").read_text() == "{}"
     assert not (sandbox / ".agents").exists()
     assert not any(path.is_symlink() for path in sandbox.rglob("*"))
+
+
+def test_canonical_prompt_is_identical_in_every_prepared_cell_and_manifest_bound(
+    tmp_path: Path,
+):
+    manifest, _ = fixture(tmp_path / "source", request_budget=18)
+    canonical = ROOT / "prompts/kernel-optimization.md"
+
+    expected = canonical.read_bytes()
+    assert manifest["prompt"]["sha256"] == campaign.digest_file(canonical)
+    assert {cell["request_budget"] for cell in manifest["cells"]} == {18}
+    interface = manifest["controller"]["agent_interface"]
+    encoded_help = json.dumps(
+        interface["help"], sort_keys=True, separators=(",", ":")
+    ).encode()
+    assert interface["request_budget"] == 18
+    assert interface["help"]["billed"] is False
+    assert interface["help_sha256"] == hashlib.sha256(encoded_help).hexdigest()
+
+    delivered = []
+    for cell in manifest["cells"]:
+        sandbox = campaign.prepare_cell(manifest, cell, tmp_path / "runs")
+        metadata = campaign.preflight(manifest, sandbox)
+        delivered.append((sandbox / "PROMPT.md").read_bytes())
+        assert metadata["prompt_sha256"] == manifest["prompt"]["sha256"]
+
+    assert delivered == [expected] * 9
 
 
 def test_prepare_rejects_reused_session_folder(tmp_path: Path):

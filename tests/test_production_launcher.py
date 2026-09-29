@@ -231,6 +231,58 @@ def test_controller_client_forwards_exit_and_streams(tmp_path: Path, capsys):
     assert captured.err == "diagnostic\n"
 
 
+def test_agent_command_matrix_is_exact_and_invalid_combinations_are_free(tmp_path: Path):
+    backend = executable(tmp_path / "backend", "#!/bin/sh\nexit 0\n")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    socket_path = tmp_path / "controller.sock"
+    valid = [
+        ["check", "--scope", "development", "--round", str(round_number)]
+        for round_number in (1, 2)
+    ] + [["check", "--scope", "full", "--round", "3"]] + [
+        ["profile", "--repeats", "3", "--round", str(round_number)]
+        for round_number in (1, 2, 3)
+    ]
+    invalid = [
+        ["check", "--scope", scope, "--round", str(round_number)]
+        for scope in ("development", "full") for round_number in (1, 2, 3)
+        if [scope, round_number] not in [["development", 1], ["development", 2], ["full", 3]]
+    ] + [
+        ["profile", "--repeats", repeats, "--round", round_number]
+        for repeats, round_number in (("2", "1"), ("3", "0"), ("3", "4"))
+    ]
+    with launcher.BudgetController(
+        socket_path, [str(backend)], len(valid), workspace,
+        {"cell_id": "gdn", "device": 0},
+    ) as controller:
+        def request(arguments):
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.connect(str(socket_path))
+                client.sendall(json.dumps({"arguments": arguments}).encode() + b"\n")
+                return json.loads(client.makefile("rb").readline())
+
+        for arguments in invalid:
+            response = request(arguments)
+            assert response["exit_code"] == 4
+            assert json.loads(response["stdout"])["status"] == "config_error"
+        assert controller.used == 0
+        for arguments in valid:
+            assert request(arguments)["exit_code"] == 0
+        assert controller.used == len(valid)
+        assert controller.invalid_requests == len(invalid)
+
+
+def test_launcher_rejects_frozen_controller_or_model_drift(tmp_path: Path):
+    with pytest.raises(launcher.LaunchError, match="controller contract"):
+        launcher_fixture(tmp_path / "interface", agent_interface={
+            **launcher.controller_contract(18), "help_sha256": "0" * 64,
+        })
+    with pytest.raises(launcher.LaunchError, match="model configuration"):
+        launcher_fixture(tmp_path / "model", agent_model={
+            "name": "gpt-5.6-sol", "reasoning_effort": "medium",
+        })
+
+
 def test_three_round_persistent_session_uses_fixed_model_and_prompt(tmp_path: Path, monkeypatch):
     instance = launcher_fixture(tmp_path)
     root = sandbox(tmp_path)
@@ -456,7 +508,10 @@ def test_budget_exhaustion_is_recorded_but_terminal_gates_still_decide(tmp_path:
         def __enter__(self): return self
         def __exit__(self, *args): pass
 
+    codex_calls = 0
+
     def fake_run(argv, **kwargs):
+        nonlocal codex_calls
         if "sh" in argv[-3:]:
             return subprocess.CompletedProcess(argv, 0, "", "")
         if argv[-3:] == ["check", "--scope", "full"]:
@@ -472,7 +527,10 @@ def test_budget_exhaustion_is_recorded_but_terminal_gates_still_decide(tmp_path:
                           for case in [40, 49, 47, 46, 45]],
             }, production_cell("gdn"), "profile")
             return subprocess.CompletedProcess(argv, 0, json.dumps(document), "")
+        codex_calls += 1
         event = json.dumps({"type": "thread.started", "thread_id": "budget-thread"}) + "\n"
+        if codex_calls == 2:
+            return subprocess.CompletedProcess(argv, 17, event, "agent process failed")
         return subprocess.CompletedProcess(argv, 0, event, "")
 
     monkeypatch.setattr(launcher, "BudgetController", ExhaustedBudget)
@@ -486,6 +544,9 @@ def test_budget_exhaustion_is_recorded_but_terminal_gates_still_decide(tmp_path:
     assert result["controller_usage"]["over_budget_requests"] == 1
     assert result["controller_requests"] == 20
     assert set(result["terminal_evidence"]) == {"check", "profile"}
+    assert result["rounds_completed"] == 1
+    assert result["exit_code"] == 17
+    assert result["turns"][-1]["stderr"] == "agent process failed"
 
 
 def test_terminal_gate_requires_exact_identity_and_case_sequences():

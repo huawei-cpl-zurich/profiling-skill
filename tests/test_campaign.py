@@ -118,6 +118,9 @@ def test_manifest_binds_agent_help_and_budget_and_rejects_drift(tmp_path: Path):
     assert interface["help"]["operation"] == "help"
     assert interface["help"]["billed"] is False
     assert len(interface["help_sha256"]) == 64
+    assert manifest["controller"]["agent_model"] == {
+        "name": "gpt-5.6-sol", "reasoning_effort": "low",
+    }
     campaign.verify_controller_schema(manifest)
 
     interface["help"]["usage"] += "drift"
@@ -397,6 +400,8 @@ def test_run_cli_uses_private_frozen_controller_bundle(
     assert observed["command"][0] == campaign.shutil.which(sys.executable)
     assert observed["kwargs"]["codex"] == "fake-codex"
     assert observed["kwargs"]["dry_run"] is True
+    assert observed["kwargs"]["agent_interface"] == document["controller"]["agent_interface"]
+    assert observed["kwargs"]["agent_model"] == document["controller"]["agent_model"]
     assert json.loads(capsys.readouterr().out)["status"] == "dry-run"
 
 
@@ -419,7 +424,7 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
         "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
         "--controller-config", str(controller_config),
         "--controller-json", json.dumps(controller_command),
-        "--output", str(output), "--rounds", "3", "--request-budget", "12",
+        "--output", str(output), "--rounds", "3", "--request-budget", "18",
     ])
     assert campaign.main() == 0
     written = json.loads(output.read_text())
@@ -456,16 +461,18 @@ def test_generate_manifest_cli_rejects_non_string_array_controller_json(
     assert not (tmp_path / "campaign.json").exists()
 
 
-def test_manifest_rejects_nonpositive_campaign_limits(tmp_path: Path):
+@pytest.mark.parametrize(("rounds", "budget"), [(0, 18), (3, 0), (3, 12), (2, 18)])
+def test_manifest_rejects_nonproduction_campaign_limits(tmp_path: Path, rounds, budget):
     manifest, _ = fixture(tmp_path)
-    with pytest.raises(campaign.CampaignError, match="must be positive"):
+    with pytest.raises(campaign.CampaignError, match="three rounds and an 18-request budget"):
         campaign.write_manifest(
             tmp_path / "bad.json", Path(manifest["prompt"]["path"]),
             {name: Path(value["path"]) for name, value in manifest["baselines"].items()},
             Path(manifest["skill_sources"]["ascend-profiling"]["path"]),
             Path(manifest["skill_sources"]["triton-guarded-kernel"]["path"]),
             Path(manifest["skill_sources"]["cannbot"]["path"]),
-            tmp_path / "controller.json", [], rounds=0, guarded_revision="b" * 40,
+            tmp_path / "controller.json", [], rounds=rounds, request_budget=budget,
+            guarded_revision="b" * 40,
         )
 
 
@@ -755,6 +762,7 @@ def test_private_bundle_executes_after_relocation_and_ignores_source_mutation(tm
     assert ledger["status"] == "complete"
     assert ledger["controller"]["command_argv"] == manifest["controller"]["command_argv"]
     assert ledger["controller"]["agent_interface"] == manifest["controller"]["agent_interface"]
+    assert ledger["controller"]["agent_model"] == manifest["controller"]["agent_model"]
     assert str(tmp_path) not in json.dumps(ledger["controller"])
 
 

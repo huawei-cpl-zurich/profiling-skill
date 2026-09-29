@@ -28,10 +28,14 @@ class LaunchError(RuntimeError):
 CONTROLLER_USAGE = """usage:
   $EXPERIMENT_CONTROLLER help
   $EXPERIMENT_CONTROLLER budget
-  $EXPERIMENT_CONTROLLER check --scope development --round {1,2,3}
-  $EXPERIMENT_CONTROLLER check --scope full --round {1,2,3}
-  $EXPERIMENT_CONTROLLER profile --repeats 3 --round {1,2,3}
+  $EXPERIMENT_CONTROLLER check --scope development --round 1
+  $EXPERIMENT_CONTROLLER check --scope development --round 2
+  $EXPERIMENT_CONTROLLER check --scope full --round 3
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round 1
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round 2
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round 3
 """
+AGENT_MODEL = {"name": "gpt-5.6-sol", "reasoning_effort": "low"}
 
 
 def controller_help_payload() -> dict:
@@ -132,8 +136,10 @@ class BudgetController:
         if list(arguments) in (["help"], ["budget"]):
             return None
         if len(arguments) == 5 and arguments[0] == "check":
-            if arguments[1] == "--scope" and arguments[2] in {"development", "full"}:
-                if arguments[3] == "--round" and arguments[4] in {"1", "2", "3"}:
+            scope, round_number = arguments[2], arguments[4]
+            if arguments[1] == "--scope" and arguments[3] == "--round":
+                if ((scope == "development" and round_number in {"1", "2"})
+                        or (scope == "full" and round_number == "3")):
                     return None
         if len(arguments) == 5 and arguments[:3] == ["profile", "--repeats", "3"]:
             if arguments[3] == "--round" and arguments[4] in {"1", "2", "3"}:
@@ -198,7 +204,9 @@ class ProductionLauncher:
     def __init__(self, controller_command: Sequence[str], *, codex: str = "codex",
                  bwrap: str = "bwrap", auth_home: Path | None = None,
                  timeout_seconds: int = 3600, forbidden_paths: Sequence[Path] = (),
-                 dry_run: bool = False, resolv_conf: Path = Path("/etc/resolv.conf")):
+                 dry_run: bool = False, resolv_conf: Path = Path("/etc/resolv.conf"),
+                 agent_interface: dict | None = None,
+                 agent_model: dict | None = None):
         self.controller_command = tuple(controller_command)
         self.codex = Path(shutil.which(codex) or codex).resolve()
         self.bwrap = shutil.which(bwrap) or bwrap
@@ -207,6 +215,16 @@ class ProductionLauncher:
         self.forbidden_paths = tuple(Path(path).resolve() for path in forbidden_paths)
         self.dry_run = dry_run
         self.resolv_conf = resolv_conf
+        self.agent_interface = agent_interface or controller_contract(18)
+        self.agent_model = agent_model or AGENT_MODEL.copy()
+        try:
+            expected_interface = controller_contract(self.agent_interface["request_budget"])
+        except (KeyError, TypeError) as error:
+            raise LaunchError("frozen agent controller interface is invalid") from error
+        if self.agent_interface != expected_interface:
+            raise LaunchError("live agent controller contract does not match frozen manifest")
+        if self.agent_model != AGENT_MODEL:
+            raise LaunchError("live agent model configuration does not match frozen manifest")
         if not Path(self.bwrap).exists() or not self.codex.exists():
             raise LaunchError("Bubblewrap and Codex executables are required")
         if not (self.auth_home / "auth.json").is_file():
@@ -467,16 +485,18 @@ class ProductionLauncher:
                     codex_args = [
                         "/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config",
                         "--skip-git-repo-check",
-                        "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
-                        "-c", 'model_reasoning_effort="low"', "-C", "/workspace", "-",
+                        "--dangerously-bypass-approvals-and-sandbox", "-m", self.agent_model["name"],
+                        "-c", f'model_reasoning_effort="{self.agent_model["reasoning_effort"]}"',
+                        "-C", "/workspace", "-",
                     ]
                     prompt = (sandbox / "PROMPT.md").read_text()
                 else:
                     codex_args = [
                         "/runtime/node/bin/codex", "exec", "resume", "--json",
                         "--ignore-user-config",
-                        "--dangerously-bypass-approvals-and-sandbox", "-m", "gpt-5.6-sol",
-                        "-c", 'model_reasoning_effort="low"', session_id, "-",
+                        "--dangerously-bypass-approvals-and-sandbox", "-m", self.agent_model["name"],
+                        "-c", f'model_reasoning_effort="{self.agent_model["reasoning_effort"]}"',
+                        session_id, "-",
                     ]
                     prompt = f"Continue optimization round {round_number} using the same experiment contract.\n"
                 try:
@@ -518,7 +538,7 @@ class ProductionLauncher:
         if timed_out:
             result.update(status="candidate_error", failure_type="time_exhausted")
             return result
-        if exit_code != 0 or rounds_completed != 3:
+        if ((exit_code != 0 or rounds_completed != 3) and not result["budget_exhausted"]):
             result.update(status="infrastructure_error", failure_type="codex_process_error")
             return result
 

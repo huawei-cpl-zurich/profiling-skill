@@ -24,6 +24,20 @@ class LaunchError(RuntimeError):
     pass
 
 
+CONTROLLER_USAGE = """usage:
+  $EXPERIMENT_CONTROLLER help
+  $EXPERIMENT_CONTROLLER budget
+  $EXPERIMENT_CONTROLLER check --scope development --round {1,2,3}
+  $EXPERIMENT_CONTROLLER check --scope full --round {1,2,3}
+  $EXPERIMENT_CONTROLLER profile --repeats 3 --round {1,2,3}
+"""
+
+
+def _local_response(document: dict, exit_code: int = 0) -> dict:
+    return {"exit_code": exit_code,
+            "stdout": json.dumps(document, sort_keys=True) + "\n", "stderr": ""}
+
+
 class _RequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         owner: BudgetController = self.server.owner  # type: ignore[attr-defined]
@@ -33,8 +47,28 @@ class _RequestHandler(socketserver.StreamRequestHandler):
             if not isinstance(arguments, list) or not all(isinstance(x, str) for x in arguments):
                 raise ValueError("arguments must be a string array")
             with owner.lock:
-                if owner.used >= owner.limit:
-                    owner.rejected += 1
+                error = owner.validate_agent_arguments(arguments)
+                if arguments == ["help"]:
+                    response = _local_response({
+                        "status": "ok", "operation": "help", "usage": CONTROLLER_USAGE,
+                        "billed": False,
+                    })
+                elif arguments == ["budget"]:
+                    response = _local_response({
+                        "status": "ok", "operation": "budget", "limit": owner.limit,
+                        "used": owner.used, "remaining": owner.limit - owner.used,
+                        "over_budget_requests": owner.over_budget_requests,
+                        "invalid_requests": owner.invalid_requests, "billed": False,
+                    })
+                elif error:
+                    owner.invalid_requests += 1
+                    response = _local_response({
+                        "status": "config_error", "operation": "usage",
+                        "diagnostics": error, "usage": CONTROLLER_USAGE,
+                        "billed": False,
+                    }, 4)
+                elif owner.used >= owner.limit:
+                    owner.over_budget_requests += 1
                     response = {"exit_code": 75, "stdout": "", "stderr": "remote request budget exhausted\n"}
                 else:
                     owner.used += 1
@@ -69,10 +103,34 @@ class BudgetController:
         self.limit = limit
         self.timeout = timeout
         self.used = 0
-        self.rejected = 0
+        self.invalid_requests = 0
+        self.over_budget_requests = 0
         self.lock = threading.Lock()
         self.server: socketserver.UnixStreamServer | None = None
         self.thread: threading.Thread | None = None
+
+    @property
+    def rejected(self) -> int:
+        """Compatibility alias for budget rejections."""
+        return self.over_budget_requests
+
+    @staticmethod
+    def validate_agent_arguments(arguments: Sequence[str]) -> str | None:
+        """Accept only the documented agent API; host gates bypass this endpoint."""
+        if list(arguments) in (["help"], ["budget"]):
+            return None
+        if len(arguments) == 5 and arguments[0] == "check":
+            if arguments[1] == "--scope" and arguments[2] in {"development", "full"}:
+                if arguments[3] == "--round" and arguments[4] in {"1", "2", "3"}:
+                    return None
+        if len(arguments) == 5 and arguments[:3] == ["profile", "--repeats", "3"]:
+            if arguments[3] == "--round" and arguments[4] in {"1", "2", "3"}:
+                return None
+        forbidden = {"--config", "--cell", "--candidate", "--device"}
+        found = sorted({item.split("=", 1)[0] for item in arguments} & forbidden)
+        if found:
+            return f"host-bound arguments are forbidden: {', '.join(found)}"
+        return "unsupported controller command or arguments"
 
     def map_arguments(self, arguments: Sequence[str]) -> list[str]:
         """Translate only sandbox-workspace paths into this cell's host tree."""
@@ -300,7 +358,7 @@ class ProductionLauncher:
     @staticmethod
     def _candidate_failure_type(evidence: dict) -> str:
         failure = evidence.get("result", {}).get("failure_type")
-        if failure in {"compile_error", "runtime_error", "correctness_error"}:
+        if failure in {"submission_error", "compile_error", "runtime_error", "correctness_error"}:
             return failure
         return "runtime_error"
 
@@ -356,8 +414,8 @@ class ProductionLauncher:
         return evidence
 
     def launch(self, sandbox: Path, cell: dict) -> dict:
-        if cell.get("rounds") != 3 or cell.get("request_budget") != 12:
-            raise LaunchError("production cells require three rounds and a 12-request budget")
+        if cell.get("rounds") != 3 or cell.get("request_budget") != 18:
+            raise LaunchError("production cells require three rounds and an 18-request budget")
         started = time.monotonic()
         deadline = started + self.timeout_seconds
         attempt_id = f"attempt-{uuid.uuid4().hex}"
@@ -366,7 +424,7 @@ class ProductionLauncher:
             self._environment_preflight(sandbox)
             return {
                 "exit_code": 0, "dry_run": True, "rounds": 3, "rounds_completed": 0,
-                "request_budget": 12,
+                "request_budget": 18,
                 "status": "dry_run",
                 "attempt_id": attempt_id,
                 "prompt_sha256": __import__("hashlib").sha256(
@@ -382,7 +440,7 @@ class ProductionLauncher:
         outputs: list[dict] = []
         timed_out = False
         with BudgetController(
-            socket_path, self.controller_command, 12, sandbox / "workspace", cell,
+            socket_path, self.controller_command, 18, sandbox / "workspace", cell,
         ) as controller:
             self._preflight(base, socket_dir)
             session_id = ""
@@ -436,11 +494,17 @@ class ProductionLauncher:
             "agent_controller_requests": controller.used,
             "controller_requests": controller.used, "turns": outputs,
             "elapsed_seconds": time.monotonic() - started, "attempt_id": attempt_id,
+            "controller_usage": {
+                "limit": getattr(controller, "limit", 18), "billed": controller.used,
+                "invalid_requests": getattr(controller, "invalid_requests", 0),
+                "over_budget_requests": getattr(controller, "over_budget_requests",
+                                                getattr(controller, "rejected", 0)),
+            },
+            "budget_exhausted": bool(getattr(controller, "over_budget_requests",
+                                               getattr(controller, "rejected", 0))),
         }
-        if getattr(controller, "rejected", 0) or timed_out:
-            result.update(status="candidate_error",
-                          failure_type=("request_budget_exhausted" if getattr(controller, "rejected", 0)
-                                        else "time_exhausted"))
+        if timed_out:
+            result.update(status="candidate_error", failure_type="time_exhausted")
             return result
         if exit_code != 0 or rounds_completed != 3:
             result.update(status="infrastructure_error", failure_type="codex_process_error")

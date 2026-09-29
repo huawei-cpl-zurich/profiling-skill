@@ -108,7 +108,7 @@ def test_fixed_schedule_has_nine_cells_in_collision_free_four_four_one_waves():
                == set(campaign.TREATMENT_SKILLS)
                for benchmark in campaign.BENCHMARK_DEVICE)
     assert {(c.benchmark, c.treatment): c.device for c in cells} == campaign.CELL_DEVICE
-    assert all(c.rounds == 3 and c.request_budget == 12 for c in cells)
+    assert all(c.rounds == 3 and c.request_budget == 18 for c in cells)
 
 
 def test_prepare_cell_copies_exact_inputs_and_treatment_skills(tmp_path: Path):

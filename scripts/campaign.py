@@ -85,7 +85,7 @@ class CampaignError(RuntimeError):
     pass
 
 
-CANDIDATE_OUTCOMES = {"compile_error", "runtime_error", "correctness_error"}
+CANDIDATE_OUTCOMES = {"submission_error", "compile_error", "runtime_error", "correctness_error"}
 
 
 def classify_outcome(result: dict) -> str:
@@ -350,7 +350,7 @@ class Cell:
     all_cases: list[int]
 
 
-def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
+def cells(rounds: int = 3, request_budget: int = 18) -> list[Cell]:
     result = []
     for wave, pairs in enumerate(WAVES, 1):
         for benchmark, treatment in pairs:
@@ -367,7 +367,7 @@ def cells(rounds: int = 3, request_budget: int = 12) -> list[Cell]:
 def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                    project_skill: Path, guarded_skill: Path, cannbot_freeze: Path,
                    controller_config: Path, controller_command: list[str],
-                   rounds: int = 3, request_budget: int = 12,
+                   rounds: int = 3, request_budget: int = 18,
                    guarded_revision: str = "", calibration_max_drift: float = 0.10) -> dict:
     if rounds < 1 or request_budget < 1:
         raise CampaignError("rounds and request budget must be positive")
@@ -854,7 +854,7 @@ def main() -> int:
                           help="frozen JSON argv; must contain the resolved controller config")
     generate.add_argument("--output", type=Path, required=True)
     generate.add_argument("--rounds", type=int, default=3)
-    generate.add_argument("--request-budget", type=int, default=12)
+    generate.add_argument("--request-budget", type=int, default=18)
     generate.add_argument("--calibration-max-drift", type=float, default=0.10)
     check = sub.add_parser("preflight")
     check.add_argument("--manifest", type=Path, required=True)

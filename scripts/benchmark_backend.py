@@ -63,7 +63,10 @@ BENCHMARKS = {
     },
 }
 VALID_ACTIONS = {"measure", "check", "profile", "calibrate"}
-VALID_RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
+VALID_RESULTS = {
+    "ok", "submission_error", "compile_error", "runtime_error",
+    "correctness_error", "infrastructure_error",
+}
 MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 
 
@@ -119,12 +122,12 @@ def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]
     try:
         manifest = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
-        return None, response("compile_error", f"cannot load candidate kernel manifest {path}: {error}")
+        return None, response("submission_error", f"cannot load candidate kernel manifest {path}: {error}")
     if not isinstance(manifest, dict) or manifest.get("schema") != MANIFEST_SCHEMA:
-        return None, response("compile_error", f"candidate kernel manifest requires schema {MANIFEST_SCHEMA!r}")
+        return None, response("submission_error", f"candidate kernel manifest requires schema {MANIFEST_SCHEMA!r}")
     kernel_name = manifest.get("kernel_name")
     if not isinstance(kernel_name, str) or not kernel_name.strip() or kernel_name != kernel_name.strip():
-        return None, response("compile_error", "candidate kernel manifest requires a non-empty trimmed kernel_name")
+        return None, response("submission_error", "candidate kernel manifest requires a non-empty trimmed kernel_name")
     return kernel_name, None
 
 
@@ -285,7 +288,7 @@ def main() -> int:
                     selector="streaming_matmul_add_kernel_mix_aic",
                 )
             elif not args.candidate.is_file():
-                result = response("compile_error", f"candidate source does not exist: {args.candidate}")
+                result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:
                 kernel_name = None
                 if request["action"] == "profile":

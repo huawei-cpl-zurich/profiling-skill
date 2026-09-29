@@ -3,8 +3,10 @@ from __future__ import annotations
 import importlib.util
 import ast
 import json
+import shutil
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -99,6 +101,50 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["job"]["case"] == 7
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
     assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+
+
+def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(
+    tmp_path: Path, monkeypatch,
+):
+    relocated = tmp_path / "staged" / "candidate.py"
+    relocated.parent.mkdir()
+    shutil.copyfile(ROOT / "benchmarks/matmul/calibration.py", relocated)
+    launches = []
+
+    class JitKernel:
+        def __getitem__(self, grid):
+            return lambda *args, **kwargs: launches.append((grid, args, kwargs))
+
+    fake_triton = types.ModuleType("triton")
+    fake_triton.jit = lambda function: JitKernel()
+    fake_triton.cdiv = lambda value, block: (value + block - 1) // block
+    fake_language = types.ModuleType("triton.language")
+    fake_language.constexpr = int
+    fake_language.float32 = "float32"
+    fake_triton.language = fake_language
+    fake_torch = types.ModuleType("torch")
+    fake_torch.float32 = "float32"
+    output = object()
+    fake_torch.empty = lambda *args, **kwargs: output
+    fake_nn = types.ModuleType("torch.nn")
+    fake_nn.Module = object
+    fake_torch.nn = fake_nn
+    monkeypatch.setitem(sys.modules, "triton", fake_triton)
+    monkeypatch.setitem(sys.modules, "triton.language", fake_language)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "torch.nn", fake_nn)
+
+    spec = importlib.util.spec_from_file_location("relocated_calibration", relocated)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    tensor = lambda shape: types.SimpleNamespace(shape=shape, device="npu:0")
+    actual = module.Model().forward(tensor((256, 256)), tensor((256, 256)), tensor((256,)))
+
+    assert actual is output
+    assert module.KERNEL_NAME == "streaming_matmul_add_kernel_mix_aic"
+    assert launches[0][0] == (8, 8)
+    assert launches[0][2] == {"BLOCK_M": 32, "BLOCK_N": 32, "BLOCK_K": 32}
 
 
 def test_pinned_repository_assets_are_exact_and_have_fifty_cases():

@@ -194,8 +194,12 @@ def test_budget_controller_exposes_free_contract_and_enforces_limit(tmp_path: Pa
 
         help_result = request(["help"])
         assert help_result["exit_code"] == 0
-        assert json.loads(help_result["stdout"])["billed"] is False
+        assert json.loads(help_result["stdout"]) == launcher.controller_help_payload()
         assert "--scope development" in json.loads(help_result["stdout"])["usage"]
+        contract = launcher.controller_contract(2)
+        assert contract["help"] == json.loads(help_result["stdout"])
+        assert contract["request_budget"] == 2
+        assert len(contract["help_sha256"]) == 64
         invalid = request(["check", "--config", "secret.json"])
         assert invalid["exit_code"] == 4
         assert json.loads(invalid["stdout"])["status"] == "config_error"

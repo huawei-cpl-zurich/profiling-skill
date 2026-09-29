@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -33,6 +34,20 @@ CONTROLLER_USAGE = """usage:
 """
 
 
+def controller_help_payload() -> dict:
+    """Return the canonical, immutable agent-facing help document."""
+    return {"status": "ok", "operation": "help", "usage": CONTROLLER_USAGE,
+            "billed": False}
+
+
+def controller_contract(request_budget: int) -> dict:
+    """Return reproducibility metadata derived from the live help payload."""
+    help_payload = controller_help_payload()
+    encoded = json.dumps(help_payload, sort_keys=True, separators=(",", ":")).encode()
+    return {"request_budget": request_budget, "help": help_payload,
+            "help_sha256": hashlib.sha256(encoded).hexdigest()}
+
+
 def _local_response(document: dict, exit_code: int = 0) -> dict:
     return {"exit_code": exit_code,
             "stdout": json.dumps(document, sort_keys=True) + "\n", "stderr": ""}
@@ -49,10 +64,7 @@ class _RequestHandler(socketserver.StreamRequestHandler):
             with owner.lock:
                 error = owner.validate_agent_arguments(arguments)
                 if arguments == ["help"]:
-                    response = _local_response({
-                        "status": "ok", "operation": "help", "usage": CONTROLLER_USAGE,
-                        "billed": False,
-                    })
+                    response = _local_response(controller_help_payload())
                 elif arguments == ["budget"]:
                     response = _local_response({
                         "status": "ok", "operation": "budget", "limit": owner.limit,

@@ -111,6 +111,20 @@ def test_fixed_schedule_has_nine_cells_in_collision_free_four_four_one_waves():
     assert all(c.rounds == 3 and c.request_budget == 18 for c in cells)
 
 
+def test_manifest_binds_agent_help_and_budget_and_rejects_drift(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    interface = manifest["controller"]["agent_interface"]
+    assert interface["request_budget"] == 18
+    assert interface["help"]["operation"] == "help"
+    assert interface["help"]["billed"] is False
+    assert len(interface["help_sha256"]) == 64
+    campaign.verify_controller_schema(manifest)
+
+    interface["help"]["usage"] += "drift"
+    with pytest.raises(campaign.CampaignError, match="help hash"):
+        campaign.verify_controller_schema(manifest)
+
+
 def test_prepare_cell_copies_exact_inputs_and_treatment_skills(tmp_path: Path):
     manifest, _ = fixture(tmp_path)
     cell = next(c for c in manifest["cells"] if c["treatment"] == "project-cannbot")
@@ -740,6 +754,7 @@ def test_private_bundle_executes_after_relocation_and_ignores_source_mutation(tm
     )
     assert ledger["status"] == "complete"
     assert ledger["controller"]["command_argv"] == manifest["controller"]["command_argv"]
+    assert ledger["controller"]["agent_interface"] == manifest["controller"]["agent_interface"]
     assert str(tmp_path) not in json.dumps(ledger["controller"])
 
 

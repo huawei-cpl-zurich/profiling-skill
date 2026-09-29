@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -169,8 +170,19 @@ def _parse_controller_command(command: list[str], controller_config: Path) -> tu
     return command[0], script
 
 
+def _agent_interface_contract(request_budget: int) -> dict:
+    """Load metadata from the launcher that serves the actual agent endpoint."""
+    path = Path(__file__).with_name("production_launcher.py")
+    spec = importlib.util.spec_from_file_location("_campaign_production_launcher", path)
+    if spec is None or spec.loader is None:
+        raise CampaignError("cannot load the production controller contract")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.controller_contract(request_budget)
+
+
 def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
-                             command: list[str]) -> dict:
+                             command: list[str], request_budget: int = 18) -> dict:
     executable, script = _parse_controller_command(command, controller_config)
     scripts = script.parent
     repository = scripts.parent
@@ -230,7 +242,8 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
         binding = {"bundle": bundle_name, "files": files,
                    "command_argv": template,
                    "command_sha256": hashlib.sha256(encoded).hexdigest(),
-                   "runtime": _runtime_identity(executable)}
+                   "runtime": _runtime_identity(executable),
+                   "agent_interface": _agent_interface_contract(request_budget)}
         os.replace(temporary, destination)
         return binding
     finally:
@@ -410,7 +423,9 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                 "freeze_sha256": digest_file(freeze_file),
             },
         },
-        "controller": freeze_controller_bundle(path, controller_config, controller_command),
+        "controller": freeze_controller_bundle(
+            path, controller_config, controller_command, request_budget
+        ),
         "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
         "max_parallel": 4,
         "calibration": {"devices": [0, 1, 2, 3], "case": 7,
@@ -433,7 +448,10 @@ def verify_controller_schema(manifest: dict, allow_unbound: bool = False) -> dic
             return None
         raise CampaignError("production requires a version 2 controller-bound manifest")
     controller = manifest["controller"]
-    required = {"bundle", "files", "command_argv", "command_sha256", "runtime"}
+    required = {
+        "bundle", "files", "command_argv", "command_sha256", "runtime",
+        "agent_interface",
+    }
     if set(controller) != required:
         raise CampaignError("controller binding schema is incomplete")
     if Path(controller["bundle"]).name != controller["bundle"]:
@@ -441,6 +459,19 @@ def verify_controller_schema(manifest: dict, allow_unbound: bool = False) -> dic
     encoded = json.dumps(controller["command_argv"], separators=(",", ":")).encode()
     if hashlib.sha256(encoded).hexdigest() != controller["command_sha256"]:
         raise CampaignError("controller command hash does not match its template")
+    interface = controller["agent_interface"]
+    if not isinstance(interface, dict) or set(interface) != {
+        "request_budget", "help", "help_sha256"
+    }:
+        raise CampaignError("agent controller interface schema is incomplete")
+    help_encoded = json.dumps(
+        interface["help"], sort_keys=True, separators=(",", ":")
+    ).encode()
+    if hashlib.sha256(help_encoded).hexdigest() != interface["help_sha256"]:
+        raise CampaignError("agent controller help hash does not match its payload")
+    budgets = {cell.get("request_budget") for cell in manifest.get("cells", [])}
+    if budgets and budgets != {interface["request_budget"]}:
+        raise CampaignError("agent controller budget does not match campaign cells")
     return controller
 
 
@@ -492,7 +523,8 @@ def stage_controller(manifest: dict, manifest_path: Path, campaign_root: Path,
                .replace("{bundle}", str(evidence.resolve()))
                for argument in binding["command_argv"]]
     ledger_binding = {"files": binding["files"], "command_argv": binding["command_argv"],
-                      "command_sha256": binding["command_sha256"], "runtime": runtime}
+                      "command_sha256": binding["command_sha256"], "runtime": runtime,
+                      "agent_interface": binding["agent_interface"]}
     return command, ledger_binding
 
 

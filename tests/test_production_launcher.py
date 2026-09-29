@@ -286,6 +286,8 @@ def test_launcher_rejects_frozen_controller_or_model_drift(tmp_path: Path):
 def test_three_round_persistent_session_uses_fixed_model_and_prompt(tmp_path: Path, monkeypatch):
     instance = launcher_fixture(tmp_path)
     root = sandbox(tmp_path)
+    canonical_prompt = (ROOT / "prompts/kernel-optimization.md").read_text()
+    (root / "PROMPT.md").write_text(canonical_prompt)
     cell = production_cell()
     calls = []
     budget_limits = []
@@ -328,7 +330,23 @@ def test_three_round_persistent_session_uses_fixed_model_and_prompt(tmp_path: Pa
     result = instance.launch(root, cell)
     codex_calls = [call for call in calls if "/runtime/node/bin/codex" in call[0]]
     assert len(codex_calls) == 3
-    assert codex_calls[0][1]["input"] == "identical prompt\n"
+    assert codex_calls[0][1]["input"] == canonical_prompt
+    assert (
+        "This invocation is Round 1 only. Execute only Round 1 now, then stop "
+        "and return\ncontrol to the host. Do not begin or perform Round 2 or "
+        "Round 3 in this turn."
+    ) in codex_calls[0][1]["input"]
+    assert codex_calls[1][1]["input"] == (
+        "Continue optimization Round 2 using the same experiment contract. "
+        "Execute only Round 2 now, then stop and return control to the host. "
+        "Do not begin or perform any later round in this turn.\n"
+    )
+    assert codex_calls[2][1]["input"] == (
+        "Continue optimization Round 3 using the same experiment contract. "
+        "Execute only Round 3 now, then stop and return control to the host. "
+        "Do not begin or perform any later round in this turn.\n"
+    )
+    assert "Round 3" not in codex_calls[1][1]["input"]
     assert all("gpt-5.6-sol" in call[0] for call in codex_calls)
     assert all('model_reasoning_effort="low"' in call[0] for call in codex_calls)
     assert all("thread-123" in call[0] for call in codex_calls[1:])

@@ -337,7 +337,8 @@ class ProductionLauncher:
         evidence["evidence_path"] = str(path)
         return evidence
 
-    def calibrate(self, sandbox: Path, cell: dict, phase: str, wave: int) -> dict:
+    def calibrate(self, sandbox: Path, cell: dict, phase: str, wave: int,
+                  attempt_id: str) -> dict:
         """Run one opaque, host-owned calibration through the frozen controller."""
         attempt = sandbox / ".launcher-attempts" / f"calibration-{phase}-{wave}-{cell['device']}"
         attempt.mkdir(parents=True, exist_ok=False)
@@ -347,7 +348,8 @@ class ProductionLauncher:
         }
         command = tuple(part.format_map(fields) for part in self.controller_command)
         evidence = self._terminal_gate(
-            command, ("calibrate", "--phase", phase, "--wave", str(wave)),
+            command, ("calibrate", "--phase", phase, "--wave", str(wave),
+                      "--attempt-id", attempt_id),
             sandbox / "workspace", attempt, "calibrate", self.timeout_seconds, cell,
         )
         evidence["timestamp"] = datetime.now(timezone.utc).isoformat()

@@ -112,7 +112,8 @@ def requests(path: Path) -> list[dict]:
 
 def test_calibration_is_forwarded_as_host_owned_operation(tmp_path: Path):
     process, document, log = run(
-        tmp_path, "calibrate", "--phase", "before", "--wave", "2"
+        tmp_path, "calibrate", "--phase", "before", "--wave", "2",
+        "--attempt-id", "wave-2-first"
     )
     assert process.returncode == 0
     assert document["operation"] == "calibrate"
@@ -120,12 +121,14 @@ def test_calibration_is_forwarded_as_host_owned_operation(tmp_path: Path):
     assert requests(log) == [{
         "protocol_version": 1, "action": "calibrate", "cell": "gdn-skill",
         "benchmark": "gdn", "device": 1, "phase": "before", "wave": 2,
+        "attempt_id": "wave-2-first",
     }]
 
 
 def test_calibration_candidate_failure_is_infrastructure(tmp_path: Path):
     process, document, _ = run(
-        tmp_path, "calibrate", "--phase", "after", "--wave", "1", mode="compile"
+        tmp_path, "calibrate", "--phase", "after", "--wave", "1",
+        "--attempt-id", "wave-1-first", mode="compile"
     )
     assert process.returncode == 3
     assert document["status"] == "infrastructure_error"

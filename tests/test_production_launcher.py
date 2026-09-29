@@ -79,8 +79,11 @@ def test_host_calibration_uses_controller_and_retains_evidence(tmp_path: Path, m
                                     "stderr": ""})()
 
     monkeypatch.setattr(launcher.subprocess, "run", fake_run)
-    evidence = instance.calibrate(root, cell, "before", 2)
-    assert observed["command"][-5:] == ["calibrate", "--phase", "before", "--wave", "2"]
+    evidence = instance.calibrate(root, cell, "before", 2, "wave-2-retry-1")
+    assert observed["command"][-7:] == [
+        "calibrate", "--phase", "before", "--wave", "2",
+        "--attempt-id", "wave-2-retry-1",
+    ]
     assert observed["cwd"] == root / "workspace"
     assert evidence["status"] == "complete"
     assert evidence["result"]["handles"] == ["gz-a3:cal"]

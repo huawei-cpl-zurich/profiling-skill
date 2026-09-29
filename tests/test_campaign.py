@@ -571,8 +571,8 @@ def test_wave_calibrates_all_devices_around_agents_and_retains_records(tmp_path:
     events = []
 
     class CalibratingLauncher(RecordingLauncher):
-        def calibrate(self, sandbox, cell, phase, wave):
-            events.append((phase, wave, cell["device"]))
+        def calibrate(self, sandbox, cell, phase, wave, attempt_id):
+            events.append((phase, wave, cell["device"], attempt_id))
             latency = 10.0 + cell["device"]
             if phase == "after":
                 latency *= 1.05
@@ -609,7 +609,7 @@ def test_calibration_drift_invalidates_whole_wave_as_infrastructure(tmp_path: Pa
     manifest, _ = fixture(tmp_path)
 
     class DriftingLauncher(RecordingLauncher):
-        def calibrate(self, sandbox, cell, phase, wave):
+        def calibrate(self, sandbox, cell, phase, wave, attempt_id):
             latency = 10.0 if phase == "before" else 12.0
             return {"status": "complete", "timestamp": phase, "evidence_path": "/evidence",
                     "result": {"latency_us": latency, "handles": ["gz-a3:cal"],
@@ -621,6 +621,47 @@ def test_calibration_drift_invalidates_whole_wave_as_infrastructure(tmp_path: Pa
     assert all(entry["outcome"] == "infra_discarded" for entry in ledger["cells"])
     assert all("reused a durable handle" in entry["result"]["diagnostics"]
                for entry in ledger["cells"])
+
+
+def test_resume_uses_fresh_calibration_attempt_identity(tmp_path: Path):
+    manifest, _ = fixture(tmp_path)
+    failed_id = "gdn-project-cannbot"
+    identities = []
+
+    class CalibratingLauncher(RecordingLauncher):
+        def __init__(self, fail=False):
+            super().__init__()
+            self.fail = fail
+
+        def calibrate(self, sandbox, cell, phase, wave, attempt_id):
+            identities.append((phase, wave, attempt_id))
+            return {
+                "status": "complete", "timestamp": phase,
+                "evidence_path": f"/{attempt_id}-{phase}.json",
+                "result": {
+                    "latency_us": 10.0,
+                    "handles": [f"gz-a3:{attempt_id}-{phase}-{cell['device']}"],
+                    "selector": "streaming_matmul_add_kernel_mix_aic",
+                },
+            }
+
+        def launch(self, sandbox, cell):
+            if self.fail and cell["cell_id"] == failed_id:
+                return {"status": "infrastructure_error", "diagnostics": "flaky"}
+            return {"status": "complete", "rounds_completed": 3}
+
+    root = tmp_path / "runs"
+    first = run_campaign(manifest, root, CalibratingLauncher(fail=True))
+    assert first["reschedule"] == [failed_id]
+    first_ids = {item[2] for item in identities}
+    identities.clear()
+
+    second = run_campaign(manifest, root, CalibratingLauncher(), resume=True)
+    assert second["status"] == "complete"
+    second_ids = {item[2] for item in identities}
+    assert first_ids.isdisjoint(second_ids)
+    assert len(second_ids) == 1
+    assert {item[0] for item in identities} == {"before", "after"}
 
 
 @pytest.mark.parametrize(

@@ -590,7 +590,8 @@ def preflight(manifest: dict, sandbox: Path) -> dict:
 class Launcher(Protocol):
     def launch(self, sandbox: Path, cell: dict) -> dict: ...
 
-    def calibrate(self, sandbox: Path, cell: dict, phase: str, wave: int) -> dict: ...
+    def calibrate(self, sandbox: Path, cell: dict, phase: str, wave: int,
+                  attempt_id: str) -> dict: ...
 
 
 class CommandLauncher:
@@ -660,14 +661,17 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
         if cell["cell_id"] in target_ids:
             by_wave[cell["wave"]].append(cell)
 
-    def calibrate_wave(sandbox: Path, wave: int, phase: str) -> dict[str, dict]:
+    def calibrate_wave(sandbox: Path, wave: int, phase: str,
+                       attempt_id: str) -> dict[str, dict]:
         representatives = {
             device: next(cell for cell in manifest["cells"] if cell["device"] == device)
             for device in manifest["calibration"]["devices"]
         }
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
-                executor.submit(launcher.calibrate, sandbox, cell, phase, wave): device
+                executor.submit(
+                    launcher.calibrate, sandbox, cell, phase, wave, attempt_id
+                ): device
                 for device, cell in representatives.items()
             }
             records = {}
@@ -732,13 +736,16 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
                 continue
             attempt_root = (Path(tempfile.mkdtemp(prefix="campaign-dry-run-")) if dry_run
                             else root / "attempts" / f"wave-{wave}-{uuid.uuid4().hex}")
+            calibration_attempt_id = attempt_root.name
             prepared = [(cell, prepare_cell(manifest, cell, attempt_root))
                         for cell in by_wave[wave]]
             if len(prepared) > manifest["max_parallel"]:
                 raise CampaignError("wave exceeds max_parallel")
             calibration_before = None
             if not dry_run and hasattr(launcher, "calibrate"):
-                calibration_before = calibrate_wave(prepared[0][1], wave, "before")
+                calibration_before = calibrate_wave(
+                    prepared[0][1], wave, "before", calibration_attempt_id
+                )
             wave_results = []
             before_failed = (calibration_before is not None and any(
                 evidence.get("status") != "complete"
@@ -778,7 +785,9 @@ def run_campaign(manifest: dict, root: Path, launcher: Launcher,
             calibration = None
             calibration_error = None
             if calibration_before is not None:
-                after = calibrate_wave(prepared[0][1], wave, "after")
+                after = calibrate_wave(
+                    prepared[0][1], wave, "after", calibration_attempt_id
+                )
                 calibration, calibration_error = calibration_summary(calibration_before, after)
                 ledger.setdefault("calibrations", {})[str(wave)] = calibration
             for cell, result in wave_results:

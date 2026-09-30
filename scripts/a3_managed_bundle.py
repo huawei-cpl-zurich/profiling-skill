@@ -390,12 +390,12 @@ def command_fetch(args: argparse.Namespace) -> None:
     started = time.monotonic()
     if not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
         raise BundleError("expected result SHA-256 must be 64 lowercase hexadecimal characters")
-    wait_transfer(Path(args.client), args.client_arg, args.handle, args.timeout, args.poll_interval)
     output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
     if output.is_file() and sha256_file(output) == args.expected_sha256:
-        print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "expected_sha256": args.expected_sha256, "output": str(output), "state": "succeeded", "reused": True, "phase": "download-fetch", "phase_timings_seconds": {"observe_fetch_verify": round(time.monotonic() - started, 6)}}).decode(), end="")
+        print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "expected_sha256": args.expected_sha256, "output": str(output), "state": "succeeded", "reused": True, "phase": "download-local-reuse", "diagnostics": "existing output matched expected SHA-256; remote observation was not required", "phase_timings_seconds": {"local_verify": round(time.monotonic() - started, 6)}}).decode(), end="")
         return
+    wait_transfer(Path(args.client), args.client_arg, args.handle, args.timeout, args.poll_interval)
+    output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(prefix=f".{output.name}.fetch-", dir=output.parent, delete=False) as temporary:
         temporary_path = Path(temporary.name)
     try:

@@ -359,17 +359,20 @@ def test_atomic_json_uses_unique_temporary_paths_under_concurrency(tmp_path: Pat
     assert not list(tmp_path.glob(".receipt.json.*.tmp"))
 
 
-def test_fetch_reuses_digest_verified_existing_output(tmp_path: Path) -> None:
+def test_fetch_reuses_digest_verified_existing_output_without_remote_observation(tmp_path: Path) -> None:
     client, log = fake_client(tmp_path)
     output = tmp_path / "result.tar"
     output.write_bytes(b"result")
     expected = BUNDLE.sha256_file(output)
-    result = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--expected-sha256", expected, "--poll-interval", "0.01"], {**os.environ, "FAKE_LOG": str(log), "FAKE_FETCH": "different"})
+    result = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--expected-sha256", expected, "--poll-interval", "0.01"], {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "observer-error", "FAKE_FETCH": "different"})
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)["reused"] is True
+    response = json.loads(result.stdout)
+    assert response["reused"] is True
+    assert response["phase"] == "download-local-reuse"
+    assert "remote observation was not required" in response["diagnostics"]
+    assert "local_verify" in response["phase_timings_seconds"]
     assert output.read_bytes() == b"result"
-    calls = [json.loads(line) for line in log.read_text().splitlines()]
-    assert [call[:2] for call in calls] == [["transfer", "status"]]
+    assert not log.exists()
 
 
 def test_identical_concurrent_download_requests_submit_once(tmp_path: Path) -> None:

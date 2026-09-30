@@ -7,6 +7,7 @@ import os
 import stat
 import subprocess
 import tarfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -324,3 +325,69 @@ def test_fetch_hash_mismatch_does_not_publish_output(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "fetched result SHA-256 mismatch" in result.stderr
     assert not output.exists()
+
+
+def test_atomic_json_uses_unique_temporary_paths_under_concurrency(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    destination = tmp_path / "receipt.json"
+    barrier = threading.Barrier(2)
+    original = BUNDLE.os.replace
+
+    def synchronized_replace(source, target):
+        barrier.wait(timeout=2)
+        original(source, target)
+
+    monkeypatch.setattr(BUNDLE.os, "replace", synchronized_replace)
+    failures = []
+
+    def publish(value):
+        try:
+            BUNDLE.atomic_json(destination, value)
+        except Exception as error:  # pragma: no cover - asserted below
+            failures.append(error)
+
+    threads = [threading.Thread(target=publish, args=({"writer": writer},)) for writer in (1, 2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert not failures
+    assert json.loads(destination.read_text()) in ({"writer": 1}, {"writer": 2})
+    assert not list(tmp_path.glob(".receipt.json.*.tmp"))
+
+
+def test_fetch_reuses_digest_verified_existing_output(tmp_path: Path) -> None:
+    client, log = fake_client(tmp_path)
+    output = tmp_path / "result.tar"
+    output.write_bytes(b"result")
+    expected = BUNDLE.sha256_file(output)
+    result = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--expected-sha256", expected, "--poll-interval", "0.01"], {**os.environ, "FAKE_LOG": str(log), "FAKE_FETCH": "different"})
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["reused"] is True
+    assert output.read_bytes() == b"result"
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [call[:2] for call in calls] == [["transfer", "status"]]
+
+
+def test_identical_concurrent_download_requests_submit_once(tmp_path: Path) -> None:
+    client, log = fake_client(tmp_path)
+    receipt = tmp_path / "download.json"
+    digest = "a" * 64
+    expected = BUNDLE.hashlib.sha256(b"result").hexdigest()
+    command = ["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", f"results/profiling-workloads/{digest}/result.tar", "--expected-sha256", expected, "--receipt", str(receipt), "--poll-interval", "0.01"]
+    env = {**os.environ, "FAKE_LOG": str(log)}
+    barrier = threading.Barrier(3)
+    results = []
+
+    def request():
+        barrier.wait(timeout=2)
+        results.append(run_cli(command, env))
+
+    threads = [threading.Thread(target=request) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait(timeout=2)
+    for thread in threads:
+        thread.join()
+    assert all(result.returncode == 0 for result in results)
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert sum(call[:2] == ["transfer", "download"] for call in calls) == 1

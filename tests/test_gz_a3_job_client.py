@@ -152,16 +152,18 @@ elif action == "run-bundle":
  job=json.loads((root/"job.json").read_text()); mode=os.environ.get("FAKE_MODE","ok")
  identity={k:job[k] for k in ("benchmark","action","device")}
  if job["action"]=="check": identity.update(cases=job["cases"],scope=job["scope"])
+ elif job["action"]=="profile": identity.update(cases=job["cases"],repeats=job["repeats"])
  else: identity["case"]=job["case"]
  if job["action"]=="measure": identity["phase"]=job["phase"]
  if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"])
  out=Path(os.environ["FAKE_OUT"]); out.mkdir(exist_ok=True)
- result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok"}
+ rows=[{"case":case,"samples_us":[7.0,7.5,8.0],"median_us":7.5} for case in job.get("cases",[])]
+ result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok","profile_cases":rows}
  if job["action"]=="measure": result["latency_us"]=10.0
  (out/"response.json").write_text(json.dumps(result))
  if job["action"]=="profile":
   (out/"profile").mkdir(exist_ok=True)
-  (out/"profile/evidence.json").write_text(json.dumps({"status":"success","kernels":[{"name":identity["kernel_name"],"duration_us":{"median":7.5}}]}))
+  (out/"profile/evidence.json").write_text(json.dumps({"status":"success","cases":rows}))
   (out/"profile/msprof.log").write_text("Profiling finished\n")
  archive=Path(os.environ["FAKE_TAR"])
  with tarfile.open(archive,"w") as stream:
@@ -186,7 +188,7 @@ def inputs(tmp_path: Path) -> tuple[dict, dict]:
         "protocol_version": 1, "profile": "gz-a3", "runtime": "py311-torch",
         "benchmark": "gdn", "action": "profile", "device": 0, "logical_device": 0,
         "candidate": str(tmp_path / "candidate.py"), "baseline": str(tmp_path / "baseline.py"),
-        "case_spec": str(tmp_path / "cases.jsonl"), "case": 40, "round": 1,
+        "case_spec": str(tmp_path / "cases.jsonl"), "cases": [40], "repeats": 3, "round": 1,
         "profiling": {"kernel_name": "candidate_kernel"},
     }
     adapter = fake_adapter(tmp_path)
@@ -211,7 +213,7 @@ def test_profile_returns_bound_msprof_evidence_and_handle(tmp_path: Path):
     assert result["status"] == "ok"
     assert result["handle"] == "gz-a3:command-1"
     assert result["kernel_name"] == "candidate_kernel"
-    assert result["latency_us"] == 7.5
+    assert result["profile_cases"][0]["median_us"] == 7.5
     assert result["profile"]["status"] == "success"
     assert Path(result["artifacts"]["msprof_log"]).read_text() == "Profiling finished\n"
 
@@ -231,7 +233,7 @@ def test_adapter_failure_is_infrastructure_and_keeps_identity(tmp_path: Path):
                              capture_output=True, env=config["env"], check=False)
     result = json.loads(process.stdout)
     assert result["status"] == "infrastructure_error"
-    assert (result["benchmark"], result["case"], result["device"]) == ("gdn", 40, 0)
+    assert (result["benchmark"], result["cases"], result["device"]) == ("gdn", [40], 0)
     assert "managed adapter unavailable" in result["diagnostics"]
 
 

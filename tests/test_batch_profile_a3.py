@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -8,6 +9,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DRIVER = ROOT / "scripts/batch_profile_a3.py"
+CLIENT = ROOT / "scripts/gz_a3_job_client.py"
+
+
+def load_client():
+    spec = importlib.util.spec_from_file_location("gz_a3_job_client_batch", CLIENT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
 
 
 def fixture(tmp_path: Path, mode: str = "ok") -> tuple[list[str], Path, Path]:
@@ -67,6 +77,13 @@ def test_batch_profiles_ordered_matrix_and_returns_compact_evidence(tmp_path: Pa
         (7, 0), (7, 1), (7, 2), (9, 0), (9, 1), (9, 2),
     ]
     assert len((output / "msprof.log").read_text()) < 64 * 1024
+
+    # Exercise the production client's wire validation against artifacts made
+    # by the real batch driver, rather than a separately maintained fixture.
+    client = load_client()
+    client.attach_profile_evidence(result, output / "evidence.json")
+    assert result["cases"] == [7, 9]
+    assert result["profile"]["cases"] == result["profile_cases"]
 
 
 def test_batch_preserves_candidate_failure_and_partial_evidence(tmp_path: Path):

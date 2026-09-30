@@ -133,7 +133,7 @@ def test_protocol_v1_default_tolerance_and_reference_setup_failure(monkeypatch, 
 
 def fake_adapter(tmp_path: Path) -> Path:
     path = tmp_path / "adapter.py"
-    path.write_text(r'''#!/usr/bin/env python3
+    path.write_text(r"""#!/usr/bin/env python3
 import hashlib, json, os, shutil, sys, tarfile
 from pathlib import Path
 args=sys.argv[1:]
@@ -176,7 +176,59 @@ elif action == "run-bundle":
  receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"run","state":"succeeded","command_handle":handle,"result_sha256":sha,"result_path":"results/x/result.tar"}))
 elif action == "fetch-bundle-result":
  shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
+""")
+    path.chmod(0o755)
+    return path
+
+
+def executing_compile_adapter(tmp_path: Path) -> Path:
+    """Adapter double which packages results only when the payload exits zero."""
+    path = tmp_path / "executing-adapter.py"
+    path.write_text(r"""#!/usr/bin/env python3
+import hashlib, json, os, shutil, subprocess, sys, tarfile
+from pathlib import Path
+args=sys.argv[1:]
+action=next(x for x in ("stage","run-bundle","fetch-bundle-result") if x in args)
+def value(name): return args[args.index(name)+1]
+if action == "stage":
+ root=Path(value("--source-root")); receipt=Path(value("--receipt"))
+ fake=root/"profile_a3.py"
+ fake.write_text(r'''#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+args=sys.argv[1:]
+def value(name): return args[args.index(name)+1]
+out=Path(value("--output")); out.mkdir(parents=True)
+job=json.loads(Path(value("--job")).read_text())
+Path(args[-1]).write_text(json.dumps({"status":"compile_error","diagnostics":"NameError from candidate.py",
+ "benchmark":job["benchmark"],"action":"profile","device":job["device"],"case":job["case"],
+ "round":job["round"],"kernel_name":job["profiling"]["kernel_name"]}))
+(out/"evidence.json").write_text(json.dumps({"status":"failure"}))
+(out/"msprof.log").write_text("compile failed\n")
+raise SystemExit(1)
 ''')
+ receipt.write_text(json.dumps({"state":"succeeded","root_digest":"x"}))
+ Path(os.environ["FAKE_ROOT"]).write_text(str(root))
+elif action == "run-bundle":
+ root=Path(os.environ["FAKE_ROOT"]).read_text(); root=Path(root)
+ out=Path(os.environ["FAKE_OUT"]); out.mkdir()
+ command=args[args.index("--")+1:]
+ run=subprocess.run(command,cwd=root,env={**os.environ,"A3_BUNDLE_OUTPUT_DIR":str(out)})
+ receipt=Path(value("--run-receipt"))
+ if run.returncode:
+  receipt.write_text(json.dumps({"state":"failed","command_handle":"command-compile"}))
+  raise SystemExit(1)
+ archive=Path(os.environ["FAKE_TAR"])
+ with tarfile.open(archive,"w") as stream:
+  stream.add(out/"response.json",arcname="response.json")
+  stream.add(out/"profile/evidence.json",arcname="profile/evidence.json")
+  stream.add(out/"profile/msprof.log",arcname="profile/msprof.log")
+ sha=hashlib.sha256(archive.read_bytes()).hexdigest()
+ receipt.write_text(json.dumps({"state":"succeeded","command_handle":"command-compile",
+  "result_sha256":sha,"result_path":"results/x/result.tar"}))
+elif action == "fetch-bundle-result":
+ shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
+""")
     path.chmod(0o755)
     return path
 
@@ -224,6 +276,23 @@ def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
     assert result["status"] == "compile_error"
     assert "NameError" in result["diagnostics"]
     assert result["handle"] == "gz-a3:command-1"
+
+
+def test_batch_compile_failure_is_packaged_and_returned_by_managed_client(tmp_path: Path):
+    job, config = inputs(tmp_path)
+    adapter = executing_compile_adapter(tmp_path)
+    config["command"][3] = json.dumps([str(adapter)])
+    process = subprocess.run(
+        config["command"], input=json.dumps(job), text=True,
+        capture_output=True, env=config["env"], check=False,
+    )
+    result = json.loads(process.stdout)
+
+    assert process.returncode == 2
+    assert result["status"] == "compile_error"
+    assert result["diagnostics"] == "NameError from candidate.py"
+    assert result["handle"] == "gz-a3:command-compile"
+    assert Path(result["artifacts"]["profile"]).is_file()
 
 
 def test_adapter_failure_is_infrastructure_and_keeps_identity(tmp_path: Path):

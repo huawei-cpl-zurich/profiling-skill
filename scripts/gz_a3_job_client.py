@@ -108,6 +108,18 @@ def prepare(job: dict, root: Path, runner: Path, profiler: Path,
     return stage, key
 
 
+def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
+    """Validate and attach the compact evidence emitted by the batch driver."""
+    evidence = json.loads(evidence_path.read_text())
+    if evidence.get("status") != "success":
+        raise ClientError(f"msprof op did not produce valid evidence: {evidence}")
+    # ``cases`` is the immutable input identity on the internal wire;
+    # ``profile_cases`` contains the rows exposed as ``cases`` by experimentctl.
+    if result.get("profile_cases") != evidence.get("cases"):
+        raise ClientError("remote response does not match compact profiling evidence")
+    result["profile"] = evidence
+
+
 def execute(job: dict, args: argparse.Namespace) -> dict:
     here = Path(__file__).resolve().parent
     stage, key = prepare(
@@ -137,7 +149,10 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
         command = (f"python3 batch_profile_a3.py --job job.json --runner runner.py "
                    f"--profiler profile_a3.py --output \"$A3_BUNDLE_OUTPUT_DIR/profile\" "
                    f"--response \"$A3_BUNDLE_OUTPUT_DIR/response.json\" "
-                   f"--kernel-name {shlex.quote(kernel)}")
+                   f"--kernel-name {shlex.quote(kernel)} || {{ "
+                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/response.json\" && "
+                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/profile/evidence.json\" && "
+                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/profile/msprof.log\"; }}")
         results.extend(("profile/evidence.json", "profile/msprof.log"))
     run_cmd = args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-run-{key[:16]}",
                               "run-bundle", "--receipt", str(upload), "--run-receipt", str(run_receipt),
@@ -171,13 +186,7 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
                            "profile": str(result_dir / "profile/evidence.json") if job["action"] == "profile" else None,
                            "msprof_log": str(result_dir / "profile/msprof.log") if job["action"] == "profile" else None}
     if job["action"] == "profile" and result["status"] == "ok":
-        evidence = json.loads((result_dir / "profile/evidence.json").read_text())
-        if evidence.get("status") != "success":
-            raise ClientError(f"msprof op did not produce valid evidence: {evidence}")
-        result["profile"] = evidence
-        if result.get("profile_cases") != evidence.get("cases"):
-            raise ClientError("remote response does not match compact profiling evidence")
-        result["profile"] = evidence
+        attach_profile_evidence(result, result_dir / "profile/evidence.json")
     return result
 
 

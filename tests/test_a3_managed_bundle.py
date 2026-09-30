@@ -252,7 +252,11 @@ def test_failed_transfer_persists_terminal_receipt(tmp_path: Path) -> None:
     result = run_cli(["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "run.sh", "--receipt", str(receipt), "--poll-interval", "0.01"], os.environ.copy())
     assert result.returncode == 2
     assert "ended with status failed" in result.stderr
-    assert json.loads(receipt.read_text())["state"] == "failed"
+    saved = json.loads(receipt.read_text())
+    assert saved["state"] == "failed"
+    assert saved["phase"] == "upload"
+    assert "ended with status failed" in saved["diagnostics"]
+    assert "upload_observe" in saved["phase_timings_seconds"]
 
 
 def test_observation_failure_persists_receipt_and_resume_never_uploads_twice(tmp_path: Path) -> None:

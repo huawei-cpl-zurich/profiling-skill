@@ -317,7 +317,8 @@ def load_matching_receipt(path: Path, expected: dict[str, Any]) -> dict[str, Any
     return receipt
 
 
-def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: list[str], timeout: int, poll: float) -> dict[str, Any]:
+def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: list[str], timeout: int, poll: float, phase: str) -> dict[str, Any]:
+    started = time.monotonic()
     if receipt.get("state") == "succeeded":
         return receipt
     if receipt.get("state") in ("failed", "cancelled", "rejected"):
@@ -325,11 +326,13 @@ def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: l
     try:
         wait_transfer(client, prefix, str(receipt["transfer_handle"]), timeout, poll)
     except TransferEnded as exc:
-        receipt["state"] = exc.state
+        receipt.update(state=exc.state, phase=phase, diagnostics=str(exc),
+                       phase_timings_seconds={f"{phase}_observe": round(time.monotonic() - started, 6)})
         atomic_json(path, receipt)
         raise
-    except ObservationUnavailable:
-        receipt["state"] = "observation-unavailable"
+    except ObservationUnavailable as exc:
+        receipt.update(state="observation-unavailable", phase=phase, diagnostics=str(exc),
+                       phase_timings_seconds={f"{phase}_observe": round(time.monotonic() - started, 6)})
         atomic_json(path, receipt)
         raise
     receipt["state"] = "succeeded"
@@ -353,7 +356,7 @@ def command_stage(args: argparse.Namespace) -> None:
                     raise BundleError("managed upload returned no job id")
                 receipt = {**identity, "transfer_handle": job_id, "state": "submitted", "manifest": manifest}
                 atomic_json(receipt_path, receipt)
-        receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval)
+        receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval, "upload")
         receipt["phase"] = "upload"
         receipt["phase_timings_seconds"] = {"upload_and_observe": round(time.monotonic() - started, 6)}
         atomic_json(receipt_path, receipt)
@@ -376,7 +379,7 @@ def command_request_download(args: argparse.Namespace) -> None:
                 raise BundleError("managed download returned no job id")
             receipt = {**identity, "transfer_handle": job_id, "state": "submitted"}
             atomic_json(receipt_path, receipt)
-    receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval)
+    receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval, "download-request")
     receipt["phase"] = "download-request"
     receipt["phase_timings_seconds"] = {"request_and_observe": round(time.monotonic() - started, 6)}
     atomic_json(receipt_path, receipt)

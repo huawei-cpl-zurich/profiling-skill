@@ -60,10 +60,11 @@ candidate failure.
 
 Classify failures at the dispatch boundary. A transport or preflight failure
 before a remote job exists is infrastructure and may be discarded or retried.
-Once dispatch yields a durable handle, observe that same job; compilation,
-import, launch, runtime, timeout, and correctness failures from that candidate
-are counted candidate outcomes. An interrupted observer is not evidence that
-the job failed and must not cause duplicate submission.
+Once dispatch yields a durable handle, observe that same job. Count compilation,
+import, launch, runtime, correctness, and workload timeouts only when the remote
+harness reports them as terminal candidate outcomes. A controller, transport,
+or observer timeout is not a candidate result: resume observation through the
+same handle, and never submit a duplicate merely because observation stopped.
 
 ## Ascend 950/A5 diagnosis
 

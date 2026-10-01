@@ -60,9 +60,11 @@ candidate failure.
 
 Classify failures by cause as well as dispatch state. Before a remote job
 exists, only transport, service, or host-environment failures are discardable
-infrastructure. Candidate validation, import, and submission failures—including
-missing or malformed files—are counted candidate outcomes even when no handle
-was created. Once dispatch yields a durable handle, observe that same job.
+infrastructure. Candidate-side validation, import, and submission failures
+reported by the controller or harness—including a reported missing
+submission—are counted candidate outcomes even when no handle was created.
+Do not infer validation that the harness does not perform. Once dispatch yields
+a durable handle, observe that same job.
 Count compilation, import, launch, runtime, correctness, and workload timeouts
 when the remote harness reports them as terminal candidate outcomes. A
 controller, transport, or observer timeout is not a candidate result: resume

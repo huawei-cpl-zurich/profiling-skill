@@ -82,6 +82,19 @@ class BzTerminalHook:
         self.campaign_id = campaign_id
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
+        client_request = self._request(request, timeout_seconds)
+        return self._map(self.client.run(client_request))
+
+    def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
+        """Observe the retained terminal job; never stage or dispatch again."""
+        client_request = self._request(request, timeout_seconds)
+        profile = handle.split(":", 1)[0]
+        if profile not in {"bz-a3-1", "bz-a3-2"}:
+            raise DiagnosticError(f"invalid retained BZ handle {handle!r}")
+        client_request["profile"] = profile
+        return self._map(self.client.observe(client_request, handle))
+
+    def _request(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         try:
             _prefix, wave, treatment = cell.split("-", 2)
@@ -90,14 +103,19 @@ class BzTerminalHook:
         workspace = Path(request["workspace"])
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
         placement = self.placements[treatment][min(attempt - 1, 1)]
-        result = self.client.run({
+        if request.get("profile") in {"bz-a3-1", "bz-a3-2"}:
+            placement = {"profile": request["profile"], "device": request["device"]}
+        return {
             "campaign": self.campaign_id, "wave": wave, "cell": treatment,
             **placement, "timeout": min(timeout_seconds, 240),
             "candidate": str(workspace / "candidate.py"),
             "candidate_manifest": str(workspace / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": list(range(7)),
-        })
+        }
+
+    @staticmethod
+    def _map(result: dict) -> dict:
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}

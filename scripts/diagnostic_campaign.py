@@ -37,6 +37,7 @@ class Launcher(Protocol):
 
 class TerminalHook(Protocol):
     def check(self, request: dict, timeout_seconds: int) -> dict: ...
+    def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict: ...
 
 
 def sha256_file(path: Path) -> str:
@@ -98,6 +99,10 @@ class CommandTerminalHook:
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
         return _invoke(self.command, request, timeout_seconds)
+
+    def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
+        return _invoke(self.command, {**request, "operation": "terminal_observe",
+                                     "handle": handle}, timeout_seconds)
 
 
 def validate_manifest(manifest: dict) -> None:
@@ -233,7 +238,11 @@ class DiagnosticCampaign:
                     remaining = self.wave_timeout - (time.monotonic() - wave_started)
                     retry = None
                     if remaining > 0:
-                        retry = self._cell(wave, result["treatment"], 2, remaining)
+                        handle = ((result.get("terminal") or {}).get("handle"))
+                        if isinstance(handle, str) and handle:
+                            retry = self._resume_terminal(result, handle, remaining)
+                        else:
+                            retry = self._cell(wave, result["treatment"], 2, remaining)
                         result["retry"] = retry
                     if retry is None or retry["category"] == "infrastructure":
                         ledger["reschedule"].append(result["cell_id"])
@@ -241,6 +250,31 @@ class DiagnosticCampaign:
                 _atomic_json(self.ledger_path, ledger)
         results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
         _atomic_json(self.ledger_path, ledger)
+
+    def _resume_terminal(self, original: dict, handle: str,
+                         available_seconds: float) -> dict:
+        """Observe one retained terminal job without replaying agent or dispatch."""
+        started = time.time()
+        workspace = (self.root / "cells" / original["cell_id"]
+                     / f"attempt-{original['attempt']}" / "workspace")
+        request = {
+            "protocol_version": 1, "operation": "terminal_observe",
+            "cell_id": original["cell_id"], "workspace": str(workspace),
+            "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+            "profile": original["terminal"].get("profile"),
+            "device": original["terminal"].get("device"),
+        }
+        terminal = self.terminal.resume(
+            request, handle, max(1, int(min(self.cell_timeout, available_seconds))))
+        outcome, category = classify(original["agent"], terminal, workspace)
+        return {
+            **{key: original[key] for key in (
+                "cell_id", "wave", "attempt", "treatment", "candidate_sha256",
+                "prompt_sha256", "model_sha256", "skill_sha256")},
+            "outcome": outcome, "category": category, "agent": original["agent"],
+            "terminal": terminal, "terminal_resumed": True,
+            "started_at_epoch": started, "elapsed_seconds": time.time() - started,
+        }
 
     def run_wave(self, wave: int) -> dict:
         """Run only the next adaptive wave and pause for curated evidence."""

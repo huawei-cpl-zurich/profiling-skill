@@ -61,9 +61,11 @@ class Agent:
 
 
 class Client:
-    def __init__(self, fail_once=False, candidate_failure=False):
+    def __init__(self, fail_once=False, candidate_failure=False, retain_handle=True):
         self.requests = []
+        self.observations = []
         self.fail_once, self.candidate_failure = fail_once, candidate_failure
+        self.retain_handle = retain_handle
         self.failed = set()
 
     def run(self, request):
@@ -71,10 +73,17 @@ class Client:
         key = (request["wave"], request["cell"])
         if self.fail_once and key not in self.failed:
             self.failed.add(key)
-            return {"status": "infrastructure_error", "failure_type": "device_error", "handle": "kept"}
+            handle = f"{request['profile']}:kept" if self.retain_handle else None
+            return {"status": "infrastructure_error", "failure_type": "device_error",
+                    "handle": handle, "profile": request["profile"], "device": request["device"]}
         if self.candidate_failure and request["wave"] == "1" and request["cell"] == "cannbot":
             return {"status": "compile_error", "diagnostics": "full compiler traceback"}
         return {"status": "ok", "passed": True, "artifacts": {"candidate_sha256": "remote"}}
+
+    def observe(self, request, handle):
+        self.observations.append((request, handle))
+        return {"status": "ok", "passed": True, "handle": handle,
+                "profile": request["profile"], "device": request["device"]}
 
 
 def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path):
@@ -95,21 +104,39 @@ def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path
     assert json.loads((tmp_path / "campaign" / "ledger.json").read_text()) == ledger
 
 
-def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
+def test_retained_terminal_job_is_observed_without_duplicate_run_or_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)
     ledger = module.run(config, manifest, placements, tmp_path / "campaign", agent, client)
 
     assert len(agent.requests) == 12
-    assert len(client.requests) == 24
+    assert len(client.requests) == len(client.observations) == 12
     assert not ledger["reschedule"]
     for wave in ledger["waves"]:
         for cell in wave["cells"]:
             assert cell["retry"]["candidate_sha256"] == cell["candidate_sha256"]
-            assert cell["retry"]["agent"]["submission_replayed"] is True
+            assert cell["retry"]["terminal_resumed"] is True
+            assert cell["retry"]["attempt"] == cell["attempt"] == 1
     first = client.requests[0]
-    retry = next(r for r in client.requests if r["wave"] == first["wave"] and r["cell"] == first["cell"] and r is not first)
-    assert (first["profile"], first["device"]) != (retry["profile"], retry["device"])
+    observed, handle = next(item for item in client.observations
+                            if item[0]["wave"] == first["wave"]
+                            and item[0]["cell"] == first["cell"])
+    assert (observed["profile"], observed["device"]) == (first["profile"], first["device"])
+    assert handle == f"{first['profile']}:kept"
+
+
+def test_pre_dispatch_infrastructure_without_handle_replays_frozen_submission(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    agent, client = Agent(), Client(fail_once=True, retain_handle=False)
+    ledger = module.run(config, manifest, placements, tmp_path / "campaign", agent, client)
+
+    assert len(agent.requests) == 12
+    assert len(client.requests) == 24
+    assert not client.observations and not ledger["reschedule"]
+    for wave in ledger["waves"]:
+        for cell in wave["cells"]:
+            assert cell["retry"]["agent"]["submission_replayed"] is True
+            assert cell["retry"]["attempt"] == 2
 
 
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):

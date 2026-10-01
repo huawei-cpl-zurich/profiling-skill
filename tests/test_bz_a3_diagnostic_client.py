@@ -51,6 +51,13 @@ class FakeTransport:
         stdout = "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n"
         return self.module.CommandResult(0, stdout, ""), f"{profile}:job-1"
 
+    def observe(self, profile, handle, timeout):
+        self.observations.append((profile, handle, timeout))
+        payload = {"status": "ok", "passed": True, "diagnostics": "",
+                   "case_evidence": [{"case": 0, "passed": True}]}
+        return self.module.CommandResult(
+            0, "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n", "")
+
 
 def request(tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -160,6 +167,21 @@ def test_adapter_transport_observes_same_handle_after_interruption():
     assert handle == "bz-a3-2:retained-7"
     assert calls[1] == ["adapter", "--profile", "bz-a3-2", "observe", "--handle", handle]
     assert sum("run" in call for call in calls) == 1
+
+
+def test_client_observes_retained_handle_without_upload_or_execution(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    handle = "bz-a3-1:retained-9"
+
+    result = client.observe(value, handle)
+
+    assert result["status"] == "ok" and result["failure_type"] == "success"
+    assert result["handle"] == handle
+    assert transport.observations == [("bz-a3-1", handle, 30)]
+    assert not transport.uploads and not transport.executions
 
 
 def test_remote_script_verifies_both_digests_and_bounds_execution():

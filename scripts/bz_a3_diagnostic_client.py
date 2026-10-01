@@ -214,6 +214,38 @@ class BzA3DiagnosticClient:
             return {"status": "infrastructure_error", "failure_type": "staging_error",
                     "diagnostics": _bounded(str(exc)), "handle": handle, **identity}
 
+    def observe(self, request: dict, handle: str) -> dict:
+        """Observe a previously dispatched job without staging or relaunching it."""
+        identity = {key: request.get(key) for key in
+                    ("campaign", "wave", "cell", "profile", "device")}
+        try:
+            profile = request.get("profile")
+            timeout = request.get("timeout", 180)
+            if profile not in PROFILES or not isinstance(handle, str) or not handle.startswith(profile + ":"):
+                raise DiagnosticError("request_error", "retained handle does not match a BZ profile")
+            if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1 or timeout > 540:
+                raise DiagnosticError("request_error", "timeout must be 1..540 seconds")
+            completed = self.transport.observe(profile, handle, timeout)
+            output = completed.stdout + completed.stderr
+            if completed.returncode == 124:
+                return {"status": "candidate_timeout", "failure_type": "candidate_timeout",
+                        "diagnostics": _bounded(output), "handle": handle, **identity}
+            if completed.returncode:
+                lowered = output.lower()
+                failure = "device_error" if any(
+                    marker in lowered for marker in ("device", "davinci", "npu")) else "transport_error"
+                raise DiagnosticError(failure, _bounded(output), handle)
+            result = _result(completed.stdout)
+            result.update(identity, handle=handle)
+            result["failure_type"] = "success" if result["status"] == "ok" else result["status"]
+            result.pop("host_elapsed_us", None)
+            for evidence in result.get("case_evidence", []):
+                evidence.pop("host_elapsed_us", None)
+            return result
+        except DiagnosticError as exc:
+            return {"status": "infrastructure_error", "failure_type": exc.failure_type,
+                    "diagnostics": _bounded(str(exc)), "handle": exc.handle or handle, **identity}
+
 
 def _remote_script(common: str, common_sha: str, candidate: str, candidate_sha: str,
                    run_root: str, timeout: int, job: dict) -> str:

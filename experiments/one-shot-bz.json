@@ -1,0 +1,11 @@
+{
+  "assets": {
+    "baseline": "benchmarks/matmul/baseline.py",
+    "case_spec": "benchmarks/matmul/cases.jsonl",
+    "runner": "scripts/a3_benchmark_runner.py"
+  },
+  "prompt": "prompts/one-shot-triton.md",
+  "prompt_sha256": "61f09cd5e4d643e84f5f958851e3144aa9cee7f57784b14f16aa325642605c78",
+  "timeouts": {"agent": 360, "cell": 600, "wave": 600},
+  "waves": 4
+}

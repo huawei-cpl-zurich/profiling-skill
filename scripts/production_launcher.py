@@ -374,11 +374,9 @@ class ProductionLauncher:
                    or not isinstance(row.get("samples_us"), list)
                    or len(row["samples_us"]) != 3 for row in rows):
                 return "infrastructure_error", "profile response has incomplete captures"
-            expected_handles = len(expected_cases) * repeats
-            if (not isinstance(handles, list) or len(handles) != expected_handles
-                    or any(not isinstance(handle, str) or not handle for handle in handles)
-                    or len(set(handles)) != expected_handles):
-                return "infrastructure_error", "profile response has incomplete durable handles"
+            if (not isinstance(handles, list) or len(handles) != 1
+                    or not isinstance(handles[0], str) or not handles[0]):
+                return "infrastructure_error", "profile batch requires one durable handle"
         elif document.get("passed") is not True:
             return "infrastructure_error", "full check did not report passed=true"
         elif not isinstance(document.get("handles"), list) or not document["handles"]:

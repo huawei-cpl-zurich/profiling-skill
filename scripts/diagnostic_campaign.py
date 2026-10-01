@@ -132,6 +132,8 @@ def classify(agent: dict, terminal: dict | None, workspace: Path) -> tuple[str, 
         return str(status), "infrastructure"
     if status in OBSERVED:
         return str(status), "observed"
+    if status in COUNTED - {"success"}:
+        return str(status), "counted"
     usage = agent.get("controller_usage")
     expected = ["check", "--scope", "development", "--round", "1"]
     calls = usage.get("calls") if isinstance(usage, dict) else None

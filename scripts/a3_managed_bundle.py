@@ -317,6 +317,24 @@ def load_matching_receipt(path: Path, expected: dict[str, Any]) -> dict[str, Any
     return receipt
 
 
+TERMINAL_STATES = frozenset({"succeeded", "failed", "cancelled", "rejected"})
+
+
+def merge_receipt(path: Path, receipt: dict[str, Any]) -> dict[str, Any]:
+    """Persist an observation without replacing a concurrent terminal result."""
+    identity = {
+        key: receipt[key]
+        for key in ("protocol", "kind", "remote", "root_digest", "archive_sha256", "remote_path", "expected_sha256")
+        if key in receipt
+    }
+    with receipt_lock(path):
+        current = load_matching_receipt(path, identity)
+        if current is not None and current.get("state") in TERMINAL_STATES:
+            return current
+        atomic_json(path, receipt)
+        return receipt
+
+
 def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: list[str], timeout: int, poll: float, phase: str) -> dict[str, Any]:
     started = time.monotonic()
     if receipt.get("state") == "succeeded":
@@ -328,15 +346,27 @@ def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: l
     except TransferEnded as exc:
         receipt.update(state=exc.state, phase=phase, diagnostics=str(exc),
                        phase_timings_seconds={f"{phase}_observe": round(time.monotonic() - started, 6)})
-        atomic_json(path, receipt)
+        receipt = merge_receipt(path, receipt)
+        if receipt.get("state") == "succeeded":
+            return receipt
         raise
     except ObservationUnavailable as exc:
         receipt.update(state="observation-unavailable", phase=phase, diagnostics=str(exc),
                        phase_timings_seconds={f"{phase}_observe": round(time.monotonic() - started, 6)})
-        atomic_json(path, receipt)
+        receipt = merge_receipt(path, receipt)
+        if receipt.get("state") in TERMINAL_STATES:
+            if receipt.get("state") == "succeeded":
+                return receipt
+            raise BundleError(
+                f"managed transfer {receipt['transfer_handle']} already ended with status {receipt['state']}"
+            ) from exc
         raise
     receipt["state"] = "succeeded"
-    atomic_json(path, receipt)
+    receipt = merge_receipt(path, receipt)
+    if receipt.get("state") != "succeeded":
+        raise BundleError(
+            f"managed transfer {receipt['transfer_handle']} already ended with status {receipt['state']}"
+        )
     return receipt
 
 

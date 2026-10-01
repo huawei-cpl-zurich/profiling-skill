@@ -398,3 +398,84 @@ def test_identical_concurrent_download_requests_submit_once(tmp_path: Path) -> N
     assert all(result.returncode == 0 for result in results)
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert sum(call[:2] == ["transfer", "download"] for call in calls) == 1
+
+
+def test_concurrent_observer_error_cannot_replace_terminal_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    receipt_path = tmp_path / "download.json"
+    receipt = {
+        "protocol": BUNDLE.PROTOCOL,
+        "kind": "download",
+        "remote": "a3-gz",
+        "remote_path": f"results/profiling-workloads/{'a' * 64}/result.tar",
+        "expected_sha256": "b" * 64,
+        "transfer_handle": "transfer-123",
+        "state": "submitted",
+    }
+    BUNDLE.atomic_json(receipt_path, receipt)
+    success_persisted = threading.Event()
+    original_atomic_json = BUNDLE.atomic_json
+
+    def tracked_atomic_json(path, value):
+        original_atomic_json(path, value)
+        if value.get("state") == "succeeded":
+            success_persisted.set()
+
+    def conflicting_observation(*_args, **_kwargs):
+        if threading.current_thread().name == "late-error":
+            assert success_persisted.wait(timeout=2)
+            raise BUNDLE.ObservationUnavailable("listener unavailable")
+        return {"status": "succeeded"}
+
+    monkeypatch.setattr(BUNDLE, "atomic_json", tracked_atomic_json)
+    monkeypatch.setattr(BUNDLE, "wait_transfer", conflicting_observation)
+    results = []
+    failures = []
+
+    def observe():
+        try:
+            results.append(
+                BUNDLE.observe_receipt(
+                    dict(receipt), receipt_path, Path("unused"), [], 1, 0, "download-request"
+                )
+            )
+        except Exception as error:  # pragma: no cover - asserted below
+            failures.append(error)
+
+    threads = [
+        threading.Thread(target=observe, name="success"),
+        threading.Thread(target=observe, name="late-error"),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=3)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert not failures
+    assert len(results) == 2
+    assert all(result["state"] == "succeeded" for result in results)
+    assert json.loads(receipt_path.read_text())["state"] == "succeeded"
+
+
+@pytest.mark.parametrize("terminal_state", ["succeeded", "failed", "cancelled", "rejected"])
+def test_receipt_merge_preserves_every_terminal_state(tmp_path: Path, terminal_state: str) -> None:
+    receipt_path = tmp_path / "upload.json"
+    terminal = {
+        "protocol": BUNDLE.PROTOCOL,
+        "kind": "upload",
+        "remote": "a3-gz",
+        "root_digest": "a" * 64,
+        "archive_sha256": "b" * 64,
+        "remote_path": f"incoming/profiling-workloads/{'a' * 64}/bundle.tar",
+        "transfer_handle": "transfer-123",
+        "state": terminal_state,
+    }
+    BUNDLE.atomic_json(receipt_path, terminal)
+    stale_observation = {**terminal, "state": "observation-unavailable"}
+
+    merged = BUNDLE.merge_receipt(receipt_path, stale_observation)
+
+    assert merged["state"] == terminal_state
+    assert json.loads(receipt_path.read_text())["state"] == terminal_state

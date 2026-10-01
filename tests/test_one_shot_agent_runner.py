@@ -327,6 +327,9 @@ def test_real_docker_probe_has_controller_but_no_host_privilege(tmp_path: Path):
         "test ! -e /root/.ssh || exit 23\n"
         "sh -c \"$EXPERIMENT_CONTROLLER help\" >/tmp/help.json || exit 24\n"
         "grep -q '\"operation\": \"help\"' /tmp/help.json || exit 25\n"
+        "! touch /workspace/.agents/skills/ascend-profiling/WRITE-LEAK 2>/dev/null || exit 26\n"
+        "touch /workspace/workspace-is-writable || exit 27\n"
+        "controller profile >/tmp/profile.out 2>/tmp/profile.err; test $? -eq 4 || exit 28\n"
         "printf '%s\\n' '{\"type\":\"turn.completed\"}'\n",
     )
     isolated = module.OneShotRunner(
@@ -339,4 +342,7 @@ def test_real_docker_probe_has_controller_but_no_host_privilege(tmp_path: Path):
     result = isolated.run(request, timeout=30)
     assert result["status"] == "ok", result
     assert result["controller_usage"]["billed"] == 0
+    assert result["controller_usage"]["invalid"] == 1
     assert result["sandbox"]["image_id"] == inspected.stdout.strip()
+    assert Path(request["workspace"], "workspace-is-writable").is_file()
+    assert not Path(runner.skill_sources["ascend-profiling"], "WRITE-LEAK").exists()

@@ -7,6 +7,7 @@ import socket
 import stat
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 
 import pytest
@@ -81,6 +82,28 @@ def fixture(tmp_path: Path):
     return runner, request, client
 
 
+def docker_fixture(tmp_path: Path, monkeypatch, image_id="sha256:frozen",
+                   inspected_image_id=None):
+    runner, request, client = fixture(tmp_path)
+    docker = executable(tmp_path / "docker")
+
+    def inspect(argv, **kwargs):
+        assert argv[1:3] == ["image", "inspect"]
+        return subprocess.CompletedProcess(
+            argv, 0, (inspected_image_id or image_id) + "\n", "",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", inspect)
+    configured = module.OneShotRunner(
+        skill_sources={name: str(path) for name, path in runner.skill_sources.items()},
+        assets=runner.assets, placements=runner.placements, client=client,
+        codex=str(runner.codex), auth_home=runner.auth_home,
+        sandbox_backend="docker", docker=str(docker), docker_image="python:3.10",
+        docker_image_id=image_id,
+    )
+    return configured, request, client
+
+
 def call_socket(socket_path: str, arguments: list[str]) -> dict:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
         sock.connect(socket_path); sock.sendall(json.dumps({"arguments": arguments}).encode() + b"\n")
@@ -111,6 +134,9 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
     assert result["controller_usage"]["billed"] == 1
     assert result["controller_usage"]["calls"] == [{"arguments": module.CHECK}]
     assert result["controller_usage"]["over_budget"] == 1
+    assert result["controller_evidence"] == [{
+        "status": "ok", "diagnostics": "passed", "passed": True,
+    }]
     assert client.requests[0]["cases"] == [1]
     assert client.requests[0]["device"] == 2 and client.requests[0]["profile"] == "bz-a3-1"
     assert client.requests[0]["logical_device"] == 0
@@ -188,3 +214,129 @@ def test_model_service_failure_is_infrastructure(monkeypatch, tmp_path: Path):
                         subprocess.CompletedProcess(argv, 1, "", "API error: service unavailable"))
     result = runner.run(request)
     assert result["status"] == "model_service_error"
+
+
+def test_docker_argv_is_an_explicit_minimal_allowlist(monkeypatch, tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    socket_dir = tmp_path / "socket"; socket_dir.mkdir()
+    workspace = Path(request["workspace"])
+    skill_root = workspace / ".agents/skills"; skill_root.mkdir(parents=True)
+    for name in request["skills"]:
+        (skill_root / name).mkdir()
+    argv = runner._docker_command(
+        workspace, Path(request["prompt"]), socket_dir, request, "frozen-cell",
+    )
+    joined = "\0".join(map(str, argv))
+    assert argv[:3] == [str(runner.docker), "run", "--rm"]
+    assert "--interactive" in argv
+    for item in ("--read-only", "--cap-drop", "ALL", "--pids-limit", "512",
+                 "--memory", "8g", "no-new-privileges"):
+        assert item in argv
+    assert f"type=bind,src={workspace.resolve()},dst=/workspace" in argv
+    assert f"type=bind,src={Path(request['prompt']).resolve()},dst=/experiment/PROMPT.md,readonly" in argv
+    assert f"type=bind,src={runner.auth_home / 'auth.json'},dst=/codex-home/auth.json,readonly" in argv
+    assert any(value.endswith("dst=/usr/local/bin/controller,readonly") for value in argv)
+    for name in request["skills"]:
+        assert (f"type=bind,src={runner.skill_sources[name]},"
+                f"dst=/workspace/.agents/skills/{name},readonly") in argv
+    assert runner.docker_image == argv[-1]
+    assert "/var/run/docker.sock" not in joined
+    assert f"src={ROOT}," not in joined
+    for forbidden in (str(Path.home() / ".agents"), str(Path.home() / ".ssh"),
+                      "reference_repos", "reference-library"):
+        assert forbidden not in joined
+    read_write_binds = [value for value in argv if value.startswith("type=bind")
+                        and not value.endswith(",readonly")]
+    assert read_write_binds == [
+        f"type=bind,src={workspace.resolve()},dst=/workspace",
+        f"type=bind,src={socket_dir.resolve()},dst=/experiment-state",
+    ]
+
+
+def test_docker_rejects_drifted_image_and_symlink_mount(monkeypatch, tmp_path: Path):
+    with pytest.raises(module.RunnerError, match="frozen image ID"):
+        docker_fixture(tmp_path / "drift", monkeypatch, image_id="sha256:expected",
+                       inspected_image_id="sha256:actual")
+
+    runner, request, _ = docker_fixture(tmp_path / "link", monkeypatch)
+    real = Path(request["prompt"])
+    linked = real.with_name("linked-prompt.md"); linked.symlink_to(real)
+    request["prompt"] = str(linked)
+    socket_dir = tmp_path / "link/socket"; socket_dir.mkdir()
+    workspace = Path(request["workspace"])
+    skill_root = workspace / ".agents/skills"; skill_root.mkdir(parents=True)
+    for name in request["skills"]: (skill_root / name).mkdir()
+    with pytest.raises(module.RunnerError, match="must not be a symlink"):
+        runner._docker_command(workspace, linked, socket_dir, request, "cell")
+
+
+def test_docker_timeout_force_removes_named_container(monkeypatch, tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[1:3] == ["rm", "-f"]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"], stderr="turn expired")
+
+    monkeypatch.setattr(module.subprocess, "run", run)
+    result = runner.run(request, timeout=1)
+    assert result["status"] == "timeout"
+    launched = calls[0]
+    name = launched[launched.index("--name") + 1]
+    assert calls[1] == [str(runner.docker), "rm", "-f", name]
+    assert result["sandbox"] == {
+        "backend": "docker", "image": "python:3.10", "image_id": "sha256:frozen",
+    }
+
+
+def test_docker_cancel_force_removes_named_container(monkeypatch, tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if argv[1:3] == ["rm", "-f"]:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(module.subprocess, "run", run)
+    with pytest.raises(KeyboardInterrupt):
+        runner.run(request)
+    name = calls[0][calls[0].index("--name") + 1]
+    assert calls[1] == [str(runner.docker), "rm", "-f", name]
+
+
+def test_real_docker_probe_has_controller_but_no_host_privilege(tmp_path: Path):
+    docker = shutil.which("docker")
+    if not docker:
+        pytest.skip("Docker is unavailable")
+    inspected = subprocess.run(
+        [docker, "image", "inspect", "python:3.10", "--format", "{{.Id}}"],
+        text=True, capture_output=True, check=False,
+    )
+    if inspected.returncode:
+        pytest.skip("the pinned local Python image is unavailable")
+    runner, request, client = fixture(tmp_path)
+    executable(
+        runner._runtime() / "bin/codex",
+        "#!/bin/sh\n"
+        "test \"$CODEX_HOME\" = /codex-home || exit 21\n"
+        "test ! -e /var/run/docker.sock || exit 22\n"
+        "test ! -e /root/.ssh || exit 23\n"
+        "sh -c \"$EXPERIMENT_CONTROLLER help\" >/tmp/help.json || exit 24\n"
+        "grep -q '\"operation\": \"help\"' /tmp/help.json || exit 25\n"
+        "printf '%s\\n' '{\"type\":\"turn.completed\"}'\n",
+    )
+    isolated = module.OneShotRunner(
+        skill_sources={name: str(path) for name, path in runner.skill_sources.items()},
+        assets=runner.assets, placements=runner.placements, client=client,
+        codex=str(runner.codex), auth_home=runner.auth_home,
+        sandbox_backend="docker", docker=docker, docker_image="python:3.10",
+        docker_image_id=inspected.stdout.strip(),
+    )
+    result = isolated.run(request, timeout=30)
+    assert result["status"] == "ok", result
+    assert result["controller_usage"]["billed"] == 0
+    assert result["sandbox"]["image_id"] == inspected.stdout.strip()

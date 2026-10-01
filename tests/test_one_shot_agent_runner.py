@@ -125,7 +125,9 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         checked = call_socket(str(Path(socket_dir) / "controller.sock"), module.CHECK)
         assert checked["exit_code"] == 0
         assert call_socket(str(Path(socket_dir) / "controller.sock"), module.CHECK)["exit_code"] == 75
-        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+        return subprocess.CompletedProcess(
+            argv, 0, "verbose-skill-output\n" * 5000 + '{"type":"turn.completed"}\n', "",
+        )
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)
     result = runner.run(request)
@@ -137,6 +139,7 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
     assert result["controller_evidence"] == [{
         "status": "ok", "diagnostics": "passed", "passed": True,
     }]
+    assert result["stdout"].endswith("[diagnostic truncated]")
     assert client.requests[0]["cases"] == [1]
     assert client.requests[0]["device"] == 2 and client.requests[0]["profile"] == "bz-a3-1"
     assert client.requests[0]["logical_device"] == 0

@@ -58,13 +58,16 @@ compiler excerpt, together with a stable handle that can retrieve the retained
 evidence. Do not move profiler trees or unrestricted logs merely to diagnose a
 candidate failure.
 
-Classify failures at the dispatch boundary. A transport or preflight failure
-before a remote job exists is infrastructure and may be discarded or retried.
-Once dispatch yields a durable handle, observe that same job. Count compilation,
-import, launch, runtime, correctness, and workload timeouts only when the remote
-harness reports them as terminal candidate outcomes. A controller, transport,
-or observer timeout is not a candidate result: resume observation through the
-same handle, and never submit a duplicate merely because observation stopped.
+Classify failures by cause as well as dispatch state. Before a remote job
+exists, only transport, service, or host-environment failures are discardable
+infrastructure. Candidate validation, import, and submission failures—including
+missing or malformed files—are counted candidate outcomes even when no handle
+was created. Once dispatch yields a durable handle, observe that same job.
+Count compilation, import, launch, runtime, correctness, and workload timeouts
+when the remote harness reports them as terminal candidate outcomes. A
+controller, transport, or observer timeout is not a candidate result: resume
+observation through the same handle, and never submit a duplicate merely
+because observation stopped.
 
 ## Ascend 950/A5 diagnosis
 

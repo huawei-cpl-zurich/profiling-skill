@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
 from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
-from diagnostic_campaign import CommandLauncher, DiagnosticCampaign, DiagnosticError, TREATMENTS
+from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
+                                 DiagnosticCampaign, DiagnosticError, TREATMENTS)
 
 
 INFRA_MAP = {
@@ -127,27 +129,84 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
                               wave_timeout=600).run()
 
 
+def _adaptive_config_sha256(config: dict, placements: dict) -> str:
+    frozen = {key: value for key, value in config.items()
+              if key not in {"prompt", "prompt_sha256"}}
+    value = {"config": frozen, "placements": placements}
+    return hashlib.sha256(json.dumps(value, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
+
+
+def run_wave(config: dict, manifest: dict, placements: dict, root: Path, launcher,
+             client: BzA3DiagnosticClient, wave: int) -> dict:
+    """Run exactly one adaptive BZ wave, preserving the fixed-run API."""
+    required = {"prompt", "prompt_sha256", "assets", "timeouts", "waves"}
+    if not required.issubset(config):
+        raise DiagnosticError("integration config is incomplete")
+    if manifest.get("prompt") != config["prompt"] or manifest.get("prompt_sha256") != config["prompt_sha256"]:
+        raise DiagnosticError("manifest does not use the frozen diagnostic prompt")
+    if config["timeouts"] != {"agent": 360, "cell": 600, "wave": 600} or config["waves"] != 4:
+        raise DiagnosticError("adaptive campaign requires four waves and 360/600/600 timeouts")
+    hook = BzTerminalHook(client, placements, config["assets"], root.name)
+    campaign = DiagnosticCampaign(
+        manifest, root, FrozenAgentLauncher(launcher), hook, waves=4,
+        agent_timeout=360, cell_timeout=600, wave_timeout=600,
+        campaign_config_sha256=_adaptive_config_sha256(config, placements),
+    )
+    return campaign.run_wave(wave)
+
+
+def acknowledge_curation(config: dict, manifest: dict, placements: dict,
+                          root: Path, receipt: dict) -> dict:
+    """Validate and persist the out-of-workspace curation receipt."""
+    campaign = DiagnosticCampaign(
+        manifest, root, CommandLauncher(["false"]), CommandTerminalHook(["false"]),
+        campaign_config_sha256=_adaptive_config_sha256(config, placements),
+    )
+    return campaign.acknowledge_curation(receipt)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation"),
+                        default="run-all")
+    parser.add_argument("--wave", type=int)
+    parser.add_argument("--curation-receipt", type=Path)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--placements", type=Path, required=True)
     parser.add_argument("--run-root", type=Path, required=True)
-    parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--agent-command-json", required=True)
+    parser.add_argument("--state-dir", type=Path)
+    parser.add_argument("--agent-command-json")
     parser.add_argument("--remote-command-json", default='["cpl-remote"]')
-    parser.add_argument("--adapter-command-json", required=True)
+    parser.add_argument("--adapter-command-json")
     args = parser.parse_args()
-    commands = [json.loads(value) for value in (args.agent_command_json,
-                args.remote_command_json, args.adapter_command_json)]
-    if any(not isinstance(value, list) or not value for value in commands):
-        parser.error("commands must be non-empty JSON arrays")
-    transport = AdapterTransport(commands[1], commands[2])
-    result = run(load_json(args.config), load_json(args.manifest),
-                 load_json(args.placements), args.run_root, CommandLauncher(commands[0]),
-                 BzA3DiagnosticClient(transport, args.state_dir))
+    config, manifest = load_json(args.config), load_json(args.manifest)
+    placements = load_json(args.placements)
+    if args.action == "acknowledge-curation":
+        if args.curation_receipt is None:
+            parser.error("--curation-receipt is required")
+        result = acknowledge_curation(config, manifest, placements, args.run_root,
+                                      load_json(args.curation_receipt))
+    else:
+        if not args.agent_command_json or not args.adapter_command_json or args.state_dir is None:
+            parser.error("agent, adapter, and state arguments are required to run waves")
+        commands = [json.loads(value) for value in (args.agent_command_json,
+                    args.remote_command_json, args.adapter_command_json)]
+        if any(not isinstance(value, list) or not value for value in commands):
+            parser.error("commands must be non-empty JSON arrays")
+        transport = AdapterTransport(commands[1], commands[2])
+        client = BzA3DiagnosticClient(transport, args.state_dir)
+        if args.action == "run-wave":
+            if args.wave is None:
+                parser.error("--wave is required")
+            result = run_wave(config, manifest, placements, args.run_root,
+                              CommandLauncher(commands[0]), client, args.wave)
+        else:
+            result = run(config, manifest, placements, args.run_root,
+                         CommandLauncher(commands[0]), client)
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["status"] == "complete" and not result["reschedule"] else 2
+    return 0 if result["status"] in {"awaiting_curation", "ready_for_next", "complete"} else 2
 
 
 if __name__ == "__main__":

@@ -164,7 +164,7 @@ class DiagnosticCampaign:
     def __init__(self, manifest: dict, root: Path, launcher: Launcher,
                  terminal: TerminalHook, *, waves: int = 4,
                  agent_timeout: int = 360, cell_timeout: int = 600,
-                 wave_timeout: int = 600):
+                 wave_timeout: int = 600, campaign_config_sha256: str | None = None):
         validate_manifest(manifest)
         if waves != 4 or agent_timeout <= 0 or cell_timeout <= 0 or wave_timeout <= 0:
             raise DiagnosticError("four waves and positive timeouts are required")
@@ -172,7 +172,111 @@ class DiagnosticCampaign:
         self.launcher, self.terminal = launcher, terminal
         self.waves, self.agent_timeout, self.cell_timeout = waves, agent_timeout, cell_timeout
         self.wave_timeout = wave_timeout
+        self.campaign_config_sha256 = campaign_config_sha256
         self.ledger_path = root / "ledger.json"
+
+    def _identity(self) -> dict:
+        return {
+            "model_sha256": self.manifest["model_sha256"],
+            "treatments": self.manifest["treatments"],
+            "campaign_config_sha256": self.campaign_config_sha256,
+        }
+
+    def _new_ledger(self, *, adaptive: bool = False) -> dict:
+        ledger = {
+            "protocol_version": 1, "campaign_id": str(uuid.uuid4()),
+            "status": "ready_for_next" if adaptive else "running",
+            "prompt_sha256": self.manifest["prompt_sha256"],
+            "model_sha256": self.manifest["model_sha256"], "waves": [],
+            "reschedule": [],
+        }
+        if adaptive:
+            ledger["adaptive"] = True
+            ledger["campaign_identity"] = self._identity()
+            ledger["curation_receipts"] = []
+        return ledger
+
+    def _load_adaptive_ledger(self) -> dict:
+        if not self.ledger_path.is_file():
+            return self._new_ledger(adaptive=True)
+        try:
+            ledger = json.loads(self.ledger_path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise DiagnosticError(f"cannot read campaign ledger: {error}") from error
+        if not isinstance(ledger, dict) or ledger.get("adaptive") is not True:
+            raise DiagnosticError("ledger is not an adaptive campaign")
+        if ledger.get("campaign_identity") != self._identity():
+            raise DiagnosticError("model, treatment, skill, or campaign configuration drift")
+        return ledger
+
+    def _run_one_wave(self, ledger: dict, wave: int) -> None:
+        wave_started = time.monotonic()
+        results = []
+        wave_record = {
+            "wave": wave, "cells": results,
+            "prompt": self.manifest["prompt"],
+            "prompt_sha256": self.manifest["prompt_sha256"],
+            "model_sha256": self.manifest["model_sha256"],
+            "skill_sha256": {
+                name: self.manifest["treatments"][name]["skill_sha256"]
+                for name in TREATMENTS
+            },
+        }
+        ledger["waves"].append(wave_record)
+        _atomic_json(self.ledger_path, ledger)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {pool.submit(self._cell, wave, treatment, 1, self.wave_timeout): treatment
+                       for treatment in TREATMENTS}
+            for future in as_completed(futures):
+                result = future.result()
+                if result["category"] == "infrastructure":
+                    remaining = self.wave_timeout - (time.monotonic() - wave_started)
+                    retry = None
+                    if remaining > 0:
+                        retry = self._cell(wave, result["treatment"], 2, remaining)
+                        result["retry"] = retry
+                    if retry is None or retry["category"] == "infrastructure":
+                        ledger["reschedule"].append(result["cell_id"])
+                results.append(result)
+                _atomic_json(self.ledger_path, ledger)
+        results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
+        _atomic_json(self.ledger_path, ledger)
+
+    def run_wave(self, wave: int) -> dict:
+        """Run only the next adaptive wave and pause for curated evidence."""
+        if isinstance(wave, bool) or not isinstance(wave, int) or not 1 <= wave <= self.waves:
+            raise DiagnosticError("wave must be an integer from 1 through 4")
+        ledger = self._load_adaptive_ledger()
+        next_wave = len(ledger["waves"]) + 1
+        if ledger["status"] != "ready_for_next" or wave != next_wave:
+            raise DiagnosticError(f"campaign is not ready for wave {wave}; next wave is {next_wave}")
+        ledger["status"] = "running"
+        _atomic_json(self.ledger_path, ledger)
+        self._run_one_wave(ledger, wave)
+        ledger["status"] = "awaiting_curation"
+        _atomic_json(self.ledger_path, ledger)
+        return ledger
+
+    def acknowledge_curation(self, receipt: dict) -> dict:
+        """Record accepted library evidence and unlock the next adaptive wave."""
+        ledger = self._load_adaptive_ledger()
+        if ledger["status"] != "awaiting_curation":
+            raise DiagnosticError("campaign is not awaiting curation")
+        wave = len(ledger["waves"])
+        required = {"wave", "accepted", "stable_ref_citations", "librarian_query_ids"}
+        citations = receipt.get("stable_ref_citations") if isinstance(receipt, dict) else None
+        queries = receipt.get("librarian_query_ids") if isinstance(receipt, dict) else None
+        if (not isinstance(receipt, dict) or not required.issubset(receipt)
+                or receipt.get("wave") != wave or receipt.get("accepted") is not True
+                or not isinstance(citations, list) or not citations
+                or not all(isinstance(item, str) and item.startswith("ref://") for item in citations)
+                or not isinstance(queries, list) or not queries
+                or not all(isinstance(item, str) and item.strip() for item in queries)):
+            raise DiagnosticError("invalid curation receipt")
+        ledger["curation_receipts"].append(receipt)
+        ledger["status"] = "complete" if wave == self.waves else "ready_for_next"
+        _atomic_json(self.ledger_path, ledger)
+        return ledger
 
     def _cell(self, wave: int, treatment: str, attempt: int,
               available_seconds: float | None = None) -> dict:
@@ -223,33 +327,10 @@ class DiagnosticCampaign:
         }
 
     def run(self) -> dict:
-        ledger = {
-            "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
-            "prompt_sha256": self.manifest["prompt_sha256"],
-            "model_sha256": self.manifest["model_sha256"], "waves": [], "reschedule": [],
-        }
+        ledger = self._new_ledger()
         _atomic_json(self.ledger_path, ledger)
         for wave in range(1, self.waves + 1):
-            wave_started = time.monotonic()
-            results = []
-            wave_record = {"wave": wave, "cells": results}
-            ledger["waves"].append(wave_record)
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                futures = {pool.submit(self._cell, wave, treatment, 1, self.wave_timeout): treatment
-                           for treatment in TREATMENTS}
-                for future in as_completed(futures):
-                    result = future.result()
-                    if result["category"] == "infrastructure":
-                        remaining = self.wave_timeout - (time.monotonic() - wave_started)
-                        if remaining > 0:
-                            retry = self._cell(wave, result["treatment"], 2, remaining)
-                            result["retry"] = retry
-                        if remaining <= 0 or retry["category"] == "infrastructure":
-                            ledger["reschedule"].append(result["cell_id"])
-                    results.append(result)
-                    _atomic_json(self.ledger_path, ledger)
-            results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
-            _atomic_json(self.ledger_path, ledger)
+            self._run_one_wave(ledger, wave)
         ledger["status"] = "complete"
         _atomic_json(self.ledger_path, ledger)
         return ledger

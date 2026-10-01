@@ -213,3 +213,122 @@ def test_ledger_is_valid_at_every_atomic_checkpoint(tmp_path: Path, monkeypatch)
                for state in observed)
     assert observed[-1] == result
     assert json.loads((tmp_path / "run" / "ledger.json").read_text()) == result
+
+
+def receipt(wave: int) -> dict:
+    return {
+        "wave": wave,
+        "accepted": True,
+        "stable_ref_citations": [f"ref://profiling-skill/triton-ascend/debugging/wave-{wave}"],
+        "librarian_query_ids": [f"query-{wave}"],
+    }
+
+
+def test_adaptive_wave_pauses_then_resumes_with_only_prompt_revision(tmp_path: Path):
+    first = manifest(tmp_path / "inputs-1")
+    launcher, terminal = RecordingLauncher(), RecordingTerminal()
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        first, root, launcher, terminal, campaign_config_sha256="config-v1"
+    )
+
+    paused = campaign.run_wave(1)
+    assert paused["status"] == "awaiting_curation"
+    assert len(paused["waves"]) == 1 and len(launcher.requests) == 3
+    assert paused["waves"][0]["prompt_sha256"] == first["prompt_sha256"]
+    ready = campaign.acknowledge_curation(receipt(1))
+    assert ready["status"] == "ready_for_next"
+
+    second = manifest(tmp_path / "inputs-2")
+    Path(second["prompt"]).write_text("revised after curated evidence\n")
+    second["prompt_sha256"] = diagnostic.sha256_file(Path(second["prompt"]))
+    resumed = diagnostic.DiagnosticCampaign(
+        second, root, launcher, terminal, campaign_config_sha256="config-v1"
+    ).run_wave(2)
+
+    assert resumed["status"] == "awaiting_curation"
+    assert [wave["prompt_sha256"] for wave in resumed["waves"]] == [
+        first["prompt_sha256"], second["prompt_sha256"]
+    ]
+    assert len(launcher.requests) == 6
+    assert len([request for request, _ in launcher.requests if request["wave"] == 1]) == 3
+
+
+def test_adaptive_requires_valid_curation_receipt(tmp_path: Path):
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(),
+        RecordingTerminal(), campaign_config_sha256="config-v1"
+    )
+    campaign.run_wave(1)
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation({"wave": 1, "accepted": True,
+                                      "stable_ref_citations": ["/raw/path"],
+                                      "librarian_query_ids": []})
+    with pytest.raises(diagnostic.DiagnosticError, match="not ready"):
+        campaign.run_wave(2)
+
+
+@pytest.mark.parametrize("drift", ["model", "skills", "config"])
+def test_adaptive_rejects_non_prompt_drift(tmp_path: Path, drift: str):
+    original = manifest(tmp_path / "inputs")
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        original, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_config_sha256="config-v1"
+    )
+    campaign.run_wave(1)
+    campaign.acknowledge_curation(receipt(1))
+    changed = dict(original)
+    config_hash = "config-v1"
+    if drift == "model":
+        changed["model"] = {"name": "different-model", "reasoning_effort": "low"}
+        changed["model_sha256"] = hashlib.sha256(json.dumps(
+            changed["model"], sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+    elif drift == "skills":
+        changed["treatments"] = json.loads(json.dumps(original["treatments"]))
+        changed["treatments"]["cannbot"]["skill_sha256"]["ops-profiling"] = "changed"
+    else:
+        config_hash = "config-v2"
+    with pytest.raises(diagnostic.DiagnosticError, match="drift"):
+        diagnostic.DiagnosticCampaign(
+            changed, root, RecordingLauncher(), RecordingTerminal(),
+            campaign_config_sha256=config_hash
+        ).run_wave(2)
+
+
+def test_four_adaptive_waves_finish_only_after_final_curation(tmp_path: Path):
+    launcher, terminal = RecordingLauncher(), RecordingTerminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", launcher, terminal,
+        campaign_config_sha256="config-v1"
+    )
+    for wave in range(1, 5):
+        paused = campaign.run_wave(wave)
+        assert paused["status"] == "awaiting_curation"
+        final = campaign.acknowledge_curation(receipt(wave))
+    assert final["status"] == "complete"
+    assert len(final["waves"]) == len(final["curation_receipts"]) == 4
+    assert len(launcher.requests) == 12
+    with pytest.raises(diagnostic.DiagnosticError, match="not ready"):
+        campaign.run_wave(4)
+
+
+def test_adaptive_checkpoints_are_atomic(tmp_path: Path, monkeypatch):
+    observed = []
+    real_replace = diagnostic.os.replace
+
+    def replace(source, destination):
+        state = json.loads(Path(source).read_text())
+        real_replace(source, destination)
+        observed.append(state)
+
+    monkeypatch.setattr(diagnostic.os, "replace", replace)
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(),
+        RecordingTerminal(), campaign_config_sha256="config-v1"
+    )
+    result = campaign.run_wave(1)
+    assert observed[-1] == result
+    assert any(state["status"] == "running" for state in observed)
+    assert any(len(state["waves"][0]["cells"]) == 1 for state in observed if state["waves"])

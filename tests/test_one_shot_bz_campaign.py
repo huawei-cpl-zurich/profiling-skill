@@ -7,6 +7,8 @@ import sys
 import threading
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -129,3 +131,42 @@ def test_placement_contract_rejects_shared_primary_device(tmp_path: Path):
         assert "distinct physical devices" in str(error)
     else:
         raise AssertionError("shared primary device accepted")
+
+
+def test_adaptive_bz_api_runs_one_wave_and_accepts_external_receipt(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    root, agent, client = tmp_path / "campaign", Agent(), Client()
+    paused = module.run_wave(config, manifest, placements, root, agent, client, 1)
+
+    assert paused["status"] == "awaiting_curation"
+    assert len(paused["waves"]) == 1
+    receipt = {"wave": 1, "accepted": True,
+               "stable_ref_citations": ["ref://profiling-skill/triton-ascend/debugging/wave-1"],
+               "librarian_query_ids": ["query-1"]}
+    ready = module.acknowledge_curation(config, manifest, placements, root, receipt)
+    assert ready["status"] == "ready_for_next"
+
+    revised = tmp_path / "revised.md"
+    revised.write_text("same experiment, curated clarification\n")
+    config = {**config, "prompt": str(revised),
+              "prompt_sha256": hashlib.sha256(revised.read_bytes()).hexdigest()}
+    manifest = {**manifest, "prompt": config["prompt"],
+                "prompt_sha256": config["prompt_sha256"]}
+    resumed = module.run_wave(config, manifest, placements, root, agent, client, 2)
+    assert len(resumed["waves"]) == 2
+    assert len(agent.requests) == 6
+
+
+def test_adaptive_bz_rejects_placement_drift_before_launch(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    root, agent = tmp_path / "campaign", Agent()
+    module.run_wave(config, manifest, placements, root, agent, Client(), 1)
+    module.acknowledge_curation(config, manifest, placements, root, {
+        "wave": 1, "accepted": True,
+        "stable_ref_citations": ["ref://profiling-skill/common/debugging/wave-1"],
+        "librarian_query_ids": ["query-1"],
+    })
+    placements["cannbot"][0]["device"] = 7
+    with pytest.raises(module.DiagnosticError, match="drift"):
+        module.run_wave(config, manifest, placements, root, agent, Client(), 2)
+    assert len(agent.requests) == 3

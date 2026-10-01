@@ -34,6 +34,37 @@ Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, acceptance rules, and interpretation boundaries. Preserve the
 full transcript so compilation and runtime errors remain actionable.
 
+### Development diagnostics before profiling
+
+Make the submission contract explicit before spending a scarce device check.
+Name the candidate module, exported entrypoint, constructor requirements,
+callable signature, output structure, and manifest fields that the harness
+will load. Derive these requirements from the harness or supplied baseline;
+do not silently substitute a convention from another coding skill. A contract
+probe should import and instantiate the candidate locally when that can be
+done without an accelerator.
+
+When a campaign grants one billed development check, enforce that limit in
+the controller. Use the check for the smallest representative case that can
+expose compilation or runtime errors, then let the agent repair files locally
+from the returned diagnostic. Invalid controller invocations may be rejected
+without billing, but they do not justify another device check. The host, not
+the candidate-writing agent, owns the final check across the complete case
+set and records the candidate identity and durable job handle.
+
+Keep bulky compiler and runtime output beside the remote job. Return a compact
+diagnostic containing the failure phase and the actionable exception or
+compiler excerpt, together with a stable handle that can retrieve the retained
+evidence. Do not move profiler trees or unrestricted logs merely to diagnose a
+candidate failure.
+
+Classify failures at the dispatch boundary. A transport or preflight failure
+before a remote job exists is infrastructure and may be discarded or retried.
+Once dispatch yields a durable handle, observe that same job; compilation,
+import, launch, runtime, timeout, and correctness failures from that candidate
+are counted candidate outcomes. An interrupted observer is not evidence that
+the job failed and must not cause duplicate submission.
+
 ## Ascend 950/A5 diagnosis
 
 Use this skill for A5 kernel timing, PMU diagnosis, sampled utilization, or

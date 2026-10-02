@@ -448,6 +448,8 @@ class DiagnosticCampaign:
                 raise DiagnosticError("terminal result receipt request mismatch")
             if record.get("state") == "completed" and isinstance(record.get("result"), dict):
                 return copy.deepcopy(record["result"])
+            if record.get("state") == "uncertain" and isinstance(record.get("result"), dict):
+                return copy.deepcopy(record["result"])
             if record.get("state") != "started":
                 raise DiagnosticError("invalid terminal result receipt")
             persisted_timeout = record.get("timeout_seconds")
@@ -487,16 +489,25 @@ class DiagnosticCampaign:
             result = copy.deepcopy(resume(receipt_request, prior_handle, timeout_seconds))
         else:
             result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
-        retriable_observation = (
-            (result.get("status") == "transport_or_observer_error"
-             and result.get("invocation_timeout") is True)
-            or (bool(result.get("handle")) and (
+        uncertain_dispatch = (
+            result.get("status") == "transport_or_observer_error"
+            and result.get("invocation_timeout") is True
+            and not result.get("handle"))
+        retriable_observation = bool(result.get("handle")) and (
                 result.get("status") == "transport_or_observer_error"
                 or (result.get("status") == "infrastructure_error"
                     and result.get("failure_type") in {
-                        "observer_error", "transport_error"})))
-        )
-        if not retriable_observation:
+                        "observer_error", "transport_error"}))
+        if uncertain_dispatch:
+            result = {**result, "manual_reconciliation_required": True,
+                      "diagnostics": "terminal outcome is uncertain; supply a durable "
+                                     "handle or terminal result before resuming"}
+            _atomic_json(receipt, {"protocol_version": 1, "state": "uncertain",
+                                   "request_sha256": digest,
+                                   "request": receipt_request,
+                                   "timeout_seconds": receipt_timeout,
+                                   "result": result})
+        elif not retriable_observation:
             _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
                                    "request_sha256": digest, "result": result})
         else:
@@ -722,6 +733,7 @@ class DiagnosticCampaign:
                 last = attempts[-1] if attempts else prior.get("retry", prior)
             durable_attempts = []
             started_receipts = []
+            uncertain_receipts = []
             for path in (self.root / "cells" / cell_id).glob(
                     "attempt-*/terminal-result-*.json"):
                 try:
@@ -733,14 +745,10 @@ class DiagnosticCampaign:
                     and isinstance(record.get("request"), dict)
                     and isinstance(record.get("timeout_seconds"), int)
                     and isinstance(record.get("result"), dict)
-                    and ((record["result"].get("status")
-                          == "transport_or_observer_error"
-                          and record["result"].get("invocation_timeout") is True)
-                         or (bool(record["result"].get("handle"))
-                             and (isinstance(record["result"].get(
-                                 "retained_terminal_request"), dict)
-                                  or callable(getattr(
-                                      self.terminal, "resume", None))))))
+                    and bool(record["result"].get("handle"))
+                    and (isinstance(record["result"].get(
+                        "retained_terminal_request"), dict)
+                         or callable(getattr(self.terminal, "resume", None))))
                 if ((record.get("state") == "completed"
                      and isinstance(record.get("result"), dict)) or retriable_started):
                     durable_attempt = int(path.parent.name.removeprefix("attempt-"))
@@ -753,13 +761,41 @@ class DiagnosticCampaign:
                                 and terminal_attempt > 0):
                             started_receipts.append(
                                 (durable_attempt, terminal_attempt, record))
+                if (record.get("state") == "uncertain"
+                        and isinstance(record.get("request"), dict)
+                        and isinstance(record.get("result"), dict)
+                        and record["result"].get(
+                            "manual_reconciliation_required") is True):
+                    terminal_attempt = record["request"].get(
+                        "terminal_attempt", int(path.parent.name.removeprefix("attempt-")))
+                    if (isinstance(terminal_attempt, int)
+                            and not isinstance(terminal_attempt, bool)
+                            and terminal_attempt > 0):
+                        uncertain_receipts.append((
+                            int(path.parent.name.removeprefix("attempt-")),
+                            terminal_attempt, record))
             newest_durable = max(durable_attempts, default=0)
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
             )
             newest_started = max(started_receipts, default=None,
                                  key=lambda item: (item[0], item[1]))
-            if (last is not None and newest_started is not None
+            newest_uncertain = max(uncertain_receipts, default=None,
+                                   key=lambda item: (item[0], item[1]))
+            if (last is not None and newest_uncertain is not None
+                    and newest_uncertain[0] > last["attempt"]):
+                resumed = self._guarded_cell(
+                    wave, treatment, newest_uncertain[0], remaining)
+            elif (last is not None and newest_uncertain is not None
+                    and newest_uncertain[0] == last["attempt"]):
+                terminal = copy.deepcopy(newest_uncertain[2]["result"])
+                uncertain_workspace = Path(newest_uncertain[2]["request"]["workspace"])
+                outcome, category = classify(
+                    last["agent"], terminal, uncertain_workspace)
+                resumed = {**copy.deepcopy(last), "outcome": outcome,
+                           "category": category, "terminal": terminal,
+                           "rescheduled": True}
+            elif (last is not None and newest_started is not None
                     and newest_started[0] > last["attempt"]):
                 resumed = self._guarded_cell(
                     wave, treatment, newest_started[0], remaining)
@@ -944,7 +980,9 @@ class DiagnosticCampaign:
         for result in [item for item in results if item["category"] == "infrastructure"]:
             remaining = self.wave_timeout - (time.monotonic() - wave_started)
             retry = None
-            if remaining > 0:
+            manual_reconciliation = bool(
+                (result.get("terminal") or {}).get("manual_reconciliation_required"))
+            if remaining > 0 and not manual_reconciliation:
                 retry_attempt = 2
                 attempt_dir = (self.root / "cells" / result["cell_id"]
                                / f"attempt-{result['attempt']}")

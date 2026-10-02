@@ -103,12 +103,16 @@ submission-freezing wrapper.
 | Stale-repair receipt fix, full suite | 312 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final stale-repair hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T105829Z-122-5607` |
 | Final stale-repair hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T105829Z-119-10001` |
+| Observed stale-repair fix, focused suite | 86 passed | Retained terminal digest mismatch enters the same repair lifecycle. |
+| Observed stale-repair fix, full suite | 313 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final observed-repair hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T110219Z-120-9429` |
+| Final observed-repair hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T110219Z-119-32485` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `2974342` |
+| Final validated implementation HEAD | `5c31c98` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

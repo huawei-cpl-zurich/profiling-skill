@@ -59,7 +59,8 @@ def _invoke(command: list[str], request: dict, timeout_seconds: int) -> dict:
         run = subprocess.run(command, input=json.dumps(request), text=True,
                              capture_output=True, timeout=timeout_seconds, check=False)
     except subprocess.TimeoutExpired as error:
-        return {"status": "timeout", "stdout": error.stdout or "",
+        return {"status": "timeout", "invocation_timeout": True,
+                "stdout": error.stdout or "",
                 "stderr": error.stderr or "", "elapsed_seconds": time.time() - started}
     except OSError as error:
         return {"status": "transport_or_observer_error", "diagnostics": str(error),
@@ -103,7 +104,7 @@ class CommandTerminalHook:
     def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
         result = _invoke(self.command, {**request, "operation": "terminal_observe",
                                         "handle": handle}, timeout_seconds)
-        if result.get("status") == "timeout":
+        if result.get("status") == "timeout" and result.get("invocation_timeout") is True:
             return {**result, "status": "transport_or_observer_error",
                     "handle": handle}
         return result

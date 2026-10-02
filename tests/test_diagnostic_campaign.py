@@ -197,8 +197,10 @@ def test_terminal_command_timeout_distinguishes_workload_from_observer(
     workload = hook.check(request, 5)
     observer = hook.resume(request, handle, 5)
 
-    assert workload["status"] == "timeout" and "handle" not in workload
+    assert workload["status"] == "timeout" and workload["invocation_timeout"] is True
+    assert "handle" not in workload
     assert observer["status"] == "transport_or_observer_error"
+    assert observer["invocation_timeout"] is True
     assert observer["handle"] == handle
 
     (tmp_path / "candidate.py").write_text("candidate\n")
@@ -210,6 +212,29 @@ def test_terminal_command_timeout_distinguishes_workload_from_observer(
         "candidate_timeout", "counted")
     assert diagnostic.classify(agent, observer, tmp_path) == (
         "transport_or_observer_error", "infrastructure")
+
+
+def test_resume_preserves_parsed_terminal_workload_timeout(tmp_path: Path, monkeypatch):
+    def completed(*_args, **_kwargs):
+        return diagnostic.subprocess.CompletedProcess(
+            ["terminal"], 0, stdout=json.dumps({"status": "timeout"}), stderr="")
+
+    monkeypatch.setattr(diagnostic.subprocess, "run", completed)
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+    terminal = hook.resume(
+        {"operation": "terminal_check", "cell_id": "wave-1-cannbot"},
+        "bz-a3-1:retained-1", 5,
+    )
+
+    assert terminal["status"] == "timeout"
+    assert "invocation_timeout" not in terminal
+    (tmp_path / "candidate.py").write_text("candidate\n")
+    (tmp_path / "candidate.manifest.json").write_text("{}\n")
+    agent = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+    assert diagnostic.classify(agent, terminal, tmp_path) == (
+        "candidate_timeout", "counted")
 
 
 def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):

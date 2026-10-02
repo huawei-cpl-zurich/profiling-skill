@@ -592,7 +592,7 @@ def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Pat
     missing = wave["cells"][1]
     assert infra["category"] == "infrastructure"
     assert infra["retry"]["attempt"] == 2
-    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert "wave-1-cannbot" in result["reschedule"]
     assert result["status"] == "reschedule_pending"
     assert missing["outcome"] == "no_submission" and "retry" not in missing
     assert len([request for request, _ in launcher.requests

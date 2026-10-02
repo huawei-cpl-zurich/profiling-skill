@@ -125,6 +125,10 @@ class _ProcessRegistry:
                 command, timeout_seconds, output=stdout, stderr=stderr,
             )
         finally:
+            # A successful protocol response ends the one-shot command's whole
+            # lifetime. Do not allow detached same-group writers to survive the
+            # leader and mutate evidence after the launcher returns.
+            self._terminate(process)
             with self._lock:
                 self._processes.discard(process)
 
@@ -133,6 +137,16 @@ class _ProcessRegistry:
         # The group can outlive its leader and keep stdout/stderr pipes open.
         # Always target the process group created at spawn, even after poll()
         # reports that the leader itself has exited.
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        for _ in range(5):
+            time.sleep(0.01)
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                return
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -289,7 +303,8 @@ class DiagnosticCampaign:
     def __init__(self, manifest: dict, root: Path, launcher: Launcher,
                  terminal: TerminalHook, *, waves: int = 4,
                  agent_timeout: int = 360, cell_timeout: int = 600,
-                 wave_timeout: int = 600):
+                 wave_timeout: int = 600, ledger_metadata: dict | None = None,
+                 campaign_id: str | None = None):
         validate_manifest(manifest)
         if waves != 4 or agent_timeout <= 0 or cell_timeout <= 0 or wave_timeout <= 0:
             raise DiagnosticError("four waves and positive timeouts are required")
@@ -297,6 +312,8 @@ class DiagnosticCampaign:
         self.launcher, self.terminal = launcher, terminal
         self.waves, self.agent_timeout, self.cell_timeout = waves, agent_timeout, cell_timeout
         self.wave_timeout = wave_timeout
+        self.ledger_metadata = copy.deepcopy(ledger_metadata or {})
+        self.campaign_id = campaign_id or str(uuid.uuid4())
         self.ledger_path = root / "ledger.json"
 
     def _cell(self, wave: int, treatment: str, attempt: int,
@@ -420,7 +437,8 @@ class DiagnosticCampaign:
         self._freeze_prompt(manifest)
         self.manifest = manifest
         ledger = {
-            "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
+            **self.ledger_metadata,
+            "protocol_version": 1, "campaign_id": self.campaign_id, "status": "running",
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"], "waves": [], "reschedule": [],
         }

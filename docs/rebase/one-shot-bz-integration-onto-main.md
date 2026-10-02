@@ -5,7 +5,7 @@
 - Feature branch: `codex/one-shot-bz-integration`
 - Reference branch: `origin/main`
 - Backup branch: `backup/codex-one-shot-bz-integration-before-main-merge-20261002-102648`
-- Report status: validating
+- Report status: complete
 
 ## Starting State
 
@@ -82,21 +82,26 @@ submission-freezing wrapper.
 | --- | --- | --- |
 | `python -m pytest -q tests/test_one_shot_bz_campaign.py tests/test_diagnostic_campaign.py tests/test_bz_a3_diagnostic_client.py` | 73 passed | Covers protocol-v2 prompt bytes, cancellation delegation, retained candidate replay, and BZ status mapping. |
 | `python -m pytest -q` | 300 passed, 1 host failure | Only failure is the pre-existing Bubblewrap namespace test; this controller denies unprivileged namespace creation. |
+| BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T103019Z-120-24115` |
+| BZ-A3-1 device 3, cases 0-6 | passed | `bz-a3-1:20261002T103019Z-123-3759` |
+| BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T103016Z-120-25088` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final feature branch HEAD | pending |
+| Final validated implementation HEAD | `819bb966c77cc42f7aa443271a70c9b35b4ef154` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
-| Uncommitted changes | compatibility update pending commit |
+| Uncommitted changes | report finalization only |
 
 ## Residual Risks
 
-Authorized BZ-A3 validation and the frozen-head review wave remain pending.
+The controller host cannot execute the one real Bubblewrap namespace test;
+the failure is environmental and unchanged from main. BZ validation covered
+the host-owned terminal path, not a live external agent invocation.
 
 ## Next Action
 
-Commit the compatibility update, validate on both authorized BZ-A3 targets,
-then publish and review the frozen pull-request head.
+Publish and review the frozen pull-request head. Do not merge until the review
+wave reports clean.

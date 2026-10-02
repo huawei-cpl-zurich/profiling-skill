@@ -871,8 +871,9 @@ def test_campaign_consumes_manual_terminal_reconciliation_without_check(
     assert cell["reschedule_attempts"][-1]["attempt"] == 1
 
 
+@pytest.mark.parametrize("failure_type", ["request_error", "device_error", "observer_error"])
 def test_failed_manual_handle_resume_stays_uncertain_without_repeat(
-    tmp_path: Path,
+    tmp_path: Path, failure_type: str,
 ):
     class Terminal:
         def __init__(self):
@@ -881,7 +882,7 @@ def test_failed_manual_handle_resume_stays_uncertain_without_repeat(
         def resume(self, request, handle, timeout_seconds):
             self.calls += 1
             return {"status": "transport_or_observer_error",
-                    "failure_type": "request_error", "handle": handle,
+                    "failure_type": failure_type, "handle": handle,
                     "manual_reconciliation_required": True}
 
     terminal = Terminal()

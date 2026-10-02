@@ -5,6 +5,7 @@ import importlib.util
 import base64
 import json
 import os
+import runpy
 import socket
 import stat
 import subprocess
@@ -51,8 +52,10 @@ def executable(path: Path, body="#!/bin/sh\nexit 0\n") -> Path:
 def fixture(tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     prompt = tmp_path / "prompt.md"; prompt.write_text("write kernel\n")
-    baseline = tmp_path / "source/baseline.py"; baseline.parent.mkdir(); baseline.write_text("reference = True\n")
-    cases = tmp_path / "source/cases.jsonl"; cases.write_text('{"case":1}\n')
+    baseline = tmp_path / "source/baseline.py"; baseline.parent.mkdir()
+    baseline.write_bytes((ROOT / "benchmarks/matmul/baseline.py").read_bytes())
+    cases = tmp_path / "source/cases.jsonl"
+    cases.write_text('{"name":"tail","kind":"correctness","m":3,"n":5,"k":7}\n')
     remote_runner = tmp_path / "source/runner.py"; remote_runner.write_text("# runner\n")
     skills = {}
     hashes = {}
@@ -122,8 +125,11 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
     assert Path(client.requests[0]["candidate"]).parent.name == "development-check"
     workspace = Path(request["workspace"])
     assert {p.name for p in workspace.iterdir()} == {
-        "baseline.py", "cases.jsonl", "AGENTS.md", ".agents", "candidate.py", "candidate.manifest.json"
+        "baseline.py", "baseline.json", "cases.jsonl", "AGENTS.md", ".agents",
+        "candidate.py", "candidate.manifest.json"
     }
+    assert (workspace / "baseline.json").read_bytes() == (workspace / "cases.jsonl").read_bytes()
+    assert len(runpy.run_path(workspace / "baseline.py")["get_input_groups"]()) == 1
     argv = observed["argv"]
     joined = "\0".join(map(str, argv))
     for name in request["skills"]:

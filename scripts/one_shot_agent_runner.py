@@ -257,6 +257,7 @@ class OneShotRunner:
             for name, source in (("baseline.py", self.assets["baseline"]),
                                  ("cases.jsonl", self.assets["case_spec"])):
                 shutil.copy2(source, workspace / name)
+            shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
             (workspace / "AGENTS.md").write_text(
                 "Write candidate.py and candidate.manifest.json. Use only declared local skills. "
                 "You have one turn and exactly one billed controller check. Do not profile.\n"

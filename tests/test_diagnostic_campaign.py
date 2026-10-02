@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 import threading
 from pathlib import Path
 
@@ -147,6 +148,7 @@ def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Pat
     assert infra["category"] == "infrastructure"
     assert infra["retry"]["attempt"] == 2
     assert result["reschedule"] == ["wave-1-cannbot"]
+    assert result["status"] == "reschedule_pending"
     assert missing["outcome"] == "no_submission" and "retry" not in missing
     assert len([request for request, _ in launcher.requests
                 if request["wave"] == 1 and request["treatment"] == "project-cannbot"]) == 1
@@ -211,3 +213,54 @@ def test_ledger_is_valid_at_every_atomic_checkpoint(tmp_path: Path, monkeypatch)
                for state in observed)
     assert observed[-1] == result
     assert json.loads((tmp_path / "run" / "ledger.json").read_text()) == result
+
+
+def test_timeout_bytes_are_serializable_and_preserve_diagnostics(tmp_path: Path, monkeypatch):
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(
+            cmd=args[0], timeout=kwargs["timeout"], output=b"partial-\xff",
+            stderr=b"diagnostic-\xfe",
+        )
+
+    monkeypatch.setattr(diagnostic.subprocess, "run", timeout)
+    result = diagnostic._invoke(["agent"], {"operation": "one_shot"}, 1)
+
+    assert result["status"] == "timeout"
+    assert result["stdout"] == "partial-\ufffd"
+    assert result["stderr"] == "diagnostic-\ufffd"
+    json.dumps(result)
+
+
+def test_primary_infrastructure_attempt_is_checkpointed_before_retry(tmp_path: Path,
+                                                                    monkeypatch):
+    observed = []
+    real_replace = diagnostic.os.replace
+
+    def replace(source, destination):
+        real_replace(source, destination)
+        observed.append(json.loads(Path(destination).read_text()))
+
+    monkeypatch.setattr(diagnostic.os, "replace", replace)
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra"}
+    diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", RecordingLauncher(outcomes),
+        RecordingTerminal(),
+    ).run()
+
+    primary_only = [
+        cell
+        for state in observed
+        for wave in state["waves"] if wave["wave"] == 1
+        for cell in wave["cells"]
+        if cell["treatment"] == "cannbot" and "retry" not in cell
+    ]
+    retried = [
+        cell
+        for state in observed
+        for wave in state["waves"] if wave["wave"] == 1
+        for cell in wave["cells"]
+        if cell["treatment"] == "cannbot" and "retry" in cell
+    ]
+    assert primary_only and retried
+    assert primary_only[0]["outcome"] == "device_or_runtime_infra"
+    assert retried[0]["retry"]["outcome"] == "success"

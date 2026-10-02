@@ -58,8 +58,14 @@ def _invoke(command: list[str], request: dict, timeout_seconds: int) -> dict:
         run = subprocess.run(command, input=json.dumps(request), text=True,
                              capture_output=True, timeout=timeout_seconds, check=False)
     except subprocess.TimeoutExpired as error:
-        return {"status": "timeout", "stdout": error.stdout or "",
-                "stderr": error.stderr or "", "elapsed_seconds": time.time() - started}
+        def timeout_text(value: str | bytes | None) -> str:
+            if isinstance(value, bytes):
+                return value.decode(errors="replace")
+            return value or ""
+
+        return {"status": "timeout", "stdout": timeout_text(error.stdout),
+                "stderr": timeout_text(error.stderr),
+                "elapsed_seconds": time.time() - started}
     except OSError as error:
         return {"status": "transport_or_observer_error", "diagnostics": str(error),
                 "elapsed_seconds": time.time() - started}
@@ -237,17 +243,19 @@ class DiagnosticCampaign:
                            for treatment in TREATMENTS}
                 for future in as_completed(futures):
                     result = future.result()
+                    results.append(result)
+                    _atomic_json(self.ledger_path, ledger)
                     if result["category"] == "infrastructure":
                         remaining = self.wave_timeout - (time.monotonic() - wave_started)
                         if remaining > 0:
                             retry = self._cell(wave, result["treatment"], 2, remaining)
                             result["retry"] = retry
+                            _atomic_json(self.ledger_path, ledger)
                         if remaining <= 0 or retry["category"] == "infrastructure":
                             ledger["reschedule"].append(result["cell_id"])
-                    results.append(result)
-                    _atomic_json(self.ledger_path, ledger)
+                            _atomic_json(self.ledger_path, ledger)
             results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
             _atomic_json(self.ledger_path, ledger)
-        ledger["status"] = "complete"
+        ledger["status"] = "reschedule_pending" if ledger["reschedule"] else "complete"
         _atomic_json(self.ledger_path, ledger)
         return ledger

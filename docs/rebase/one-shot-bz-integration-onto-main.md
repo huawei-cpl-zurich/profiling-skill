@@ -91,12 +91,16 @@ submission-freezing wrapper.
 | Response-grace fix, full suite | 308 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final response-grace hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T104724Z-119-29069` |
 | Final response-grace hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T104724Z-116-17839` |
+| Handle/kill-grace fix, focused suite | 82 passed | Known dispatch handle survives handle-less observer failure; kill-after has separate budget. |
+| Handle/kill-grace fix, full suite | 309 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final kill-grace hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T105133Z-119-5022` |
+| Final kill-grace hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T105132Z-123-6826` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `ed076d4` |
+| Final validated implementation HEAD | `72c05d8` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

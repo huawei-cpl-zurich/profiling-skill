@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one frozen diagnostic Codex turn in an outer Bubblewrap sandbox."""
+"""Run one frozen diagnostic Codex turn in an explicit outer sandbox."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -294,14 +295,39 @@ def controller_client(socket_path: Path, arguments: list[str]) -> int:
 class OneShotRunner:
     def __init__(self, *, skill_sources: dict[str, str], assets: dict[str, str], placements: dict,
                  client: BzA3DiagnosticClient, codex: str = "codex", bwrap: str = "bwrap",
-                 auth_home: Path | None = None):
+                 auth_home: Path | None = None, sandbox_backend: str = "bubblewrap",
+                 docker: str = "docker", docker_image: str | None = None,
+                 docker_image_id: str | None = None):
+        raw_skill_sources = {name: Path(path) for name, path in skill_sources.items()}
         self.skill_sources = {name: Path(path).resolve() for name, path in skill_sources.items()}
         self.assets, self.placements, self.client = assets, placements, client
         self.codex = Path(shutil.which(codex) or codex).resolve()
         self.bwrap = shutil.which(bwrap) or bwrap
-        self.auth_home = (auth_home or Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))).resolve()
-        if not self.codex.is_file() or not Path(self.bwrap).is_file() or not (self.auth_home / "auth.json").is_file():
-            raise RunnerError("Bubblewrap, Codex, and authenticated state are required")
+        self.sandbox_backend = sandbox_backend
+        self.docker = shutil.which(docker) or docker
+        self.docker_image = docker_image
+        self.docker_image_id = docker_image_id
+        raw_auth_home = auth_home or Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+        self.auth_home = raw_auth_home.resolve()
+        if sandbox_backend not in {"bubblewrap", "docker"}:
+            raise RunnerError("sandbox backend must be bubblewrap or docker")
+        if not self.codex.is_file() or not (self.auth_home / "auth.json").is_file():
+            raise RunnerError("Codex and authenticated state are required")
+        if sandbox_backend == "bubblewrap" and not Path(self.bwrap).is_file():
+            raise RunnerError("Bubblewrap is required")
+        if sandbox_backend == "docker":
+            if any(path.is_symlink() for path in raw_skill_sources.values()):
+                raise RunnerError("skill mount source must not be a symlink")
+            if raw_auth_home.is_symlink():
+                raise RunnerError("Codex auth mount source must not be a symlink")
+            if not Path(self.docker).is_file() or not docker_image or not docker_image_id:
+                raise RunnerError("Docker executable, image, and frozen image ID are required")
+            inspected = subprocess.run(
+                [self.docker, "image", "inspect", docker_image, "--format", "{{.Id}}"],
+                text=True, capture_output=True, check=False,
+            )
+            if inspected.returncode or inspected.stdout.strip() != docker_image_id:
+                raise RunnerError("local Docker image does not match frozen image ID")
 
     def _runtime(self) -> Path:
         for parent in self.codex.parents:
@@ -345,13 +371,87 @@ class OneShotRunner:
             source = self.skill_sources.get(name)
             if source is None or not source.is_dir() or _digest(source) != request["skill_sha256"][name]:
                 raise RunnerError(f"frozen skill changed: {name}")
-        workspace = Path(request["workspace"]).resolve()
+        raw_workspace = Path(request["workspace"])
+        if self.sandbox_backend == "docker" and raw_workspace.is_symlink():
+            raise RunnerError("workspace mount source must not be a symlink")
+        workspace = raw_workspace.resolve()
         if not workspace.is_dir() or any(workspace.iterdir()):
             raise RunnerError("a fresh empty workspace is required")
         choices = self.placements.get(request["treatment"])
         if not isinstance(choices, list) or len(choices) != 2:
             raise RunnerError("treatment placement is unavailable")
         return workspace, choices[min(int(request["attempt"]) - 1, 1)], prompt
+
+    @staticmethod
+    def _mount_source(path: Path, *, kind: str, within: Path | None = None) -> Path:
+        """Resolve one allowlisted bind without following a caller-controlled link."""
+        if path.is_symlink():
+            raise RunnerError(f"{kind} mount source must not be a symlink")
+        try:
+            resolved = path.resolve(strict=True)
+        except (FileNotFoundError, RuntimeError) as error:
+            raise RunnerError(f"{kind} mount source is unavailable") from error
+        if within is not None and not resolved.is_relative_to(within.resolve(strict=True)):
+            raise RunnerError(f"{kind} mount source escaped its expected root")
+        if any(character in str(resolved) for character in (",", "\n", "\r")):
+            raise RunnerError(f"{kind} mount source contains unsupported characters")
+        return resolved
+
+    @staticmethod
+    def _docker_mount(source: Path, destination: str, *, readonly: bool) -> list[str]:
+        value = f"type=bind,src={source},dst={destination}"
+        if readonly:
+            value += ",readonly"
+        return ["--mount", value]
+
+    def _docker_command(self, workspace: Path, prompt: Path, socket_dir: Path,
+                        shim: Path, request: dict, container_name: str) -> list[str]:
+        """Construct the complete allowlisted Docker boundary for one cell."""
+        workspace = self._mount_source(workspace, kind="workspace")
+        prompt = self._mount_source(prompt, kind="prompt")
+        auth = self._mount_source(self.auth_home / "auth.json", kind="Codex auth")
+        runtime = self._mount_source(self._runtime(), kind="Codex runtime")
+        shim = self._mount_source(shim, kind="controller client")
+        socket_dir = self._mount_source(socket_dir, kind="controller socket parent")
+        uid, gid = os.getuid(), os.getgid()
+        command = [
+            self.docker, "run", "--rm", "--interactive", "--name", container_name,
+            "--user", f"{uid}:{gid}", "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--pids-limit", "512",
+            "--memory", "8g", "--tmpfs", f"/tmp:rw,nosuid,nodev,mode=1777,uid={uid},gid={gid}",
+            "--tmpfs", f"/codex-home:rw,nosuid,nodev,mode=700,uid={uid},gid={gid}",
+            "--tmpfs", f"/home/agent:rw,nosuid,nodev,mode=700,uid={uid},gid={gid}",
+            "--workdir", "/workspace", "--env", "HOME=/home/agent",
+            "--env", "CODEX_HOME=/codex-home",
+            "--env", "PATH=/runtime/node/bin:/usr/local/bin:/usr/bin:/bin",
+            "--env", ("EXPERIMENT_CONTROLLER=/usr/local/bin/python3 "
+                      "/experiment/controller-client.py /experiment-state/controller.sock"),
+            *self._docker_mount(workspace, "/workspace", readonly=False),
+            *self._docker_mount(prompt, "/experiment/PROMPT.md", readonly=True),
+            *self._docker_mount(auth, "/codex-home/auth.json", readonly=True),
+            *self._docker_mount(runtime, "/runtime/node", readonly=True),
+            *self._docker_mount(shim, "/experiment/controller-client.py", readonly=True),
+            *self._docker_mount(socket_dir, "/experiment-state", readonly=False),
+        ]
+        skill_root = workspace / ".agents" / "skills"
+        for name in request["skills"]:
+            source = self._mount_source(self.skill_sources[name], kind=f"skill {name}")
+            target = self._mount_source(skill_root / name, kind=f"skill target {name}",
+                                        within=workspace)
+            command += self._docker_mount(source, f"/workspace/.agents/skills/{name}", readonly=True)
+            assert target.is_dir()
+        command.append(str(self.docker_image_id))
+        return command
+
+    def _remove_container(self, name: str) -> None:
+        subprocess.run([self.docker, "rm", "-f", name], text=True,
+                       capture_output=True, check=False, timeout=30)
+
+    def _sandbox_evidence(self) -> dict:
+        evidence = {"backend": self.sandbox_backend}
+        if self.sandbox_backend == "docker":
+            evidence.update(image=self.docker_image, image_id=self.docker_image_id)
+        return evidence
 
     def run(self, request: dict, timeout: int = 360) -> dict:
         started = time.monotonic(); milestones = [{"name": "request_validating", "elapsed_seconds": 0.0}]
@@ -376,29 +476,44 @@ class OneShotRunner:
             snapshot_dir = Path(tempfile.mkdtemp(prefix="oneshot-snapshot-"))
             shim_dir = Path(tempfile.mkdtemp(prefix="oneshot-shim-"))
             shim = shim_dir / "controller-client.py"; shim.write_text(CONTROLLER_CLIENT); shim.chmod(0o444)
+            prompt_file = shim_dir / "PROMPT.md"; prompt_file.write_bytes(prompt); prompt_file.chmod(0o444)
             runtime = self._runtime()
-            command = [self.bwrap, "--die-with-parent", "--new-session", "--unshare-all", "--share-net", "--clearenv",
-                       "--tmpfs", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
-            for source in ("/usr", "/bin", "/lib", "/lib64", "/etc"):
-                if Path(source).exists(): command += ["--ro-bind", source, source]
-            command += self._resolver_mounts()
-            command += ["--dir", "/home", "--dir", "/home/agent", "--dir", "/runtime", "--dir", "/experiment",
-                        "--bind", str(workspace), "/workspace", *skill_mounts,
-                        "--bind", str(state), "/codex-home", "--ro-bind", str(self.auth_home / "auth.json"), "/codex-home/auth.json",
-                        "--ro-bind", str(runtime), "/runtime/node", "--ro-bind", str(shim), "/experiment/controller-client.py",
-                        "--bind", str(socket_dir), "/experiment-state", "--chdir", "/workspace",
-                        "--setenv", "HOME", "/home/agent", "--setenv", "CODEX_HOME", "/codex-home",
-                        "--setenv", "PATH", "/runtime/node/bin:/usr/bin:/bin", "--setenv", "EXPERIMENT_CONTROLLER",
-                        "/usr/bin/python3 /experiment/controller-client.py /experiment-state/controller.sock"]
+            container_name = f"triton-one-shot-{uuid.uuid4().hex}"
+            if self.sandbox_backend == "bubblewrap":
+                command = [self.bwrap, "--die-with-parent", "--new-session", "--unshare-all", "--share-net", "--clearenv",
+                           "--tmpfs", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+                for source in ("/usr", "/bin", "/lib", "/lib64", "/etc"):
+                    if Path(source).exists(): command += ["--ro-bind", source, source]
+                command += self._resolver_mounts()
+                command += ["--dir", "/home", "--dir", "/home/agent", "--dir", "/runtime", "--dir", "/experiment",
+                            "--bind", str(workspace), "/workspace", *skill_mounts,
+                            "--bind", str(state), "/codex-home", "--ro-bind", str(self.auth_home / "auth.json"), "/codex-home/auth.json",
+                            "--ro-bind", str(runtime), "/runtime/node", "--ro-bind", str(shim), "/experiment/controller-client.py",
+                            "--bind", str(socket_dir), "/experiment-state", "--chdir", "/workspace",
+                            "--setenv", "HOME", "/home/agent", "--setenv", "CODEX_HOME", "/codex-home",
+                            "--setenv", "PATH", "/runtime/node/bin:/usr/bin:/bin", "--setenv", "EXPERIMENT_CONTROLLER",
+                            "/usr/bin/python3 /experiment/controller-client.py /experiment-state/controller.sock"]
+            else:
+                command = self._docker_command(workspace, prompt_file, socket_dir,
+                                               shim, request, container_name)
             codex = ["/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config", "--skip-git-repo-check",
                      "--dangerously-bypass-approvals-and-sandbox", "-m", request["model"]["name"],
                      "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"', "-C", "/workspace", "-"]
             milestones.append({"name": "sandbox_ready", "elapsed_seconds": time.monotonic() - started})
             with Controller(socket_path, self.client, request, placement, self.assets,
                             snapshot_dir, started + timeout) as controller:
+                previous_handlers: dict[signal.Signals, Any] = {}
+                if (self.sandbox_backend == "docker"
+                        and threading.current_thread() is threading.main_thread()):
+                    def cancelled(_signum: int, _frame: Any) -> None:
+                        raise KeyboardInterrupt
+                    for watched in (signal.SIGTERM, signal.SIGHUP):
+                        previous_handlers[watched] = signal.signal(watched, cancelled)
                 try:
                     run = _run_group([*command, *codex], prompt.decode(), timeout)
                 except subprocess.TimeoutExpired as error:
+                    if self.sandbox_backend == "docker":
+                        self._remove_container(container_name)
                     controller.finalize_outputs()
                     if (controller.last_result
                             and controller.last_result.get("status") in {
@@ -413,9 +528,18 @@ class OneShotRunner:
                             result.update(failure_type=controller.last_result.get(
                                               "failure_type", "controller_infrastructure"),
                                           handle=controller.last_result.get("handle"))
+                        result["sandbox"] = self._sandbox_evidence()
                         return result
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
-                            "controller_usage": {"billed": controller.used, "calls": controller.calls}}
+                            "controller_usage": {"billed": controller.used, "calls": controller.calls},
+                            "sandbox": self._sandbox_evidence()}
+                except KeyboardInterrupt:
+                    if self.sandbox_backend == "docker":
+                        self._remove_container(container_name)
+                    raise
+                finally:
+                    for watched, previous in previous_handlers.items():
+                        signal.signal(watched, previous)
                 controller.finalize_outputs()
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})
             output = (run.stdout + run.stderr).lower()
@@ -427,13 +551,14 @@ class OneShotRunner:
                 status = "ok"
             elif any(x in output for x in ("rate limit", "service unavailable", "connection", "api error")):
                 status = "model_service_error"
-            elif any(x in output for x in ("bwrap:", "bubblewrap", "namespace")):
+            elif any(x in output for x in ("bwrap:", "bubblewrap", "namespace", "docker:")):
                 status = "setup_error"
             else:
                 status = "protocol_error"
             result = {"status": status, "codex_exit_code": run.returncode,
                     "stdout": _bounded(run.stdout),
                     "stderr": _bounded(run.stderr), "milestones": milestones,
+                    "sandbox": self._sandbox_evidence(),
                     "controller_usage": {"limit": 1, "billed": controller.used, "calls": controller.calls,
                                          "free_calls": controller.free_calls, "invalid": controller.invalid,
                                          "over_budget": controller.over_budget}}
@@ -448,6 +573,7 @@ class OneShotRunner:
             return result
         except (RunnerError, OSError, KeyError, TypeError, ValueError) as error:
             return {"status": "setup_error", "diagnostics": _bounded(error), "milestones": milestones,
+                    "sandbox": self._sandbox_evidence(),
                     "controller_usage": {"limit": 1, "billed": 0, "calls": []}}
         finally:
             for temporary in (state, socket_dir, snapshot_dir, shim_dir):
@@ -469,6 +595,9 @@ def main() -> int:
     parser.add_argument("--skill-sources", type=Path); parser.add_argument("--assets", type=Path)
     parser.add_argument("--placements", type=Path); parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--remote-json", default='["cpl-remote"]'); parser.add_argument("--adapter-json")
+    parser.add_argument("--sandbox-backend", choices=("bubblewrap", "docker"), default="bubblewrap")
+    parser.add_argument("--docker", default="docker"); parser.add_argument("--docker-image")
+    parser.add_argument("--docker-image-id")
     args = parser.parse_args()
     if args.command == "controller-client": return controller_client(args.socket, args.arguments)
     try:
@@ -478,7 +607,9 @@ def main() -> int:
         from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
         runner = OneShotRunner(skill_sources=_load(args.skill_sources), assets=_load(args.assets),
             placements=_load(args.placements), client=BzA3DiagnosticClient(
-                AdapterTransport(remote, adapter), args.state_dir))
+                AdapterTransport(remote, adapter), args.state_dir),
+            sandbox_backend=args.sandbox_backend, docker=args.docker,
+            docker_image=args.docker_image, docker_image_id=args.docker_image_id)
         request = json.load(sys.stdin); result = runner.run(request, timeout=INNER_TURN_TIMEOUT)
     except (RunnerError, OSError, ValueError, json.JSONDecodeError) as error:
         result = {"status": "setup_error", "diagnostics": _bounded(error),

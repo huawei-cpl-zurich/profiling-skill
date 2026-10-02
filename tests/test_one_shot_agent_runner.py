@@ -6,6 +6,8 @@ import base64
 import json
 import os
 import runpy
+import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -88,6 +90,26 @@ def fixture(tmp_path: Path):
     runner = module.OneShotRunner(skill_sources=skills, assets=assets, placements=placements,
                                   client=client, codex=str(codex), bwrap=str(bwrap), auth_home=auth)
     return runner, request, client
+
+
+def docker_fixture(tmp_path: Path, monkeypatch, image_id="sha256:frozen",
+                   inspected_image_id=None):
+    runner, request, client = fixture(tmp_path)
+    docker = executable(tmp_path / "docker")
+
+    def inspect(argv, **kwargs):
+        assert argv[1:3] == ["image", "inspect"]
+        return subprocess.CompletedProcess(argv, 0, (inspected_image_id or image_id) + "\n", "")
+
+    monkeypatch.setattr(module.subprocess, "run", inspect)
+    configured = module.OneShotRunner(
+        skill_sources={name: str(path) for name, path in runner.skill_sources.items()},
+        assets=runner.assets, placements=runner.placements, client=client,
+        codex=str(runner.codex), auth_home=runner.auth_home,
+        sandbox_backend="docker", docker=str(docker), docker_image="python:3.10",
+        docker_image_id=image_id,
+    )
+    return configured, request, client
 
 
 def call_socket(socket_path: str, arguments: list[str]) -> dict:
@@ -522,3 +544,127 @@ def test_in_band_prompt_hash_drift_fails_before_codex(tmp_path: Path):
     request["prompt"]["data"] = base64.b64encode(b"different").decode()
     result = runner.run(request)
     assert result["status"] == "setup_error" and "prompt hash mismatch" in result["diagnostics"]
+
+
+def _docker_inputs(runner, request, tmp_path: Path):
+    socket_dir = tmp_path / "socket"; socket_dir.mkdir()
+    shim = tmp_path / "controller-client.py"; shim.write_text("# opaque client\n")
+    prompt = tmp_path / "PROMPT.md"; prompt.write_text("write kernel\n")
+    workspace = Path(request["workspace"])
+    skill_root = workspace / ".agents/skills"; skill_root.mkdir(parents=True)
+    for name in request["skills"]: (skill_root / name).mkdir()
+    return workspace, prompt, socket_dir, shim
+
+
+def test_docker_argv_is_an_explicit_minimal_allowlist(monkeypatch, tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    workspace, prompt, socket_dir, shim = _docker_inputs(runner, request, tmp_path)
+    argv = runner._docker_command(workspace, prompt, socket_dir, shim, request, "frozen-cell")
+    joined = "\0".join(map(str, argv))
+    assert argv[:3] == [str(runner.docker), "run", "--rm"]
+    for item in ("--interactive", "--read-only", "--cap-drop", "ALL", "--pids-limit",
+                 "512", "--memory", "8g", "no-new-privileges"):
+        assert item in argv
+    assert f"type=bind,src={workspace.resolve()},dst=/workspace" in argv
+    assert f"type=bind,src={prompt.resolve()},dst=/experiment/PROMPT.md,readonly" in argv
+    assert f"type=bind,src={runner.auth_home / 'auth.json'},dst=/codex-home/auth.json,readonly" in argv
+    assert f"type=bind,src={shim.resolve()},dst=/experiment/controller-client.py,readonly" in argv
+    for name in request["skills"]:
+        assert (f"type=bind,src={runner.skill_sources[name]},"
+                f"dst=/workspace/.agents/skills/{name},readonly") in argv
+    assert runner.docker_image_id == argv[-1]
+    for forbidden in ("/var/run/docker.sock", f"src={ROOT},", str(Path.home() / ".agents"),
+                      str(Path.home() / ".ssh"), "reference_repos", "reference-library",
+                      "/experiment/runner.py"):
+        assert forbidden not in joined
+    read_write = [value for value in argv if value.startswith("type=bind")
+                  and not value.endswith(",readonly")]
+    assert read_write == [f"type=bind,src={workspace.resolve()},dst=/workspace",
+                          f"type=bind,src={socket_dir.resolve()},dst=/experiment-state"]
+
+
+def test_docker_rejects_drifted_image_and_symlink_mount(monkeypatch, tmp_path: Path):
+    with pytest.raises(module.RunnerError, match="frozen image ID"):
+        docker_fixture(tmp_path / "drift", monkeypatch, image_id="sha256:expected",
+                       inspected_image_id="sha256:actual")
+    runner, request, _ = docker_fixture(tmp_path / "link", monkeypatch)
+    workspace, prompt, socket_dir, shim = _docker_inputs(runner, request, tmp_path / "link")
+    linked = prompt.with_name("linked-prompt.md"); linked.symlink_to(prompt)
+    with pytest.raises(module.RunnerError, match="must not be a symlink"):
+        runner._docker_command(workspace, linked, socket_dir, shim, request, "cell")
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_docker_timeout_or_cancel_force_removes_container(monkeypatch, tmp_path: Path,
+                                                           cancelled: bool):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    removed = []
+    failure = KeyboardInterrupt() if cancelled else subprocess.TimeoutExpired(["docker"], 1)
+    monkeypatch.setattr(module, "_run_group",
+                        lambda argv, prompt, timeout: (_ for _ in ()).throw(failure))
+    monkeypatch.setattr(module.subprocess, "run",
+        lambda argv, **kwargs: (removed.append(argv) or subprocess.CompletedProcess(argv, 0, "", "")))
+    if cancelled:
+        with pytest.raises(KeyboardInterrupt): runner.run(request, timeout=1)
+    else:
+        result = runner.run(request, timeout=1)
+        assert result["status"] == "timeout" and result["sandbox"]["backend"] == "docker"
+    assert len(removed) == 1 and removed[0][1:3] == ["rm", "-f"]
+    assert removed[0][3].startswith("triton-one-shot-")
+
+
+def test_docker_sigterm_routes_through_cleanup_and_restores_handlers(monkeypatch,
+                                                                    tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    handlers = {}
+    removed = []
+
+    def install(watched, handler):
+        previous = handlers.get(watched, signal.SIG_DFL)
+        handlers[watched] = handler
+        return previous
+
+    def interrupt(_argv, _prompt, _timeout):
+        handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    monkeypatch.setattr(module.signal, "signal", install)
+    monkeypatch.setattr(module, "_run_group", interrupt)
+    monkeypatch.setattr(module.subprocess, "run",
+        lambda argv, **kwargs: (removed.append(argv) or subprocess.CompletedProcess(argv, 0, "", "")))
+    with pytest.raises(KeyboardInterrupt):
+        runner.run(request)
+    assert handlers[signal.SIGTERM] == signal.SIG_DFL
+    assert handlers[signal.SIGHUP] == signal.SIG_DFL
+    assert len(removed) == 1 and removed[0][1:3] == ["rm", "-f"]
+
+
+def test_real_docker_probe_has_controller_but_no_host_privilege(tmp_path: Path):
+    docker = shutil.which("docker")
+    if not docker: pytest.skip("Docker is unavailable")
+    inspected = subprocess.run([docker, "image", "inspect", "python:3.10", "--format", "{{.Id}}"],
+                               text=True, capture_output=True, check=False)
+    if inspected.returncode: pytest.skip("the pinned local Python image is unavailable")
+    runner, request, client = fixture(tmp_path)
+    executable(runner._runtime() / "bin/codex", "#!/bin/sh\n"
+        "test \"$CODEX_HOME\" = /codex-home || exit 21\n"
+        "test ! -e /var/run/docker.sock || exit 22\n"
+        "test ! -e /root/.ssh || exit 23\n"
+        "sh -c \"$EXPERIMENT_CONTROLLER help\" >/tmp/help.json || exit 24\n"
+        "grep -q '\"operation\": \"help\"' /tmp/help.json || exit 25\n"
+        "! touch /workspace/.agents/skills/ascend-profiling/WRITE-LEAK 2>/dev/null || exit 26\n"
+        "touch /workspace/workspace-is-writable || exit 27\n"
+        "sh -c \"$EXPERIMENT_CONTROLLER profile\" >/tmp/profile.out 2>/tmp/profile.err; test $? -eq 4 || exit 28\n"
+        "printf '%s\\n' '{\"type\":\"turn.completed\"}'\n")
+    isolated = module.OneShotRunner(
+        skill_sources={name: str(path) for name, path in runner.skill_sources.items()},
+        assets=runner.assets, placements=runner.placements, client=client,
+        codex=str(runner.codex), auth_home=runner.auth_home,
+        sandbox_backend="docker", docker=docker, docker_image="python:3.10",
+        docker_image_id=inspected.stdout.strip())
+    result = isolated.run(request, timeout=30)
+    assert result["status"] == "ok", result
+    assert result["controller_usage"]["billed"] == 0
+    assert result["controller_usage"]["invalid"] == 1
+    assert result["sandbox"]["image_id"] == inspected.stdout.strip()
+    assert Path(request["workspace"], "workspace-is-writable").is_file()
+    assert not Path(runner.skill_sources["ascend-profiling"], "WRITE-LEAK").exists()

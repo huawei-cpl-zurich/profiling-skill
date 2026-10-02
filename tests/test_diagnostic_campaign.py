@@ -1183,8 +1183,13 @@ def test_over_budget_retry_overrides_incomplete_agent_result(tmp_path: Path, mon
     assert result["status"] == "reschedule_pending"
 
 
-def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
-                                                               monkeypatch):
+@pytest.mark.parametrize("terminal_result, expected_outcome", [
+    ({"status": "ok", "passed": True, "diagnostics": "complete traceback"}, "success"),
+    ({"status": "compile_error", "diagnostics": "compiler diagnostic"}, "compile_error"),
+])
+def test_retry_terminal_completion_at_deadline_preserves_result(
+    tmp_path: Path, monkeypatch, terminal_result: dict, expected_outcome: str,
+):
     clock = [0.0]
     monkeypatch.setattr(diagnostic.time, "monotonic", lambda: clock[0])
 
@@ -1199,7 +1204,8 @@ def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
             if request["cell_id"] == "wave-1-cannbot" and not self.crossed:
                 self.crossed = True
                 clock[0] += 0.06
-            return super().check(request, timeout_seconds)
+            self.requests.append((request, timeout_seconds))
+            return dict(terminal_result)
 
     result = diagnostic.DiagnosticCampaign(
         manifest(tmp_path), tmp_path / "run", RetryLauncher(),
@@ -1208,11 +1214,11 @@ def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
 
     retry = result["waves"][0]["cells"][0]["retry"]
     assert retry["agent"]["status"] == "ok"
-    assert retry["terminal"]["failure_type"] == "wave_budget_exhausted"
-    assert retry["outcome"] == "wave_budget_exhausted"
-    assert retry["category"] == "infrastructure"
-    assert result["reschedule"] == ["wave-1-cannbot"]
-    assert result["status"] == "reschedule_pending"
+    assert retry["terminal"] == terminal_result
+    assert retry["outcome"] == expected_outcome
+    assert retry["category"] == "counted"
+    assert result["reschedule"] == []
+    assert result["status"] == "complete"
 
 
 @pytest.mark.parametrize("component", ["launcher", "terminal"])

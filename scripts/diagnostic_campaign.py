@@ -397,10 +397,6 @@ class DiagnosticCampaign:
                 terminal = {"status": "transport_or_observer_error",
                             "diagnostics":
                                 f"terminal hook raised {type(error).__name__}: {error}"}
-            if time.monotonic() - monotonic_started >= cap:
-                terminal = {"status": "infrastructure_error",
-                            "failure_type": "wave_budget_exhausted",
-                            "diagnostics": "terminal hook exceeded the remaining cell budget"}
         outcome, category = classify(agent, terminal, workspace)
         return {
             "cell_id": cell_id, "wave": wave, "attempt": attempt, "treatment": treatment,

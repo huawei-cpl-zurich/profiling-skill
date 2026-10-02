@@ -418,8 +418,13 @@ class DiagnosticCampaign:
             _atomic_json(receipt, {"protocol_version": 1, "state": "started",
                                    "request_sha256": digest})
         result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
-        _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
-                               "request_sha256": digest, "result": result})
+        retriable_observation = (
+            result.get("status") == "infrastructure_error"
+            and result.get("failure_type") in {"observer_error", "transport_error"}
+            and bool(result.get("handle")))
+        if not retriable_observation:
+            _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
+                                   "request_sha256": digest, "result": result})
         return result
 
     def _guarded_cell(self, wave: int, treatment: str, attempt: int,
@@ -586,8 +591,12 @@ class DiagnosticCampaign:
         try:
             self._run_one_wave(ledger, wave)
         except BaseException:
-            completed = {cell["treatment"] for cell in ledger["waves"][-1]["cells"]
-                         if cell["category"] == "counted"}
+            completed = set()
+            for cell in ledger["waves"][-1]["cells"]:
+                attempts = cell.get("reschedule_attempts", [])
+                latest = attempts[-1] if attempts else cell.get("retry", cell)
+                if latest["category"] == "counted":
+                    completed.add(cell["treatment"])
             pending = set(ledger["reschedule"])
             pending.update(f"wave-{wave}-{name}" for name in TREATMENTS
                            if name not in completed)

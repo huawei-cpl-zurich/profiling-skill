@@ -80,17 +80,19 @@ submission-freezing wrapper.
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `python -m pytest -q tests/test_one_shot_bz_campaign.py tests/test_diagnostic_campaign.py tests/test_bz_a3_diagnostic_client.py` | 73 passed | Covers protocol-v2 prompt bytes, cancellation delegation, retained candidate replay, and BZ status mapping. |
-| `python -m pytest -q` | 300 passed, 1 host failure | Only failure is the pre-existing Bubblewrap namespace test; this controller denies unprivileged namespace creation. |
+| `python -m pytest -q tests/test_one_shot_bz_campaign.py tests/test_diagnostic_campaign.py tests/test_bz_a3_diagnostic_client.py` | 79 passed | Covers protocol-v2 prompt bytes, cancellation, same-receipt observation, one deadline, unique namespaces, frozen assets, and BZ status mapping. |
+| `python -m pytest -q` | 306 passed, 1 host failure | Only failure is the pre-existing Bubblewrap namespace test; this controller denies unprivileged namespace creation. |
 | BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T103019Z-120-24115` |
 | BZ-A3-1 device 3, cases 0-6 | passed | `bz-a3-1:20261002T103019Z-123-3759` |
 | BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T103016Z-120-25088` |
+| Final integration hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T103938Z-118-2452` |
+| Final integration hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T103938Z-123-5071` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `819bb966c77cc42f7aa443271a70c9b35b4ef154` |
+| Final validated implementation HEAD | `dcf366f` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

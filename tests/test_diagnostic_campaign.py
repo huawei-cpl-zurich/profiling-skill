@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
+from scripts import campaign as production_campaign
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,11 +26,8 @@ def manifest(tmp_path: Path) -> dict:
     prompt = tmp_path / "prompt.md"
     prompt.write_text("write the kernel\n")
     model = {"name": "test-model", "reasoning_effort": "low"}
-    treatments = {
-        "cannbot": ["triton-op-coding", "ops-profiling"],
-        "project-cannbot": ["triton-op-coding", "ascend-profiling"],
-        "project-guarded": ["ascend-profiling", "triton-guarded-kernel"],
-    }
+    treatments = {name: list(diagnostic.TREATMENT_SKILLS[name])
+                  for name in diagnostic.TREATMENTS}
     return {
         "prompt": str(prompt),
         "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
@@ -196,17 +194,18 @@ def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
         diagnostic.validate_manifest(config)
 
 
-@pytest.mark.parametrize(
-    "skills",
-    [
-        ["triton-op-coding"],
-        ["triton-op-coding", "ops-profiling", "ascend-profiling"],
-        ["triton-op-coding", "ascend-profiling"],
-        ["ops-profiling", "triton-op-coding"],
-    ],
-)
-def test_manifest_rejects_noncanonical_cannbot_skill_inventory(tmp_path: Path, skills):
+@pytest.mark.parametrize("mutation", ["omitted", "extra", "wrong", "reordered"])
+def test_manifest_rejects_noncanonical_cannbot_skill_inventory(tmp_path: Path, mutation):
     config = manifest(tmp_path)
+    skills = list(diagnostic.TREATMENT_SKILLS["cannbot"])
+    if mutation == "omitted":
+        skills.pop()
+    elif mutation == "extra":
+        skills.append("ascend-profiling")
+    elif mutation == "wrong":
+        skills[-1] = "ascend-profiling"
+    else:
+        skills.reverse()
     config["treatments"]["cannbot"] = {
         "skills": skills,
         "skill_sha256": {skill: f"hash-{skill}" for skill in skills},
@@ -224,6 +223,16 @@ def test_manifest_accepts_exact_ordered_canonical_skill_inventories(tmp_path: Pa
     assert all(
         config["treatments"][name]["skills"] == list(diagnostic.TREATMENT_SKILLS[name])
         for name in diagnostic.TREATMENTS
+    )
+    assert diagnostic.TREATMENT_SKILLS is production_campaign.TREATMENT_SKILLS
+    assert diagnostic.TREATMENT_SKILLS["cannbot"] == (
+        "triton-task-extractor", "triton-op-designer", "triton-op-coding",
+        "triton-op-verifier", "triton-latency-optimizer",
+        "triton-simulator-optimizer", "npu-arch", "ops-profiling",
+    )
+    assert diagnostic.TREATMENT_SKILLS["project-cannbot"][-1] == "ascend-profiling"
+    assert diagnostic.TREATMENT_SKILLS["project-guarded"] == (
+        "ascend-profiling", "triton-guarded-kernel",
     )
 
 
@@ -602,3 +611,51 @@ def test_run_freezes_prompt_bytes_before_launch(tmp_path: Path):
     assert result["status"] == "complete"
     frozen_paths = {request["prompt"] for request, _ in launcher.requests}
     assert frozen_paths == {str(tmp_path / "run" / "inputs" / "prompt.md")}
+
+
+def test_concurrent_launcher_mutation_cannot_cross_cell_or_change_evidence(tmp_path: Path):
+    config = manifest(tmp_path)
+    expected_model = dict(config["model"])
+    expected_skills = {
+        name: list(config["treatments"][name]["skills"])
+        for name in diagnostic.TREATMENTS
+    }
+    expected_hashes = {
+        name: dict(config["treatments"][name]["skill_sha256"])
+        for name in diagnostic.TREATMENTS
+    }
+
+    class MutatingConcurrentLauncher:
+        def __init__(self):
+            self.barrier = threading.Barrier(3)
+            self.observed = []
+            self.lock = threading.Lock()
+
+        def launch(self, request, timeout_seconds):
+            with self.lock:
+                self.observed.append((
+                    request["treatment"], dict(request["model"]),
+                    list(request["skills"]), dict(request["skill_sha256"]),
+                ))
+            request["model"]["name"] = "mutated"
+            request["skills"].append("cross-cell-leak")
+            request["skill_sha256"].clear()
+            self.barrier.wait()
+            workspace = Path(request["workspace"])
+            (workspace / "candidate.py").write_text("def kernel(): pass\n")
+            (workspace / "candidate.manifest.json").write_text("{}\n")
+            return {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+                {"arguments": ["check", "--scope", "development", "--round", "1"]}
+            ]}}
+
+    launcher = MutatingConcurrentLauncher()
+    result = diagnostic.DiagnosticCampaign(
+        config, tmp_path / "run", launcher, RecordingTerminal(),
+    ).run()
+
+    assert all(model == expected_model and skills == expected_skills[treatment]
+               and hashes == expected_hashes[treatment]
+               for treatment, model, skills, hashes in launcher.observed)
+    assert all(cell["skill_sha256"] == expected_hashes[cell["treatment"]]
+               for wave in result["waves"] for cell in wave["cells"])
+    assert result["status"] == "complete"

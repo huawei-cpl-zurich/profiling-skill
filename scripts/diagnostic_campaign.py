@@ -15,13 +15,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Protocol
 
+try:
+    from scripts.campaign import TREATMENT_SKILLS
+except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from campaign import TREATMENT_SKILLS
 
 TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
-TREATMENT_SKILLS = {
-    "cannbot": ("triton-op-coding", "ops-profiling"),
-    "project-cannbot": ("triton-op-coding", "ascend-profiling"),
-    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
-}
 COUNTED = {
     "no_submission", "protocol_error", "source_error", "compile_error",
     "runtime_error", "correctness_error", "candidate_timeout", "success",
@@ -205,22 +204,25 @@ class DiagnosticCampaign:
         workspace.mkdir(parents=True, exist_ok=False)
         started = time.time()
         monotonic_started = time.monotonic()
-        treatment_record = self.manifest["treatments"][treatment]
+        treatment_record = copy.deepcopy(self.manifest["treatments"][treatment])
         request = {
             "protocol_version": 1, "operation": "one_shot", "cell_id": cell_id,
             "wave": wave, "attempt": attempt, "treatment": treatment,
             "workspace": str(workspace), "prompt": self.manifest["prompt"],
             "prompt_sha256": self.manifest["prompt_sha256"],
-            "model": self.manifest["model"], "model_sha256": self.manifest["model_sha256"],
-            "skills": treatment_record["skills"],
-            "skill_sha256": treatment_record["skill_sha256"],
+            "model": copy.deepcopy(self.manifest["model"]),
+            "model_sha256": self.manifest["model_sha256"],
+            "skills": list(treatment_record["skills"]),
+            "skill_sha256": copy.deepcopy(treatment_record["skill_sha256"]),
             "benchmark": "streaming-matmul-add", "development_cases": [1],
             "controller_contract": {"billed_limit": 1,
                 "command": ["check", "--scope", "development", "--round", "1"]},
         }
         cap = min(self.cell_timeout, available_seconds or self.cell_timeout)
         try:
-            agent = self.launcher.launch(request, max(1, int(min(self.agent_timeout, cap))))
+            agent = copy.deepcopy(self.launcher.launch(
+                request, max(1, int(min(self.agent_timeout, cap))),
+            ))
         except Exception as error:
             agent = {"status": "transport_or_observer_error",
                      "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
@@ -239,7 +241,9 @@ class DiagnosticCampaign:
                 "cases": list(range(7)),
             }
             try:
-                terminal = self.terminal.check(terminal_request, max(1, int(cap - elapsed)))
+                terminal = copy.deepcopy(self.terminal.check(
+                    terminal_request, max(1, int(cap - elapsed)),
+                ))
             except Exception as error:
                 terminal = {"status": "transport_or_observer_error",
                             "diagnostics":
@@ -260,7 +264,7 @@ class DiagnosticCampaign:
             "candidate_sha256": hashes, "started_at_epoch": started,
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"],
-            "skill_sha256": treatment_record["skill_sha256"],
+            "skill_sha256": copy.deepcopy(treatment_record["skill_sha256"]),
             "elapsed_seconds": time.time() - started,
         }
 
@@ -270,7 +274,7 @@ class DiagnosticCampaign:
         try:
             return self._cell(wave, treatment, attempt, available_seconds)
         except Exception as error:
-            treatment_record = self.manifest["treatments"][treatment]
+            treatment_record = copy.deepcopy(self.manifest["treatments"][treatment])
             return {
                 "cell_id": f"wave-{wave}-{treatment}", "wave": wave,
                 "attempt": attempt, "treatment": treatment,
@@ -282,7 +286,7 @@ class DiagnosticCampaign:
                 "started_at_epoch": time.time(),
                 "prompt_sha256": self.manifest["prompt_sha256"],
                 "model_sha256": self.manifest["model_sha256"],
-                "skill_sha256": treatment_record["skill_sha256"],
+                "skill_sha256": copy.deepcopy(treatment_record["skill_sha256"]),
                 "elapsed_seconds": 0,
             }
 

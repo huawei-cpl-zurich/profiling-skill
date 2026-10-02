@@ -211,8 +211,8 @@ class BzA3DiagnosticClient:
             wave = _safe_id(request.get("wave"), "wave")
             cell = _safe_id(request.get("cell"), "cell")
             timeout = request.get("timeout", 180)
-            if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1 or timeout > 540:
-                raise DiagnosticError("request_error", "timeout must be 1..540 seconds")
+            if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 26 or timeout > 540:
+                raise DiagnosticError("request_error", "timeout must be 26..540 seconds")
             observe_timeout = request.get("observe_timeout")
             if (observe_timeout is not None
                     and (isinstance(observe_timeout, bool)

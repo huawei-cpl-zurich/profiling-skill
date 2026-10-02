@@ -278,14 +278,14 @@ def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path
     assert clock[0] < outer_timeout
 
 
-def test_insufficient_response_grace_is_infrastructure_not_candidate_timeout(tmp_path: Path):
+def test_timeout_without_response_grace_is_rejected_before_staging(tmp_path: Path):
     module = load()
     transport = FakeTransport(module, "candidate_timeout")
     value = {**request(tmp_path), "timeout": 25}
     result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
     assert result["status"] == "infrastructure_error"
-    assert result["failure_type"] == "transport_error"
-    assert not transport.executions
+    assert result["failure_type"] == "request_error"
+    assert not transport.uploads and not transport.executions
 
 
 def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):

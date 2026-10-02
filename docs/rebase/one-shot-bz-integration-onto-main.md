@@ -115,12 +115,16 @@ submission-freezing wrapper.
 | Retry-lifecycle fix, full suite | 319 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final retry-lifecycle hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T111211Z-306-6606` |
 | Final retry-lifecycle hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T111211Z-239-13526` |
+| Evidence/budget fix, focused suite | 93 passed | Asset evidence is in the initial atomic ledger; insufficient response grace remains infrastructure. |
+| Evidence/budget fix, full suite | 320 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final evidence/budget hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T111447Z-306-24732` |
+| Final evidence/budget hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T111447Z-233-2023` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `7fa8db6` |
+| Final validated implementation HEAD | `38812a1` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

@@ -271,7 +271,7 @@ class BzTerminalHook:
                 and not uncertain):
             remaining = int(deadline - time.monotonic())
             if remaining < 1:
-                return result
+                return {**result, "terminal_attempt": terminal_attempt}
             terminal_attempt += 1
             placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
             client_request = {

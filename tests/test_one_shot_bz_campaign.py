@@ -403,6 +403,46 @@ def test_terminal_retained_failure_dispatches_new_fallback_attempt(tmp_path: Pat
     assert "observe_timeout" not in client.requests[2]
 
 
+def test_exhausted_retained_failure_preserves_attempt_for_next_resume(
+        tmp_path: Path, monkeypatch):
+    config, _manifest, placements = inputs(tmp_path)
+
+    class TerminalThenSuccess(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "handle": "bz-a3-2:retained"}
+            return {"status": "ok", "passed": True}
+
+    client = TerminalThenSuccess()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    workspace = tmp_path / "attempt-2" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    retained = {
+        "campaign": "campaign", "wave": "1", "cell": "cannbot-attempt-2",
+        "profile": "bz-a3-2", "device": 2, "timeout": 30,
+        "candidate": str(snapshot / "candidate.py"),
+        "candidate_manifest": str(snapshot / "candidate.manifest.json"),
+        **config["assets"], "cases": list(range(7)),
+    }
+    ticks = iter((0, 31))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    first = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                        "terminal_attempt": 2, "retained_terminal_request": retained}, 30)
+    assert first["terminal_attempt"] == 2
+    monkeypatch.setattr(module.time, "monotonic", lambda: 0)
+    second = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                         "terminal_attempt": first["terminal_attempt"] + 1}, 30)
+    assert second["status"] == "ok"
+    assert [request["cell"] for request in client.requests] == [
+        "cannbot-attempt-2", "cannbot-attempt-3"]
+
+
 def test_terminal_infrastructure_result_uses_fallback(tmp_path: Path):
     config, _manifest, placements = inputs(tmp_path)
 

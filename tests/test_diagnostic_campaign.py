@@ -5,6 +5,7 @@ import importlib.util
 import json
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -231,6 +232,19 @@ def test_timeout_bytes_are_serializable_and_preserve_diagnostics(tmp_path: Path,
     json.dumps(result)
 
 
+def test_nonzero_process_cannot_claim_success(tmp_path: Path, monkeypatch):
+    completed = subprocess.CompletedProcess(
+        ["agent"], 7, stdout='{"status":"ok","passed":true}', stderr="cleanup failed",
+    )
+    monkeypatch.setattr(diagnostic.subprocess, "run", lambda *args, **kwargs: completed)
+
+    result = diagnostic._invoke(["agent"], {"operation": "terminal_check"}, 1)
+
+    assert result["status"] == "transport_or_observer_error"
+    assert result["exit_code"] == 7
+    assert "claimed ok" in result["diagnostics"]
+
+
 def test_primary_infrastructure_attempt_is_checkpointed_before_retry(tmp_path: Path,
                                                                     monkeypatch):
     observed = []
@@ -335,3 +349,83 @@ def test_bz_client_structured_infrastructure_error_is_interoperable(tmp_path: Pa
         result = diagnostic.classify(valid_agent, infrastructure, tmp_path)
 
     assert result == ("runner_setup_error", "infrastructure")
+
+
+def test_submission_error_is_counted_candidate_failure(tmp_path: Path):
+    (tmp_path / "candidate.py").write_text("x")
+    (tmp_path / "candidate.manifest.json").write_text("{}")
+    agent = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+
+    assert diagnostic.classify(
+        agent, {"status": "submission_error", "diagnostics": "malformed manifest"},
+        tmp_path,
+    ) == ("submission_error", "counted")
+
+
+def test_all_primary_completions_are_checkpointed_before_retry(tmp_path: Path):
+    class DelayedPrimaryLauncher(RecordingLauncher):
+        def __init__(self):
+            super().__init__({(1, "cannbot", 1): "device_or_runtime_infra"})
+            self.completed = set()
+
+        def launch(self, request, timeout_seconds):
+            if request["wave"] == 1 and request["attempt"] == 1 \
+                    and request["treatment"] != "cannbot":
+                time.sleep(0.03)
+            if request["wave"] == 1 and request["attempt"] == 2:
+                assert self.completed == set(diagnostic.TREATMENTS)
+            result = super().launch(request, timeout_seconds)
+            if request["wave"] == 1 and request["attempt"] == 1:
+                self.completed.add(request["treatment"])
+            return result
+
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", DelayedPrimaryLauncher(),
+        RecordingTerminal(),
+    ).run()
+
+    assert result["status"] == "complete"
+    assert result["waves"][0]["cells"][0]["retry"]["outcome"] == "success"
+
+
+def test_unexpected_cell_exception_is_durable_and_does_not_abort_siblings(tmp_path: Path,
+                                                                         monkeypatch):
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", RecordingLauncher(), RecordingTerminal(),
+    )
+    original = campaign._cell
+
+    def broken_cell(wave, treatment, attempt, available_seconds=None):
+        if treatment == "cannbot":
+            raise RuntimeError("unexpected hook failure")
+        return original(wave, treatment, attempt, available_seconds)
+
+    monkeypatch.setattr(campaign, "_cell", broken_cell)
+    result = campaign.run()
+
+    failed = result["waves"][0]["cells"][0]
+    assert failed["outcome"] == "transport_or_observer_error"
+    assert failed["retry"]["outcome"] == "transport_or_observer_error"
+    assert [cell["outcome"] for cell in result["waves"][0]["cells"][1:]] == [
+        "success", "success",
+    ]
+    assert result["status"] == "reschedule_pending"
+    assert json.loads((tmp_path / "run" / "ledger.json").read_text()) == result
+
+
+def test_reused_output_root_is_rejected_without_changing_ledger(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path)
+    diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+    ).run()
+    retained = (root / "ledger.json").read_bytes()
+
+    with pytest.raises(diagnostic.DiagnosticError, match="not fresh"):
+        diagnostic.DiagnosticCampaign(
+            config, root, RecordingLauncher(), RecordingTerminal(),
+        ).run()
+
+    assert (root / "ledger.json").read_bytes() == retained

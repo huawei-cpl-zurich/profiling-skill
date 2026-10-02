@@ -78,6 +78,11 @@ def _invoke(command: list[str], request: dict, timeout_seconds: int) -> dict:
                 "diagnostics": f"invalid response: {error}", "stdout": run.stdout,
                 "stderr": run.stderr, "exit_code": run.returncode,
                 "elapsed_seconds": time.time() - started}
+    if run.returncode and document.get("status") == "ok":
+        return {"status": "transport_or_observer_error",
+                "diagnostics": f"process claimed ok but exited {run.returncode}",
+                "stdout": run.stdout, "stderr": run.stderr,
+                "exit_code": run.returncode, "elapsed_seconds": time.time() - started}
     return {**document, "stdout": run.stdout, "stderr": run.stderr,
             "exit_code": run.returncode, "elapsed_seconds": time.time() - started}
 
@@ -159,7 +164,8 @@ def classify(agent: dict, terminal: dict | None, workspace: Path) -> tuple[str, 
         return str(terminal_status), "infrastructure"
     if terminal_status == "timeout":
         return "candidate_timeout", "counted"
-    if terminal_status in {"source_error", "compile_error", "runtime_error", "correctness_error"}:
+    if terminal_status in {"submission_error", "source_error", "compile_error",
+                           "runtime_error", "correctness_error"}:
         return str(terminal_status), "counted"
     if terminal_status == "ok" and terminal.get("passed") is True:
         return "success", "counted"
@@ -239,7 +245,31 @@ class DiagnosticCampaign:
             "elapsed_seconds": time.time() - started,
         }
 
+    def _guarded_cell(self, wave: int, treatment: str, attempt: int,
+                      available_seconds: float | None = None) -> dict:
+        """Keep an unexpected cell implementation error inside durable evidence."""
+        try:
+            return self._cell(wave, treatment, attempt, available_seconds)
+        except Exception as error:
+            treatment_record = self.manifest["treatments"][treatment]
+            return {
+                "cell_id": f"wave-{wave}-{treatment}", "wave": wave,
+                "attempt": attempt, "treatment": treatment,
+                "outcome": "transport_or_observer_error", "category": "infrastructure",
+                "agent": {"status": "transport_or_observer_error",
+                          "diagnostics":
+                              f"cell hook raised {type(error).__name__}: {error}"},
+                "terminal": None, "candidate_sha256": {},
+                "started_at_epoch": time.time(),
+                "prompt_sha256": self.manifest["prompt_sha256"],
+                "model_sha256": self.manifest["model_sha256"],
+                "skill_sha256": treatment_record["skill_sha256"],
+                "elapsed_seconds": 0,
+            }
+
     def run(self) -> dict:
+        if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
+            raise DiagnosticError(f"diagnostic output root is not fresh: {self.root}")
         ledger = {
             "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
             "prompt_sha256": self.manifest["prompt_sha256"],
@@ -252,21 +282,24 @@ class DiagnosticCampaign:
             wave_record = {"wave": wave, "cells": results}
             ledger["waves"].append(wave_record)
             with ThreadPoolExecutor(max_workers=3) as pool:
-                futures = {pool.submit(self._cell, wave, treatment, 1, self.wave_timeout): treatment
+                futures = {pool.submit(self._guarded_cell, wave, treatment, 1,
+                                       self.wave_timeout): treatment
                            for treatment in TREATMENTS}
                 for future in as_completed(futures):
                     result = future.result()
                     results.append(result)
                     _atomic_json(self.ledger_path, ledger)
-                    if result["category"] == "infrastructure":
-                        remaining = self.wave_timeout - (time.monotonic() - wave_started)
-                        if remaining > 0:
-                            retry = self._cell(wave, result["treatment"], 2, remaining)
-                            result["retry"] = retry
-                            _atomic_json(self.ledger_path, ledger)
-                        if remaining <= 0 or retry["category"] != "counted":
-                            ledger["reschedule"].append(result["cell_id"])
-                            _atomic_json(self.ledger_path, ledger)
+            for result in [item for item in results if item["category"] == "infrastructure"]:
+                remaining = self.wave_timeout - (time.monotonic() - wave_started)
+                if remaining > 0:
+                    retry = self._guarded_cell(
+                        wave, result["treatment"], 2, remaining,
+                    )
+                    result["retry"] = retry
+                    _atomic_json(self.ledger_path, ledger)
+                if remaining <= 0 or retry["category"] != "counted":
+                    ledger["reschedule"].append(result["cell_id"])
+                    _atomic_json(self.ledger_path, ledger)
             results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
             _atomic_json(self.ledger_path, ledger)
         ledger["status"] = "reschedule_pending" if ledger["reschedule"] else "complete"

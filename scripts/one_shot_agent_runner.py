@@ -92,6 +92,24 @@ def _kill_group(pid: int, sig: signal.Signals) -> None:
     except ProcessLookupError: pass
 
 
+def _copy_regular(source: Path, destination: Path, workspace: Path) -> None:
+    if stat.S_ISLNK(source.lstat().st_mode):
+        raise OSError(f"submission is a symlink: {source.name}")
+    resolved = source.resolve(strict=True)
+    if resolved == workspace or not resolved.is_relative_to(workspace):
+        raise OSError(f"submission escaped workspace: {source.name}")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(source, flags)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise OSError(f"submission is not a regular file: {source.name}")
+        with os.fdopen(descriptor, "rb", closefd=False) as incoming, destination.open("xb") as outgoing:
+            shutil.copyfileobj(incoming, outgoing)
+    finally:
+        os.close(descriptor)
+    destination.chmod(0o444)
+
+
 class _Handler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         owner: Controller = self.server.owner  # type: ignore[attr-defined]
@@ -142,29 +160,38 @@ class Controller:
                 return {"exit_code": 75, "stdout": "", "stderr": "remote request budget exhausted\n"}
             self.used = 1
             self.calls.append({"arguments": arguments})
-            workspace = Path(self.request["workspace"])
-            snapshot = self.snapshot_root / "development-check"
-            snapshot.mkdir(parents=True, exist_ok=False)
-            for name in ("candidate.py", "candidate.manifest.json"):
-                source = workspace / name
-                if not source.is_file():
-                    return self._wire({"status": "submission_error",
-                        "diagnostics": f"missing {name}", "billed": True}, 2)
-                destination = snapshot / name
-                shutil.copyfile(source, destination); destination.chmod(0o444)
-            campaign = "agent-" + hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
-            result = self.client.run({
-                "campaign": campaign, "wave": self.request["wave"], "cell": self.request["treatment"],
-                **self.placement, "logical_device": 0, "timeout": 240,
-                "candidate": str(snapshot / "candidate.py"),
-                "candidate_manifest": str(snapshot / "candidate.manifest.json"),
-                "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
-                "runner": self.assets["runner"], "cases": [1],
-            })
-            result["diagnostics"] = _bounded(result.get("diagnostics"))
-            self.last_result = result
-            code = 0 if result.get("status") == "ok" else 2
-            return self._wire(result, code)
+            try:
+                return self._development_check()
+            except Exception as error:
+                self.last_result = {
+                    "status": "infrastructure_error", "failure_type": "controller_error",
+                    "diagnostics": _bounded(f"controller failed: {type(error).__name__}: {error}"),
+                    "handle": getattr(error, "handle", None),
+                }
+                return self._wire(self.last_result, 74)
+
+    def _development_check(self) -> dict:
+        workspace = Path(self.request["workspace"])
+        snapshot = self.snapshot_root / "development-check"
+        snapshot.mkdir(parents=True, exist_ok=False)
+        for name in ("candidate.py", "candidate.manifest.json"):
+            source = workspace / name
+            if not source.is_file():
+                return self._wire({"status": "submission_error",
+                    "diagnostics": f"missing {name}", "billed": True}, 2)
+            _copy_regular(source, snapshot / name, workspace)
+        campaign = "agent-" + hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
+        result = self.client.run({
+            "campaign": campaign, "wave": self.request["wave"], "cell": self.request["treatment"],
+            **self.placement, "logical_device": 0, "timeout": 240,
+            "candidate": str(snapshot / "candidate.py"),
+            "candidate_manifest": str(snapshot / "candidate.manifest.json"),
+            "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
+            "runner": self.assets["runner"], "cases": [1],
+        })
+        result["diagnostics"] = _bounded(result.get("diagnostics"))
+        self.last_result = result
+        return self._wire(result, 0 if result.get("status") == "ok" else 2)
 
     def __enter__(self) -> "Controller":
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)

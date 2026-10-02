@@ -156,6 +156,28 @@ def test_compile_diagnostic_is_bounded_and_returned_to_agent(tmp_path: Path):
     assert len(document["diagnostics"]) < 66000 and ctl.used == 1
 
 
+@pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
+@pytest.mark.parametrize("absolute", [False, True])
+def test_controller_rejects_submission_symlink_outside_workspace(
+        tmp_path: Path, name: str, absolute: bool):
+    runner, request, client = fixture(tmp_path)
+    workspace = Path(request["workspace"])
+    outside = tmp_path / "outside"; outside.write_text("host data\n")
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    (workspace / name).unlink()
+    (workspace / name).symlink_to(outside if absolute else "../outside")
+    socket_path = tmp_path / "ctl/controller.sock"
+    with module.Controller(socket_path, client, request, {"profile": "bz-a3-1", "device": 0},
+                           runner.assets, tmp_path / "snapshots") as controller:
+        response = call_socket(str(socket_path), module.CHECK)
+    result = json.loads(response["stdout"])
+    assert response["exit_code"] == 74 and result["status"] == "infrastructure_error"
+    assert controller.used == 1 and controller.last_result == result
+    assert not client.requests
+    assert not (tmp_path / "snapshots/development-check" / name).exists()
+
+
 def test_standalone_sandbox_controller_client_needs_no_backend_module(tmp_path: Path):
     script = tmp_path / "runner.py"
     script.write_bytes((ROOT / "scripts/one_shot_agent_runner.py").read_bytes())
@@ -223,6 +245,29 @@ def test_billed_controller_infrastructure_overrides_zero_codex_exit(monkeypatch,
     assert result["failure_type"] == "device_error"
     assert result["diagnostics"] == "device unavailable"
     assert result["handle"] is None and result["controller_result"]["failure_type"] == "device_error"
+    assert result["controller_usage"]["billed"] == 1
+
+
+def test_billed_snapshot_exception_overrides_zero_codex_exit(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+
+    def fail_copy(*_):
+        raise OSError("snapshot storage unavailable")
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 74
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_copy_regular", fail_copy)
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "controller_error"
+    assert "snapshot storage unavailable" in result["diagnostics"]
     assert result["controller_usage"]["billed"] == 1
 
 

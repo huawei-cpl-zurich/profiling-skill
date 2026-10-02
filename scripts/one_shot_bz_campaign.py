@@ -378,13 +378,26 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
         raise DiagnosticError("diagnostic timeouts must remain 360/600/600 seconds")
     if config["waves"] != 4:
         raise DiagnosticError("diagnostic campaign requires exactly four waves")
-    campaign_id = str(uuid.uuid4())
-    assets, asset_evidence = freeze_assets(config["assets"], root, campaign_id)
+    identity = _adaptive_inputs(config, manifest, placements)
+    existing = root / "ledger.json"
+    if existing.is_file():
+        ledger = load_json(existing)
+        campaign_id = ledger.get("campaign_id")
+        if not isinstance(campaign_id, str) or not campaign_id:
+            raise DiagnosticError("fixed ledger has no campaign identity")
+        asset_evidence, assets = ledger.get("assets"), _retained_assets(ledger)
+    else:
+        campaign_id = str(uuid.uuid4())
+        assets, asset_evidence = freeze_assets(config["assets"], root, campaign_id)
     hook = BzTerminalHook(client, placements, assets, campaign_id)
     campaign = DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
                                   waves=4, agent_timeout=360, cell_timeout=600,
                                   wave_timeout=600, ledger_metadata={"assets": asset_evidence},
-                                  campaign_id=campaign_id)
+                                  campaign_id=campaign_id,
+                                  campaign_identity={"config_sha256": identity})
+    campaign.ledger_metadata["fixed_campaign_identity"] = campaign._adaptive_identity()
+    if existing.is_file():
+        return campaign.resume_fixed()
     try:
         ledger = campaign.run()
     except BaseException:
@@ -493,11 +506,14 @@ def reconcile_terminal(config: dict, manifest: dict, placements: dict,
         manifest, root, CommandLauncher(["false"]), CommandTerminalHook(["false"]),
         campaign_id=campaign_id, campaign_identity={"config_sha256": identity},
     )
-    validated = campaign._load_adaptive_ledger()
+    validated = (campaign._load_adaptive_ledger()
+                 if ledger.get("adaptive") is True
+                 else campaign._load_fixed_ledger())
     if validated.get("campaign_id") != campaign_id:
-        raise DiagnosticError("adaptive ledger campaign identity mismatch")
-    if validated.get("status") != "reschedule_pending":
-        raise DiagnosticError("campaign is not awaiting terminal reconciliation")
+        raise DiagnosticError("campaign ledger identity mismatch")
+    if (validated.get("status") != "reschedule_pending"
+            or cell_id not in validated.get("reschedule", [])):
+        raise DiagnosticError("cell is not awaiting terminal reconciliation")
     if handle is not None:
         parts = cell_id.split("-", 2)
         if (len(parts) != 3 or parts[2] not in placements

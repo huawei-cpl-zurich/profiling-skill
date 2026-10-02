@@ -908,6 +908,65 @@ def test_reconcile_terminal_cli_updates_uncertain_receipt(
     assert output["receipt"]["result"]["handle"] == "bz-a3-1:recovered"
 
 
+@pytest.mark.parametrize("reconciliation", ["handle", "result"])
+def test_fixed_run_reconciliation_resumes_without_redispatch(
+    tmp_path: Path, reconciliation: str,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+
+    class DispatchTimeout(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if request["wave"] == "1" and request["cell"] == "cannbot-attempt-1":
+                return {"status": "infrastructure_error",
+                        "failure_type": "transport_error",
+                        "invocation_timeout": True, "dispatch_uncertain": True,
+                        "handle": None}
+            return {"status": "ok", "passed": True}
+
+    initial_agent, initial_client = Agent(), DispatchTimeout()
+    ledger = module.run(
+        config, manifest, placements, root, initial_agent, initial_client)
+    assert ledger["status"] == "reschedule_pending"
+    assert ledger["reschedule"] == ["wave-1-cannbot"]
+    receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-1").glob(
+        "terminal-result-*.json"))
+    receipt = json.loads(receipt_path.read_text())
+    if reconciliation == "handle":
+        module.reconcile_terminal(
+            config, manifest, placements, root, "wave-1-cannbot", 1, 1,
+            handle="bz-a3-1:recovered")
+    else:
+        module.reconcile_terminal(
+            config, manifest, placements, root, "wave-1-cannbot", 1, 1,
+            result={"status": "ok", "passed": True,
+                    "campaign_id": ledger["campaign_id"],
+                    "request_sha256": receipt["request_sha256"],
+                    "cell_id": "wave-1-cannbot", "terminal_attempt": 1,
+                    "handle": "bz-a3-1:recovered",
+                    "candidate_sha256": receipt["request"]["candidate_sha256"]})
+
+    class RecoveryClient(Client):
+        def run(self, request):
+            raise AssertionError("fixed recovery must not dispatch")
+
+        def resume(self, requests, handle, observe_timeout):
+            if reconciliation != "handle":
+                raise AssertionError("completed reconciliation must not observe")
+            assert len(requests) == 1
+            return {"status": "ok", "passed": True, "handle": handle,
+                    "cell": requests[0]["cell"]}
+
+    recovery_agent = Agent()
+    recovered = module.run(
+        config, manifest, placements, root, recovery_agent, RecoveryClient())
+
+    assert recovered["status"] == "complete"
+    assert recovered["reschedule"] == []
+    assert recovery_agent.requests == []
+
+
 @pytest.mark.parametrize("mode", ["config_drift", "placement_drift", "not_pending",
                                    "minimal_ledger", "wrong_profile"])
 def test_reconcile_terminal_rejects_invalid_adaptive_campaign(

@@ -599,6 +599,47 @@ class DiagnosticCampaign:
                 receipt, {**ledger, "waves": waves[:index]})
         return ledger
 
+    def _load_fixed_ledger(self) -> dict:
+        try:
+            ledger = json.loads(self.ledger_path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise DiagnosticError(f"cannot read fixed campaign ledger: {error}") from error
+        if (not isinstance(ledger, dict) or ledger.get("adaptive") is True
+                or ledger.get("protocol_version") != 1
+                or ledger.get("campaign_id") != self.campaign_id
+                or ledger.get("fixed_campaign_identity") != self._adaptive_identity()
+                or ledger.get("status") != "reschedule_pending"
+                or not isinstance(ledger.get("waves"), list)
+                or not isinstance(ledger.get("reschedule"), list)):
+            raise DiagnosticError("invalid or drifted fixed campaign ledger")
+        valid_cells = {f"wave-{wave}-{name}"
+                       for wave in range(1, self.waves + 1) for name in TREATMENTS}
+        if (len(ledger["reschedule"]) != len(set(ledger["reschedule"]))
+                or not set(ledger["reschedule"]).issubset(valid_cells)):
+            raise DiagnosticError("fixed campaign has invalid pending cells")
+        return ledger
+
+    def resume_fixed(self) -> dict:
+        """Resume only pending cells in a validated fixed-run ledger."""
+        ledger = self._load_fixed_ledger()
+        for wave in range(1, self.waves + 1):
+            if not any(cell.startswith(f"wave-{wave}-")
+                       for cell in ledger["reschedule"]):
+                continue
+            records = [item for item in ledger["waves"] if item.get("wave") == wave]
+            if len(records) != 1:
+                raise DiagnosticError("fixed campaign wave record is missing or ambiguous")
+            prompt = Path(records[0]["prompt"])
+            if (not prompt.is_file()
+                    or sha256_file(prompt) != records[0].get("prompt_sha256")):
+                raise DiagnosticError("fixed campaign prompt is missing or changed")
+            self._prompt_bytes = prompt.read_bytes()
+            self.manifest["prompt"] = str(prompt)
+            self._resume_wave(ledger, wave)
+        ledger["status"] = "reschedule_pending" if ledger["reschedule"] else "complete"
+        _atomic_json(self.ledger_path, ledger)
+        return ledger
+
     @staticmethod
     def _wave_sha256(wave_record: dict) -> str:
         return hashlib.sha256(json.dumps(

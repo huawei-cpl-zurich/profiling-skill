@@ -154,11 +154,14 @@ class FrozenAgentLauncher:
             }, files)
             raise
         snapshot = workspace.parent / "frozen-submission"
+        candidate_sha256 = {name: hashlib.sha256(content).hexdigest()
+                            for name, content in files.items()}
+        result = {**result, "candidate_sha256": candidate_sha256}
+        self.frozen[cell] = (result, files)
         diagnostic_campaign._atomic_json(receipt_path, {
             "protocol_version": 1, "cell_id": cell, "state": "completed",
             "result": result, "snapshot": str(snapshot),
-            "candidate_sha256": {name: hashlib.sha256(content).hexdigest()
-                                 for name, content in files.items()},
+            "candidate_sha256": candidate_sha256,
         })
         return result
 
@@ -233,6 +236,30 @@ class BzTerminalHook:
         # the attempt-2 placement.
         retained = request.get("retained_terminal_request") or self._uncertain.get(cell)
         if retained is not None:
+            immutable = ("campaign", "wave", "baseline", "case_spec", "runner", "cases")
+            retained_candidate = Path(str(retained.get("candidate", "")))
+            retained_manifest = Path(str(retained.get("candidate_manifest", "")))
+            prefix = f"{treatment}-attempt-"
+            retained_attempt = str(retained.get("cell", "")).removeprefix(prefix)
+            retained_placement = (self.placements[treatment][min(int(retained_attempt) - 1, 1)]
+                                  if retained_attempt.isdigit() and int(retained_attempt) > 0
+                                  else {})
+            same_cell = (retained_candidate.name == "candidate.py"
+                         and retained_manifest.name == "candidate.manifest.json"
+                         and retained_candidate.parent == retained_manifest.parent
+                         and retained_candidate.parent.name == "frozen-submission"
+                         and retained_candidate.parent.parent.name.startswith("attempt-")
+                         and retained_candidate.parent.parent.parent == submission.parent.parent)
+            if (not isinstance(retained, dict)
+                    or any(retained.get(key) != client_request[key] for key in immutable)
+                    or any(retained.get(key) != value
+                           for key, value in retained_placement.items())
+                    or not retained_placement
+                    or not same_cell
+                    or isinstance(retained.get("timeout"), bool)
+                    or not isinstance(retained.get("timeout"), int)
+                    or not 1 <= retained["timeout"] <= 240):
+                raise DiagnosticError(f"retained terminal request mismatch for {cell}")
             client_request = {**retained, "observe_timeout":
                               min(timeout_seconds, retained["timeout"])}
         deadline = time.monotonic() + timeout_seconds
@@ -244,7 +271,10 @@ class BzTerminalHook:
                 and not uncertain):
             remaining = int(deadline - time.monotonic())
             if remaining < 1:
-                return result
+                self._uncertain.pop(cell, None)
+                return {**result, "terminal_attempt": terminal_attempt}
+            terminal_attempt += 1
+            placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
             client_request = {
                 **client_request, **placement,
                 "cell": f"{treatment}-attempt-{terminal_attempt}",

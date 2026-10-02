@@ -267,6 +267,10 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     monkeypatch.setattr(Path, "read_bytes", mutate_after_read)
     result = frozen.launch(request, 10)
     assert result["status"] == "ok" and len(agent.requests) == 1
+    assert result["candidate_sha256"] == {
+        "candidate.py": hashlib.sha256(b"candidate\n").hexdigest(),
+        "candidate.manifest.json": hashlib.sha256(b"{}\n").hexdigest(),
+    }
     assert (workspace / "candidate.py").read_text() == "candidate\n"
     assert (workspace / "candidate.py").stat().st_mode & 0o777 == 0o444
     snapshot = workspace.parent / "frozen-submission"
@@ -365,6 +369,77 @@ def test_failed_retained_observation_never_dispatches_fallback(tmp_path: Path):
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert (client.requests[1]["profile"], client.requests[1]["device"]) == ("bz-a3-1", 0)
     assert client.requests[1]["observe_timeout"] == client.requests[1]["timeout"]
+
+
+def test_terminal_retained_failure_dispatches_new_fallback_attempt(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+
+    class RetainedThenTerminalFailure(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-1:retained"}
+            if len(self.requests) == 2:
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "handle": "bz-a3-1:retained"}
+            return {"status": "ok", "passed": True}
+
+    client = RetainedThenTerminalFailure()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "unique")
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    first = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace)}, 240)
+    result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                         "retained_terminal_request": first["retained_terminal_request"]}, 240)
+    assert result["status"] == "ok" and result["terminal_attempt"] == 2
+    assert [request["cell"] for request in client.requests] == [
+        "cannbot-attempt-1", "cannbot-attempt-1", "cannbot-attempt-2"]
+    assert (client.requests[2]["profile"], client.requests[2]["device"]) == ("bz-a3-2", 2)
+    assert "observe_timeout" not in client.requests[2]
+
+
+def test_exhausted_retained_failure_preserves_attempt_for_next_resume(
+        tmp_path: Path, monkeypatch):
+    config, _manifest, placements = inputs(tmp_path)
+
+    class TerminalThenSuccess(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-2:retained"}
+            if len(self.requests) == 2:
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "handle": "bz-a3-2:retained"}
+            return {"status": "ok", "passed": True}
+
+    client = TerminalThenSuccess()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    workspace = tmp_path / "attempt-2" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    ticks = iter((0, 0, 31))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    uncertain = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                            "terminal_attempt": 2}, 30)
+    assert uncertain["retained_terminal_request"]["cell"] == "cannbot-attempt-2"
+    first = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                        "terminal_attempt": 2}, 30)
+    assert first["terminal_attempt"] == 2 and not hook._uncertain
+    monkeypatch.setattr(module.time, "monotonic", lambda: 0)
+    second = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                         "terminal_attempt": first["terminal_attempt"] + 1}, 30)
+    assert second["status"] == "ok"
+    assert [request["cell"] for request in client.requests] == [
+        "cannbot-attempt-2", "cannbot-attempt-2", "cannbot-attempt-3"]
 
 
 def test_terminal_infrastructure_result_uses_fallback(tmp_path: Path):
@@ -558,6 +633,33 @@ def test_retained_terminal_request_survives_hook_restart(tmp_path: Path):
     assert second["status"] == "ok"
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert "observe_timeout" in client.requests[1]
+
+
+def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    other = tmp_path / "other" / "frozen-submission"
+    other.mkdir(parents=True)
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (other / name).write_text("other\n")
+    client = Client()
+    retained = {
+        "campaign": "campaign", "wave": "1", "cell": "cannbot-attempt-1",
+        "profile": "bz-a3-1", "device": 0, "timeout": 30,
+        "candidate": str(other / "candidate.py"),
+        "candidate_manifest": str(other / "candidate.manifest.json"),
+        **config["assets"], "cases": list(range(7)),
+    }
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    with pytest.raises(module.DiagnosticError, match="retained terminal request mismatch"):
+        hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                    "retained_terminal_request": retained}, 30)
+    assert client.requests == []
 
 
 def test_terminal_cancel_waits_for_durable_client_completion(tmp_path: Path):

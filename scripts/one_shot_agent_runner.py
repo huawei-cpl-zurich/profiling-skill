@@ -300,6 +300,8 @@ class OneShotRunner:
                                 "failure_type": controller.last_result.get(
                                     "failure_type", "controller_infrastructure"),
                                 "diagnostics": controller.last_result.get("diagnostics", ""),
+                                "handle": controller.last_result.get("handle"),
+                                "controller_result": controller.last_result,
                                 "agent_timeout": _bounded(error.stderr), "milestones": milestones,
                                 "controller_usage": {"billed": controller.used,
                                                      "calls": controller.calls}}
@@ -325,7 +327,9 @@ class OneShotRunner:
                                          "over_budget": controller.over_budget}}
             if status == "infrastructure_error":
                 result.update(failure_type=controller.last_result.get("failure_type", "controller_infrastructure"),
-                              diagnostics=controller.last_result.get("diagnostics", ""))
+                              diagnostics=controller.last_result.get("diagnostics", ""),
+                              handle=controller.last_result.get("handle"),
+                              controller_result=controller.last_result)
             return result
         except (RunnerError, OSError, KeyError, TypeError, ValueError) as error:
             return {"status": "setup_error", "diagnostics": _bounded(error), "milestones": milestones,

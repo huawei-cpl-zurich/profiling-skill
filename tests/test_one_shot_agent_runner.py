@@ -222,6 +222,7 @@ def test_billed_controller_infrastructure_overrides_zero_codex_exit(monkeypatch,
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "device_error"
     assert result["diagnostics"] == "device unavailable"
+    assert result["handle"] is None and result["controller_result"]["failure_type"] == "device_error"
     assert result["controller_usage"]["billed"] == 1
 
 
@@ -243,6 +244,8 @@ def test_billed_controller_infrastructure_overrides_agent_timeout(monkeypatch, t
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "transport_error"
     assert result["diagnostics"] == "observer unavailable"
+    assert result["handle"] == "bz-a3-1:kept"
+    assert result["controller_result"]["handle"] == "bz-a3-1:kept"
     assert result["agent_timeout"] == "agent exceeded turn"
 
 

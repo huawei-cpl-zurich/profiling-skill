@@ -200,7 +200,27 @@ def test_snapshot_failure_cannot_invoke_agent_twice(tmp_path: Path, monkeypatch)
     Path(request["workspace"]).mkdir()
     replay = frozen.launch(request, 5)
     assert len(agent.requests) == 1
-    assert replay["status"] == "ok" and replay["submission_replayed"] is True
+    assert replay["status"] == "infrastructure_error"
+    assert replay["failure_type"] == "snapshot_error" and replay["submission_replayed"] is True
+
+
+def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):
+    config, manifest, placements = inputs(tmp_path)
+    agent = Agent()
+    original = Path.read_bytes
+
+    def unreadable(path):
+        if path.name == "candidate.py":
+            raise PermissionError("candidate is unreadable")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    ledger = module.run(config, manifest, placements, tmp_path / "campaign", agent, Client())
+    failed = ledger["waves"][0]["cells"][0]
+    assert len(agent.requests) == 12
+    assert failed["category"] == "infrastructure"
+    assert failed["retry"]["outcome"] == "snapshot_error"
+    assert "wave-1-cannbot" in ledger["reschedule"]
 
 
 def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: Path):

@@ -88,10 +88,18 @@ class FrozenAgentLauncher:
         # Snapshot failures may make this attempt infrastructure, but must never
         # permit another billed invocation for the same logical cell.
         self.frozen[cell] = (result, files)
-        for name in ("candidate.py", "candidate.manifest.json"):
-            path = workspace / name
-            if path.is_file():
-                files[name] = path.read_bytes()
+        try:
+            for name in ("candidate.py", "candidate.manifest.json"):
+                path = workspace / name
+                if path.is_file():
+                    files[name] = path.read_bytes()
+        except OSError as error:
+            files.clear()
+            self.frozen[cell] = ({
+                "status": "infrastructure_error", "failure_type": "snapshot_error",
+                "diagnostics": f"submission snapshot failed: {type(error).__name__}: {error}",
+            }, files)
+            raise
         return result
 
     def cancel(self) -> None:

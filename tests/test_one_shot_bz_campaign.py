@@ -76,7 +76,7 @@ class Client:
         if self.observer_once and key not in self.failed:
             self.failed.add(key)
             return {"status": "infrastructure_error", "failure_type": "observer_error",
-                    "handle": "bz-a3-1:retained"}
+                    "handle": f"{request['profile']}:retained"}
         if self.fail_once and key not in self.failed:
             self.failed.add(key)
             return {"status": "infrastructure_error", "failure_type": "device_error"}
@@ -319,12 +319,14 @@ def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: P
     for request in client.requests:
         by_cell.setdefault((request["wave"], request["cell"]), []).append(request)
     assert len(by_cell) == 12
-    assert all(len(requests) == 2
-               and {**requests[1], "observe_timeout": None}
-               == {**requests[0], "observe_timeout": None}
-               and requests[1]["observe_timeout"] == requests[0]["timeout"]
-               and requests[0]["cell"].endswith("-attempt-1")
-               for requests in by_cell.values())
+    for requests in by_cell.values():
+        assert len(requests) == 2
+        first, resumed = requests
+        assert resumed["retained_handle"] == f"{first['profile']}:retained"
+        assert resumed["observe_timeout"] == first["timeout"]
+        assert {key: value for key, value in resumed.items()
+                if key not in {"retained_handle", "observe_timeout"}} == first
+        assert first["cell"].endswith("-attempt-1")
 
 
 def test_retained_observation_uses_remaining_attempt_budget(tmp_path: Path):
@@ -675,6 +677,34 @@ def test_retained_terminal_request_survives_hook_restart(tmp_path: Path):
     assert second["status"] == "ok"
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert "observe_timeout" in client.requests[1]
+
+
+def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class ResumeOnlyClient(Client):
+        def run(self, request):
+            self.requests.append(request)
+            assert request["retained_handle"] == "bz-a3-1:reconciled"
+            assert request["observe_timeout"] == 30
+            return {"status": "ok", "passed": True,
+                    "handle": request["retained_handle"]}
+
+    client = ResumeOnlyClient()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, "bz-a3-1:reconciled", 30)
+
+    assert result["status"] == "ok"
+    assert result["terminal_attempt"] == 1
+    assert len(client.requests) == 1
 
 
 def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):

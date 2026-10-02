@@ -206,6 +206,11 @@ class BzTerminalHook:
                 self._active -= 1
                 self._condition.notify_all()
 
+    def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
+        """Observe an explicitly reconciled handle without dispatching a job."""
+        return self.check(
+            {**request, "manual_retained_handle": handle}, timeout_seconds)
+
     def _check(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         try:
@@ -244,6 +249,15 @@ class BzTerminalHook:
             if all((submission / name).is_file()
                    for name in ("candidate.py", "candidate.manifest.json")) else {})
         client_request["candidate_sha256"] = copy.deepcopy(snapshot_hashes)
+        manual_handle = request.get("manual_retained_handle")
+        if manual_handle is not None:
+            if (not isinstance(manual_handle, str)
+                    or not manual_handle.startswith(placement["profile"] + ":")):
+                raise DiagnosticError("manual retained handle does not match placement")
+            client_request.update({"retained_handle": manual_handle,
+                                   "observe_timeout": min(
+                                       timeout_seconds, client_request["timeout"])})
+            return self._map_result(self.client.run(client_request), terminal_attempt)
         # A retained observer interruption is not permission to dispatch on a
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
@@ -309,11 +323,15 @@ class BzTerminalHook:
         if uncertain:
             self._uncertain[cell] = {key: value for key, value in client_request.items()
                                      if key != "observe_timeout"}
+            result = {**result, "retained_terminal_request":
+                      copy.deepcopy(self._uncertain[cell])}
         else:
             self._uncertain.pop(cell, None)
+        return self._map_result(result, terminal_attempt)
+
+    @staticmethod
+    def _map_result(result: dict, terminal_attempt: int) -> dict:
         result = {**result, "terminal_attempt": terminal_attempt}
-        if uncertain:
-            result["retained_terminal_request"] = copy.deepcopy(self._uncertain[cell])
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}

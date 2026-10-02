@@ -220,6 +220,12 @@ class BzA3DiagnosticClient:
                          or observe_timeout < 1 or observe_timeout > timeout)):
                 raise DiagnosticError("request_error",
                                       "observe_timeout must be 1..timeout seconds")
+            retained_handle = request.get("retained_handle")
+            if (retained_handle is not None
+                    and (not isinstance(retained_handle, str)
+                         or not retained_handle.startswith(profile + ":"))):
+                raise DiagnosticError("request_error",
+                                      "retained_handle must match the selected profile")
             deadline = time.monotonic() + (observe_timeout or timeout)
             path_names = ("candidate", "candidate_manifest", "baseline", "case_spec", "runner")
             if any(not isinstance(request.get(name, ""), str) for name in path_names):
@@ -251,6 +257,10 @@ class BzA3DiagnosticClient:
             request_sha = _json_sha({"identity": identity, "timeout": timeout, "cases": cases,
                                      "common_sha256": common_sha, "candidate_sha256": candidate_sha,
                                      "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})})
+            if retained_handle is not None and not dispatch_receipt.is_file():
+                _write_receipt(dispatch_receipt, {"protocol_version": 1,
+                               "request_sha256": request_sha,
+                               "handle": retained_handle})
             if completed_receipt.is_file():
                 completed_record = json.loads(completed_receipt.read_text())
                 if (completed_record.get("request_sha256") != request_sha

@@ -657,9 +657,22 @@ class DiagnosticCampaign:
         request_digest = hashlib.sha256(json.dumps(
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         expected_workspace = attempt_dir / "workspace"
-        if (record.get("request_sha256") != request_digest
+        candidate_sha256 = request.get("candidate_sha256")
+        if (record.get("protocol_version") != 1
+                or request.get("protocol_version") != 1
+                or request.get("operation") != "terminal_check"
+                or request.get("benchmark") != "streaming-matmul-add"
+                or request.get("cases") != list(range(7))
+                or isinstance(record.get("timeout_seconds"), bool)
+                or not isinstance(record.get("timeout_seconds"), int)
+                or record["timeout_seconds"] < 1
+                or record.get("request_sha256") != request_digest
                 or request.get("cell_id") != cell_id
                 or Path(str(request.get("workspace", ""))) != expected_workspace
+                or not isinstance(candidate_sha256, dict)
+                or any(candidate_sha256.get(name) != sha256_file(
+                    expected_workspace / name)
+                       for name in ("candidate.py", "candidate.manifest.json"))
                 or not isinstance(record.get("result"), dict)
                 or record["result"].get("manual_reconciliation_required") is not True):
             raise DiagnosticError("uncertain terminal receipt identity mismatch")
@@ -675,7 +688,14 @@ class DiagnosticCampaign:
             status = result.get("status")
             if (status not in {"timeout", "submission_error", "source_error",
                                "compile_error", "runtime_error", "correctness_error", "ok"}
-                    or (status == "ok" and result.get("passed") is not True)):
+                    or (status == "ok" and result.get("passed") is not True)
+                    or result.get("campaign_id") != self.campaign_id
+                    or result.get("request_sha256") != request_digest
+                    or result.get("cell_id") != cell_id
+                    or result.get("terminal_attempt") != terminal_attempt
+                    or not isinstance(result.get("handle"), str)
+                    or not result["handle"].strip()
+                    or result.get("candidate_sha256") != candidate_sha256):
                 raise DiagnosticError("reconciliation result is not terminal")
             record.update({"state": "completed", "result": copy.deepcopy(result)})
         _atomic_json(path, record)

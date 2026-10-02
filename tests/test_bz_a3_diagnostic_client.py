@@ -135,6 +135,24 @@ def test_verified_common_archive_is_reused(tmp_path: Path):
     assert not (completed.parent / "dispatch.json").exists()
 
 
+def test_retained_handle_observes_without_upload_or_execute(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = request(tmp_path)
+    value.update(retained_handle="bz-a3-1:reconciled", observe_timeout=17)
+
+    result = module.BzA3DiagnosticClient(
+        transport, tmp_path / "state").run(value)
+
+    assert result["status"] == "ok"
+    assert result["handle"] == "bz-a3-1:reconciled"
+    assert transport.uploads == []
+    assert transport.executions == []
+    assert transport.observations == [
+        ("bz-a3-1", "bz-a3-1:reconciled", pytest.approx(17, abs=1)),
+    ]
+
+
 def test_completed_result_is_durable_before_dispatch_cleanup(tmp_path: Path, monkeypatch):
     module = load()
     transport = FakeTransport(module)

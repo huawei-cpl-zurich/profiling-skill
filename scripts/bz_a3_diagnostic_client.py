@@ -211,7 +211,14 @@ class BzA3DiagnosticClient:
             timeout = request.get("timeout", 180)
             if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1 or timeout > 540:
                 raise DiagnosticError("request_error", "timeout must be 1..540 seconds")
-            deadline = time.monotonic() + timeout
+            observe_timeout = request.get("observe_timeout")
+            if (observe_timeout is not None
+                    and (isinstance(observe_timeout, bool)
+                         or not isinstance(observe_timeout, int)
+                         or observe_timeout < 1 or observe_timeout > timeout)):
+                raise DiagnosticError("request_error",
+                                      "observe_timeout must be 1..timeout seconds")
+            deadline = time.monotonic() + (observe_timeout or timeout)
             path_names = ("candidate", "candidate_manifest", "baseline", "case_spec", "runner")
             if any(not isinstance(request.get(name, ""), str) for name in path_names):
                 raise DiagnosticError("request_error", "asset paths must be JSON strings")
@@ -241,7 +248,8 @@ class BzA3DiagnosticClient:
             request_sha = _json_sha({"identity": identity, "timeout": timeout, "cases": cases,
                                      "common_sha256": common_sha, "candidate_sha256": candidate_sha,
                                      "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})})
-            if dispatch_receipt.is_file():
+            had_dispatch_receipt = dispatch_receipt.is_file()
+            if had_dispatch_receipt:
                 try:
                     prior = json.loads(dispatch_receipt.read_text())
                 except (OSError, json.JSONDecodeError) as exc:
@@ -252,7 +260,7 @@ class BzA3DiagnosticClient:
                 handle = prior["handle"]
                 completed = self.transport.observe(profile, handle, _remaining(deadline, handle))
                 observed_output = completed.stdout + completed.stderr
-                if (common_receipt.is_file() and completed.returncode
+                if (completed.returncode
                         and "common-digest-mismatch" in observed_output.lower()):
                     common_receipt.unlink(missing_ok=True)
                     dispatch_receipt.unlink(missing_ok=True)
@@ -261,6 +269,9 @@ class BzA3DiagnosticClient:
                     return self._completed(completed, handle, identity, common_sha, candidate_sha,
                                            run_root, common_remote, common_receipt,
                                            dispatch_receipt)
+            if observe_timeout is not None and not had_dispatch_receipt:
+                raise DiagnosticError("request_error",
+                                      "observe_timeout requires a retained dispatch receipt")
             # A structured prior result proves the remote script verified the common digest.
             common_cached = common_receipt.is_file()
             if not common_cached:

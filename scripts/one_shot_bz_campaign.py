@@ -144,12 +144,16 @@ class BzTerminalHook:
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
         # the attempt-2 placement.
-        client_request = self._uncertain.get(cell, client_request)
+        retained = self._uncertain.get(cell)
+        if retained is not None:
+            client_request = {**retained, "observe_timeout":
+                              min(timeout_seconds, retained["timeout"])}
         result = self.client.run(client_request)
         if (result.get("status") == "infrastructure_error"
                 and result.get("failure_type") == "observer_error"
                 and result.get("handle")):
-            self._uncertain[cell] = client_request
+            self._uncertain[cell] = {key: value for key, value in client_request.items()
+                                     if key != "observe_timeout"}
         else:
             self._uncertain.pop(cell, None)
         status = result.get("status")

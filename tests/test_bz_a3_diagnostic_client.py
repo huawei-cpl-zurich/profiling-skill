@@ -176,6 +176,31 @@ def test_resumed_stale_common_result_repairs_instead_of_reobserving(tmp_path: Pa
                 if "diagnostic-common-" in upload[2]]) == 2
 
 
+def test_first_dispatch_observed_digest_mismatch_is_repaired(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer_then_stale")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    interrupted = client.run(value)
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["handle"] == "bz-a3-1:kept"
+    resumed = client.run({**value, "observe_timeout": 7})
+    assert resumed["status"] == "ok"
+    assert transport.observations[-1][2] == 7
+    assert len([upload for upload in transport.uploads
+                if "diagnostic-common-" in upload[2]]) == 2
+
+
+def test_observe_timeout_cannot_dispatch_without_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = {**request(tmp_path), "observe_timeout": 7}
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert not transport.uploads and not transport.executions
+
+
 def test_compiler_traceback_is_complete_and_counted(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "compile_error")
     assert result["status"] == result["failure_type"] == "compile_error"

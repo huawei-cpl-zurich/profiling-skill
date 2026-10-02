@@ -164,9 +164,29 @@ def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: P
     for request in client.requests:
         by_cell.setdefault((request["wave"], request["cell"]), []).append(request)
     assert len(by_cell) == 12
-    assert all(len(requests) == 2 and requests[0] == requests[1]
+    assert all(len(requests) == 2
+               and {**requests[1], "observe_timeout": None}
+               == {**requests[0], "observe_timeout": None}
+               and requests[1]["observe_timeout"] == requests[0]["timeout"]
                and requests[0]["cell"].endswith("-attempt-1")
                for requests in by_cell.values())
+
+
+def test_retained_observation_uses_remaining_attempt_budget(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    client = Client(observer_once=True)
+    hook = module.BzTerminalHook(client, placements, config["assets"], "unique")
+    first = tmp_path / "attempt-1" / "workspace"
+    second = tmp_path / "attempt-2" / "workspace"
+    for workspace in (first, second):
+        workspace.mkdir(parents=True)
+        (workspace / "candidate.py").write_text("candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+    hook.check({"cell_id": "wave-1-cannbot", "workspace": str(first)}, 240)
+    hook.check({"cell_id": "wave-1-cannbot", "workspace": str(second)}, 7)
+    assert client.requests[1]["cell"] == "cannbot-attempt-1"
+    assert client.requests[1]["timeout"] == 240
+    assert client.requests[1]["observe_timeout"] == 7
 
 
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):

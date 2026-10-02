@@ -26,10 +26,13 @@ class FakeTransport:
         self.uploads = []
         self.executions = []
         self.observations = []
+        self.stale_returned = False
+        self.observer_returned = False
 
     def upload(self, profile, source, destination, timeout):
         self.uploads.append((profile, source, destination, timeout))
-        if self.mode == "staging":
+        if self.mode == "staging" or (self.mode == "stale_common_upload_failure"
+                                      and "diagnostic-common-" in destination):
             raise self.module.DiagnosticError("staging_error", "rsync unavailable")
 
     def execute(self, profile, device, operation, script, timeout):
@@ -38,26 +41,42 @@ class FakeTransport:
             raise self.module.DiagnosticError("transport_error", "vpn unavailable")
         if self.mode == "observer":
             raise self.module.DiagnosticError("observer_error", "retained job is not terminal", f"{profile}:kept")
+        if self.mode == "observer_then_stale" and not self.observer_returned:
+            self.observer_returned = True
+            raise self.module.DiagnosticError("observer_error", "retained job is not terminal",
+                                              f"{profile}:kept")
         if self.mode == "candidate_timeout":
             return self.module.CommandResult(124, "timed out", ""), f"{profile}:timeout"
+        if self.mode == "candidate_kill_timeout":
+            return self.module.CommandResult(137, "killed after timeout", ""), f"{profile}:killed"
         if self.mode == "device":
             return self.module.CommandResult(1, "", "NPU device unavailable"), f"{profile}:device"
         if self.mode == "digest":
             return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:digest"
-        status = self.mode if self.mode in {"compile_error", "runtime_error", "correctness_error"} else "ok"
+        if self.mode in {"stale_common", "stale_common_upload_failure"} and not self.stale_returned:
+            self.stale_returned = True
+            return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:stale"
+        return self.completed(profile)
+
+    def observe(self, profile, handle, timeout):
+        self.observations.append((profile, handle, timeout))
+        if self.mode == "observer_then_stale" and not self.stale_returned:
+            self.stale_returned = True
+            return self.module.CommandResult(91, "", "common-digest-mismatch")
+        return self.completed(profile)[0]
+
+    def completed(self, profile):
+        status = self.mode if self.mode in {
+            "compile_error", "runtime_error", "correctness_error", "infrastructure_error",
+        } else "ok"
         diagnostics = "Traceback\n  File candidate.py, line 17\nNameError: tl" if status == "compile_error" else ""
         payload = {"status": status, "diagnostics": diagnostics, "passed": status == "ok",
                    "case_evidence": [{"case": 0, "passed": status == "ok", "host_elapsed_us": 99.0}],
                    "host_elapsed_us": 99.0}
+        if status == "infrastructure_error":
+            payload.update(failure_type="runner_setup_error", diagnostics="torch import failed")
         stdout = "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n"
         return self.module.CommandResult(0, stdout, ""), f"{profile}:job-1"
-
-    def observe(self, profile, handle, timeout):
-        self.observations.append((profile, handle, timeout))
-        payload = {"status": "ok", "passed": True, "diagnostics": "",
-                   "case_evidence": [{"case": 0, "passed": True}]}
-        return self.module.CommandResult(
-            0, "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n", "")
 
 
 def request(tmp_path: Path):
@@ -110,6 +129,91 @@ def test_verified_common_archive_is_reused(tmp_path: Path):
     assert len(candidate_uploads) == 2
 
 
+def test_stale_common_receipt_reuploads_once_and_self_heals(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    assert client.run(value)["status"] == "ok"
+    transport.mode = "stale_common"
+    assert client.run(value)["status"] == "ok"
+    common_uploads = [upload for upload in transport.uploads if "diagnostic-common-" in upload[2]]
+    assert len(common_uploads) == 2
+    assert len(transport.executions) == 3
+
+
+def test_stale_common_repair_failure_does_not_preserve_terminal_handle(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    state = tmp_path / "state"
+    client = module.BzA3DiagnosticClient(transport, state)
+    value = request(tmp_path)
+    assert client.run(value)["status"] == "ok"
+    transport.mode = "stale_common_upload_failure"
+    failed = client.run(value)
+    assert failed["status"] == "infrastructure_error"
+    assert failed["handle"] is None
+    assert not (state / "quick" / "1" / "arm-a" / "dispatch.json").exists()
+    transport.mode = "ok"
+    assert client.run(value)["status"] == "ok"
+    assert not transport.observations
+
+
+def test_repeated_common_digest_mismatch_never_poisons_dispatch_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "digest")
+    state = tmp_path / "state"
+    client = module.BzA3DiagnosticClient(transport, state)
+    value = request(tmp_path)
+    assert client.run(value)["failure_type"] == "digest_mismatch"
+    assert client.run(value)["failure_type"] == "digest_mismatch"
+    assert len(transport.executions) == 2
+    assert not transport.observations
+    assert not (state / "quick" / "1" / "arm-a" / "dispatch.json").exists()
+
+
+def test_resumed_stale_common_result_repairs_instead_of_reobserving(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    assert client.run(value)["status"] == "ok"
+    transport.mode = "observer_then_stale"
+    interrupted = client.run(value)
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["handle"] == "bz-a3-1:kept"
+    resumed = client.run(value)
+    assert resumed["status"] == "ok"
+    assert transport.observations[-1][1] == "bz-a3-1:kept"
+    assert len([upload for upload in transport.uploads
+                if "diagnostic-common-" in upload[2]]) == 2
+
+
+def test_first_dispatch_observed_digest_mismatch_is_repaired(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer_then_stale")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    interrupted = client.run(value)
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["handle"] == "bz-a3-1:kept"
+    resumed = client.run({**value, "observe_timeout": 30})
+    assert resumed["status"] == "ok"
+    assert transport.observations[-1][2] == 30
+    assert len([upload for upload in transport.uploads
+                if "diagnostic-common-" in upload[2]]) == 2
+
+
+def test_observe_timeout_cannot_dispatch_without_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = {**request(tmp_path), "observe_timeout": 7}
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert not transport.uploads and not transport.executions
+
+
 def test_compiler_traceback_is_complete_and_counted(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "compile_error")
     assert result["status"] == result["failure_type"] == "compile_error"
@@ -141,6 +245,134 @@ def test_candidate_timeout_is_not_infrastructure(tmp_path: Path):
     assert result["handle"] == "bz-a3-1:timeout"
 
 
+def test_candidate_kill_after_timeout_is_not_infrastructure(tmp_path: Path):
+    _module, _transport, result = run(tmp_path, "candidate_kill_timeout")
+    assert result["status"] == "candidate_timeout"
+    assert result["failure_type"] == "candidate_timeout"
+    assert result["handle"] == "bz-a3-1:killed"
+
+
+def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path,
+                                                                   monkeypatch):
+    module = load()
+    calls = []
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    def invoke(argv, timeout):
+        calls.append((argv, timeout))
+        if "upload" in argv:
+            return module.CommandResult(0)
+        # Simulate setup, the complete workload cap, ten-second kill-after,
+        # and result propagation without sleeping.
+        clock[0] += 2 + 5 + 10 + 2
+        return module.CommandResult(124, "bz-a3-1:timed-out\n", "")
+
+    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
+    assert result["status"] == result["failure_type"] == "candidate_timeout"
+    adapter_argv, outer_timeout = calls[-1]
+    assert outer_timeout == 30
+    assert adapter_argv[adapter_argv.index("--timeout") + 1] == "30"
+    assert "timeout --signal=TERM --kill-after=10 5" in adapter_argv[-1]
+    assert clock[0] < outer_timeout
+
+
+def test_timeout_without_response_grace_is_rejected_before_staging(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "candidate_timeout")
+    value = {**request(tmp_path), "timeout": 25}
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert not transport.uploads and not transport.executions
+
+
+def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
+    module = load()
+    calls = []
+
+    def invoke(argv, timeout):
+        calls.append((argv, timeout))
+        if "upload" in argv:
+            return module.CommandResult(0)
+        raise module.DiagnosticError("transport_error", "outer response deadline expired")
+
+    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert calls[-1][1] == 30
+    assert "timeout --signal=TERM --kill-after=10 5" in calls[-1][0][-1]
+
+
+def test_observe_failure_preserves_handle_from_initial_dispatch():
+    module = load()
+
+    def invoke(argv, _timeout):
+        if "observe" in argv:
+            raise module.DiagnosticError("transport_error", "observer timed out")
+        return module.CommandResult(75, "CATLASS_VALIDATION_STATE=running\n",
+                                    "bz-a3-1:retained")
+
+    try:
+        module.AdapterTransport(["remote"], ["adapter"], invoke).execute(
+            "bz-a3-1", 2, "diagnostic", "true", 30)
+    except module.DiagnosticError as error:
+        assert error.failure_type == "observer_error"
+        assert error.handle == "bz-a3-1:retained"
+    else:
+        raise AssertionError("observer failure should preserve retained handle")
+
+
+def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):
+    _module, _transport, result = run(tmp_path, "infrastructure_error")
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "runner_setup_error"
+    assert result["diagnostics"] == "torch import failed"
+    assert result["handle"] == "bz-a3-1:job-1"
+
+
+def test_non_object_request_returns_structured_request_error(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    for value in (None, [], "request"):
+        result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+        assert result == {"status": "infrastructure_error", "failure_type": "request_error",
+                          "diagnostics": "request must be a JSON object", "handle": None}
+    assert not transport.uploads and not transport.executions
+
+
+def test_non_string_asset_paths_return_structured_request_error(tmp_path: Path):
+    module = load()
+    for invalid in (None, 7, 1.5, [], {}):
+        transport = FakeTransport(module)
+        value = request(tmp_path / str(type(invalid).__name__))
+        value["candidate"] = invalid
+        result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+        assert result["status"] == "infrastructure_error"
+        assert result["failure_type"] == "request_error"
+        assert result["diagnostics"] == "asset paths must be JSON strings"
+        assert not transport.uploads and not transport.executions
+
+
+def test_second_invocation_observes_durable_handle_without_redispatch(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    interrupted = client.run(value)
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["handle"] == "bz-a3-1:kept"
+    assert len(transport.uploads) == 2 and len(transport.executions) == 1
+
+    transport.mode = "ok"
+    resumed = client.run(value)
+    assert resumed["status"] == "ok"
+    assert transport.observations == [("bz-a3-1", "bz-a3-1:kept", 30)]
+    assert len(transport.uploads) == 2 and len(transport.executions) == 1
+
+
 def test_infrastructure_failures_are_disjoint(tmp_path: Path):
     expected = {"staging": "staging_error", "transport": "transport_error",
                 "observer": "observer_error", "device": "device_error",
@@ -170,76 +402,65 @@ def test_adapter_transport_observes_same_handle_after_interruption():
     assert sum("run" in call for call in calls) == 1
 
 
-def test_client_observes_retained_handle_without_upload_or_execution(tmp_path: Path):
+def test_client_uses_one_decreasing_deadline_across_all_phases(tmp_path: Path, monkeypatch):
     module = load()
+    ticks = iter((100.0, 101.0, 105.0, 108.0))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
     transport = FakeTransport(module)
-    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
-    value = request(tmp_path)
-    handle = "bz-a3-1:retained-9"
-
-    result = client.observe(value, handle)
-
-    assert result["status"] == "ok" and result["failure_type"] == "success"
-    assert result["handle"] == handle
-    assert transport.observations == [("bz-a3-1", handle, 30)]
-    assert not transport.uploads and not transport.executions
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert [entry[3] for entry in transport.uploads] == [29, 25]
+    assert not transport.executions
 
 
-def test_dispatch_observer_timeout_retains_handle_for_observe_only_resume(tmp_path: Path):
+def test_execute_observation_shares_one_deadline(monkeypatch):
     module = load()
+    clock = [0.0]
     calls = []
-    observe_attempts = 0
-    handle = "bz-a3-1:retained-timeout"
 
     def invoke(argv, timeout):
-        nonlocal observe_attempts
-        calls.append(argv)
-        if "observe" in argv:
-            observe_attempts += 1
-            if observe_attempts == 1:
-                raise subprocess.TimeoutExpired(argv, timeout)
-            payload = {"status": "ok", "passed": True, "diagnostics": "",
-                       "case_evidence": [{"case": 0, "passed": True}]}
-            return module.CommandResult(
-                0, "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n", "")
-        if "run" in argv:
-            return module.CommandResult(
-                75, "CATLASS_VALIDATION_STATE=observation-unavailable\n" + handle + "\n", "")
-        return module.CommandResult(0, "", "")
+        calls.append((argv, timeout))
+        if "observe" not in argv:
+            clock[0] = 20.0
+            return module.CommandResult(75, "CATLASS_VALIDATION_STATE=running\n",
+                                        "bz-a3-1:kept")
+        return module.CommandResult(0, "CATLASS_VALIDATION_STATE=completed\n", "")
 
-    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
-    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
-    value = request(tmp_path)
-
-    interrupted = client.run(value)
-    resumed = client.observe(value, interrupted["handle"])
-
-    assert interrupted["status"] == "infrastructure_error"
-    assert interrupted["failure_type"] == "transport_error"
-    assert interrupted["handle"] == handle
-    assert resumed["status"] == "ok" and resumed["handle"] == handle
-    assert sum("run" in argv for argv in calls) == 1
-    assert sum("observe" in argv for argv in calls) == 2
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    module.AdapterTransport(["remote"], ["adapter"], invoke).execute(
+        "bz-a3-1", 2, "diagnostic", "true", 30)
+    assert [timeout for _argv, timeout in calls] == [30, 10]
 
 
-def test_dispatch_observer_error_reattaches_extracted_handle():
+def test_host_timeout_preserves_handle_from_partial_adapter_output(monkeypatch):
     module = load()
-    handle = "bz-a3-2:retained-observer"
 
-    def invoke(argv, _timeout):
-        if "observe" in argv:
-            raise module.DiagnosticError("observer_error", "listener unavailable")
-        return module.CommandResult(
-            75, "CATLASS_VALIDATION_STATE=observation-unavailable\n" + handle + "\n", "")
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["adapter"], 30,
+                                        output=b"submitted bz-a3-2:retained-timeout\n")
 
-    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    monkeypatch.setattr(module.subprocess, "run", timeout)
     try:
-        transport.execute("bz-a3-2", 0, "diagnostic", "true", 30)
+        module._run(["adapter"], 30)
     except module.DiagnosticError as error:
         assert error.failure_type == "observer_error"
-        assert error.handle == handle
+        assert error.handle == "bz-a3-2:retained-timeout"
     else:
-        raise AssertionError("observer failure was not propagated")
+        raise AssertionError("timeout should raise DiagnosticError")
+
+
+def test_identifier_dot_segments_are_rejected_without_dispatch(tmp_path: Path):
+    module = load()
+    for name in ("campaign", "wave", "cell"):
+        for invalid in (".", ".."):
+            transport = FakeTransport(module)
+            value = request(tmp_path / name / invalid.replace(".", "dot"))
+            value[name] = invalid
+            result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+            assert result["status"] == "infrastructure_error"
+            assert result["failure_type"] == "request_error"
+            assert not transport.uploads and not transport.executions
 
 
 def test_remote_script_verifies_both_digests_and_bounds_execution():
@@ -248,4 +469,5 @@ def test_remote_script_verifies_both_digests_and_bounds_execution():
                                    "/run", 42, {"device": 0})
     assert script.count("sha256sum") == 2
     assert "timeout --signal=TERM --kill-after=10 42" in script
+    assert 'test "$rc" -ne 124 && test "$rc" -ne 137 || exit 124' in script
     assert "BZ_DIAGNOSTIC_RESULT=" in script

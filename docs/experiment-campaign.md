@@ -73,7 +73,9 @@ wave atomically pauses its ledger in `awaiting_curation`; it does not launch
 the next wave. Submit the curator-produced JSON with `--action
 acknowledge-curation --curation-receipt /absolute/receipt.json`. The receipt
 must identify the completed wave, set `accepted` to true, and contain nonempty
-`stable_ref_citations` (`ref://...`) and `librarian_query_ids` arrays.
+`stable_ref_citations` (`ref://...`) and `librarian_query_ids` arrays. It also
+binds the curator operation to the ledger's `campaign_id` and canonical
+`wave_sha256`; receipts from another campaign or evidence revision are rejected.
 
 Acknowledgement moves waves 1-3 to `ready_for_next` and Wave 4 to `complete`.
 Only the prompt path and digest may change between waves. The CLI rejects
@@ -240,8 +242,8 @@ for GDN/BSA and 10 for matmul), set `passed=true`, and retain
 at least one durable handle. It then runs exactly
 `profile --repeats 3 --round 3`, which must carry the same exact identity,
 report the configured development cases in order, retain three samples per
-case and exactly three distinct durable handles per case (15 for GDN/BSA and
-9 for matmul), and report three repeats. A cell is
+case, retain exactly one durable handle for the managed batch job, and report
+three repeats. A cell is
 complete only after both host gates pass; their full JSON, stdout, stderr,
 diagnostics, handles, and artifact paths are retained under the attempt and in
 `ledger.json`.

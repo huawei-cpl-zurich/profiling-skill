@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ import tarfile
 import tempfile
 import time
 from pathlib import Path, PurePosixPath
+from contextlib import contextmanager
 from typing import Any, Iterable
 
 PROTOCOL = "a3-managed-bundle/v1"
@@ -279,9 +281,31 @@ def wait_transfer(client: Path, prefix: list[str], job_id: str, timeout: int, po
 
 def atomic_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_bytes(canonical_json(value))
-    os.replace(temporary, path)
+    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(canonical_json(value))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def receipt_lock(path: Path):
+    """Serialize the load-or-submit decision without sharing a temp filename."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f".{path.name}.lock")
+    with lock_path.open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        yield
 
 
 def load_matching_receipt(path: Path, expected: dict[str, Any]) -> dict[str, Any] | None:
@@ -298,7 +322,26 @@ def load_matching_receipt(path: Path, expected: dict[str, Any]) -> dict[str, Any
     return receipt
 
 
-def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: list[str], timeout: int, poll: float) -> dict[str, Any]:
+TERMINAL_STATES = frozenset({"succeeded", "failed", "cancelled", "rejected"})
+
+
+def merge_receipt(path: Path, receipt: dict[str, Any]) -> dict[str, Any]:
+    """Persist an observation without replacing a concurrent terminal result."""
+    identity = {
+        key: receipt[key]
+        for key in ("protocol", "kind", "remote", "root_digest", "archive_sha256", "remote_path", "expected_sha256")
+        if key in receipt
+    }
+    with receipt_lock(path):
+        current = load_matching_receipt(path, identity)
+        if current is not None and current.get("state") in TERMINAL_STATES:
+            return current
+        atomic_json(path, receipt)
+        return receipt
+
+
+def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: list[str], timeout: int, poll: float, phase: str) -> dict[str, Any]:
+    started = time.monotonic()
     if receipt.get("state") == "succeeded":
         return receipt
     if receipt.get("state") in ("failed", "cancelled", "rejected"):
@@ -306,59 +349,88 @@ def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: l
     try:
         wait_transfer(client, prefix, str(receipt["transfer_handle"]), timeout, poll)
     except TransferEnded as exc:
-        receipt["state"] = exc.state
-        atomic_json(path, receipt)
+        receipt.update(state=exc.state, phase=phase, diagnostics=str(exc),
+                       phase_timings_seconds={f"{phase}_observe": round(time.monotonic() - started, 6)})
+        receipt = merge_receipt(path, receipt)
+        if receipt.get("state") == "succeeded":
+            return receipt
         raise
-    except ObservationUnavailable:
-        receipt["state"] = "observation-unavailable"
-        atomic_json(path, receipt)
+    except ObservationUnavailable as exc:
+        receipt.update(state="observation-unavailable", phase=phase, diagnostics=str(exc),
+                       phase_timings_seconds={f"{phase}_observe": round(time.monotonic() - started, 6)})
+        receipt = merge_receipt(path, receipt)
+        if receipt.get("state") in TERMINAL_STATES:
+            if receipt.get("state") == "succeeded":
+                return receipt
+            raise BundleError(
+                f"managed transfer {receipt['transfer_handle']} already ended with status {receipt['state']}"
+            ) from exc
         raise
     receipt["state"] = "succeeded"
-    atomic_json(path, receipt)
+    receipt.pop("diagnostics", None)
+    receipt = merge_receipt(path, receipt)
+    if receipt.get("state") != "succeeded":
+        raise BundleError(
+            f"managed transfer {receipt['transfer_handle']} already ended with status {receipt['state']}"
+        )
     return receipt
 
 
 def command_stage(args: argparse.Namespace) -> None:
+    started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="a3-bundle-") as temp:
         archive, manifest = create_bundle(Path(args.source_root), args.include, Path(temp), args.max_files, args.max_bytes)
         remote_path = f"incoming/profiling-workloads/{manifest['root_digest']}/bundle.tar"
         receipt_path = Path(args.receipt)
         identity = {"protocol": PROTOCOL, "kind": "upload", "remote": args.remote, "root_digest": manifest["root_digest"], "archive_sha256": manifest["archive_sha256"], "remote_path": remote_path}
-        receipt = load_matching_receipt(receipt_path, identity)
-        if receipt is None:
-            response = run_client(Path(args.client), args.client_arg, ["transfer", "upload", "--remote", args.remote, "--src", str(archive), "--dst", remote_path])
-            job_id = str(response.get("id", ""))
-            if not job_id:
-                raise BundleError("managed upload returned no job id")
-            receipt = {**identity, "transfer_handle": job_id, "state": "submitted", "manifest": manifest}
-            atomic_json(receipt_path, receipt)
-        receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval)
+        with receipt_lock(receipt_path):
+            receipt = load_matching_receipt(receipt_path, identity)
+            if receipt is None:
+                response = run_client(Path(args.client), args.client_arg, ["transfer", "upload", "--remote", args.remote, "--src", str(archive), "--dst", remote_path])
+                job_id = str(response.get("id", ""))
+                if not job_id:
+                    raise BundleError("managed upload returned no job id")
+                receipt = {**identity, "transfer_handle": job_id, "state": "submitted", "manifest": manifest}
+                atomic_json(receipt_path, receipt)
+        receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval, "upload")
+        receipt["phase"] = "upload"
+        receipt["phase_timings_seconds"] = {"upload_and_observe": round(time.monotonic() - started, 6)}
+        atomic_json(receipt_path, receipt)
         print(canonical_json(receipt).decode(), end="")
 
 
 def command_request_download(args: argparse.Namespace) -> None:
+    started = time.monotonic()
     remote_path = safe_result_path(args.remote_path)
     if not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
         raise BundleError("expected result SHA-256 must be 64 lowercase hexadecimal characters")
     receipt_path = Path(args.receipt)
     identity = {"protocol": PROTOCOL, "kind": "download", "remote": args.remote, "remote_path": remote_path, "expected_sha256": args.expected_sha256}
-    receipt = load_matching_receipt(receipt_path, identity)
-    if receipt is None:
-        response = run_client(Path(args.client), args.client_arg, ["transfer", "download", "--remote", args.remote, "--src", remote_path])
-        job_id = str(response.get("id", ""))
-        if not job_id:
-            raise BundleError("managed download returned no job id")
-        receipt = {**identity, "transfer_handle": job_id, "state": "submitted"}
-        atomic_json(receipt_path, receipt)
-    receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval)
+    with receipt_lock(receipt_path):
+        receipt = load_matching_receipt(receipt_path, identity)
+        if receipt is None:
+            response = run_client(Path(args.client), args.client_arg, ["transfer", "download", "--remote", args.remote, "--src", remote_path])
+            job_id = str(response.get("id", ""))
+            if not job_id:
+                raise BundleError("managed download returned no job id")
+            receipt = {**identity, "transfer_handle": job_id, "state": "submitted"}
+            atomic_json(receipt_path, receipt)
+    receipt = observe_receipt(receipt, receipt_path, Path(args.client), args.client_arg, args.timeout, args.poll_interval, "download-request")
+    receipt["phase"] = "download-request"
+    receipt["phase_timings_seconds"] = {"request_and_observe": round(time.monotonic() - started, 6)}
+    atomic_json(receipt_path, receipt)
     print(canonical_json(receipt).decode(), end="")
 
 
 def command_fetch(args: argparse.Namespace) -> None:
+    started = time.monotonic()
     if not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256):
         raise BundleError("expected result SHA-256 must be 64 lowercase hexadecimal characters")
-    wait_transfer(Path(args.client), args.client_arg, args.handle, args.timeout, args.poll_interval)
     output = Path(args.output)
+    if output.is_file() and sha256_file(output) == args.expected_sha256:
+        print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "expected_sha256": args.expected_sha256, "output": str(output), "state": "succeeded", "reused": True, "phase": "download-local-reuse", "diagnostics": "existing output matched expected SHA-256; remote observation was not required", "phase_timings_seconds": {"local_verify": round(time.monotonic() - started, 6)}}).decode(), end="")
+        return
+    wait_transfer(Path(args.client), args.client_arg, args.handle, args.timeout, args.poll_interval)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(prefix=f".{output.name}.fetch-", dir=output.parent, delete=False) as temporary:
         temporary_path = Path(temporary.name)
@@ -369,7 +441,7 @@ def command_fetch(args: argparse.Namespace) -> None:
         os.replace(temporary_path, output)
     finally:
         temporary_path.unlink(missing_ok=True)
-    print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "expected_sha256": args.expected_sha256, "output": str(output), "state": "succeeded"}).decode(), end="")
+    print(canonical_json({"protocol": PROTOCOL, "transfer_handle": args.handle, "expected_sha256": args.expected_sha256, "output": str(output), "state": "succeeded", "reused": False, "phase": "download-fetch", "phase_timings_seconds": {"observe_fetch_verify": round(time.monotonic() - started, 6)}}).decode(), end="")
 
 
 def parser() -> argparse.ArgumentParser:

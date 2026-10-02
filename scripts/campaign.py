@@ -73,6 +73,7 @@ CONTROLLER_SCRIPTS = (
     "gz_a3_job_client.py",
     "a3_benchmark_runner.py",
     "profile_a3.py",
+    "batch_profile_a3.py",
 )
 CONTROLLER_BENCHMARK_ASSETS = tuple(
     f"{benchmark}/{name}"

@@ -666,9 +666,7 @@ class DiagnosticCampaign:
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         expected_workspace = attempt_dir / "workspace"
         frozen_submission = attempt_dir / "frozen-submission"
-        candidate_root = (frozen_submission
-                          if all((frozen_submission / name).is_file()
-                                 for name in ("candidate.py", "candidate.manifest.json"))
+        candidate_root = (frozen_submission if frozen_submission.exists()
                           else expected_workspace)
         candidate_sha256 = request.get("candidate_sha256")
         if (record.get("protocol_version") != 1
@@ -683,6 +681,8 @@ class DiagnosticCampaign:
                 or request.get("cell_id") != cell_id
                 or Path(str(request.get("workspace", ""))) != expected_workspace
                 or not isinstance(candidate_sha256, dict)
+                or any(not (candidate_root / name).is_file()
+                       for name in ("candidate.py", "candidate.manifest.json"))
                 or any(candidate_sha256.get(name) != sha256_file(
                     candidate_root / name)
                        for name in ("candidate.py", "candidate.manifest.json"))

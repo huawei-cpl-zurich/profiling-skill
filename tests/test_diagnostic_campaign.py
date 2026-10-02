@@ -1038,7 +1038,10 @@ def test_terminal_reconciliation_rejects_unrelated_terminal_result(
         campaign.reconcile_terminal("wave-1-cannbot", 1, 1, result=result)
 
 
-def test_terminal_reconciliation_uses_immutable_frozen_submission(tmp_path: Path):
+@pytest.mark.parametrize("missing_frozen_file", [False, True])
+def test_terminal_reconciliation_uses_immutable_frozen_submission(
+    tmp_path: Path, missing_frozen_file: bool,
+):
     class TimeoutTerminal(RecordingTerminal):
         def check(self, request, timeout_seconds):
             return {"status": "transport_or_observer_error",
@@ -1069,10 +1072,17 @@ def test_terminal_reconciliation_uses_immutable_frozen_submission(tmp_path: Path
     }
     campaign._durable_terminal_check(request, 30)
     (workspace / "candidate.py").write_text("mutated\n")
+    if missing_frozen_file:
+        (frozen / "candidate.py").unlink()
+
+    if missing_frozen_file:
+        with pytest.raises(diagnostic.DiagnosticError, match="identity mismatch"):
+            campaign.reconcile_terminal(
+                "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
+        return
 
     reconciled = campaign.reconcile_terminal(
         "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
-
     assert reconciled["state"] == "started"
     assert reconciled["result"]["handle"] == "bz-a3-1:recovered"
 

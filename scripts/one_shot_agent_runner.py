@@ -294,6 +294,15 @@ class OneShotRunner:
                 try:
                     run = _run_group([*command, *codex], prompt.decode(), timeout)
                 except subprocess.TimeoutExpired as error:
+                    if (controller.last_result
+                            and controller.last_result.get("status") == "infrastructure_error"):
+                        return {"status": "infrastructure_error",
+                                "failure_type": controller.last_result.get(
+                                    "failure_type", "controller_infrastructure"),
+                                "diagnostics": controller.last_result.get("diagnostics", ""),
+                                "agent_timeout": _bounded(error.stderr), "milestones": milestones,
+                                "controller_usage": {"billed": controller.used,
+                                                     "calls": controller.calls}}
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
                             "controller_usage": {"billed": controller.used, "calls": controller.calls}}
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})

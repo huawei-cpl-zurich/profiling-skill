@@ -1008,6 +1008,33 @@ def test_command_launcher_rejects_legacy_path_prompt_before_spawning(monkeypatch
         launcher.launch(request, 1)
 
 
+def test_command_launcher_stops_detached_same_group_writer(tmp_path: Path):
+    marker = tmp_path / "late-write"
+    child = (
+        "import pathlib,time; time.sleep(0.3); "
+        f"pathlib.Path({str(marker)!r}).write_text('mutated')"
+    )
+    agent = tmp_path / "agent.py"
+    agent.write_text(
+        "import json,subprocess,sys\n"
+        "json.load(sys.stdin)\n"
+        f"subprocess.Popen([sys.executable, '-c', {child!r}], "
+        "stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+        "print(json.dumps({'status': 'ok'}), flush=True)\n"
+    )
+    content = b"prompt\n"
+    digest = hashlib.sha256(content).hexdigest()
+    request = {
+        "protocol_version": 2,
+        "prompt": {"encoding": "base64", "data": "cHJvbXB0Cg==", "sha256": digest},
+        "prompt_sha256": digest,
+    }
+    result = diagnostic.CommandLauncher([sys.executable, str(agent)]).launch(request, 2)
+    assert result["status"] == "ok"
+    time.sleep(0.4)
+    assert not marker.exists()
+
+
 @pytest.mark.parametrize("version", [None, 1])
 def test_command_launcher_rejects_non_v2_prompt_envelope_before_spawning(
         monkeypatch, version):

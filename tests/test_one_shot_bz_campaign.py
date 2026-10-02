@@ -207,8 +207,8 @@ def test_snapshot_failure_cannot_invoke_agent_twice(tmp_path: Path, monkeypatch)
 def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypatch):
     agent = Agent()
     frozen = module.FrozenAgentLauncher(agent)
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
+    workspace = tmp_path / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
     request = {"cell_id": "wave-1-cannbot", "workspace": str(workspace)}
     original = Path.read_bytes
 
@@ -223,6 +223,18 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     assert result["status"] == "ok" and len(agent.requests) == 1
     assert (workspace / "candidate.py").read_text() == "candidate\n"
     assert (workspace / "candidate.py").stat().st_mode & 0o777 == 0o444
+    snapshot = workspace.parent / "frozen-submission"
+    assert (snapshot / "candidate.py").read_text() == "candidate\n"
+    assert snapshot.stat().st_mode & 0o777 == 0o555
+    (workspace / "candidate.py").unlink()
+    (workspace / "candidate.py").write_text("delayed mutation\n")
+    (tmp_path / "inputs").mkdir()
+    _config, _manifest, placements = inputs(tmp_path / "inputs")
+    client = Client()
+    hook = module.BzTerminalHook(client, placements, _config["assets"], "unique")
+    hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace)}, 240)
+    assert Path(client.requests[0]["candidate"]).read_text() == "candidate\n"
+    assert Path(client.requests[0]["candidate"]).parent == snapshot
 
 
 def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):

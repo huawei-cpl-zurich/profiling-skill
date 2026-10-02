@@ -82,12 +82,22 @@ class FrozenAgentLauncher:
             os.chmod(temporary, 0o444)
             os.replace(temporary, workspace / name)
 
+    @classmethod
+    def _freeze_submission(cls, workspace: Path, files: dict[str, bytes]) -> None:
+        if not files:
+            return
+        snapshot = workspace.parent / "frozen-submission"
+        snapshot.mkdir(exist_ok=False)
+        cls._restore(snapshot, files)
+        os.chmod(snapshot, 0o555)
+        cls._restore(workspace, files)
+
     def launch(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         workspace = Path(request["workspace"])
         if cell in self.frozen:
             result, files = self.frozen[cell]
-            self._restore(workspace, files)
+            self._freeze_submission(workspace, files)
             return {**result, "submission_replayed": True}
         try:
             result = self.launcher.launch(request, timeout_seconds)
@@ -104,7 +114,7 @@ class FrozenAgentLauncher:
                 path = workspace / name
                 if path.is_file():
                     files[name] = path.read_bytes()
-            self._restore(workspace, files)
+            self._freeze_submission(workspace, files)
         except OSError as error:
             files.clear()
             self.frozen[cell] = ({
@@ -154,6 +164,7 @@ class BzTerminalHook:
         except ValueError as exc:
             raise DiagnosticError(f"invalid cell id {cell!r}") from exc
         workspace = Path(request["workspace"])
+        submission = workspace.parent / "frozen-submission"
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
         placement = self.placements[treatment][min(attempt - 1, 1)]
         client_request = {
@@ -163,8 +174,8 @@ class BzTerminalHook:
             # observe its retained handle instead of redispatching it.
             "cell": f"{treatment}-attempt-{attempt}",
             **placement, "timeout": min(timeout_seconds, 240),
-            "candidate": str(workspace / "candidate.py"),
-            "candidate_manifest": str(workspace / "candidate.manifest.json"),
+            "candidate": str(submission / "candidate.py"),
+            "candidate_manifest": str(submission / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": list(range(7)),
         }

@@ -125,6 +125,10 @@ class _ProcessRegistry:
                 command, timeout_seconds, output=stdout, stderr=stderr,
             )
         finally:
+            # A successful protocol response ends the one-shot command's whole
+            # lifetime. Do not allow detached same-group writers to survive the
+            # leader and mutate evidence after the launcher returns.
+            self._terminate(process)
             with self._lock:
                 self._processes.discard(process)
 
@@ -133,6 +137,16 @@ class _ProcessRegistry:
         # The group can outlive its leader and keep stdout/stderr pipes open.
         # Always target the process group created at spawn, even after poll()
         # reports that the leader itself has exited.
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        for _ in range(5):
+            time.sleep(0.01)
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                return
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:

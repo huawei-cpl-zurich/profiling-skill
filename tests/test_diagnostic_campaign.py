@@ -398,16 +398,32 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
                    "retained_terminal_request": {"cell": "cannbot-attempt-2",
                                                    "timeout": 7}}})
     (receipt_path).write_text(json.dumps(receipt))
-    terminal = RecordingTerminal()
-    recovered = diagnostic.DiagnosticCampaign(
+    class ReobservingTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained-again", "terminal_attempt": 2,
+                    "retained_terminal_request": {"cell": "cannbot-attempt-2",
+                                                  "timeout": 7, "generation": 2}}
+
+    terminal = ReobservingTerminal()
+    pending = diagnostic.DiagnosticCampaign(
         config, root, RecordingLauncher(), terminal,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
-    assert recovered["status"] == "awaiting_curation"
+    assert pending["status"] == "reschedule_pending"
     assert terminal.requests[0][1] == 7
     assert terminal.requests[0][0]["terminal_attempt"] == 2
     assert terminal.requests[0][0]["retained_terminal_request"] == {
         "cell": "cannbot-attempt-2", "timeout": 7}
+    final_terminal = RecordingTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), final_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert final_terminal.requests[0][0]["retained_terminal_request"] == {
+        "cell": "cannbot-attempt-2", "timeout": 7, "generation": 2}
 
 
 def test_infrastructure_agent_with_candidate_gets_full_replacement(tmp_path: Path):

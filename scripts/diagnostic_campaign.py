@@ -521,10 +521,15 @@ class DiagnosticCampaign:
                 ledger["status"] = "ready_for_next"
             elif wave == len(ledger["waves"]):
                 current = ledger["waves"][-1]
-                completed = {cell["treatment"] for cell in current["cells"]
-                             if cell["category"] != "infrastructure"}
+                completed = set()
+                for cell in current["cells"]:
+                    attempts = cell.get("reschedule_attempts", [])
+                    latest = attempts[-1] if attempts else cell.get("retry", cell)
+                    if latest["category"] != "infrastructure":
+                        completed.add(cell["treatment"])
+                completed_ids = {f"wave-{wave}-{name}" for name in completed}
                 ledger["reschedule"] = sorted(
-                    set(ledger["reschedule"]) |
+                    (set(ledger["reschedule"]) - completed_ids) |
                     {f"wave-{wave}-{name}" for name in TREATMENTS if name not in completed}
                 )
                 ledger["status"] = "reschedule_pending"

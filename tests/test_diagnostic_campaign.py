@@ -394,7 +394,9 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
         "candidate_sha256": retry["candidate_sha256"],
     }, "timeout_seconds": 7,
         "result": {"status": "infrastructure_error", "failure_type": "observer_error",
-                   "handle": "bz-a3-1:retained"}})
+                   "handle": "bz-a3-1:retained", "terminal_attempt": 2,
+                   "retained_terminal_request": {"cell": "cannbot-attempt-2",
+                                                   "timeout": 7}}})
     (receipt_path).write_text(json.dumps(receipt))
     terminal = RecordingTerminal()
     recovered = diagnostic.DiagnosticCampaign(
@@ -403,6 +405,9 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
     ).run_wave(1)
     assert recovered["status"] == "awaiting_curation"
     assert terminal.requests[0][1] == 7
+    assert terminal.requests[0][0]["terminal_attempt"] == 2
+    assert terminal.requests[0][0]["retained_terminal_request"] == {
+        "cell": "cannbot-attempt-2", "timeout": 7}
 
 
 def test_infrastructure_agent_with_candidate_gets_full_replacement(tmp_path: Path):

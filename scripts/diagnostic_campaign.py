@@ -434,6 +434,24 @@ class DiagnosticCampaign:
             if (isinstance(persisted_timeout, bool)
                     or not isinstance(persisted_timeout, int) or persisted_timeout < 1):
                 raise DiagnosticError("invalid started terminal timeout")
+            persisted_request = record.get("request")
+            if (not isinstance(persisted_request, dict)
+                    or hashlib.sha256(json.dumps(
+                        persisted_request, sort_keys=True,
+                        separators=(",", ":")).encode()).hexdigest() != digest):
+                raise DiagnosticError("invalid started terminal request")
+            prior_result = record.get("result")
+            retained_request = (prior_result.get("retained_terminal_request")
+                                if isinstance(prior_result, dict) else None)
+            if retained_request is not None:
+                if not isinstance(retained_request, dict):
+                    raise DiagnosticError("invalid retained terminal request")
+                request = {**copy.deepcopy(persisted_request),
+                           "retained_terminal_request": copy.deepcopy(retained_request),
+                           "terminal_attempt": prior_result.get(
+                               "terminal_attempt", persisted_request.get("terminal_attempt"))}
+            else:
+                request = copy.deepcopy(persisted_request)
             timeout_seconds = persisted_timeout
         else:
             _atomic_json(receipt, {"protocol_version": 1, "state": "started",
@@ -681,7 +699,8 @@ class DiagnosticCampaign:
                     and isinstance(record.get("request"), dict)
                     and isinstance(record.get("timeout_seconds"), int)
                     and isinstance(record.get("result"), dict)
-                    and bool(record["result"].get("handle")))
+                    and bool(record["result"].get("handle"))
+                    and isinstance(record["result"].get("retained_terminal_request"), dict))
                 if ((record.get("state") == "completed"
                      and isinstance(record.get("result"), dict)) or retriable_started):
                     durable_attempts.append(int(path.parent.name.removeprefix("attempt-")))

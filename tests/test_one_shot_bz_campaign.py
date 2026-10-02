@@ -918,7 +918,10 @@ def test_fixed_run_reconciliation_resumes_without_redispatch(
     class DispatchTimeout(Client):
         def run(self, request):
             self.requests.append(request)
-            if request["wave"] == "1" and request["cell"] == "cannbot-attempt-1":
+            if (request["wave"], request["cell"]) in {
+                ("1", "cannbot-attempt-1"),
+                ("3", "project-cannbot-attempt-1"),
+            }:
                 return {"status": "infrastructure_error",
                         "failure_type": "transport_error",
                         "invocation_timeout": True, "dispatch_uncertain": True,
@@ -929,23 +932,27 @@ def test_fixed_run_reconciliation_resumes_without_redispatch(
     ledger = module.run(
         config, manifest, placements, root, initial_agent, initial_client)
     assert ledger["status"] == "reschedule_pending"
-    assert ledger["reschedule"] == ["wave-1-cannbot"]
-    receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-1").glob(
-        "terminal-result-*.json"))
-    receipt = json.loads(receipt_path.read_text())
-    if reconciliation == "handle":
-        module.reconcile_terminal(
-            config, manifest, placements, root, "wave-1-cannbot", 1, 1,
-            handle="bz-a3-1:recovered")
-    else:
-        module.reconcile_terminal(
-            config, manifest, placements, root, "wave-1-cannbot", 1, 1,
-            result={"status": "ok", "passed": True,
-                    "campaign_id": ledger["campaign_id"],
-                    "request_sha256": receipt["request_sha256"],
-                    "cell_id": "wave-1-cannbot", "terminal_attempt": 1,
-                    "handle": "bz-a3-1:recovered",
-                    "candidate_sha256": receipt["request"]["candidate_sha256"]})
+    pending = ["wave-1-cannbot", "wave-3-project-cannbot"]
+    assert ledger["reschedule"] == pending
+    wave4_before = copy.deepcopy(next(
+        wave for wave in ledger["waves"] if wave["wave"] == 4))
+    for cell_id in pending:
+        receipt_path = next((root / "cells" / cell_id / "attempt-1").glob(
+            "terminal-result-*.json"))
+        receipt = json.loads(receipt_path.read_text())
+        if reconciliation == "handle":
+            module.reconcile_terminal(
+                config, manifest, placements, root, cell_id, 1, 1,
+                handle="bz-a3-1:recovered-" + cell_id)
+        else:
+            module.reconcile_terminal(
+                config, manifest, placements, root, cell_id, 1, 1,
+                result={"status": "ok", "passed": True,
+                        "campaign_id": ledger["campaign_id"],
+                        "request_sha256": receipt["request_sha256"],
+                        "cell_id": cell_id, "terminal_attempt": 1,
+                        "handle": "bz-a3-1:recovered-" + cell_id,
+                        "candidate_sha256": receipt["request"]["candidate_sha256"]})
 
     class RecoveryClient(Client):
         def run(self, request):
@@ -965,6 +972,14 @@ def test_fixed_run_reconciliation_resumes_without_redispatch(
     assert recovered["status"] == "complete"
     assert recovered["reschedule"] == []
     assert recovery_agent.requests == []
+    wave1 = next(wave for wave in recovered["waves"] if wave["wave"] == 1)
+    cannbot = next(cell for cell in wave1["cells"] if cell["treatment"] == "cannbot")
+    assert cannbot["resolution"]["outcome"] == "success"
+    wave3 = next(wave for wave in recovered["waves"] if wave["wave"] == 3)
+    project = next(cell for cell in wave3["cells"]
+                   if cell["treatment"] == "project-cannbot")
+    assert project["resolution"]["outcome"] == "success"
+    assert next(wave for wave in recovered["waves"] if wave["wave"] == 4) == wave4_before
 
 
 @pytest.mark.parametrize("mode", ["config_drift", "placement_drift", "not_pending",

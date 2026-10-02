@@ -857,10 +857,15 @@ class DiagnosticCampaign:
 
     def _resume_wave(self, ledger: dict, wave: int) -> None:
         """Retry only unresolved infrastructure cells in an existing wave."""
-        wave_record = ledger["waves"][-1]
+        records = [record for record in ledger["waves"] if record.get("wave") == wave]
+        if len(records) != 1:
+            raise DiagnosticError("pending wave record is missing or ambiguous")
+        wave_record = records[0]
         by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
         deadline = time.monotonic() + self.wave_timeout
         for cell_id in list(ledger["reschedule"]):
+            if not cell_id.startswith(f"wave-{wave}-"):
+                continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break

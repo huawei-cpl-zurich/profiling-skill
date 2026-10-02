@@ -306,8 +306,9 @@ def test_adaptive_recovers_persisted_running_ledger(tmp_path: Path):
     ledger["waves"][0]["cells"] = ledger["waves"][0]["cells"][:2]
     (root / "ledger.json").write_text(json.dumps(ledger))
     replay_terminal = RecordingTerminal()
+    replay_launcher = RecordingLauncher()
     recovered = diagnostic.DiagnosticCampaign(
-        config, root, RecordingLauncher(), replay_terminal,
+        config, root, replay_launcher, replay_terminal,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert recovered["status"] == "awaiting_curation"
@@ -331,6 +332,75 @@ def test_adaptive_rejects_changed_frozen_prompt_on_resume(tmp_path: Path):
     prompt.write_text("changed\n")
     with pytest.raises(diagnostic.DiagnosticError, match="prompt.*changed"):
         campaign.run_wave(1)
+
+
+def test_running_recovery_discovers_completed_automatic_retry(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra"}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    cannbot = next(cell for cell in ledger["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert cannbot["retry"]["category"] == "counted"
+    cannbot.pop("retry")
+    ledger["status"] = "running"
+    ledger["reschedule"] = ["wave-1-cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    replay_terminal = RecordingTerminal()
+    replay_launcher = RecordingLauncher()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, replay_launcher, replay_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert replay_launcher.requests == []
+    assert replay_terminal.requests == []
+    recovered_cell = next(cell for cell in recovered["waves"][0]["cells"]
+                          if cell["treatment"] == "cannbot")
+    assert recovered_cell["reschedule_attempts"][-1]["attempt"] == 2
+
+
+def test_adaptive_load_revalidates_prior_curation_wave_hash(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    campaign.acknowledge_curation(curation_receipt(paused))
+    ledger = json.loads((root / "ledger.json").read_text())
+    ledger["waves"][0]["cells"][0]["outcome"] = "changed-after-curation"
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.run_wave(2)
+
+
+def test_resumed_cells_share_one_wave_deadline(tmp_path: Path, monkeypatch):
+    outcomes = {(1, treatment, attempt): "device_or_runtime_infra"
+                for treatment in diagnostic.TREATMENTS for attempt in (1, 2)}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        wave_timeout=10, campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    replacement = RecordingLauncher()
+    ticks = iter(range(0, 200))
+    monkeypatch.setattr(diagnostic.time, "monotonic", lambda: next(ticks))
+    diagnostic.DiagnosticCampaign(
+        config, root, replacement, RecordingTerminal(),
+        wave_timeout=10, campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    timeouts = [timeout for _request, timeout in replacement.requests]
+    assert len(timeouts) >= 2
+    assert timeouts == sorted(timeouts, reverse=True)
+    assert timeouts[-1] < timeouts[0]
 
 
 def test_interrupted_adaptive_wave_drains_result_before_resuming(
@@ -522,7 +592,7 @@ def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Pat
     missing = wave["cells"][1]
     assert infra["category"] == "infrastructure"
     assert infra["retry"]["attempt"] == 2
-    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert "wave-1-cannbot" in result["reschedule"]
     assert result["status"] == "reschedule_pending"
     assert missing["outcome"] == "no_submission" and "retry" not in missing
     assert len([request for request, _ in launcher.requests

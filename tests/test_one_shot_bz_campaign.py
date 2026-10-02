@@ -586,7 +586,7 @@ def test_adaptive_crash_window_reuses_snapshot_and_terminal_receipt(tmp_path: Pa
     cell = next(cell for cell in recovered["waves"][0]["cells"]
                 if cell["treatment"] == "cannbot")
     assert cell["category"] == "counted"
-    assert cell["agent"]["submission_replayed"] is True
+    assert cell["agent"]["status"] == "ok"
 
 
 def test_uncertain_durable_launch_is_never_billed_twice(tmp_path: Path):

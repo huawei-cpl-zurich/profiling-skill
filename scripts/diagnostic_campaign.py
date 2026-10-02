@@ -421,6 +421,7 @@ class DiagnosticCampaign:
         digest = hashlib.sha256(json.dumps(
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         receipt_request = copy.deepcopy(request)
+        receipt_timeout = timeout_seconds
         terminal_attempt = request.get("terminal_attempt", workspace.parent.name)
         receipt = workspace.parent / f"terminal-result-{terminal_attempt}-{digest[:16]}.json"
         if receipt.is_file():
@@ -442,6 +443,7 @@ class DiagnosticCampaign:
                         separators=(",", ":")).encode()).hexdigest() != digest):
                 raise DiagnosticError("invalid started terminal request")
             receipt_request = copy.deepcopy(persisted_request)
+            receipt_timeout = persisted_timeout
             prior_result = record.get("result")
             retained_request = (prior_result.get("retained_terminal_request")
                                 if isinstance(prior_result, dict) else None)
@@ -472,7 +474,7 @@ class DiagnosticCampaign:
             _atomic_json(receipt, {"protocol_version": 1, "state": "started",
                                    "request_sha256": digest,
                                    "request": receipt_request,
-                                   "timeout_seconds": timeout_seconds,
+                                   "timeout_seconds": receipt_timeout,
                                    "result": result})
         return result
 

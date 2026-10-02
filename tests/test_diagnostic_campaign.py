@@ -409,11 +409,11 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
     terminal = ReobservingTerminal()
     pending = diagnostic.DiagnosticCampaign(
         config, root, RecordingLauncher(), terminal,
-        wave_timeout=5,
+        wave_timeout=1,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert pending["status"] == "reschedule_pending"
-    assert 1 <= terminal.requests[0][1] <= 5
+    assert terminal.requests[0][1] == 1
     assert terminal.requests[0][0]["terminal_attempt"] == 2
     assert terminal.requests[0][0]["retained_terminal_request"] == {
         "cell": "cannbot-attempt-2", "timeout": 7}
@@ -424,6 +424,7 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert recovered["status"] == "awaiting_curation"
+    assert 1 < final_terminal.requests[0][1] <= 5
     assert final_terminal.requests[0][0]["retained_terminal_request"] == {
         "cell": "cannbot-attempt-2", "timeout": 7, "generation": 2}
 

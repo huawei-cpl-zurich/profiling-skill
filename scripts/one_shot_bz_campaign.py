@@ -485,6 +485,11 @@ def reconcile_terminal(config: dict, manifest: dict, placements: dict,
         manifest, root, CommandLauncher(["false"]), CommandTerminalHook(["false"]),
         campaign_id=campaign_id, campaign_identity={"config_sha256": identity},
     )
+    validated = campaign._load_adaptive_ledger()
+    if validated.get("campaign_id") != campaign_id:
+        raise DiagnosticError("adaptive ledger campaign identity mismatch")
+    if validated.get("status") != "reschedule_pending":
+        raise DiagnosticError("campaign is not awaiting terminal reconciliation")
     receipt = campaign.reconcile_terminal(
         cell_id, agent_attempt, terminal_attempt, handle=handle, result=result)
     return {"status": "reconciled", "receipt": receipt}

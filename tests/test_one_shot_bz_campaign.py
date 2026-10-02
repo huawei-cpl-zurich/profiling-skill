@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -722,29 +723,18 @@ def test_reconcile_terminal_cli_updates_uncertain_receipt(
     config, manifest, placements = inputs(tmp_path)
     root = tmp_path / "campaign"
     cell = "wave-1-cannbot"
-    workspace = root / "cells" / cell / "attempt-1" / "workspace"
-    workspace.mkdir(parents=True)
-    for name in ("candidate.py", "candidate.manifest.json"):
-        (workspace / name).write_text("{}\n")
 
     class LocalTimeout:
         def check(self, request, timeout_seconds):
             return {"status": "transport_or_observer_error",
                     "invocation_timeout": True}
 
+    identity = module._adaptive_inputs(config, manifest, placements)
     campaign = module.DiagnosticCampaign(
-        manifest, root, module.CommandLauncher(["false"]), LocalTimeout(),
-        campaign_id="campaign", campaign_identity={"config_sha256": "fixed"},
+        manifest, root, Agent(), LocalTimeout(), campaign_id="campaign",
+        campaign_identity={"config_sha256": identity},
     )
-    request = {
-        "protocol_version": 1, "operation": "terminal_check", "cell_id": cell,
-        "workspace": str(workspace), "benchmark": "streaming-matmul-add",
-        "cases": list(range(7)), "terminal_attempt": 1,
-        "candidate_sha256": {name: module.diagnostic_campaign.sha256_file(workspace / name)
-                             for name in ("candidate.py", "candidate.manifest.json")},
-    }
-    campaign._durable_terminal_check(request, 30)
-    (root / "ledger.json").write_text(json.dumps({"campaign_id": "campaign"}))
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
     paths = {}
     for name, value in (("config", config), ("manifest", manifest),
                         ("placements", placements)):
@@ -764,6 +754,46 @@ def test_reconcile_terminal_cli_updates_uncertain_receipt(
     assert output["status"] == "reconciled"
     assert output["receipt"]["state"] == "started"
     assert output["receipt"]["result"]["handle"] == "bz-a3-1:recovered"
+
+
+@pytest.mark.parametrize("mode", ["config_drift", "placement_drift", "not_pending",
+                                   "minimal_ledger"])
+def test_reconcile_terminal_rejects_invalid_adaptive_campaign(
+    tmp_path: Path, mode: str,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+
+    class LocalTimeout:
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    identity = module._adaptive_inputs(config, manifest, placements)
+    campaign = module.DiagnosticCampaign(
+        manifest, root, Agent(), LocalTimeout(), campaign_id="campaign",
+        campaign_identity={"config_sha256": identity},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    changed_config = copy.deepcopy(config)
+    changed_placements = copy.deepcopy(placements)
+    if mode == "config_drift":
+        changed_config["assets"]["baseline"] += ".changed"
+    elif mode == "placement_drift":
+        changed_placements["cannbot"][0]["device"] += 4
+    else:
+        ledger_path = root / "ledger.json"
+        ledger = json.loads(ledger_path.read_text())
+        if mode == "not_pending":
+            ledger["status"] = "awaiting_curation"
+        else:
+            ledger = {"campaign_id": "campaign"}
+        ledger_path.write_text(json.dumps(ledger))
+
+    with pytest.raises(module.DiagnosticError):
+        module.reconcile_terminal(
+            changed_config, manifest, changed_placements, root,
+            "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
 
 
 def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):

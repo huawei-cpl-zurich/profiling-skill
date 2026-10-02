@@ -439,6 +439,35 @@ def test_repeated_reschedule_uses_latest_candidate_without_relaunch(tmp_path: Pa
     assert [item["attempt"] for item in cell["reschedule_attempts"]] == [3, 3]
 
 
+def test_retained_observation_uses_distinct_durable_terminal_receipt(tmp_path: Path):
+    class ObserverTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            cannbot_calls = [item for item in self.requests
+                             if item[0]["cell_id"] == "wave-1-cannbot"]
+            if request["cell_id"] != "wave-1-cannbot":
+                return {"status": "ok", "passed": True}
+            if len(cannbot_calls) == 1:
+                return {"status": "infrastructure_error", "failure_type": "device_error"}
+            if len(cannbot_calls) == 2:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "terminal_attempt": 2,
+                        "retained_terminal_request": {"cell": "cannbot-attempt-2"}}
+            assert request["terminal_attempt"] == 2
+            assert request["retained_terminal_request"]["cell"] == "cannbot-attempt-2"
+            return {"status": "ok", "passed": True, "terminal_attempt": 2}
+
+    terminal = ObserverTerminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    assert campaign.run_wave(1)["status"] == "awaiting_curation"
+    assert len([request for request, _ in terminal.requests
+                if request["cell_id"] == "wave-1-cannbot"]) == 3
+
+
 def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",

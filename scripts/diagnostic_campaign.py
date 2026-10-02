@@ -402,10 +402,10 @@ class DiagnosticCampaign:
     def _durable_terminal_check(self, request: dict, timeout_seconds: int) -> dict:
         """Replay a completed terminal result across a wave-checkpoint crash."""
         workspace = Path(request["workspace"])
-        terminal_attempt = request.get("terminal_attempt", workspace.parent.name)
-        receipt = workspace.parent / f"terminal-result-{terminal_attempt}.json"
         digest = hashlib.sha256(json.dumps(
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        terminal_attempt = request.get("terminal_attempt", workspace.parent.name)
+        receipt = workspace.parent / f"terminal-result-{terminal_attempt}-{digest[:16]}.json"
         if receipt.is_file():
             record = json.loads(receipt.read_text())
             if record.get("request_sha256") != digest:

@@ -411,6 +411,9 @@ def test_exhausted_retained_failure_preserves_attempt_for_next_resume(
         def run(self, request):
             self.requests.append(request)
             if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-2:retained"}
+            if len(self.requests) == 2:
                 return {"status": "infrastructure_error", "failure_type": "device_error",
                         "handle": "bz-a3-2:retained"}
             return {"status": "ok", "passed": True}
@@ -423,24 +426,20 @@ def test_exhausted_retained_failure_preserves_attempt_for_next_resume(
     snapshot.mkdir()
     for name in ("candidate.py", "candidate.manifest.json"):
         (snapshot / name).write_text("{}\n")
-    retained = {
-        "campaign": "campaign", "wave": "1", "cell": "cannbot-attempt-2",
-        "profile": "bz-a3-2", "device": 2, "timeout": 30,
-        "candidate": str(snapshot / "candidate.py"),
-        "candidate_manifest": str(snapshot / "candidate.manifest.json"),
-        **config["assets"], "cases": list(range(7)),
-    }
-    ticks = iter((0, 31))
+    ticks = iter((0, 0, 31))
     monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    uncertain = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                            "terminal_attempt": 2}, 30)
+    assert uncertain["retained_terminal_request"]["cell"] == "cannbot-attempt-2"
     first = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
-                        "terminal_attempt": 2, "retained_terminal_request": retained}, 30)
-    assert first["terminal_attempt"] == 2
+                        "terminal_attempt": 2}, 30)
+    assert first["terminal_attempt"] == 2 and not hook._uncertain
     monkeypatch.setattr(module.time, "monotonic", lambda: 0)
     second = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
                          "terminal_attempt": first["terminal_attempt"] + 1}, 30)
     assert second["status"] == "ok"
     assert [request["cell"] for request in client.requests] == [
-        "cannbot-attempt-2", "cannbot-attempt-3"]
+        "cannbot-attempt-2", "cannbot-attempt-2", "cannbot-attempt-3"]
 
 
 def test_terminal_infrastructure_result_uses_fallback(tmp_path: Path):

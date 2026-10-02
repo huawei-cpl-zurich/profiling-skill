@@ -17,6 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import diagnostic_campaign as diagnostic
 SPEC = importlib.util.spec_from_file_location("one_shot_agent_runner", ROOT / "scripts/one_shot_agent_runner.py")
 module = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
@@ -184,6 +185,46 @@ def test_post_check_regular_mutation_restores_checked_bytes(monkeypatch, tmp_pat
     monkeypatch.setattr(module, "_run_group", fake_group)
     result = runner.run(request)
     assert result["status"] == "ok"
+    assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
+
+
+@pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
+def test_post_check_missing_output_is_counted_and_restored(monkeypatch, tmp_path: Path, name: str):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("checked candidate\n")
+        (workspace / "candidate.manifest.json").write_text('{"checked":true}\n')
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 0
+        (workspace / name).unlink()
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    workspace = Path(request["workspace"])
+    assert result["status"] == "submission_error"
+    assert diagnostic.classify(result, None, workspace) == ("submission_error", "counted")
+    assert (workspace / "candidate.py").read_text() == "checked candidate\n"
+    assert json.loads((workspace / "candidate.manifest.json").read_text()) == {"checked": True}
+
+
+def test_post_check_mutation_is_restored_before_agent_timeout(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("checked candidate\n")
+        (workspace / "candidate.manifest.json").write_text('{"checked":true}\n')
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 0
+        (workspace / "candidate.py").write_text("unchecked mutation\n")
+        raise subprocess.TimeoutExpired(argv, timeout, stderr="agent exceeded turn")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "timeout"
     assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
 
 

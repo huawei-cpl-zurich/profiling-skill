@@ -170,6 +170,8 @@ def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Pat
          "model_service_error", "infrastructure"),
         ({"status": "protocol_error"}, None, False,
          "protocol_error", "counted"),
+        ({"status": "submission_error"}, None, False,
+         "submission_error", "counted"),
         ({"status": "ok", "controller_usage": {"billed": 1, "calls": [{"arguments":
           ["check", "--scope", "development", "--round", "1"]}]}},
          {"status": "compile_error"}, True, "compile_error", "counted"),

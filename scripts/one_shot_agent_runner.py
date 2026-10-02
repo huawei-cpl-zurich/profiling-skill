@@ -216,6 +216,10 @@ class Controller:
         snapshot = self.snapshot_root / "development-check"
         try:
             for name in ("candidate.py", "candidate.manifest.json"):
+                try:
+                    (workspace / name).lstat()
+                except FileNotFoundError as error:
+                    raise SubmissionError(f"missing {name}") from error
                 probe = self.snapshot_root / (name + ".final-probe")
                 _copy_regular(workspace / name, probe, workspace)
                 probe.unlink()
@@ -367,6 +371,7 @@ class OneShotRunner:
                 try:
                     run = _run_group([*command, *codex], prompt.decode(), timeout)
                 except subprocess.TimeoutExpired as error:
+                    controller.finalize_outputs()
                     if (controller.last_result
                             and controller.last_result.get("status") in {
                                 "infrastructure_error", "submission_error"}):

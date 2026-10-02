@@ -247,9 +247,16 @@ class BzA3DiagnosticClient:
             candidate_remote = f"/home/m00933363/diagnostic-candidate-{campaign}-{wave}-{cell}-{candidate_sha}.tar"
             common_receipt = self.state_dir / "common" / profile / f"{common_sha}.verified"
             dispatch_receipt = local / "dispatch.json"
+            completed_receipt = local / "completed.json"
             request_sha = _json_sha({"identity": identity, "timeout": timeout, "cases": cases,
                                      "common_sha256": common_sha, "candidate_sha256": candidate_sha,
                                      "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})})
+            if completed_receipt.is_file():
+                completed_record = json.loads(completed_receipt.read_text())
+                if (completed_record.get("request_sha256") != request_sha
+                        or not isinstance(completed_record.get("result"), dict)):
+                    raise DiagnosticError("request_error", "completed receipt does not match request")
+                return completed_record["result"]
             had_dispatch_receipt = dispatch_receipt.is_file()
             if had_dispatch_receipt:
                 try:
@@ -270,7 +277,7 @@ class BzA3DiagnosticClient:
                 else:
                     return self._completed(completed, handle, identity, common_sha, candidate_sha,
                                            run_root, common_remote, common_receipt,
-                                           dispatch_receipt)
+                                           dispatch_receipt, completed_receipt, request_sha)
             if observe_timeout is not None and not had_dispatch_receipt:
                 raise DiagnosticError("request_error",
                                       "observe_timeout requires a retained dispatch receipt")
@@ -315,7 +322,8 @@ class BzA3DiagnosticClient:
                 dispatch_receipt.unlink(missing_ok=True)
                 handle = None
             return self._completed(completed, handle, identity, common_sha, candidate_sha,
-                                   run_root, common_remote, common_receipt, dispatch_receipt)
+                                   run_root, common_remote, common_receipt, dispatch_receipt,
+                                   completed_receipt, request_sha)
         except DiagnosticError as exc:
             if dispatch_receipt is not None and request_sha is not None and (exc.handle or handle):
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
@@ -329,11 +337,16 @@ class BzA3DiagnosticClient:
     @staticmethod
     def _completed(completed: CommandResult, handle: str | None, identity: dict,
                    common_sha: str, candidate_sha: str, run_root: str, common_remote: str,
-                   common_receipt: Path, dispatch_receipt: Path) -> dict:
+                   common_receipt: Path, dispatch_receipt: Path,
+                   completed_receipt: Path, request_sha: str) -> dict:
         output = completed.stdout + completed.stderr
         if completed.returncode in (124, 137):
-            return {"status": "candidate_timeout", "failure_type": "candidate_timeout",
-                    "diagnostics": _bounded(output), "handle": handle, **identity}
+            result = {"status": "candidate_timeout", "failure_type": "candidate_timeout",
+                      "diagnostics": _bounded(output), "handle": handle, **identity}
+            _write_receipt(completed_receipt, {"protocol_version": 1,
+                           "request_sha256": request_sha, "result": result})
+            dispatch_receipt.unlink(missing_ok=True)
+            return result
         if completed.returncode:
             lowered = output.lower()
             if "digest-mismatch" in lowered:
@@ -346,7 +359,6 @@ class BzA3DiagnosticClient:
         result = _result(completed.stdout)
         common_receipt.parent.mkdir(parents=True, exist_ok=True)
         common_receipt.write_text(common_remote + "\n")
-        dispatch_receipt.unlink(missing_ok=True)
         result.update(identity, handle=handle, artifacts={"common_sha256": common_sha,
                       "candidate_sha256": candidate_sha, "remote_run_root": run_root})
         if result["status"] == "infrastructure_error":
@@ -356,6 +368,9 @@ class BzA3DiagnosticClient:
         result.pop("host_elapsed_us", None)
         for evidence in result.get("case_evidence", []):
             evidence.pop("host_elapsed_us", None)
+        _write_receipt(completed_receipt, {"protocol_version": 1,
+                       "request_sha256": request_sha, "result": result})
+        dispatch_receipt.unlink(missing_ok=True)
         return result
 
 

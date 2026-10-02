@@ -392,7 +392,7 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
         "benchmark": "streaming-matmul-add", "cases": list(range(7)),
         "terminal_attempt": 2,
         "candidate_sha256": retry["candidate_sha256"],
-    }, "timeout_seconds": 7,
+    }, "timeout_seconds": 70,
         "result": {"status": "infrastructure_error", "failure_type": "observer_error",
                    "handle": "bz-a3-1:retained", "terminal_attempt": 2,
                    "retained_terminal_request": {"cell": "cannbot-attempt-2",
@@ -409,16 +409,18 @@ def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(t
     terminal = ReobservingTerminal()
     pending = diagnostic.DiagnosticCampaign(
         config, root, RecordingLauncher(), terminal,
+        wave_timeout=5,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert pending["status"] == "reschedule_pending"
-    assert terminal.requests[0][1] == 7
+    assert 1 <= terminal.requests[0][1] <= 5
     assert terminal.requests[0][0]["terminal_attempt"] == 2
     assert terminal.requests[0][0]["retained_terminal_request"] == {
         "cell": "cannbot-attempt-2", "timeout": 7}
     final_terminal = RecordingTerminal()
     recovered = diagnostic.DiagnosticCampaign(
         config, root, RecordingLauncher(), final_terminal,
+        wave_timeout=5,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert recovered["status"] == "awaiting_curation"

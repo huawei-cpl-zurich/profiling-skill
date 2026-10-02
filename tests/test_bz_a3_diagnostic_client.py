@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "scripts/bz_a3_diagnostic_client.py"
@@ -126,7 +128,30 @@ def test_verified_common_archive_is_reused(tmp_path: Path):
     common_uploads = [upload for upload in transport.uploads if "diagnostic-common-" in upload[2]]
     candidate_uploads = [upload for upload in transport.uploads if "diagnostic-candidate-" in upload[2]]
     assert len(common_uploads) == 1
-    assert len(candidate_uploads) == 2
+    assert len(candidate_uploads) == 1
+    assert len(transport.executions) == 1
+    completed = tmp_path / "state" / "quick" / "1" / "arm-a" / "completed.json"
+    assert completed.is_file()
+    assert not (completed.parent / "dispatch.json").exists()
+
+
+def test_completed_result_is_durable_before_dispatch_cleanup(tmp_path: Path, monkeypatch):
+    module = load()
+    transport = FakeTransport(module)
+    state = tmp_path / "state"
+    completed = state / "quick" / "1" / "arm-a" / "completed.json"
+    original_unlink = Path.unlink
+
+    def ordered_unlink(path, *args, **kwargs):
+        if path.name == "dispatch.json":
+            assert completed.is_file()
+            record = json.loads(completed.read_text())
+            assert record["result"]["status"] == "ok"
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", ordered_unlink)
+    result = module.BzA3DiagnosticClient(transport, state).run(request(tmp_path))
+    assert result["status"] == "ok"
 
 
 def test_stale_common_receipt_reuploads_once_and_self_heals(tmp_path: Path):
@@ -135,6 +160,7 @@ def test_stale_common_receipt_reuploads_once_and_self_heals(tmp_path: Path):
     client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
     value = request(tmp_path)
     assert client.run(value)["status"] == "ok"
+    value["cell"] = "arm-b"
     transport.mode = "stale_common"
     assert client.run(value)["status"] == "ok"
     common_uploads = [upload for upload in transport.uploads if "diagnostic-common-" in upload[2]]
@@ -149,11 +175,12 @@ def test_stale_common_repair_failure_does_not_preserve_terminal_handle(tmp_path:
     client = module.BzA3DiagnosticClient(transport, state)
     value = request(tmp_path)
     assert client.run(value)["status"] == "ok"
+    value["cell"] = "arm-b"
     transport.mode = "stale_common_upload_failure"
     failed = client.run(value)
     assert failed["status"] == "infrastructure_error"
     assert failed["handle"] is None
-    assert not (state / "quick" / "1" / "arm-a" / "dispatch.json").exists()
+    assert not (state / "quick" / "1" / "arm-b" / "dispatch.json").exists()
     transport.mode = "ok"
     assert client.run(value)["status"] == "ok"
     assert not transport.observations
@@ -178,6 +205,7 @@ def test_resumed_stale_common_result_repairs_instead_of_reobserving(tmp_path: Pa
     client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
     value = request(tmp_path)
     assert client.run(value)["status"] == "ok"
+    value["cell"] = "arm-b"
     transport.mode = "observer_then_stale"
     interrupted = client.run(value)
     assert interrupted["status"] == "infrastructure_error"

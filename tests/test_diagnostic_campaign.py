@@ -80,6 +80,15 @@ class RecordingTerminal:
                 "diagnostics": "complete traceback"}
 
 
+def curation_receipt(ledger: dict) -> dict:
+    wave = len(ledger["waves"])
+    return {"wave": wave, "campaign_id": ledger["campaign_id"],
+            "wave_sha256": diagnostic.DiagnosticCampaign._wave_sha256(ledger["waves"][-1]),
+            "curator_operation_id": f"curate-wave-{wave}", "accepted": True,
+            "stable_ref_citations": [f"ref://profiling-skill/common/debugging/wave-{wave}"],
+            "librarian_query_ids": [f"query-{wave}"]}
+
+
 def test_runs_four_sequential_waves_of_three_one_shot_cells(tmp_path: Path):
     launcher, terminal = RecordingLauncher(), RecordingTerminal()
     result = diagnostic.DiagnosticCampaign(
@@ -126,6 +135,529 @@ def test_cells_receive_identical_prompt_and_only_declared_treatment_skills(tmp_p
     assert "triton-op-coding" not in guarded["skills"]
 
 
+def test_adaptive_wave_requires_curation_and_preserves_prior_cells(tmp_path: Path):
+    root, launcher = tmp_path / "run", RecordingLauncher()
+    first = manifest(tmp_path / "first")
+    campaign = diagnostic.DiagnosticCampaign(
+        first, root, launcher, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"}, campaign_id="campaign-fixed",
+    )
+    paused = campaign.run_wave(1)
+    assert paused["status"] == "awaiting_curation"
+    assert paused["waves"][0]["prompt_sha256"] == first["prompt_sha256"]
+    with pytest.raises(diagnostic.DiagnosticError, match="not ready"):
+        campaign.run_wave(2)
+    ready = campaign.acknowledge_curation(curation_receipt(paused))
+    assert ready["status"] == "ready_for_next"
+
+    second = manifest(tmp_path / "second")
+    Path(second["prompt"]).write_text("curated prompt revision\n")
+    second["prompt_sha256"] = diagnostic.sha256_file(Path(second["prompt"]))
+    resumed = diagnostic.DiagnosticCampaign(
+        second, root, launcher, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(2)
+    assert [wave["prompt_sha256"] for wave in resumed["waves"]] == [
+        first["prompt_sha256"], second["prompt_sha256"],
+    ]
+    assert len(launcher.requests) == 6
+    assert len([request for request, _ in launcher.requests
+                if request["wave"] == 1]) == 3
+    assert all(request["protocol_version"] == 2 for request, _ in launcher.requests)
+
+
+def test_adaptive_rejects_invalid_receipt_and_campaign_drift(tmp_path: Path):
+    root = tmp_path / "run"
+    original = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        original, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation({"wave": 1, "accepted": True,
+                                      "stable_ref_citations": ["raw/path"],
+                                      "librarian_query_ids": []})
+    campaign.acknowledge_curation(curation_receipt(
+        json.loads((root / "ledger.json").read_text())))
+    with pytest.raises(diagnostic.DiagnosticError, match="drift"):
+        diagnostic.DiagnosticCampaign(
+            original, root, RecordingLauncher(), RecordingTerminal(),
+            campaign_identity={"config_sha256": "changed"},
+        ).run_wave(2)
+
+
+def test_adaptive_completes_only_after_fourth_curation(tmp_path: Path):
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(),
+        RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
+    )
+    for wave in range(1, 5):
+        paused = campaign.run_wave(wave)
+        assert paused["status"] == "awaiting_curation"
+        result = campaign.acknowledge_curation(curation_receipt(paused))
+    assert result["status"] == "complete"
+    assert len(result["waves"]) == len(result["curation_receipts"]) == 4
+
+
+def test_adaptive_reschedules_only_unresolved_infrastructure_cell(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    launcher = RecordingLauncher(outcomes)
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", launcher,
+        RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
+    )
+    blocked = campaign.run_wave(1)
+    assert blocked["status"] == "reschedule_pending"
+    resumed = campaign.run_wave(1)
+    assert resumed["status"] == "awaiting_curation"
+    assert resumed["reschedule"] == []
+    assert len([request for request, _ in launcher.requests
+                if request["treatment"] == "cannbot"]) == 3
+    assert all(len([request for request, _ in launcher.requests
+                    if request["treatment"] == treatment]) == 1
+               for treatment in ("project-cannbot", "project-guarded"))
+    assert resumed["waves"][0]["cells"][0]["reschedule_attempts"][0][
+        "category"] == "counted"
+
+
+def test_running_recovery_keeps_counted_retry_while_resuming_sibling(tmp_path: Path):
+    outcomes = {
+        (1, "cannbot", 1): "device_or_runtime_infra",
+        (1, "cannbot", 2): "device_or_runtime_infra",
+        (1, "project-cannbot", 1): "device_or_runtime_infra",
+        (1, "project-cannbot", 2): "device_or_runtime_infra",
+    }
+    launcher = RecordingLauncher(outcomes)
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, launcher, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    blocked = campaign.run_wave(1)
+    cells = {cell["treatment"]: cell for cell in blocked["waves"][0]["cells"]}
+    counted = json.loads(json.dumps(cells["cannbot"]["retry"]))
+    counted["category"] = "counted"
+    counted["outcome"] = "compile_error"
+    cells["cannbot"]["reschedule_attempts"] = [counted]
+    cells["cannbot"]["resolution"] = counted
+    blocked["status"] = "running"
+    diagnostic._atomic_json(root / "ledger.json", blocked)
+    cannbot_calls = len([request for request, _ in launcher.requests
+                         if request["treatment"] == "cannbot"])
+
+    recovered = campaign.run_wave(1)
+
+    assert recovered["status"] == "awaiting_curation"
+    assert recovered["reschedule"] == []
+    assert len([request for request, _ in launcher.requests
+                if request["treatment"] == "cannbot"]) == cannbot_calls
+    recovered_cells = {cell["treatment"]: cell for cell in recovered["waves"][0]["cells"]}
+    assert recovered_cells["cannbot"]["reschedule_attempts"] == [counted]
+
+
+def test_curation_receipt_is_bound_to_campaign_and_wave_evidence(tmp_path: Path):
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(),
+        RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
+        campaign_id="campaign-one",
+    )
+    paused = campaign.run_wave(1)
+    wrong = curation_receipt(paused)
+    wrong["campaign_id"] = "campaign-two"
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation(wrong)
+    wrong = curation_receipt(paused)
+    wrong["stable_ref_citations"] = ["ref://   "]
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation(wrong)
+    wrong = curation_receipt(paused)
+    wrong["wave_sha256"] = "0" * 64
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation(wrong)
+
+
+def test_adaptive_recovers_hash_matching_preinstalled_prompt(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    campaign.acknowledge_curation(curation_receipt(paused))
+    destination = root / "inputs" / "wave-2-prompt.md"
+    destination.write_bytes(Path(config["prompt"]).read_bytes())
+    assert campaign.run_wave(2)["status"] == "awaiting_curation"
+
+
+def test_adaptive_recovers_persisted_running_ledger(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    initial_terminal = RecordingTerminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), initial_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    ledger["status"] = "running"
+    ledger["waves"][0]["cells"] = ledger["waves"][0]["cells"][:2]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    replay_terminal = RecordingTerminal()
+    replay_launcher = RecordingLauncher()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, replay_launcher, replay_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert len(recovered["waves"][0]["cells"]) == 3
+    assert paused["waves"][0]["cells"][:2] == recovered["waves"][0]["cells"][:2]
+    assert replay_terminal.requests == []
+
+
+def test_adaptive_rejects_changed_frozen_prompt_on_resume(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    blocked = campaign.run_wave(1)
+    prompt = Path(blocked["waves"][0]["prompt"])
+    prompt.chmod(0o644)
+    prompt.write_text("changed\n")
+    with pytest.raises(diagnostic.DiagnosticError, match="prompt.*changed"):
+        campaign.run_wave(1)
+
+
+def test_running_recovery_discovers_completed_automatic_retry(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra"}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    cannbot = next(cell for cell in ledger["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert cannbot["retry"]["category"] == "counted"
+    cannbot.pop("retry")
+    ledger["status"] = "running"
+    ledger["reschedule"] = ["wave-1-cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    replay_terminal = RecordingTerminal()
+    replay_launcher = RecordingLauncher()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, replay_launcher, replay_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert replay_launcher.requests == []
+    assert replay_terminal.requests == []
+    recovered_cell = next(cell for cell in recovered["waves"][0]["cells"]
+                          if cell["treatment"] == "cannbot")
+    assert recovered_cell["reschedule_attempts"][-1]["attempt"] == 2
+
+
+def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra"}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    cannbot = next(cell for cell in ledger["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    retry = cannbot["retry"]
+    cannbot.pop("retry")
+    ledger["status"] = "running"
+    ledger["reschedule"] = ["wave-1-cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-2").glob(
+        "terminal-result-*.json"))
+    receipt = json.loads(receipt_path.read_text())
+    receipt.update({"state": "started", "request": {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot",
+        "workspace": str(root / "cells" / "wave-1-cannbot" / "attempt-2" / "workspace"),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 2,
+        "candidate_sha256": retry["candidate_sha256"],
+    }, "timeout_seconds": 70,
+        "result": {"status": "infrastructure_error", "failure_type": "observer_error",
+                   "handle": "bz-a3-1:retained", "terminal_attempt": 2,
+                   "retained_terminal_request": {"cell": "cannbot-attempt-2",
+                                                   "timeout": 7}}})
+    (receipt_path).write_text(json.dumps(receipt))
+    class ReobservingTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained-again", "terminal_attempt": 2,
+                    "retained_terminal_request": {"cell": "cannbot-attempt-2",
+                                                  "timeout": 7, "generation": 2}}
+
+    terminal = ReobservingTerminal()
+    pending = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), terminal,
+        wave_timeout=1,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert pending["status"] == "reschedule_pending"
+    assert terminal.requests[0][1] == 1
+    assert terminal.requests[0][0]["terminal_attempt"] == 2
+    assert terminal.requests[0][0]["retained_terminal_request"] == {
+        "cell": "cannbot-attempt-2", "timeout": 7}
+    final_terminal = RecordingTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), final_terminal,
+        wave_timeout=5,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert 1 < final_terminal.requests[0][1] <= 5
+    assert final_terminal.requests[0][0]["retained_terminal_request"] == {
+        "cell": "cannbot-attempt-2", "timeout": 7, "generation": 2}
+
+
+def test_infrastructure_agent_with_candidate_gets_full_replacement(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    cell = next(cell for cell in ledger["waves"][0]["cells"]
+                if cell["treatment"] == "cannbot")
+    cell.update({"category": "infrastructure", "outcome": "wave_budget_exhausted"})
+    cell["agent"] = {"status": "infrastructure_error",
+                     "failure_type": "wave_budget_exhausted"}
+    ledger["status"] = "reschedule_pending"
+    ledger["reschedule"] = ["wave-1-cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    launcher = RecordingLauncher()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, launcher, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert [request["attempt"] for request, _ in launcher.requests] == [2]
+
+
+def test_adaptive_load_revalidates_prior_curation_wave_hash(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    campaign.acknowledge_curation(curation_receipt(paused))
+    ledger = json.loads((root / "ledger.json").read_text())
+    ledger["waves"][0]["cells"][0]["outcome"] = "changed-after-curation"
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.run_wave(2)
+
+
+def test_resumed_cells_share_one_wave_deadline(tmp_path: Path, monkeypatch):
+    outcomes = {(1, treatment, attempt): "device_or_runtime_infra"
+                for treatment in diagnostic.TREATMENTS for attempt in (1, 2)}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        wave_timeout=10, campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    replacement = RecordingLauncher()
+    ticks = iter(range(0, 200))
+    monkeypatch.setattr(diagnostic.time, "monotonic", lambda: next(ticks))
+    diagnostic.DiagnosticCampaign(
+        config, root, replacement, RecordingTerminal(),
+        wave_timeout=10, campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    timeouts = [timeout for _request, timeout in replacement.requests]
+    assert len(timeouts) >= 2
+    assert timeouts == sorted(timeouts, reverse=True)
+    assert timeouts[-1] < timeouts[0]
+
+
+def test_interrupted_adaptive_wave_drains_result_before_resuming(
+        tmp_path: Path, monkeypatch):
+    publish_ready, publish_release = threading.Event(), threading.Event()
+
+    class DelayedPublishingFuture(diagnostic.Future):
+        def set_result(self, result):
+            if result.get("treatment") == "cannbot":
+                publish_ready.set()
+                assert publish_release.wait(1)
+            super().set_result(result)
+
+    monkeypatch.setattr(diagnostic, "Future", DelayedPublishingFuture)
+
+    class CompletingTerminal(RecordingTerminal):
+        def cancel(self):
+            publish_release.set()
+
+    class InterruptingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["treatment"] == "project-guarded":
+                assert publish_ready.wait(1)
+                raise KeyboardInterrupt("simulated operator interruption")
+            result = super().launch(request, timeout_seconds)
+            if request["treatment"] == "cannbot":
+                result["status"] = "timeout"
+            return result
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    interrupted = diagnostic.DiagnosticCampaign(
+        config, root, InterruptingLauncher(), CompletingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.run_wave(1)
+    checkpoint = json.loads((root / "ledger.json").read_text())
+    assert checkpoint["status"] == "reschedule_pending"
+    assert checkpoint["reschedule"] == ["wave-1-cannbot", "wave-1-project-guarded"]
+
+    replacement = RecordingLauncher()
+    resumed = diagnostic.DiagnosticCampaign(
+        config, root, replacement, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert resumed["status"] == "awaiting_curation"
+    assert len(replacement.requests) == 2
+    assert {request["treatment"] for request, _ in replacement.requests} == {
+        "cannbot", "project-guarded"}
+
+
+def test_reschedule_rejects_changed_retained_candidate(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    launcher = RecordingLauncher(outcomes)
+
+    class InfraOnceTerminal(RecordingTerminal):
+        failed = False
+
+        def check(self, request, timeout_seconds):
+            if request["cell_id"] == "wave-1-cannbot" and not self.failed:
+                self.failed = True
+                return {"status": "device_or_runtime_infra"}
+            return super().check(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, launcher, InfraOnceTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    campaign.run_wave(1)
+    candidate = root / "cells" / "wave-1-cannbot" / "attempt-3" / "workspace" / "candidate.py"
+    candidate.write_text("changed\n")
+    with pytest.raises(diagnostic.DiagnosticError, match="digest mismatch"):
+        campaign.run_wave(1)
+
+
+def test_repeated_reschedule_uses_latest_candidate_without_relaunch(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    launcher = RecordingLauncher(outcomes)
+
+    class InfraOnceTerminal(RecordingTerminal):
+        failed = False
+
+        def check(self, request, timeout_seconds):
+            if request["cell_id"] == "wave-1-cannbot" and not self.failed:
+                self.failed = True
+                return {"status": "device_or_runtime_infra"}
+            return super().check(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, launcher, InfraOnceTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    agent_calls = len(launcher.requests)
+    completed = campaign.run_wave(1)
+    assert completed["status"] == "awaiting_curation"
+    assert len(launcher.requests) == agent_calls
+    cell = completed["waves"][0]["cells"][0]
+    assert [item["attempt"] for item in cell["reschedule_attempts"]] == [3, 3]
+
+
+def test_retained_observation_uses_distinct_durable_terminal_receipt(tmp_path: Path):
+    class ObserverTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            cannbot_calls = [item for item in self.requests
+                             if item[0]["cell_id"] == "wave-1-cannbot"]
+            if request["cell_id"] != "wave-1-cannbot":
+                return {"status": "ok", "passed": True}
+            if len(cannbot_calls) == 1:
+                return {"status": "infrastructure_error", "failure_type": "device_error"}
+            if len(cannbot_calls) in (2, 3):
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-1:retained",
+                        "terminal_attempt": 2,
+                        "retained_terminal_request": {"cell": "cannbot-attempt-2"}}
+            assert request["terminal_attempt"] == 2
+            assert request["retained_terminal_request"]["cell"] == "cannbot-attempt-2"
+            return {"status": "ok", "passed": True, "terminal_attempt": 2}
+
+    terminal = ObserverTerminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    assert campaign.run_wave(1)["status"] == "awaiting_curation"
+    assert len([request for request, _ in terminal.requests
+                if request["cell_id"] == "wave-1-cannbot"]) == 4
+
+
+def test_interruption_keeps_counted_retry_complete(tmp_path: Path):
+    outcomes = {
+        (1, "cannbot", 1): "device_or_runtime_infra",
+        (1, "project-cannbot", 1): "device_or_runtime_infra",
+    }
+
+    class InterruptSecondRetry(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["treatment"] == "project-cannbot" and request["attempt"] == 2:
+                raise KeyboardInterrupt("interrupt after counted sibling retry")
+            if request["treatment"] == "project-cannbot" and request["attempt"] == 1:
+                time.sleep(0.05)
+            return super().launch(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, InterruptSecondRetry(outcomes),
+        RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
+    )
+    with pytest.raises(KeyboardInterrupt, match="counted sibling retry"):
+        campaign.run_wave(1)
+    checkpoint = json.loads((root / "ledger.json").read_text())
+    assert "wave-1-cannbot" not in checkpoint["reschedule"]
+    cannbot = next(cell for cell in checkpoint["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert cannbot["retry"]["category"] == "counted"
+
+
 def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",
@@ -150,7 +682,7 @@ def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Pat
     missing = wave["cells"][1]
     assert infra["category"] == "infrastructure"
     assert infra["retry"]["attempt"] == 2
-    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert "wave-1-cannbot" in result["reschedule"]
     assert result["status"] == "reschedule_pending"
     assert missing["outcome"] == "no_submission" and "retry" not in missing
     assert len([request for request, _ in launcher.requests
@@ -634,7 +1166,7 @@ def test_keyboard_interrupt_checkpoints_terminal_state_and_sibling_evidence(tmp_
     def observing_atomic(path, value):
         real_atomic(path, value)
         if any(cell["treatment"] == "cannbot"
-               for wave in value["waves"] for cell in wave["cells"]):
+               for wave in value.get("waves", []) for cell in wave["cells"]):
             sibling_checkpointed.set()
 
     monkeypatch.setattr(diagnostic, "_atomic_json", observing_atomic)

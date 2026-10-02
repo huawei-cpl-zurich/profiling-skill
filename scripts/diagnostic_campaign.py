@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 import uuid
-from concurrent.futures import Future, as_completed
+from concurrent.futures import Future, TimeoutError as FutureTimeout, as_completed
 from pathlib import Path
 from typing import Protocol
 
@@ -306,7 +306,8 @@ class DiagnosticCampaign:
                  terminal: TerminalHook, *, waves: int = 4,
                  agent_timeout: int = 360, cell_timeout: int = 600,
                  wave_timeout: int = 600, ledger_metadata: dict | None = None,
-                 campaign_id: str | None = None):
+                 campaign_id: str | None = None,
+                 campaign_identity: dict | None = None):
         validate_manifest(manifest)
         if waves != 4 or agent_timeout <= 0 or cell_timeout <= 0 or wave_timeout <= 0:
             raise DiagnosticError("four waves and positive timeouts are required")
@@ -316,13 +317,15 @@ class DiagnosticCampaign:
         self.wave_timeout = wave_timeout
         self.ledger_metadata = copy.deepcopy(ledger_metadata or {})
         self.campaign_id = campaign_id or str(uuid.uuid4())
+        self.campaign_identity = copy.deepcopy(campaign_identity)
         self.ledger_path = root / "ledger.json"
 
     def _cell(self, wave: int, treatment: str, attempt: int,
               available_seconds: float | None = None) -> dict:
         cell_id = f"wave-{wave}-{treatment}"
         workspace = self.root / "cells" / cell_id / f"attempt-{attempt}" / "workspace"
-        workspace.mkdir(parents=True, exist_ok=False)
+        replaying = any(workspace.parent.glob("terminal-result-*.json"))
+        workspace.mkdir(parents=True, exist_ok=replaying)
         started = time.time()
         monotonic_started = time.monotonic()
         treatment_record = copy.deepcopy(self.manifest["treatments"][treatment])
@@ -344,17 +347,19 @@ class DiagnosticCampaign:
                 "command": ["check", "--scope", "development", "--round", "1"]},
         }
         cap = min(self.cell_timeout, available_seconds or self.cell_timeout)
-        try:
-            agent = copy.deepcopy(self.launcher.launch(
-                request, max(1, int(min(self.agent_timeout, cap))),
-            ))
-        except Exception as error:
-            agent = {"status": "transport_or_observer_error",
-                     "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
+        agent = self._durable_agent_launch(
+            request, max(1, int(min(self.agent_timeout, cap))))
         elapsed = time.monotonic() - monotonic_started
         terminal = None
         candidate = workspace / "candidate.py"
         candidate_manifest = workspace / "candidate.manifest.json"
+        submission_hashes = agent.get("candidate_sha256")
+        if not isinstance(submission_hashes, dict):
+            submission_hashes = {}
+            for name in ("candidate.py", "candidate.manifest.json"):
+                path = workspace / name
+                if path.is_file():
+                    submission_hashes[name] = sha256_file(path)
         if elapsed >= cap:
             agent = {"status": "infrastructure_error",
                      "failure_type": "wave_budget_exhausted",
@@ -364,12 +369,12 @@ class DiagnosticCampaign:
             terminal_request = {
                 "protocol_version": 1, "operation": "terminal_check", "cell_id": cell_id,
                 "workspace": str(workspace), "benchmark": "streaming-matmul-add",
-                "cases": list(range(7)),
+                "cases": list(range(7)), "terminal_attempt": attempt,
+                "candidate_sha256": copy.deepcopy(submission_hashes),
             }
             try:
-                terminal = copy.deepcopy(self.terminal.check(
-                    terminal_request, max(1, int(cap - elapsed)),
-                ))
+                terminal = self._durable_terminal_check(
+                    terminal_request, max(1, int(cap - elapsed)))
             except Exception as error:
                 terminal = {"status": "transport_or_observer_error",
                             "diagnostics":
@@ -379,20 +384,99 @@ class DiagnosticCampaign:
                             "failure_type": "wave_budget_exhausted",
                             "diagnostics": "terminal hook exceeded the remaining cell budget"}
         outcome, category = classify(agent, terminal, workspace)
-        hashes = {}
-        for name in ("candidate.py", "candidate.manifest.json"):
-            path = workspace / name
-            if path.is_file():
-                hashes[name] = sha256_file(path)
         return {
             "cell_id": cell_id, "wave": wave, "attempt": attempt, "treatment": treatment,
             "outcome": outcome, "category": category, "agent": agent, "terminal": terminal,
-            "candidate_sha256": hashes, "started_at_epoch": started,
+            "candidate_sha256": submission_hashes, "started_at_epoch": started,
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"],
             "skill_sha256": copy.deepcopy(treatment_record["skill_sha256"]),
             "elapsed_seconds": time.time() - started,
         }
+
+    def _durable_agent_launch(self, request: dict, timeout_seconds: int) -> dict:
+        workspace = Path(request["workspace"])
+        receipt = workspace.parent / "controller-agent-result.json"
+        digest = hashlib.sha256(json.dumps(
+            request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if receipt.is_file():
+            record = json.loads(receipt.read_text())
+            if (record.get("request_sha256") != digest
+                    or record.get("state") != "completed"
+                    or not isinstance(record.get("result"), dict)):
+                raise DiagnosticError("invalid controller agent result receipt")
+            return copy.deepcopy(record["result"])
+        try:
+            result = copy.deepcopy(self.launcher.launch(request, timeout_seconds))
+        except Exception as error:
+            result = {"status": "transport_or_observer_error",
+                      "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
+        _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
+                               "request_sha256": digest, "result": result})
+        return result
+
+    def _durable_terminal_check(self, request: dict, timeout_seconds: int) -> dict:
+        """Replay a completed terminal result across a wave-checkpoint crash."""
+        workspace = Path(request["workspace"])
+        digest = hashlib.sha256(json.dumps(
+            request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        receipt_request = copy.deepcopy(request)
+        receipt_timeout = timeout_seconds
+        terminal_attempt = request.get("terminal_attempt", workspace.parent.name)
+        receipt = workspace.parent / f"terminal-result-{terminal_attempt}-{digest[:16]}.json"
+        if receipt.is_file():
+            record = json.loads(receipt.read_text())
+            if record.get("request_sha256") != digest:
+                raise DiagnosticError("terminal result receipt request mismatch")
+            if record.get("state") == "completed" and isinstance(record.get("result"), dict):
+                return copy.deepcopy(record["result"])
+            if record.get("state") != "started":
+                raise DiagnosticError("invalid terminal result receipt")
+            persisted_timeout = record.get("timeout_seconds")
+            if (isinstance(persisted_timeout, bool)
+                    or not isinstance(persisted_timeout, int) or persisted_timeout < 1):
+                raise DiagnosticError("invalid started terminal timeout")
+            persisted_request = record.get("request")
+            if (not isinstance(persisted_request, dict)
+                    or hashlib.sha256(json.dumps(
+                        persisted_request, sort_keys=True,
+                        separators=(",", ":")).encode()).hexdigest() != digest):
+                raise DiagnosticError("invalid started terminal request")
+            receipt_request = copy.deepcopy(persisted_request)
+            receipt_timeout = persisted_timeout
+            prior_result = record.get("result")
+            retained_request = (prior_result.get("retained_terminal_request")
+                                if isinstance(prior_result, dict) else None)
+            if retained_request is not None:
+                if not isinstance(retained_request, dict):
+                    raise DiagnosticError("invalid retained terminal request")
+                request = {**copy.deepcopy(persisted_request),
+                           "retained_terminal_request": copy.deepcopy(retained_request),
+                           "terminal_attempt": prior_result.get(
+                               "terminal_attempt", persisted_request.get("terminal_attempt"))}
+            else:
+                request = copy.deepcopy(persisted_request)
+            timeout_seconds = min(timeout_seconds, persisted_timeout)
+        else:
+            _atomic_json(receipt, {"protocol_version": 1, "state": "started",
+                                   "request_sha256": digest,
+                                   "request": receipt_request,
+                                   "timeout_seconds": timeout_seconds})
+        result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
+        retriable_observation = (
+            result.get("status") == "infrastructure_error"
+            and result.get("failure_type") in {"observer_error", "transport_error"}
+            and bool(result.get("handle")))
+        if not retriable_observation:
+            _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
+                                   "request_sha256": digest, "result": result})
+        else:
+            _atomic_json(receipt, {"protocol_version": 1, "state": "started",
+                                   "request_sha256": digest,
+                                   "request": receipt_request,
+                                   "timeout_seconds": receipt_timeout,
+                                   "result": result})
+        return result
 
     def _guarded_cell(self, wave: int, treatment: str, attempt: int,
                       available_seconds: float | None = None) -> dict:
@@ -416,13 +500,19 @@ class DiagnosticCampaign:
                 "elapsed_seconds": 0,
             }
 
-    def _freeze_prompt(self, manifest: dict) -> None:
+    def _freeze_prompt(self, manifest: dict, name: str = "prompt.md") -> None:
         source = Path(manifest["prompt"])
         content = source.read_bytes()
         if hashlib.sha256(content).hexdigest() != manifest["prompt_sha256"]:
             raise DiagnosticError("prompt changed while campaign inputs were frozen")
-        destination = self.root / "inputs" / "prompt.md"
-        destination.parent.mkdir(parents=True, exist_ok=False)
+        destination = self.root / "inputs" / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            if sha256_file(destination) != manifest["prompt_sha256"]:
+                raise DiagnosticError(f"existing frozen prompt changed: {destination}")
+            self._prompt_bytes = destination.read_bytes()
+            manifest["prompt"] = str(destination)
+            return
         with tempfile.NamedTemporaryFile("wb", dir=destination.parent, delete=False) as stream:
             stream.write(content)
             temporary = Path(stream.name)
@@ -430,6 +520,261 @@ class DiagnosticCampaign:
         os.replace(temporary, destination)
         self._prompt_bytes = content
         manifest["prompt"] = str(destination)
+
+    def _adaptive_identity(self) -> dict:
+        return {
+            "campaign": self.campaign_identity,
+            "model_sha256": self.manifest["model_sha256"],
+            "treatments": copy.deepcopy(self.manifest["treatments"]),
+        }
+
+    def _load_adaptive_ledger(self) -> dict:
+        try:
+            ledger = json.loads(self.ledger_path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise DiagnosticError(f"cannot read adaptive ledger: {error}") from error
+        if not isinstance(ledger, dict) or ledger.get("adaptive") is not True:
+            raise DiagnosticError("ledger is not an adaptive campaign")
+        if ledger.get("campaign_identity") != self._adaptive_identity():
+            raise DiagnosticError("model, treatment, skill, or campaign configuration drift")
+        receipts = ledger.get("curation_receipts")
+        waves = ledger.get("waves")
+        if (not isinstance(receipts, list) or not isinstance(waves, list)
+                or len(receipts) > len(waves)):
+            raise DiagnosticError("adaptive ledger has invalid curation history")
+        for index, receipt in enumerate(receipts, 1):
+            self._validate_curation_receipt(
+                receipt, {**ledger, "waves": waves[:index]})
+        return ledger
+
+    @staticmethod
+    def _wave_sha256(wave_record: dict) -> str:
+        return hashlib.sha256(json.dumps(
+            wave_record, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+
+    @classmethod
+    def _validate_curation_receipt(cls, receipt: dict, ledger: dict) -> None:
+        wave = len(ledger["waves"])
+        citations = receipt.get("stable_ref_citations") if isinstance(receipt, dict) else None
+        queries = receipt.get("librarian_query_ids") if isinstance(receipt, dict) else None
+        if (not isinstance(receipt, dict) or receipt.get("wave") != wave
+                or receipt.get("campaign_id") != ledger["campaign_id"]
+                or receipt.get("wave_sha256") != cls._wave_sha256(ledger["waves"][-1])
+                or not isinstance(receipt.get("curator_operation_id"), str)
+                or not receipt["curator_operation_id"].strip()
+                or receipt.get("accepted") is not True
+                or not isinstance(citations, list) or not citations
+                or not all(isinstance(item, str) and item.startswith("ref://")
+                           and bool(item.removeprefix("ref://").strip())
+                           for item in citations)
+                or not isinstance(queries, list) or not queries
+                or not all(isinstance(item, str) and item.strip() for item in queries)):
+            raise DiagnosticError("invalid curation receipt")
+
+    def acknowledge_curation(self, receipt: dict) -> dict:
+        ledger = self._load_adaptive_ledger()
+        if ledger["status"] != "awaiting_curation":
+            raise DiagnosticError("campaign is not awaiting curation")
+        wave = len(ledger["waves"])
+        self._validate_curation_receipt(receipt, ledger)
+        ledger["curation_receipts"].append(copy.deepcopy(receipt))
+        ledger["status"] = "complete" if wave == self.waves else "ready_for_next"
+        _atomic_json(self.ledger_path, ledger)
+        return ledger
+
+    def run_wave(self, wave: int) -> dict:
+        """Run exactly the next adaptive wave and pause for curation."""
+        if isinstance(wave, bool) or not isinstance(wave, int) or not 1 <= wave <= self.waves:
+            raise DiagnosticError("wave must be an integer from 1 through 4")
+        manifest = copy.deepcopy(self.manifest)
+        validate_manifest(manifest)
+        if wave == 1 and not self.ledger_path.exists():
+            if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
+                raise DiagnosticError(f"diagnostic output root is not fresh: {self.root}")
+            ledger = {
+                **self.ledger_metadata, "protocol_version": 1,
+                "campaign_id": self.campaign_id, "adaptive": True,
+                "campaign_identity": self._adaptive_identity(),
+                "status": "ready_for_next", "waves": [], "reschedule": [],
+                "curation_receipts": [],
+            }
+            _atomic_json(self.ledger_path, ledger)
+        else:
+            ledger = self._load_adaptive_ledger()
+            self.campaign_id = ledger["campaign_id"]
+        if ledger["status"] == "running":
+            if wave == len(ledger["waves"]) + 1:
+                ledger["status"] = "ready_for_next"
+            elif wave == len(ledger["waves"]):
+                current = ledger["waves"][-1]
+                completed = set()
+                for cell in current["cells"]:
+                    attempts = cell.get("reschedule_attempts", [])
+                    latest = attempts[-1] if attempts else cell.get("retry", cell)
+                    if latest["category"] == "counted":
+                        completed.add(cell["treatment"])
+                completed_ids = {f"wave-{wave}-{name}" for name in completed}
+                ledger["reschedule"] = sorted(
+                    (set(ledger["reschedule"]) - completed_ids) |
+                    {f"wave-{wave}-{name}" for name in TREATMENTS if name not in completed}
+                )
+                ledger["status"] = "reschedule_pending"
+            else:
+                raise DiagnosticError("running adaptive ledger has inconsistent wave state")
+            _atomic_json(self.ledger_path, ledger)
+        if ledger["status"] == "reschedule_pending":
+            if wave != len(ledger["waves"]):
+                raise DiagnosticError(f"campaign must reschedule wave {len(ledger['waves'])}")
+            if self.manifest["prompt_sha256"] != ledger["waves"][-1]["prompt_sha256"]:
+                raise DiagnosticError("prompt cannot change while a wave is reschedule pending")
+            frozen_prompt = Path(ledger["waves"][-1]["prompt"])
+            if (not frozen_prompt.is_file()
+                    or sha256_file(frozen_prompt) != ledger["waves"][-1]["prompt_sha256"]):
+                raise DiagnosticError("frozen wave prompt is missing or changed")
+            self._prompt_bytes = frozen_prompt.read_bytes()
+            self.manifest["prompt"] = ledger["waves"][-1]["prompt"]
+            self._resume_wave(ledger, wave)
+            ledger["status"] = (
+                "reschedule_pending" if ledger["reschedule"] else "awaiting_curation"
+            )
+            _atomic_json(self.ledger_path, ledger)
+            return ledger
+        next_wave = len(ledger["waves"]) + 1
+        if ledger["status"] != "ready_for_next" or wave != next_wave:
+            raise DiagnosticError(f"campaign is not ready for wave {wave}; next wave is {next_wave}")
+        self._freeze_prompt(manifest, f"wave-{wave}-prompt.md")
+        self.manifest = manifest
+        ledger["status"] = "running"
+        _atomic_json(self.ledger_path, ledger)
+        try:
+            self._run_one_wave(ledger, wave)
+        except BaseException:
+            completed = set()
+            for cell in ledger["waves"][-1]["cells"]:
+                attempts = cell.get("reschedule_attempts", [])
+                latest = attempts[-1] if attempts else cell.get("retry", cell)
+                if latest["category"] == "counted":
+                    completed.add(cell["treatment"])
+            pending = set(ledger["reschedule"])
+            pending.update(f"wave-{wave}-{name}" for name in TREATMENTS
+                           if name not in completed)
+            ledger["reschedule"] = sorted(pending)
+            ledger["status"] = "reschedule_pending"
+            _atomic_json(self.ledger_path, ledger)
+            for hook in (self.launcher, self.terminal):
+                cancel = getattr(hook, "cancel", None)
+                if cancel is not None:
+                    try:
+                        cancel()
+                    except Exception:
+                        pass
+            raise
+        ledger["status"] = (
+            "reschedule_pending" if ledger["reschedule"] else "awaiting_curation"
+        )
+        _atomic_json(self.ledger_path, ledger)
+        return ledger
+
+    def _resume_wave(self, ledger: dict, wave: int) -> None:
+        """Retry only unresolved infrastructure cells in an existing wave."""
+        wave_record = ledger["waves"][-1]
+        by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
+        deadline = time.monotonic() + self.wave_timeout
+        for cell_id in list(ledger["reschedule"]):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            treatment = cell_id.removeprefix(f"wave-{wave}-")
+            prior = by_treatment.get(treatment)
+            last = None
+            if prior is not None:
+                attempts = prior.get("reschedule_attempts", [])
+                last = attempts[-1] if attempts else prior.get("retry", prior)
+            durable_attempts = []
+            for path in (self.root / "cells" / cell_id).glob(
+                    "attempt-*/terminal-result-*.json"):
+                try:
+                    record = json.loads(path.read_text())
+                except (OSError, json.JSONDecodeError):
+                    continue
+                retriable_started = (
+                    record.get("state") == "started"
+                    and isinstance(record.get("request"), dict)
+                    and isinstance(record.get("timeout_seconds"), int)
+                    and isinstance(record.get("result"), dict)
+                    and bool(record["result"].get("handle"))
+                    and isinstance(record["result"].get("retained_terminal_request"), dict))
+                if ((record.get("state") == "completed"
+                     and isinstance(record.get("result"), dict)) or retriable_started):
+                    durable_attempts.append(int(path.parent.name.removeprefix("attempt-")))
+            newest_durable = max(durable_attempts, default=0)
+            workspace = None if last is None else (
+                self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
+            )
+            if last is not None and newest_durable > last["attempt"]:
+                resumed = self._guarded_cell(
+                    wave, treatment, newest_durable, remaining)
+            elif (last is not None and last["category"] == "infrastructure"
+                    and last.get("agent", {}).get("status") == "ok"
+                    and workspace is not None
+                    and all((workspace / name).is_file()
+                            for name in ("candidate.py", "candidate.manifest.json"))):
+                expected = last.get("candidate_sha256")
+                if (not isinstance(expected, dict)
+                        or any(expected.get(name) != sha256_file(workspace / name)
+                               for name in ("candidate.py", "candidate.manifest.json"))):
+                    raise DiagnosticError(f"retained candidate digest mismatch for {cell_id}")
+                try:
+                    retained_request = (last.get("terminal") or {}).get(
+                        "retained_terminal_request")
+                    terminal_attempt = (last.get("terminal") or {}).get(
+                        "terminal_attempt", last["attempt"])
+                    terminal_request = {
+                        "protocol_version": 1, "operation": "terminal_check",
+                        "cell_id": cell_id, "workspace": str(workspace),
+                        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+                        "candidate_sha256": copy.deepcopy(expected),
+                        "terminal_attempt": (terminal_attempt if retained_request
+                                             else terminal_attempt + 1),
+                        "retained_terminal_request": copy.deepcopy(retained_request),
+                    }
+                    terminal = self._durable_terminal_check(
+                        terminal_request, max(1, int(remaining)))
+                except DiagnosticError:
+                    raise
+                except Exception as error:
+                    terminal = {"status": "transport_or_observer_error",
+                                "diagnostics":
+                                    f"terminal hook raised {type(error).__name__}: {error}"}
+                outcome, category = classify(last["agent"], terminal, workspace)
+                resumed = {**copy.deepcopy(last), "outcome": outcome,
+                           "category": category, "terminal": terminal,
+                           "rescheduled": True}
+            else:
+                attempt = 1 if last is None else last["attempt"] + 1
+                if last is None:
+                    durable = [path.parent for path in
+                               (self.root / "cells" / cell_id).glob(
+                                   "attempt-*/terminal-result-*.json")]
+                    if durable:
+                        attempt = max(int(path.name.removeprefix("attempt-"))
+                                      for path in durable)
+                if not any((self.root / "cells" / cell_id /
+                            f"attempt-{attempt}").glob("terminal-result-*.json")):
+                    while (self.root / "cells" / cell_id / f"attempt-{attempt}").exists():
+                        attempt += 1
+                resumed = self._guarded_cell(wave, treatment, attempt, remaining)
+            if prior is None:
+                wave_record["cells"].append(resumed)
+                by_treatment[treatment] = resumed
+            else:
+                prior.setdefault("reschedule_attempts", []).append(resumed)
+                prior["resolution"] = resumed
+            if resumed["category"] == "counted":
+                ledger["reschedule"].remove(cell_id)
+            _atomic_json(self.ledger_path, ledger)
+        wave_record["cells"].sort(key=lambda item: TREATMENTS.index(item["treatment"]))
 
     def run(self) -> dict:
         manifest = copy.deepcopy(self.manifest)
@@ -481,38 +826,69 @@ class DiagnosticCampaign:
 
     def _run_waves(self, ledger: dict) -> dict:
         for wave in range(1, self.waves + 1):
-            wave_started = time.monotonic()
-            results = []
-            wave_record = {"wave": wave, "cells": results}
-            ledger["waves"].append(wave_record)
-            futures = {}
-            try:
-                for treatment in TREATMENTS:
-                    future = _submit_daemon(
-                        self._guarded_cell, wave, treatment, 1, self.wave_timeout,
-                    )
-                    futures[future] = treatment
-                for future in as_completed(futures):
-                    result = future.result()
-                    results.append(result)
-                    _atomic_json(self.ledger_path, ledger)
-            except BaseException:
-                for future in futures:
-                    future.cancel()
-                raise
-            for result in [item for item in results if item["category"] == "infrastructure"]:
-                remaining = self.wave_timeout - (time.monotonic() - wave_started)
-                if remaining > 0:
-                    retry = self._guarded_cell(
-                        wave, result["treatment"], 2, remaining,
-                    )
-                    result["retry"] = retry
-                    _atomic_json(self.ledger_path, ledger)
-                if remaining <= 0 or retry["category"] != "counted":
-                    ledger["reschedule"].append(result["cell_id"])
-                    _atomic_json(self.ledger_path, ledger)
-            results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
-            _atomic_json(self.ledger_path, ledger)
+            self._run_one_wave(ledger, wave)
         ledger["status"] = "reschedule_pending" if ledger["reschedule"] else "complete"
         _atomic_json(self.ledger_path, ledger)
         return ledger
+
+    def _run_one_wave(self, ledger: dict, wave: int) -> None:
+        wave_started = time.monotonic()
+        results = []
+        wave_record = {
+            "wave": wave, "cells": results,
+            "prompt": self.manifest["prompt"],
+            "prompt_sha256": self.manifest["prompt_sha256"],
+            "model_sha256": self.manifest["model_sha256"],
+            "skill_sha256": {name: copy.deepcopy(
+                self.manifest["treatments"][name]["skill_sha256"])
+                for name in TREATMENTS},
+        }
+        ledger["waves"].append(wave_record)
+        _atomic_json(self.ledger_path, ledger)
+        futures = {}
+        try:
+            for treatment in TREATMENTS:
+                future = _submit_daemon(
+                    self._guarded_cell, wave, treatment, 1, self.wave_timeout,
+                )
+                futures[future] = treatment
+            for future in as_completed(futures):
+                results.append(future.result())
+                _atomic_json(self.ledger_path, ledger)
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            if ledger.get("adaptive") is True:
+                for hook in (self.launcher, self.terminal):
+                    cancel = getattr(hook, "cancel", None)
+                    if cancel is not None:
+                        try:
+                            cancel()
+                        except Exception:
+                            pass
+            recorded = {item["treatment"] for item in results}
+            for future, treatment in futures.items():
+                if (treatment in recorded or future.cancelled()
+                        or (ledger.get("adaptive") is not True and not future.done())):
+                    continue
+                try:
+                    results.append(future.result(timeout=min(5, self.cell_timeout)))
+                except FutureTimeout:
+                    continue
+                except BaseException:
+                    pass
+            results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
+            _atomic_json(self.ledger_path, ledger)
+            raise
+        for result in [item for item in results if item["category"] == "infrastructure"]:
+            remaining = self.wave_timeout - (time.monotonic() - wave_started)
+            retry = None
+            if remaining > 0:
+                retry = self._guarded_cell(wave, result["treatment"], 2, remaining)
+                result["retry"] = retry
+                _atomic_json(self.ledger_path, ledger)
+            if retry is None or retry["category"] != "counted":
+                ledger["reschedule"].append(result["cell_id"])
+                _atomic_json(self.ledger_path, ledger)
+        results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
+        _atomic_json(self.ledger_path, ledger)

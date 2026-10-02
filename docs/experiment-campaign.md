@@ -65,6 +65,24 @@ The production launcher exposes an opaque controller socket as the only route
 from an isolated agent to its host controller command; the agent cannot see
 that implementation or the other treatments.
 
+## Adaptive diagnostic waves
+
+The short BZ diagnostic campaign is advanced one wave at a time with
+`scripts/one_shot_bz_campaign.py --action run-wave --wave N`. A successful
+wave atomically pauses its ledger in `awaiting_curation`; it does not launch
+the next wave. Submit the curator-produced JSON with `--action
+acknowledge-curation --curation-receipt /absolute/receipt.json`. The receipt
+must identify the completed wave, set `accepted` to true, and contain nonempty
+`stable_ref_citations` (`ref://...`) and `librarian_query_ids` arrays. It also
+binds the curator operation to the ledger's `campaign_id` and canonical
+`wave_sha256`; receipts from another campaign or evidence revision are rejected.
+
+Acknowledgement moves waves 1-3 to `ready_for_next` and Wave 4 to `complete`.
+Only the prompt path and digest may change between waves. The CLI rejects
+model, treatment, skill, timeout, asset, or placement drift before launching
+an agent, and completed countable cells are never relaunched. The legacy
+`run-all` action remains available for fixed non-adaptive tests.
+
 ## Freeze and configure
 
 Use a new output directory for every freeze and campaign. The examples use

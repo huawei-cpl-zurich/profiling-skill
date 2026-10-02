@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
 import os
 import shutil
@@ -15,7 +17,8 @@ from pathlib import Path
 
 import diagnostic_campaign
 from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
-from diagnostic_campaign import CommandLauncher, DiagnosticCampaign, DiagnosticError, TREATMENTS
+from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
+                                 DiagnosticCampaign, DiagnosticError, TREATMENTS)
 
 
 def load_json(path: Path) -> dict:
@@ -52,15 +55,19 @@ def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dic
     snapshot_root = root.parent / f".{root.name}-inputs-{campaign_id}"
     snapshot_root.mkdir(parents=True, exist_ok=False)
     frozen, hashes = {}, {}
-    for name, source_name in assets.items():
-        source = Path(source_name)
-        if not source.is_file():
-            raise DiagnosticError(f"benchmark asset is missing: {source}")
-        destination = snapshot_root / name
-        shutil.copyfile(source, destination)
-        os.chmod(destination, 0o444)
-        frozen[name] = str(destination)
-        hashes[name] = diagnostic_campaign.sha256_file(destination)
+    try:
+        for name, source_name in assets.items():
+            source = Path(source_name)
+            if not source.is_file():
+                raise DiagnosticError(f"benchmark asset is missing: {source}")
+            destination = snapshot_root / name
+            shutil.copyfile(source, destination)
+            os.chmod(destination, 0o444)
+            frozen[name] = str(destination)
+            hashes[name] = diagnostic_campaign.sha256_file(destination)
+    except BaseException:
+        shutil.rmtree(snapshot_root, ignore_errors=True)
+        raise
     return frozen, {"root": str(snapshot_root), "sha256": hashes}
 
 
@@ -87,6 +94,14 @@ class FrozenAgentLauncher:
         if not files:
             return
         snapshot = workspace.parent / "frozen-submission"
+        if snapshot.exists():
+            if (not snapshot.is_dir()
+                    or {path.name for path in snapshot.iterdir()} != set(files)
+                    or any((snapshot / name).read_bytes() != content
+                           for name, content in files.items())):
+                raise DiagnosticError("existing frozen submission does not match receipt")
+            cls._restore(workspace, files)
+            return
         snapshot.mkdir(exist_ok=False)
         cls._restore(snapshot, files)
         os.chmod(snapshot, 0o555)
@@ -95,10 +110,34 @@ class FrozenAgentLauncher:
     def launch(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         workspace = Path(request["workspace"])
+        cell_root = (workspace.parent.parent
+                     if workspace.parent.name.startswith("attempt-") else workspace)
+        receipt_path = cell_root / "agent-launch.json"
         if cell in self.frozen:
             result, files = self.frozen[cell]
             self._freeze_submission(workspace, files)
             return {**result, "submission_replayed": True}
+        if receipt_path.is_file():
+            receipt = json.loads(receipt_path.read_text())
+            if receipt.get("state") != "completed":
+                return {"status": "infrastructure_error",
+                        "failure_type": "uncertain_agent_launch",
+                        "diagnostics": "prior billed launch has no durable terminal receipt"}
+            snapshot = Path(receipt["snapshot"])
+            expected = receipt.get("candidate_sha256")
+            allowed = {"candidate.py", "candidate.manifest.json"}
+            if not isinstance(expected, dict) or not set(expected).issubset(allowed):
+                raise DiagnosticError("durable launch receipt has invalid candidate hashes")
+            files = {name: (snapshot / name).read_bytes() for name in expected}
+            if any(hashlib.sha256(files[name]).hexdigest() != digest
+                   for name, digest in expected.items()):
+                raise DiagnosticError("durable launch snapshot digest mismatch")
+            self.frozen[cell] = (receipt["result"], files)
+            self._freeze_submission(workspace, files)
+            return {**receipt["result"], "submission_replayed": True}
+        diagnostic_campaign._atomic_json(receipt_path, {
+            "protocol_version": 1, "cell_id": cell, "state": "started",
+        })
         try:
             result = self.launcher.launch(request, timeout_seconds)
         except Exception as error:
@@ -122,6 +161,16 @@ class FrozenAgentLauncher:
                 "diagnostics": f"submission snapshot failed: {type(error).__name__}: {error}",
             }, files)
             raise
+        snapshot = workspace.parent / "frozen-submission"
+        candidate_sha256 = {name: hashlib.sha256(content).hexdigest()
+                            for name, content in files.items()}
+        result = {**result, "candidate_sha256": candidate_sha256}
+        self.frozen[cell] = (result, files)
+        diagnostic_campaign._atomic_json(receipt_path, {
+            "protocol_version": 1, "cell_id": cell, "state": "completed",
+            "result": result, "snapshot": str(snapshot),
+            "candidate_sha256": candidate_sha256,
+        })
         return result
 
     def cancel(self) -> None:
@@ -165,26 +214,73 @@ class BzTerminalHook:
             raise DiagnosticError(f"invalid cell id {cell!r}") from exc
         workspace = Path(request["workspace"])
         submission = workspace.parent / "frozen-submission"
+        expected = request.get("candidate_sha256")
+        if expected is not None and (
+                not isinstance(expected, dict)
+                or any(expected.get(name) != diagnostic_campaign.sha256_file(submission / name)
+                       for name in ("candidate.py", "candidate.manifest.json"))):
+            raise DiagnosticError(f"frozen submission digest mismatch for {cell}")
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
-        placement = self.placements[treatment][min(attempt - 1, 1)]
+        terminal_attempt = request.get("terminal_attempt", attempt)
+        if (isinstance(terminal_attempt, bool) or not isinstance(terminal_attempt, int)
+                or terminal_attempt < 1):
+            raise DiagnosticError("terminal attempt must be a positive integer")
+        placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
         client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
             # observe its retained handle instead of redispatching it.
-            "cell": f"{treatment}-attempt-{attempt}",
+            "cell": f"{treatment}-attempt-{terminal_attempt}",
             **placement, "timeout": min(timeout_seconds, 240),
             "candidate": str(submission / "candidate.py"),
             "candidate_manifest": str(submission / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": list(range(7)),
         }
+        snapshot_hashes = expected if isinstance(expected, dict) else (
+            {name: diagnostic_campaign.sha256_file(submission / name)
+             for name in ("candidate.py", "candidate.manifest.json")}
+            if all((submission / name).is_file()
+                   for name in ("candidate.py", "candidate.manifest.json")) else {})
+        client_request["candidate_sha256"] = copy.deepcopy(snapshot_hashes)
         # A retained observer interruption is not permission to dispatch on a
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
         # the attempt-2 placement.
-        retained = self._uncertain.get(cell)
+        retained = request.get("retained_terminal_request") or self._uncertain.get(cell)
         if retained is not None:
+            immutable = ("campaign", "wave", "baseline", "case_spec", "runner", "cases")
+            retained_candidate = Path(str(retained.get("candidate", "")))
+            retained_manifest = Path(str(retained.get("candidate_manifest", "")))
+            retained_hashes = retained.get("candidate_sha256")
+            prefix = f"{treatment}-attempt-"
+            retained_attempt = str(retained.get("cell", "")).removeprefix(prefix)
+            retained_placement = (self.placements[treatment][min(int(retained_attempt) - 1, 1)]
+                                  if retained_attempt.isdigit() and int(retained_attempt) > 0
+                                  else {})
+            same_cell = (retained_candidate.name == "candidate.py"
+                         and retained_manifest.name == "candidate.manifest.json"
+                         and retained_candidate.parent == retained_manifest.parent
+                         and retained_candidate.parent.name == "frozen-submission"
+                         and retained_candidate.parent.parent.name.startswith("attempt-")
+                         and retained_candidate.parent.parent.parent == submission.parent.parent)
+            if (not isinstance(retained, dict)
+                    or any(retained.get(key) != client_request[key] for key in immutable)
+                    or any(retained.get(key) != value
+                           for key, value in retained_placement.items())
+                    or not retained_placement
+                    or not same_cell
+                    or not isinstance(retained_hashes, dict)
+                    or retained_hashes.get("candidate.py") != diagnostic_campaign.sha256_file(
+                        retained_candidate)
+                    or retained_hashes.get("candidate.manifest.json") != (
+                        diagnostic_campaign.sha256_file(retained_manifest))
+                    or isinstance(retained.get("timeout"), bool)
+                    or not isinstance(retained.get("timeout"), int)
+                    or not 1 <= retained["timeout"] <= 240):
+                raise DiagnosticError(f"retained terminal request mismatch for {cell}")
+            terminal_attempt = int(retained_attempt)
             client_request = {**retained, "observe_timeout":
                               min(timeout_seconds, retained["timeout"])}
         deadline = time.monotonic() + timeout_seconds
@@ -196,9 +292,13 @@ class BzTerminalHook:
                 and not uncertain):
             remaining = int(deadline - time.monotonic())
             if remaining < 1:
-                return result
+                self._uncertain.pop(cell, None)
+                return {**result, "terminal_attempt": terminal_attempt}
+            terminal_attempt += 1
+            placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
             client_request = {
-                **client_request, **placement, "cell": f"{treatment}-attempt-{attempt}",
+                **client_request, **placement,
+                "cell": f"{treatment}-attempt-{terminal_attempt}",
                 "timeout": min(remaining, 240),
             }
             client_request.pop("observe_timeout", None)
@@ -211,6 +311,9 @@ class BzTerminalHook:
                                      if key != "observe_timeout"}
         else:
             self._uncertain.pop(cell, None)
+        result = {**result, "terminal_attempt": terminal_attempt}
+        if uncertain:
+            result["retained_terminal_request"] = copy.deepcopy(self._uncertain[cell])
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}
@@ -261,27 +364,128 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
     return ledger
 
 
+def _adaptive_config_sha256(config: dict, placements: dict) -> str:
+    frozen = {key: value for key, value in config.items()
+              if key not in {"prompt", "prompt_sha256"}}
+    value = {"config": frozen, "placements": placements}
+    return hashlib.sha256(json.dumps(value, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
+
+
+def _adaptive_inputs(config: dict, manifest: dict, placements: dict) -> str:
+    required = {"prompt", "prompt_sha256", "assets", "timeouts", "waves"}
+    if not required.issubset(config):
+        raise DiagnosticError("integration config is incomplete")
+    if (manifest.get("prompt") != config["prompt"]
+            or manifest.get("prompt_sha256") != config["prompt_sha256"]):
+        raise DiagnosticError("manifest does not use the frozen diagnostic prompt")
+    if config["timeouts"] != {"agent": 360, "cell": 600, "wave": 600}:
+        raise DiagnosticError("adaptive campaign requires 360/600/600 timeouts")
+    if config["waves"] != 4:
+        raise DiagnosticError("adaptive campaign requires exactly four waves")
+    validate_placements(placements)
+    return _adaptive_config_sha256(config, placements)
+
+
+def _retained_assets(ledger: dict) -> dict:
+    evidence = ledger.get("assets")
+    if not isinstance(evidence, dict) or set(evidence.get("sha256", {})) != {
+            "baseline", "case_spec", "runner"}:
+        raise DiagnosticError("adaptive ledger has no frozen asset evidence")
+    root = Path(evidence.get("root", ""))
+    assets = {name: str(root / name) for name in evidence["sha256"]}
+    if any(not Path(path).is_file() for path in assets.values()):
+        raise DiagnosticError("frozen adaptive asset is missing")
+    if any(diagnostic_campaign.sha256_file(Path(assets[name])) != digest
+           for name, digest in evidence["sha256"].items()):
+        raise DiagnosticError("frozen adaptive asset changed")
+    return assets
+
+
+def run_wave(config: dict, manifest: dict, placements: dict, root: Path, launcher,
+             client: BzA3DiagnosticClient, wave: int) -> dict:
+    """Run exactly one adaptive BZ wave, preserving the fixed-run API."""
+    identity = _adaptive_inputs(config, manifest, placements)
+    created_snapshot = wave == 1 and not (root / "ledger.json").exists()
+    if created_snapshot:
+        diagnostic_campaign.validate_manifest(manifest)
+        if root.exists() and (not root.is_dir() or any(root.iterdir())):
+            raise DiagnosticError(f"diagnostic output root is not fresh: {root}")
+        campaign_id = str(uuid.uuid4())
+        assets, evidence = freeze_assets(config["assets"], root, campaign_id)
+    else:
+        ledger = load_json(root / "ledger.json")
+        campaign_id = ledger.get("campaign_id")
+        if not isinstance(campaign_id, str) or not campaign_id:
+            raise DiagnosticError("adaptive ledger has no campaign identity")
+        evidence, assets = ledger.get("assets"), _retained_assets(ledger)
+    hook = BzTerminalHook(client, placements, assets, campaign_id)
+    campaign = DiagnosticCampaign(
+        manifest, root, FrozenAgentLauncher(launcher), hook, waves=4,
+        agent_timeout=360, cell_timeout=600, wave_timeout=600,
+        ledger_metadata={"assets": evidence}, campaign_id=campaign_id,
+        campaign_identity={"config_sha256": identity},
+    )
+    try:
+        return campaign.run_wave(wave)
+    except BaseException:
+        if created_snapshot and not campaign.ledger_path.exists():
+            shutil.rmtree(evidence["root"], ignore_errors=True)
+        raise
+
+
+def acknowledge_curation(config: dict, manifest: dict, placements: dict,
+                          root: Path, receipt: dict) -> dict:
+    """Validate and persist the out-of-workspace curation receipt."""
+    identity = _adaptive_inputs(config, manifest, placements)
+    campaign = DiagnosticCampaign(
+        manifest, root, CommandLauncher(["false"]), CommandTerminalHook(["false"]),
+        campaign_identity={"config_sha256": identity},
+    )
+    return campaign.acknowledge_curation(receipt)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation"),
+                        default="run-all")
+    parser.add_argument("--wave", type=int)
+    parser.add_argument("--curation-receipt", type=Path)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--placements", type=Path, required=True)
     parser.add_argument("--run-root", type=Path, required=True)
-    parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--agent-command-json", required=True)
+    parser.add_argument("--state-dir", type=Path)
+    parser.add_argument("--agent-command-json")
     parser.add_argument("--remote-command-json", default='["cpl-remote"]')
-    parser.add_argument("--adapter-command-json", required=True)
+    parser.add_argument("--adapter-command-json")
     args = parser.parse_args()
-    commands = [json.loads(value) for value in (args.agent_command_json,
-                args.remote_command_json, args.adapter_command_json)]
-    if any(not isinstance(value, list) or not value for value in commands):
-        parser.error("commands must be non-empty JSON arrays")
-    transport = AdapterTransport(commands[1], commands[2])
-    result = run(load_json(args.config), load_json(args.manifest),
-                 load_json(args.placements), args.run_root, CommandLauncher(commands[0]),
-                 BzA3DiagnosticClient(transport, args.state_dir))
+    config, manifest = load_json(args.config), load_json(args.manifest)
+    placements = load_json(args.placements)
+    if args.action == "acknowledge-curation":
+        if args.curation_receipt is None:
+            parser.error("--curation-receipt is required")
+        result = acknowledge_curation(config, manifest, placements, args.run_root,
+                                      load_json(args.curation_receipt))
+    else:
+        if not args.agent_command_json or not args.adapter_command_json or args.state_dir is None:
+            parser.error("agent, adapter, and state arguments are required to run waves")
+        commands = [json.loads(value) for value in (args.agent_command_json,
+                    args.remote_command_json, args.adapter_command_json)]
+        if any(not isinstance(value, list) or not value for value in commands):
+            parser.error("commands must be non-empty JSON arrays")
+        transport = AdapterTransport(commands[1], commands[2])
+        client = BzA3DiagnosticClient(transport, args.state_dir)
+        if args.action == "run-wave":
+            if args.wave is None:
+                parser.error("--wave is required")
+            result = run_wave(config, manifest, placements, args.run_root,
+                              CommandLauncher(commands[0]), client, args.wave)
+        else:
+            result = run(config, manifest, placements, args.run_root,
+                         CommandLauncher(commands[0]), client)
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["status"] == "complete" and not result["reschedule"] else 2
+    return 0 if result["status"] in {"awaiting_curation", "ready_for_next", "complete"} else 2
 
 
 if __name__ == "__main__":

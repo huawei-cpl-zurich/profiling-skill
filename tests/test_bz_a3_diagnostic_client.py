@@ -25,6 +25,7 @@ class FakeTransport:
         self.uploads = []
         self.executions = []
         self.observations = []
+        self.stale_returned = False
 
     def upload(self, profile, source, destination, timeout):
         self.uploads.append((profile, source, destination, timeout))
@@ -45,6 +46,16 @@ class FakeTransport:
             return self.module.CommandResult(1, "", "NPU device unavailable"), f"{profile}:device"
         if self.mode == "digest":
             return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:digest"
+        if self.mode == "stale_common" and not self.stale_returned:
+            self.stale_returned = True
+            return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:stale"
+        return self.completed(profile)
+
+    def observe(self, profile, handle, timeout):
+        self.observations.append((profile, handle, timeout))
+        return self.completed(profile)[0]
+
+    def completed(self, profile):
         status = self.mode if self.mode in {
             "compile_error", "runtime_error", "correctness_error", "infrastructure_error",
         } else "ok"
@@ -108,6 +119,19 @@ def test_verified_common_archive_is_reused(tmp_path: Path):
     assert len(candidate_uploads) == 2
 
 
+def test_stale_common_receipt_reuploads_once_and_self_heals(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    assert client.run(value)["status"] == "ok"
+    transport.mode = "stale_common"
+    assert client.run(value)["status"] == "ok"
+    common_uploads = [upload for upload in transport.uploads if "diagnostic-common-" in upload[2]]
+    assert len(common_uploads) == 2
+    assert len(transport.executions) == 3
+
+
 def test_compiler_traceback_is_complete_and_counted(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "compile_error")
     assert result["status"] == result["failure_type"] == "compile_error"
@@ -162,6 +186,36 @@ def test_non_object_request_returns_structured_request_error(tmp_path: Path):
         assert result == {"status": "infrastructure_error", "failure_type": "request_error",
                           "diagnostics": "request must be a JSON object", "handle": None}
     assert not transport.uploads and not transport.executions
+
+
+def test_non_string_asset_paths_return_structured_request_error(tmp_path: Path):
+    module = load()
+    for invalid in (None, 7, 1.5, [], {}):
+        transport = FakeTransport(module)
+        value = request(tmp_path / str(type(invalid).__name__))
+        value["candidate"] = invalid
+        result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+        assert result["status"] == "infrastructure_error"
+        assert result["failure_type"] == "request_error"
+        assert result["diagnostics"] == "asset paths must be JSON strings"
+        assert not transport.uploads and not transport.executions
+
+
+def test_second_invocation_observes_durable_handle_without_redispatch(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    interrupted = client.run(value)
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["handle"] == "bz-a3-1:kept"
+    assert len(transport.uploads) == 2 and len(transport.executions) == 1
+
+    transport.mode = "ok"
+    resumed = client.run(value)
+    assert resumed["status"] == "ok"
+    assert transport.observations == [("bz-a3-1", "bz-a3-1:kept", 30)]
+    assert len(transport.uploads) == 2 and len(transport.executions) == 1
 
 
 def test_infrastructure_failures_are_disjoint(tmp_path: Path):

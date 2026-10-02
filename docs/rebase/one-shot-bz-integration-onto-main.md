@@ -87,12 +87,16 @@ submission-freezing wrapper.
 | BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T103016Z-120-25088` |
 | Final integration hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T103938Z-118-2452` |
 | Final integration hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T103938Z-123-5071` |
+| Response-grace fix, focused suite | 81 passed | Remote 124/137 is counted; outer overrun remains infrastructure. |
+| Response-grace fix, full suite | 308 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final response-grace hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T104724Z-119-29069` |
+| Final response-grace hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T104724Z-116-17839` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `dcf366f` |
+| Final validated implementation HEAD | `ed076d4` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

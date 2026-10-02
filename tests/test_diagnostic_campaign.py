@@ -255,7 +255,10 @@ def test_interrupted_adaptive_wave_resumes_without_relaunching_completed_cells(t
                 assert completed.wait(1)
                 time.sleep(0.02)
                 raise KeyboardInterrupt("simulated operator interruption")
-            return super().launch(request, timeout_seconds)
+            result = super().launch(request, timeout_seconds)
+            if request["treatment"] == "cannbot":
+                result["status"] = "timeout"
+            return result
 
     root = tmp_path / "run"
     config = manifest(tmp_path / "inputs")
@@ -277,6 +280,35 @@ def test_interrupted_adaptive_wave_resumes_without_relaunching_completed_cells(t
     assert resumed["status"] == "awaiting_curation"
     assert len(replacement.requests) == 1
     assert replacement.requests[0][0]["treatment"] == "project-guarded"
+
+
+def test_repeated_reschedule_uses_latest_candidate_without_relaunch(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    launcher = RecordingLauncher(outcomes)
+
+    class InfraOnceTerminal(RecordingTerminal):
+        failed = False
+
+        def check(self, request, timeout_seconds):
+            if request["cell_id"] == "wave-1-cannbot" and not self.failed:
+                self.failed = True
+                return {"status": "device_or_runtime_infra"}
+            return super().check(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, launcher, InfraOnceTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    agent_calls = len(launcher.requests)
+    completed = campaign.run_wave(1)
+    assert completed["status"] == "awaiting_curation"
+    assert len(launcher.requests) == agent_calls
+    cell = completed["waves"][0]["cells"][0]
+    assert [item["attempt"] for item in cell["reschedule_attempts"]] == [3, 3]
 
 
 def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Path):

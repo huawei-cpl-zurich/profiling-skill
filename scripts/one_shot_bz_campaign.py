@@ -54,15 +54,19 @@ def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dic
     snapshot_root = root.parent / f".{root.name}-inputs-{campaign_id}"
     snapshot_root.mkdir(parents=True, exist_ok=False)
     frozen, hashes = {}, {}
-    for name, source_name in assets.items():
-        source = Path(source_name)
-        if not source.is_file():
-            raise DiagnosticError(f"benchmark asset is missing: {source}")
-        destination = snapshot_root / name
-        shutil.copyfile(source, destination)
-        os.chmod(destination, 0o444)
-        frozen[name] = str(destination)
-        hashes[name] = diagnostic_campaign.sha256_file(destination)
+    try:
+        for name, source_name in assets.items():
+            source = Path(source_name)
+            if not source.is_file():
+                raise DiagnosticError(f"benchmark asset is missing: {source}")
+            destination = snapshot_root / name
+            shutil.copyfile(source, destination)
+            os.chmod(destination, 0o444)
+            frozen[name] = str(destination)
+            hashes[name] = diagnostic_campaign.sha256_file(destination)
+    except BaseException:
+        shutil.rmtree(snapshot_root, ignore_errors=True)
+        raise
     return frozen, {"root": str(snapshot_root), "sha256": hashes}
 
 

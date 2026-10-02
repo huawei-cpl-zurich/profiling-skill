@@ -173,6 +173,15 @@ def test_adaptive_rejects_nonfresh_root_before_freezing_assets(tmp_path: Path):
     assert list(tmp_path.glob(".campaign-inputs-*")) == []
 
 
+def test_partial_asset_snapshot_failure_is_cleaned_up(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    Path(config["assets"]["case_spec"]).unlink()
+    with pytest.raises(module.DiagnosticError, match="asset is missing"):
+        module.run_wave(config, manifest, placements, tmp_path / "campaign",
+                        Agent(), Client(), 1)
+    assert list(tmp_path.glob(".campaign-inputs-*")) == []
+
+
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)

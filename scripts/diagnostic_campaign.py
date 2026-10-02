@@ -532,7 +532,7 @@ class DiagnosticCampaign:
             self._run_one_wave(ledger, wave)
         except BaseException:
             completed = {cell["treatment"] for cell in ledger["waves"][-1]["cells"]
-                         if cell["category"] == "counted"}
+                         if cell["category"] != "infrastructure"}
             pending = set(ledger["reschedule"])
             pending.update(f"wave-{wave}-{name}" for name in TREATMENTS
                            if name not in completed)
@@ -560,7 +560,10 @@ class DiagnosticCampaign:
         for cell_id in list(ledger["reschedule"]):
             treatment = cell_id.removeprefix(f"wave-{wave}-")
             prior = by_treatment.get(treatment)
-            last = prior.get("retry", prior) if prior is not None else None
+            last = None
+            if prior is not None:
+                attempts = prior.get("reschedule_attempts", [])
+                last = attempts[-1] if attempts else prior.get("retry", prior)
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
             )
@@ -679,6 +682,13 @@ class DiagnosticCampaign:
         except BaseException:
             for future in futures:
                 future.cancel()
+            for hook in (self.launcher, self.terminal):
+                cancel = getattr(hook, "cancel", None)
+                if cancel is not None:
+                    try:
+                        cancel()
+                    except Exception:
+                        pass
             recorded = {item["treatment"] for item in results}
             for future, treatment in futures.items():
                 if treatment in recorded or not future.done() or future.cancelled():

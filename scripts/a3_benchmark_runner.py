@@ -105,6 +105,8 @@ def identity(job: dict) -> dict:
     result = {key: job[key] for key in ("benchmark", "action", "device")}
     if job["action"] == "check":
         result.update(cases=job["cases"], scope=job["scope"])
+    elif job["action"] == "profile" and "cases" in job:
+        result.update(cases=job["cases"], repeats=job["repeats"])
     else:
         result["case"] = job["case"]
     if job["action"] == "measure":

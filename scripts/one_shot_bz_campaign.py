@@ -5,17 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
+import tempfile
+import threading
+import time
+import uuid
 from pathlib import Path
 
+import diagnostic_campaign
 from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
 from diagnostic_campaign import CommandLauncher, DiagnosticCampaign, DiagnosticError, TREATMENTS
-
-
-INFRA_MAP = {
-    "device_error": "device_or_runtime_infra",
-    "staging_error": "pre_dispatch_infra",
-    "request_error": "setup_error",
-}
 
 
 def load_json(path: Path) -> dict:
@@ -38,10 +38,30 @@ def validate_placements(value: dict) -> dict:
                     or isinstance(choice.get("device"), bool)
                     or not isinstance(choice.get("device"), int) or choice["device"] < 0):
                 raise DiagnosticError(f"invalid BZ placement for {treatment}")
+        if all(choices[0][key] == choices[1][key] for key in ("profile", "device")):
+            raise DiagnosticError(f"fallback placement must differ for {treatment}")
         primary.add((choices[0]["profile"], choices[0]["device"]))
     if len(primary) != 3:
         raise DiagnosticError("primary cells require three distinct physical devices")
     return value
+
+
+def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dict]:
+    if set(assets) != {"baseline", "case_spec", "runner"}:
+        raise DiagnosticError("exactly the three frozen benchmark assets are required")
+    snapshot_root = root.parent / f".{root.name}-inputs-{campaign_id}"
+    snapshot_root.mkdir(parents=True, exist_ok=False)
+    frozen, hashes = {}, {}
+    for name, source_name in assets.items():
+        source = Path(source_name)
+        if not source.is_file():
+            raise DiagnosticError(f"benchmark asset is missing: {source}")
+        destination = snapshot_root / name
+        shutil.copyfile(source, destination)
+        os.chmod(destination, 0o444)
+        frozen[name] = str(destination)
+        hashes[name] = diagnostic_campaign.sha256_file(destination)
+    return frozen, {"root": str(snapshot_root), "sha256": hashes}
 
 
 class FrozenAgentLauncher:
@@ -51,22 +71,63 @@ class FrozenAgentLauncher:
         self.launcher = launcher
         self.frozen: dict[str, tuple[dict, dict[str, bytes]]] = {}
 
+    @staticmethod
+    def _restore(workspace: Path, files: dict[str, bytes]) -> None:
+        for name, content in files.items():
+            with tempfile.NamedTemporaryFile("wb", dir=workspace, delete=False) as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+                temporary = Path(stream.name)
+            os.chmod(temporary, 0o444)
+            os.replace(temporary, workspace / name)
+
+    @classmethod
+    def _freeze_submission(cls, workspace: Path, files: dict[str, bytes]) -> None:
+        if not files:
+            return
+        snapshot = workspace.parent / "frozen-submission"
+        snapshot.mkdir(exist_ok=False)
+        cls._restore(snapshot, files)
+        os.chmod(snapshot, 0o555)
+        cls._restore(workspace, files)
+
     def launch(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         workspace = Path(request["workspace"])
         if cell in self.frozen:
             result, files = self.frozen[cell]
-            for name, content in files.items():
-                (workspace / name).write_bytes(content)
+            self._freeze_submission(workspace, files)
             return {**result, "submission_replayed": True}
-        result = self.launcher.launch(request, timeout_seconds)
+        try:
+            result = self.launcher.launch(request, timeout_seconds)
+        except Exception as error:
+            result = {"status": "infrastructure_error", "failure_type": "launcher_error",
+                      "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
         files = {}
-        for name in ("candidate.py", "candidate.manifest.json"):
-            path = workspace / name
-            if path.is_file():
-                files[name] = path.read_bytes()
+        # Cache the normalized launch outcome before touching agent-owned files.
+        # Snapshot failures may make this attempt infrastructure, but must never
+        # permit another billed invocation for the same logical cell.
         self.frozen[cell] = (result, files)
+        try:
+            for name in ("candidate.py", "candidate.manifest.json"):
+                path = workspace / name
+                if path.is_file():
+                    files[name] = path.read_bytes()
+            self._freeze_submission(workspace, files)
+        except OSError as error:
+            files.clear()
+            self.frozen[cell] = ({
+                "status": "infrastructure_error", "failure_type": "snapshot_error",
+                "diagnostics": f"submission snapshot failed: {type(error).__name__}: {error}",
+            }, files)
+            raise
         return result
+
+    def cancel(self) -> None:
+        cancel = getattr(self.launcher, "cancel", None)
+        if cancel is not None:
+            cancel()
 
 
 class BzTerminalHook:
@@ -78,24 +139,78 @@ class BzTerminalHook:
         self.placements = validate_placements(placements)
         self.assets = assets
         self.campaign_id = campaign_id
+        self._condition = threading.Condition()
+        self._active = 0
+        self._cancelled = False
+        self._uncertain: dict[str, dict] = {}
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
+        with self._condition:
+            if self._cancelled:
+                return {"status": "infrastructure_error", "failure_type": "cancelled",
+                        "diagnostics": "terminal hook was cancelled"}
+            self._active += 1
+        try:
+            return self._check(request, timeout_seconds)
+        finally:
+            with self._condition:
+                self._active -= 1
+                self._condition.notify_all()
+
+    def _check(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         try:
             _prefix, wave, treatment = cell.split("-", 2)
         except ValueError as exc:
             raise DiagnosticError(f"invalid cell id {cell!r}") from exc
         workspace = Path(request["workspace"])
+        submission = workspace.parent / "frozen-submission"
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
         placement = self.placements[treatment][min(attempt - 1, 1)]
-        result = self.client.run({
-            "campaign": self.campaign_id, "wave": wave, "cell": treatment,
+        client_request = {
+            "campaign": self.campaign_id, "wave": wave,
+            # BZ dispatch receipts are keyed by cell. A fallback placement is
+            # a new terminal attempt, while repeating this exact request must
+            # observe its retained handle instead of redispatching it.
+            "cell": f"{treatment}-attempt-{attempt}",
             **placement, "timeout": min(timeout_seconds, 240),
-            "candidate": str(workspace / "candidate.py"),
-            "candidate_manifest": str(workspace / "candidate.manifest.json"),
+            "candidate": str(submission / "candidate.py"),
+            "candidate_manifest": str(submission / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": list(range(7)),
-        })
+        }
+        # A retained observer interruption is not permission to dispatch on a
+        # fallback device. Re-enter the exact original request so the durable
+        # client observes its receipt. Only terminal/pre-dispatch failures use
+        # the attempt-2 placement.
+        retained = self._uncertain.get(cell)
+        if retained is not None:
+            client_request = {**retained, "observe_timeout":
+                              min(timeout_seconds, retained["timeout"])}
+        deadline = time.monotonic() + timeout_seconds
+        result = self.client.run(client_request)
+        uncertain = (result.get("status") == "infrastructure_error"
+                     and result.get("failure_type") in {"observer_error", "transport_error"}
+                     and bool(result.get("handle")))
+        if (retained is not None and result.get("status") == "infrastructure_error"
+                and not uncertain):
+            remaining = int(deadline - time.monotonic())
+            if remaining < 1:
+                return result
+            client_request = {
+                **client_request, **placement, "cell": f"{treatment}-attempt-{attempt}",
+                "timeout": min(remaining, 240),
+            }
+            client_request.pop("observe_timeout", None)
+            result = self.client.run(client_request)
+            uncertain = (result.get("status") == "infrastructure_error"
+                         and result.get("failure_type") in {"observer_error", "transport_error"}
+                         and bool(result.get("handle")))
+        if uncertain:
+            self._uncertain[cell] = {key: value for key, value in client_request.items()
+                                     if key != "observe_timeout"}
+        else:
+            self._uncertain.pop(cell, None)
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}
@@ -103,10 +218,15 @@ class BzTerminalHook:
             return {**result, "status": "timeout"}
         if status in {"compile_error", "runtime_error", "correctness_error"}:
             return result
-        if status == "submission_error":
-            return {**result, "status": "source_error"}
-        failure = str(result.get("failure_type", "transport_error"))
-        return {**result, "status": INFRA_MAP.get(failure, "transport_or_observer_error")}
+        return result
+
+    def cancel(self) -> None:
+        # BzA3DiagnosticClient owns the durable receipt. Let active observation
+        # reach that checkpoint before campaign shutdown abandons daemon cells.
+        with self._condition:
+            self._cancelled = True
+            while self._active:
+                self._condition.wait()
 
 
 def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
@@ -121,10 +241,24 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
         raise DiagnosticError("diagnostic timeouts must remain 360/600/600 seconds")
     if config["waves"] != 4:
         raise DiagnosticError("diagnostic campaign requires exactly four waves")
-    hook = BzTerminalHook(client, placements, config["assets"], root.name)
-    return DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
-                              waves=4, agent_timeout=360, cell_timeout=600,
-                              wave_timeout=600).run()
+    campaign_id = str(uuid.uuid4())
+    assets, asset_evidence = freeze_assets(config["assets"], root, campaign_id)
+    hook = BzTerminalHook(client, placements, assets, campaign_id)
+    campaign = DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
+                                  waves=4, agent_timeout=360, cell_timeout=600,
+                                  wave_timeout=600, ledger_metadata={"assets": asset_evidence},
+                                  campaign_id=campaign_id)
+    try:
+        ledger = campaign.run()
+    except BaseException:
+        if campaign.ledger_path.is_file():
+            ledger = json.loads(campaign.ledger_path.read_text())
+            ledger["assets"] = asset_evidence
+            diagnostic_campaign._atomic_json(campaign.ledger_path, ledger)
+        raise
+    ledger["assets"] = asset_evidence
+    diagnostic_campaign._atomic_json(campaign.ledger_path, ledger)
+    return ledger
 
 
 def main() -> int:

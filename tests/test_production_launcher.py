@@ -316,7 +316,7 @@ def test_three_round_persistent_session_uses_fixed_model_and_prompt(tmp_path: Pa
             )
         if argv[-5:] == ["profile", "--repeats", "3", "--round", "3"]:
             profile = {"status": "ok", "repeats": 3,
-                       "handles": [f"gz-a3:p{i}" for i in range(15)],
+                       "handles": ["gz-a3:profile-batch"],
                        "cases": [{"case": i, "samples_us": [1.0, 1.1, 1.2]}
                                  for i in cell["development_cases"]],
                        "operation": "profile", "cell": cell["cell_id"],
@@ -457,13 +457,13 @@ def test_nonzero_codex_turn_is_retained_as_infrastructure_error(tmp_path: Path, 
     ("check_document", "profile_document", "expected"),
     [
         ({"status": "candidate_error", "diagnostics": "wrong answer", "handles": ["gz-a3:c"]},
-         {"status": "ok", "repeats": 3, "handles": [f"gz-a3:p{i}" for i in range(15)],
+         {"status": "ok", "repeats": 3, "handles": ["gz-a3:profile-batch"],
           "cases": [{"case": i, "samples_us": [1, 2, 3]} for i in range(5)]}, "candidate_error"),
         ({"status": "ok", "passed": True, "cases": list(range(50)), "handles": ["gz-a3:c"]},
          {"status": "ok", "repeats": 3, "cases": []}, "infrastructure_error"),
         ({"status": "infrastructure_error", "diagnostics": "device busy",
           "handles": ["gz-a3:observe-this"]},
-         {"status": "ok", "repeats": 3, "handles": [f"gz-a3:p{i}" for i in range(15)],
+         {"status": "ok", "repeats": 3, "handles": ["gz-a3:profile-batch"],
           "cases": [{"case": i, "samples_us": [1, 2, 3]} for i in range(5)]}, "infrastructure_error"),
     ],
 )
@@ -540,7 +540,7 @@ def test_budget_exhaustion_is_recorded_but_terminal_gates_still_decide(tmp_path:
         if argv[-5:] == ["profile", "--repeats", "3", "--round", "3"]:
             document = identified({
                 "status": "ok", "repeats": 3,
-                "handles": [f"gz-a3:p{i}" for i in range(15)],
+                "handles": ["gz-a3:profile-batch"],
                 "cases": [{"case": case, "samples_us": [1, 2, 3]}
                           for case in [40, 49, 47, 46, 45]],
             }, production_cell("gdn"), "profile")
@@ -579,7 +579,7 @@ def test_terminal_gate_requires_exact_identity_and_case_sequences():
 
     profile = identified({
         "status": "ok", "repeats": 3,
-        "handles": [f"gz-a3:p{i}" for i in range(15)],
+        "handles": ["gz-a3:profile-batch"],
         "cases": [{"case": case, "samples_us": [1, 2, 3]}
                   for case in cell["development_cases"]],
     }, cell, "profile")
@@ -594,20 +594,20 @@ def test_terminal_gate_requires_exact_identity_and_case_sequences():
     assert launcher.ProductionLauncher._gate_status(
         malformed_samples, cell, "profile"
     )[0] == "infrastructure_error"
-    duplicate_handles = {**profile, "handles": ["gz-a3:same"] * 15}
+    duplicate_handles = {**profile, "handles": ["gz-a3:first", "gz-a3:second"]}
     assert launcher.ProductionLauncher._gate_status(
         duplicate_handles, cell, "profile"
     )[0] == "infrastructure_error"
 
 
-def test_matmul_terminal_profile_accepts_three_cases_and_nine_unique_handles():
+def test_matmul_terminal_profile_accepts_three_cases_and_one_batch_handle():
     cell = {
         "cell_id": "matmul-project-guarded", "benchmark": "matmul", "device": 0,
         "development_cases": [7, 8, 9], "all_cases": list(range(10)),
     }
     profile = identified({
         "status": "ok", "repeats": 3,
-        "handles": [f"gz-a3:matmul-{index}" for index in range(9)],
+        "handles": ["gz-a3:matmul-batch"],
         "cases": [{"case": case, "samples_us": [1, 2, 3]}
                   for case in cell["development_cases"]],
     }, cell, "profile")

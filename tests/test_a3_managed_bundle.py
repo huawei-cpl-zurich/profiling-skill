@@ -7,6 +7,7 @@ import os
 import stat
 import subprocess
 import tarfile
+import threading
 from pathlib import Path
 
 import pytest
@@ -251,7 +252,11 @@ def test_failed_transfer_persists_terminal_receipt(tmp_path: Path) -> None:
     result = run_cli(["stage", "--client", str(client), "--remote", "a3-gz", "--source-root", str(root), "--include", "run.sh", "--receipt", str(receipt), "--poll-interval", "0.01"], os.environ.copy())
     assert result.returncode == 2
     assert "ended with status failed" in result.stderr
-    assert json.loads(receipt.read_text())["state"] == "failed"
+    saved = json.loads(receipt.read_text())
+    assert saved["state"] == "failed"
+    assert saved["phase"] == "upload"
+    assert "ended with status failed" in saved["diagnostics"]
+    assert "upload_observe" in saved["phase_timings_seconds"]
 
 
 def test_observation_failure_persists_receipt_and_resume_never_uploads_twice(tmp_path: Path) -> None:
@@ -266,7 +271,11 @@ def test_observation_failure_persists_receipt_and_resume_never_uploads_twice(tmp
     assert resumed.returncode == 0, resumed.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert sum(call[:2] == ["transfer", "upload"] for call in calls) == 1
-    assert json.loads(receipt.read_text())["state"] == "succeeded"
+    response = json.loads(resumed.stdout)
+    saved = json.loads(receipt.read_text())
+    assert response["state"] == saved["state"] == "succeeded"
+    assert "diagnostics" not in response
+    assert "diagnostics" not in saved
 
 
 def test_timeout_persists_observation_receipt(tmp_path: Path) -> None:
@@ -324,3 +333,187 @@ def test_fetch_hash_mismatch_does_not_publish_output(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "fetched result SHA-256 mismatch" in result.stderr
     assert not output.exists()
+
+
+def test_atomic_json_uses_unique_temporary_paths_under_concurrency(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    destination = tmp_path / "receipt.json"
+    barrier = threading.Barrier(2)
+    original = BUNDLE.os.replace
+
+    def synchronized_replace(source, target):
+        barrier.wait(timeout=2)
+        original(source, target)
+
+    monkeypatch.setattr(BUNDLE.os, "replace", synchronized_replace)
+    failures = []
+
+    def publish(value):
+        try:
+            BUNDLE.atomic_json(destination, value)
+        except Exception as error:  # pragma: no cover - asserted below
+            failures.append(error)
+
+    threads = [threading.Thread(target=publish, args=({"writer": writer},)) for writer in (1, 2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert not failures
+    assert json.loads(destination.read_text()) in ({"writer": 1}, {"writer": 2})
+    assert not list(tmp_path.glob(".receipt.json.*.tmp"))
+
+
+def test_atomic_json_syncs_parent_directory_after_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    destination = tmp_path / "receipt.json"
+    events: list[str] = []
+    directory_descriptors: set[int] = set()
+    original_open = BUNDLE.os.open
+    original_fsync = BUNDLE.os.fsync
+    original_replace = BUNDLE.os.replace
+
+    def observed_open(path, flags, *args, **kwargs):
+        descriptor = original_open(path, flags, *args, **kwargs)
+        if Path(path) == tmp_path:
+            directory_descriptors.add(descriptor)
+        return descriptor
+
+    def observed_fsync(descriptor):
+        events.append("directory-fsync" if descriptor in directory_descriptors else "file-fsync")
+        return original_fsync(descriptor)
+
+    def observed_replace(source, target):
+        events.append("replace")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(BUNDLE.os, "open", observed_open)
+    monkeypatch.setattr(BUNDLE.os, "fsync", observed_fsync)
+    monkeypatch.setattr(BUNDLE.os, "replace", observed_replace)
+
+    with BUNDLE.receipt_lock(destination):
+        BUNDLE.atomic_json(destination, {"state": "succeeded"})
+        assert events[-1] == "directory-fsync"
+
+    assert events == ["file-fsync", "replace", "directory-fsync"]
+    assert json.loads(destination.read_text()) == {"state": "succeeded"}
+
+
+def test_fetch_reuses_digest_verified_existing_output_without_remote_observation(tmp_path: Path) -> None:
+    client, log = fake_client(tmp_path)
+    output = tmp_path / "result.tar"
+    output.write_bytes(b"result")
+    expected = BUNDLE.sha256_file(output)
+    result = run_cli(["fetch", "--client", str(client), "--handle", "transfer-123", "--output", str(output), "--expected-sha256", expected, "--poll-interval", "0.01"], {**os.environ, "FAKE_LOG": str(log), "FAKE_STATUS": "observer-error", "FAKE_FETCH": "different"})
+    assert result.returncode == 0, result.stderr
+    response = json.loads(result.stdout)
+    assert response["reused"] is True
+    assert response["phase"] == "download-local-reuse"
+    assert "remote observation was not required" in response["diagnostics"]
+    assert "local_verify" in response["phase_timings_seconds"]
+    assert output.read_bytes() == b"result"
+    assert not log.exists()
+
+
+def test_identical_concurrent_download_requests_submit_once(tmp_path: Path) -> None:
+    client, log = fake_client(tmp_path)
+    receipt = tmp_path / "download.json"
+    digest = "a" * 64
+    expected = BUNDLE.hashlib.sha256(b"result").hexdigest()
+    command = ["request-download", "--client", str(client), "--remote", "a3-gz", "--remote-path", f"results/profiling-workloads/{digest}/result.tar", "--expected-sha256", expected, "--receipt", str(receipt), "--poll-interval", "0.01"]
+    env = {**os.environ, "FAKE_LOG": str(log)}
+    barrier = threading.Barrier(3)
+    results = []
+
+    def request():
+        barrier.wait(timeout=2)
+        results.append(run_cli(command, env))
+
+    threads = [threading.Thread(target=request) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    barrier.wait(timeout=2)
+    for thread in threads:
+        thread.join()
+    assert all(result.returncode == 0 for result in results)
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert sum(call[:2] == ["transfer", "download"] for call in calls) == 1
+
+
+def test_concurrent_observer_error_cannot_replace_terminal_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    receipt_path = tmp_path / "download.json"
+    receipt = {
+        "protocol": BUNDLE.PROTOCOL,
+        "kind": "download",
+        "remote": "a3-gz",
+        "remote_path": f"results/profiling-workloads/{'a' * 64}/result.tar",
+        "expected_sha256": "b" * 64,
+        "transfer_handle": "transfer-123",
+        "state": "submitted",
+    }
+    BUNDLE.atomic_json(receipt_path, receipt)
+    success_persisted = threading.Event()
+    original_atomic_json = BUNDLE.atomic_json
+
+    def tracked_atomic_json(path, value):
+        original_atomic_json(path, value)
+        if value.get("state") == "succeeded":
+            success_persisted.set()
+
+    def conflicting_observation(*_args, **_kwargs):
+        if threading.current_thread().name == "late-error":
+            assert success_persisted.wait(timeout=2)
+            raise BUNDLE.ObservationUnavailable("listener unavailable")
+        return {"status": "succeeded"}
+
+    monkeypatch.setattr(BUNDLE, "atomic_json", tracked_atomic_json)
+    monkeypatch.setattr(BUNDLE, "wait_transfer", conflicting_observation)
+    results = []
+    failures = []
+
+    def observe():
+        try:
+            results.append(
+                BUNDLE.observe_receipt(
+                    dict(receipt), receipt_path, Path("unused"), [], 1, 0, "download-request"
+                )
+            )
+        except Exception as error:  # pragma: no cover - asserted below
+            failures.append(error)
+
+    threads = [
+        threading.Thread(target=observe, name="success"),
+        threading.Thread(target=observe, name="late-error"),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=3)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert not failures
+    assert len(results) == 2
+    assert all(result["state"] == "succeeded" for result in results)
+    assert json.loads(receipt_path.read_text())["state"] == "succeeded"
+
+
+@pytest.mark.parametrize("terminal_state", ["succeeded", "failed", "cancelled", "rejected"])
+def test_receipt_merge_preserves_every_terminal_state(tmp_path: Path, terminal_state: str) -> None:
+    receipt_path = tmp_path / "upload.json"
+    terminal = {
+        "protocol": BUNDLE.PROTOCOL,
+        "kind": "upload",
+        "remote": "a3-gz",
+        "root_digest": "a" * 64,
+        "archive_sha256": "b" * 64,
+        "remote_path": f"incoming/profiling-workloads/{'a' * 64}/bundle.tar",
+        "transfer_handle": "transfer-123",
+        "state": terminal_state,
+    }
+    BUNDLE.atomic_json(receipt_path, terminal)
+    stale_observation = {**terminal, "state": "observation-unavailable"}
+
+    merged = BUNDLE.merge_receipt(receipt_path, stale_observation)
+
+    assert merged["state"] == terminal_state
+    assert json.loads(receipt_path.read_text())["state"] == terminal_state

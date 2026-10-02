@@ -115,8 +115,14 @@ class FrozenAgentLauncher:
                         "failure_type": "uncertain_agent_launch",
                         "diagnostics": "prior billed launch has no durable terminal receipt"}
             snapshot = Path(receipt["snapshot"])
-            files = {name: (snapshot / name).read_bytes()
-                     for name in receipt.get("candidate_sha256", {})}
+            expected = receipt.get("candidate_sha256")
+            allowed = {"candidate.py", "candidate.manifest.json"}
+            if not isinstance(expected, dict) or not set(expected).issubset(allowed):
+                raise DiagnosticError("durable launch receipt has invalid candidate hashes")
+            files = {name: (snapshot / name).read_bytes() for name in expected}
+            if any(hashlib.sha256(files[name]).hexdigest() != digest
+                   for name, digest in expected.items()):
+                raise DiagnosticError("durable launch snapshot digest mismatch")
             self.frozen[cell] = (receipt["result"], files)
             self._freeze_submission(workspace, files)
             return {**receipt["result"], "submission_replayed": True}

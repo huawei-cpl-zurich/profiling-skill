@@ -452,6 +452,26 @@ def test_frozen_launcher_replays_durable_receipt_after_restart(tmp_path: Path):
     assert (second_workspace / "candidate.py").read_text() == "candidate\n"
 
 
+def test_frozen_launcher_rejects_changed_durable_snapshot(tmp_path: Path):
+    cell_root = tmp_path / "cells" / "wave-1-cannbot"
+    first_workspace = cell_root / "attempt-1" / "workspace"
+    first_workspace.mkdir(parents=True)
+    request = {"cell_id": "wave-1-cannbot", "workspace": str(first_workspace)}
+    module.FrozenAgentLauncher(Agent()).launch(request, 10)
+    (first_workspace.parent / "frozen-submission" / "candidate.py").chmod(0o644)
+    (first_workspace.parent / "frozen-submission" / "candidate.py").write_text("changed\n")
+
+    class MustNotLaunch:
+        def launch(self, _request, _timeout):
+            raise AssertionError("corrupt durable snapshot caused relaunch")
+
+    second_workspace = cell_root / "attempt-2" / "workspace"
+    second_workspace.mkdir(parents=True)
+    request["workspace"] = str(second_workspace)
+    with pytest.raises(module.DiagnosticError, match="snapshot digest mismatch"):
+        module.FrozenAgentLauncher(MustNotLaunch()).launch(request, 10)
+
+
 def test_uncertain_durable_launch_is_never_billed_twice(tmp_path: Path):
     class Interrupted:
         calls = 0

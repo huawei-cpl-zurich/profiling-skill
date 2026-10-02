@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
 import shutil
+import signal
 import socket
 import socketserver
 import stat
@@ -49,6 +51,47 @@ def _bounded(value: object) -> str:
     return text if len(text) <= MAX_DIAGNOSTIC else text[:MAX_DIAGNOSTIC] + "\n...[diagnostic truncated]"
 
 
+def _prompt_bytes(request: dict) -> bytes:
+    prompt = request.get("prompt")
+    if request.get("protocol_version") != 2 or not isinstance(prompt, dict):
+        raise RunnerError("protocol-v2 in-band prompt is required")
+    if prompt.get("encoding") != "base64":
+        raise RunnerError("prompt must use base64 encoding")
+    try:
+        content = base64.b64decode(prompt.get("data", ""), validate=True)
+    except (TypeError, ValueError) as error:
+        raise RunnerError("prompt is not valid base64") from error
+    digest = hashlib.sha256(content).hexdigest()
+    if prompt.get("sha256") != digest or request.get("prompt_sha256") != digest:
+        raise RunnerError("prompt hash mismatch")
+    return content
+
+
+def _run_group(command: list[str], prompt: str, timeout: int) -> subprocess.CompletedProcess:
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(prompt, timeout=timeout)
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    except subprocess.TimeoutExpired as error:
+        _kill_group(process.pid, signal.SIGTERM)
+        for _ in range(10):
+            time.sleep(0.05)
+            try: os.killpg(process.pid, 0)
+            except ProcessLookupError: break
+        else: _kill_group(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(command, timeout, output=stdout,
+                                        stderr=stderr) from error
+    finally:
+        _kill_group(process.pid, signal.SIGKILL)
+
+
+def _kill_group(pid: int, sig: signal.Signals) -> None:
+    try: os.killpg(pid, sig)
+    except ProcessLookupError: pass
+
+
 class _Handler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         owner: Controller = self.server.owner  # type: ignore[attr-defined]
@@ -66,9 +109,10 @@ class Controller:
     """Opaque one-request controller backed by the approved BZ client."""
 
     def __init__(self, socket_path: Path, client: Any, request: dict,
-                 placement: dict, assets: dict):
+                 placement: dict, assets: dict, snapshot_root: Path):
         self.socket_path, self.client, self.request = socket_path, client, request
         self.placement, self.assets = placement, assets
+        self.snapshot_root = snapshot_root
         self.used = self.invalid = self.over_budget = 0
         self.calls: list[dict] = []
         self.free_calls: list[dict] = []
@@ -98,12 +142,21 @@ class Controller:
             self.used = 1
             self.calls.append({"arguments": arguments})
             workspace = Path(self.request["workspace"])
+            snapshot = self.snapshot_root / "development-check"
+            snapshot.mkdir(parents=True, exist_ok=False)
+            for name in ("candidate.py", "candidate.manifest.json"):
+                source = workspace / name
+                if not source.is_file():
+                    return self._wire({"status": "submission_error",
+                        "diagnostics": f"missing {name}", "billed": True}, 2)
+                destination = snapshot / name
+                shutil.copyfile(source, destination); destination.chmod(0o444)
             campaign = "agent-" + hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
             result = self.client.run({
                 "campaign": campaign, "wave": self.request["wave"], "cell": self.request["treatment"],
                 **self.placement, "logical_device": 0, "timeout": 240,
-                "candidate": str(workspace / "candidate.py"),
-                "candidate_manifest": str(workspace / "candidate.manifest.json"),
+                "candidate": str(snapshot / "candidate.py"),
+                "candidate_manifest": str(snapshot / "candidate.manifest.json"),
                 "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
                 "runner": self.assets["runner"], "cases": [1],
             })
@@ -170,17 +223,20 @@ class OneShotRunner:
         required = {"protocol_version", "operation", "workspace", "prompt", "prompt_sha256",
                     "model", "model_sha256", "skills", "skill_sha256", "controller_contract",
                     "wave", "attempt", "treatment", "cell_id"}
-        if not required.issubset(request) or request["protocol_version"] != 1 or request["operation"] != "one_shot":
+        if not required.issubset(request) or request["protocol_version"] != 2 or request["operation"] != "one_shot":
             raise RunnerError("invalid one-shot request")
-        prompt = Path(request["prompt"])
+        prompt = _prompt_bytes(request)
         model_hash = hashlib.sha256(json.dumps(request["model"], sort_keys=True,
                                                separators=(",", ":")).encode()).hexdigest()
-        if not prompt.is_file() or _digest(prompt) != request["prompt_sha256"] or model_hash != request["model_sha256"]:
-            raise RunnerError("frozen prompt or model changed")
+        if model_hash != request["model_sha256"]:
+            raise RunnerError("frozen model changed")
         if request["controller_contract"] != {"billed_limit": 1, "command": CHECK}:
             raise RunnerError("controller contract changed")
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")
+        from campaign import TREATMENT_SKILLS
+        if request["skills"] != list(TREATMENT_SKILLS.get(request["treatment"], ())):
+            raise RunnerError("noncanonical treatment skill inventory")
         for name in request["skills"]:
             source = self.skill_sources.get(name)
             if source is None or not source.is_dir() or _digest(source) != request["skill_sha256"][name]:
@@ -191,13 +247,13 @@ class OneShotRunner:
         choices = self.placements.get(request["treatment"])
         if not isinstance(choices, list) or len(choices) != 2:
             raise RunnerError("treatment placement is unavailable")
-        return workspace, choices[min(int(request["attempt"]) - 1, 1)]
+        return workspace, choices[min(int(request["attempt"]) - 1, 1)], prompt
 
     def run(self, request: dict, timeout: int = 360) -> dict:
         started = time.monotonic(); milestones = [{"name": "request_validating", "elapsed_seconds": 0.0}]
         state = socket_dir = None
         try:
-            workspace, placement = self._validate(request)
+            workspace, placement, prompt = self._validate(request)
             for name, source in (("baseline.py", self.assets["baseline"]),
                                  ("cases.jsonl", self.assets["case_spec"])):
                 shutil.copy2(source, workspace / name)
@@ -230,10 +286,10 @@ class OneShotRunner:
                      "--dangerously-bypass-approvals-and-sandbox", "-m", request["model"]["name"],
                      "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"', "-C", "/workspace", "-"]
             milestones.append({"name": "sandbox_ready", "elapsed_seconds": time.monotonic() - started})
-            with Controller(socket_path, self.client, request, placement, self.assets) as controller:
+            with Controller(socket_path, self.client, request, placement, self.assets,
+                            socket_dir / "snapshots") as controller:
                 try:
-                    run = subprocess.run([*command, *codex], input=Path(request["prompt"]).read_text(), text=True,
-                                         capture_output=True, timeout=timeout, check=False)
+                    run = _run_group([*command, *codex], prompt.decode(), timeout)
                 except subprocess.TimeoutExpired as error:
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
                             "controller_usage": {"billed": controller.used, "calls": controller.calls}}

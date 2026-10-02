@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import base64
 import json
+import os
 import socket
 import stat
 import subprocess
@@ -61,9 +63,11 @@ def fixture(tmp_path: Path):
     workspace = tmp_path / "workspace"; workspace.mkdir()
     model = {"name": "test-model", "reasoning_effort": "low"}
     request = {
-        "protocol_version": 1, "operation": "one_shot", "cell_id": "wave-1-project-guarded",
+        "protocol_version": 2, "operation": "one_shot", "cell_id": "wave-1-project-guarded",
         "wave": 1, "attempt": 1, "treatment": "project-guarded", "workspace": str(workspace),
-        "prompt": str(prompt), "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
+        "prompt": {"encoding": "base64", "data": base64.b64encode(prompt.read_bytes()).decode(),
+                   "sha256": hashlib.sha256(prompt.read_bytes()).hexdigest()},
+        "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest(),
         "model": model, "model_sha256": hashlib.sha256(json.dumps(model, sort_keys=True,
             separators=(",", ":")).encode()).hexdigest(), "skills": list(skills),
         "skill_sha256": hashes, "controller_contract": {"billed_limit": 1, "command": module.CHECK},
@@ -104,7 +108,8 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         assert call_socket(str(Path(socket_dir) / "controller.sock"), module.CHECK)["exit_code"] == 75
         return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
 
-    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    monkeypatch.setattr(module, "_run_group", lambda argv, prompt, timeout:
+                        fake_run(argv, input=prompt, timeout=timeout))
     result = runner.run(request)
 
     assert result["status"] == "ok", result
@@ -114,6 +119,7 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
     assert client.requests[0]["cases"] == [1]
     assert client.requests[0]["device"] == 2 and client.requests[0]["profile"] == "bz-a3-1"
     assert client.requests[0]["logical_device"] == 0
+    assert Path(client.requests[0]["candidate"]).parent.name == "development-check"
     workspace = Path(request["workspace"])
     assert {p.name for p in workspace.iterdir()} == {
         "baseline.py", "cases.jsonl", "AGENTS.md", ".agents", "candidate.py", "candidate.manifest.json"
@@ -134,7 +140,8 @@ def test_compile_diagnostic_is_bounded_and_returned_to_agent(tmp_path: Path):
     (workspace / "candidate.py").write_text("bad\n")
     (workspace / "candidate.manifest.json").write_text("{}\n")
     socket_path = tmp_path / "ctl/controller.sock"
-    with module.Controller(socket_path, client, request, {"profile": "bz-a3-2", "device": 9}, runner.assets) as ctl:
+    with module.Controller(socket_path, client, request, {"profile": "bz-a3-2", "device": 9},
+                           runner.assets, tmp_path / "snapshots") as ctl:
         response = call_socket(str(socket_path), module.CHECK)
     document = json.loads(response["stdout"])
     assert response["exit_code"] == 2 and document["status"] == "compile_error"
@@ -149,7 +156,8 @@ def test_standalone_sandbox_controller_client_needs_no_backend_module(tmp_path: 
     socket_path = tmp_path / "ctl/controller.sock"
     runner, request, client = fixture(tmp_path / "inputs")
     with module.Controller(socket_path, client, request,
-                           {"profile": "bz-a3-1", "device": 0}, runner.assets):
+                           {"profile": "bz-a3-1", "device": 0}, runner.assets,
+                           tmp_path / "snapshots"):
         run = subprocess.run([sys.executable, str(script), "controller-client", str(socket_path), "help"],
                              text=True, capture_output=True, check=False)
     assert run.returncode == 0
@@ -159,7 +167,7 @@ def test_standalone_sandbox_controller_client_needs_no_backend_module(tmp_path: 
 def test_frozen_hash_and_fresh_workspace_drift_fail_before_codex(monkeypatch, tmp_path: Path):
     runner, request, _ = fixture(tmp_path)
     request["skill_sha256"]["ascend-profiling"] = "0" * 64
-    monkeypatch.setattr(module.subprocess, "run", lambda *a, **k: pytest.fail("Codex started"))
+    monkeypatch.setattr(module, "_run_group", lambda *a, **k: pytest.fail("Codex started"))
     result = runner.run(request)
     assert result["status"] == "setup_error" and "frozen skill changed" in result["diagnostics"]
 
@@ -172,10 +180,10 @@ def test_frozen_hash_and_fresh_workspace_drift_fail_before_codex(monkeypatch, tm
 def test_timeout_is_observed_and_preserves_controller_usage(monkeypatch, tmp_path: Path):
     runner, request, _ = fixture(tmp_path)
 
-    def timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"], stderr="agent exceeded turn")
+    def timeout(command, prompt, timeout):
+        raise subprocess.TimeoutExpired(command, timeout, stderr="agent exceeded turn")
 
-    monkeypatch.setattr(module.subprocess, "run", timeout)
+    monkeypatch.setattr(module, "_run_group", timeout)
     result = runner.run(request, timeout=1)
     assert result["status"] == "timeout"
     assert "agent exceeded turn" in result["diagnostics"]
@@ -184,7 +192,29 @@ def test_timeout_is_observed_and_preserves_controller_usage(monkeypatch, tmp_pat
 
 def test_model_service_failure_is_infrastructure(monkeypatch, tmp_path: Path):
     runner, request, _ = fixture(tmp_path)
-    monkeypatch.setattr(module.subprocess, "run", lambda argv, **kwargs:
+    monkeypatch.setattr(module, "_run_group", lambda argv, prompt, timeout:
                         subprocess.CompletedProcess(argv, 1, "", "API error: service unavailable"))
     result = runner.run(request)
     assert result["status"] == "model_service_error"
+
+
+def test_process_group_timeout_kills_descendants(tmp_path: Path):
+    child = tmp_path / "child.pid"
+    with pytest.raises(subprocess.TimeoutExpired):
+        module._run_group(["bash", "-c", f"sleep 30 & echo $! >{child}; wait"], "", 1)
+    pid = int(child.read_text())
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        pass
+    else:
+        state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], text=True,
+                               capture_output=True, check=False).stdout.strip()
+        assert not state or state.startswith("Z")
+
+
+def test_in_band_prompt_hash_drift_fails_before_codex(tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+    request["prompt"]["data"] = base64.b64encode(b"different").decode()
+    result = runner.run(request)
+    assert result["status"] == "setup_error" and "prompt hash mismatch" in result["diagnostics"]

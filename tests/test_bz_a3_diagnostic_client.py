@@ -197,9 +197,9 @@ def test_first_dispatch_observed_digest_mismatch_is_repaired(tmp_path: Path):
     interrupted = client.run(value)
     assert interrupted["status"] == "infrastructure_error"
     assert interrupted["handle"] == "bz-a3-1:kept"
-    resumed = client.run({**value, "observe_timeout": 7})
+    resumed = client.run({**value, "observe_timeout": 30})
     assert resumed["status"] == "ok"
-    assert transport.observations[-1][2] == 7
+    assert transport.observations[-1][2] == 30
     assert len([upload for upload in transport.uploads
                 if "diagnostic-common-" in upload[2]]) == 2
 
@@ -276,6 +276,16 @@ def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path
     assert adapter_argv[adapter_argv.index("--timeout") + 1] == "30"
     assert "timeout --signal=TERM --kill-after=10 5" in adapter_argv[-1]
     assert clock[0] < outer_timeout
+
+
+def test_insufficient_response_grace_is_infrastructure_not_candidate_timeout(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "candidate_timeout")
+    value = {**request(tmp_path), "timeout": 25}
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert not transport.executions
 
 
 def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
@@ -398,9 +408,10 @@ def test_client_uses_one_decreasing_deadline_across_all_phases(tmp_path: Path, m
     monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
     transport = FakeTransport(module)
     result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
-    assert result["status"] == "ok"
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
     assert [entry[3] for entry in transport.uploads] == [29, 25]
-    assert transport.executions[0][4] == 22
+    assert not transport.executions
 
 
 def test_execute_observation_shares_one_deadline(monkeypatch):

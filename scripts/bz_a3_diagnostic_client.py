@@ -107,8 +107,10 @@ def _remaining(deadline: float, handle: str | None = None) -> int:
 
 def _workload_timeout(outer_timeout: int) -> int:
     """Reserve kill-after and response grace inside the caller's deadline."""
-    grace = min(25, max(0, outer_timeout - 1))
-    return outer_timeout - grace
+    if outer_timeout <= 25:
+        raise DiagnosticError("transport_error",
+                              "insufficient remaining budget for workload and response grace")
+    return outer_timeout - 25
 
 
 def _handle(output: str, profile: str) -> str | None:

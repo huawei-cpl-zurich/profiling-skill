@@ -216,28 +216,37 @@ def check(cell: dict[str, Any], scope: str, round_number: int | None) -> dict[st
 
 
 def profile(cell: dict[str, Any], repeats: int, round_number: int | None) -> dict[str, Any]:
-    rows, handles = [], []
-    for case in cell["development_cases"]:
-        samples = []
-        for index in range(repeats):
-            result = invoke(cell, "profile", case=case, iteration=index, round=round_number)
-            handles += result["handles"]
-            if result["status"] != "ok":
-                result["handles"] = handles
-                return merge_failure(result, "profile", cell)
-            try:
-                latency = float(result["latency_us"])
-                if not math.isfinite(latency) or latency <= 0:
-                    raise ValueError
-            except (KeyError, TypeError, ValueError):
-                return merge_failure(invalid_latency(result, handles), "profile", cell)
-            samples.append(latency)
-        rows.append({"case": case, "median_us": statistics.median(samples), "samples_us": samples})
-    score = math.exp(sum(math.log(row["median_us"]) for row in rows) / len(rows))
+    expected_cases = cell["development_cases"]
+    result = invoke(
+        cell, "profile", cases=expected_cases, repeats=repeats, round=round_number,
+    )
+    if result["status"] != "ok":
+        return merge_failure(result, "profile", cell)
+    rows = result.get("cases")
+    if not isinstance(rows, list) or len(rows) != len(expected_cases):
+        return merge_failure(invalid_latency(result, result["handles"]), "profile", cell)
+    normalized = []
+    for expected_case, row in zip(expected_cases, rows):
+        samples = row.get("samples_us") if isinstance(row, dict) else None
+        if (not isinstance(row, dict) or row.get("case") != expected_case
+                or not isinstance(samples, list) or len(samples) != repeats):
+            return merge_failure(invalid_latency(result, result["handles"]), "profile", cell)
+        try:
+            values = [float(value) for value in samples]
+            if any(not math.isfinite(value) or value <= 0 for value in values):
+                raise ValueError
+            median = float(row["median_us"])
+            if not math.isfinite(median) or median <= 0:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            return merge_failure(invalid_latency(result, result["handles"]), "profile", cell)
+        if not math.isclose(median, statistics.median(values), rel_tol=1e-12):
+            return merge_failure(invalid_latency(result, result["handles"]), "profile", cell)
+        normalized.append({"case": expected_case, "median_us": median, "samples_us": values})
+    score = math.exp(sum(math.log(row["median_us"]) for row in normalized) / len(normalized))
     return merge_failure(
-        {"status": "ok", "diagnostics": "", "handles": handles, "repeats": repeats, "cases": rows, "geomean_us": score},
-        "profile",
-        cell,
+        {**result, "repeats": repeats, "cases": normalized, "geomean_us": score},
+        "profile", cell,
     )
 
 

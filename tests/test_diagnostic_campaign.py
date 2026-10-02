@@ -3,7 +3,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -111,6 +113,8 @@ def test_cells_receive_identical_prompt_and_only_declared_treatment_skills(tmp_p
         config["prompt_sha256"]
     }
     for request, _ in launcher.requests:
+        assert request["protocol_version"] == 2
+        assert diagnostic.request_prompt_bytes(request) == Path(config["prompt"]).read_bytes()
         declared = config["treatments"][request["treatment"]]
         assert request["skills"] == declared["skills"]
         assert request["skill_sha256"] == declared["skill_sha256"]
@@ -286,6 +290,57 @@ def test_nonzero_process_cannot_claim_success(tmp_path: Path, monkeypatch):
     assert result["status"] == "transport_or_observer_error"
     assert result["exit_code"] == 7
     assert "claimed ok" in result["diagnostics"]
+
+
+def test_cancelled_command_registry_cannot_start_a_late_process(monkeypatch):
+    registry = diagnostic._ProcessRegistry()
+    registry.cancel()
+
+    def unexpected_process(*args, **kwargs):
+        raise AssertionError("cancelled registry started a process")
+
+    monkeypatch.setattr(diagnostic.subprocess, "Popen", unexpected_process)
+    result = diagnostic._invoke(
+        ["agent"], {"operation": "one_shot"}, 1, registry,
+    )
+
+    assert result["status"] == "transport_or_observer_error"
+    assert "cancelled" in result["diagnostics"]
+
+
+def test_timeout_kills_descendant_after_command_leader_exits(tmp_path: Path):
+    child_pid = tmp_path / "descendant.pid"
+    program = (
+        "import json, os, pathlib, sys, time\n"
+        "request = json.load(sys.stdin)\n"
+        "pid = os.fork()\n"
+        "if pid == 0:\n"
+        "    pathlib.Path(request['pid_file']).write_text(str(os.getpid()))\n"
+        "    time.sleep(60)\n"
+        "    os._exit(0)\n"
+        "os._exit(0)\n"
+    )
+    started = time.monotonic()
+    result = diagnostic._invoke(
+        [sys.executable, "-c", program], {"pid_file": str(child_pid)}, 0.2,
+        diagnostic._ProcessRegistry(),
+    )
+
+    assert result["status"] == "timeout"
+    assert time.monotonic() - started < 2
+    assert child_pid.is_file()
+    pid = int(child_pid.read_text())
+    deadline = time.monotonic() + 1
+    while True:
+        status = Path(f"/proc/{pid}/stat")
+        if not status.exists():
+            break
+        # A container PID 1 may defer reaping an orphaned zombie. It has
+        # exited and cannot execute or retain the command pipes.
+        if status.read_text().split()[2] == "Z":
+            break
+        assert time.monotonic() < deadline, f"descendant {pid} survived group termination"
+        time.sleep(0.01)
 
 
 def test_primary_infrastructure_attempt_is_checkpointed_before_retry(tmp_path: Path,
@@ -609,6 +664,223 @@ def test_keyboard_interrupt_checkpoints_terminal_state_and_sibling_evidence(tmp_
     assert "wave-1-cannbot" not in ledger["reschedule"]
 
 
+def test_interrupt_checkpoints_without_waiting_for_blocked_sibling(tmp_path: Path):
+    sibling_entered = threading.Event()
+    release_sibling = threading.Event()
+    campaign_finished = threading.Event()
+    raised = []
+
+    class BlockingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            treatment = request["treatment"]
+            if treatment == "cannbot":
+                assert release_sibling.wait(timeout=5)
+                return super().launch(request, timeout_seconds)
+            if treatment == "project-guarded":
+                sibling_entered.set()
+                # Deliberately ignore the launcher's advisory timeout.
+                assert release_sibling.wait(timeout=5)
+                return super().launch(request, timeout_seconds)
+            if treatment == "project-cannbot":
+                assert sibling_entered.wait(timeout=1)
+                raise KeyboardInterrupt("operator interrupted")
+            return super().launch(request, timeout_seconds)
+
+    root = tmp_path / "run"
+
+    def run_campaign():
+        try:
+            diagnostic.DiagnosticCampaign(
+                manifest(tmp_path), root, BlockingLauncher(), RecordingTerminal(),
+            ).run()
+        except BaseException as error:
+            raised.append(error)
+        finally:
+            campaign_finished.set()
+
+    runner = threading.Thread(target=run_campaign)
+    runner.start()
+    try:
+        assert campaign_finished.wait(timeout=1), (
+            "campaign waited for a blocked sibling before checkpointing interruption"
+        )
+        assert len(raised) == 1
+        assert isinstance(raised[0], KeyboardInterrupt)
+        ledger = json.loads((root / "ledger.json").read_text())
+        assert ledger["status"] == "interrupted"
+        assert set(ledger["reschedule"]) == {
+            f"wave-{wave}-{treatment}"
+            for wave in range(1, 5)
+            for treatment in diagnostic.TREATMENTS
+        }
+    finally:
+        release_sibling.set()
+        runner.join(timeout=2)
+
+
+def test_interrupt_during_worker_submission_is_checkpointed_and_cancelled(tmp_path: Path,
+                                                                          monkeypatch):
+    released = threading.Event()
+
+    class CancellableLauncher(RecordingLauncher):
+        def __init__(self):
+            super().__init__()
+            self.cancelled = False
+
+        def launch(self, request, timeout_seconds):
+            assert released.wait(timeout=2)
+            return super().launch(request, timeout_seconds)
+
+        def cancel(self):
+            self.cancelled = True
+            released.set()
+
+    real_submit = diagnostic._submit_daemon
+    submissions = 0
+
+    def interrupting_submit(function, *args):
+        nonlocal submissions
+        submissions += 1
+        if submissions == 2:
+            raise KeyboardInterrupt("interrupted during submission")
+        return real_submit(function, *args)
+
+    monkeypatch.setattr(diagnostic, "_submit_daemon", interrupting_submit)
+    launcher = CancellableLauncher()
+    root = tmp_path / "run"
+    with pytest.raises(KeyboardInterrupt, match="during submission"):
+        diagnostic.DiagnosticCampaign(
+            manifest(tmp_path), root, launcher, RecordingTerminal(),
+        ).run()
+
+    ledger = json.loads((root / "ledger.json").read_text())
+    assert ledger["status"] == "interrupted"
+    assert len(ledger["reschedule"]) == 12
+    assert launcher.cancelled is True
+
+
+def test_checkpoint_failure_preserves_interrupt_and_cancels_subprocesses(tmp_path: Path,
+                                                                         monkeypatch):
+    blocker = tmp_path / "blocker.py"
+    blocker.write_text(
+        "import json, os, pathlib, sys, time\n"
+        "request = json.load(sys.stdin)\n"
+        "pathlib.Path(request['workspace'], 'child.pid').write_text(str(os.getpid()))\n"
+        "time.sleep(60)\n"
+    )
+    command = diagnostic.CommandLauncher([sys.executable, str(blocker)])
+
+    class InterruptingCommandLauncher:
+        def launch(self, request, timeout_seconds):
+            if request["treatment"] == "project-cannbot":
+                pid_files = [
+                    tmp_path / "run" / "cells" / f"wave-1-{treatment}" /
+                    "attempt-1" / "workspace" / "child.pid"
+                    for treatment in ("cannbot", "project-guarded")
+                ]
+                deadline = time.monotonic() + 1
+                while not all(path.is_file() for path in pid_files):
+                    assert time.monotonic() < deadline
+                    time.sleep(0.01)
+                raise KeyboardInterrupt("original interruption")
+            return command.launch(request, timeout_seconds)
+
+        def cancel(self):
+            command.cancel()
+
+    real_atomic = diagnostic._atomic_json
+
+    def fail_interrupted_checkpoint(path, value):
+        if value.get("status") == "interrupted":
+            raise OSError("checkpoint storage unavailable")
+        real_atomic(path, value)
+
+    monkeypatch.setattr(diagnostic, "_atomic_json", fail_interrupted_checkpoint)
+    root = tmp_path / "run"
+    with pytest.raises(KeyboardInterrupt, match="original interruption"):
+        diagnostic.DiagnosticCampaign(
+            manifest(tmp_path), root, InterruptingCommandLauncher(), RecordingTerminal(),
+        ).run()
+
+    pid_files = root.glob("cells/wave-1-*/attempt-1/workspace/child.pid")
+    pids = [int(path.read_text()) for path in pid_files]
+    assert len(pids) == 2
+    deadline = time.monotonic() + 1
+    for pid in pids:
+        while True:
+            status = Path(f"/proc/{pid}/stat")
+            if not status.exists() or status.read_text().split()[2] == "Z":
+                break
+            assert time.monotonic() < deadline, f"launcher child {pid} survived cleanup"
+            time.sleep(0.01)
+
+
+def test_interrupted_campaign_process_exits_with_permanently_blocked_siblings(tmp_path: Path):
+    if os.environ.get("DIAGNOSTIC_BLOCKED_SIBLING_CHILD") == "1":
+        blocker = tmp_path / "blocker.py"
+        blocker.write_text(
+            "import json, os, pathlib, sys, time\n"
+            "request = json.load(sys.stdin)\n"
+            "pathlib.Path(request['workspace'], 'child.pid').write_text(str(os.getpid()))\n"
+            "time.sleep(60)\n"
+        )
+        command = diagnostic.CommandLauncher([sys.executable, str(blocker)])
+
+        class InterruptingCommandLauncher:
+            def launch(self, request, timeout_seconds):
+                if request["treatment"] == "project-cannbot":
+                    pid_files = [
+                        tmp_path / "run" / "cells" / f"wave-1-{treatment}" /
+                        "attempt-1" / "workspace" / "child.pid"
+                        for treatment in ("cannbot", "project-guarded")
+                    ]
+                    deadline = time.monotonic() + 1
+                    while not all(path.is_file() for path in pid_files):
+                        assert time.monotonic() < deadline
+                        time.sleep(0.01)
+                    raise KeyboardInterrupt("operator interrupted")
+                return command.launch(request, timeout_seconds)
+
+            def cancel(self):
+                command.cancel()
+
+        root = tmp_path / "run"
+        with pytest.raises(KeyboardInterrupt, match="operator interrupted"):
+            diagnostic.DiagnosticCampaign(
+                manifest(tmp_path), root,
+                InterruptingCommandLauncher(), RecordingTerminal(),
+            ).run()
+        ledger = json.loads((root / "ledger.json").read_text())
+        assert ledger["status"] == "interrupted"
+        assert set(ledger["reschedule"]) == {
+            f"wave-{wave}-{treatment}"
+            for wave in range(1, 5)
+            for treatment in diagnostic.TREATMENTS
+        }
+        pid_files = root.glob("cells/wave-1-*/attempt-1/workspace/child.pid")
+        pids = [int(path.read_text()) for path in pid_files]
+        assert len(pids) == 2
+        deadline = time.monotonic() + 1
+        for pid in pids:
+            while True:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    break
+                assert time.monotonic() < deadline, f"launcher child {pid} survived cancellation"
+                time.sleep(0.01)
+        return
+
+    environment = dict(os.environ, DIAGNOSTIC_BLOCKED_SIBLING_CHILD="1")
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+         f"{Path(__file__).resolve()}::{test_interrupted_campaign_process_exits_with_permanently_blocked_siblings.__name__}"],
+        cwd=ROOT, env=environment, text=True, capture_output=True, timeout=3,
+        check=False,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
 def test_reused_output_root_is_rejected_without_changing_ledger(tmp_path: Path):
     root = tmp_path / "run"
     config = manifest(tmp_path)
@@ -671,11 +943,7 @@ def test_run_freezes_prompt_bytes_before_launch(tmp_path: Path):
     class PromptMutatingLauncher(RecordingLauncher):
         def launch(self, request, timeout_seconds):
             source.write_text("mutated after run started\n")
-            frozen = Path(request["prompt"])
-            assert frozen != source
-            assert frozen.read_bytes() == original
-            assert frozen.stat().st_mode & 0o222 == 0
-            assert diagnostic.sha256_file(frozen) == request["prompt_sha256"]
+            assert diagnostic.request_prompt_bytes(request) == original
             return super().launch(request, timeout_seconds)
 
     launcher = PromptMutatingLauncher()
@@ -684,8 +952,80 @@ def test_run_freezes_prompt_bytes_before_launch(tmp_path: Path):
     ).run()
 
     assert result["status"] == "complete"
-    frozen_paths = {request["prompt"] for request, _ in launcher.requests}
-    assert frozen_paths == {str(tmp_path / "run" / "inputs" / "prompt.md")}
+    assert all(
+        diagnostic.request_prompt_bytes(request) == original
+        for request, _ in launcher.requests
+    )
+
+
+def test_swap_and_restore_cannot_drift_in_band_prompts(tmp_path: Path):
+    config = manifest(tmp_path)
+    original = Path(config["prompt"]).read_bytes()
+    barrier = threading.Barrier(3)
+    consumed = []
+    consumed_lock = threading.Lock()
+
+    class DestructiveLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            shared = tmp_path / "run" / "inputs" / "prompt.md"
+            if request["treatment"] == "project-cannbot":
+                shared.unlink()
+                shared.write_text("temporary sibling-controlled bytes\n")
+            barrier.wait(timeout=5)
+            content = diagnostic.request_prompt_bytes(request)
+            with consumed_lock:
+                consumed.append(content)
+            barrier.wait(timeout=5)
+            if request["treatment"] == "project-cannbot":
+                shared.unlink()
+                shared.write_bytes(original)
+            return super().launch(request, timeout_seconds)
+
+    launcher = DestructiveLauncher()
+    result = diagnostic.DiagnosticCampaign(
+        config, tmp_path / "run", launcher, RecordingTerminal(),
+    ).run()
+
+    outcomes = [
+        (cell["outcome"], cell["agent"].get("diagnostics"), cell.get("retry"))
+        for wave in result["waves"] for cell in wave["cells"]
+    ]
+    assert result["status"] == "complete", outcomes
+    assert consumed == [original] * 12
+    assert len(launcher.requests) == 12
+
+
+def test_command_launcher_rejects_legacy_path_prompt_before_spawning(monkeypatch):
+    launcher = diagnostic.CommandLauncher(["agent"])
+    request = {"protocol_version": 2, "prompt": "/writable/prompt.md",
+               "prompt_sha256": "digest"}
+
+    def unexpected_process(*args, **kwargs):
+        raise AssertionError("legacy prompt request reached the command consumer")
+
+    monkeypatch.setattr(diagnostic.subprocess, "Popen", unexpected_process)
+    with pytest.raises(diagnostic.DiagnosticError, match="in-band"):
+        launcher.launch(request, 1)
+
+
+@pytest.mark.parametrize("version", [None, 1])
+def test_command_launcher_rejects_non_v2_prompt_envelope_before_spawning(
+        monkeypatch, version):
+    launcher = diagnostic.CommandLauncher(["agent"])
+    digest = hashlib.sha256(b"x").hexdigest()
+    request = {
+        "prompt": {"encoding": "base64", "data": "eA==", "sha256": digest},
+        "prompt_sha256": digest,
+    }
+    if version is not None:
+        request["protocol_version"] = version
+
+    def unexpected_process(*args, **kwargs):
+        raise AssertionError("non-v2 request reached the command consumer")
+
+    monkeypatch.setattr(diagnostic.subprocess, "Popen", unexpected_process)
+    with pytest.raises(diagnostic.DiagnosticError, match="protocol version 2"):
+        launcher.launch(request, 1)
 
 
 def test_concurrent_launcher_mutation_cannot_cross_cell_or_change_evidence(tmp_path: Path):

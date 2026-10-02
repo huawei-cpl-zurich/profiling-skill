@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import copy
+import base64
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, as_completed
 from pathlib import Path
 from typing import Protocol
 
@@ -48,6 +51,23 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def request_prompt_bytes(request: dict) -> bytes:
+    """Decode and verify the in-band prompt consumed by launcher protocols."""
+    if request.get("protocol_version") != 2:
+        raise DiagnosticError("in-band prompt requests require protocol version 2")
+    prompt = request.get("prompt")
+    if not isinstance(prompt, dict) or prompt.get("encoding") != "base64":
+        raise DiagnosticError("request prompt must use the base64 in-band contract")
+    try:
+        content = base64.b64decode(prompt.get("data", ""), validate=True)
+    except (ValueError, TypeError) as error:
+        raise DiagnosticError("request prompt is not valid base64") from error
+    digest = hashlib.sha256(content).hexdigest()
+    if prompt.get("sha256") != digest or request.get("prompt_sha256") != digest:
+        raise DiagnosticError("request prompt hash mismatch")
+    return content
+
+
 def _atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as stream:
@@ -57,11 +77,84 @@ def _atomic_json(path: Path, value: dict) -> None:
     os.replace(temporary, path)
 
 
-def _invoke(command: list[str], request: dict, timeout_seconds: int) -> dict:
+def _submit_daemon(function, *args) -> Future:
+    """Run a cell in a daemon thread so interrupted CLI shutdown cannot join it."""
+    future = Future()
+
+    def run() -> None:
+        if not future.set_running_or_notify_cancel():
+            return
+        try:
+            result = function(*args)
+        except BaseException as error:
+            future.set_exception(error)
+        else:
+            future.set_result(result)
+
+    threading.Thread(target=run, daemon=True, name="diagnostic-cell").start()
+    return future
+
+
+class _ProcessRegistry:
+    """Track command process groups so an interrupted campaign can stop them."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._processes: set[subprocess.Popen] = set()
+        self._cancelled = False
+
+    def run(self, command: list[str], request: dict,
+            timeout_seconds: int) -> subprocess.CompletedProcess:
+        with self._lock:
+            if self._cancelled:
+                raise OSError("command hook was cancelled")
+            # Spawn and registration share the cancellation lock: cancel()
+            # either sees this process or prevents it from starting.
+            process = subprocess.Popen(
+                command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, start_new_session=True,
+            )
+            self._processes.add(process)
+        try:
+            stdout, stderr = process.communicate(json.dumps(request), timeout=timeout_seconds)
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        except subprocess.TimeoutExpired:
+            self._terminate(process)
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(
+                command, timeout_seconds, output=stdout, stderr=stderr,
+            )
+        finally:
+            with self._lock:
+                self._processes.discard(process)
+
+    @staticmethod
+    def _terminate(process: subprocess.Popen) -> None:
+        # The group can outlive its leader and keep stdout/stderr pipes open.
+        # Always target the process group created at spawn, even after poll()
+        # reports that the leader itself has exited.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    def cancel(self) -> None:
+        with self._lock:
+            self._cancelled = True
+            processes = tuple(self._processes)
+        for process in processes:
+            self._terminate(process)
+
+
+def _invoke(command: list[str], request: dict, timeout_seconds: int,
+            registry: _ProcessRegistry | None = None) -> dict:
     started = time.time()
     try:
-        run = subprocess.run(command, input=json.dumps(request), text=True,
-                             capture_output=True, timeout=timeout_seconds, check=False)
+        if registry is None:
+            run = subprocess.run(command, input=json.dumps(request), text=True,
+                                 capture_output=True, timeout=timeout_seconds, check=False)
+        else:
+            run = registry.run(command, request, timeout_seconds)
     except subprocess.TimeoutExpired as error:
         def timeout_text(value: str | bytes | None) -> str:
             if isinstance(value, bytes):
@@ -99,9 +192,14 @@ class CommandLauncher:
         if not command:
             raise DiagnosticError("agent command is required")
         self.command = command
+        self._processes = _ProcessRegistry()
 
     def launch(self, request: dict, timeout_seconds: int) -> dict:
-        return _invoke(self.command, request, timeout_seconds)
+        request_prompt_bytes(request)
+        return _invoke(self.command, request, timeout_seconds, self._processes)
+
+    def cancel(self) -> None:
+        self._processes.cancel()
 
 
 class CommandTerminalHook:
@@ -111,9 +209,13 @@ class CommandTerminalHook:
         if not command:
             raise DiagnosticError("terminal command is required")
         self.command = command
+        self._processes = _ProcessRegistry()
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
-        return _invoke(self.command, request, timeout_seconds)
+        return _invoke(self.command, request, timeout_seconds, self._processes)
+
+    def cancel(self) -> None:
+        self._processes.cancel()
 
 
 def validate_manifest(manifest: dict) -> None:
@@ -206,9 +308,13 @@ class DiagnosticCampaign:
         monotonic_started = time.monotonic()
         treatment_record = copy.deepcopy(self.manifest["treatments"][treatment])
         request = {
-            "protocol_version": 1, "operation": "one_shot", "cell_id": cell_id,
+            "protocol_version": 2, "operation": "one_shot", "cell_id": cell_id,
             "wave": wave, "attempt": attempt, "treatment": treatment,
-            "workspace": str(workspace), "prompt": self.manifest["prompt"],
+            "workspace": str(workspace), "prompt": {
+                "encoding": "base64",
+                "data": base64.b64encode(self._prompt_bytes).decode("ascii"),
+                "sha256": self.manifest["prompt_sha256"],
+            },
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model": copy.deepcopy(self.manifest["model"]),
             "model_sha256": self.manifest["model_sha256"],
@@ -303,6 +409,7 @@ class DiagnosticCampaign:
             temporary = Path(stream.name)
         os.chmod(temporary, 0o444)
         os.replace(temporary, destination)
+        self._prompt_bytes = content
         manifest["prompt"] = str(destination)
 
     def run(self) -> dict:
@@ -336,7 +443,20 @@ class DiagnosticCampaign:
                                         and cell.get("retry", {}).get("category") != "counted"):
                         pending.add(f"wave-{wave}-{treatment}")
             ledger["reschedule"] = sorted(pending)
-            _atomic_json(self.ledger_path, ledger)
+            try:
+                _atomic_json(self.ledger_path, ledger)
+            except BaseException:
+                # Preserve the campaign exception. Cleanup below is mandatory
+                # even when the durability boundary itself is unavailable.
+                pass
+            finally:
+                for hook in (self.launcher, self.terminal):
+                    cancel = getattr(hook, "cancel", None)
+                    if cancel is not None:
+                        try:
+                            cancel()
+                        except Exception:
+                            pass
             raise
 
     def _run_waves(self, ledger: dict) -> dict:
@@ -345,14 +465,21 @@ class DiagnosticCampaign:
             results = []
             wave_record = {"wave": wave, "cells": results}
             ledger["waves"].append(wave_record)
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                futures = {pool.submit(self._guarded_cell, wave, treatment, 1,
-                                       self.wave_timeout): treatment
-                           for treatment in TREATMENTS}
+            futures = {}
+            try:
+                for treatment in TREATMENTS:
+                    future = _submit_daemon(
+                        self._guarded_cell, wave, treatment, 1, self.wave_timeout,
+                    )
+                    futures[future] = treatment
                 for future in as_completed(futures):
                     result = future.result()
                     results.append(result)
                     _atomic_json(self.ledger_path, ledger)
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                raise
             for result in [item for item in results if item["category"] == "infrastructure"]:
                 remaining = self.wave_timeout - (time.monotonic() - wave_started)
                 if remaining > 0:

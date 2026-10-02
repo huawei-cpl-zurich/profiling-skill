@@ -111,12 +111,16 @@ submission-freezing wrapper.
 | Bounded-resume fix, full suite | 316 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final bounded-resume hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T110728Z-282-16038` |
 | Final bounded-resume hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T110728Z-231-2142` |
+| Retry-lifecycle fix, focused suite | 92 passed | Launcher failures replay once; retained terminal infrastructure uses the configured fallback; repeated digest mismatch remains repairable. |
+| Retry-lifecycle fix, full suite | 319 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final retry-lifecycle hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T111211Z-306-6606` |
+| Final retry-lifecycle hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T111211Z-239-13526` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `7a5027d` |
+| Final validated implementation HEAD | `7fa8db6` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

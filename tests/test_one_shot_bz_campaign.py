@@ -718,6 +718,33 @@ def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path
     assert len(client.requests) == 1
 
 
+def test_manual_handle_resume_preserves_request_timeout_and_bounds_observation(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class TimeoutIdentityClient(Client):
+        def resume(self, requests, handle, observe_timeout):
+            assert len(requests) == 1
+            assert requests[0]["timeout"] == 240
+            assert observe_timeout == 7
+            return {"status": "ok", "passed": True, "handle": handle,
+                    "cell": requests[0]["cell"]}
+
+    hook = module.BzTerminalHook(
+        TimeoutIdentityClient(), placements, config["assets"], "campaign")
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1, "terminal_request_timeout": 300},
+        "bz-a3-1:recovered", 7)
+
+    assert result["status"] == "ok"
+
+
 def test_production_bz_hook_reconstructs_primary_handle_without_dispatch_receipt(
     tmp_path: Path,
 ):

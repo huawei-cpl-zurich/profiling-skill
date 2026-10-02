@@ -490,7 +490,11 @@ class DiagnosticCampaign:
         prior_handle = (prior_result.get("handle")
                         if isinstance(prior_result, dict) else None)
         if callable(resume) and isinstance(prior_handle, str) and prior_handle:
-            result = copy.deepcopy(resume(receipt_request, prior_handle, timeout_seconds))
+            resume_request = copy.deepcopy(receipt_request)
+            if isinstance(prior_result.get("terminal_request_timeout"), int):
+                resume_request["terminal_request_timeout"] = prior_result[
+                    "terminal_request_timeout"]
+            result = copy.deepcopy(resume(resume_request, prior_handle, timeout_seconds))
         else:
             result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
         uncertain_dispatch = (
@@ -684,6 +688,7 @@ class DiagnosticCampaign:
             if not isinstance(handle, str) or not handle.strip():
                 raise DiagnosticError("reconciliation handle must be non-empty")
             reconciled = {**record["result"], "handle": handle}
+            reconciled["terminal_request_timeout"] = record["timeout_seconds"]
             reconciled.pop("manual_reconciliation_required", None)
             record.update({"state": "started", "result": reconciled})
         else:

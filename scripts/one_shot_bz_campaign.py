@@ -231,13 +231,17 @@ class BzTerminalHook:
                 or terminal_attempt < 1):
             raise DiagnosticError("terminal attempt must be a positive integer")
         placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
+        request_timeout = request.get("terminal_request_timeout", timeout_seconds)
+        if (isinstance(request_timeout, bool) or not isinstance(request_timeout, int)
+                or request_timeout < 1):
+            raise DiagnosticError("terminal request timeout must be a positive integer")
         client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
             # observe its retained handle instead of redispatching it.
             "cell": f"{treatment}-attempt-{terminal_attempt}",
-            **placement, "timeout": min(timeout_seconds, 240),
+            **placement, "timeout": min(request_timeout, 240),
             "candidate": str(submission / "candidate.py"),
             "candidate_manifest": str(submission / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],

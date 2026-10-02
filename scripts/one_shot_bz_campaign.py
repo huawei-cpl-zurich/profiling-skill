@@ -7,15 +7,9 @@ import argparse
 import json
 from pathlib import Path
 
+import diagnostic_campaign
 from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
 from diagnostic_campaign import CommandLauncher, DiagnosticCampaign, DiagnosticError, TREATMENTS
-
-
-INFRA_MAP = {
-    "device_error": "device_or_runtime_infra",
-    "staging_error": "pre_dispatch_infra",
-    "request_error": "setup_error",
-}
 
 
 def load_json(path: Path) -> dict:
@@ -68,6 +62,11 @@ class FrozenAgentLauncher:
         self.frozen[cell] = (result, files)
         return result
 
+    def cancel(self) -> None:
+        cancel = getattr(self.launcher, "cancel", None)
+        if cancel is not None:
+            cancel()
+
 
 class BzTerminalHook:
     """Map campaign terminal requests to deterministic BZ host/device jobs."""
@@ -89,7 +88,11 @@ class BzTerminalHook:
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
         placement = self.placements[treatment][min(attempt - 1, 1)]
         result = self.client.run({
-            "campaign": self.campaign_id, "wave": wave, "cell": treatment,
+            "campaign": self.campaign_id, "wave": wave,
+            # BZ dispatch receipts are keyed by cell. A fallback placement is
+            # a new terminal attempt, while repeating this exact request must
+            # observe its retained handle instead of redispatching it.
+            "cell": f"{treatment}-attempt-{attempt}",
             **placement, "timeout": min(timeout_seconds, 240),
             "candidate": str(workspace / "candidate.py"),
             "candidate_manifest": str(workspace / "candidate.manifest.json"),
@@ -103,10 +106,7 @@ class BzTerminalHook:
             return {**result, "status": "timeout"}
         if status in {"compile_error", "runtime_error", "correctness_error"}:
             return result
-        if status == "submission_error":
-            return {**result, "status": "source_error"}
-        failure = str(result.get("failure_type", "transport_error"))
-        return {**result, "status": INFRA_MAP.get(failure, "transport_or_observer_error")}
+        return result
 
 
 def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,

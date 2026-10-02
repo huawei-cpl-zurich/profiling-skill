@@ -5,7 +5,7 @@
 - Feature branch: `codex/one-shot-bz-integration`
 - Reference branch: `origin/main`
 - Backup branch: `backup/codex-one-shot-bz-integration-before-main-merge-20261002-102648`
-- Report status: preflight
+- Report status: validating
 
 ## Starting State
 
@@ -16,7 +16,7 @@
 | Reference branch HEAD | `7c1e254e682dc3709a0de21acdae74214d0af209` |
 | Merge base | `caef9af127dac0d8cd8ddc17c1c52b9159766e76` |
 | Working tree status | clean |
-| Merge started at | pending |
+| Merge started at | 2026-10-02 10:28 UTC |
 
 ## Branch Intent
 
@@ -67,27 +67,36 @@ history-preserving merge of actual `origin/main`, not a history rewrite.
 
 ## Conflicts Encountered
 
-Pending.
+| File | Conflict type | Resolution | Validation |
+| --- | --- | --- | --- |
+| `scripts/bz_a3_diagnostic_client.py` | mechanical | Kept the merged PR #23 implementation from `origin/main`. | Parent and integration tests passed. |
+| `tests/test_bz_a3_diagnostic_client.py` | mechanical | Kept the merged PR #23 tests from `origin/main`. | Parent and integration tests passed. |
+
+The compatibility audit also assigned a unique BZ receipt identity to each
+primary/fallback attempt and delegated launcher cancellation through the
+submission-freezing wrapper.
 
 ## Validation
 
-Pending focused, full local, and authorized BZ-A3 validation.
+| Command | Result | Notes |
+| --- | --- | --- |
+| `python -m pytest -q tests/test_one_shot_bz_campaign.py tests/test_diagnostic_campaign.py tests/test_bz_a3_diagnostic_client.py` | 73 passed | Covers protocol-v2 prompt bytes, cancellation delegation, retained candidate replay, and BZ status mapping. |
+| `python -m pytest -q` | 300 passed, 1 host failure | Only failure is the pre-existing Bubblewrap namespace test; this controller denies unprivileged namespace creation. |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
 | Final feature branch HEAD | pending |
-| Merge completed at | pending |
+| Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
-| Uncommitted changes | report only |
+| Uncommitted changes | compatibility update pending commit |
 
 ## Residual Risks
 
-Pending validation.
+Authorized BZ-A3 validation and the frozen-head review wave remain pending.
 
 ## Next Action
 
-Commit this report, merge `origin/main`, resolve parent overlap in favor of
-the hardened main implementations, then update and validate the unique
-integration layer.
+Commit the compatibility update, validate on both authorized BZ-A3 targets,
+then publish and review the frozen pull-request head.

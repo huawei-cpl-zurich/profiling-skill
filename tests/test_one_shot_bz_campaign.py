@@ -20,9 +20,8 @@ def inputs(tmp_path: Path):
     prompt = tmp_path / "prompt.md"
     prompt.write_text("same prompt\n")
     model = {"name": "model", "reasoning_effort": "low"}
-    skills = {"cannbot": ["triton-op-coding", "ops-profiling"],
-              "project-cannbot": ["triton-op-coding", "ascend-profiling"],
-              "project-guarded": ["ascend-profiling", "triton-guarded-kernel"]}
+    skills = {name: list(module.diagnostic_campaign.TREATMENT_SKILLS[name])
+              for name in module.TREATMENTS}
     digest = hashlib.sha256(prompt.read_bytes()).hexdigest()
     manifest = {"prompt": str(prompt), "prompt_sha256": digest, "model": model,
         "model_sha256": hashlib.sha256(json.dumps(model, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
@@ -47,6 +46,7 @@ class Agent:
     def __init__(self):
         self.requests = []
         self.lock = threading.Lock()
+        self.cancelled = False
 
     def launch(self, request, timeout):
         with self.lock:
@@ -57,6 +57,9 @@ class Agent:
         return {"status": "ok", "controller_usage": {"billed": 1, "calls": [
             {"arguments": ["check", "--scope", "development", "--round", "1"]}]}}
 
+    def cancel(self):
+        self.cancelled = True
+
 
 class Client:
     def __init__(self, fail_once=False, candidate_failure=False):
@@ -66,11 +69,11 @@ class Client:
 
     def run(self, request):
         self.requests.append(request)
-        key = (request["wave"], request["cell"])
+        key = (request["wave"], request["cell"].rsplit("-attempt-", 1)[0])
         if self.fail_once and key not in self.failed:
             self.failed.add(key)
             return {"status": "infrastructure_error", "failure_type": "device_error", "handle": "kept"}
-        if self.candidate_failure and request["wave"] == "1" and request["cell"] == "cannbot":
+        if self.candidate_failure and request["wave"] == "1" and request["cell"] == "cannbot-attempt-1":
             return {"status": "compile_error", "diagnostics": "full compiler traceback"}
         return {"status": "ok", "passed": True, "artifacts": {"candidate_sha256": "remote"}}
 
@@ -84,6 +87,9 @@ def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path
     assert all(timeout == 360 for _, timeout in agent.requests)
     assert all(request["controller_contract"] == {"billed_limit": 1,
         "command": ["check", "--scope", "development", "--round", "1"]} for request, _ in agent.requests)
+    assert all(request["protocol_version"] == 2 and
+               module.diagnostic_campaign.request_prompt_bytes(request) == b"same prompt\n"
+               for request, _ in agent.requests)
     assert all(request["cases"] == list(range(7)) for request in client.requests)
     assert {(r["profile"], r["device"]) for r in client.requests[:3]} == {
         ("bz-a3-1", 0), ("bz-a3-1", 1), ("bz-a3-2", 0)}
@@ -106,8 +112,11 @@ def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_p
             assert cell["retry"]["candidate_sha256"] == cell["candidate_sha256"]
             assert cell["retry"]["agent"]["submission_replayed"] is True
     first = client.requests[0]
-    retry = next(r for r in client.requests if r["wave"] == first["wave"] and r["cell"] == first["cell"] and r is not first)
+    treatment = first["cell"].rsplit("-attempt-", 1)[0]
+    retry = next(r for r in client.requests if r["wave"] == first["wave"]
+                 and r["cell"] == treatment + "-attempt-2")
     assert (first["profile"], first["device"]) != (retry["profile"], retry["device"])
+    assert first["cell"] == treatment + "-attempt-1"
 
 
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):
@@ -129,3 +138,9 @@ def test_placement_contract_rejects_shared_primary_device(tmp_path: Path):
         assert "distinct physical devices" in str(error)
     else:
         raise AssertionError("shared primary device accepted")
+
+
+def test_frozen_launcher_delegates_cancellation():
+    agent = Agent()
+    module.FrozenAgentLauncher(agent).cancel()
+    assert agent.cancelled is True

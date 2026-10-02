@@ -357,6 +357,13 @@ class DiagnosticCampaign:
         terminal = None
         candidate = workspace / "candidate.py"
         candidate_manifest = workspace / "candidate.manifest.json"
+        submission_hashes = agent.get("candidate_sha256")
+        if not isinstance(submission_hashes, dict):
+            submission_hashes = {}
+            for name in ("candidate.py", "candidate.manifest.json"):
+                path = workspace / name
+                if path.is_file():
+                    submission_hashes[name] = sha256_file(path)
         if elapsed >= cap:
             agent = {"status": "infrastructure_error",
                      "failure_type": "wave_budget_exhausted",
@@ -367,6 +374,7 @@ class DiagnosticCampaign:
                 "protocol_version": 1, "operation": "terminal_check", "cell_id": cell_id,
                 "workspace": str(workspace), "benchmark": "streaming-matmul-add",
                 "cases": list(range(7)), "terminal_attempt": attempt,
+                "candidate_sha256": copy.deepcopy(submission_hashes),
             }
             try:
                 terminal = copy.deepcopy(self.terminal.check(
@@ -381,15 +389,10 @@ class DiagnosticCampaign:
                             "failure_type": "wave_budget_exhausted",
                             "diagnostics": "terminal hook exceeded the remaining cell budget"}
         outcome, category = classify(agent, terminal, workspace)
-        hashes = {}
-        for name in ("candidate.py", "candidate.manifest.json"):
-            path = workspace / name
-            if path.is_file():
-                hashes[name] = sha256_file(path)
         return {
             "cell_id": cell_id, "wave": wave, "attempt": attempt, "treatment": treatment,
             "outcome": outcome, "category": category, "agent": agent, "terminal": terminal,
-            "candidate_sha256": hashes, "started_at_epoch": started,
+            "candidate_sha256": submission_hashes, "started_at_epoch": started,
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"],
             "skill_sha256": copy.deepcopy(treatment_record["skill_sha256"]),

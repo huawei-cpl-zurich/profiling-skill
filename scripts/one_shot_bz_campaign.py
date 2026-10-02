@@ -154,11 +154,14 @@ class FrozenAgentLauncher:
             }, files)
             raise
         snapshot = workspace.parent / "frozen-submission"
+        candidate_sha256 = {name: hashlib.sha256(content).hexdigest()
+                            for name, content in files.items()}
+        result = {**result, "candidate_sha256": candidate_sha256}
+        self.frozen[cell] = (result, files)
         diagnostic_campaign._atomic_json(receipt_path, {
             "protocol_version": 1, "cell_id": cell, "state": "completed",
             "result": result, "snapshot": str(snapshot),
-            "candidate_sha256": {name: hashlib.sha256(content).hexdigest()
-                                 for name, content in files.items()},
+            "candidate_sha256": candidate_sha256,
         })
         return result
 
@@ -245,6 +248,8 @@ class BzTerminalHook:
             remaining = int(deadline - time.monotonic())
             if remaining < 1:
                 return result
+            terminal_attempt += 1
+            placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
             client_request = {
                 **client_request, **placement,
                 "cell": f"{treatment}-attempt-{terminal_attempt}",

@@ -267,6 +267,10 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     monkeypatch.setattr(Path, "read_bytes", mutate_after_read)
     result = frozen.launch(request, 10)
     assert result["status"] == "ok" and len(agent.requests) == 1
+    assert result["candidate_sha256"] == {
+        "candidate.py": hashlib.sha256(b"candidate\n").hexdigest(),
+        "candidate.manifest.json": hashlib.sha256(b"{}\n").hexdigest(),
+    }
     assert (workspace / "candidate.py").read_text() == "candidate\n"
     assert (workspace / "candidate.py").stat().st_mode & 0o777 == 0o444
     snapshot = workspace.parent / "frozen-submission"
@@ -365,6 +369,38 @@ def test_failed_retained_observation_never_dispatches_fallback(tmp_path: Path):
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert (client.requests[1]["profile"], client.requests[1]["device"]) == ("bz-a3-1", 0)
     assert client.requests[1]["observe_timeout"] == client.requests[1]["timeout"]
+
+
+def test_terminal_retained_failure_dispatches_new_fallback_attempt(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+
+    class RetainedThenTerminalFailure(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-1:retained"}
+            if len(self.requests) == 2:
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "handle": "bz-a3-1:retained"}
+            return {"status": "ok", "passed": True}
+
+    client = RetainedThenTerminalFailure()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "unique")
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    first = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace)}, 240)
+    result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                         "retained_terminal_request": first["retained_terminal_request"]}, 240)
+    assert result["status"] == "ok" and result["terminal_attempt"] == 2
+    assert [request["cell"] for request in client.requests] == [
+        "cannbot-attempt-1", "cannbot-attempt-1", "cannbot-attempt-2"]
+    assert (client.requests[2]["profile"], client.requests[2]["device"]) == ("bz-a3-2", 2)
+    assert "observe_timeout" not in client.requests[2]
 
 
 def test_terminal_infrastructure_result_uses_fallback(tmp_path: Path):

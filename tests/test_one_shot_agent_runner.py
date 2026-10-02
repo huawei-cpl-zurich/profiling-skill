@@ -313,6 +313,26 @@ def test_billed_controller_infrastructure_overrides_agent_timeout(monkeypatch, t
     assert result["agent_timeout"] == "agent exceeded turn"
 
 
+def test_billed_submission_overrides_agent_timeout(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        outside = tmp_path / "outside.py"; outside.write_text("host data\n")
+        (workspace / "candidate.py").symlink_to(outside)
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 2
+        raise subprocess.TimeoutExpired(argv, timeout, stderr="agent exceeded turn")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "submission_error"
+    assert result["controller_usage"]["billed"] == 1
+    assert result["controller_result"]["status"] == "submission_error"
+    assert result["agent_timeout"] == "agent exceeded turn"
+
+
 def test_process_group_timeout_kills_descendants(tmp_path: Path):
     child = tmp_path / "child.pid"
     with pytest.raises(subprocess.TimeoutExpired):

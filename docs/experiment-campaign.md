@@ -83,6 +83,16 @@ model, treatment, skill, timeout, asset, or placement drift before launching
 an agent, and completed countable cells are never relaunched. The legacy
 `run-all` action remains available for fixed non-adaptive tests.
 
+If a local terminal invocation times out without returning a durable handle,
+the cell pauses for manual reconciliation and must not be replayed. Recover it
+with `--action reconcile-terminal`, the original `--cell-id`,
+`--agent-attempt`, and `--terminal-attempt`, plus exactly one of
+`--terminal-handle HANDLE` or `--terminal-result /absolute/result.json`.
+Handle recovery locates the exact durable BZ dispatch receipt and observes it;
+it fails closed when no unique receipt owns the handle. A supplied result must
+carry the campaign, request, cell, attempt, job-handle, and frozen-candidate
+identities recorded by the uncertain receipt.
+
 ## Freeze and configure
 
 Use a new output directory for every freeze and campaign. The examples use

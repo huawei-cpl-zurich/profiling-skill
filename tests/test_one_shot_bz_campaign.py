@@ -84,6 +84,13 @@ class Client:
             return {"status": "compile_error", "diagnostics": "full compiler traceback"}
         return {"status": "ok", "passed": True, "artifacts": {"candidate_sha256": "remote"}}
 
+    def resume(self, requests, handle, observe_timeout):
+        matches = [request for request in requests
+                   if handle.startswith(request["profile"] + ":")]
+        assert len(matches) == 1
+        return self.run({**matches[0], "retained_handle": handle,
+                         "observe_timeout": observe_timeout})
+
 
 def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
@@ -689,12 +696,14 @@ def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path
         (snapshot / name).write_text("{}\n")
 
     class ResumeOnlyClient(Client):
-        def run(self, request):
+        def resume(self, requests, handle, observe_timeout):
+            assert len(requests) == 2
+            request = requests[0]
             self.requests.append(request)
-            assert request["retained_handle"] == "bz-a3-1:reconciled"
-            assert request["observe_timeout"] == 30
+            assert handle == "bz-a3-1:reconciled"
+            assert observe_timeout == 30
             return {"status": "ok", "passed": True,
-                    "handle": request["retained_handle"]}
+                    "handle": handle, "cell": request["cell"]}
 
     client = ResumeOnlyClient()
     hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
@@ -705,6 +714,56 @@ def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path
     assert result["status"] == "ok"
     assert result["terminal_attempt"] == 1
     assert len(client.requests) == 1
+
+
+def test_reconcile_terminal_cli_updates_uncertain_receipt(
+    tmp_path: Path, monkeypatch, capsys,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+    cell = "wave-1-cannbot"
+    workspace = root / "cells" / cell / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (workspace / name).write_text("{}\n")
+
+    class LocalTimeout:
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    campaign = module.DiagnosticCampaign(
+        manifest, root, module.CommandLauncher(["false"]), LocalTimeout(),
+        campaign_id="campaign", campaign_identity={"config_sha256": "fixed"},
+    )
+    request = {
+        "protocol_version": 1, "operation": "terminal_check", "cell_id": cell,
+        "workspace": str(workspace), "benchmark": "streaming-matmul-add",
+        "cases": list(range(7)), "terminal_attempt": 1,
+        "candidate_sha256": {name: module.diagnostic_campaign.sha256_file(workspace / name)
+                             for name in ("candidate.py", "candidate.manifest.json")},
+    }
+    campaign._durable_terminal_check(request, 30)
+    (root / "ledger.json").write_text(json.dumps({"campaign_id": "campaign"}))
+    paths = {}
+    for name, value in (("config", config), ("manifest", manifest),
+                        ("placements", placements)):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(value))
+        paths[name] = path
+    monkeypatch.setattr(sys, "argv", [
+        "one_shot_bz_campaign.py", "--action", "reconcile-terminal",
+        "--config", str(paths["config"]), "--manifest", str(paths["manifest"]),
+        "--placements", str(paths["placements"]), "--run-root", str(root),
+        "--cell-id", cell, "--agent-attempt", "1", "--terminal-attempt", "1",
+        "--terminal-handle", "bz-a3-1:recovered",
+    ])
+
+    assert module.main() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "reconciled"
+    assert output["receipt"]["state"] == "started"
+    assert output["receipt"]["result"]["handle"] == "bz-a3-1:recovered"
 
 
 def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):

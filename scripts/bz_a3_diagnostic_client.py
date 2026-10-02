@@ -194,6 +194,33 @@ class BzA3DiagnosticClient:
     def __init__(self, transport: AdapterTransport, state_dir: Path, remote_root: str = "/home/m00933363/.profiling-skill/diagnostic"):
         self.transport, self.state_dir, self.remote_root = transport, state_dir, remote_root.rstrip("/")
 
+    def resume(self, requests: list[dict], handle: str, observe_timeout: int) -> dict:
+        """Observe the one candidate request whose durable receipt owns handle."""
+        matches = []
+        for request in requests:
+            try:
+                local = (self.state_dir / _safe_id(request.get("campaign"), "campaign")
+                         / _safe_id(request.get("wave"), "wave")
+                         / _safe_id(request.get("cell"), "cell"))
+                records = []
+                dispatch = local / "dispatch.json"
+                completed = local / "completed.json"
+                if dispatch.is_file():
+                    records.append(json.loads(dispatch.read_text()))
+                if completed.is_file():
+                    records.append(json.loads(completed.read_text()).get("result", {}))
+                if any(record.get("handle") == handle for record in records
+                       if isinstance(record, dict)):
+                    matches.append(request)
+            except (OSError, json.JSONDecodeError, DiagnosticError):
+                continue
+        if len(matches) != 1:
+            return {"status": "infrastructure_error", "failure_type": "request_error",
+                    "diagnostics": "retained handle has no unique durable BZ receipt",
+                    "handle": handle}
+        return self.run({**matches[0], "retained_handle": handle,
+                         "observe_timeout": observe_timeout})
+
     def run(self, request: object) -> dict:
         if not isinstance(request, dict):
             return {"status": "infrastructure_error", "failure_type": "request_error",
@@ -264,7 +291,10 @@ class BzA3DiagnosticClient:
             if completed_receipt.is_file():
                 completed_record = json.loads(completed_receipt.read_text())
                 if (completed_record.get("request_sha256") != request_sha
-                        or not isinstance(completed_record.get("result"), dict)):
+                        or not isinstance(completed_record.get("result"), dict)
+                        or (retained_handle is not None
+                            and completed_record["result"].get("handle")
+                            != retained_handle)):
                     raise DiagnosticError("request_error", "completed receipt does not match request")
                 return completed_record["result"]
             had_dispatch_receipt = dispatch_receipt.is_file()
@@ -274,13 +304,20 @@ class BzA3DiagnosticClient:
                 except (OSError, json.JSONDecodeError) as exc:
                     raise DiagnosticError("request_error", f"invalid dispatch receipt: {exc}") from exc
                 if (not isinstance(prior, dict) or prior.get("request_sha256") != request_sha
-                        or not isinstance(prior.get("handle"), str)):
+                        or not isinstance(prior.get("handle"), str)
+                        or (retained_handle is not None
+                            and prior["handle"] != retained_handle)):
                     raise DiagnosticError("request_error", "dispatch receipt does not match request")
                 handle = prior["handle"]
                 completed = self.transport.observe(profile, handle, _remaining(deadline, handle))
                 observed_output = completed.stdout + completed.stderr
                 if (completed.returncode
                         and "common-digest-mismatch" in observed_output.lower()):
+                    if retained_handle is not None:
+                        return {"status": "infrastructure_error",
+                                "failure_type": "digest_mismatch",
+                                "diagnostics": _bounded(observed_output),
+                                "handle": handle, **identity}
                     common_receipt.unlink(missing_ok=True)
                     dispatch_receipt.unlink(missing_ok=True)
                     handle = None

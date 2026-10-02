@@ -251,13 +251,21 @@ class BzTerminalHook:
         client_request["candidate_sha256"] = copy.deepcopy(snapshot_hashes)
         manual_handle = request.get("manual_retained_handle")
         if manual_handle is not None:
-            if (not isinstance(manual_handle, str)
-                    or not manual_handle.startswith(placement["profile"] + ":")):
-                raise DiagnosticError("manual retained handle does not match placement")
-            client_request.update({"retained_handle": manual_handle,
-                                   "observe_timeout": min(
-                                       timeout_seconds, client_request["timeout"])})
-            return self._map_result(self.client.run(client_request), terminal_attempt)
+            if not isinstance(manual_handle, str) or not manual_handle:
+                raise DiagnosticError("manual retained handle must be non-empty")
+            candidates = [client_request]
+            fallback_attempt = terminal_attempt + 1
+            fallback = self.placements[treatment][min(fallback_attempt - 1, 1)]
+            candidates.append({**client_request, **fallback,
+                               "cell": f"{treatment}-attempt-{fallback_attempt}"})
+            result = self.client.resume(
+                candidates, manual_handle,
+                min(timeout_seconds, client_request["timeout"]))
+            result_cell = str(result.get("cell", ""))
+            result_suffix = result_cell.removeprefix(f"{treatment}-attempt-")
+            result_attempt = (int(result_suffix) if result_suffix.isdigit()
+                              else terminal_attempt)
+            return self._map_result(result, result_attempt)
         # A retained observer interruption is not permission to dispatch on a
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
@@ -463,12 +471,38 @@ def acknowledge_curation(config: dict, manifest: dict, placements: dict,
     return campaign.acknowledge_curation(receipt)
 
 
+def reconcile_terminal(config: dict, manifest: dict, placements: dict,
+                       root: Path, cell_id: str, agent_attempt: int,
+                       terminal_attempt: int, *, handle: str | None = None,
+                       result: dict | None = None) -> dict:
+    """Apply an explicit operator reconciliation to one uncertain receipt."""
+    identity = _adaptive_inputs(config, manifest, placements)
+    ledger = load_json(root / "ledger.json")
+    campaign_id = ledger.get("campaign_id")
+    if not isinstance(campaign_id, str) or not campaign_id:
+        raise DiagnosticError("campaign ledger has no valid campaign id")
+    campaign = DiagnosticCampaign(
+        manifest, root, CommandLauncher(["false"]), CommandTerminalHook(["false"]),
+        campaign_id=campaign_id, campaign_identity={"config_sha256": identity},
+    )
+    receipt = campaign.reconcile_terminal(
+        cell_id, agent_attempt, terminal_attempt, handle=handle, result=result)
+    return {"status": "reconciled", "receipt": receipt}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation"),
+    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation",
+                                              "reconcile-terminal"),
                         default="run-all")
     parser.add_argument("--wave", type=int)
     parser.add_argument("--curation-receipt", type=Path)
+    parser.add_argument("--cell-id")
+    parser.add_argument("--agent-attempt", type=int)
+    parser.add_argument("--terminal-attempt", type=int)
+    reconciliation = parser.add_mutually_exclusive_group()
+    reconciliation.add_argument("--terminal-handle")
+    reconciliation.add_argument("--terminal-result", type=Path)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--placements", type=Path, required=True)
@@ -485,6 +519,16 @@ def main() -> int:
             parser.error("--curation-receipt is required")
         result = acknowledge_curation(config, manifest, placements, args.run_root,
                                       load_json(args.curation_receipt))
+    elif args.action == "reconcile-terminal":
+        if (not args.cell_id or args.agent_attempt is None
+                or args.terminal_attempt is None
+                or (args.terminal_handle is None) == (args.terminal_result is None)):
+            parser.error("cell, attempts, and exactly one terminal handle/result are required")
+        result = reconcile_terminal(
+            config, manifest, placements, args.run_root, args.cell_id,
+            args.agent_attempt, args.terminal_attempt,
+            handle=args.terminal_handle,
+            result=(load_json(args.terminal_result) if args.terminal_result else None))
     else:
         if not args.agent_command_json or not args.adapter_command_json or args.state_dir is None:
             parser.error("agent, adapter, and state arguments are required to run waves")
@@ -503,7 +547,9 @@ def main() -> int:
             result = run(config, manifest, placements, args.run_root,
                          CommandLauncher(commands[0]), client)
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["status"] in {"awaiting_curation", "ready_for_next", "complete"} else 2
+    return 0 if result["status"] in {
+        "awaiting_curation", "ready_for_next", "complete", "reconciled",
+    } else 2
 
 
 if __name__ == "__main__":

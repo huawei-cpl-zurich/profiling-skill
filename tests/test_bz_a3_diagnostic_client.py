@@ -153,6 +153,65 @@ def test_retained_handle_observes_without_upload_or_execute(tmp_path: Path):
     ]
 
 
+@pytest.mark.parametrize("receipt", ["dispatch", "completed"])
+def test_retained_handle_rejects_conflicting_durable_receipt(
+    tmp_path: Path, receipt: str,
+):
+    module = load()
+    transport = FakeTransport(module, "observer" if receipt == "dispatch" else "ok")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    first = client.run(value)
+    assert first["handle"] == (
+        "bz-a3-1:kept" if receipt == "dispatch" else "bz-a3-1:job-1")
+    executions = len(transport.executions)
+
+    result = client.run({**value, "retained_handle": "bz-a3-1:other",
+                         "observe_timeout": 17})
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert len(transport.executions) == executions
+    assert transport.observations == []
+
+
+def test_retained_digest_mismatch_fails_without_redispatch(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer_then_stale")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    first = client.run(value)
+    assert first["handle"] == "bz-a3-1:kept"
+
+    result = client.run({**value, "retained_handle": first["handle"],
+                         "observe_timeout": 17})
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "digest_mismatch"
+    assert result["handle"] == first["handle"]
+    assert len(transport.executions) == 1
+
+
+def test_resume_finds_exact_fallback_dispatch_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    primary = request(tmp_path)
+    primary["cell"] = "arm-attempt-1"
+    fallback = {**primary, "cell": "arm-attempt-2", "profile": "bz-a3-2",
+                "device": 2}
+    first = client.run(fallback)
+    assert first["handle"] == "bz-a3-2:kept"
+    transport.mode = "ok"
+
+    result = client.resume([primary, fallback], first["handle"], 17)
+
+    assert result["status"] == "ok"
+    assert result["cell"] == "arm-attempt-2"
+    assert len(transport.executions) == 1
+    assert transport.observations[-1][1] == first["handle"]
+
+
 def test_completed_result_is_durable_before_dispatch_cleanup(tmp_path: Path, monkeypatch):
     module = load()
     transport = FakeTransport(module)

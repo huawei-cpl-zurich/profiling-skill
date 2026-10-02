@@ -326,13 +326,15 @@ class DiagnosticCampaign:
             )
             ledger["failure"] = {"type": type(error).__name__, "message": str(error)}
             pending = set(ledger["reschedule"])
-            for wave_record in ledger["waves"]:
+            waves_by_number = {record["wave"]: record for record in ledger["waves"]}
+            for wave in range(1, self.waves + 1):
+                wave_record = waves_by_number.get(wave, {"cells": []})
                 by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
                 for treatment in TREATMENTS:
                     cell = by_treatment.get(treatment)
                     if cell is None or (cell["category"] == "infrastructure"
                                         and cell.get("retry", {}).get("category") != "counted"):
-                        pending.add(f"wave-{wave_record['wave']}-{treatment}")
+                        pending.add(f"wave-{wave}-{treatment}")
             ledger["reschedule"] = sorted(pending)
             _atomic_json(self.ledger_path, ledger)
             raise

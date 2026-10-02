@@ -601,6 +601,12 @@ def test_keyboard_interrupt_checkpoints_terminal_state_and_sibling_evidence(tmp_
     completed = {cell["treatment"] for cell in ledger["waves"][0]["cells"]}
     assert "cannbot" in completed
     assert "wave-1-project-cannbot" in ledger["reschedule"]
+    assert {
+        f"wave-{wave}-{treatment}"
+        for wave in range(2, 5)
+        for treatment in diagnostic.TREATMENTS
+    }.issubset(ledger["reschedule"])
+    assert "wave-1-cannbot" not in ledger["reschedule"]
 
 
 def test_reused_output_root_is_rejected_without_changing_ledger(tmp_path: Path):

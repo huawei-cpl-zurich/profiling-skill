@@ -65,6 +65,8 @@ def identity(job: dict) -> dict:
     result = {key: job[key] for key in ("benchmark", "action", "device")}
     if job["action"] == "check":
         result.update(cases=job["cases"], scope=job["scope"])
+    elif job["action"] == "profile":
+        result.update(cases=job["cases"], repeats=job["repeats"])
     else:
         result["case"] = job["case"]
     if job["action"] == "measure":
@@ -74,11 +76,13 @@ def identity(job: dict) -> dict:
     return result
 
 
-def prepare(job: dict, root: Path, runner: Path, profiler: Path) -> tuple[Path, str]:
+def prepare(job: dict, root: Path, runner: Path, profiler: Path,
+            batch_profiler: Path | None = None) -> tuple[Path, str]:
     source = Path(job["candidate"])
     baseline = Path(job["baseline"])
     cases = Path(job["case_spec"])
-    files = [source, baseline, cases, runner] + ([profiler] if job["action"] == "profile" else [])
+    profile_files = [profiler, batch_profiler] if job["action"] == "profile" else []
+    files = [source, baseline, cases, runner] + [path for path in profile_files if path is not None]
     if any(not path.is_file() for path in files):
         raise ClientError("a required candidate or frozen benchmark file is missing")
     request = json.loads(json.dumps(job))
@@ -97,14 +101,31 @@ def prepare(job: dict, root: Path, runner: Path, profiler: Path) -> tuple[Path, 
             shutil.copyfile(path, temporary / name)
         if job["action"] == "profile":
             shutil.copyfile(profiler, temporary / "profile_a3.py")
+            if batch_profiler is not None:
+                shutil.copyfile(batch_profiler, temporary / "batch_profile_a3.py")
         atomic_json(temporary / "job.json", request)
         os.replace(temporary, stage)
     return stage, key
 
 
+def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
+    """Validate and attach the compact evidence emitted by the batch driver."""
+    evidence = json.loads(evidence_path.read_text())
+    if evidence.get("status") != "success":
+        raise ClientError(f"msprof op did not produce valid evidence: {evidence}")
+    # ``cases`` is the immutable input identity on the internal wire;
+    # ``profile_cases`` contains the rows exposed as ``cases`` by experimentctl.
+    if result.get("profile_cases") != evidence.get("cases"):
+        raise ClientError("remote response does not match compact profiling evidence")
+    result["profile"] = evidence
+
+
 def execute(job: dict, args: argparse.Namespace) -> dict:
     here = Path(__file__).resolve().parent
-    stage, key = prepare(job, args.state_dir, here / "a3_benchmark_runner.py", here / "profile_a3.py")
+    stage, key = prepare(
+        job, args.state_dir, here / "a3_benchmark_runner.py", here / "profile_a3.py",
+        here / "batch_profile_a3.py",
+    )
     state = stage.parent
     upload = state / "upload.json"
     run_receipt = state / "run.json"
@@ -113,7 +134,7 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
     result_dir = state / "result"
     includes = ["candidate.py", "baseline.py", "baseline.json", "runner.py", "job.json"]
     if job["action"] == "profile":
-        includes.append("profile_a3.py")
+        includes.extend(("profile_a3.py", "batch_profile_a3.py"))
     stage_cmd = args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-stage-{key[:16]}",
                                 "stage", "--source-root", str(stage), "--receipt", str(upload)]
     for name in includes:
@@ -125,10 +146,13 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
     results = ["response.json"]
     if job["action"] == "profile":
         kernel = job["profiling"]["kernel_name"]
-        command = (f"python3 profile_a3.py --output \"$A3_BUNDLE_OUTPUT_DIR/profile\" "
-                   f"--kernel-name {shlex.quote(kernel)} -- python3 runner.py --job job.json "
-                   f"--output \"$A3_BUNDLE_OUTPUT_DIR/response.json\" || "
-                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/response.json\"")
+        command = (f"python3 batch_profile_a3.py --job job.json --runner runner.py "
+                   f"--profiler profile_a3.py --output \"$A3_BUNDLE_OUTPUT_DIR/profile\" "
+                   f"--response \"$A3_BUNDLE_OUTPUT_DIR/response.json\" "
+                   f"--kernel-name {shlex.quote(kernel)} || {{ "
+                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/response.json\" && "
+                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/profile/evidence.json\" && "
+                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/profile/msprof.log\"; }}")
         results.extend(("profile/evidence.json", "profile/msprof.log"))
     run_cmd = args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-run-{key[:16]}",
                               "run-bundle", "--receipt", str(upload), "--run-receipt", str(run_receipt),
@@ -162,11 +186,7 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
                            "profile": str(result_dir / "profile/evidence.json") if job["action"] == "profile" else None,
                            "msprof_log": str(result_dir / "profile/msprof.log") if job["action"] == "profile" else None}
     if job["action"] == "profile" and result["status"] == "ok":
-        evidence = json.loads((result_dir / "profile/evidence.json").read_text())
-        if evidence.get("status") != "success":
-            raise ClientError(f"msprof op did not produce valid evidence: {evidence}")
-        result["profile"] = evidence
-        result["latency_us"] = evidence["kernels"][0]["duration_us"]["median"]
+        attach_profile_evidence(result, result_dir / "profile/evidence.json")
     return result
 
 

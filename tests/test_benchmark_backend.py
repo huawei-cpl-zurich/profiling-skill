@@ -35,17 +35,20 @@ mode = os.environ.get("FAKE_MODE", "ok")
 print("client diagnostic", file=sys.stderr)
 identity = {k: job[k] for k in ("benchmark", "action", "device")}
 if job["action"] == "check": identity.update(cases=job["cases"], scope=job["scope"])
+elif job["action"] == "profile": identity.update(cases=job["cases"], repeats=job["repeats"])
 else: identity["case"] = job["case"]
 if job["action"] == "measure": identity["phase"] = job["phase"]
 if job["action"] == "profile":
     identity["round"] = job["round"]
     identity["kernel_name"] = job["profiling"]["kernel_name"]
-if mode == "wrong_identity": identity["case"] = 49
+if mode == "wrong_identity": identity["cases"] = list(reversed(identity["cases"]))
 if mode == "wrong_check": identity["scope"] = "development"
 if mode == "wrong_round": identity["round"] = 2
 if mode == "echo":
     print(json.dumps({"status": "ok", "diagnostics": "", "job": job,
                       "latency_us": 12.5, "passed": True,
+                      "profile_cases": [{"case": case, "samples_us": [12.5] * job.get("repeats", 1),
+                                         "median_us": 12.5} for case in job.get("cases", [])],
                       "handle": "gz-a3:job-1", **identity}))
 elif mode in {"compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
     print(json.dumps({"status": mode, "diagnostics": mode + " details",
@@ -66,11 +69,10 @@ def request(benchmark="gdn", action="profile", **extra):
     default = {"protocol_version": 1, "action": action, "benchmark": benchmark,
                "device": spec["device"]}
     if action in {"profile", "measure"}:
-        default.update(case=spec["development_cases"][0], iteration=0)
         if action == "profile":
-            default["round"] = 1
+            default.update(cases=spec["development_cases"], repeats=3, round=1)
         else:
-            default["phase"] = "sample"
+            default.update(case=spec["development_cases"][0], iteration=0, phase="sample")
     else:
         default.update(cases=spec["all_cases"], scope="full", round=3)
     default.update(extra)
@@ -99,7 +101,7 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["action"] == "calibrate"
     assert result["device"] == 3
     assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
-    assert result["job"]["case"] == 7
+    assert result["job"]["cases"] == [7]
     assert result["job"]["calibration_phase"] == "before"
     assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
@@ -210,7 +212,8 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
     assert job["profile"] == "gz-a3"
     assert job["runtime"] == "py311-torch"
     assert (job["device"], job["logical_device"]) == (0, 0)
-    assert job["case"] == 40
+    assert job["cases"] == [40, 49, 47, 46, 45]
+    assert job["repeats"] == 3
     assert job["round"] == 1
     assert job["reference_revision"] == "a42c54b916189500e2f7cb47640980f230f2eb65"
     assert job["reference"] == {
@@ -221,7 +224,7 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
     assert job["tolerances"] == {"rtol": 1e-2, "atol": 1e-2}
     assert job["profiling"] == {
         "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
-        "tool": "msprof op", "captures": 1, "aic_metrics": "BasicInfo", "warm_up": 3,
+        "tool": "msprof op", "captures": 15, "aic_metrics": "BasicInfo", "warm_up": 3,
         "launch_count": 1, "replay_mode": "kernel", "kernel_name": "candidate_kernel",
         "driver_arguments": ["--kernel-name", "candidate_kernel"],
     }
@@ -247,10 +250,10 @@ def test_environment_failure_is_separate(tmp_path: Path):
 def test_job_result_identity_mismatch_preserves_evidence(tmp_path: Path):
     result = json.loads(run_backend(tmp_path, request(), mode="wrong_identity").stdout)
     assert result["status"] == "infrastructure_error"
-    assert "identity mismatch for case" in result["diagnostics"]
+    assert "identity mismatch for cases" in result["diagnostics"]
     assert result["handle"] == "gz-a3:job-3"
     assert result["evidence"]["diagnostics"] == "wrong case evidence\nclient diagnostic"
-    assert result["evidence"]["case"] == 49
+    assert result["evidence"]["cases"] == [45, 46, 47, 49, 40]
 
 
 def test_check_result_identity_includes_cases_and_scope(tmp_path: Path):
@@ -286,7 +289,7 @@ def test_measure_phase_and_profile_round_are_validated(tmp_path: Path, payload: 
 
 @pytest.mark.parametrize("change,message", [
     ({"device": 4}, "physical device 0-3"),
-    ({"case": 0}, "invalid profile case"),
+    ({"cases": [0]}, "profile cases"),
     ({"benchmark": "bsa"}, "does not match"),
 ])
 def test_adapter_rejects_controller_drift(tmp_path: Path, change: dict, message: str):

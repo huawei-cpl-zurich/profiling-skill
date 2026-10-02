@@ -41,6 +41,13 @@ latency = (case + 1) * 10 + iteration
 response = {"status":"ok", "device":request["device"],
             "handle":f"gz-a3:{request['action']}-{case}-{iteration}",
             "latency_us":latency, "passed":True}
+if request["action"] == "profile":
+    response["handle"] = "gz-a3:profile-batch"
+    response["cases"] = [{"case": value,
+                          "samples_us": [(value + 1) * 10 + index
+                                         for index in range(request["repeats"])],
+                          "median_us": (value + 1) * 10 + (request["repeats"] - 1) / 2}
+                         for value in request["cases"]]
 if mode in {"invalid-status", "nonzero-ok", "wrong-device"}:
     response["handle"] = "gz-a3:protocol"
     response["diagnostics"] = "backend diagnostic"
@@ -52,15 +59,15 @@ if request["action"] == "check" and mode.startswith("passed-"):
     if value == "missing": del response["passed"]
     elif value == "false": response["passed"] = False
     else: response["passed"] = value
-if iteration == 1 and mode.startswith("latency-"):
+if request["action"] == "profile" and mode.startswith("latency-"):
     response["diagnostics"] = "msprof output had no valid duration"
     value = mode.removeprefix("latency-")
     if value == "missing":
-        del response["latency_us"]
+        del response["cases"][0]["samples_us"]
     elif value == "nan":
-        response["latency_us"] = float("nan")
+        response["cases"][0]["samples_us"][1] = float("nan")
     else:
-        response["latency_us"] = int(value)
+        response["cases"][0]["samples_us"][1] = int(value)
 print(json.dumps(response))
 if mode == "nonzero-ok": raise SystemExit(6)
 '''
@@ -163,8 +170,12 @@ def test_profile_medians_and_geometric_mean(tmp_path: Path):
     assert process.returncode == 0
     assert [row["median_us"] for row in result["cases"]] == [51, 31]
     assert round(result["geomean_us"], 6) == round((51 * 31) ** 0.5, 6)
-    assert len(result["handles"]) == 6
-    assert all(call["round"] == 3 for call in requests(log))
+    assert result["handles"] == ["gz-a3:profile-batch"]
+    assert requests(log) == [{
+        "protocol_version": 1, "action": "profile", "cell": "gdn-skill",
+        "benchmark": "gdn", "device": 1, "cases": [4, 2], "repeats": 3,
+        "round": 3,
+    }]
 
 
 def test_compile_failure_counts_and_preserves_diagnostics(tmp_path: Path):
@@ -213,7 +224,7 @@ def test_invalid_latency_preserves_collected_handles_and_diagnostics(tmp_path: P
     process, result, _ = run(tmp_path, "profile", "--repeats", "3", mode=mode)
     assert process.returncode == 3
     assert result["status"] == "infrastructure_error"
-    assert result["handles"] == ["gz-a3:profile-4-0", "gz-a3:profile-4-1"]
+    assert result["handles"] == ["gz-a3:profile-batch"]
     assert "backend returned invalid latency" in result["diagnostics"]
     assert "msprof output had no valid duration" in result["diagnostics"]
 

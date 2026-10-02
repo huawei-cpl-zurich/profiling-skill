@@ -757,10 +757,13 @@ def test_campaign_restart_resumes_newer_terminal_attempt_in_same_workspace(tmp_p
 
 def test_campaign_retries_initial_local_terminal_timeout_as_infrastructure(tmp_path: Path):
     class InitialTimeoutTerminal(RecordingTerminal):
+        timed_out = False
+
         def check(self, request, timeout_seconds):
             self.requests.append((request, timeout_seconds))
             if (request["cell_id"] == "wave-1-cannbot"
-                    and request["terminal_attempt"] == 1):
+                    and not self.timed_out):
+                self.timed_out = True
                 return {"status": "transport_or_observer_error",
                         "invocation_timeout": True, "stdout": "retained output"}
             return {"status": "ok", "passed": True}
@@ -779,7 +782,10 @@ def test_campaign_retries_initial_local_terminal_timeout_as_infrastructure(tmp_p
     assert cannbot["category"] == "infrastructure"
     assert cannbot["terminal"]["stdout"] == "retained output"
     assert cannbot["retry"]["outcome"] == "success"
-    assert cannbot["retry"]["attempt"] == 2
+    assert cannbot["retry"]["attempt"] == 1
+    cannbot_requests = [request for request, _ in terminal.requests
+                        if request["cell_id"] == "wave-1-cannbot"]
+    assert [request["terminal_attempt"] for request in cannbot_requests] == [1, 1]
 
 
 def test_interruption_keeps_counted_retry_complete(tmp_path: Path):

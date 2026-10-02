@@ -487,10 +487,14 @@ class DiagnosticCampaign:
             result = copy.deepcopy(resume(receipt_request, prior_handle, timeout_seconds))
         else:
             result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
-        retriable_observation = bool(result.get("handle")) and (
-            result.get("status") == "transport_or_observer_error"
-            or (result.get("status") == "infrastructure_error"
-                and result.get("failure_type") in {"observer_error", "transport_error"})
+        retriable_observation = (
+            (result.get("status") == "transport_or_observer_error"
+             and result.get("invocation_timeout") is True)
+            or (bool(result.get("handle")) and (
+                result.get("status") == "transport_or_observer_error"
+                or (result.get("status") == "infrastructure_error"
+                    and result.get("failure_type") in {
+                        "observer_error", "transport_error"})))
         )
         if not retriable_observation:
             _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
@@ -729,10 +733,14 @@ class DiagnosticCampaign:
                     and isinstance(record.get("request"), dict)
                     and isinstance(record.get("timeout_seconds"), int)
                     and isinstance(record.get("result"), dict)
-                    and bool(record["result"].get("handle"))
-                    and (isinstance(
-                        record["result"].get("retained_terminal_request"), dict)
-                        or callable(getattr(self.terminal, "resume", None))))
+                    and ((record["result"].get("status")
+                          == "transport_or_observer_error"
+                          and record["result"].get("invocation_timeout") is True)
+                         or (bool(record["result"].get("handle"))
+                             and (isinstance(record["result"].get(
+                                 "retained_terminal_request"), dict)
+                                  or callable(getattr(
+                                      self.terminal, "resume", None))))))
                 if ((record.get("state") == "completed"
                      and isinstance(record.get("result"), dict)) or retriable_started):
                     durable_attempt = int(path.parent.name.removeprefix("attempt-"))
@@ -937,7 +945,21 @@ class DiagnosticCampaign:
             remaining = self.wave_timeout - (time.monotonic() - wave_started)
             retry = None
             if remaining > 0:
-                retry = self._guarded_cell(wave, result["treatment"], 2, remaining)
+                retry_attempt = 2
+                attempt_dir = (self.root / "cells" / result["cell_id"]
+                               / f"attempt-{result['attempt']}")
+                for receipt_path in attempt_dir.glob("terminal-result-*.json"):
+                    try:
+                        receipt = json.loads(receipt_path.read_text())
+                    except (OSError, json.JSONDecodeError):
+                        continue
+                    if (receipt.get("state") == "started"
+                            and isinstance(receipt.get("request"), dict)
+                            and isinstance(receipt.get("result"), dict)):
+                        retry_attempt = result["attempt"]
+                        break
+                retry = self._guarded_cell(
+                    wave, result["treatment"], retry_attempt, remaining)
                 result["retry"] = retry
                 _atomic_json(self.ledger_path, ledger)
             if retry is None or retry["category"] != "counted":

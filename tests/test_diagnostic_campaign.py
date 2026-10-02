@@ -722,6 +722,60 @@ def test_outcome_taxonomy(tmp_path, agent, terminal, files, expected, category):
     assert diagnostic.classify(agent, terminal, tmp_path) == (expected, category)
 
 
+def test_terminal_local_check_timeout_is_counted_candidate_timeout(
+    tmp_path: Path, monkeypatch,
+):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["terminal"], 5, output=b"compile output")
+
+    monkeypatch.setattr(hook._processes, "run", timeout)
+    terminal = hook.check({"operation": "terminal_check"}, 5)
+
+    assert terminal["status"] == "timeout"
+    assert terminal["invocation_timeout"] is True
+    assert terminal["stdout"] == "compile output"
+    (tmp_path / "candidate.py").write_text("candidate\n")
+    (tmp_path / "candidate.manifest.json").write_text("{}\n")
+    agent = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+    assert diagnostic.classify(agent, terminal, tmp_path) == (
+        "candidate_timeout", "counted")
+
+
+def test_terminal_local_resume_timeout_is_observer_infrastructure(monkeypatch):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["terminal"], 5)
+
+    monkeypatch.setattr(hook._processes, "run", timeout)
+    terminal = hook.resume(
+        {"operation": "terminal_check"}, "bz-a3-1:retained", 5)
+
+    assert terminal["status"] == "transport_or_observer_error"
+    assert terminal["invocation_timeout"] is True
+    assert terminal["handle"] == "bz-a3-1:retained"
+
+
+def test_terminal_resume_preserves_parsed_remote_workload_timeout(monkeypatch):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def completed(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            ["terminal"], 0, json.dumps({"status": "timeout"}), "")
+
+    monkeypatch.setattr(hook._processes, "run", completed)
+    terminal = hook.resume(
+        {"operation": "terminal_check"}, "bz-a3-1:retained", 5)
+
+    assert terminal["status"] == "timeout"
+    assert "invocation_timeout" not in terminal
+    assert "handle" not in terminal
+
+
 def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
     config = manifest(tmp_path)
     Path(config["prompt"]).write_text("changed")

@@ -175,7 +175,8 @@ def _invoke(command: list[str], request: dict, timeout_seconds: int,
                 return value.decode(errors="replace")
             return value or ""
 
-        return {"status": "timeout", "stdout": timeout_text(error.stdout),
+        return {"status": "timeout", "invocation_timeout": True,
+                "stdout": timeout_text(error.stdout),
                 "stderr": timeout_text(error.stderr),
                 "elapsed_seconds": time.time() - started}
     except OSError as error:
@@ -227,6 +228,20 @@ class CommandTerminalHook:
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
         return _invoke(self.command, request, timeout_seconds, self._processes)
+
+    def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
+        """Observe a retained job, distinguishing local and workload timeouts."""
+        result = _invoke(
+            self.command,
+            {**request, "operation": "terminal_observe", "handle": handle},
+            timeout_seconds,
+            self._processes,
+        )
+        if result.get("status") == "timeout" and result.get("invocation_timeout") is True:
+            return {**result, "status": "transport_or_observer_error", "handle": handle}
+        if result.get("status") in INFRASTRUCTURE:
+            return {**result, "handle": handle}
+        return result
 
     def cancel(self) -> None:
         self._processes.cancel()
@@ -422,6 +437,7 @@ class DiagnosticCampaign:
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         receipt_request = copy.deepcopy(request)
         receipt_timeout = timeout_seconds
+        prior_result = None
         terminal_attempt = request.get("terminal_attempt", workspace.parent.name)
         receipt = workspace.parent / f"terminal-result-{terminal_attempt}-{digest[:16]}.json"
         if receipt.is_file():
@@ -462,7 +478,13 @@ class DiagnosticCampaign:
                                    "request_sha256": digest,
                                    "request": receipt_request,
                                    "timeout_seconds": timeout_seconds})
-        result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
+        resume = getattr(self.terminal, "resume", None)
+        prior_handle = (prior_result.get("handle")
+                        if isinstance(prior_result, dict) else None)
+        if callable(resume) and isinstance(prior_handle, str) and prior_handle:
+            result = copy.deepcopy(resume(receipt_request, prior_handle, timeout_seconds))
+        else:
+            result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
         retriable_observation = (
             result.get("status") == "infrastructure_error"
             and result.get("failure_type") in {"observer_error", "transport_error"}

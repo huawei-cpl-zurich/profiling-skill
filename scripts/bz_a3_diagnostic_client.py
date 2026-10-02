@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
 import subprocess
 import tarfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -68,17 +70,23 @@ class AdapterTransport:
 
     def execute(self, profile: str, device: int, operation: str, script: str,
                 timeout: int) -> tuple[CommandResult, str | None]:
+        deadline = time.monotonic() + timeout
         argv = self.adapter + ["--profile", profile, "--operation", operation, "run",
                                "--native", "--runtime", "py311-torch", "--device", str(device),
                                "--timeout", str(timeout), "--", "bash", "-c", script]
-        result = self.invoke(argv, timeout + 30)
+        result = self.invoke(argv, timeout)
         handle = _handle(result.stdout + result.stderr, profile)
         if handle and _nonterminal(result.stdout + result.stderr):
-            result = self.observe(profile, handle, timeout)
+            try:
+                result = self.observe(profile, handle, _remaining(deadline, handle))
+            except DiagnosticError as exc:
+                if exc.handle:
+                    raise
+                raise DiagnosticError("observer_error", str(exc), handle) from exc
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
-        result = self.invoke(self.adapter + ["--profile", profile, "observe", "--handle", handle], timeout + 30)
+        result = self.invoke(self.adapter + ["--profile", profile, "observe", "--handle", handle], timeout)
         if _nonterminal(result.stdout + result.stderr):
             raise DiagnosticError("observer_error", "retained job is not terminal", handle)
         return result
@@ -87,6 +95,22 @@ class AdapterTransport:
 def _bounded(value: str, limit: int = 64 * 1024) -> str:
     value = value.strip()
     return value if len(value) <= limit else value[:limit] + "\n...[diagnostic truncated]"
+
+
+def _remaining(deadline: float, handle: str | None = None) -> int:
+    remaining = math.ceil(deadline - time.monotonic())
+    if remaining < 1:
+        raise DiagnosticError("observer_error" if handle else "transport_error",
+                              "BZ diagnostic deadline exhausted", handle)
+    return remaining
+
+
+def _workload_timeout(outer_timeout: int) -> int:
+    """Reserve kill-after and response grace inside the caller's deadline."""
+    if outer_timeout <= 25:
+        raise DiagnosticError("transport_error",
+                              "insufficient remaining budget for workload and response grace")
+    return outer_timeout - 25
 
 
 def _handle(output: str, profile: str) -> str | None:
@@ -189,6 +213,14 @@ class BzA3DiagnosticClient:
             timeout = request.get("timeout", 180)
             if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout < 1 or timeout > 540:
                 raise DiagnosticError("request_error", "timeout must be 1..540 seconds")
+            observe_timeout = request.get("observe_timeout")
+            if (observe_timeout is not None
+                    and (isinstance(observe_timeout, bool)
+                         or not isinstance(observe_timeout, int)
+                         or observe_timeout < 1 or observe_timeout > timeout)):
+                raise DiagnosticError("request_error",
+                                      "observe_timeout must be 1..timeout seconds")
+            deadline = time.monotonic() + (observe_timeout or timeout)
             path_names = ("candidate", "candidate_manifest", "baseline", "case_spec", "runner")
             if any(not isinstance(request.get(name, ""), str) for name in path_names):
                 raise DiagnosticError("request_error", "asset paths must be JSON strings")
@@ -218,7 +250,8 @@ class BzA3DiagnosticClient:
             request_sha = _json_sha({"identity": identity, "timeout": timeout, "cases": cases,
                                      "common_sha256": common_sha, "candidate_sha256": candidate_sha,
                                      "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})})
-            if dispatch_receipt.is_file():
+            had_dispatch_receipt = dispatch_receipt.is_file()
+            if had_dispatch_receipt:
                 try:
                     prior = json.loads(dispatch_receipt.read_text())
                 except (OSError, json.JSONDecodeError) as exc:
@@ -227,22 +260,36 @@ class BzA3DiagnosticClient:
                         or not isinstance(prior.get("handle"), str)):
                     raise DiagnosticError("request_error", "dispatch receipt does not match request")
                 handle = prior["handle"]
-                completed = self.transport.observe(profile, handle, timeout)
-                return self._completed(completed, handle, identity, common_sha, candidate_sha,
-                                       run_root, common_remote, common_receipt, dispatch_receipt)
+                completed = self.transport.observe(profile, handle, _remaining(deadline, handle))
+                observed_output = completed.stdout + completed.stderr
+                if (completed.returncode
+                        and "common-digest-mismatch" in observed_output.lower()):
+                    common_receipt.unlink(missing_ok=True)
+                    dispatch_receipt.unlink(missing_ok=True)
+                    handle = None
+                else:
+                    return self._completed(completed, handle, identity, common_sha, candidate_sha,
+                                           run_root, common_remote, common_receipt,
+                                           dispatch_receipt)
+            if observe_timeout is not None and not had_dispatch_receipt:
+                raise DiagnosticError("request_error",
+                                      "observe_timeout requires a retained dispatch receipt")
             # A structured prior result proves the remote script verified the common digest.
             common_cached = common_receipt.is_file()
             if not common_cached:
-                self.transport.upload(profile, common_tar, common_remote, timeout)
-            self.transport.upload(profile, candidate_tar, candidate_remote, timeout)
+                self.transport.upload(profile, common_tar, common_remote, _remaining(deadline))
+            self.transport.upload(profile, candidate_tar, candidate_remote, _remaining(deadline))
             job = {"protocol_version": 1, "benchmark": "matmul", "action": "check", "device": 0,
                    "logical_device": 0, "candidate": "candidate.py", "baseline": "baseline.py",
                    "case_spec": "cases.jsonl", "cases": cases, "scope": "diagnostic",
                    "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})}
+            operation_timeout = _remaining(deadline)
             script = _remote_script(common_remote, common_sha, candidate_remote, candidate_sha,
-                                    run_root, timeout, job)
+                                    run_root, _workload_timeout(operation_timeout), job)
             operation = f"diagnostic-{campaign}-{wave}-{cell}"[:80]
-            completed, handle = self.transport.execute(profile, device, operation, script, timeout)
+            completed, handle = self.transport.execute(
+                profile, device, operation, script, operation_timeout,
+            )
             if handle:
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
                                "request_sha256": request_sha, "handle": handle})
@@ -250,11 +297,23 @@ class BzA3DiagnosticClient:
             if (common_cached and completed.returncode
                     and "common-digest-mismatch" in output.lower()):
                 common_receipt.unlink(missing_ok=True)
-                self.transport.upload(profile, common_tar, common_remote, timeout)
-                completed, handle = self.transport.execute(profile, device, operation, script, timeout)
-                if handle:
-                    _write_receipt(dispatch_receipt, {"protocol_version": 1,
-                                   "request_sha256": request_sha, "handle": handle})
+                dispatch_receipt.unlink(missing_ok=True)
+                handle = None
+                self.transport.upload(profile, common_tar, common_remote, _remaining(deadline))
+                operation_timeout = _remaining(deadline)
+                retry_script = _remote_script(
+                    common_remote, common_sha, candidate_remote, candidate_sha,
+                    run_root, _workload_timeout(operation_timeout), job,
+                )
+                completed, handle = self.transport.execute(
+                    profile, device, operation, retry_script, operation_timeout)
+            if handle:
+                _write_receipt(dispatch_receipt, {"protocol_version": 1,
+                               "request_sha256": request_sha, "handle": handle})
+            if completed.returncode and "common-digest-mismatch" in (
+                    completed.stdout + completed.stderr).lower():
+                dispatch_receipt.unlink(missing_ok=True)
+                handle = None
             return self._completed(completed, handle, identity, common_sha, candidate_sha,
                                    run_root, common_remote, common_receipt, dispatch_receipt)
         except DiagnosticError as exc:

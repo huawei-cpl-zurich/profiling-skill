@@ -513,6 +513,53 @@ def test_terminal_resume_rejects_changed_frozen_submission(tmp_path: Path):
                     "candidate_sha256": expected}, 30)
 
 
+def test_rescheduled_terminal_uses_new_durable_attempt_identity(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-2" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    client = Client()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                         "terminal_attempt": 3}, 30)
+    assert result["status"] == "ok"
+    assert client.requests[0]["cell"] == "cannbot-attempt-3"
+
+
+def test_retained_terminal_request_survives_hook_restart(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class ObserverThenSuccess(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-1:retained"}
+            return {"status": "ok", "passed": True, "handle": "bz-a3-1:retained"}
+
+    client = ObserverThenSuccess()
+    first = module.BzTerminalHook(client, placements, config["assets"], "campaign").check(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, 30)
+    assert first["retained_terminal_request"]["cell"] == "cannbot-attempt-1"
+    second = module.BzTerminalHook(client, placements, config["assets"], "campaign").check(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1,
+         "retained_terminal_request": first["retained_terminal_request"]}, 30)
+    assert second["status"] == "ok"
+    assert client.requests[1]["cell"] == "cannbot-attempt-1"
+    assert "observe_timeout" in client.requests[1]
+
+
 def test_terminal_cancel_waits_for_durable_client_completion(tmp_path: Path):
     entered, release, cancelled = threading.Event(), threading.Event(), threading.Event()
 

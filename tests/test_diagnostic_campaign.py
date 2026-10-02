@@ -234,9 +234,65 @@ def test_curation_receipt_is_bound_to_campaign_and_wave_evidence(tmp_path: Path)
     with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
         campaign.acknowledge_curation(wrong)
     wrong = curation_receipt(paused)
+    wrong["stable_ref_citations"] = ["ref://   "]
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation(wrong)
+    wrong = curation_receipt(paused)
     wrong["wave_sha256"] = "0" * 64
     with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
         campaign.acknowledge_curation(wrong)
+
+
+def test_adaptive_recovers_hash_matching_preinstalled_prompt(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    campaign.acknowledge_curation(curation_receipt(paused))
+    destination = root / "inputs" / "wave-2-prompt.md"
+    destination.write_bytes(Path(config["prompt"]).read_bytes())
+    assert campaign.run_wave(2)["status"] == "awaiting_curation"
+
+
+def test_adaptive_recovers_persisted_running_ledger(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    paused = campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    ledger["status"] = "running"
+    ledger["waves"][0]["cells"] = ledger["waves"][0]["cells"][:2]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert len(recovered["waves"][0]["cells"]) == 3
+    assert paused["waves"][0]["cells"][:2] == recovered["waves"][0]["cells"][:2]
+
+
+def test_adaptive_rejects_changed_frozen_prompt_on_resume(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    blocked = campaign.run_wave(1)
+    prompt = Path(blocked["waves"][0]["prompt"])
+    prompt.chmod(0o644)
+    prompt.write_text("changed\n")
+    with pytest.raises(diagnostic.DiagnosticError, match="prompt.*changed"):
+        campaign.run_wave(1)
 
 
 def test_interrupted_adaptive_wave_drains_result_before_resuming(

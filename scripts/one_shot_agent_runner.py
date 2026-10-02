@@ -116,6 +116,7 @@ class Controller:
         self.used = self.invalid = self.over_budget = 0
         self.calls: list[dict] = []
         self.free_calls: list[dict] = []
+        self.last_result: dict | None = None
         self.lock = threading.Lock()
         self.server: socketserver.UnixStreamServer | None = None
 
@@ -161,6 +162,7 @@ class Controller:
                 "runner": self.assets["runner"], "cases": [1],
             })
             result["diagnostics"] = _bounded(result.get("diagnostics"))
+            self.last_result = result
             code = 0 if result.get("status") == "ok" else 2
             return self._wire(result, code)
 
@@ -296,7 +298,9 @@ class OneShotRunner:
                             "controller_usage": {"billed": controller.used, "calls": controller.calls}}
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})
             output = (run.stdout + run.stderr).lower()
-            if run.returncode == 0:
+            if controller.last_result and controller.last_result.get("status") == "infrastructure_error":
+                status = "infrastructure_error"
+            elif run.returncode == 0:
                 status = "ok"
             elif any(x in output for x in ("rate limit", "service unavailable", "connection", "api error")):
                 status = "model_service_error"
@@ -304,11 +308,16 @@ class OneShotRunner:
                 status = "setup_error"
             else:
                 status = "protocol_error"
-            return {"status": status, "codex_exit_code": run.returncode, "stdout": _bounded(run.stdout),
+            result = {"status": status, "codex_exit_code": run.returncode,
+                    "stdout": _bounded(run.stdout),
                     "stderr": _bounded(run.stderr), "milestones": milestones,
                     "controller_usage": {"limit": 1, "billed": controller.used, "calls": controller.calls,
                                          "free_calls": controller.free_calls, "invalid": controller.invalid,
                                          "over_budget": controller.over_budget}}
+            if status == "infrastructure_error":
+                result.update(failure_type=controller.last_result.get("failure_type", "controller_infrastructure"),
+                              diagnostics=controller.last_result.get("diagnostics", ""))
+            return result
         except (RunnerError, OSError, KeyError, TypeError, ValueError) as error:
             return {"status": "setup_error", "diagnostics": _bounded(error), "milestones": milestones,
                     "controller_usage": {"limit": 1, "billed": 0, "calls": []}}

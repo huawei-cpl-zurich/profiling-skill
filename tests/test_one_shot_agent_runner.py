@@ -129,7 +129,7 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         "candidate.py", "candidate.manifest.json"
     }
     assert (workspace / "baseline.json").read_bytes() == (workspace / "cases.jsonl").read_bytes()
-    assert len(runpy.run_path(workspace / "baseline.py")["get_input_groups"]()) == 1
+    assert len(runpy.run_path(str(workspace / "baseline.py"))["get_input_groups"]()) == 1
     argv = observed["argv"]
     joined = "\0".join(map(str, argv))
     for name in request["skills"]:
@@ -202,6 +202,27 @@ def test_model_service_failure_is_infrastructure(monkeypatch, tmp_path: Path):
                         subprocess.CompletedProcess(argv, 1, "", "API error: service unavailable"))
     result = runner.run(request)
     assert result["status"] == "model_service_error"
+
+
+def test_billed_controller_infrastructure_overrides_zero_codex_exit(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+    runner.client = Client({"status": "infrastructure_error", "failure_type": "device_error",
+                            "diagnostics": "device unavailable", "handle": None})
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 2
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "device_error"
+    assert result["diagnostics"] == "device unavailable"
+    assert result["controller_usage"]["billed"] == 1
 
 
 def test_process_group_timeout_kills_descendants(tmp_path: Path):

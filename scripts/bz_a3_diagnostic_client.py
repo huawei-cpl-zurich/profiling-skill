@@ -25,8 +25,12 @@ REMOTE_RESULTS = {
 
 
 class DiagnosticError(RuntimeError):
-    def __init__(self, failure_type: str, message: str, handle: str | None = None):
+    def __init__(self, failure_type: str, message: str, handle: str | None = None,
+                 *, invocation_timeout: bool = False,
+                 dispatch_uncertain: bool = False):
         self.failure_type, self.handle = failure_type, handle
+        self.invocation_timeout = invocation_timeout
+        self.dispatch_uncertain = dispatch_uncertain
         super().__init__(message)
 
 
@@ -45,7 +49,8 @@ def _run(argv: list[str], timeout: int) -> CommandResult:
         match = re.search(r"\b(bz-a3-[12]:[A-Za-z0-9_.-]+)\b", partial)
         handle = match.group(1) if match else None
         raise DiagnosticError("observer_error" if handle else "transport_error",
-                              f"transport timed out after {timeout}s", handle) from exc
+                              f"transport timed out after {timeout}s", handle,
+                              invocation_timeout=True) from exc
     except OSError as exc:
         raise DiagnosticError("transport_error", f"transport unavailable: {exc}") from exc
     return CommandResult(result.returncode, result.stdout, result.stderr)
@@ -74,7 +79,14 @@ class AdapterTransport:
         argv = self.adapter + ["--profile", profile, "--operation", operation, "run",
                                "--native", "--runtime", "py311-torch", "--device", str(device),
                                "--timeout", str(timeout), "--", "bash", "-c", script]
-        result = self.invoke(argv, timeout)
+        try:
+            result = self.invoke(argv, timeout)
+        except DiagnosticError as exc:
+            if exc.invocation_timeout and not exc.handle:
+                raise DiagnosticError(
+                    exc.failure_type, str(exc), dispatch_uncertain=True,
+                    invocation_timeout=True) from exc
+            raise
         handle = _handle(result.stdout + result.stderr, profile)
         if handle and _nonterminal(result.stdout + result.stderr):
             try:
@@ -409,7 +421,9 @@ class BzA3DiagnosticClient:
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
                                "request_sha256": request_sha, "handle": exc.handle or handle})
             return {"status": "infrastructure_error", "failure_type": exc.failure_type,
-                    "diagnostics": _bounded(str(exc)), "handle": exc.handle or handle, **identity}
+                    "diagnostics": _bounded(str(exc)), "handle": exc.handle or handle,
+                    "invocation_timeout": exc.invocation_timeout,
+                    "dispatch_uncertain": exc.dispatch_uncertain, **identity}
         except (OSError, ValueError, tarfile.TarError) as exc:
             return {"status": "infrastructure_error", "failure_type": "staging_error",
                     "diagnostics": _bounded(str(exc)), "handle": handle, **identity}

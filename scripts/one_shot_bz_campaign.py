@@ -309,6 +309,12 @@ class BzTerminalHook:
                               min(timeout_seconds, retained["timeout"])}
         deadline = time.monotonic() + timeout_seconds
         result = self.client.run(client_request)
+        if (result.get("dispatch_uncertain") is True
+                and result.get("invocation_timeout") is True
+                and not result.get("handle")):
+            return {**self._map_result(result, terminal_attempt),
+                    "status": "transport_or_observer_error",
+                    "manual_reconciliation_required": True}
         uncertain = (result.get("status") == "infrastructure_error"
                      and result.get("failure_type") in {"observer_error", "transport_error"}
                      and bool(result.get("handle")))

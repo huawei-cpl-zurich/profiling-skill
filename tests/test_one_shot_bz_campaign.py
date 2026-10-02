@@ -819,6 +819,56 @@ def test_failed_manual_bz_observation_requires_reconciliation(
     assert result["handle"] == "bz-a3-1:recovered"
 
 
+def test_adapter_timeout_after_possible_dispatch_never_falls_back_or_replays(
+    tmp_path: Path,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+    workspace = root / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (workspace / name).write_text("{}\n")
+        (snapshot / name).write_text("{}\n")
+    adapter_runs = []
+
+    def invoke(argv, timeout):
+        if argv[0] == "remote":
+            return module.diagnostic_campaign.subprocess.CompletedProcess(argv, 0, "", "")
+        adapter_runs.append((argv, timeout))
+        raise bz_client.DiagnosticError(
+            "transport_error", "adapter response timed out",
+            invocation_timeout=True)
+
+    # Import the same module object used by the production hook so this test
+    # exercises AdapterTransport.execute rather than a synthetic terminal.
+    import bz_a3_diagnostic_client as bz_client
+    transport = bz_client.AdapterTransport(["remote"], ["adapter"], invoke)
+    client = bz_client.BzA3DiagnosticClient(transport, tmp_path / "state")
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    campaign = module.DiagnosticCampaign(
+        manifest, root, Agent(), hook, campaign_id="campaign",
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+        "candidate_sha256": {name: module.diagnostic_campaign.sha256_file(snapshot / name)
+                             for name in ("candidate.py", "candidate.manifest.json")},
+    }
+
+    first = campaign._durable_terminal_check(request, 30)
+    second = campaign._durable_terminal_check(request, 30)
+
+    assert first == second
+    assert first["manual_reconciliation_required"] is True
+    assert first["dispatch_uncertain"] is True
+    assert len(adapter_runs) == 1
+
+
 def test_reconcile_terminal_cli_updates_uncertain_receipt(
     tmp_path: Path, monkeypatch, capsys,
 ):

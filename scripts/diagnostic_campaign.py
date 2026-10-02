@@ -665,6 +665,11 @@ class DiagnosticCampaign:
         request_digest = hashlib.sha256(json.dumps(
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         expected_workspace = attempt_dir / "workspace"
+        frozen_submission = attempt_dir / "frozen-submission"
+        candidate_root = (frozen_submission
+                          if all((frozen_submission / name).is_file()
+                                 for name in ("candidate.py", "candidate.manifest.json"))
+                          else expected_workspace)
         candidate_sha256 = request.get("candidate_sha256")
         if (record.get("protocol_version") != 1
                 or request.get("protocol_version") != 1
@@ -679,7 +684,7 @@ class DiagnosticCampaign:
                 or Path(str(request.get("workspace", ""))) != expected_workspace
                 or not isinstance(candidate_sha256, dict)
                 or any(candidate_sha256.get(name) != sha256_file(
-                    expected_workspace / name)
+                    candidate_root / name)
                        for name in ("candidate.py", "candidate.manifest.json"))
                 or not isinstance(record.get("result"), dict)
                 or record["result"].get("manual_reconciliation_required") is not True):

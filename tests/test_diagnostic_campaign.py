@@ -1038,6 +1038,45 @@ def test_terminal_reconciliation_rejects_unrelated_terminal_result(
         campaign.reconcile_terminal("wave-1-cannbot", 1, 1, result=result)
 
 
+def test_terminal_reconciliation_uses_immutable_frozen_submission(tmp_path: Path):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    attempt = root / "cells" / "wave-1-cannbot" / "attempt-1"
+    workspace = attempt / "workspace"
+    frozen = attempt / "frozen-submission"
+    workspace.mkdir(parents=True)
+    frozen.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (workspace / name).write_text("original\n")
+        (frozen / name).write_text("original\n")
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+        "candidate_sha256": {
+            name: diagnostic.sha256_file(frozen / name)
+            for name in ("candidate.py", "candidate.manifest.json")
+        },
+    }
+    campaign._durable_terminal_check(request, 30)
+    (workspace / "candidate.py").write_text("mutated\n")
+
+    reconciled = campaign.reconcile_terminal(
+        "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
+
+    assert reconciled["state"] == "started"
+    assert reconciled["result"]["handle"] == "bz-a3-1:recovered"
+
+
 def test_interruption_keeps_counted_retry_complete(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",

@@ -153,6 +153,27 @@ def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_p
     assert first["cell"] == treatment + "-attempt-1"
 
 
+def test_launcher_exception_is_replayed_without_second_agent_invocation(tmp_path: Path):
+    class RaisingAgent:
+        calls = 0
+
+        def launch(self, _request, _timeout):
+            self.calls += 1
+            raise RuntimeError("controller unavailable")
+
+    launcher = RaisingAgent()
+    frozen = module.FrozenAgentLauncher(launcher)
+    request = {"cell_id": "wave-1-cannbot", "workspace": str(tmp_path / "one")}
+    Path(request["workspace"]).mkdir()
+    first = frozen.launch(request, 10)
+    request["workspace"] = str(tmp_path / "two")
+    Path(request["workspace"]).mkdir()
+    second = frozen.launch(request, 5)
+    assert launcher.calls == 1
+    assert first["failure_type"] == second["failure_type"] == "launcher_error"
+    assert second["submission_replayed"] is True
+
+
 def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(observer_once=True)
@@ -187,6 +208,35 @@ def test_retained_observation_uses_remaining_attempt_budget(tmp_path: Path):
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert client.requests[1]["timeout"] == 240
     assert client.requests[1]["observe_timeout"] == 7
+
+
+def test_failed_retained_job_uses_fallback_in_same_retry(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+
+    class RetainedFailure(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error", "failure_type": "observer_error",
+                        "handle": "bz-a3-1:retained"}
+            if len(self.requests) == 2:
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "handle": "bz-a3-1:retained"}
+            return {"status": "ok", "passed": True}
+
+    client = RetainedFailure()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "unique")
+    for attempt in (1, 2):
+        workspace = tmp_path / f"attempt-{attempt}" / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "candidate.py").write_text("candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace)}, 240)
+    assert result["status"] == "ok"
+    assert len(client.requests) == 3
+    assert client.requests[1]["cell"] == "cannbot-attempt-1"
+    assert (client.requests[2]["profile"], client.requests[2]["device"]) == ("bz-a3-2", 2)
+    assert client.requests[2]["cell"] == "cannbot-attempt-2"
 
 
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):

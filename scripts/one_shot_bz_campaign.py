@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -77,7 +78,11 @@ class FrozenAgentLauncher:
             for name, content in files.items():
                 (workspace / name).write_bytes(content)
             return {**result, "submission_replayed": True}
-        result = self.launcher.launch(request, timeout_seconds)
+        try:
+            result = self.launcher.launch(request, timeout_seconds)
+        except Exception as error:
+            result = {"status": "infrastructure_error", "failure_type": "launcher_error",
+                      "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
         files = {}
         for name in ("candidate.py", "candidate.manifest.json"):
             path = workspace / name
@@ -148,7 +153,19 @@ class BzTerminalHook:
         if retained is not None:
             client_request = {**retained, "observe_timeout":
                               min(timeout_seconds, retained["timeout"])}
+        deadline = time.monotonic() + timeout_seconds
         result = self.client.run(client_request)
+        if (retained is not None and result.get("status") == "infrastructure_error"
+                and result.get("failure_type") != "observer_error"):
+            remaining = int(deadline - time.monotonic())
+            if remaining < 1:
+                return result
+            client_request = {
+                **client_request, **placement, "cell": f"{treatment}-attempt-{attempt}",
+                "timeout": min(remaining, 240),
+            }
+            client_request.pop("observe_timeout", None)
+            result = self.client.run(client_request)
         if (result.get("status") == "infrastructure_error"
                 and result.get("failure_type") == "observer_error"
                 and result.get("handle")):

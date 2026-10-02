@@ -802,7 +802,7 @@ def test_reconcile_terminal_cli_updates_uncertain_receipt(
 
 
 @pytest.mark.parametrize("mode", ["config_drift", "placement_drift", "not_pending",
-                                   "minimal_ledger"])
+                                   "minimal_ledger", "wrong_profile"])
 def test_reconcile_terminal_rejects_invalid_adaptive_campaign(
     tmp_path: Path, mode: str,
 ):
@@ -835,10 +835,16 @@ def test_reconcile_terminal_rejects_invalid_adaptive_campaign(
             ledger = {"campaign_id": "campaign"}
         ledger_path.write_text(json.dumps(ledger))
 
+    receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-1").glob(
+        "terminal-result-*.json"))
+    before = receipt_path.read_bytes()
+    handle = ("bz-a3-2:wrong-placement" if mode == "wrong_profile"
+              else "bz-a3-1:recovered")
     with pytest.raises(module.DiagnosticError):
         module.reconcile_terminal(
             changed_config, manifest, changed_placements, root,
-            "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
+            "wave-1-cannbot", 1, 1, handle=handle)
+    assert receipt_path.read_bytes() == before
 
 
 def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):

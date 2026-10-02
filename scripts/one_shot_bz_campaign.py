@@ -256,6 +256,11 @@ class BzTerminalHook:
             result = self.client.resume(
                 [client_request], manual_handle,
                 min(timeout_seconds, client_request["timeout"]))
+            if (result.get("status") == "infrastructure_error"
+                    and result.get("failure_type") in {
+                        "request_error", "digest_mismatch"}):
+                result = {**result, "status": "transport_or_observer_error",
+                          "manual_reconciliation_required": True}
             result_cell = str(result.get("cell", ""))
             result_suffix = result_cell.removeprefix(f"{treatment}-attempt-")
             result_attempt = (int(result_suffix) if result_suffix.isdigit()
@@ -485,6 +490,14 @@ def reconcile_terminal(config: dict, manifest: dict, placements: dict,
         raise DiagnosticError("adaptive ledger campaign identity mismatch")
     if validated.get("status") != "reschedule_pending":
         raise DiagnosticError("campaign is not awaiting terminal reconciliation")
+    if handle is not None:
+        parts = cell_id.split("-", 2)
+        if (len(parts) != 3 or parts[2] not in placements
+                or terminal_attempt < 1):
+            raise DiagnosticError("invalid reconciliation cell or terminal attempt")
+        profile = placements[parts[2]][min(terminal_attempt - 1, 1)]["profile"]
+        if not handle.startswith(profile + ":"):
+            raise DiagnosticError("reconciliation handle does not match terminal placement")
     receipt = campaign.reconcile_terminal(
         cell_id, agent_attempt, terminal_attempt, handle=handle, result=result)
     return {"status": "reconciled", "receipt": receipt}

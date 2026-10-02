@@ -871,6 +871,52 @@ def test_campaign_consumes_manual_terminal_reconciliation_without_check(
     assert cell["reschedule_attempts"][-1]["attempt"] == 1
 
 
+def test_failed_manual_handle_resume_stays_uncertain_without_repeat(
+    tmp_path: Path,
+):
+    class Terminal:
+        def __init__(self):
+            self.calls = 0
+
+        def resume(self, request, handle, timeout_seconds):
+            self.calls += 1
+            return {"status": "transport_or_observer_error",
+                    "failure_type": "request_error", "handle": handle,
+                    "manual_reconciliation_required": True}
+
+    terminal = Terminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run",
+        RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = tmp_path / "run" / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+    }
+    digest = hashlib.sha256(json.dumps(
+        request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    receipt = workspace.parent / f"terminal-result-1-{digest[:16]}.json"
+    receipt.write_text(json.dumps({
+        "protocol_version": 1, "state": "started", "request_sha256": digest,
+        "request": request, "timeout_seconds": 30,
+        "result": {"status": "transport_or_observer_error",
+                   "handle": "bz-a3-1:wrong"},
+    }))
+
+    first = campaign._durable_terminal_check(request, 30)
+    second = campaign._durable_terminal_check(request, 30)
+
+    assert first == second
+    assert first["manual_reconciliation_required"] is True
+    assert json.loads(receipt.read_text())["state"] == "uncertain"
+    assert terminal.calls == 1
+
+
 @pytest.mark.parametrize("tamper", [
     "digest", "cell", "manual_marker", "record_protocol", "request_protocol",
     "operation", "benchmark", "cases", "timeout", "candidate_digest",

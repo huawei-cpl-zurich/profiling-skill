@@ -211,13 +211,20 @@ def test_resume_observes_exact_selected_fallback_dispatch_receipt(tmp_path: Path
     assert transport.observations[-1][1] == first["handle"]
 
 
-def test_resume_rejects_handle_owned_by_different_attempt(tmp_path: Path):
+@pytest.mark.parametrize("owner", ["attempt", "wave", "campaign"])
+def test_resume_rejects_handle_owned_by_different_request(
+    tmp_path: Path, owner: str,
+):
     module = load()
     transport = FakeTransport(module, "observer")
     client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
     primary = request(tmp_path)
     primary["cell"] = "arm-attempt-1"
     fallback = {**primary, "cell": "arm-attempt-2", "device": 2}
+    if owner == "wave":
+        fallback["wave"] = 2
+    elif owner == "campaign":
+        fallback["campaign"] = "other-campaign"
     first = client.run(fallback)
     assert first["handle"] == "bz-a3-1:kept"
     executions = len(transport.executions)

@@ -450,7 +450,9 @@ class DiagnosticCampaign:
                 return copy.deepcopy(record["result"])
             if (record.get("state") == "uncertain"
                     and isinstance(record.get("result"), dict)
-                    and not record["result"].get("handle")):
+                    and (not record["result"].get("handle")
+                         or record["result"].get(
+                             "manual_reconciliation_required") is True)):
                 return copy.deepcopy(record["result"])
             if record.get("state") not in {"started", "uncertain"}:
                 raise DiagnosticError("invalid terminal result receipt")
@@ -495,15 +497,17 @@ class DiagnosticCampaign:
             result.get("status") == "transport_or_observer_error"
             and result.get("invocation_timeout") is True
             and not result.get("handle"))
+        manual_failure = result.get("manual_reconciliation_required") is True
         retriable_observation = bool(result.get("handle")) and (
                 result.get("status") == "transport_or_observer_error"
                 or (result.get("status") == "infrastructure_error"
                     and result.get("failure_type") in {
                         "observer_error", "transport_error"}))
-        if uncertain_dispatch:
-            result = {**result, "manual_reconciliation_required": True,
-                      "diagnostics": "terminal outcome is uncertain; supply a durable "
-                                     "handle or terminal result before resuming"}
+        if uncertain_dispatch or manual_failure:
+            if uncertain_dispatch:
+                result = {**result, "manual_reconciliation_required": True,
+                          "diagnostics": "terminal outcome is uncertain; supply a durable "
+                                         "handle or terminal result before resuming"}
             _atomic_json(receipt, {"protocol_version": 1, "state": "uncertain",
                                    "request_sha256": digest,
                                    "request": receipt_request,

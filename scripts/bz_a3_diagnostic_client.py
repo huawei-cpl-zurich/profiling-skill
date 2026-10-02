@@ -226,11 +226,11 @@ class BzA3DiagnosticClient:
             campaign = _safe_id(selected.get("campaign"), "campaign")
             wave = _safe_id(selected.get("wave"), "wave")
             cell = _safe_id(selected.get("cell"), "cell")
+            selected_local = self.state_dir / campaign / wave / cell
             foreign = False
-            wave_root = self.state_dir / campaign / wave
-            for pattern in ("*/dispatch.json", "*/completed.json"):
-                for path in wave_root.glob(pattern):
-                    if path.parent.name == cell:
+            for pattern in ("*/*/*/dispatch.json", "*/*/*/completed.json"):
+                for path in self.state_dir.glob(pattern):
+                    if path.parent == selected_local:
                         continue
                     try:
                         record = json.loads(path.read_text())

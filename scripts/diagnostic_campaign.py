@@ -486,6 +486,14 @@ class DiagnosticCampaign:
             raise DiagnosticError("ledger is not an adaptive campaign")
         if ledger.get("campaign_identity") != self._adaptive_identity():
             raise DiagnosticError("model, treatment, skill, or campaign configuration drift")
+        receipts = ledger.get("curation_receipts")
+        waves = ledger.get("waves")
+        if (not isinstance(receipts, list) or not isinstance(waves, list)
+                or len(receipts) > len(waves)):
+            raise DiagnosticError("adaptive ledger has invalid curation history")
+        for index, receipt in enumerate(receipts, 1):
+            self._validate_curation_receipt(
+                receipt, {**ledger, "waves": waves[:index]})
         return ledger
 
     @staticmethod
@@ -621,17 +629,29 @@ class DiagnosticCampaign:
         """Retry only unresolved infrastructure cells in an existing wave."""
         wave_record = ledger["waves"][-1]
         by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
+        deadline = time.monotonic() + self.wave_timeout
         for cell_id in list(ledger["reschedule"]):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             treatment = cell_id.removeprefix(f"wave-{wave}-")
             prior = by_treatment.get(treatment)
             last = None
             if prior is not None:
                 attempts = prior.get("reschedule_attempts", [])
                 last = attempts[-1] if attempts else prior.get("retry", prior)
+            durable_attempts = [
+                int(path.parent.name.removeprefix("attempt-"))
+                for path in (self.root / "cells" / cell_id).glob(
+                    "attempt-*/terminal-result-*.json")]
+            newest_durable = max(durable_attempts, default=0)
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
             )
-            if (last is not None and last["category"] == "infrastructure"
+            if last is not None and newest_durable > last["attempt"]:
+                resumed = self._guarded_cell(
+                    wave, treatment, newest_durable, remaining)
+            elif (last is not None and last["category"] == "infrastructure"
                     and workspace is not None
                     and all((workspace / name).is_file()
                             for name in ("candidate.py", "candidate.manifest.json"))):
@@ -655,7 +675,7 @@ class DiagnosticCampaign:
                         "retained_terminal_request": copy.deepcopy(retained_request),
                     }
                     terminal = self._durable_terminal_check(
-                        terminal_request, self.cell_timeout)
+                        terminal_request, max(1, int(remaining)))
                 except DiagnosticError:
                     raise
                 except Exception as error:
@@ -679,7 +699,7 @@ class DiagnosticCampaign:
                             f"attempt-{attempt}").glob("terminal-result-*.json")):
                     while (self.root / "cells" / cell_id / f"attempt-{attempt}").exists():
                         attempt += 1
-                resumed = self._guarded_cell(wave, treatment, attempt, self.wave_timeout)
+                resumed = self._guarded_cell(wave, treatment, attempt, remaining)
             if prior is None:
                 wave_record["cells"].append(resumed)
                 by_treatment[treatment] = resumed

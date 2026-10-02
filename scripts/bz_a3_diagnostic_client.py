@@ -251,8 +251,16 @@ class BzA3DiagnosticClient:
                     raise DiagnosticError("request_error", "dispatch receipt does not match request")
                 handle = prior["handle"]
                 completed = self.transport.observe(profile, handle, _remaining(deadline, handle))
-                return self._completed(completed, handle, identity, common_sha, candidate_sha,
-                                       run_root, common_remote, common_receipt, dispatch_receipt)
+                observed_output = completed.stdout + completed.stderr
+                if (common_receipt.is_file() and completed.returncode
+                        and "common-digest-mismatch" in observed_output.lower()):
+                    common_receipt.unlink(missing_ok=True)
+                    dispatch_receipt.unlink(missing_ok=True)
+                    handle = None
+                else:
+                    return self._completed(completed, handle, identity, common_sha, candidate_sha,
+                                           run_root, common_remote, common_receipt,
+                                           dispatch_receipt)
             # A structured prior result proves the remote script verified the common digest.
             common_cached = common_receipt.is_file()
             if not common_cached:

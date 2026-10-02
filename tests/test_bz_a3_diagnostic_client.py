@@ -27,6 +27,7 @@ class FakeTransport:
         self.executions = []
         self.observations = []
         self.stale_returned = False
+        self.observer_returned = False
 
     def upload(self, profile, source, destination, timeout):
         self.uploads.append((profile, source, destination, timeout))
@@ -40,6 +41,10 @@ class FakeTransport:
             raise self.module.DiagnosticError("transport_error", "vpn unavailable")
         if self.mode == "observer":
             raise self.module.DiagnosticError("observer_error", "retained job is not terminal", f"{profile}:kept")
+        if self.mode == "observer_then_stale" and not self.observer_returned:
+            self.observer_returned = True
+            raise self.module.DiagnosticError("observer_error", "retained job is not terminal",
+                                              f"{profile}:kept")
         if self.mode == "candidate_timeout":
             return self.module.CommandResult(124, "timed out", ""), f"{profile}:timeout"
         if self.mode == "candidate_kill_timeout":
@@ -55,6 +60,9 @@ class FakeTransport:
 
     def observe(self, profile, handle, timeout):
         self.observations.append((profile, handle, timeout))
+        if self.mode == "observer_then_stale" and not self.stale_returned:
+            self.stale_returned = True
+            return self.module.CommandResult(91, "", "common-digest-mismatch")
         return self.completed(profile)[0]
 
     def completed(self, profile):
@@ -149,6 +157,23 @@ def test_stale_common_repair_failure_does_not_preserve_terminal_handle(tmp_path:
     transport.mode = "ok"
     assert client.run(value)["status"] == "ok"
     assert not transport.observations
+
+
+def test_resumed_stale_common_result_repairs_instead_of_reobserving(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+    assert client.run(value)["status"] == "ok"
+    transport.mode = "observer_then_stale"
+    interrupted = client.run(value)
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["handle"] == "bz-a3-1:kept"
+    resumed = client.run(value)
+    assert resumed["status"] == "ok"
+    assert transport.observations[-1][1] == "bz-a3-1:kept"
+    assert len([upload for upload in transport.uploads
+                if "diagnostic-common-" in upload[2]]) == 2
 
 
 def test_compiler_traceback_is_complete_and_counted(tmp_path: Path):

@@ -159,6 +159,19 @@ def test_stale_common_repair_failure_does_not_preserve_terminal_handle(tmp_path:
     assert not transport.observations
 
 
+def test_repeated_common_digest_mismatch_never_poisons_dispatch_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "digest")
+    state = tmp_path / "state"
+    client = module.BzA3DiagnosticClient(transport, state)
+    value = request(tmp_path)
+    assert client.run(value)["failure_type"] == "digest_mismatch"
+    assert client.run(value)["failure_type"] == "digest_mismatch"
+    assert len(transport.executions) == 2
+    assert not transport.observations
+    assert not (state / "quick" / "1" / "arm-a" / "dispatch.json").exists()
+
+
 def test_resumed_stale_common_result_repairs_instead_of_reobserving(tmp_path: Path):
     module = load()
     transport = FakeTransport(module)

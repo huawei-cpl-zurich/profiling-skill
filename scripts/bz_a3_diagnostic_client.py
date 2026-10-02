@@ -305,9 +305,13 @@ class BzA3DiagnosticClient:
                 )
                 completed, handle = self.transport.execute(
                     profile, device, operation, retry_script, operation_timeout)
-                if handle:
-                    _write_receipt(dispatch_receipt, {"protocol_version": 1,
-                                   "request_sha256": request_sha, "handle": handle})
+            if handle:
+                _write_receipt(dispatch_receipt, {"protocol_version": 1,
+                               "request_sha256": request_sha, "handle": handle})
+            if completed.returncode and "common-digest-mismatch" in (
+                    completed.stdout + completed.stderr).lower():
+                dispatch_receipt.unlink(missing_ok=True)
+                handle = None
             return self._completed(completed, handle, identity, common_sha, candidate_sha,
                                    run_root, common_remote, common_receipt, dispatch_receipt)
         except DiagnosticError as exc:

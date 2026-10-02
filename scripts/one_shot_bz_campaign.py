@@ -36,6 +36,8 @@ def validate_placements(value: dict) -> dict:
                     or isinstance(choice.get("device"), bool)
                     or not isinstance(choice.get("device"), int) or choice["device"] < 0):
                 raise DiagnosticError(f"invalid BZ placement for {treatment}")
+        if all(choices[0][key] == choices[1][key] for key in ("profile", "device")):
+            raise DiagnosticError(f"fallback placement must differ for {treatment}")
         primary.add((choices[0]["profile"], choices[0]["device"]))
     if len(primary) != 3:
         raise DiagnosticError("primary cells require three distinct physical devices")
@@ -52,7 +54,7 @@ def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dic
         source = Path(source_name)
         if not source.is_file():
             raise DiagnosticError(f"benchmark asset is missing: {source}")
-        destination = snapshot_root / source.name
+        destination = snapshot_root / name
         shutil.copyfile(source, destination)
         os.chmod(destination, 0o444)
         frozen[name] = str(destination)

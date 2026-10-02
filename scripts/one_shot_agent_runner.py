@@ -207,7 +207,7 @@ class Controller:
     def _development_check(self) -> dict:
         remote_timeout = (240 if self.deadline == float("inf") else
                           min(240, int(self.deadline - time.monotonic() - 20)))
-        if remote_timeout <= 0:
+        if remote_timeout < 26:
             raise SubmissionError("development check requested too late to complete")
         workspace = Path(self.request["workspace"])
         snapshot = self.snapshot_root / "development-check"

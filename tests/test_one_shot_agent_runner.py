@@ -303,6 +303,20 @@ def test_late_check_is_billed_without_starting_remote_work(tmp_path: Path):
     assert controller.used == 1 and not client.requests
 
 
+def test_check_dispatches_at_client_minimum_timeout(tmp_path: Path):
+    runner, request, client = fixture(tmp_path)
+    workspace = Path(request["workspace"])
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    socket_path = tmp_path / "ctl/controller.sock"
+    with module.Controller(socket_path, client, request, {"profile": "bz-a3-1", "device": 0},
+                           runner.assets, tmp_path / "snapshots",
+                           deadline=time.monotonic() + 47) as controller:
+        response = call_socket(str(socket_path), module.CHECK)
+    assert response["exit_code"] == 0 and controller.used == 1
+    assert client.requests[0]["timeout"] == 26
+
+
 @pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
 @pytest.mark.parametrize("absolute", [False, True])
 def test_controller_rejects_submission_symlink_outside_workspace(

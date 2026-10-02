@@ -39,15 +39,21 @@ class FakeTransport:
             raise self.module.DiagnosticError("observer_error", "retained job is not terminal", f"{profile}:kept")
         if self.mode == "candidate_timeout":
             return self.module.CommandResult(124, "timed out", ""), f"{profile}:timeout"
+        if self.mode == "candidate_kill_timeout":
+            return self.module.CommandResult(137, "killed after timeout", ""), f"{profile}:killed"
         if self.mode == "device":
             return self.module.CommandResult(1, "", "NPU device unavailable"), f"{profile}:device"
         if self.mode == "digest":
             return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:digest"
-        status = self.mode if self.mode in {"compile_error", "runtime_error", "correctness_error"} else "ok"
+        status = self.mode if self.mode in {
+            "compile_error", "runtime_error", "correctness_error", "infrastructure_error",
+        } else "ok"
         diagnostics = "Traceback\n  File candidate.py, line 17\nNameError: tl" if status == "compile_error" else ""
         payload = {"status": status, "diagnostics": diagnostics, "passed": status == "ok",
                    "case_evidence": [{"case": 0, "passed": status == "ok", "host_elapsed_us": 99.0}],
                    "host_elapsed_us": 99.0}
+        if status == "infrastructure_error":
+            payload.update(failure_type="runner_setup_error", diagnostics="torch import failed")
         stdout = "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n"
         return self.module.CommandResult(0, stdout, ""), f"{profile}:job-1"
 
@@ -133,6 +139,31 @@ def test_candidate_timeout_is_not_infrastructure(tmp_path: Path):
     assert result["handle"] == "bz-a3-1:timeout"
 
 
+def test_candidate_kill_after_timeout_is_not_infrastructure(tmp_path: Path):
+    _module, _transport, result = run(tmp_path, "candidate_kill_timeout")
+    assert result["status"] == "candidate_timeout"
+    assert result["failure_type"] == "candidate_timeout"
+    assert result["handle"] == "bz-a3-1:killed"
+
+
+def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):
+    _module, _transport, result = run(tmp_path, "infrastructure_error")
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "runner_setup_error"
+    assert result["diagnostics"] == "torch import failed"
+    assert result["handle"] == "bz-a3-1:job-1"
+
+
+def test_non_object_request_returns_structured_request_error(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    for value in (None, [], "request"):
+        result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+        assert result == {"status": "infrastructure_error", "failure_type": "request_error",
+                          "diagnostics": "request must be a JSON object", "handle": None}
+    assert not transport.uploads and not transport.executions
+
+
 def test_infrastructure_failures_are_disjoint(tmp_path: Path):
     expected = {"staging": "staging_error", "transport": "transport_error",
                 "observer": "observer_error", "device": "device_error",
@@ -168,4 +199,5 @@ def test_remote_script_verifies_both_digests_and_bounds_execution():
                                    "/run", 42, {"device": 0})
     assert script.count("sha256sum") == 2
     assert "timeout --signal=TERM --kill-after=10 42" in script
+    assert 'test "$rc" -ne 124 && test "$rc" -ne 137 || exit 124' in script
     assert "BZ_DIAGNOSTIC_RESULT=" in script

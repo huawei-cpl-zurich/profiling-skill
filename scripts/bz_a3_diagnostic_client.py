@@ -16,7 +16,9 @@ from typing import Callable
 
 
 PROFILES = {"bz-a3-1", "bz-a3-2"}
-CANDIDATE_RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error"}
+REMOTE_RESULTS = {
+    "ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error",
+}
 
 
 class DiagnosticError(RuntimeError):
@@ -125,8 +127,8 @@ def _result(stdout: str) -> dict:
         value = json.loads(matches[0])
     except json.JSONDecodeError as exc:
         raise DiagnosticError("transport_error", "remote result is invalid JSON") from exc
-    if not isinstance(value, dict) or value.get("status") not in CANDIDATE_RESULTS:
-        raise DiagnosticError("transport_error", "remote result has an invalid candidate status")
+    if not isinstance(value, dict) or value.get("status") not in REMOTE_RESULTS:
+        raise DiagnosticError("transport_error", "remote result has an invalid status")
     value["diagnostics"] = _bounded(str(value.get("diagnostics", "")))
     return value
 
@@ -135,7 +137,10 @@ class BzA3DiagnosticClient:
     def __init__(self, transport: AdapterTransport, state_dir: Path, remote_root: str = "/home/m00933363/.profiling-skill/diagnostic"):
         self.transport, self.state_dir, self.remote_root = transport, state_dir, remote_root.rstrip("/")
 
-    def run(self, request: dict) -> dict:
+    def run(self, request: object) -> dict:
+        if not isinstance(request, dict):
+            return {"status": "infrastructure_error", "failure_type": "request_error",
+                    "diagnostics": "request must be a JSON object", "handle": None}
         identity = {key: request.get(key) for key in ("campaign", "wave", "cell", "profile", "device")}
         handle = None
         try:
@@ -185,7 +190,7 @@ class BzA3DiagnosticClient:
             operation = f"diagnostic-{campaign}-{wave}-{cell}"[:80]
             completed, handle = self.transport.execute(profile, device, operation, script, timeout)
             output = completed.stdout + completed.stderr
-            if completed.returncode == 124:
+            if completed.returncode in (124, 137):
                 return {"status": "candidate_timeout", "failure_type": "candidate_timeout",
                         "diagnostics": _bounded(output), "handle": handle, **identity}
             if completed.returncode:
@@ -202,7 +207,10 @@ class BzA3DiagnosticClient:
             common_receipt.write_text(common_remote + "\n")
             result.update(identity, handle=handle, artifacts={"common_sha256": common_sha,
                           "candidate_sha256": candidate_sha, "remote_run_root": run_root})
-            result["failure_type"] = "success" if result["status"] == "ok" else result["status"]
+            if result["status"] == "infrastructure_error":
+                result["failure_type"] = str(result.get("failure_type") or "remote_infrastructure_error")
+            else:
+                result["failure_type"] = "success" if result["status"] == "ok" else result["status"]
             result.pop("host_elapsed_us", None)
             for evidence in result.get("case_evidence", []):
                 evidence.pop("host_elapsed_us", None)
@@ -233,7 +241,7 @@ set +e
 timeout --signal=TERM --kill-after=10 {q["timeout"]} python "$work/runner.py" --job "$work/job.json" --output "$work/response.json"
 rc=$?
 set -e
-test "$rc" -ne 124 || exit 124
+test "$rc" -ne 124 && test "$rc" -ne 137 || exit 124
 test -f "$work/response.json" || exit "$rc"
 printf 'BZ_DIAGNOSTIC_RESULT='; tr -d '\\n' <"$work/response.json"; printf '\\n'
 exit 0'''

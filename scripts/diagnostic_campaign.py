@@ -454,7 +454,7 @@ class DiagnosticCampaign:
                                "terminal_attempt", persisted_request.get("terminal_attempt"))}
             else:
                 request = copy.deepcopy(persisted_request)
-            timeout_seconds = persisted_timeout
+            timeout_seconds = min(timeout_seconds, persisted_timeout)
         else:
             _atomic_json(receipt, {"protocol_version": 1, "state": "started",
                                    "request_sha256": digest,

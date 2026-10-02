@@ -39,10 +39,20 @@ def _run(argv: list[str], timeout: int) -> CommandResult:
     try:
         result = subprocess.run(argv, text=True, capture_output=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired as exc:
-        raise DiagnosticError("transport_error", f"transport timed out after {timeout}s") from exc
+        partial = "".join(_text(value) for value in (exc.stdout, exc.stderr))
+        match = re.search(r"\b(bz-a3-[12]:[A-Za-z0-9_.-]+)\b", partial)
+        handle = match.group(1) if match else None
+        raise DiagnosticError("observer_error" if handle else "transport_error",
+                              f"transport timed out after {timeout}s", handle) from exc
     except OSError as exc:
         raise DiagnosticError("transport_error", f"transport unavailable: {exc}") from exc
     return CommandResult(result.returncode, result.stdout, result.stderr)
+
+
+def _text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value or ""
 
 
 class AdapterTransport:
@@ -135,6 +145,7 @@ def _archive(output: Path, files: list[tuple[Path, str]]) -> str:
 
 def _safe_id(value: object, name: str) -> str:
     if (not isinstance(value, (str, int)) or len(str(value)) > 40
+            or str(value) in {".", ".."}
             or not re.fullmatch(r"[A-Za-z0-9_.-]+", str(value))):
         raise DiagnosticError("request_error", f"unsafe or missing {name}")
     return str(value)

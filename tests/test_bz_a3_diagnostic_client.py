@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -245,6 +246,36 @@ def test_adapter_transport_observes_same_handle_after_interruption():
     assert handle == "bz-a3-2:retained-7"
     assert calls[1] == ["adapter", "--profile", "bz-a3-2", "observe", "--handle", handle]
     assert sum("run" in call for call in calls) == 1
+
+
+def test_host_timeout_preserves_handle_from_partial_adapter_output(monkeypatch):
+    module = load()
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["adapter"], 30,
+                                        output=b"submitted bz-a3-2:retained-timeout\n")
+
+    monkeypatch.setattr(module.subprocess, "run", timeout)
+    try:
+        module._run(["adapter"], 30)
+    except module.DiagnosticError as error:
+        assert error.failure_type == "observer_error"
+        assert error.handle == "bz-a3-2:retained-timeout"
+    else:
+        raise AssertionError("timeout should raise DiagnosticError")
+
+
+def test_identifier_dot_segments_are_rejected_without_dispatch(tmp_path: Path):
+    module = load()
+    for name in ("campaign", "wave", "cell"):
+        for invalid in (".", ".."):
+            transport = FakeTransport(module)
+            value = request(tmp_path / name / invalid.replace(".", "dot"))
+            value[name] = invalid
+            result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+            assert result["status"] == "infrastructure_error"
+            assert result["failure_type"] == "request_error"
+            assert not transport.uploads and not transport.executions
 
 
 def test_remote_script_verifies_both_digests_and_bounds_execution():

@@ -421,10 +421,10 @@ class DiagnosticCampaign:
         self._freeze_prompt(manifest)
         self.manifest = manifest
         ledger = {
+            **self.ledger_metadata,
             "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"], "waves": [], "reschedule": [],
-            **self.ledger_metadata,
         }
         _atomic_json(self.ledger_path, ledger)
         try:

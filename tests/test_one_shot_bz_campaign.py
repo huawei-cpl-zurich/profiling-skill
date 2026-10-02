@@ -762,6 +762,36 @@ def test_production_bz_hook_reconstructs_primary_handle_without_dispatch_receipt
     assert transport.observations[0][0:2] == ("bz-a3-1", "bz-a3-1:recovered")
 
 
+@pytest.mark.parametrize("failure_type", [
+    "request_error", "digest_mismatch", "device_error", "staging_error", "cancelled",
+])
+def test_failed_manual_bz_observation_requires_reconciliation(
+    tmp_path: Path, failure_type: str,
+):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class FailedResume(Client):
+        def resume(self, requests, handle, observe_timeout):
+            return {"status": "infrastructure_error", "failure_type": failure_type,
+                    "handle": handle}
+
+    hook = module.BzTerminalHook(
+        FailedResume(), placements, config["assets"], "campaign")
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, "bz-a3-1:recovered", 30)
+
+    assert result["status"] == "transport_or_observer_error"
+    assert result["manual_reconciliation_required"] is True
+    assert result["handle"] == "bz-a3-1:recovered"
+
+
 def test_reconcile_terminal_cli_updates_uncertain_receipt(
     tmp_path: Path, monkeypatch, capsys,
 ):

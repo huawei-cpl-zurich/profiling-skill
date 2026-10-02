@@ -256,9 +256,7 @@ class BzTerminalHook:
             result = self.client.resume(
                 [client_request], manual_handle,
                 min(timeout_seconds, client_request["timeout"]))
-            if (result.get("status") == "infrastructure_error"
-                    and result.get("failure_type") in {
-                        "request_error", "digest_mismatch"}):
+            if result.get("status") == "infrastructure_error":
                 result = {**result, "status": "transport_or_observer_error",
                           "manual_reconciliation_required": True}
             result_cell = str(result.get("cell", ""))

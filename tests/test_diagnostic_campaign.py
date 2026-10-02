@@ -264,3 +264,74 @@ def test_primary_infrastructure_attempt_is_checkpointed_before_retry(tmp_path: P
     assert primary_only and retried
     assert primary_only[0]["outcome"] == "device_or_runtime_infra"
     assert retried[0]["retry"]["outcome"] == "success"
+
+
+def test_infrastructure_then_observed_retry_remains_pending(tmp_path: Path):
+    outcomes = {
+        (1, "cannbot", 1): "device_or_runtime_infra",
+        (1, "cannbot", 2): "request_budget_exhausted",
+    }
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", RecordingLauncher(outcomes),
+        RecordingTerminal(),
+    ).run()
+
+    cell = result["waves"][0]["cells"][0]
+    assert cell["category"] == "infrastructure"
+    assert cell["retry"]["category"] == "observed"
+    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert result["status"] == "reschedule_pending"
+
+
+@pytest.mark.parametrize("component", ["launcher", "terminal"])
+def test_hook_exception_is_checkpointed_and_sibling_cells_finish(tmp_path: Path, component: str):
+    class RaisingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["treatment"] == "cannbot":
+                raise RuntimeError("agent transport disconnected")
+            return super().launch(request, timeout_seconds)
+
+    class RaisingTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            if request["cell_id"].split("-", 2)[2] == "cannbot":
+                raise RuntimeError("terminal transport disconnected")
+            return super().check(request, timeout_seconds)
+
+    launcher = RaisingLauncher() if component == "launcher" else RecordingLauncher()
+    terminal = RaisingTerminal() if component == "terminal" else RecordingTerminal()
+    root = tmp_path / "run"
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), root, launcher, terminal,
+    ).run()
+
+    cell = result["waves"][0]["cells"][0]
+    evidence = cell["agent"] if component == "launcher" else cell["terminal"]
+    assert cell["outcome"] == "transport_or_observer_error"
+    assert cell["retry"]["outcome"] == "transport_or_observer_error"
+    assert "RuntimeError" in evidence["diagnostics"]
+    assert [entry["outcome"] for entry in result["waves"][0]["cells"][1:]] == [
+        "success", "success",
+    ]
+    assert result["status"] == "reschedule_pending"
+    assert json.loads((root / "ledger.json").read_text()) == result
+
+
+@pytest.mark.parametrize("component", ["agent", "terminal"])
+def test_bz_client_structured_infrastructure_error_is_interoperable(tmp_path: Path,
+                                                                   component: str):
+    (tmp_path / "candidate.py").write_text("x")
+    (tmp_path / "candidate.manifest.json").write_text("{}")
+    valid_agent = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+    infrastructure = {
+        "status": "infrastructure_error", "failure_type": "runner_setup_error",
+        "diagnostics": "torch import failed", "handle": "bz-a3-1:job-1",
+    }
+
+    if component == "agent":
+        result = diagnostic.classify(infrastructure, None, tmp_path)
+    else:
+        result = diagnostic.classify(valid_agent, infrastructure, tmp_path)
+
+    assert result == ("runner_setup_error", "infrastructure")

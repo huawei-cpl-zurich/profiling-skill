@@ -134,6 +134,8 @@ def classify(agent: dict, terminal: dict | None, workspace: Path) -> tuple[str, 
     status = agent.get("status")
     if status == "timeout":
         return "agent_timeout", "observed"
+    if status == "infrastructure_error":
+        return str(agent.get("failure_type") or status), "infrastructure"
     if status in INFRASTRUCTURE:
         return str(status), "infrastructure"
     if status in OBSERVED:
@@ -151,6 +153,8 @@ def classify(agent: dict, terminal: dict | None, workspace: Path) -> tuple[str, 
     if terminal is None:
         return "protocol_error", "counted"
     terminal_status = terminal.get("status")
+    if terminal_status == "infrastructure_error":
+        return str(terminal.get("failure_type") or terminal_status), "infrastructure"
     if terminal_status in INFRASTRUCTURE:
         return str(terminal_status), "infrastructure"
     if terminal_status == "timeout":
@@ -198,7 +202,11 @@ class DiagnosticCampaign:
                 "command": ["check", "--scope", "development", "--round", "1"]},
         }
         cap = min(self.cell_timeout, available_seconds or self.cell_timeout)
-        agent = self.launcher.launch(request, max(1, int(min(self.agent_timeout, cap))))
+        try:
+            agent = self.launcher.launch(request, max(1, int(min(self.agent_timeout, cap))))
+        except Exception as error:
+            agent = {"status": "transport_or_observer_error",
+                     "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
         elapsed = time.time() - started
         terminal = None
         candidate = workspace / "candidate.py"
@@ -209,7 +217,12 @@ class DiagnosticCampaign:
                 "workspace": str(workspace), "benchmark": "streaming-matmul-add",
                 "cases": list(range(7)),
             }
-            terminal = self.terminal.check(terminal_request, max(1, int(cap - elapsed)))
+            try:
+                terminal = self.terminal.check(terminal_request, max(1, int(cap - elapsed)))
+            except Exception as error:
+                terminal = {"status": "transport_or_observer_error",
+                            "diagnostics":
+                                f"terminal hook raised {type(error).__name__}: {error}"}
         outcome, category = classify(agent, terminal, workspace)
         hashes = {}
         for name in ("candidate.py", "candidate.manifest.json"):
@@ -251,7 +264,7 @@ class DiagnosticCampaign:
                             retry = self._cell(wave, result["treatment"], 2, remaining)
                             result["retry"] = retry
                             _atomic_json(self.ledger_path, ledger)
-                        if remaining <= 0 or retry["category"] == "infrastructure":
+                        if remaining <= 0 or retry["category"] != "counted":
                             ledger["reschedule"].append(result["cell_id"])
                             _atomic_json(self.ledger_path, ledger)
             results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))

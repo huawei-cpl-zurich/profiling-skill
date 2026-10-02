@@ -80,8 +80,11 @@ class RecordingTerminal:
                 "diagnostics": "complete traceback"}
 
 
-def curation_receipt(wave: int) -> dict:
-    return {"wave": wave, "accepted": True,
+def curation_receipt(ledger: dict) -> dict:
+    wave = len(ledger["waves"])
+    return {"wave": wave, "campaign_id": ledger["campaign_id"],
+            "wave_sha256": diagnostic.DiagnosticCampaign._wave_sha256(ledger["waves"][-1]),
+            "curator_operation_id": f"curate-wave-{wave}", "accepted": True,
             "stable_ref_citations": [f"ref://profiling-skill/common/debugging/wave-{wave}"],
             "librarian_query_ids": [f"query-{wave}"]}
 
@@ -144,7 +147,7 @@ def test_adaptive_wave_requires_curation_and_preserves_prior_cells(tmp_path: Pat
     assert paused["waves"][0]["prompt_sha256"] == first["prompt_sha256"]
     with pytest.raises(diagnostic.DiagnosticError, match="not ready"):
         campaign.run_wave(2)
-    ready = campaign.acknowledge_curation(curation_receipt(1))
+    ready = campaign.acknowledge_curation(curation_receipt(paused))
     assert ready["status"] == "ready_for_next"
 
     second = manifest(tmp_path / "second")
@@ -175,7 +178,8 @@ def test_adaptive_rejects_invalid_receipt_and_campaign_drift(tmp_path: Path):
         campaign.acknowledge_curation({"wave": 1, "accepted": True,
                                       "stable_ref_citations": ["raw/path"],
                                       "librarian_query_ids": []})
-    campaign.acknowledge_curation(curation_receipt(1))
+    campaign.acknowledge_curation(curation_receipt(
+        json.loads((root / "ledger.json").read_text())))
     with pytest.raises(diagnostic.DiagnosticError, match="drift"):
         diagnostic.DiagnosticCampaign(
             original, root, RecordingLauncher(), RecordingTerminal(),
@@ -189,10 +193,90 @@ def test_adaptive_completes_only_after_fourth_curation(tmp_path: Path):
         RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
     )
     for wave in range(1, 5):
-        assert campaign.run_wave(wave)["status"] == "awaiting_curation"
-        result = campaign.acknowledge_curation(curation_receipt(wave))
+        paused = campaign.run_wave(wave)
+        assert paused["status"] == "awaiting_curation"
+        result = campaign.acknowledge_curation(curation_receipt(paused))
     assert result["status"] == "complete"
     assert len(result["waves"]) == len(result["curation_receipts"]) == 4
+
+
+def test_adaptive_reschedules_only_unresolved_infrastructure_cell(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    launcher = RecordingLauncher(outcomes)
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", launcher,
+        RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
+    )
+    blocked = campaign.run_wave(1)
+    assert blocked["status"] == "reschedule_pending"
+    resumed = campaign.run_wave(1)
+    assert resumed["status"] == "awaiting_curation"
+    assert resumed["reschedule"] == []
+    assert len([request for request, _ in launcher.requests
+                if request["treatment"] == "cannbot"]) == 3
+    assert all(len([request for request, _ in launcher.requests
+                    if request["treatment"] == treatment]) == 1
+               for treatment in ("project-cannbot", "project-guarded"))
+    assert resumed["waves"][0]["cells"][0]["reschedule_attempts"][0][
+        "category"] == "counted"
+
+
+def test_curation_receipt_is_bound_to_campaign_and_wave_evidence(tmp_path: Path):
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(),
+        RecordingTerminal(), campaign_identity={"config_sha256": "fixed"},
+        campaign_id="campaign-one",
+    )
+    paused = campaign.run_wave(1)
+    wrong = curation_receipt(paused)
+    wrong["campaign_id"] = "campaign-two"
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation(wrong)
+    wrong = curation_receipt(paused)
+    wrong["wave_sha256"] = "0" * 64
+    with pytest.raises(diagnostic.DiagnosticError, match="invalid curation"):
+        campaign.acknowledge_curation(wrong)
+
+
+def test_interrupted_adaptive_wave_resumes_without_relaunching_completed_cells(tmp_path: Path):
+    completed = threading.Event()
+
+    class CompletingTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            result = super().check(request, timeout_seconds)
+            if len(self.requests) == 2:
+                completed.set()
+            return result
+
+    class InterruptingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["treatment"] == "project-guarded":
+                assert completed.wait(1)
+                time.sleep(0.02)
+                raise KeyboardInterrupt("simulated operator interruption")
+            return super().launch(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    interrupted = diagnostic.DiagnosticCampaign(
+        config, root, InterruptingLauncher(), CompletingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.run_wave(1)
+    checkpoint = json.loads((root / "ledger.json").read_text())
+    assert checkpoint["status"] == "reschedule_pending"
+    assert checkpoint["reschedule"] == ["wave-1-project-guarded"]
+
+    replacement = RecordingLauncher()
+    resumed = diagnostic.DiagnosticCampaign(
+        config, root, replacement, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert resumed["status"] == "awaiting_curation"
+    assert len(replacement.requests) == 1
+    assert replacement.requests[0][0]["treatment"] == "project-guarded"
 
 
 def test_infrastructure_is_retried_once_but_counted_failure_is_not(tmp_path: Path):

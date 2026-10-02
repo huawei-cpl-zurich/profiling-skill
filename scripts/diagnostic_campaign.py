@@ -454,10 +454,21 @@ class DiagnosticCampaign:
         return ledger
 
     @staticmethod
-    def _validate_curation_receipt(receipt: dict, wave: int) -> None:
+    def _wave_sha256(wave_record: dict) -> str:
+        return hashlib.sha256(json.dumps(
+            wave_record, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+
+    @classmethod
+    def _validate_curation_receipt(cls, receipt: dict, ledger: dict) -> None:
+        wave = len(ledger["waves"])
         citations = receipt.get("stable_ref_citations") if isinstance(receipt, dict) else None
         queries = receipt.get("librarian_query_ids") if isinstance(receipt, dict) else None
         if (not isinstance(receipt, dict) or receipt.get("wave") != wave
+                or receipt.get("campaign_id") != ledger["campaign_id"]
+                or receipt.get("wave_sha256") != cls._wave_sha256(ledger["waves"][-1])
+                or not isinstance(receipt.get("curator_operation_id"), str)
+                or not receipt["curator_operation_id"].strip()
                 or receipt.get("accepted") is not True
                 or not isinstance(citations, list) or not citations
                 or not all(isinstance(item, str) and item.startswith("ref://")
@@ -471,7 +482,7 @@ class DiagnosticCampaign:
         if ledger["status"] != "awaiting_curation":
             raise DiagnosticError("campaign is not awaiting curation")
         wave = len(ledger["waves"])
-        self._validate_curation_receipt(receipt, wave)
+        self._validate_curation_receipt(receipt, ledger)
         ledger["curation_receipts"].append(copy.deepcopy(receipt))
         ledger["status"] = "complete" if wave == self.waves else "ready_for_next"
         _atomic_json(self.ledger_path, ledger)
@@ -483,7 +494,7 @@ class DiagnosticCampaign:
             raise DiagnosticError("wave must be an integer from 1 through 4")
         manifest = copy.deepcopy(self.manifest)
         validate_manifest(manifest)
-        if wave == 1:
+        if wave == 1 and not self.ledger_path.exists():
             if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
                 raise DiagnosticError(f"diagnostic output root is not fresh: {self.root}")
             ledger = {
@@ -497,6 +508,19 @@ class DiagnosticCampaign:
         else:
             ledger = self._load_adaptive_ledger()
             self.campaign_id = ledger["campaign_id"]
+        if ledger["status"] == "reschedule_pending":
+            if wave != len(ledger["waves"]):
+                raise DiagnosticError(f"campaign must reschedule wave {len(ledger['waves'])}")
+            if self.manifest["prompt_sha256"] != ledger["waves"][-1]["prompt_sha256"]:
+                raise DiagnosticError("prompt cannot change while a wave is reschedule pending")
+            self._prompt_bytes = Path(ledger["waves"][-1]["prompt"]).read_bytes()
+            self.manifest["prompt"] = ledger["waves"][-1]["prompt"]
+            self._resume_wave(ledger, wave)
+            ledger["status"] = (
+                "reschedule_pending" if ledger["reschedule"] else "awaiting_curation"
+            )
+            _atomic_json(self.ledger_path, ledger)
+            return ledger
         next_wave = len(ledger["waves"]) + 1
         if ledger["status"] != "ready_for_next" or wave != next_wave:
             raise DiagnosticError(f"campaign is not ready for wave {wave}; next wave is {next_wave}")
@@ -507,18 +531,71 @@ class DiagnosticCampaign:
         try:
             self._run_one_wave(ledger, wave)
         except BaseException:
-            ledger["status"] = "interrupted"
+            completed = {cell["treatment"] for cell in ledger["waves"][-1]["cells"]
+                         if cell["category"] == "counted"}
+            pending = set(ledger["reschedule"])
+            pending.update(f"wave-{wave}-{name}" for name in TREATMENTS
+                           if name not in completed)
+            ledger["reschedule"] = sorted(pending)
+            ledger["status"] = "reschedule_pending"
             _atomic_json(self.ledger_path, ledger)
             for hook in (self.launcher, self.terminal):
                 cancel = getattr(hook, "cancel", None)
                 if cancel is not None:
-                    cancel()
+                    try:
+                        cancel()
+                    except Exception:
+                        pass
             raise
         ledger["status"] = (
             "reschedule_pending" if ledger["reschedule"] else "awaiting_curation"
         )
         _atomic_json(self.ledger_path, ledger)
         return ledger
+
+    def _resume_wave(self, ledger: dict, wave: int) -> None:
+        """Retry only unresolved infrastructure cells in an existing wave."""
+        wave_record = ledger["waves"][-1]
+        by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
+        for cell_id in list(ledger["reschedule"]):
+            treatment = cell_id.removeprefix(f"wave-{wave}-")
+            prior = by_treatment.get(treatment)
+            last = prior.get("retry", prior) if prior is not None else None
+            workspace = None if last is None else (
+                self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
+            )
+            if (last is not None and workspace is not None
+                    and all((workspace / name).is_file()
+                            for name in ("candidate.py", "candidate.manifest.json"))):
+                try:
+                    terminal = self.terminal.check({
+                        "protocol_version": 1, "operation": "terminal_check",
+                        "cell_id": cell_id, "workspace": str(workspace),
+                        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+                    }, self.cell_timeout)
+                except Exception as error:
+                    terminal = {"status": "transport_or_observer_error",
+                                "diagnostics":
+                                    f"terminal hook raised {type(error).__name__}: {error}"}
+                outcome, category = classify(last["agent"], terminal, workspace)
+                resumed = {**copy.deepcopy(last), "outcome": outcome,
+                           "category": category, "terminal": terminal,
+                           "rescheduled": True}
+            else:
+                attempt = 1 if last is None else last["attempt"] + 1
+                while (self.root / "cells" / cell_id / f"attempt-{attempt}").exists():
+                    attempt += 1
+                resumed = self._guarded_cell(wave, treatment, attempt, self.wave_timeout)
+            if prior is None:
+                wave_record["cells"].append(resumed)
+                by_treatment[treatment] = resumed
+            else:
+                prior.setdefault("reschedule_attempts", []).append(resumed)
+                prior["resolution"] = resumed
+            if resumed["category"] != "infrastructure":
+                ledger["reschedule"].remove(cell_id)
+            _atomic_json(self.ledger_path, ledger)
+        wave_record["cells"].sort(key=lambda item: TREATMENTS.index(item["treatment"]))
 
     def run(self) -> dict:
         manifest = copy.deepcopy(self.manifest)
@@ -602,6 +679,16 @@ class DiagnosticCampaign:
         except BaseException:
             for future in futures:
                 future.cancel()
+            recorded = {item["treatment"] for item in results}
+            for future, treatment in futures.items():
+                if treatment in recorded or not future.done() or future.cancelled():
+                    continue
+                try:
+                    results.append(future.result())
+                except BaseException:
+                    pass
+            results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))
+            _atomic_json(self.ledger_path, ledger)
             raise
         for result in [item for item in results if item["category"] == "infrastructure"]:
             remaining = self.wave_timeout - (time.monotonic() - wave_started)

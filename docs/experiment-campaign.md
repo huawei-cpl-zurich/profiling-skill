@@ -73,7 +73,9 @@ wave atomically pauses its ledger in `awaiting_curation`; it does not launch
 the next wave. Submit the curator-produced JSON with `--action
 acknowledge-curation --curation-receipt /absolute/receipt.json`. The receipt
 must identify the completed wave, set `accepted` to true, and contain nonempty
-`stable_ref_citations` (`ref://...`) and `librarian_query_ids` arrays.
+`stable_ref_citations` (`ref://...`) and `librarian_query_ids` arrays. It also
+binds the curator operation to the ledger's `campaign_id` and canonical
+`wave_sha256`; receipts from another campaign or evidence revision are rejected.
 
 Acknowledgement moves waves 1-3 to `ready_for_next` and Wave 4 to `complete`.
 Only the prompt path and digest may change between waves. The CLI rejects

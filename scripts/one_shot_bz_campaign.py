@@ -305,7 +305,11 @@ def run_wave(config: dict, manifest: dict, placements: dict, root: Path, launche
              client: BzA3DiagnosticClient, wave: int) -> dict:
     """Run exactly one adaptive BZ wave, preserving the fixed-run API."""
     identity = _adaptive_inputs(config, manifest, placements)
-    if wave == 1:
+    created_snapshot = wave == 1 and not (root / "ledger.json").exists()
+    if created_snapshot:
+        diagnostic_campaign.validate_manifest(manifest)
+        if root.exists() and (not root.is_dir() or any(root.iterdir())):
+            raise DiagnosticError(f"diagnostic output root is not fresh: {root}")
         campaign_id = str(uuid.uuid4())
         assets, evidence = freeze_assets(config["assets"], root, campaign_id)
     else:
@@ -321,7 +325,12 @@ def run_wave(config: dict, manifest: dict, placements: dict, root: Path, launche
         ledger_metadata={"assets": evidence}, campaign_id=campaign_id,
         campaign_identity={"config_sha256": identity},
     )
-    return campaign.run_wave(wave)
+    try:
+        return campaign.run_wave(wave)
+    except BaseException:
+        if created_snapshot and not campaign.ledger_path.exists():
+            shutil.rmtree(evidence["root"], ignore_errors=True)
+        raise
 
 
 def acknowledge_curation(config: dict, manifest: dict, placements: dict,

@@ -7,6 +7,8 @@ import sys
 import threading
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -140,7 +142,9 @@ def test_adaptive_bz_reuses_controller_snapshot_across_prompt_revision(tmp_path:
     config, manifest, placements = inputs(tmp_path)
     root, agent, client = tmp_path / "campaign", Agent(), Client()
     first = module.run_wave(config, manifest, placements, root, agent, client, 1)
-    receipt = {"wave": 1, "accepted": True,
+    receipt = {"wave": 1, "campaign_id": first["campaign_id"],
+               "wave_sha256": module.DiagnosticCampaign._wave_sha256(first["waves"][0]),
+               "curator_operation_id": "curate-wave-1", "accepted": True,
                "stable_ref_citations": ["ref://profiling-skill/common/debugging/wave-1"],
                "librarian_query_ids": ["query-1"]}
     module.acknowledge_curation(config, manifest, placements, root, receipt)
@@ -157,6 +161,16 @@ def test_adaptive_bz_reuses_controller_snapshot_across_prompt_revision(tmp_path:
     assert len(agent.requests) == len(client.requests) == 6
     assert len({request["campaign"] for request in client.requests}) == 1
     assert len([request for request, _ in agent.requests if request["wave"] == 1]) == 3
+
+
+def test_adaptive_rejects_nonfresh_root_before_freezing_assets(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+    root.mkdir()
+    (root / "existing").write_text("keep\n")
+    with pytest.raises(module.DiagnosticError, match="not fresh"):
+        module.run_wave(config, manifest, placements, root, Agent(), Client(), 1)
+    assert list(tmp_path.glob(".campaign-inputs-*")) == []
 
 
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):

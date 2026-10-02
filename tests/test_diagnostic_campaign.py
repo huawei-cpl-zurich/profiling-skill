@@ -365,6 +365,93 @@ def test_running_recovery_discovers_completed_automatic_retry(tmp_path: Path):
     assert recovered_cell["reschedule_attempts"][-1]["attempt"] == 2
 
 
+def test_running_recovery_reobserves_newer_started_retry_with_original_timeout(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra"}
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(outcomes), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    cannbot = next(cell for cell in ledger["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    retry = cannbot["retry"]
+    cannbot.pop("retry")
+    ledger["status"] = "running"
+    ledger["reschedule"] = ["wave-1-cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-2").glob(
+        "terminal-result-*.json"))
+    receipt = json.loads(receipt_path.read_text())
+    receipt.update({"state": "started", "request": {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot",
+        "workspace": str(root / "cells" / "wave-1-cannbot" / "attempt-2" / "workspace"),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 2,
+        "candidate_sha256": retry["candidate_sha256"],
+    }, "timeout_seconds": 7,
+        "result": {"status": "infrastructure_error", "failure_type": "observer_error",
+                   "handle": "bz-a3-1:retained", "terminal_attempt": 2,
+                   "retained_terminal_request": {"cell": "cannbot-attempt-2",
+                                                   "timeout": 7}}})
+    (receipt_path).write_text(json.dumps(receipt))
+    class ReobservingTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained-again", "terminal_attempt": 2,
+                    "retained_terminal_request": {"cell": "cannbot-attempt-2",
+                                                  "timeout": 7, "generation": 2}}
+
+    terminal = ReobservingTerminal()
+    pending = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert pending["status"] == "reschedule_pending"
+    assert terminal.requests[0][1] == 7
+    assert terminal.requests[0][0]["terminal_attempt"] == 2
+    assert terminal.requests[0][0]["retained_terminal_request"] == {
+        "cell": "cannbot-attempt-2", "timeout": 7}
+    final_terminal = RecordingTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), final_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert final_terminal.requests[0][0]["retained_terminal_request"] == {
+        "cell": "cannbot-attempt-2", "timeout": 7, "generation": 2}
+
+
+def test_infrastructure_agent_with_candidate_gets_full_replacement(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    cell = next(cell for cell in ledger["waves"][0]["cells"]
+                if cell["treatment"] == "cannbot")
+    cell.update({"category": "infrastructure", "outcome": "wave_budget_exhausted"})
+    cell["agent"] = {"status": "infrastructure_error",
+                     "failure_type": "wave_budget_exhausted"}
+    ledger["status"] = "reschedule_pending"
+    ledger["reschedule"] = ["wave-1-cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+    launcher = RecordingLauncher()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, launcher, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert [request["attempt"] for request, _ in launcher.requests] == [2]
+
+
 def test_adaptive_load_revalidates_prior_curation_wave_hash(tmp_path: Path):
     root = tmp_path / "run"
     config = manifest(tmp_path / "inputs")

@@ -420,6 +420,7 @@ class DiagnosticCampaign:
         workspace = Path(request["workspace"])
         digest = hashlib.sha256(json.dumps(
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        receipt_request = copy.deepcopy(request)
         terminal_attempt = request.get("terminal_attempt", workspace.parent.name)
         receipt = workspace.parent / f"terminal-result-{terminal_attempt}-{digest[:16]}.json"
         if receipt.is_file():
@@ -430,9 +431,35 @@ class DiagnosticCampaign:
                 return copy.deepcopy(record["result"])
             if record.get("state") != "started":
                 raise DiagnosticError("invalid terminal result receipt")
+            persisted_timeout = record.get("timeout_seconds")
+            if (isinstance(persisted_timeout, bool)
+                    or not isinstance(persisted_timeout, int) or persisted_timeout < 1):
+                raise DiagnosticError("invalid started terminal timeout")
+            persisted_request = record.get("request")
+            if (not isinstance(persisted_request, dict)
+                    or hashlib.sha256(json.dumps(
+                        persisted_request, sort_keys=True,
+                        separators=(",", ":")).encode()).hexdigest() != digest):
+                raise DiagnosticError("invalid started terminal request")
+            receipt_request = copy.deepcopy(persisted_request)
+            prior_result = record.get("result")
+            retained_request = (prior_result.get("retained_terminal_request")
+                                if isinstance(prior_result, dict) else None)
+            if retained_request is not None:
+                if not isinstance(retained_request, dict):
+                    raise DiagnosticError("invalid retained terminal request")
+                request = {**copy.deepcopy(persisted_request),
+                           "retained_terminal_request": copy.deepcopy(retained_request),
+                           "terminal_attempt": prior_result.get(
+                               "terminal_attempt", persisted_request.get("terminal_attempt"))}
+            else:
+                request = copy.deepcopy(persisted_request)
+            timeout_seconds = persisted_timeout
         else:
             _atomic_json(receipt, {"protocol_version": 1, "state": "started",
-                                   "request_sha256": digest})
+                                   "request_sha256": digest,
+                                   "request": receipt_request,
+                                   "timeout_seconds": timeout_seconds})
         result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
         retriable_observation = (
             result.get("status") == "infrastructure_error"
@@ -441,6 +468,12 @@ class DiagnosticCampaign:
         if not retriable_observation:
             _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
                                    "request_sha256": digest, "result": result})
+        else:
+            _atomic_json(receipt, {"protocol_version": 1, "state": "started",
+                                   "request_sha256": digest,
+                                   "request": receipt_request,
+                                   "timeout_seconds": timeout_seconds,
+                                   "result": result})
         return result
 
     def _guarded_cell(self, wave: int, treatment: str, attempt: int,
@@ -663,7 +696,15 @@ class DiagnosticCampaign:
                     record = json.loads(path.read_text())
                 except (OSError, json.JSONDecodeError):
                     continue
-                if record.get("state") == "completed" and isinstance(record.get("result"), dict):
+                retriable_started = (
+                    record.get("state") == "started"
+                    and isinstance(record.get("request"), dict)
+                    and isinstance(record.get("timeout_seconds"), int)
+                    and isinstance(record.get("result"), dict)
+                    and bool(record["result"].get("handle"))
+                    and isinstance(record["result"].get("retained_terminal_request"), dict))
+                if ((record.get("state") == "completed"
+                     and isinstance(record.get("result"), dict)) or retriable_started):
                     durable_attempts.append(int(path.parent.name.removeprefix("attempt-")))
             newest_durable = max(durable_attempts, default=0)
             workspace = None if last is None else (
@@ -673,6 +714,7 @@ class DiagnosticCampaign:
                 resumed = self._guarded_cell(
                     wave, treatment, newest_durable, remaining)
             elif (last is not None and last["category"] == "infrastructure"
+                    and last.get("agent", {}).get("status") == "ok"
                     and workspace is not None
                     and all((workspace / name).is_file()
                             for name in ("candidate.py", "candidate.manifest.json"))):

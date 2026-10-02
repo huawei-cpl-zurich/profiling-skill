@@ -204,6 +204,27 @@ def test_snapshot_failure_cannot_invoke_agent_twice(tmp_path: Path, monkeypatch)
     assert replay["failure_type"] == "snapshot_error" and replay["submission_replayed"] is True
 
 
+def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypatch):
+    agent = Agent()
+    frozen = module.FrozenAgentLauncher(agent)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    request = {"cell_id": "wave-1-cannbot", "workspace": str(workspace)}
+    original = Path.read_bytes
+
+    def mutate_after_read(path):
+        content = original(path)
+        if path.name == "candidate.py":
+            path.write_text("background mutation\n")
+        return content
+
+    monkeypatch.setattr(Path, "read_bytes", mutate_after_read)
+    result = frozen.launch(request, 10)
+    assert result["status"] == "ok" and len(agent.requests) == 1
+    assert (workspace / "candidate.py").read_text() == "candidate\n"
+    assert (workspace / "candidate.py").stat().st_mode & 0o777 == 0o444
+
+
 def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):
     config, manifest, placements = inputs(tmp_path)
     agent = Agent()
@@ -286,6 +307,32 @@ def test_failed_retained_observation_never_dispatches_fallback(tmp_path: Path):
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert (client.requests[1]["profile"], client.requests[1]["device"]) == ("bz-a3-1", 0)
     assert client.requests[1]["observe_timeout"] == client.requests[1]["timeout"]
+
+
+def test_terminal_infrastructure_result_uses_fallback(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+
+    class TerminalFailure(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return {"status": "infrastructure_error",
+                        "failure_type": "remote_infrastructure_error",
+                        "handle": "bz-a3-1:terminal", "artifacts": {"remote_run_root": "kept"}}
+            return {"status": "ok", "passed": True}
+
+    client = TerminalFailure()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "unique")
+    for attempt in (1, 2):
+        workspace = tmp_path / f"attempt-{attempt}" / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "candidate.py").write_text("candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace)}, 240)
+    assert result["status"] == "ok" and len(client.requests) == 2
+    assert client.requests[0]["cell"] == "cannbot-attempt-1"
+    assert client.requests[1]["cell"] == "cannbot-attempt-2"
+    assert (client.requests[1]["profile"], client.requests[1]["device"]) == ("bz-a3-2", 2)
 
 
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):

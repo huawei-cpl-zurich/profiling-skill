@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -70,13 +71,23 @@ class FrozenAgentLauncher:
         self.launcher = launcher
         self.frozen: dict[str, tuple[dict, dict[str, bytes]]] = {}
 
+    @staticmethod
+    def _restore(workspace: Path, files: dict[str, bytes]) -> None:
+        for name, content in files.items():
+            with tempfile.NamedTemporaryFile("wb", dir=workspace, delete=False) as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+                temporary = Path(stream.name)
+            os.chmod(temporary, 0o444)
+            os.replace(temporary, workspace / name)
+
     def launch(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         workspace = Path(request["workspace"])
         if cell in self.frozen:
             result, files = self.frozen[cell]
-            for name, content in files.items():
-                (workspace / name).write_bytes(content)
+            self._restore(workspace, files)
             return {**result, "submission_replayed": True}
         try:
             result = self.launcher.launch(request, timeout_seconds)
@@ -93,6 +104,7 @@ class FrozenAgentLauncher:
                 path = workspace / name
                 if path.is_file():
                     files[name] = path.read_bytes()
+            self._restore(workspace, files)
         except OSError as error:
             files.clear()
             self.frozen[cell] = ({
@@ -167,6 +179,7 @@ class BzTerminalHook:
         deadline = time.monotonic() + timeout_seconds
         result = self.client.run(client_request)
         uncertain = (result.get("status") == "infrastructure_error"
+                     and result.get("failure_type") in {"observer_error", "transport_error"}
                      and bool(result.get("handle")))
         if (retained is not None and result.get("status") == "infrastructure_error"
                 and not uncertain):
@@ -180,6 +193,7 @@ class BzTerminalHook:
             client_request.pop("observe_timeout", None)
             result = self.client.run(client_request)
             uncertain = (result.get("status") == "infrastructure_error"
+                         and result.get("failure_type") in {"observer_error", "transport_error"}
                          and bool(result.get("handle")))
         if uncertain:
             self._uncertain[cell] = {key: value for key, value in client_request.items()

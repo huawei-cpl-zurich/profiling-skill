@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -182,6 +183,63 @@ def test_client_observes_retained_handle_without_upload_or_execution(tmp_path: P
     assert result["handle"] == handle
     assert transport.observations == [("bz-a3-1", handle, 30)]
     assert not transport.uploads and not transport.executions
+
+
+def test_dispatch_observer_timeout_retains_handle_for_observe_only_resume(tmp_path: Path):
+    module = load()
+    calls = []
+    observe_attempts = 0
+    handle = "bz-a3-1:retained-timeout"
+
+    def invoke(argv, timeout):
+        nonlocal observe_attempts
+        calls.append(argv)
+        if "observe" in argv:
+            observe_attempts += 1
+            if observe_attempts == 1:
+                raise subprocess.TimeoutExpired(argv, timeout)
+            payload = {"status": "ok", "passed": True, "diagnostics": "",
+                       "case_evidence": [{"case": 0, "passed": True}]}
+            return module.CommandResult(
+                0, "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n", "")
+        if "run" in argv:
+            return module.CommandResult(
+                75, "CATLASS_VALIDATION_STATE=observation-unavailable\n" + handle + "\n", "")
+        return module.CommandResult(0, "", "")
+
+    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    value = request(tmp_path)
+
+    interrupted = client.run(value)
+    resumed = client.observe(value, interrupted["handle"])
+
+    assert interrupted["status"] == "infrastructure_error"
+    assert interrupted["failure_type"] == "transport_error"
+    assert interrupted["handle"] == handle
+    assert resumed["status"] == "ok" and resumed["handle"] == handle
+    assert sum("run" in argv for argv in calls) == 1
+    assert sum("observe" in argv for argv in calls) == 2
+
+
+def test_dispatch_observer_error_reattaches_extracted_handle():
+    module = load()
+    handle = "bz-a3-2:retained-observer"
+
+    def invoke(argv, _timeout):
+        if "observe" in argv:
+            raise module.DiagnosticError("observer_error", "listener unavailable")
+        return module.CommandResult(
+            75, "CATLASS_VALIDATION_STATE=observation-unavailable\n" + handle + "\n", "")
+
+    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    try:
+        transport.execute("bz-a3-2", 0, "diagnostic", "true", 30)
+    except module.DiagnosticError as error:
+        assert error.failure_type == "observer_error"
+        assert error.handle == handle
+    else:
+        raise AssertionError("observer failure was not propagated")
 
 
 def test_remote_script_verifies_both_digests_and_bounds_execution():

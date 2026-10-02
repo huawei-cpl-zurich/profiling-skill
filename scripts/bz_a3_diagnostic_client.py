@@ -65,7 +65,21 @@ class AdapterTransport:
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
-        result = self.invoke(self.adapter + ["--profile", profile, "observe", "--handle", handle], timeout + 30)
+        try:
+            result = self.invoke(
+                self.adapter + ["--profile", profile, "observe", "--handle", handle],
+                timeout + 30,
+            )
+        except DiagnosticError as exc:
+            raise DiagnosticError(exc.failure_type, str(exc), exc.handle or handle) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise DiagnosticError(
+                "transport_error", f"observation timed out after {timeout + 30}s", handle
+            ) from exc
+        except OSError as exc:
+            raise DiagnosticError(
+                "transport_error", f"observation unavailable: {exc}", handle
+            ) from exc
         if _nonterminal(result.stdout + result.stderr):
             raise DiagnosticError("observer_error", "retained job is not terminal", handle)
         return result

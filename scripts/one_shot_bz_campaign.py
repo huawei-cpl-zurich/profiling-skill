@@ -230,6 +230,12 @@ class BzTerminalHook:
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": list(range(7)),
         }
+        snapshot_hashes = expected if isinstance(expected, dict) else (
+            {name: diagnostic_campaign.sha256_file(submission / name)
+             for name in ("candidate.py", "candidate.manifest.json")}
+            if all((submission / name).is_file()
+                   for name in ("candidate.py", "candidate.manifest.json")) else {})
+        client_request["candidate_sha256"] = copy.deepcopy(snapshot_hashes)
         # A retained observer interruption is not permission to dispatch on a
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
@@ -239,6 +245,7 @@ class BzTerminalHook:
             immutable = ("campaign", "wave", "baseline", "case_spec", "runner", "cases")
             retained_candidate = Path(str(retained.get("candidate", "")))
             retained_manifest = Path(str(retained.get("candidate_manifest", "")))
+            retained_hashes = retained.get("candidate_sha256")
             prefix = f"{treatment}-attempt-"
             retained_attempt = str(retained.get("cell", "")).removeprefix(prefix)
             retained_placement = (self.placements[treatment][min(int(retained_attempt) - 1, 1)]
@@ -256,6 +263,11 @@ class BzTerminalHook:
                            for key, value in retained_placement.items())
                     or not retained_placement
                     or not same_cell
+                    or not isinstance(retained_hashes, dict)
+                    or retained_hashes.get("candidate.py") != diagnostic_campaign.sha256_file(
+                        retained_candidate)
+                    or retained_hashes.get("candidate.manifest.json") != (
+                        diagnostic_campaign.sha256_file(retained_manifest))
                     or isinstance(retained.get("timeout"), bool)
                     or not isinstance(retained.get("timeout"), int)
                     or not 1 <= retained["timeout"] <= 240):

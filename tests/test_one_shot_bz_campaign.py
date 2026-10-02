@@ -596,6 +596,33 @@ def test_retained_terminal_request_survives_hook_restart(tmp_path: Path):
     assert "observe_timeout" in client.requests[1]
 
 
+def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+    other = tmp_path / "other" / "frozen-submission"
+    other.mkdir(parents=True)
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (other / name).write_text("other\n")
+    client = Client()
+    retained = {
+        "campaign": "campaign", "wave": "1", "cell": "cannbot-attempt-1",
+        "profile": "bz-a3-1", "device": 0, "timeout": 30,
+        "candidate": str(other / "candidate.py"),
+        "candidate_manifest": str(other / "candidate.manifest.json"),
+        **config["assets"], "cases": list(range(7)),
+    }
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    with pytest.raises(module.DiagnosticError, match="retained terminal request mismatch"):
+        hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                    "retained_terminal_request": retained}, 30)
+    assert client.requests == []
+
+
 def test_terminal_cancel_waits_for_durable_client_completion(tmp_path: Path):
     entered, release, cancelled = threading.Event(), threading.Event(), threading.Event()
 

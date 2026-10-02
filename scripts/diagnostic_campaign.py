@@ -393,6 +393,8 @@ class DiagnosticCampaign:
                 "cases": list(range(7)), "terminal_attempt": attempt,
                 "candidate_sha256": copy.deepcopy(submission_hashes),
             }
+            if (workspace.parent / "frozen-submission").exists():
+                terminal_request["candidate_source"] = "frozen-submission"
             try:
                 terminal = self._durable_terminal_check(
                     terminal_request, max(1, int(cap - elapsed)))
@@ -666,7 +668,9 @@ class DiagnosticCampaign:
             request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         expected_workspace = attempt_dir / "workspace"
         frozen_submission = attempt_dir / "frozen-submission"
-        candidate_root = (frozen_submission if frozen_submission.exists()
+        candidate_root = (frozen_submission
+                          if (request.get("candidate_source") == "frozen-submission"
+                              or frozen_submission.exists())
                           else expected_workspace)
         candidate_sha256 = request.get("candidate_sha256")
         if (record.get("protocol_version") != 1
@@ -674,6 +678,8 @@ class DiagnosticCampaign:
                 or request.get("operation") != "terminal_check"
                 or request.get("benchmark") != "streaming-matmul-add"
                 or request.get("cases") != list(range(7))
+                or request.get("candidate_source") not in {
+                    None, "frozen-submission"}
                 or isinstance(record.get("timeout_seconds"), bool)
                 or not isinstance(record.get("timeout_seconds"), int)
                 or record["timeout_seconds"] < 1
@@ -921,8 +927,13 @@ class DiagnosticCampaign:
                     and all((workspace / name).is_file()
                             for name in ("candidate.py", "candidate.manifest.json"))):
                 expected = last.get("candidate_sha256")
+                frozen_submission = workspace.parent / "frozen-submission"
+                candidate_root = (frozen_submission if frozen_submission.exists()
+                                  else workspace)
                 if (not isinstance(expected, dict)
-                        or any(expected.get(name) != sha256_file(workspace / name)
+                        or any(not (candidate_root / name).is_file()
+                               for name in ("candidate.py", "candidate.manifest.json"))
+                        or any(expected.get(name) != sha256_file(candidate_root / name)
                                for name in ("candidate.py", "candidate.manifest.json"))):
                     raise DiagnosticError(f"retained candidate digest mismatch for {cell_id}")
                 try:
@@ -939,6 +950,8 @@ class DiagnosticCampaign:
                                              else terminal_attempt + 1),
                         "retained_terminal_request": copy.deepcopy(retained_request),
                     }
+                    if candidate_root == frozen_submission:
+                        terminal_request["candidate_source"] = "frozen-submission"
                     terminal = self._durable_terminal_check(
                         terminal_request, max(1, int(remaining)))
                 except DiagnosticError:

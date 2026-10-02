@@ -1038,9 +1038,9 @@ def test_terminal_reconciliation_rejects_unrelated_terminal_result(
         campaign.reconcile_terminal("wave-1-cannbot", 1, 1, result=result)
 
 
-@pytest.mark.parametrize("missing_frozen_file", [False, True])
+@pytest.mark.parametrize("missing_frozen", [None, "file", "directory"])
 def test_terminal_reconciliation_uses_immutable_frozen_submission(
-    tmp_path: Path, missing_frozen_file: bool,
+    tmp_path: Path, missing_frozen: str | None,
 ):
     class TimeoutTerminal(RecordingTerminal):
         def check(self, request, timeout_seconds):
@@ -1065,6 +1065,7 @@ def test_terminal_reconciliation_uses_immutable_frozen_submission(
         "cell_id": "wave-1-cannbot", "workspace": str(workspace),
         "benchmark": "streaming-matmul-add", "cases": list(range(7)),
         "terminal_attempt": 1,
+        "candidate_source": "frozen-submission",
         "candidate_sha256": {
             name: diagnostic.sha256_file(frozen / name)
             for name in ("candidate.py", "candidate.manifest.json")
@@ -1072,10 +1073,14 @@ def test_terminal_reconciliation_uses_immutable_frozen_submission(
     }
     campaign._durable_terminal_check(request, 30)
     (workspace / "candidate.py").write_text("mutated\n")
-    if missing_frozen_file:
+    if missing_frozen == "file":
         (frozen / "candidate.py").unlink()
+    elif missing_frozen == "directory":
+        for path in frozen.iterdir():
+            path.unlink()
+        frozen.rmdir()
 
-    if missing_frozen_file:
+    if missing_frozen is not None:
         with pytest.raises(diagnostic.DiagnosticError, match="identity mismatch"):
             campaign.reconcile_terminal(
                 "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")

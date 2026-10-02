@@ -101,10 +101,28 @@ class FrozenAgentLauncher:
     def launch(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         workspace = Path(request["workspace"])
+        cell_root = (workspace.parent.parent
+                     if workspace.parent.name.startswith("attempt-") else workspace)
+        receipt_path = cell_root / "agent-launch.json"
         if cell in self.frozen:
             result, files = self.frozen[cell]
             self._freeze_submission(workspace, files)
             return {**result, "submission_replayed": True}
+        if receipt_path.is_file():
+            receipt = json.loads(receipt_path.read_text())
+            if receipt.get("state") != "completed":
+                return {"status": "infrastructure_error",
+                        "failure_type": "uncertain_agent_launch",
+                        "diagnostics": "prior billed launch has no durable terminal receipt"}
+            snapshot = Path(receipt["snapshot"])
+            files = {name: (snapshot / name).read_bytes()
+                     for name in receipt.get("candidate_sha256", {})}
+            self.frozen[cell] = (receipt["result"], files)
+            self._freeze_submission(workspace, files)
+            return {**receipt["result"], "submission_replayed": True}
+        diagnostic_campaign._atomic_json(receipt_path, {
+            "protocol_version": 1, "cell_id": cell, "state": "started",
+        })
         try:
             result = self.launcher.launch(request, timeout_seconds)
         except Exception as error:
@@ -128,6 +146,13 @@ class FrozenAgentLauncher:
                 "diagnostics": f"submission snapshot failed: {type(error).__name__}: {error}",
             }, files)
             raise
+        snapshot = workspace.parent / "frozen-submission"
+        diagnostic_campaign._atomic_json(receipt_path, {
+            "protocol_version": 1, "cell_id": cell, "state": "completed",
+            "result": result, "snapshot": str(snapshot),
+            "candidate_sha256": {name: hashlib.sha256(content).hexdigest()
+                                 for name, content in files.items()},
+        })
         return result
 
     def cancel(self) -> None:
@@ -171,6 +196,12 @@ class BzTerminalHook:
             raise DiagnosticError(f"invalid cell id {cell!r}") from exc
         workspace = Path(request["workspace"])
         submission = workspace.parent / "frozen-submission"
+        expected = request.get("candidate_sha256")
+        if expected is not None and (
+                not isinstance(expected, dict)
+                or any(expected.get(name) != diagnostic_campaign.sha256_file(submission / name)
+                       for name in ("candidate.py", "candidate.manifest.json"))):
+            raise DiagnosticError(f"frozen submission digest mismatch for {cell}")
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
         placement = self.placements[treatment][min(attempt - 1, 1)]
         client_request = {

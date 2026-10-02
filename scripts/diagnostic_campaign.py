@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 import uuid
-from concurrent.futures import Future, as_completed
+from concurrent.futures import Future, TimeoutError as FutureTimeout, as_completed
 from pathlib import Path
 from typing import Protocol
 
@@ -570,12 +570,20 @@ class DiagnosticCampaign:
             if (last is not None and workspace is not None
                     and all((workspace / name).is_file()
                             for name in ("candidate.py", "candidate.manifest.json"))):
+                expected = last.get("candidate_sha256")
+                if (not isinstance(expected, dict)
+                        or any(expected.get(name) != sha256_file(workspace / name)
+                               for name in ("candidate.py", "candidate.manifest.json"))):
+                    raise DiagnosticError(f"retained candidate digest mismatch for {cell_id}")
                 try:
                     terminal = self.terminal.check({
                         "protocol_version": 1, "operation": "terminal_check",
                         "cell_id": cell_id, "workspace": str(workspace),
                         "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+                        "candidate_sha256": copy.deepcopy(expected),
                     }, self.cell_timeout)
+                except DiagnosticError:
+                    raise
                 except Exception as error:
                     terminal = {"status": "transport_or_observer_error",
                                 "diagnostics":
@@ -682,19 +690,23 @@ class DiagnosticCampaign:
         except BaseException:
             for future in futures:
                 future.cancel()
-            for hook in (self.launcher, self.terminal):
-                cancel = getattr(hook, "cancel", None)
-                if cancel is not None:
-                    try:
-                        cancel()
-                    except Exception:
-                        pass
+            if ledger.get("adaptive") is True:
+                for hook in (self.launcher, self.terminal):
+                    cancel = getattr(hook, "cancel", None)
+                    if cancel is not None:
+                        try:
+                            cancel()
+                        except Exception:
+                            pass
             recorded = {item["treatment"] for item in results}
             for future, treatment in futures.items():
-                if treatment in recorded or not future.done() or future.cancelled():
+                if (treatment in recorded or future.cancelled()
+                        or (ledger.get("adaptive") is not True and not future.done())):
                     continue
                 try:
-                    results.append(future.result())
+                    results.append(future.result(timeout=min(5, self.cell_timeout)))
+                except FutureTimeout:
+                    continue
                 except BaseException:
                     pass
             results.sort(key=lambda item: TREATMENTS.index(item["treatment"]))

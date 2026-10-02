@@ -431,6 +431,68 @@ def test_frozen_launcher_delegates_cancellation():
     assert agent.cancelled is True
 
 
+def test_frozen_launcher_replays_durable_receipt_after_restart(tmp_path: Path):
+    cell_root = tmp_path / "cells" / "wave-1-cannbot"
+    first_workspace = cell_root / "attempt-1" / "workspace"
+    first_workspace.mkdir(parents=True)
+    request = {"cell_id": "wave-1-cannbot", "workspace": str(first_workspace)}
+    first_agent = Agent()
+    first = module.FrozenAgentLauncher(first_agent).launch(request, 10)
+
+    class MustNotLaunch:
+        def launch(self, _request, _timeout):
+            raise AssertionError("durably completed agent was relaunched")
+
+    second_workspace = cell_root / "attempt-2" / "workspace"
+    second_workspace.mkdir(parents=True)
+    request["workspace"] = str(second_workspace)
+    replay = module.FrozenAgentLauncher(MustNotLaunch()).launch(request, 10)
+    assert first["status"] == replay["status"] == "ok"
+    assert replay["submission_replayed"] is True
+    assert (second_workspace / "candidate.py").read_text() == "candidate\n"
+
+
+def test_uncertain_durable_launch_is_never_billed_twice(tmp_path: Path):
+    class Interrupted:
+        calls = 0
+
+        def launch(self, _request, _timeout):
+            self.calls += 1
+            raise KeyboardInterrupt
+
+    cell_root = tmp_path / "cells" / "wave-1-cannbot"
+    first_workspace = cell_root / "attempt-1" / "workspace"
+    first_workspace.mkdir(parents=True)
+    request = {"cell_id": "wave-1-cannbot", "workspace": str(first_workspace)}
+    agent = Interrupted()
+    with pytest.raises(KeyboardInterrupt):
+        module.FrozenAgentLauncher(agent).launch(request, 10)
+    second_workspace = cell_root / "attempt-2" / "workspace"
+    second_workspace.mkdir(parents=True)
+    request["workspace"] = str(second_workspace)
+    result = module.FrozenAgentLauncher(agent).launch(request, 10)
+    assert agent.calls == 1
+    assert result["failure_type"] == "uncertain_agent_launch"
+
+
+def test_terminal_resume_rejects_changed_frozen_submission(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name, content in (("candidate.py", b"candidate\n"),
+                          ("candidate.manifest.json", b"{}\n")):
+        (snapshot / name).write_bytes(content)
+    expected = {name: hashlib.sha256((snapshot / name).read_bytes()).hexdigest()
+                for name in ("candidate.py", "candidate.manifest.json")}
+    (snapshot / "candidate.py").write_text("changed\n")
+    hook = module.BzTerminalHook(Client(), placements, config["assets"], "campaign")
+    with pytest.raises(module.DiagnosticError, match="digest mismatch"):
+        hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+                    "candidate_sha256": expected}, 30)
+
+
 def test_terminal_cancel_waits_for_durable_client_completion(tmp_path: Path):
     entered, release, cancelled = threading.Event(), threading.Event(), threading.Event()
 

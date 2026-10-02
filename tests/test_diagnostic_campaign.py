@@ -239,21 +239,27 @@ def test_curation_receipt_is_bound_to_campaign_and_wave_evidence(tmp_path: Path)
         campaign.acknowledge_curation(wrong)
 
 
-def test_interrupted_adaptive_wave_resumes_without_relaunching_completed_cells(tmp_path: Path):
-    completed = threading.Event()
+def test_interrupted_adaptive_wave_drains_result_before_resuming(
+        tmp_path: Path, monkeypatch):
+    publish_ready, publish_release = threading.Event(), threading.Event()
+
+    class DelayedPublishingFuture(diagnostic.Future):
+        def set_result(self, result):
+            if result.get("treatment") == "cannbot":
+                publish_ready.set()
+                assert publish_release.wait(1)
+            super().set_result(result)
+
+    monkeypatch.setattr(diagnostic, "Future", DelayedPublishingFuture)
 
     class CompletingTerminal(RecordingTerminal):
-        def check(self, request, timeout_seconds):
-            result = super().check(request, timeout_seconds)
-            if len(self.requests) == 2:
-                completed.set()
-            return result
+        def cancel(self):
+            publish_release.set()
 
     class InterruptingLauncher(RecordingLauncher):
         def launch(self, request, timeout_seconds):
             if request["treatment"] == "project-guarded":
-                assert completed.wait(1)
-                time.sleep(0.02)
+                assert publish_ready.wait(1)
                 raise KeyboardInterrupt("simulated operator interruption")
             result = super().launch(request, timeout_seconds)
             if request["treatment"] == "cannbot":
@@ -280,6 +286,33 @@ def test_interrupted_adaptive_wave_resumes_without_relaunching_completed_cells(t
     assert resumed["status"] == "awaiting_curation"
     assert len(replacement.requests) == 1
     assert replacement.requests[0][0]["treatment"] == "project-guarded"
+
+
+def test_reschedule_rejects_changed_retained_candidate(tmp_path: Path):
+    outcomes = {(1, "cannbot", 1): "device_or_runtime_infra",
+                (1, "cannbot", 2): "device_or_runtime_infra"}
+    launcher = RecordingLauncher(outcomes)
+
+    class InfraOnceTerminal(RecordingTerminal):
+        failed = False
+
+        def check(self, request, timeout_seconds):
+            if request["cell_id"] == "wave-1-cannbot" and not self.failed:
+                self.failed = True
+                return {"status": "device_or_runtime_infra"}
+            return super().check(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, launcher, InfraOnceTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    campaign.run_wave(1)
+    campaign.run_wave(1)
+    candidate = root / "cells" / "wave-1-cannbot" / "attempt-3" / "workspace" / "candidate.py"
+    candidate.write_text("changed\n")
+    with pytest.raises(diagnostic.DiagnosticError, match="digest mismatch"):
+        campaign.run_wave(1)
 
 
 def test_repeated_reschedule_uses_latest_candidate_without_relaunch(tmp_path: Path):

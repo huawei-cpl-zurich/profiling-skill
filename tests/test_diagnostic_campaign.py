@@ -306,8 +306,9 @@ def test_adaptive_recovers_persisted_running_ledger(tmp_path: Path):
     ledger["waves"][0]["cells"] = ledger["waves"][0]["cells"][:2]
     (root / "ledger.json").write_text(json.dumps(ledger))
     replay_terminal = RecordingTerminal()
+    replay_launcher = RecordingLauncher()
     recovered = diagnostic.DiagnosticCampaign(
-        config, root, RecordingLauncher(), replay_terminal,
+        config, root, replay_launcher, replay_terminal,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert recovered["status"] == "awaiting_curation"
@@ -351,11 +352,13 @@ def test_running_recovery_discovers_completed_automatic_retry(tmp_path: Path):
     ledger["reschedule"] = ["wave-1-cannbot"]
     (root / "ledger.json").write_text(json.dumps(ledger))
     replay_terminal = RecordingTerminal()
+    replay_launcher = RecordingLauncher()
     recovered = diagnostic.DiagnosticCampaign(
-        config, root, RecordingLauncher(), replay_terminal,
+        config, root, replay_launcher, replay_terminal,
         campaign_identity={"config_sha256": "fixed"},
     ).run_wave(1)
     assert recovered["status"] == "awaiting_curation"
+    assert replay_launcher.requests == []
     assert replay_terminal.requests == []
     recovered_cell = next(cell for cell in recovered["waves"][0]["cells"]
                           if cell["treatment"] == "cannbot")

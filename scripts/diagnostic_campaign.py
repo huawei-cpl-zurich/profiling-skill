@@ -347,13 +347,8 @@ class DiagnosticCampaign:
                 "command": ["check", "--scope", "development", "--round", "1"]},
         }
         cap = min(self.cell_timeout, available_seconds or self.cell_timeout)
-        try:
-            agent = copy.deepcopy(self.launcher.launch(
-                request, max(1, int(min(self.agent_timeout, cap))),
-            ))
-        except Exception as error:
-            agent = {"status": "transport_or_observer_error",
-                     "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
+        agent = self._durable_agent_launch(
+            request, max(1, int(min(self.agent_timeout, cap))))
         elapsed = time.monotonic() - monotonic_started
         terminal = None
         candidate = workspace / "candidate.py"
@@ -398,6 +393,27 @@ class DiagnosticCampaign:
             "skill_sha256": copy.deepcopy(treatment_record["skill_sha256"]),
             "elapsed_seconds": time.time() - started,
         }
+
+    def _durable_agent_launch(self, request: dict, timeout_seconds: int) -> dict:
+        workspace = Path(request["workspace"])
+        receipt = workspace.parent / "controller-agent-result.json"
+        digest = hashlib.sha256(json.dumps(
+            request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if receipt.is_file():
+            record = json.loads(receipt.read_text())
+            if (record.get("request_sha256") != digest
+                    or record.get("state") != "completed"
+                    or not isinstance(record.get("result"), dict)):
+                raise DiagnosticError("invalid controller agent result receipt")
+            return copy.deepcopy(record["result"])
+        try:
+            result = copy.deepcopy(self.launcher.launch(request, timeout_seconds))
+        except Exception as error:
+            result = {"status": "transport_or_observer_error",
+                      "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
+        _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
+                               "request_sha256": digest, "result": result})
+        return result
 
     def _durable_terminal_check(self, request: dict, timeout_seconds: int) -> dict:
         """Replay a completed terminal result across a wave-checkpoint crash."""
@@ -640,10 +656,15 @@ class DiagnosticCampaign:
             if prior is not None:
                 attempts = prior.get("reschedule_attempts", [])
                 last = attempts[-1] if attempts else prior.get("retry", prior)
-            durable_attempts = [
-                int(path.parent.name.removeprefix("attempt-"))
-                for path in (self.root / "cells" / cell_id).glob(
-                    "attempt-*/terminal-result-*.json")]
+            durable_attempts = []
+            for path in (self.root / "cells" / cell_id).glob(
+                    "attempt-*/terminal-result-*.json"):
+                try:
+                    record = json.loads(path.read_text())
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if record.get("state") == "completed" and isinstance(record.get("result"), dict):
+                    durable_attempts.append(int(path.parent.name.removeprefix("attempt-")))
             newest_durable = max(durable_attempts, default=0)
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"

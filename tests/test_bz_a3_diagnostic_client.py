@@ -30,7 +30,8 @@ class FakeTransport:
 
     def upload(self, profile, source, destination, timeout):
         self.uploads.append((profile, source, destination, timeout))
-        if self.mode == "staging":
+        if self.mode == "staging" or (self.mode == "stale_common_upload_failure"
+                                      and "diagnostic-common-" in destination):
             raise self.module.DiagnosticError("staging_error", "rsync unavailable")
 
     def execute(self, profile, device, operation, script, timeout):
@@ -47,7 +48,7 @@ class FakeTransport:
             return self.module.CommandResult(1, "", "NPU device unavailable"), f"{profile}:device"
         if self.mode == "digest":
             return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:digest"
-        if self.mode == "stale_common" and not self.stale_returned:
+        if self.mode in {"stale_common", "stale_common_upload_failure"} and not self.stale_returned:
             self.stale_returned = True
             return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:stale"
         return self.completed(profile)
@@ -131,6 +132,23 @@ def test_stale_common_receipt_reuploads_once_and_self_heals(tmp_path: Path):
     common_uploads = [upload for upload in transport.uploads if "diagnostic-common-" in upload[2]]
     assert len(common_uploads) == 2
     assert len(transport.executions) == 3
+
+
+def test_stale_common_repair_failure_does_not_preserve_terminal_handle(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    state = tmp_path / "state"
+    client = module.BzA3DiagnosticClient(transport, state)
+    value = request(tmp_path)
+    assert client.run(value)["status"] == "ok"
+    transport.mode = "stale_common_upload_failure"
+    failed = client.run(value)
+    assert failed["status"] == "infrastructure_error"
+    assert failed["handle"] is None
+    assert not (state / "quick" / "1" / "arm-a" / "dispatch.json").exists()
+    transport.mode = "ok"
+    assert client.run(value)["status"] == "ok"
+    assert not transport.observations
 
 
 def test_compiler_traceback_is_complete_and_counted(tmp_path: Path):

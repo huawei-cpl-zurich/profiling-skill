@@ -276,6 +276,8 @@ class BzA3DiagnosticClient:
             if (common_cached and completed.returncode
                     and "common-digest-mismatch" in output.lower()):
                 common_receipt.unlink(missing_ok=True)
+                dispatch_receipt.unlink(missing_ok=True)
+                handle = None
                 self.transport.upload(profile, common_tar, common_remote, _remaining(deadline))
                 operation_timeout = _remaining(deadline)
                 retry_script = _remote_script(

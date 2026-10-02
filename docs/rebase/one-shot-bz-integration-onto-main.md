@@ -95,12 +95,16 @@ submission-freezing wrapper.
 | Handle/kill-grace fix, full suite | 309 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final kill-grace hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T105133Z-119-5022` |
 | Final kill-grace hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T105132Z-123-6826` |
+| Distinct-assets/fallback fix, focused suite | 84 passed | Same-basename assets and repeated primary/fallback devices are covered. |
+| Distinct-assets/fallback fix, full suite | 311 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final distinct-assets hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T105410Z-119-23540` |
+| Final distinct-assets hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T105409Z-120-25967` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `72c05d8` |
+| Final validated implementation HEAD | `53d26ac` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

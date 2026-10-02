@@ -99,12 +99,16 @@ submission-freezing wrapper.
 | Distinct-assets/fallback fix, full suite | 311 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final distinct-assets hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T105410Z-119-23540` |
 | Final distinct-assets hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T105409Z-120-25967` |
+| Stale-repair receipt fix, focused suite | 85 passed | Failed repair cannot preserve the terminal digest-mismatch handle. |
+| Stale-repair receipt fix, full suite | 312 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final stale-repair hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T105829Z-122-5607` |
+| Final stale-repair hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T105829Z-119-10001` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `53d26ac` |
+| Final validated implementation HEAD | `2974342` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

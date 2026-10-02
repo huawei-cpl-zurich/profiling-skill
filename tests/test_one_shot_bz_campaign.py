@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
 import sys
 import threading
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -76,13 +78,20 @@ class Client:
         if self.observer_once and key not in self.failed:
             self.failed.add(key)
             return {"status": "infrastructure_error", "failure_type": "observer_error",
-                    "handle": "bz-a3-1:retained"}
+                    "handle": f"{request['profile']}:retained"}
         if self.fail_once and key not in self.failed:
             self.failed.add(key)
             return {"status": "infrastructure_error", "failure_type": "device_error"}
         if self.candidate_failure and request["wave"] == "1" and request["cell"] == "cannbot-attempt-1":
             return {"status": "compile_error", "diagnostics": "full compiler traceback"}
         return {"status": "ok", "passed": True, "artifacts": {"candidate_sha256": "remote"}}
+
+    def resume(self, requests, handle, observe_timeout):
+        matches = [request for request in requests
+                   if handle.startswith(request["profile"] + ":")]
+        assert len(matches) == 1
+        return self.run({**matches[0], "retained_handle": handle,
+                         "observe_timeout": observe_timeout})
 
 
 def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path):
@@ -319,12 +328,14 @@ def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: P
     for request in client.requests:
         by_cell.setdefault((request["wave"], request["cell"]), []).append(request)
     assert len(by_cell) == 12
-    assert all(len(requests) == 2
-               and {**requests[1], "observe_timeout": None}
-               == {**requests[0], "observe_timeout": None}
-               and requests[1]["observe_timeout"] == requests[0]["timeout"]
-               and requests[0]["cell"].endswith("-attempt-1")
-               for requests in by_cell.values())
+    for requests in by_cell.values():
+        assert len(requests) == 2
+        first, resumed = requests
+        assert resumed["retained_handle"] == f"{first['profile']}:retained"
+        assert resumed["observe_timeout"] == first["timeout"]
+        assert {key: value for key, value in resumed.items()
+                if key not in {"retained_handle", "observe_timeout"}} == first
+        assert first["cell"].endswith("-attempt-1")
 
 
 def test_retained_observation_uses_remaining_attempt_budget(tmp_path: Path):
@@ -675,6 +686,346 @@ def test_retained_terminal_request_survives_hook_restart(tmp_path: Path):
     assert second["status"] == "ok"
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert "observe_timeout" in client.requests[1]
+
+
+def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class ResumeOnlyClient(Client):
+        def resume(self, requests, handle, observe_timeout):
+            assert len(requests) == 1
+            request = requests[0]
+            self.requests.append(request)
+            assert handle == "bz-a3-1:reconciled"
+            assert observe_timeout == 30
+            return {"status": "ok", "passed": True,
+                    "handle": handle, "cell": request["cell"]}
+
+    client = ResumeOnlyClient()
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, "bz-a3-1:reconciled", 30)
+
+    assert result["status"] == "ok"
+    assert result["terminal_attempt"] == 1
+    assert len(client.requests) == 1
+
+
+def test_manual_handle_resume_preserves_request_timeout_and_bounds_observation(tmp_path: Path):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class TimeoutIdentityClient(Client):
+        def resume(self, requests, handle, observe_timeout):
+            assert len(requests) == 1
+            assert requests[0]["timeout"] == 240
+            assert observe_timeout == 7
+            return {"status": "ok", "passed": True, "handle": handle,
+                    "cell": requests[0]["cell"]}
+
+    hook = module.BzTerminalHook(
+        TimeoutIdentityClient(), placements, config["assets"], "campaign")
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1, "terminal_request_timeout": 300},
+        "bz-a3-1:recovered", 7)
+
+    assert result["status"] == "ok"
+
+
+def test_production_bz_hook_reconstructs_primary_handle_without_dispatch_receipt(
+    tmp_path: Path,
+):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class ObserveOnlyTransport:
+        def __init__(self):
+            self.observations = []
+
+        def upload(self, *_args):
+            raise AssertionError("reconciliation must not upload")
+
+        def execute(self, *_args):
+            raise AssertionError("reconciliation must not dispatch")
+
+        def observe(self, profile, handle, timeout):
+            self.observations.append((profile, handle, timeout))
+            payload = {"status": "ok", "passed": True, "diagnostics": "",
+                       "case_evidence": []}
+            return SimpleNamespace(
+                returncode=0,
+                stdout="BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n",
+                stderr="",
+            )
+
+    transport = ObserveOnlyTransport()
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, "bz-a3-1:recovered", 30)
+
+    assert result["status"] == "ok"
+    assert result["terminal_attempt"] == 1
+    assert transport.observations[0][0:2] == ("bz-a3-1", "bz-a3-1:recovered")
+
+
+@pytest.mark.parametrize("failure_type", [
+    "request_error", "digest_mismatch", "device_error", "staging_error", "cancelled",
+])
+def test_failed_manual_bz_observation_requires_reconciliation(
+    tmp_path: Path, failure_type: str,
+):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class FailedResume(Client):
+        def resume(self, requests, handle, observe_timeout):
+            return {"status": "infrastructure_error", "failure_type": failure_type,
+                    "handle": handle}
+
+    hook = module.BzTerminalHook(
+        FailedResume(), placements, config["assets"], "campaign")
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, "bz-a3-1:recovered", 30)
+
+    assert result["status"] == "transport_or_observer_error"
+    assert result["manual_reconciliation_required"] is True
+    assert result["handle"] == "bz-a3-1:recovered"
+
+
+def test_adapter_timeout_after_possible_dispatch_never_falls_back_or_replays(
+    tmp_path: Path,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+    workspace = root / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (workspace / name).write_text("{}\n")
+        (snapshot / name).write_text("{}\n")
+    adapter_runs = []
+
+    def invoke(argv, timeout):
+        if argv[0] == "remote":
+            return module.diagnostic_campaign.subprocess.CompletedProcess(argv, 0, "", "")
+        adapter_runs.append((argv, timeout))
+        raise bz_client.DiagnosticError(
+            "transport_error", "adapter response timed out",
+            invocation_timeout=True)
+
+    # Import the same module object used by the production hook so this test
+    # exercises AdapterTransport.execute rather than a synthetic terminal.
+    import bz_a3_diagnostic_client as bz_client
+    transport = bz_client.AdapterTransport(["remote"], ["adapter"], invoke)
+    client = bz_client.BzA3DiagnosticClient(transport, tmp_path / "state")
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+    campaign = module.DiagnosticCampaign(
+        manifest, root, Agent(), hook, campaign_id="campaign",
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+        "candidate_sha256": {name: module.diagnostic_campaign.sha256_file(snapshot / name)
+                             for name in ("candidate.py", "candidate.manifest.json")},
+    }
+
+    first = campaign._durable_terminal_check(request, 30)
+    second = campaign._durable_terminal_check(request, 30)
+
+    assert first == second
+    assert first["manual_reconciliation_required"] is True
+    assert first["dispatch_uncertain"] is True
+    assert len(adapter_runs) == 1
+
+
+def test_reconcile_terminal_cli_updates_uncertain_receipt(
+    tmp_path: Path, monkeypatch, capsys,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+    cell = "wave-1-cannbot"
+
+    class LocalTimeout:
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    identity = module._adaptive_inputs(config, manifest, placements)
+    campaign = module.DiagnosticCampaign(
+        manifest, root, Agent(), LocalTimeout(), campaign_id="campaign",
+        campaign_identity={"config_sha256": identity},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    paths = {}
+    for name, value in (("config", config), ("manifest", manifest),
+                        ("placements", placements)):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(value))
+        paths[name] = path
+    monkeypatch.setattr(sys, "argv", [
+        "one_shot_bz_campaign.py", "--action", "reconcile-terminal",
+        "--config", str(paths["config"]), "--manifest", str(paths["manifest"]),
+        "--placements", str(paths["placements"]), "--run-root", str(root),
+        "--cell-id", cell, "--agent-attempt", "1", "--terminal-attempt", "1",
+        "--terminal-handle", "bz-a3-1:recovered",
+    ])
+
+    assert module.main() == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "reconciled"
+    assert output["receipt"]["state"] == "started"
+    assert output["receipt"]["result"]["handle"] == "bz-a3-1:recovered"
+
+
+@pytest.mark.parametrize("reconciliation", ["handle", "result"])
+def test_fixed_run_reconciliation_resumes_without_redispatch(
+    tmp_path: Path, reconciliation: str,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+
+    class DispatchTimeout(Client):
+        def run(self, request):
+            self.requests.append(request)
+            if (request["wave"], request["cell"]) in {
+                ("1", "cannbot-attempt-1"),
+                ("3", "project-cannbot-attempt-1"),
+            }:
+                return {"status": "infrastructure_error",
+                        "failure_type": "transport_error",
+                        "invocation_timeout": True, "dispatch_uncertain": True,
+                        "handle": None}
+            return {"status": "ok", "passed": True}
+
+    initial_agent, initial_client = Agent(), DispatchTimeout()
+    ledger = module.run(
+        config, manifest, placements, root, initial_agent, initial_client)
+    assert ledger["status"] == "reschedule_pending"
+    pending = ["wave-1-cannbot", "wave-3-project-cannbot"]
+    assert ledger["reschedule"] == pending
+    wave4_before = copy.deepcopy(next(
+        wave for wave in ledger["waves"] if wave["wave"] == 4))
+    for cell_id in pending:
+        receipt_path = next((root / "cells" / cell_id / "attempt-1").glob(
+            "terminal-result-*.json"))
+        receipt = json.loads(receipt_path.read_text())
+        if reconciliation == "handle":
+            module.reconcile_terminal(
+                config, manifest, placements, root, cell_id, 1, 1,
+                handle="bz-a3-1:recovered-" + cell_id)
+        else:
+            module.reconcile_terminal(
+                config, manifest, placements, root, cell_id, 1, 1,
+                result={"status": "ok", "passed": True,
+                        "campaign_id": ledger["campaign_id"],
+                        "request_sha256": receipt["request_sha256"],
+                        "cell_id": cell_id, "terminal_attempt": 1,
+                        "handle": "bz-a3-1:recovered-" + cell_id,
+                        "candidate_sha256": receipt["request"]["candidate_sha256"]})
+
+    class RecoveryClient(Client):
+        def run(self, request):
+            raise AssertionError("fixed recovery must not dispatch")
+
+        def resume(self, requests, handle, observe_timeout):
+            if reconciliation != "handle":
+                raise AssertionError("completed reconciliation must not observe")
+            assert len(requests) == 1
+            return {"status": "ok", "passed": True, "handle": handle,
+                    "cell": requests[0]["cell"]}
+
+    recovery_agent = Agent()
+    recovered = module.run(
+        config, manifest, placements, root, recovery_agent, RecoveryClient())
+
+    assert recovered["status"] == "complete"
+    assert recovered["reschedule"] == []
+    assert recovery_agent.requests == []
+    wave1 = next(wave for wave in recovered["waves"] if wave["wave"] == 1)
+    cannbot = next(cell for cell in wave1["cells"] if cell["treatment"] == "cannbot")
+    assert cannbot["resolution"]["outcome"] == "success"
+    wave3 = next(wave for wave in recovered["waves"] if wave["wave"] == 3)
+    project = next(cell for cell in wave3["cells"]
+                   if cell["treatment"] == "project-cannbot")
+    assert project["resolution"]["outcome"] == "success"
+    assert next(wave for wave in recovered["waves"] if wave["wave"] == 4) == wave4_before
+
+
+@pytest.mark.parametrize("mode", ["config_drift", "placement_drift", "not_pending",
+                                   "minimal_ledger", "wrong_profile"])
+def test_reconcile_terminal_rejects_invalid_adaptive_campaign(
+    tmp_path: Path, mode: str,
+):
+    config, manifest, placements = inputs(tmp_path)
+    root = tmp_path / "campaign"
+
+    class LocalTimeout:
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    identity = module._adaptive_inputs(config, manifest, placements)
+    campaign = module.DiagnosticCampaign(
+        manifest, root, Agent(), LocalTimeout(), campaign_id="campaign",
+        campaign_identity={"config_sha256": identity},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    changed_config = copy.deepcopy(config)
+    changed_placements = copy.deepcopy(placements)
+    if mode == "config_drift":
+        changed_config["assets"]["baseline"] += ".changed"
+    elif mode == "placement_drift":
+        changed_placements["cannbot"][0]["device"] += 4
+    else:
+        ledger_path = root / "ledger.json"
+        ledger = json.loads(ledger_path.read_text())
+        if mode == "not_pending":
+            ledger["status"] = "awaiting_curation"
+        else:
+            ledger = {"campaign_id": "campaign"}
+        ledger_path.write_text(json.dumps(ledger))
+
+    receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-1").glob(
+        "terminal-result-*.json"))
+    before = receipt_path.read_bytes()
+    handle = ("bz-a3-2:wrong-placement" if mode == "wrong_profile"
+              else "bz-a3-1:recovered")
+    with pytest.raises(module.DiagnosticError):
+        module.reconcile_terminal(
+            changed_config, manifest, changed_placements, root,
+            "wave-1-cannbot", 1, 1, handle=handle)
+    assert receipt_path.read_bytes() == before
 
 
 def test_retained_terminal_request_rejects_cross_cell_snapshot(tmp_path: Path):

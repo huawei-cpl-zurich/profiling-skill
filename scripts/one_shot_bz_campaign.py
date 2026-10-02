@@ -206,6 +206,11 @@ class BzTerminalHook:
                 self._active -= 1
                 self._condition.notify_all()
 
+    def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
+        """Observe an explicitly reconciled handle without dispatching a job."""
+        return self.check(
+            {**request, "manual_retained_handle": handle}, timeout_seconds)
+
     def _check(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         try:
@@ -226,13 +231,17 @@ class BzTerminalHook:
                 or terminal_attempt < 1):
             raise DiagnosticError("terminal attempt must be a positive integer")
         placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
+        request_timeout = request.get("terminal_request_timeout", timeout_seconds)
+        if (isinstance(request_timeout, bool) or not isinstance(request_timeout, int)
+                or request_timeout < 1):
+            raise DiagnosticError("terminal request timeout must be a positive integer")
         client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
             # observe its retained handle instead of redispatching it.
             "cell": f"{treatment}-attempt-{terminal_attempt}",
-            **placement, "timeout": min(timeout_seconds, 240),
+            **placement, "timeout": min(request_timeout, 240),
             "candidate": str(submission / "candidate.py"),
             "candidate_manifest": str(submission / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
@@ -244,6 +253,21 @@ class BzTerminalHook:
             if all((submission / name).is_file()
                    for name in ("candidate.py", "candidate.manifest.json")) else {})
         client_request["candidate_sha256"] = copy.deepcopy(snapshot_hashes)
+        manual_handle = request.get("manual_retained_handle")
+        if manual_handle is not None:
+            if not isinstance(manual_handle, str) or not manual_handle:
+                raise DiagnosticError("manual retained handle must be non-empty")
+            result = self.client.resume(
+                [client_request], manual_handle,
+                min(timeout_seconds, client_request["timeout"]))
+            if result.get("status") == "infrastructure_error":
+                result = {**result, "status": "transport_or_observer_error",
+                          "manual_reconciliation_required": True}
+            result_cell = str(result.get("cell", ""))
+            result_suffix = result_cell.removeprefix(f"{treatment}-attempt-")
+            result_attempt = (int(result_suffix) if result_suffix.isdigit()
+                              else terminal_attempt)
+            return self._map_result(result, result_attempt)
         # A retained observer interruption is not permission to dispatch on a
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
@@ -285,6 +309,12 @@ class BzTerminalHook:
                               min(timeout_seconds, retained["timeout"])}
         deadline = time.monotonic() + timeout_seconds
         result = self.client.run(client_request)
+        if (result.get("dispatch_uncertain") is True
+                and result.get("invocation_timeout") is True
+                and not result.get("handle")):
+            return {**self._map_result(result, terminal_attempt),
+                    "status": "transport_or_observer_error",
+                    "manual_reconciliation_required": True}
         uncertain = (result.get("status") == "infrastructure_error"
                      and result.get("failure_type") in {"observer_error", "transport_error"}
                      and bool(result.get("handle")))
@@ -309,11 +339,15 @@ class BzTerminalHook:
         if uncertain:
             self._uncertain[cell] = {key: value for key, value in client_request.items()
                                      if key != "observe_timeout"}
+            result = {**result, "retained_terminal_request":
+                      copy.deepcopy(self._uncertain[cell])}
         else:
             self._uncertain.pop(cell, None)
+        return self._map_result(result, terminal_attempt)
+
+    @staticmethod
+    def _map_result(result: dict, terminal_attempt: int) -> dict:
         result = {**result, "terminal_attempt": terminal_attempt}
-        if uncertain:
-            result["retained_terminal_request"] = copy.deepcopy(self._uncertain[cell])
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}
@@ -344,13 +378,26 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
         raise DiagnosticError("diagnostic timeouts must remain 360/600/600 seconds")
     if config["waves"] != 4:
         raise DiagnosticError("diagnostic campaign requires exactly four waves")
-    campaign_id = str(uuid.uuid4())
-    assets, asset_evidence = freeze_assets(config["assets"], root, campaign_id)
+    identity = _adaptive_inputs(config, manifest, placements)
+    existing = root / "ledger.json"
+    if existing.is_file():
+        ledger = load_json(existing)
+        campaign_id = ledger.get("campaign_id")
+        if not isinstance(campaign_id, str) or not campaign_id:
+            raise DiagnosticError("fixed ledger has no campaign identity")
+        asset_evidence, assets = ledger.get("assets"), _retained_assets(ledger)
+    else:
+        campaign_id = str(uuid.uuid4())
+        assets, asset_evidence = freeze_assets(config["assets"], root, campaign_id)
     hook = BzTerminalHook(client, placements, assets, campaign_id)
     campaign = DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
                                   waves=4, agent_timeout=360, cell_timeout=600,
                                   wave_timeout=600, ledger_metadata={"assets": asset_evidence},
-                                  campaign_id=campaign_id)
+                                  campaign_id=campaign_id,
+                                  campaign_identity={"config_sha256": identity})
+    campaign.ledger_metadata["fixed_campaign_identity"] = campaign._adaptive_identity()
+    if existing.is_file():
+        return campaign.resume_fixed()
     try:
         ledger = campaign.run()
     except BaseException:
@@ -445,12 +492,54 @@ def acknowledge_curation(config: dict, manifest: dict, placements: dict,
     return campaign.acknowledge_curation(receipt)
 
 
+def reconcile_terminal(config: dict, manifest: dict, placements: dict,
+                       root: Path, cell_id: str, agent_attempt: int,
+                       terminal_attempt: int, *, handle: str | None = None,
+                       result: dict | None = None) -> dict:
+    """Apply an explicit operator reconciliation to one uncertain receipt."""
+    identity = _adaptive_inputs(config, manifest, placements)
+    ledger = load_json(root / "ledger.json")
+    campaign_id = ledger.get("campaign_id")
+    if not isinstance(campaign_id, str) or not campaign_id:
+        raise DiagnosticError("campaign ledger has no valid campaign id")
+    campaign = DiagnosticCampaign(
+        manifest, root, CommandLauncher(["false"]), CommandTerminalHook(["false"]),
+        campaign_id=campaign_id, campaign_identity={"config_sha256": identity},
+    )
+    validated = (campaign._load_adaptive_ledger()
+                 if ledger.get("adaptive") is True
+                 else campaign._load_fixed_ledger())
+    if validated.get("campaign_id") != campaign_id:
+        raise DiagnosticError("campaign ledger identity mismatch")
+    if (validated.get("status") != "reschedule_pending"
+            or cell_id not in validated.get("reschedule", [])):
+        raise DiagnosticError("cell is not awaiting terminal reconciliation")
+    if handle is not None:
+        parts = cell_id.split("-", 2)
+        if (len(parts) != 3 or parts[2] not in placements
+                or terminal_attempt < 1):
+            raise DiagnosticError("invalid reconciliation cell or terminal attempt")
+        profile = placements[parts[2]][min(terminal_attempt - 1, 1)]["profile"]
+        if not handle.startswith(profile + ":"):
+            raise DiagnosticError("reconciliation handle does not match terminal placement")
+    receipt = campaign.reconcile_terminal(
+        cell_id, agent_attempt, terminal_attempt, handle=handle, result=result)
+    return {"status": "reconciled", "receipt": receipt}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation"),
+    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation",
+                                              "reconcile-terminal"),
                         default="run-all")
     parser.add_argument("--wave", type=int)
     parser.add_argument("--curation-receipt", type=Path)
+    parser.add_argument("--cell-id")
+    parser.add_argument("--agent-attempt", type=int)
+    parser.add_argument("--terminal-attempt", type=int)
+    reconciliation = parser.add_mutually_exclusive_group()
+    reconciliation.add_argument("--terminal-handle")
+    reconciliation.add_argument("--terminal-result", type=Path)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--placements", type=Path, required=True)
@@ -467,6 +556,16 @@ def main() -> int:
             parser.error("--curation-receipt is required")
         result = acknowledge_curation(config, manifest, placements, args.run_root,
                                       load_json(args.curation_receipt))
+    elif args.action == "reconcile-terminal":
+        if (not args.cell_id or args.agent_attempt is None
+                or args.terminal_attempt is None
+                or (args.terminal_handle is None) == (args.terminal_result is None)):
+            parser.error("cell, attempts, and exactly one terminal handle/result are required")
+        result = reconcile_terminal(
+            config, manifest, placements, args.run_root, args.cell_id,
+            args.agent_attempt, args.terminal_attempt,
+            handle=args.terminal_handle,
+            result=(load_json(args.terminal_result) if args.terminal_result else None))
     else:
         if not args.agent_command_json or not args.adapter_command_json or args.state_dir is None:
             parser.error("agent, adapter, and state arguments are required to run waves")
@@ -485,7 +584,9 @@ def main() -> int:
             result = run(config, manifest, placements, args.run_root,
                          CommandLauncher(commands[0]), client)
     print(json.dumps(result, sort_keys=True))
-    return 0 if result["status"] in {"awaiting_curation", "ready_for_next", "complete"} else 2
+    return 0 if result["status"] in {
+        "awaiting_curation", "ready_for_next", "complete", "reconciled",
+    } else 2
 
 
 if __name__ == "__main__":

@@ -25,8 +25,12 @@ REMOTE_RESULTS = {
 
 
 class DiagnosticError(RuntimeError):
-    def __init__(self, failure_type: str, message: str, handle: str | None = None):
+    def __init__(self, failure_type: str, message: str, handle: str | None = None,
+                 *, invocation_timeout: bool = False,
+                 dispatch_uncertain: bool = False):
         self.failure_type, self.handle = failure_type, handle
+        self.invocation_timeout = invocation_timeout
+        self.dispatch_uncertain = dispatch_uncertain
         super().__init__(message)
 
 
@@ -45,7 +49,8 @@ def _run(argv: list[str], timeout: int) -> CommandResult:
         match = re.search(r"\b(bz-a3-[12]:[A-Za-z0-9_.-]+)\b", partial)
         handle = match.group(1) if match else None
         raise DiagnosticError("observer_error" if handle else "transport_error",
-                              f"transport timed out after {timeout}s", handle) from exc
+                              f"transport timed out after {timeout}s", handle,
+                              invocation_timeout=True) from exc
     except OSError as exc:
         raise DiagnosticError("transport_error", f"transport unavailable: {exc}") from exc
     return CommandResult(result.returncode, result.stdout, result.stderr)
@@ -74,7 +79,14 @@ class AdapterTransport:
         argv = self.adapter + ["--profile", profile, "--operation", operation, "run",
                                "--native", "--runtime", "py311-torch", "--device", str(device),
                                "--timeout", str(timeout), "--", "bash", "-c", script]
-        result = self.invoke(argv, timeout)
+        try:
+            result = self.invoke(argv, timeout)
+        except DiagnosticError as exc:
+            if exc.invocation_timeout and not exc.handle:
+                raise DiagnosticError(
+                    exc.failure_type, str(exc), dispatch_uncertain=True,
+                    invocation_timeout=True) from exc
+            raise
         handle = _handle(result.stdout + result.stderr, profile)
         if handle and _nonterminal(result.stdout + result.stderr):
             try:
@@ -194,6 +206,66 @@ class BzA3DiagnosticClient:
     def __init__(self, transport: AdapterTransport, state_dir: Path, remote_root: str = "/home/m00933363/.profiling-skill/diagnostic"):
         self.transport, self.state_dir, self.remote_root = transport, state_dir, remote_root.rstrip("/")
 
+    def resume(self, requests: list[dict], handle: str, observe_timeout: int) -> dict:
+        """Observe the one candidate request whose durable receipt owns handle."""
+        if len(requests) != 1:
+            return {"status": "infrastructure_error", "failure_type": "request_error",
+                    "diagnostics": "resume requires one exact terminal request",
+                    "handle": handle}
+        matches = []
+        for request in requests:
+            try:
+                local = (self.state_dir / _safe_id(request.get("campaign"), "campaign")
+                         / _safe_id(request.get("wave"), "wave")
+                         / _safe_id(request.get("cell"), "cell"))
+                records = []
+                dispatch = local / "dispatch.json"
+                completed = local / "completed.json"
+                if dispatch.is_file():
+                    records.append(json.loads(dispatch.read_text()))
+                if completed.is_file():
+                    records.append(json.loads(completed.read_text()).get("result", {}))
+                if any(record.get("handle") == handle for record in records
+                       if isinstance(record, dict)):
+                    matches.append(request)
+            except (OSError, json.JSONDecodeError, DiagnosticError):
+                continue
+        if not matches:
+            # The generic terminal receipt is authoritative for its selected
+            # attempt. A supplied handle can reconstruct that one request when
+            # the lower-level process died before persisting dispatch state.
+            selected = requests[0]
+            campaign = _safe_id(selected.get("campaign"), "campaign")
+            wave = _safe_id(selected.get("wave"), "wave")
+            cell = _safe_id(selected.get("cell"), "cell")
+            selected_local = self.state_dir / campaign / wave / cell
+            foreign = False
+            for pattern in ("*/*/*/dispatch.json", "*/*/*/completed.json"):
+                for path in self.state_dir.glob(pattern):
+                    if path.parent == selected_local:
+                        continue
+                    try:
+                        record = json.loads(path.read_text())
+                        owner = (record.get("result", {}).get("handle")
+                                 if path.name == "completed.json"
+                                 else record.get("handle"))
+                        foreign = owner == handle
+                    except (OSError, json.JSONDecodeError, AttributeError):
+                        continue
+                    if foreign:
+                        break
+                if foreign:
+                    break
+            if (not foreign
+                    and handle.startswith(str(selected.get("profile")) + ":")):
+                matches.append(selected)
+        if len(matches) != 1:
+            return {"status": "infrastructure_error", "failure_type": "request_error",
+                    "diagnostics": "retained handle has no unique durable BZ receipt",
+                    "handle": handle}
+        return self.run({**matches[0], "retained_handle": handle,
+                         "observe_timeout": observe_timeout})
+
     def run(self, request: object) -> dict:
         if not isinstance(request, dict):
             return {"status": "infrastructure_error", "failure_type": "request_error",
@@ -220,6 +292,12 @@ class BzA3DiagnosticClient:
                          or observe_timeout < 1 or observe_timeout > timeout)):
                 raise DiagnosticError("request_error",
                                       "observe_timeout must be 1..timeout seconds")
+            retained_handle = request.get("retained_handle")
+            if (retained_handle is not None
+                    and (not isinstance(retained_handle, str)
+                         or not retained_handle.startswith(profile + ":"))):
+                raise DiagnosticError("request_error",
+                                      "retained_handle must match the selected profile")
             deadline = time.monotonic() + (observe_timeout or timeout)
             path_names = ("candidate", "candidate_manifest", "baseline", "case_spec", "runner")
             if any(not isinstance(request.get(name, ""), str) for name in path_names):
@@ -251,10 +329,17 @@ class BzA3DiagnosticClient:
             request_sha = _json_sha({"identity": identity, "timeout": timeout, "cases": cases,
                                      "common_sha256": common_sha, "candidate_sha256": candidate_sha,
                                      "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})})
+            if retained_handle is not None and not dispatch_receipt.is_file():
+                _write_receipt(dispatch_receipt, {"protocol_version": 1,
+                               "request_sha256": request_sha,
+                               "handle": retained_handle})
             if completed_receipt.is_file():
                 completed_record = json.loads(completed_receipt.read_text())
                 if (completed_record.get("request_sha256") != request_sha
-                        or not isinstance(completed_record.get("result"), dict)):
+                        or not isinstance(completed_record.get("result"), dict)
+                        or (retained_handle is not None
+                            and completed_record["result"].get("handle")
+                            != retained_handle)):
                     raise DiagnosticError("request_error", "completed receipt does not match request")
                 return completed_record["result"]
             had_dispatch_receipt = dispatch_receipt.is_file()
@@ -264,13 +349,20 @@ class BzA3DiagnosticClient:
                 except (OSError, json.JSONDecodeError) as exc:
                     raise DiagnosticError("request_error", f"invalid dispatch receipt: {exc}") from exc
                 if (not isinstance(prior, dict) or prior.get("request_sha256") != request_sha
-                        or not isinstance(prior.get("handle"), str)):
+                        or not isinstance(prior.get("handle"), str)
+                        or (retained_handle is not None
+                            and prior["handle"] != retained_handle)):
                     raise DiagnosticError("request_error", "dispatch receipt does not match request")
                 handle = prior["handle"]
                 completed = self.transport.observe(profile, handle, _remaining(deadline, handle))
                 observed_output = completed.stdout + completed.stderr
                 if (completed.returncode
                         and "common-digest-mismatch" in observed_output.lower()):
+                    if retained_handle is not None:
+                        return {"status": "infrastructure_error",
+                                "failure_type": "digest_mismatch",
+                                "diagnostics": _bounded(observed_output),
+                                "handle": handle, **identity}
                     common_receipt.unlink(missing_ok=True)
                     dispatch_receipt.unlink(missing_ok=True)
                     handle = None
@@ -329,7 +421,9 @@ class BzA3DiagnosticClient:
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
                                "request_sha256": request_sha, "handle": exc.handle or handle})
             return {"status": "infrastructure_error", "failure_type": exc.failure_type,
-                    "diagnostics": _bounded(str(exc)), "handle": exc.handle or handle, **identity}
+                    "diagnostics": _bounded(str(exc)), "handle": exc.handle or handle,
+                    "invocation_timeout": exc.invocation_timeout,
+                    "dispatch_uncertain": exc.dispatch_uncertain, **identity}
         except (OSError, ValueError, tarfile.TarError) as exc:
             return {"status": "infrastructure_error", "failure_type": "staging_error",
                     "diagnostics": _bounded(str(exc)), "handle": handle, **identity}

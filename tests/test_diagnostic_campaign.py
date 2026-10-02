@@ -630,6 +630,468 @@ def test_retained_observation_uses_distinct_durable_terminal_receipt(tmp_path: P
                 if request["cell_id"] == "wave-1-cannbot"]) == 4
 
 
+def test_campaign_restart_retries_handle_only_started_observation(tmp_path: Path):
+    class InitialTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if request["cell_id"] != "wave-1-cannbot":
+                return {"status": "ok", "passed": True}
+            calls = sum(item[0]["cell_id"] == "wave-1-cannbot"
+                        for item in self.requests)
+            if calls == 1:
+                return {"status": "infrastructure_error", "failure_type": "device_error"}
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained"}
+
+    class ResumingTerminal:
+        def __init__(self, result):
+            self.result = result
+            self.check_calls = 0
+            self.resume_calls = 0
+
+        def check(self, request, timeout_seconds):
+            self.check_calls += 1
+            raise AssertionError("retained observation must not dispatch another check")
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls += 1
+            assert handle == "bz-a3-1:retained"
+            return self.result
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    initial = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), InitialTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert initial.run_wave(1)["status"] == "reschedule_pending"
+
+    timed_out_terminal = ResumingTerminal({
+        "status": "transport_or_observer_error", "invocation_timeout": True,
+        "handle": "bz-a3-1:retained",
+    })
+    timed_out = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), timed_out_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert timed_out["status"] == "reschedule_pending"
+    assert timed_out_terminal.check_calls == 0
+    assert timed_out_terminal.resume_calls == 1
+
+    success_terminal = ResumingTerminal({"status": "ok", "passed": True})
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), success_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert success_terminal.check_calls == 0
+    assert success_terminal.resume_calls == 1
+    cannbot = next(cell for cell in recovered["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert [item["attempt"] for item in cannbot["reschedule_attempts"]] == [2, 2]
+
+
+def test_campaign_restart_resumes_newer_terminal_attempt_in_same_workspace(tmp_path: Path):
+    class DeviceTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if request["cell_id"] == "wave-1-cannbot":
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "terminal_attempt": request["terminal_attempt"]}
+            return {"status": "ok", "passed": True}
+
+    class ObserverTerminal:
+        def __init__(self):
+            self.check_calls = []
+
+        def check(self, request, timeout_seconds):
+            self.check_calls.append(request)
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:terminal-attempt-3",
+                    "terminal_attempt": request["terminal_attempt"]}
+
+    class ResumeTerminal:
+        def __init__(self):
+            self.check_calls = 0
+            self.resume_calls = []
+
+        def check(self, request, timeout_seconds):
+            self.check_calls += 1
+            raise AssertionError("restart must resume the persisted terminal request")
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls.append((request, handle))
+            return {"status": "ok", "passed": True,
+                    "terminal_attempt": request["terminal_attempt"]}
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    initial = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), DeviceTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert initial.run_wave(1)["status"] == "reschedule_pending"
+
+    observer = ObserverTerminal()
+    still_pending = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), observer,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert still_pending["status"] == "reschedule_pending"
+    assert observer.check_calls[0]["terminal_attempt"] == 3
+    assert Path(observer.check_calls[0]["workspace"]).parent.name == "attempt-2"
+
+    resume = ResumeTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), resume,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert resume.check_calls == 0
+    assert len(resume.resume_calls) == 1
+    request, handle = resume.resume_calls[0]
+    assert request["terminal_attempt"] == 3
+    assert Path(request["workspace"]).parent.name == "attempt-2"
+    assert handle == "bz-a3-1:terminal-attempt-3"
+
+
+def test_campaign_requires_manual_reconciliation_for_handleless_terminal_timeout(
+    tmp_path: Path,
+):
+    class InitialTimeoutTerminal(RecordingTerminal):
+        timed_out = False
+
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if (request["cell_id"] == "wave-1-cannbot"
+                    and not self.timed_out):
+                self.timed_out = True
+                return {"status": "transport_or_observer_error",
+                        "invocation_timeout": True, "stdout": "retained output"}
+            return {"status": "ok", "passed": True}
+
+    terminal = InitialTimeoutTerminal()
+    root = tmp_path / "run"
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root,
+        RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+
+    assert result["status"] == "reschedule_pending"
+    cannbot = next(cell for cell in result["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert cannbot["outcome"] == "transport_or_observer_error"
+    assert cannbot["category"] == "infrastructure"
+    assert cannbot["terminal"]["stdout"] == "retained output"
+    assert cannbot["terminal"]["manual_reconciliation_required"] is True
+    assert "retry" not in cannbot
+    cannbot_requests = [request for request, _ in terminal.requests
+                        if request["cell_id"] == "wave-1-cannbot"]
+    assert [request["terminal_attempt"] for request in cannbot_requests] == [1]
+
+    class NoReplayTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            raise AssertionError("uncertain terminal dispatch must not be replayed")
+
+    restarted = NoReplayTerminal()
+    pending = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, RecordingLauncher(), restarted,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert pending["status"] == "reschedule_pending"
+    resolution = next(cell for cell in pending["waves"][0]["cells"]
+                      if cell["treatment"] == "cannbot")["reschedule_attempts"][-1]
+    assert resolution["terminal"]["manual_reconciliation_required"] is True
+    assert resolution["attempt"] == 1
+    assert restarted.requests == []
+
+
+@pytest.mark.parametrize("reconciliation", ["completed", "handle"])
+def test_campaign_consumes_manual_terminal_reconciliation_without_check(
+    tmp_path: Path, reconciliation: str,
+):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if request["cell_id"] == "wave-1-cannbot":
+                return {"status": "transport_or_observer_error",
+                        "invocation_timeout": True}
+            return {"status": "ok", "passed": True}
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    if reconciliation == "completed":
+        receipt_path = next((root / "cells" / "wave-1-cannbot" / "attempt-1").glob(
+            "terminal-result-*.json"))
+        receipt = json.loads(receipt_path.read_text())
+        reconciled = campaign.reconcile_terminal(
+            "wave-1-cannbot", 1, 1,
+            result={"status": "ok", "passed": True, "reconciled": True,
+                    "campaign_id": campaign.campaign_id,
+                    "request_sha256": receipt["request_sha256"],
+                    "cell_id": "wave-1-cannbot", "terminal_attempt": 1,
+                    "handle": "bz-a3-1:manually-recovered",
+                    "candidate_sha256": receipt["request"]["candidate_sha256"]})
+    else:
+        reconciled = campaign.reconcile_terminal(
+            "wave-1-cannbot", 1, 1, handle="bz-a3-1:manually-recovered")
+    assert reconciled["state"] == (
+        "completed" if reconciliation == "completed" else "started")
+
+    class ReconciledTerminal(RecordingTerminal):
+        def __init__(self):
+            super().__init__()
+            self.resume_calls = []
+
+        def check(self, request, timeout_seconds):
+            raise AssertionError("manual reconciliation must not dispatch a check")
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls.append((request, handle))
+            return {"status": "ok", "passed": True, "reconciled": True}
+
+    terminal = ReconciledTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+
+    assert recovered["status"] == "awaiting_curation"
+    assert terminal.requests == []
+    assert len(terminal.resume_calls) == (1 if reconciliation == "handle" else 0)
+    cell = next(cell for cell in recovered["waves"][0]["cells"]
+                if cell["treatment"] == "cannbot")
+    assert cell["reschedule_attempts"][-1]["outcome"] == "success"
+    assert cell["reschedule_attempts"][-1]["attempt"] == 1
+
+
+@pytest.mark.parametrize("failure_type", ["request_error", "device_error", "observer_error"])
+def test_failed_manual_handle_resume_stays_uncertain_without_repeat(
+    tmp_path: Path, failure_type: str,
+):
+    class Terminal:
+        def __init__(self):
+            self.calls = 0
+
+        def resume(self, request, handle, timeout_seconds):
+            self.calls += 1
+            return {"status": "transport_or_observer_error",
+                    "failure_type": failure_type, "handle": handle,
+                    "manual_reconciliation_required": True}
+
+    terminal = Terminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run",
+        RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = tmp_path / "run" / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+    }
+    digest = hashlib.sha256(json.dumps(
+        request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    receipt = workspace.parent / f"terminal-result-1-{digest[:16]}.json"
+    receipt.write_text(json.dumps({
+        "protocol_version": 1, "state": "started", "request_sha256": digest,
+        "request": request, "timeout_seconds": 30,
+        "result": {"status": "transport_or_observer_error",
+                   "handle": "bz-a3-1:wrong"},
+    }))
+
+    first = campaign._durable_terminal_check(request, 30)
+    second = campaign._durable_terminal_check(request, 30)
+
+    assert first == second
+    assert first["manual_reconciliation_required"] is True
+    assert json.loads(receipt.read_text())["state"] == "uncertain"
+    assert terminal.calls == 1
+
+
+@pytest.mark.parametrize("tamper", [
+    "digest", "cell", "manual_marker", "record_protocol", "request_protocol",
+    "operation", "benchmark", "cases", "timeout", "candidate_digest",
+])
+def test_terminal_reconciliation_rejects_receipt_identity_drift(
+    tmp_path: Path, tamper: str,
+):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = root / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+        "candidate_sha256": {
+            name: diagnostic.sha256_file(workspace / name)
+            for name in ("candidate.py", "candidate.manifest.json")
+        },
+    }
+    campaign._durable_terminal_check(request, 30)
+    receipt_path = next(workspace.parent.glob("terminal-result-*.json"))
+    receipt = json.loads(receipt_path.read_text())
+    if tamper == "digest":
+        receipt["request"]["cases"].append(99)
+    elif tamper == "cell":
+        receipt["request"]["cell_id"] = "wave-1-project-cannbot"
+        receipt["request_sha256"] = hashlib.sha256(json.dumps(
+            receipt["request"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    elif tamper == "manual_marker":
+        receipt["result"].pop("manual_reconciliation_required")
+    elif tamper == "record_protocol":
+        receipt["protocol_version"] = 2
+    elif tamper == "request_protocol":
+        receipt["request"]["protocol_version"] = 2
+    elif tamper == "operation":
+        receipt["request"]["operation"] = "other"
+    elif tamper == "benchmark":
+        receipt["request"]["benchmark"] = "other"
+    elif tamper == "cases":
+        receipt["request"]["cases"] = [0]
+    elif tamper == "timeout":
+        receipt["timeout_seconds"] = 0
+    else:
+        receipt["request"]["candidate_sha256"]["candidate.py"] = "0" * 64
+    if tamper in {"request_protocol", "operation", "benchmark", "cases",
+                  "candidate_digest"}:
+        receipt["request_sha256"] = hashlib.sha256(json.dumps(
+            receipt["request"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    receipt_path.write_text(json.dumps(receipt))
+
+    with pytest.raises(diagnostic.DiagnosticError, match="identity mismatch"):
+        campaign.reconcile_terminal(
+            "wave-1-cannbot", 1, 1,
+            result={"status": "ok", "passed": True})
+
+
+@pytest.mark.parametrize("field", [
+    "campaign_id", "request_sha256", "cell_id", "terminal_attempt", "handle",
+    "candidate_sha256",
+])
+def test_terminal_reconciliation_rejects_unrelated_terminal_result(
+    tmp_path: Path, field: str,
+):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = root / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+        "candidate_sha256": {
+            name: diagnostic.sha256_file(workspace / name)
+            for name in ("candidate.py", "candidate.manifest.json")
+        },
+    }
+    campaign._durable_terminal_check(request, 30)
+    receipt = json.loads(next(workspace.parent.glob(
+        "terminal-result-*.json")).read_text())
+    result = {
+        "status": "ok", "passed": True, "campaign_id": campaign.campaign_id,
+        "request_sha256": receipt["request_sha256"],
+        "cell_id": "wave-1-cannbot", "terminal_attempt": 1,
+        "handle": "bz-a3-1:recovered",
+        "candidate_sha256": receipt["request"]["candidate_sha256"],
+    }
+    corruptions = {
+        "campaign_id": "other", "request_sha256": "0" * 64,
+        "cell_id": "wave-1-project-cannbot", "terminal_attempt": 2,
+        "handle": "", "candidate_sha256": {"candidate.py": "0" * 64},
+    }
+    result[field] = corruptions[field]
+
+    with pytest.raises(diagnostic.DiagnosticError, match="not terminal"):
+        campaign.reconcile_terminal("wave-1-cannbot", 1, 1, result=result)
+
+
+@pytest.mark.parametrize("missing_frozen", [None, "file", "directory"])
+def test_terminal_reconciliation_uses_immutable_frozen_submission(
+    tmp_path: Path, missing_frozen: str | None,
+):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    attempt = root / "cells" / "wave-1-cannbot" / "attempt-1"
+    workspace = attempt / "workspace"
+    frozen = attempt / "frozen-submission"
+    workspace.mkdir(parents=True)
+    frozen.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (workspace / name).write_text("original\n")
+        (frozen / name).write_text("original\n")
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+        "candidate_source": "frozen-submission",
+        "candidate_sha256": {
+            name: diagnostic.sha256_file(frozen / name)
+            for name in ("candidate.py", "candidate.manifest.json")
+        },
+    }
+    campaign._durable_terminal_check(request, 30)
+    (workspace / "candidate.py").write_text("mutated\n")
+    if missing_frozen == "file":
+        (frozen / "candidate.py").unlink()
+    elif missing_frozen == "directory":
+        for path in frozen.iterdir():
+            path.unlink()
+        frozen.rmdir()
+
+    if missing_frozen is not None:
+        with pytest.raises(diagnostic.DiagnosticError, match="identity mismatch"):
+            campaign.reconcile_terminal(
+                "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
+        return
+
+    reconciled = campaign.reconcile_terminal(
+        "wave-1-cannbot", 1, 1, handle="bz-a3-1:recovered")
+    assert reconciled["state"] == "started"
+    assert reconciled["result"]["handle"] == "bz-a3-1:recovered"
+
+
 def test_interruption_keeps_counted_retry_complete(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",
@@ -720,6 +1182,130 @@ def test_outcome_taxonomy(tmp_path, agent, terminal, files, expected, category):
         (tmp_path / "candidate.py").write_text("x")
         (tmp_path / "candidate.manifest.json").write_text("{}")
     assert diagnostic.classify(agent, terminal, tmp_path) == (expected, category)
+
+
+def test_terminal_local_check_timeout_is_controller_infrastructure(
+    tmp_path: Path, monkeypatch,
+):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["terminal"], 5, output=b"compile output")
+
+    monkeypatch.setattr(hook._processes, "run", timeout)
+    terminal = hook.check({"operation": "terminal_check"}, 5)
+
+    assert terminal["status"] == "transport_or_observer_error"
+    assert terminal["invocation_timeout"] is True
+    assert terminal["stdout"] == "compile output"
+    (tmp_path / "candidate.py").write_text("candidate\n")
+    (tmp_path / "candidate.manifest.json").write_text("{}\n")
+    agent = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+    assert diagnostic.classify(agent, terminal, tmp_path) == (
+        "transport_or_observer_error", "infrastructure")
+
+
+def test_terminal_local_resume_timeout_is_observer_infrastructure(monkeypatch):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["terminal"], 5)
+
+    monkeypatch.setattr(hook._processes, "run", timeout)
+    terminal = hook.resume(
+        {"operation": "terminal_check"}, "bz-a3-1:retained", 5)
+
+    assert terminal["status"] == "transport_or_observer_error"
+    assert terminal["invocation_timeout"] is True
+    assert terminal["handle"] == "bz-a3-1:retained"
+
+
+def test_terminal_resume_preserves_parsed_remote_workload_timeout(monkeypatch):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def completed(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            ["terminal"], 0, json.dumps({"status": "timeout"}), "")
+
+    monkeypatch.setattr(hook._processes, "run", completed)
+    terminal = hook.resume(
+        {"operation": "terminal_check"}, "bz-a3-1:retained", 5)
+
+    assert terminal["status"] == "timeout"
+    assert "invocation_timeout" not in terminal
+    assert "handle" not in terminal
+
+
+@pytest.mark.parametrize("failure_type", ["observer_error", "transport_error"])
+def test_terminal_resume_reattaches_handle_to_structured_observer_error(
+    monkeypatch, failure_type: str,
+):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def completed(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            ["terminal"], 2,
+            json.dumps({"status": "infrastructure_error",
+                        "failure_type": failure_type}), "")
+
+    monkeypatch.setattr(hook._processes, "run", completed)
+    terminal = hook.resume(
+        {"operation": "terminal_check"}, "bz-a3-1:retained", 5)
+
+    assert terminal["status"] == "infrastructure_error"
+    assert terminal["failure_type"] == failure_type
+    assert terminal["handle"] == "bz-a3-1:retained"
+
+
+def test_durable_terminal_receipt_retries_local_resume_timeout(tmp_path: Path):
+    class Terminal:
+        def __init__(self):
+            self.check_calls = 0
+            self.resume_calls = 0
+
+        def check(self, request, timeout_seconds):
+            self.check_calls += 1
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained"}
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls += 1
+            if self.resume_calls == 1:
+                return {"status": "transport_or_observer_error",
+                        "invocation_timeout": True, "handle": handle}
+            return {"status": "ok", "passed": True}
+
+    terminal = Terminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run",
+        RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = tmp_path / "run" / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+    }
+
+    first = campaign._durable_terminal_check(request, 30)
+    second = campaign._durable_terminal_check(request, 30)
+    receipt_path = next(workspace.parent.glob("terminal-result-*.json"))
+    pending = json.loads(receipt_path.read_text())
+    third = campaign._durable_terminal_check(request, 30)
+    completed = json.loads(receipt_path.read_text())
+
+    assert first["handle"] == second["handle"] == "bz-a3-1:retained"
+    assert second["status"] == "transport_or_observer_error"
+    assert pending["state"] == "started"
+    assert third == {"status": "ok", "passed": True}
+    assert completed["state"] == "completed"
+    assert terminal.check_calls == 1
+    assert terminal.resume_calls == 2
 
 
 def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
@@ -992,8 +1578,13 @@ def test_over_budget_retry_overrides_incomplete_agent_result(tmp_path: Path, mon
     assert result["status"] == "reschedule_pending"
 
 
-def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
-                                                               monkeypatch):
+@pytest.mark.parametrize("terminal_result, expected_outcome", [
+    ({"status": "ok", "passed": True, "diagnostics": "complete traceback"}, "success"),
+    ({"status": "compile_error", "diagnostics": "compiler diagnostic"}, "compile_error"),
+])
+def test_retry_terminal_completion_at_deadline_preserves_result(
+    tmp_path: Path, monkeypatch, terminal_result: dict, expected_outcome: str,
+):
     clock = [0.0]
     monkeypatch.setattr(diagnostic.time, "monotonic", lambda: clock[0])
 
@@ -1008,7 +1599,8 @@ def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
             if request["cell_id"] == "wave-1-cannbot" and not self.crossed:
                 self.crossed = True
                 clock[0] += 0.06
-            return super().check(request, timeout_seconds)
+            self.requests.append((request, timeout_seconds))
+            return dict(terminal_result)
 
     result = diagnostic.DiagnosticCampaign(
         manifest(tmp_path), tmp_path / "run", RetryLauncher(),
@@ -1017,11 +1609,11 @@ def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
 
     retry = result["waves"][0]["cells"][0]["retry"]
     assert retry["agent"]["status"] == "ok"
-    assert retry["terminal"]["failure_type"] == "wave_budget_exhausted"
-    assert retry["outcome"] == "wave_budget_exhausted"
-    assert retry["category"] == "infrastructure"
-    assert result["reschedule"] == ["wave-1-cannbot"]
-    assert result["status"] == "reschedule_pending"
+    assert retry["terminal"] == terminal_result
+    assert retry["outcome"] == expected_outcome
+    assert retry["category"] == "counted"
+    assert result["reschedule"] == []
+    assert result["status"] == "complete"
 
 
 @pytest.mark.parametrize("component", ["launcher", "terminal"])

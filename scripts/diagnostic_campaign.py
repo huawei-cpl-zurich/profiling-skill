@@ -242,6 +242,9 @@ class CommandTerminalHook:
         )
         if result.get("status") == "timeout" and result.get("invocation_timeout") is True:
             return {**result, "status": "transport_or_observer_error", "handle": handle}
+        if (result.get("status") == "infrastructure_error"
+                and result.get("failure_type") in {"observer_error", "transport_error"}):
+            return {**result, "handle": handle}
         if result.get("status") in INFRASTRUCTURE:
             return {**result, "handle": handle}
         return result
@@ -714,7 +717,7 @@ class DiagnosticCampaign:
                 attempts = prior.get("reschedule_attempts", [])
                 last = attempts[-1] if attempts else prior.get("retry", prior)
             durable_attempts = []
-            started_attempts = []
+            started_receipts = []
             for path in (self.root / "cells" / cell_id).glob(
                     "attempt-*/terminal-result-*.json"):
                 try:
@@ -735,16 +738,33 @@ class DiagnosticCampaign:
                     durable_attempt = int(path.parent.name.removeprefix("attempt-"))
                     durable_attempts.append(durable_attempt)
                     if retriable_started:
-                        started_attempts.append(durable_attempt)
+                        terminal_attempt = record["request"].get(
+                            "terminal_attempt", durable_attempt)
+                        if (isinstance(terminal_attempt, int)
+                                and not isinstance(terminal_attempt, bool)
+                                and terminal_attempt > 0):
+                            started_receipts.append(
+                                (durable_attempt, terminal_attempt, record))
             newest_durable = max(durable_attempts, default=0)
-            newest_started = max(started_attempts, default=0)
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
             )
-            if (last is not None and newest_started
-                    and newest_started >= last["attempt"]):
+            newest_started = max(started_receipts, default=None,
+                                 key=lambda item: (item[0], item[1]))
+            if (last is not None and newest_started is not None
+                    and newest_started[0] > last["attempt"]):
                 resumed = self._guarded_cell(
-                    wave, treatment, newest_started, remaining)
+                    wave, treatment, newest_started[0], remaining)
+            elif (last is not None and newest_started is not None
+                    and newest_started[0] == last["attempt"]):
+                terminal_request = copy.deepcopy(newest_started[2]["request"])
+                started_workspace = Path(terminal_request["workspace"])
+                terminal = self._durable_terminal_check(
+                    terminal_request, max(1, int(remaining)))
+                outcome, category = classify(last["agent"], terminal, started_workspace)
+                resumed = {**copy.deepcopy(last), "outcome": outcome,
+                           "category": category, "terminal": terminal,
+                           "rescheduled": True}
             elif last is not None and newest_durable > last["attempt"]:
                 resumed = self._guarded_cell(
                     wave, treatment, newest_durable, remaining)

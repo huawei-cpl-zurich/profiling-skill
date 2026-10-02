@@ -691,6 +691,70 @@ def test_campaign_restart_retries_handle_only_started_observation(tmp_path: Path
     assert [item["attempt"] for item in cannbot["reschedule_attempts"]] == [2, 2]
 
 
+def test_campaign_restart_resumes_newer_terminal_attempt_in_same_workspace(tmp_path: Path):
+    class DeviceTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if request["cell_id"] == "wave-1-cannbot":
+                return {"status": "infrastructure_error", "failure_type": "device_error",
+                        "terminal_attempt": request["terminal_attempt"]}
+            return {"status": "ok", "passed": True}
+
+    class ObserverTerminal:
+        def __init__(self):
+            self.check_calls = []
+
+        def check(self, request, timeout_seconds):
+            self.check_calls.append(request)
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:terminal-attempt-3",
+                    "terminal_attempt": request["terminal_attempt"]}
+
+    class ResumeTerminal:
+        def __init__(self):
+            self.check_calls = 0
+            self.resume_calls = []
+
+        def check(self, request, timeout_seconds):
+            self.check_calls += 1
+            raise AssertionError("restart must resume the persisted terminal request")
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls.append((request, handle))
+            return {"status": "ok", "passed": True,
+                    "terminal_attempt": request["terminal_attempt"]}
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    initial = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), DeviceTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert initial.run_wave(1)["status"] == "reschedule_pending"
+
+    observer = ObserverTerminal()
+    still_pending = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), observer,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert still_pending["status"] == "reschedule_pending"
+    assert observer.check_calls[0]["terminal_attempt"] == 3
+    assert Path(observer.check_calls[0]["workspace"]).parent.name == "attempt-2"
+
+    resume = ResumeTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), resume,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert resume.check_calls == 0
+    assert len(resume.resume_calls) == 1
+    request, handle = resume.resume_calls[0]
+    assert request["terminal_attempt"] == 3
+    assert Path(request["workspace"]).parent.name == "attempt-2"
+    assert handle == "bz-a3-1:terminal-attempt-3"
+
+
 def test_campaign_retries_initial_local_terminal_timeout_as_infrastructure(tmp_path: Path):
     class InitialTimeoutTerminal(RecordingTerminal):
         def check(self, request, timeout_seconds):
@@ -862,6 +926,27 @@ def test_terminal_resume_preserves_parsed_remote_workload_timeout(monkeypatch):
     assert terminal["status"] == "timeout"
     assert "invocation_timeout" not in terminal
     assert "handle" not in terminal
+
+
+@pytest.mark.parametrize("failure_type", ["observer_error", "transport_error"])
+def test_terminal_resume_reattaches_handle_to_structured_observer_error(
+    monkeypatch, failure_type: str,
+):
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+
+    def completed(*_args, **_kwargs):
+        return subprocess.CompletedProcess(
+            ["terminal"], 2,
+            json.dumps({"status": "infrastructure_error",
+                        "failure_type": failure_type}), "")
+
+    monkeypatch.setattr(hook._processes, "run", completed)
+    terminal = hook.resume(
+        {"operation": "terminal_check"}, "bz-a3-1:retained", 5)
+
+    assert terminal["status"] == "infrastructure_error"
+    assert terminal["failure_type"] == failure_type
+    assert terminal["handle"] == "bz-a3-1:retained"
 
 
 def test_durable_terminal_receipt_retries_local_resume_timeout(tmp_path: Path):

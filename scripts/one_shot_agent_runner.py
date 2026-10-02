@@ -114,6 +114,13 @@ def _copy_regular(source: Path, destination: Path, workspace: Path) -> None:
     destination.chmod(0o444)
 
 
+def _restore_regular(source: Path, destination: Path, source_root: Path) -> None:
+    temporary = destination.with_name(destination.name + ".controller-tmp")
+    temporary.unlink(missing_ok=True)
+    _copy_regular(source, temporary, source_root)
+    os.replace(temporary, destination)
+
+
 class _Handler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         owner: Controller = self.server.owner  # type: ignore[attr-defined]
@@ -202,6 +209,35 @@ class Controller:
         self.last_result = result
         return self._wire(result, 0 if result.get("status") == "ok" else 2)
 
+    def finalize_outputs(self) -> None:
+        if not self.used or not self.last_result or self.last_result.get("status") != "ok":
+            return
+        workspace = Path(self.request["workspace"])
+        snapshot = self.snapshot_root / "development-check"
+        try:
+            for name in ("candidate.py", "candidate.manifest.json"):
+                probe = self.snapshot_root / (name + ".final-probe")
+                _copy_regular(workspace / name, probe, workspace)
+                probe.unlink()
+        except SubmissionError as error:
+            self.last_result = {"status": "submission_error",
+                                "diagnostics": _bounded(error), "billed": True}
+        except Exception as error:
+            self.last_result = {
+                "status": "infrastructure_error", "failure_type": "controller_error",
+                "diagnostics": _bounded(f"controller failed: {type(error).__name__}: {error}"),
+                "handle": getattr(error, "handle", None),
+            }
+        try:
+            for name in ("candidate.py", "candidate.manifest.json"):
+                _restore_regular(snapshot / name, workspace / name, self.snapshot_root)
+        except Exception as error:
+            self.last_result = {
+                "status": "infrastructure_error", "failure_type": "controller_error",
+                "diagnostics": _bounded(f"controller failed: {type(error).__name__}: {error}"),
+                "handle": getattr(error, "handle", None),
+            }
+
     def __enter__(self) -> "Controller":
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
         self.server = socketserver.UnixStreamServer(str(self.socket_path), _Handler)
@@ -289,7 +325,7 @@ class OneShotRunner:
 
     def run(self, request: dict, timeout: int = 360) -> dict:
         started = time.monotonic(); milestones = [{"name": "request_validating", "elapsed_seconds": 0.0}]
-        state = socket_dir = None
+        state = socket_dir = snapshot_dir = None
         try:
             workspace, placement, prompt = self._validate(request)
             for name, source in (("baseline.py", self.assets["baseline"]),
@@ -307,6 +343,7 @@ class OneShotRunner:
                 skill_mounts += ["--ro-bind", str(self.skill_sources[name]), f"/workspace/.agents/skills/{name}"]
             state = Path(tempfile.mkdtemp(prefix="oneshot-codex-")); (state / "auth.json").touch(mode=0o600)
             socket_dir = Path(tempfile.mkdtemp(prefix="oneshot-ctl-")); socket_path = socket_dir / "controller.sock"
+            snapshot_dir = Path(tempfile.mkdtemp(prefix="oneshot-snapshot-"))
             script = Path(__file__).resolve(); runtime = self._runtime()
             command = [self.bwrap, "--die-with-parent", "--new-session", "--unshare-all", "--share-net",
                        "--tmpfs", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
@@ -326,7 +363,7 @@ class OneShotRunner:
                      "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"', "-C", "/workspace", "-"]
             milestones.append({"name": "sandbox_ready", "elapsed_seconds": time.monotonic() - started})
             with Controller(socket_path, self.client, request, placement, self.assets,
-                            socket_dir / "snapshots") as controller:
+                            snapshot_dir) as controller:
                 try:
                     run = _run_group([*command, *codex], prompt.decode(), timeout)
                 except subprocess.TimeoutExpired as error:
@@ -346,6 +383,8 @@ class OneShotRunner:
                         return result
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
                             "controller_usage": {"billed": controller.used, "calls": controller.calls}}
+                if run.returncode == 0:
+                    controller.finalize_outputs()
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})
             output = (run.stdout + run.stderr).lower()
             if (controller.last_result
@@ -379,7 +418,7 @@ class OneShotRunner:
             return {"status": "setup_error", "diagnostics": _bounded(error), "milestones": milestones,
                     "controller_usage": {"limit": 1, "billed": 0, "calls": []}}
         finally:
-            for temporary in (state, socket_dir):
+            for temporary in (state, socket_dir, snapshot_dir):
                 if temporary is not None:
                     shutil.rmtree(temporary, ignore_errors=True)
 

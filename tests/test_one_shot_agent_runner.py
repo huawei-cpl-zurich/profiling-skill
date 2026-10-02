@@ -108,6 +108,10 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         assert json.loads(call_socket(str(Path(socket_dir) / "controller.sock"), ["budget"])["stdout"])["remaining"] == 1
         checked = call_socket(str(Path(socket_dir) / "controller.sock"), module.CHECK)
         assert checked["exit_code"] == 0
+        snapshot = Path(client.requests[0]["candidate"])
+        observed["snapshot"] = snapshot
+        assert stat.S_IMODE(snapshot.stat().st_mode) == 0o444
+        assert str(snapshot.parent.parent) not in map(str, argv)
         assert call_socket(str(Path(socket_dir) / "controller.sock"), module.CHECK)["exit_code"] == 75
         return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
 
@@ -137,6 +141,50 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         assert f"--ro-bind\0{runner.skill_sources[name]}\0/workspace/.agents/skills/{name}" in joined
     assert "/codex-home/skills" not in joined and "/codex-home/plugins" not in joined
     assert "reference_repos" not in joined and "controller.sock" not in json.dumps(client.requests)
+    assert str(observed["snapshot"].parent.parent) not in joined
+    assert not observed["snapshot"].exists()
+
+
+@pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
+def test_post_check_symlink_is_counted_and_canonical_output_restored(
+        monkeypatch, tmp_path: Path, name: str):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("checked candidate\n")
+        (workspace / "candidate.manifest.json").write_text('{"checked":true}\n')
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 0
+        outside = tmp_path / "outside"; outside.write_text("outside\n")
+        (workspace / name).unlink(); (workspace / name).symlink_to(outside)
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    workspace = Path(request["workspace"])
+    assert result["status"] == "submission_error"
+    assert not (workspace / name).is_symlink()
+    assert (workspace / "candidate.py").read_text() == "checked candidate\n"
+    assert json.loads((workspace / "candidate.manifest.json").read_text()) == {"checked": True}
+
+
+def test_post_check_regular_mutation_restores_checked_bytes(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("checked candidate\n")
+        (workspace / "candidate.manifest.json").write_text('{"checked":true}\n')
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 0
+        (workspace / "candidate.py").write_text("unchecked mutation\n")
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "ok"
+    assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
 
 
 def test_compile_diagnostic_is_bounded_and_returned_to_agent(tmp_path: Path):

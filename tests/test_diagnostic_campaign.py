@@ -368,6 +368,39 @@ def test_retry_that_consumes_remaining_wave_budget_stays_pending(tmp_path: Path)
     assert result["status"] == "reschedule_pending"
 
 
+@pytest.mark.parametrize("malformed", ["no_submission", "protocol_error"])
+def test_over_budget_retry_overrides_incomplete_agent_result(tmp_path: Path, monkeypatch,
+                                                            malformed: str):
+    clock = [0.0]
+    monkeypatch.setattr(diagnostic.time, "monotonic", lambda: clock[0])
+
+    class OverBudgetLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["wave"] == 1 and request["treatment"] == "cannbot":
+                if request["attempt"] == 1:
+                    return {"status": "device_or_runtime_infra"}
+                clock[0] += 0.06
+                result = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+                    {"arguments": ["check", "--scope", "development", "--round", "1"]}
+                ]}}
+                if malformed == "protocol_error":
+                    result["controller_usage"]["billed"] = 0
+                return result
+            return super().launch(request, timeout_seconds)
+
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", OverBudgetLauncher(), RecordingTerminal(),
+        wave_timeout=0.05,
+    ).run()
+
+    retry = result["waves"][0]["cells"][0]["retry"]
+    assert retry["outcome"] == "wave_budget_exhausted"
+    assert retry["category"] == "infrastructure"
+    assert retry["agent"]["reported_agent"]["status"] == "ok"
+    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert result["status"] == "reschedule_pending"
+
+
 def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
                                                                monkeypatch):
     clock = [0.0]
@@ -532,6 +565,42 @@ def test_unexpected_cell_exception_is_durable_and_does_not_abort_siblings(tmp_pa
     ]
     assert result["status"] == "reschedule_pending"
     assert json.loads((tmp_path / "run" / "ledger.json").read_text()) == result
+
+
+def test_keyboard_interrupt_checkpoints_terminal_state_and_sibling_evidence(tmp_path: Path,
+                                                                            monkeypatch):
+    sibling_checkpointed = threading.Event()
+    real_atomic = diagnostic._atomic_json
+
+    def observing_atomic(path, value):
+        real_atomic(path, value)
+        if any(cell["treatment"] == "cannbot"
+               for wave in value["waves"] for cell in wave["cells"]):
+            sibling_checkpointed.set()
+
+    monkeypatch.setattr(diagnostic, "_atomic_json", observing_atomic)
+
+    class InterruptingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["wave"] == 1 and request["treatment"] == "project-cannbot":
+                assert sibling_checkpointed.wait(timeout=1)
+                raise KeyboardInterrupt("operator interrupted")
+            return super().launch(request, timeout_seconds)
+
+    root = tmp_path / "run"
+    with pytest.raises(KeyboardInterrupt, match="operator interrupted"):
+        diagnostic.DiagnosticCampaign(
+            manifest(tmp_path), root, InterruptingLauncher(), RecordingTerminal(),
+        ).run()
+
+    ledger = json.loads((root / "ledger.json").read_text())
+    assert ledger["status"] == "interrupted"
+    assert ledger["failure"] == {
+        "type": "KeyboardInterrupt", "message": "operator interrupted",
+    }
+    completed = {cell["treatment"] for cell in ledger["waves"][0]["cells"]}
+    assert "cannbot" in completed
+    assert "wave-1-project-cannbot" in ledger["reschedule"]
 
 
 def test_reused_output_root_is_rejected_without_changing_ledger(tmp_path: Path):

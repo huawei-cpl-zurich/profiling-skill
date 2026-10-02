@@ -231,9 +231,10 @@ class DiagnosticCampaign:
         candidate = workspace / "candidate.py"
         candidate_manifest = workspace / "candidate.manifest.json"
         if elapsed >= cap:
-            terminal = {"status": "infrastructure_error",
-                        "failure_type": "wave_budget_exhausted",
-                        "diagnostics": "agent consumed the remaining cell budget"}
+            agent = {"status": "infrastructure_error",
+                     "failure_type": "wave_budget_exhausted",
+                     "diagnostics": "agent consumed the remaining cell budget",
+                     "reported_agent": agent}
         elif candidate.is_file() and candidate_manifest.is_file():
             terminal_request = {
                 "protocol_version": 1, "operation": "terminal_check", "cell_id": cell_id,
@@ -317,6 +318,26 @@ class DiagnosticCampaign:
             "model_sha256": self.manifest["model_sha256"], "waves": [], "reschedule": [],
         }
         _atomic_json(self.ledger_path, ledger)
+        try:
+            return self._run_waves(ledger)
+        except BaseException as error:
+            ledger["status"] = (
+                "interrupted" if isinstance(error, (KeyboardInterrupt, SystemExit)) else "failed"
+            )
+            ledger["failure"] = {"type": type(error).__name__, "message": str(error)}
+            pending = set(ledger["reschedule"])
+            for wave_record in ledger["waves"]:
+                by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
+                for treatment in TREATMENTS:
+                    cell = by_treatment.get(treatment)
+                    if cell is None or (cell["category"] == "infrastructure"
+                                        and cell.get("retry", {}).get("category") != "counted"):
+                        pending.add(f"wave-{wave_record['wave']}-{treatment}")
+            ledger["reschedule"] = sorted(pending)
+            _atomic_json(self.ledger_path, ledger)
+            raise
+
+    def _run_waves(self, ledger: dict) -> dict:
         for wave in range(1, self.waves + 1):
             wave_started = time.monotonic()
             results = []

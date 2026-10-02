@@ -448,9 +448,11 @@ class DiagnosticCampaign:
                 raise DiagnosticError("terminal result receipt request mismatch")
             if record.get("state") == "completed" and isinstance(record.get("result"), dict):
                 return copy.deepcopy(record["result"])
-            if record.get("state") == "uncertain" and isinstance(record.get("result"), dict):
+            if (record.get("state") == "uncertain"
+                    and isinstance(record.get("result"), dict)
+                    and not record["result"].get("handle")):
                 return copy.deepcopy(record["result"])
-            if record.get("state") != "started":
+            if record.get("state") not in {"started", "uncertain"}:
                 raise DiagnosticError("invalid terminal result receipt")
             persisted_timeout = record.get("timeout_seconds")
             if (isinstance(persisted_timeout, bool)
@@ -623,6 +625,62 @@ class DiagnosticCampaign:
         _atomic_json(self.ledger_path, ledger)
         return ledger
 
+    def reconcile_terminal(self, cell_id: str, agent_attempt: int,
+                           terminal_attempt: int, *, handle: str | None = None,
+                           result: dict | None = None) -> dict:
+        """Resolve one uncertain terminal receipt without dispatching a check."""
+        parts = cell_id.split("-", 2) if isinstance(cell_id, str) else []
+        if (len(parts) != 3 or parts[0] != "wave" or not parts[1].isdigit()
+                or parts[2] not in TREATMENTS):
+            raise DiagnosticError("invalid reconciliation cell id")
+        if (isinstance(agent_attempt, bool) or not isinstance(agent_attempt, int)
+                or agent_attempt < 1 or isinstance(terminal_attempt, bool)
+                or not isinstance(terminal_attempt, int) or terminal_attempt < 1):
+            raise DiagnosticError("reconciliation attempts must be positive integers")
+        if (handle is None) == (result is None):
+            raise DiagnosticError("supply exactly one terminal handle or result")
+        attempt_dir = self.root / "cells" / cell_id / f"attempt-{agent_attempt}"
+        matches = []
+        for path in attempt_dir.glob("terminal-result-*.json"):
+            try:
+                record = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            request = record.get("request")
+            if (record.get("state") == "uncertain" and isinstance(request, dict)
+                    and request.get("terminal_attempt") == terminal_attempt):
+                matches.append((path, record))
+        if len(matches) != 1:
+            raise DiagnosticError("uncertain terminal receipt is missing or ambiguous")
+        path, record = matches[0]
+        request = record["request"]
+        request_digest = hashlib.sha256(json.dumps(
+            request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        expected_workspace = attempt_dir / "workspace"
+        if (record.get("request_sha256") != request_digest
+                or request.get("cell_id") != cell_id
+                or Path(str(request.get("workspace", ""))) != expected_workspace
+                or not isinstance(record.get("result"), dict)
+                or record["result"].get("manual_reconciliation_required") is not True):
+            raise DiagnosticError("uncertain terminal receipt identity mismatch")
+        if handle is not None:
+            if not isinstance(handle, str) or not handle.strip():
+                raise DiagnosticError("reconciliation handle must be non-empty")
+            reconciled = {**record["result"], "handle": handle}
+            reconciled.pop("manual_reconciliation_required", None)
+            record.update({"state": "started", "result": reconciled})
+        else:
+            if not isinstance(result, dict):
+                raise DiagnosticError("reconciliation result must be an object")
+            status = result.get("status")
+            if (status not in {"timeout", "submission_error", "source_error",
+                               "compile_error", "runtime_error", "correctness_error", "ok"}
+                    or (status == "ok" and result.get("passed") is not True)):
+                raise DiagnosticError("reconciliation result is not terminal")
+            record.update({"state": "completed", "result": copy.deepcopy(result)})
+        _atomic_json(path, record)
+        return copy.deepcopy(record)
+
     def run_wave(self, wave: int) -> dict:
         """Run exactly the next adaptive wave and pause for curation."""
         if isinstance(wave, bool) or not isinstance(wave, int) or not 1 <= wave <= self.waves:
@@ -732,6 +790,7 @@ class DiagnosticCampaign:
                 attempts = prior.get("reschedule_attempts", [])
                 last = attempts[-1] if attempts else prior.get("retry", prior)
             durable_attempts = []
+            completed_receipts = []
             started_receipts = []
             uncertain_receipts = []
             for path in (self.root / "cells" / cell_id).glob(
@@ -741,7 +800,7 @@ class DiagnosticCampaign:
                 except (OSError, json.JSONDecodeError):
                     continue
                 retriable_started = (
-                    record.get("state") == "started"
+                    record.get("state") in {"started", "uncertain"}
                     and isinstance(record.get("request"), dict)
                     and isinstance(record.get("timeout_seconds"), int)
                     and isinstance(record.get("result"), dict)
@@ -753,6 +812,15 @@ class DiagnosticCampaign:
                      and isinstance(record.get("result"), dict)) or retriable_started):
                     durable_attempt = int(path.parent.name.removeprefix("attempt-"))
                     durable_attempts.append(durable_attempt)
+                    if (record.get("state") == "completed"
+                            and isinstance(record.get("request"), dict)):
+                        terminal_attempt = record["request"].get(
+                            "terminal_attempt", durable_attempt)
+                        if (isinstance(terminal_attempt, int)
+                                and not isinstance(terminal_attempt, bool)
+                                and terminal_attempt > 0):
+                            completed_receipts.append(
+                                (durable_attempt, terminal_attempt, record))
                     if retriable_started:
                         terminal_attempt = record["request"].get(
                             "terminal_attempt", durable_attempt)
@@ -764,6 +832,7 @@ class DiagnosticCampaign:
                 if (record.get("state") == "uncertain"
                         and isinstance(record.get("request"), dict)
                         and isinstance(record.get("result"), dict)
+                        and not record["result"].get("handle")
                         and record["result"].get(
                             "manual_reconciliation_required") is True):
                     terminal_attempt = record["request"].get(
@@ -778,34 +847,34 @@ class DiagnosticCampaign:
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
             )
-            newest_started = max(started_receipts, default=None,
+            receipt_candidates = (
+                [(a, t, "completed", record) for a, t, record in completed_receipts]
+                + [(a, t, "started", record) for a, t, record in started_receipts]
+                + [(a, t, "uncertain", record) for a, t, record in uncertain_receipts]
+            )
+            newest_receipt = max(receipt_candidates, default=None,
                                  key=lambda item: (item[0], item[1]))
-            newest_uncertain = max(uncertain_receipts, default=None,
-                                   key=lambda item: (item[0], item[1]))
-            if (last is not None and newest_uncertain is not None
-                    and newest_uncertain[0] > last["attempt"]):
+            if (last is not None and newest_receipt is not None
+                    and newest_receipt[0] > last["attempt"]):
                 resumed = self._guarded_cell(
-                    wave, treatment, newest_uncertain[0], remaining)
-            elif (last is not None and newest_uncertain is not None
-                    and newest_uncertain[0] == last["attempt"]):
-                terminal = copy.deepcopy(newest_uncertain[2]["result"])
-                uncertain_workspace = Path(newest_uncertain[2]["request"]["workspace"])
-                outcome, category = classify(
-                    last["agent"], terminal, uncertain_workspace)
-                resumed = {**copy.deepcopy(last), "outcome": outcome,
-                           "category": category, "terminal": terminal,
-                           "rescheduled": True}
-            elif (last is not None and newest_started is not None
-                    and newest_started[0] > last["attempt"]):
-                resumed = self._guarded_cell(
-                    wave, treatment, newest_started[0], remaining)
-            elif (last is not None and newest_started is not None
-                    and newest_started[0] == last["attempt"]):
-                terminal_request = copy.deepcopy(newest_started[2]["request"])
+                    wave, treatment, newest_receipt[0], remaining)
+            elif (last is not None and newest_receipt is not None
+                    and newest_receipt[0] == last["attempt"]
+                    and newest_receipt[2] == "started"):
+                terminal_request = copy.deepcopy(newest_receipt[3]["request"])
                 started_workspace = Path(terminal_request["workspace"])
                 terminal = self._durable_terminal_check(
                     terminal_request, max(1, int(remaining)))
                 outcome, category = classify(last["agent"], terminal, started_workspace)
+                resumed = {**copy.deepcopy(last), "outcome": outcome,
+                           "category": category, "terminal": terminal,
+                           "rescheduled": True}
+            elif (last is not None and newest_receipt is not None
+                    and newest_receipt[0] == last["attempt"]):
+                terminal = copy.deepcopy(newest_receipt[3]["result"])
+                reconciled_workspace = Path(newest_receipt[3]["request"]["workspace"])
+                outcome, category = classify(
+                    last["agent"], terminal, reconciled_workspace)
                 resumed = {**copy.deepcopy(last), "outcome": outcome,
                            "category": category, "terminal": terminal,
                            "rescheduled": True}

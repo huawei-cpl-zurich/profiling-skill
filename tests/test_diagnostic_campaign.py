@@ -807,6 +807,103 @@ def test_campaign_requires_manual_reconciliation_for_handleless_terminal_timeout
     assert restarted.requests == []
 
 
+@pytest.mark.parametrize("reconciliation", ["completed", "handle"])
+def test_campaign_consumes_manual_terminal_reconciliation_without_check(
+    tmp_path: Path, reconciliation: str,
+):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if request["cell_id"] == "wave-1-cannbot":
+                return {"status": "transport_or_observer_error",
+                        "invocation_timeout": True}
+            return {"status": "ok", "passed": True}
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert campaign.run_wave(1)["status"] == "reschedule_pending"
+    if reconciliation == "completed":
+        reconciled = campaign.reconcile_terminal(
+            "wave-1-cannbot", 1, 1,
+            result={"status": "ok", "passed": True, "reconciled": True})
+    else:
+        reconciled = campaign.reconcile_terminal(
+            "wave-1-cannbot", 1, 1, handle="bz-a3-1:manually-recovered")
+    assert reconciled["state"] == (
+        "completed" if reconciliation == "completed" else "started")
+
+    class ReconciledTerminal(RecordingTerminal):
+        def __init__(self):
+            super().__init__()
+            self.resume_calls = []
+
+        def check(self, request, timeout_seconds):
+            raise AssertionError("manual reconciliation must not dispatch a check")
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls.append((request, handle))
+            return {"status": "ok", "passed": True, "reconciled": True}
+
+    terminal = ReconciledTerminal()
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+
+    assert recovered["status"] == "awaiting_curation"
+    assert terminal.requests == []
+    assert len(terminal.resume_calls) == (1 if reconciliation == "handle" else 0)
+    cell = next(cell for cell in recovered["waves"][0]["cells"]
+                if cell["treatment"] == "cannbot")
+    assert cell["reschedule_attempts"][-1]["outcome"] == "success"
+    assert cell["reschedule_attempts"][-1]["attempt"] == 1
+
+
+@pytest.mark.parametrize("tamper", ["digest", "cell", "schema"])
+def test_terminal_reconciliation_rejects_receipt_identity_drift(
+    tmp_path: Path, tamper: str,
+):
+    class TimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            return {"status": "transport_or_observer_error",
+                    "invocation_timeout": True}
+
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, RecordingLauncher(), TimeoutTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = root / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+    }
+    campaign._durable_terminal_check(request, 30)
+    receipt_path = next(workspace.parent.glob("terminal-result-*.json"))
+    receipt = json.loads(receipt_path.read_text())
+    if tamper == "digest":
+        receipt["request"]["cases"].append(99)
+    elif tamper == "cell":
+        receipt["request"]["cell_id"] = "wave-1-project-cannbot"
+        receipt["request_sha256"] = hashlib.sha256(json.dumps(
+            receipt["request"], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    else:
+        receipt["result"].pop("manual_reconciliation_required")
+    receipt_path.write_text(json.dumps(receipt))
+
+    with pytest.raises(diagnostic.DiagnosticError, match="identity mismatch"):
+        campaign.reconcile_terminal(
+            "wave-1-cannbot", 1, 1,
+            result={"status": "ok", "passed": True})
+
+
 def test_interruption_keeps_counted_retry_complete(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",

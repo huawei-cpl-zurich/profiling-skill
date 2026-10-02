@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -152,6 +153,8 @@ def classify(agent: dict, terminal: dict | None, workspace: Path) -> tuple[str, 
         return str(status), "infrastructure"
     if status in OBSERVED:
         return str(status), "observed"
+    if status != "ok":
+        return "protocol_error", "counted"
     usage = agent.get("controller_usage")
     expected = ["check", "--scope", "development", "--round", "1"]
     calls = usage.get("calls") if isinstance(usage, dict) else None
@@ -275,6 +278,9 @@ class DiagnosticCampaign:
             }
 
     def run(self) -> dict:
+        manifest = copy.deepcopy(self.manifest)
+        validate_manifest(manifest)
+        self.manifest = manifest
         if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
             raise DiagnosticError(f"diagnostic output root is not fresh: {self.root}")
         ledger = {

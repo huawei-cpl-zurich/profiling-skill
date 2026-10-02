@@ -395,6 +395,22 @@ def test_submission_error_is_counted_candidate_failure(tmp_path: Path):
     ) == ("submission_error", "counted")
 
 
+@pytest.mark.parametrize("status", [None, "unexpected"])
+def test_unknown_or_missing_agent_status_cannot_inherit_terminal_success(tmp_path: Path,
+                                                                        status):
+    (tmp_path / "candidate.py").write_text("x")
+    (tmp_path / "candidate.manifest.json").write_text("{}")
+    agent = {"controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+    if status is not None:
+        agent["status"] = status
+
+    assert diagnostic.classify(
+        agent, {"status": "ok", "passed": True}, tmp_path,
+    ) == ("protocol_error", "counted")
+
+
 def test_all_primary_completions_are_checkpointed_before_retry(tmp_path: Path):
     class DelayedPrimaryLauncher(RecordingLauncher):
         def __init__(self):
@@ -460,3 +476,41 @@ def test_reused_output_root_is_rejected_without_changing_ledger(tmp_path: Path):
         ).run()
 
     assert (root / "ledger.json").read_bytes() == retained
+
+
+@pytest.mark.parametrize("drift", ["prompt", "manifest"])
+def test_inputs_are_revalidated_immediately_before_initial_ledger(tmp_path: Path, drift: str):
+    config = manifest(tmp_path)
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), RecordingTerminal(),
+    )
+    if drift == "prompt":
+        Path(config["prompt"]).write_text("changed after construction\n")
+    else:
+        config["treatments"]["cannbot"]["skills"] = ["triton-op-coding"]
+
+    with pytest.raises(diagnostic.DiagnosticError):
+        campaign.run()
+
+    assert not (root / "ledger.json").exists()
+
+
+def test_run_uses_manifest_snapshot_after_revalidation(tmp_path: Path):
+    config = manifest(tmp_path)
+
+    class MutatingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            config["treatments"]["cannbot"]["skills"] = ["wrong-after-run-started"]
+            return super().launch(request, timeout_seconds)
+
+    launcher = MutatingLauncher()
+    diagnostic.DiagnosticCampaign(
+        config, tmp_path / "run", launcher, RecordingTerminal(),
+    ).run()
+
+    cannbot_requests = [request for request, _ in launcher.requests
+                        if request["treatment"] == "cannbot"]
+    assert cannbot_requests
+    assert all(request["skills"] == list(diagnostic.TREATMENT_SKILLS["cannbot"])
+               for request in cannbot_requests)

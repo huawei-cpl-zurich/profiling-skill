@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import threading
+import uuid
 from pathlib import Path
 
 import diagnostic_campaign
@@ -77,8 +79,25 @@ class BzTerminalHook:
         self.placements = validate_placements(placements)
         self.assets = assets
         self.campaign_id = campaign_id
+        self._condition = threading.Condition()
+        self._active = 0
+        self._cancelled = False
+        self._uncertain: dict[str, dict] = {}
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
+        with self._condition:
+            if self._cancelled:
+                return {"status": "infrastructure_error", "failure_type": "cancelled",
+                        "diagnostics": "terminal hook was cancelled"}
+            self._active += 1
+        try:
+            return self._check(request, timeout_seconds)
+        finally:
+            with self._condition:
+                self._active -= 1
+                self._condition.notify_all()
+
+    def _check(self, request: dict, timeout_seconds: int) -> dict:
         cell = request["cell_id"]
         try:
             _prefix, wave, treatment = cell.split("-", 2)
@@ -87,7 +106,7 @@ class BzTerminalHook:
         workspace = Path(request["workspace"])
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
         placement = self.placements[treatment][min(attempt - 1, 1)]
-        result = self.client.run({
+        client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
@@ -98,7 +117,19 @@ class BzTerminalHook:
             "candidate_manifest": str(workspace / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": list(range(7)),
-        })
+        }
+        # A retained observer interruption is not permission to dispatch on a
+        # fallback device. Re-enter the exact original request so the durable
+        # client observes its receipt. Only terminal/pre-dispatch failures use
+        # the attempt-2 placement.
+        client_request = self._uncertain.get(cell, client_request)
+        result = self.client.run(client_request)
+        if (result.get("status") == "infrastructure_error"
+                and result.get("failure_type") == "observer_error"
+                and result.get("handle")):
+            self._uncertain[cell] = client_request
+        else:
+            self._uncertain.pop(cell, None)
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}
@@ -107,6 +138,14 @@ class BzTerminalHook:
         if status in {"compile_error", "runtime_error", "correctness_error"}:
             return result
         return result
+
+    def cancel(self) -> None:
+        # BzA3DiagnosticClient owns the durable receipt. Let active observation
+        # reach that checkpoint before campaign shutdown abandons daemon cells.
+        with self._condition:
+            self._cancelled = True
+            while self._active:
+                self._condition.wait()
 
 
 def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
@@ -121,7 +160,7 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
         raise DiagnosticError("diagnostic timeouts must remain 360/600/600 seconds")
     if config["waves"] != 4:
         raise DiagnosticError("diagnostic campaign requires exactly four waves")
-    hook = BzTerminalHook(client, placements, config["assets"], root.name)
+    hook = BzTerminalHook(client, placements, config["assets"], str(uuid.uuid4()))
     return DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
                               waves=4, agent_timeout=360, cell_timeout=600,
                               wave_timeout=600).run()

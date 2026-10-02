@@ -62,14 +62,19 @@ class Agent:
 
 
 class Client:
-    def __init__(self, fail_once=False, candidate_failure=False):
+    def __init__(self, fail_once=False, candidate_failure=False, observer_once=False):
         self.requests = []
         self.fail_once, self.candidate_failure = fail_once, candidate_failure
+        self.observer_once = observer_once
         self.failed = set()
 
     def run(self, request):
         self.requests.append(request)
         key = (request["wave"], request["cell"].rsplit("-attempt-", 1)[0])
+        if self.observer_once and key not in self.failed:
+            self.failed.add(key)
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained"}
         if self.fail_once and key not in self.failed:
             self.failed.add(key)
             return {"status": "infrastructure_error", "failure_type": "device_error", "handle": "kept"}
@@ -119,6 +124,22 @@ def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_p
     assert first["cell"] == treatment + "-attempt-1"
 
 
+def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    agent, client = Agent(), Client(observer_once=True)
+    ledger = module.run(config, manifest, placements, tmp_path / "campaign", agent, client)
+
+    assert len(agent.requests) == 12 and len(client.requests) == 24
+    assert not ledger["reschedule"]
+    by_cell = {}
+    for request in client.requests:
+        by_cell.setdefault((request["wave"], request["cell"]), []).append(request)
+    assert len(by_cell) == 12
+    assert all(len(requests) == 2 and requests[0] == requests[1]
+               and requests[0]["cell"].endswith("-attempt-1")
+               for requests in by_cell.values())
+
+
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(candidate_failure=True)
@@ -144,3 +165,39 @@ def test_frozen_launcher_delegates_cancellation():
     agent = Agent()
     module.FrozenAgentLauncher(agent).cancel()
     assert agent.cancelled is True
+
+
+def test_terminal_cancel_waits_for_durable_client_completion(tmp_path: Path):
+    entered, release, cancelled = threading.Event(), threading.Event(), threading.Event()
+
+    class BlockingClient:
+        def run(self, _request):
+            entered.set()
+            release.wait()
+            return {"status": "ok", "passed": True, "handle": "bz-a3-1:kept"}
+
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    hook = module.BzTerminalHook(BlockingClient(), placements, config["assets"], "unique")
+    worker = threading.Thread(target=hook.check, args=({"cell_id": "wave-1-cannbot",
+        "workspace": str(workspace)}, 30))
+    worker.start()
+    assert entered.wait(1)
+    stopper = threading.Thread(target=lambda: (hook.cancel(), cancelled.set()))
+    stopper.start()
+    assert not cancelled.wait(0.05)
+    release.set()
+    worker.join(1), stopper.join(1)
+    assert cancelled.is_set()
+
+
+def test_each_campaign_uses_a_globally_unique_bz_receipt_namespace(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    first, second = Client(), Client()
+    module.run(config, manifest, placements, tmp_path / "one" / "same", Agent(), first)
+    module.run(config, manifest, placements, tmp_path / "two" / "same", Agent(), second)
+    assert {r["campaign"] for r in first.requests}.isdisjoint(
+        {r["campaign"] for r in second.requests})

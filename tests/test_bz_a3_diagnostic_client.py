@@ -248,6 +248,36 @@ def test_adapter_transport_observes_same_handle_after_interruption():
     assert sum("run" in call for call in calls) == 1
 
 
+def test_client_uses_one_decreasing_deadline_across_all_phases(tmp_path: Path, monkeypatch):
+    module = load()
+    ticks = iter((100.0, 101.0, 105.0, 108.0))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    transport = FakeTransport(module)
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
+    assert result["status"] == "ok"
+    assert [entry[3] for entry in transport.uploads] == [29, 25]
+    assert transport.executions[0][4] == 22
+
+
+def test_execute_observation_shares_one_deadline(monkeypatch):
+    module = load()
+    clock = [0.0]
+    calls = []
+
+    def invoke(argv, timeout):
+        calls.append((argv, timeout))
+        if "observe" not in argv:
+            clock[0] = 20.0
+            return module.CommandResult(75, "CATLASS_VALIDATION_STATE=running\n",
+                                        "bz-a3-1:kept")
+        return module.CommandResult(0, "CATLASS_VALIDATION_STATE=completed\n", "")
+
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+    module.AdapterTransport(["remote"], ["adapter"], invoke).execute(
+        "bz-a3-1", 2, "diagnostic", "true", 30)
+    assert [timeout for _argv, timeout in calls] == [30, 10]
+
+
 def test_host_timeout_preserves_handle_from_partial_adapter_output(monkeypatch):
     module = load()
 

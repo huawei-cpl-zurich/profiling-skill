@@ -94,6 +94,14 @@ class FrozenAgentLauncher:
         if not files:
             return
         snapshot = workspace.parent / "frozen-submission"
+        if snapshot.exists():
+            if (not snapshot.is_dir()
+                    or {path.name for path in snapshot.iterdir()} != set(files)
+                    or any((snapshot / name).read_bytes() != content
+                           for name, content in files.items())):
+                raise DiagnosticError("existing frozen submission does not match receipt")
+            cls._restore(workspace, files)
+            return
         snapshot.mkdir(exist_ok=False)
         cls._restore(snapshot, files)
         os.chmod(snapshot, 0o555)

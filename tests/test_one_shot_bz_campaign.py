@@ -525,6 +525,12 @@ def test_frozen_launcher_replays_durable_receipt_after_restart(tmp_path: Path):
         def launch(self, _request, _timeout):
             raise AssertionError("durably completed agent was relaunched")
 
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (first_workspace / name).unlink()
+    same_attempt = module.FrozenAgentLauncher(MustNotLaunch()).launch(request, 10)
+    assert same_attempt["submission_replayed"] is True
+    assert (first_workspace / "candidate.py").read_text() == "candidate\n"
+
     second_workspace = cell_root / "attempt-2" / "workspace"
     second_workspace.mkdir(parents=True)
     request["workspace"] = str(second_workspace)
@@ -552,6 +558,35 @@ def test_frozen_launcher_rejects_changed_durable_snapshot(tmp_path: Path):
     request["workspace"] = str(second_workspace)
     with pytest.raises(module.DiagnosticError, match="snapshot digest mismatch"):
         module.FrozenAgentLauncher(MustNotLaunch()).launch(request, 10)
+
+
+def test_adaptive_crash_window_reuses_snapshot_and_terminal_receipt(tmp_path: Path):
+    input_root = tmp_path / "inputs"
+    input_root.mkdir()
+    config, manifest, placements = inputs(input_root)
+    root = tmp_path / "campaign"
+    first = module.run_wave(config, manifest, placements, root, Agent(), Client(), 1)
+    ledger = json.loads((root / "ledger.json").read_text())
+    ledger["status"] = "running"
+    ledger["waves"][0]["cells"] = [
+        cell for cell in ledger["waves"][0]["cells"] if cell["treatment"] != "cannbot"]
+    (root / "ledger.json").write_text(json.dumps(ledger))
+
+    class MustNotLaunch:
+        def launch(self, _request, _timeout):
+            raise AssertionError("durable agent submission was relaunched")
+
+    class MustNotRun:
+        def run(self, _request):
+            raise AssertionError("completed terminal result was redispatched")
+
+    recovered = module.run_wave(
+        config, manifest, placements, root, MustNotLaunch(), MustNotRun(), 1)
+    assert recovered["status"] == "awaiting_curation"
+    cell = next(cell for cell in recovered["waves"][0]["cells"]
+                if cell["treatment"] == "cannbot")
+    assert cell["category"] == "counted"
+    assert cell["agent"]["submission_replayed"] is True
 
 
 def test_uncertain_durable_launch_is_never_billed_twice(tmp_path: Path):

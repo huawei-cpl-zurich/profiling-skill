@@ -228,6 +228,24 @@ def test_post_check_mutation_is_restored_before_agent_timeout(monkeypatch, tmp_p
     assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
 
 
+def test_post_check_mutation_is_restored_before_nonzero_exit(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("checked candidate\n")
+        (workspace / "candidate.manifest.json").write_text('{"checked":true}\n')
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 0
+        (workspace / "candidate.py").write_text("unchecked mutation\n")
+        return subprocess.CompletedProcess(argv, 1, "", "protocol failed")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "protocol_error"
+    assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
+
+
 def test_compile_diagnostic_is_bounded_and_returned_to_agent(tmp_path: Path):
     runner, request, _ = fixture(tmp_path)
     client = Client({"status": "compile_error", "diagnostics": "traceback:" + "x" * 70000})

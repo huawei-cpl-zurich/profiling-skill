@@ -388,8 +388,7 @@ class OneShotRunner:
                         return result
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
                             "controller_usage": {"billed": controller.used, "calls": controller.calls}}
-                if run.returncode == 0:
-                    controller.finalize_outputs()
+                controller.finalize_outputs()
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})
             output = (run.stdout + run.stderr).lower()
             if (controller.last_result

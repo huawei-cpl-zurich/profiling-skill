@@ -107,12 +107,16 @@ submission-freezing wrapper.
 | Observed stale-repair fix, full suite | 313 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
 | Final observed-repair hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T110219Z-120-9429` |
 | Final observed-repair hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T110219Z-119-32485` |
+| Bounded-resume fix, focused suite | 89 passed | Retained observation uses the remaining attempt budget; observation-only requests cannot dispatch. |
+| Bounded-resume fix, full suite | 316 passed, 1 host failure | Same pre-existing Bubblewrap namespace limitation. |
+| Final bounded-resume hook, BZ-A3-1 device 2, cases 0-6 | passed | `bz-a3-1:20261002T110728Z-282-16038` |
+| Final bounded-resume hook, BZ-A3-2 device 12, cases 0-6 | passed | `bz-a3-2:20261002T110728Z-231-2142` |
 
 ## Final State
 
 | Item | Value |
 | --- | --- |
-| Final validated implementation HEAD | `5c31c98` |
+| Final validated implementation HEAD | `7a5027d` |
 | Merge completed at | 2026-10-02 10:29 UTC |
 | Rebase or merge still in progress | no |
 | Uncommitted changes | report finalization only |

@@ -367,6 +367,7 @@ def observe_receipt(receipt: dict[str, Any], path: Path, client: Path, prefix: l
             ) from exc
         raise
     receipt["state"] = "succeeded"
+    receipt.pop("diagnostics", None)
     receipt = merge_receipt(path, receipt)
     if receipt.get("state") != "succeeded":
         raise BundleError(

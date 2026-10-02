@@ -271,7 +271,11 @@ def test_observation_failure_persists_receipt_and_resume_never_uploads_twice(tmp
     assert resumed.returncode == 0, resumed.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert sum(call[:2] == ["transfer", "upload"] for call in calls) == 1
-    assert json.loads(receipt.read_text())["state"] == "succeeded"
+    response = json.loads(resumed.stdout)
+    saved = json.loads(receipt.read_text())
+    assert response["state"] == saved["state"] == "succeeded"
+    assert "diagnostics" not in response
+    assert "diagnostics" not in saved
 
 
 def test_timeout_persists_observation_receipt(tmp_path: Path) -> None:

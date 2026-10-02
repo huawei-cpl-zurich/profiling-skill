@@ -440,7 +440,7 @@ class OneShotRunner:
                                         within=workspace)
             command += self._docker_mount(source, f"/workspace/.agents/skills/{name}", readonly=True)
             assert target.is_dir()
-        command.append(str(self.docker_image))
+        command.append(str(self.docker_image_id))
         return command
 
     def _remove_container(self, name: str) -> None:
@@ -502,6 +502,13 @@ class OneShotRunner:
             milestones.append({"name": "sandbox_ready", "elapsed_seconds": time.monotonic() - started})
             with Controller(socket_path, self.client, request, placement, self.assets,
                             snapshot_dir, started + timeout) as controller:
+                previous_handlers: dict[signal.Signals, Any] = {}
+                if (self.sandbox_backend == "docker"
+                        and threading.current_thread() is threading.main_thread()):
+                    def cancelled(_signum: int, _frame: Any) -> None:
+                        raise KeyboardInterrupt
+                    for watched in (signal.SIGTERM, signal.SIGHUP):
+                        previous_handlers[watched] = signal.signal(watched, cancelled)
                 try:
                     run = _run_group([*command, *codex], prompt.decode(), timeout)
                 except subprocess.TimeoutExpired as error:
@@ -530,6 +537,9 @@ class OneShotRunner:
                     if self.sandbox_backend == "docker":
                         self._remove_container(container_name)
                     raise
+                finally:
+                    for watched, previous in previous_handlers.items():
+                        signal.signal(watched, previous)
                 controller.finalize_outputs()
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})
             output = (run.stdout + run.stderr).lower()

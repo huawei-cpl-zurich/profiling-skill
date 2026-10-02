@@ -7,6 +7,7 @@ import json
 import os
 import runpy
 import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -571,7 +572,7 @@ def test_docker_argv_is_an_explicit_minimal_allowlist(monkeypatch, tmp_path: Pat
     for name in request["skills"]:
         assert (f"type=bind,src={runner.skill_sources[name]},"
                 f"dst=/workspace/.agents/skills/{name},readonly") in argv
-    assert runner.docker_image == argv[-1]
+    assert runner.docker_image_id == argv[-1]
     for forbidden in ("/var/run/docker.sock", f"src={ROOT},", str(Path.home() / ".agents"),
                       str(Path.home() / ".ssh"), "reference_repos", "reference-library",
                       "/experiment/runner.py"):
@@ -610,6 +611,31 @@ def test_docker_timeout_or_cancel_force_removes_container(monkeypatch, tmp_path:
         assert result["status"] == "timeout" and result["sandbox"]["backend"] == "docker"
     assert len(removed) == 1 and removed[0][1:3] == ["rm", "-f"]
     assert removed[0][3].startswith("triton-one-shot-")
+
+
+def test_docker_sigterm_routes_through_cleanup_and_restores_handlers(monkeypatch,
+                                                                    tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    handlers = {}
+    removed = []
+
+    def install(watched, handler):
+        previous = handlers.get(watched, signal.SIG_DFL)
+        handlers[watched] = handler
+        return previous
+
+    def interrupt(_argv, _prompt, _timeout):
+        handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+    monkeypatch.setattr(module.signal, "signal", install)
+    monkeypatch.setattr(module, "_run_group", interrupt)
+    monkeypatch.setattr(module.subprocess, "run",
+        lambda argv, **kwargs: (removed.append(argv) or subprocess.CompletedProcess(argv, 0, "", "")))
+    with pytest.raises(KeyboardInterrupt):
+        runner.run(request)
+    assert handlers[signal.SIGTERM] == signal.SIG_DFL
+    assert handlers[signal.SIGHUP] == signal.SIG_DFL
+    assert len(removed) == 1 and removed[0][1:3] == ["rm", "-f"]
 
 
 def test_real_docker_probe_has_controller_but_no_host_privilege(tmp_path: Path):

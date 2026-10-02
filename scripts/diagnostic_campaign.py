@@ -227,7 +227,10 @@ class CommandTerminalHook:
         self._processes = _ProcessRegistry()
 
     def check(self, request: dict, timeout_seconds: int) -> dict:
-        return _invoke(self.command, request, timeout_seconds, self._processes)
+        result = _invoke(self.command, request, timeout_seconds, self._processes)
+        if result.get("status") == "timeout" and result.get("invocation_timeout") is True:
+            return {**result, "status": "transport_or_observer_error"}
+        return result
 
     def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
         """Observe a retained job, distinguishing local and workload timeouts."""

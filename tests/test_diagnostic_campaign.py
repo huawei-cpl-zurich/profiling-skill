@@ -691,6 +691,33 @@ def test_campaign_restart_retries_handle_only_started_observation(tmp_path: Path
     assert [item["attempt"] for item in cannbot["reschedule_attempts"]] == [2, 2]
 
 
+def test_campaign_retries_initial_local_terminal_timeout_as_infrastructure(tmp_path: Path):
+    class InitialTimeoutTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if (request["cell_id"] == "wave-1-cannbot"
+                    and request["terminal_attempt"] == 1):
+                return {"status": "transport_or_observer_error",
+                        "invocation_timeout": True, "stdout": "retained output"}
+            return {"status": "ok", "passed": True}
+
+    terminal = InitialTimeoutTerminal()
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run",
+        RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+
+    assert result["status"] == "awaiting_curation"
+    cannbot = next(cell for cell in result["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert cannbot["outcome"] == "transport_or_observer_error"
+    assert cannbot["category"] == "infrastructure"
+    assert cannbot["terminal"]["stdout"] == "retained output"
+    assert cannbot["retry"]["outcome"] == "success"
+    assert cannbot["retry"]["attempt"] == 2
+
+
 def test_interruption_keeps_counted_retry_complete(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",
@@ -783,7 +810,7 @@ def test_outcome_taxonomy(tmp_path, agent, terminal, files, expected, category):
     assert diagnostic.classify(agent, terminal, tmp_path) == (expected, category)
 
 
-def test_terminal_local_check_timeout_is_counted_candidate_timeout(
+def test_terminal_local_check_timeout_is_controller_infrastructure(
     tmp_path: Path, monkeypatch,
 ):
     hook = diagnostic.CommandTerminalHook(["terminal"])
@@ -794,7 +821,7 @@ def test_terminal_local_check_timeout_is_counted_candidate_timeout(
     monkeypatch.setattr(hook._processes, "run", timeout)
     terminal = hook.check({"operation": "terminal_check"}, 5)
 
-    assert terminal["status"] == "timeout"
+    assert terminal["status"] == "transport_or_observer_error"
     assert terminal["invocation_timeout"] is True
     assert terminal["stdout"] == "compile output"
     (tmp_path / "candidate.py").write_text("candidate\n")
@@ -803,7 +830,7 @@ def test_terminal_local_check_timeout_is_counted_candidate_timeout(
         {"arguments": ["check", "--scope", "development", "--round", "1"]}
     ]}}
     assert diagnostic.classify(agent, terminal, tmp_path) == (
-        "candidate_timeout", "counted")
+        "transport_or_observer_error", "infrastructure")
 
 
 def test_terminal_local_resume_timeout_is_observer_infrastructure(monkeypatch):

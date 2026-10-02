@@ -289,7 +289,7 @@ class DiagnosticCampaign:
     def __init__(self, manifest: dict, root: Path, launcher: Launcher,
                  terminal: TerminalHook, *, waves: int = 4,
                  agent_timeout: int = 360, cell_timeout: int = 600,
-                 wave_timeout: int = 600):
+                 wave_timeout: int = 600, ledger_metadata: dict | None = None):
         validate_manifest(manifest)
         if waves != 4 or agent_timeout <= 0 or cell_timeout <= 0 or wave_timeout <= 0:
             raise DiagnosticError("four waves and positive timeouts are required")
@@ -297,6 +297,7 @@ class DiagnosticCampaign:
         self.launcher, self.terminal = launcher, terminal
         self.waves, self.agent_timeout, self.cell_timeout = waves, agent_timeout, cell_timeout
         self.wave_timeout = wave_timeout
+        self.ledger_metadata = copy.deepcopy(ledger_metadata or {})
         self.ledger_path = root / "ledger.json"
 
     def _cell(self, wave: int, treatment: str, attempt: int,
@@ -423,6 +424,7 @@ class DiagnosticCampaign:
             "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"], "waves": [], "reschedule": [],
+            **self.ledger_metadata,
         }
         _atomic_json(self.ledger_path, ledger)
         try:

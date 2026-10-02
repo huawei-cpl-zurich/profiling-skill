@@ -112,6 +112,8 @@ def test_common_assets_are_snapshotted_before_any_cell_runs(tmp_path: Path):
 
     class MutatingClient(Client):
         def run(self, request):
+            ledger = json.loads((tmp_path / "campaign" / "ledger.json").read_text())
+            assert set(ledger["assets"]["sha256"]) == {"baseline", "case_spec", "runner"}
             for source in config["assets"].values():
                 Path(source).write_text("changed\n")
             assert all(Path(request[name]).read_text() == "frozen\n"

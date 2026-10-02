@@ -340,10 +340,11 @@ def test_retained_observation_uses_remaining_attempt_budget(tmp_path: Path):
         (snapshot / "candidate.py").write_text("candidate\n")
         (snapshot / "candidate.manifest.json").write_text("{}\n")
     hook.check({"cell_id": "wave-1-cannbot", "workspace": str(first)}, 240)
-    hook.check({"cell_id": "wave-1-cannbot", "workspace": str(second)}, 7)
+    result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(second)}, 7)
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
     assert client.requests[1]["timeout"] == 240
     assert client.requests[1]["observe_timeout"] == 7
+    assert result["terminal_attempt"] == 1
 
 
 def test_failed_retained_observation_never_dispatches_fallback(tmp_path: Path):

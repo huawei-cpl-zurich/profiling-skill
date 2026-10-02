@@ -272,6 +272,7 @@ class BzTerminalHook:
                     or not isinstance(retained.get("timeout"), int)
                     or not 1 <= retained["timeout"] <= 240):
                 raise DiagnosticError(f"retained terminal request mismatch for {cell}")
+            terminal_attempt = int(retained_attempt)
             client_request = {**retained, "observe_timeout":
                               min(timeout_seconds, retained["timeout"])}
         deadline = time.monotonic() + timeout_seconds

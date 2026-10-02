@@ -121,6 +121,18 @@ def test_common_assets_are_snapshotted_before_any_cell_runs(tmp_path: Path):
     module.run(config, manifest, placements, tmp_path / "campaign", Agent(), MutatingClient())
 
 
+def test_common_assets_with_same_basename_remain_distinct(tmp_path: Path):
+    config, _manifest, _placements = inputs(tmp_path)
+    for index, name in enumerate(("baseline", "case_spec", "runner")):
+        source = tmp_path / "sources" / name / "main.py"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"asset-{index}\n")
+        config["assets"][name] = str(source)
+    frozen, _evidence = module.freeze_assets(config["assets"], tmp_path / "run", "unique")
+    assert [Path(frozen[name]).read_text() for name in ("baseline", "case_spec", "runner")] == [
+        "asset-0\n", "asset-1\n", "asset-2\n"]
+
+
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)
@@ -176,6 +188,17 @@ def test_placement_contract_rejects_shared_primary_device(tmp_path: Path):
         assert "distinct physical devices" in str(error)
     else:
         raise AssertionError("shared primary device accepted")
+
+
+def test_placement_contract_rejects_primary_as_fallback(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    placements["cannbot"][1] = placements["cannbot"][0]
+    try:
+        module.run(config, manifest, placements, tmp_path / "campaign", Agent(), Client())
+    except module.DiagnosticError as error:
+        assert "fallback placement must differ" in str(error)
+    else:
+        raise AssertionError("primary placement accepted as fallback")
 
 
 def test_frozen_launcher_delegates_cancellation():

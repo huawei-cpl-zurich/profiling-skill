@@ -224,8 +224,8 @@ for GDN/BSA and 10 for matmul), set `passed=true`, and retain
 at least one durable handle. It then runs exactly
 `profile --repeats 3 --round 3`, which must carry the same exact identity,
 report the configured development cases in order, retain three samples per
-case and exactly three distinct durable handles per case (15 for GDN/BSA and
-9 for matmul), and report three repeats. A cell is
+case, retain exactly one durable handle for the managed batch job, and report
+three repeats. A cell is
 complete only after both host gates pass; their full JSON, stdout, stderr,
 diagnostics, handles, and artifact paths are retained under the attempt and in
 `ledger.json`.

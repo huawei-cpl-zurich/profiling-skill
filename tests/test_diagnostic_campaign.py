@@ -222,6 +222,41 @@ def test_adaptive_reschedules_only_unresolved_infrastructure_cell(tmp_path: Path
         "category"] == "counted"
 
 
+def test_running_recovery_keeps_counted_retry_while_resuming_sibling(tmp_path: Path):
+    outcomes = {
+        (1, "cannbot", 1): "device_or_runtime_infra",
+        (1, "cannbot", 2): "device_or_runtime_infra",
+        (1, "project-cannbot", 1): "device_or_runtime_infra",
+        (1, "project-cannbot", 2): "device_or_runtime_infra",
+    }
+    launcher = RecordingLauncher(outcomes)
+    root = tmp_path / "run"
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), root, launcher, RecordingTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    blocked = campaign.run_wave(1)
+    cells = {cell["treatment"]: cell for cell in blocked["waves"][0]["cells"]}
+    counted = json.loads(json.dumps(cells["cannbot"]["retry"]))
+    counted["category"] = "counted"
+    counted["outcome"] = "compile_error"
+    cells["cannbot"]["reschedule_attempts"] = [counted]
+    cells["cannbot"]["resolution"] = counted
+    blocked["status"] = "running"
+    diagnostic._atomic_json(root / "ledger.json", blocked)
+    cannbot_calls = len([request for request, _ in launcher.requests
+                         if request["treatment"] == "cannbot"])
+
+    recovered = campaign.run_wave(1)
+
+    assert recovered["status"] == "awaiting_curation"
+    assert recovered["reschedule"] == []
+    assert len([request for request, _ in launcher.requests
+                if request["treatment"] == "cannbot"]) == cannbot_calls
+    recovered_cells = {cell["treatment"]: cell for cell in recovered["waves"][0]["cells"]}
+    assert recovered_cells["cannbot"]["reschedule_attempts"] == [counted]
+
+
 def test_curation_receipt_is_bound_to_campaign_and_wave_evidence(tmp_path: Path):
     campaign = diagnostic.DiagnosticCampaign(
         manifest(tmp_path / "inputs"), tmp_path / "run", RecordingLauncher(),

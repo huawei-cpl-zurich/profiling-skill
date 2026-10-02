@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 import threading
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -715,6 +716,50 @@ def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path
     assert result["status"] == "ok"
     assert result["terminal_attempt"] == 1
     assert len(client.requests) == 1
+
+
+def test_production_bz_hook_reconstructs_primary_handle_without_dispatch_receipt(
+    tmp_path: Path,
+):
+    config, _manifest, placements = inputs(tmp_path)
+    workspace = tmp_path / "attempt-1" / "workspace"
+    snapshot = workspace.parent / "frozen-submission"
+    workspace.mkdir(parents=True)
+    snapshot.mkdir()
+    for name in ("candidate.py", "candidate.manifest.json"):
+        (snapshot / name).write_text("{}\n")
+
+    class ObserveOnlyTransport:
+        def __init__(self):
+            self.observations = []
+
+        def upload(self, *_args):
+            raise AssertionError("reconciliation must not upload")
+
+        def execute(self, *_args):
+            raise AssertionError("reconciliation must not dispatch")
+
+        def observe(self, profile, handle, timeout):
+            self.observations.append((profile, handle, timeout))
+            payload = {"status": "ok", "passed": True, "diagnostics": "",
+                       "case_evidence": []}
+            return SimpleNamespace(
+                returncode=0,
+                stdout="BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n",
+                stderr="",
+            )
+
+    transport = ObserveOnlyTransport()
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
+
+    result = hook.resume(
+        {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
+         "terminal_attempt": 1}, "bz-a3-1:recovered", 30)
+
+    assert result["status"] == "ok"
+    assert result["terminal_attempt"] == 1
+    assert transport.observations[0][0:2] == ("bz-a3-1", "bz-a3-1:recovered")
 
 
 def test_reconcile_terminal_cli_updates_uncertain_receipt(

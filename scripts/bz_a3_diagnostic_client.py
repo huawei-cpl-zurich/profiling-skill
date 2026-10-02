@@ -214,6 +214,14 @@ class BzA3DiagnosticClient:
                     matches.append(request)
             except (OSError, json.JSONDecodeError, DiagnosticError):
                 continue
+        if not matches and requests:
+            # The generic terminal receipt is authoritative for its selected
+            # attempt. A supplied handle can reconstruct that one request when
+            # the lower-level process died before persisting dispatch state.
+            # Never guess the fallback request without its own durable receipt.
+            selected = requests[0]
+            if handle.startswith(str(selected.get("profile")) + ":"):
+                matches.append(selected)
         if len(matches) != 1:
             return {"status": "infrastructure_error", "failure_type": "request_error",
                     "diagnostics": "retained handle has no unique durable BZ receipt",

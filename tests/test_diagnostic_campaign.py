@@ -196,6 +196,37 @@ def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
         diagnostic.validate_manifest(config)
 
 
+@pytest.mark.parametrize(
+    "skills",
+    [
+        ["triton-op-coding"],
+        ["triton-op-coding", "ops-profiling", "ascend-profiling"],
+        ["triton-op-coding", "ascend-profiling"],
+        ["ops-profiling", "triton-op-coding"],
+    ],
+)
+def test_manifest_rejects_noncanonical_cannbot_skill_inventory(tmp_path: Path, skills):
+    config = manifest(tmp_path)
+    config["treatments"]["cannbot"] = {
+        "skills": skills,
+        "skill_sha256": {skill: f"hash-{skill}" for skill in skills},
+    }
+
+    with pytest.raises(diagnostic.DiagnosticError, match="noncanonical"):
+        diagnostic.validate_manifest(config)
+
+
+def test_manifest_accepts_exact_ordered_canonical_skill_inventories(tmp_path: Path):
+    config = manifest(tmp_path)
+
+    diagnostic.validate_manifest(config)
+
+    assert all(
+        config["treatments"][name]["skills"] == list(diagnostic.TREATMENT_SKILLS[name])
+        for name in diagnostic.TREATMENTS
+    )
+
+
 def test_ledger_is_valid_at_every_atomic_checkpoint(tmp_path: Path, monkeypatch):
     observed = []
     real_replace = diagnostic.os.replace

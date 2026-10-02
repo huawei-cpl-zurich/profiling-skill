@@ -16,6 +16,11 @@ from typing import Protocol
 
 
 TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+TREATMENT_SKILLS = {
+    "cannbot": ("triton-op-coding", "ops-profiling"),
+    "project-cannbot": ("triton-op-coding", "ascend-profiling"),
+    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
+}
 COUNTED = {
     "no_submission", "protocol_error", "source_error", "compile_error",
     "runtime_error", "correctness_error", "candidate_timeout", "success",
@@ -129,6 +134,8 @@ def validate_manifest(manifest: dict) -> None:
         skills = treatment.get("skills")
         if not isinstance(skills, list) or not skills or len(skills) != len(set(skills)):
             raise DiagnosticError(f"invalid isolated skill inventory for {name}")
+        if skills != list(TREATMENT_SKILLS[name]):
+            raise DiagnosticError(f"noncanonical isolated skill inventory for {name}")
         if not isinstance(treatment.get("skill_sha256"), dict):
             raise DiagnosticError(f"skill hashes are required for {name}")
         if set(skills) != set(treatment["skill_sha256"]):

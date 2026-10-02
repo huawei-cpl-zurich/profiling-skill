@@ -208,7 +208,8 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
     hook = BzTerminalHook(client, placements, assets, campaign_id)
     campaign = DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
                                   waves=4, agent_timeout=360, cell_timeout=600,
-                                  wave_timeout=600, ledger_metadata={"assets": asset_evidence})
+                                  wave_timeout=600, ledger_metadata={"assets": asset_evidence},
+                                  campaign_id=campaign_id)
     try:
         ledger = campaign.run()
     except BaseException:

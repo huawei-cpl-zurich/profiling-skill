@@ -776,6 +776,55 @@ def test_terminal_resume_preserves_parsed_remote_workload_timeout(monkeypatch):
     assert "handle" not in terminal
 
 
+def test_durable_terminal_receipt_retries_local_resume_timeout(tmp_path: Path):
+    class Terminal:
+        def __init__(self):
+            self.check_calls = 0
+            self.resume_calls = 0
+
+        def check(self, request, timeout_seconds):
+            self.check_calls += 1
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained"}
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls += 1
+            if self.resume_calls == 1:
+                return {"status": "transport_or_observer_error",
+                        "invocation_timeout": True, "handle": handle}
+            return {"status": "ok", "passed": True}
+
+    terminal = Terminal()
+    campaign = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path / "inputs"), tmp_path / "run",
+        RecordingLauncher(), terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    workspace = tmp_path / "run" / "cells" / "wave-1-cannbot" / "attempt-1" / "workspace"
+    workspace.mkdir(parents=True)
+    request = {
+        "protocol_version": 1, "operation": "terminal_check",
+        "cell_id": "wave-1-cannbot", "workspace": str(workspace),
+        "benchmark": "streaming-matmul-add", "cases": list(range(7)),
+        "terminal_attempt": 1,
+    }
+
+    first = campaign._durable_terminal_check(request, 30)
+    second = campaign._durable_terminal_check(request, 30)
+    receipt_path = next(workspace.parent.glob("terminal-result-*.json"))
+    pending = json.loads(receipt_path.read_text())
+    third = campaign._durable_terminal_check(request, 30)
+    completed = json.loads(receipt_path.read_text())
+
+    assert first["handle"] == second["handle"] == "bz-a3-1:retained"
+    assert second["status"] == "transport_or_observer_error"
+    assert pending["state"] == "started"
+    assert third == {"status": "ok", "passed": True}
+    assert completed["state"] == "completed"
+    assert terminal.check_calls == 1
+    assert terminal.resume_calls == 2
+
+
 def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
     config = manifest(tmp_path)
     Path(config["prompt"]).write_text("changed")

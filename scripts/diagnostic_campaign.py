@@ -485,10 +485,11 @@ class DiagnosticCampaign:
             result = copy.deepcopy(resume(receipt_request, prior_handle, timeout_seconds))
         else:
             result = copy.deepcopy(self.terminal.check(request, timeout_seconds))
-        retriable_observation = (
-            result.get("status") == "infrastructure_error"
-            and result.get("failure_type") in {"observer_error", "transport_error"}
-            and bool(result.get("handle")))
+        retriable_observation = bool(result.get("handle")) and (
+            result.get("status") == "transport_or_observer_error"
+            or (result.get("status") == "infrastructure_error"
+                and result.get("failure_type") in {"observer_error", "transport_error"})
+        )
         if not retriable_observation:
             _atomic_json(receipt, {"protocol_version": 1, "state": "completed",
                                    "request_sha256": digest, "result": result})

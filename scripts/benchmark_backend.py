@@ -98,19 +98,21 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
                 "infrastructure_error", "calibration attempt identity must be non-empty"
             )
         return raw, None
-    if action in {"measure", "profile"}:
-        case = raw.get("case")
-        allowed = spec["all_cases"] if action == "measure" else spec["development_cases"]
-        if isinstance(case, bool) or case not in allowed:
-            return None, response("infrastructure_error", f"invalid {action} case")
-        if action == "measure" and raw.get("phase") not in {"warmup", "sample"}:
-            return None, response("infrastructure_error", "measure phase must be warmup or sample")
-        if action == "profile" and (
-            isinstance(raw.get("round"), bool)
-            or not isinstance(raw.get("round"), int)
-            or raw["round"] < 1
-        ):
+    if action == "profile":
+        if raw.get("cases") != spec["development_cases"]:
+            return None, response("infrastructure_error", "profile cases are not the exact configured sequence")
+        repeats = raw.get("repeats")
+        if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
+            return None, response("infrastructure_error", "profile repeats must be a positive integer")
+        if (isinstance(raw.get("round"), bool) or not isinstance(raw.get("round"), int)
+                or raw["round"] < 1):
             return None, response("infrastructure_error", "profile round must be a positive integer")
+    elif action == "measure":
+        case = raw.get("case")
+        if isinstance(case, bool) or case not in spec["all_cases"]:
+            return None, response("infrastructure_error", f"invalid {action} case")
+        if raw.get("phase") not in {"warmup", "sample"}:
+            return None, response("infrastructure_error", "measure phase must be warmup or sample")
     else:
         expected = spec["all_cases"] if raw.get("scope") == "full" else spec["development_cases"]
         if raw.get("cases") != expected:
@@ -154,25 +156,24 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         job["reference_revision"] = spec["reference"]["revision"]
     if action == "check":
         job.update(cases=request["cases"], scope=request.get("scope"), round=request.get("round"))
-    else:
+    elif action == "measure":
         job.update(case=request["case"], iteration=request.get("iteration"))
-        if action == "measure":
-            job["phase"] = request["phase"]
-        if action == "profile":
-            job["round"] = request["round"]
-            if kernel_name is None:
-                raise ValueError("profile job requires a kernel selector")
-            job["profiling"] = {
-                "driver": str((root / "scripts/profile_a3.py").resolve()),
-                "tool": "msprof op",
-                "captures": 1,
-                "aic_metrics": "BasicInfo",
-                "warm_up": 3,
-                "launch_count": 1,
-                "replay_mode": "kernel",
-                "kernel_name": kernel_name,
-                "driver_arguments": ["--kernel-name", kernel_name],
-            }
+        job["phase"] = request["phase"]
+    else:
+        job.update(cases=request["cases"], repeats=request["repeats"], round=request["round"])
+        if kernel_name is None:
+            raise ValueError("profile job requires a kernel selector")
+        job["profiling"] = {
+            "driver": str((root / "scripts/profile_a3.py").resolve()),
+            "tool": "msprof op",
+            "captures": len(request["cases"]) * request["repeats"],
+            "aic_metrics": "BasicInfo",
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_name": kernel_name,
+            "driver_arguments": ["--kernel-name", kernel_name],
+        }
     return job
 
 
@@ -180,6 +181,8 @@ def identity_fields(job: dict[str, Any]) -> dict[str, Any]:
     fields = {name: job[name] for name in ("benchmark", "action", "device")}
     if job["action"] == "check":
         fields.update(cases=job["cases"], scope=job["scope"])
+    elif job["action"] == "profile":
+        fields.update(cases=job["cases"], repeats=job["repeats"])
     else:
         fields["case"] = job["case"]
     if job["action"] == "measure":
@@ -226,6 +229,8 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
             handle=result.get("handle"),
             evidence=result,
         )
+    if job["action"] == "profile":
+        result["cases"] = result.pop("profile_cases", None)
     return result
 
 
@@ -269,7 +274,7 @@ def main() -> int:
             elif request["action"] == "calibrate":
                 calibration_request = {
                     "action": "profile", "device": request["device"],
-                    "case": 7, "iteration": 0, "round": request["wave"],
+                    "cases": [7], "repeats": 1, "round": request["wave"],
                 }
                 calibration = root / "benchmarks/matmul/calibration.py"
                 job = make_job(calibration_request, "matmul", calibration, root,
@@ -287,6 +292,8 @@ def main() -> int:
                     wave=request["wave"],
                     selector="streaming_matmul_add_kernel_mix_aic",
                 )
+                if result.get("status") == "ok":
+                    result["latency_us"] = result["cases"][0]["samples_us"][0]
             elif not args.candidate.is_file():
                 result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:

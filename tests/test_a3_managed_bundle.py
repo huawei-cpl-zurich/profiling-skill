@@ -359,6 +359,40 @@ def test_atomic_json_uses_unique_temporary_paths_under_concurrency(tmp_path: Pat
     assert not list(tmp_path.glob(".receipt.json.*.tmp"))
 
 
+def test_atomic_json_syncs_parent_directory_after_publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    destination = tmp_path / "receipt.json"
+    events: list[str] = []
+    directory_descriptors: set[int] = set()
+    original_open = BUNDLE.os.open
+    original_fsync = BUNDLE.os.fsync
+    original_replace = BUNDLE.os.replace
+
+    def observed_open(path, flags, *args, **kwargs):
+        descriptor = original_open(path, flags, *args, **kwargs)
+        if Path(path) == tmp_path:
+            directory_descriptors.add(descriptor)
+        return descriptor
+
+    def observed_fsync(descriptor):
+        events.append("directory-fsync" if descriptor in directory_descriptors else "file-fsync")
+        return original_fsync(descriptor)
+
+    def observed_replace(source, target):
+        events.append("replace")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(BUNDLE.os, "open", observed_open)
+    monkeypatch.setattr(BUNDLE.os, "fsync", observed_fsync)
+    monkeypatch.setattr(BUNDLE.os, "replace", observed_replace)
+
+    with BUNDLE.receipt_lock(destination):
+        BUNDLE.atomic_json(destination, {"state": "succeeded"})
+        assert events[-1] == "directory-fsync"
+
+    assert events == ["file-fsync", "replace", "directory-fsync"]
+    assert json.loads(destination.read_text()) == {"state": "succeeded"}
+
+
 def test_fetch_reuses_digest_verified_existing_output_without_remote_observation(tmp_path: Path) -> None:
     client, log = fake_client(tmp_path)
     output = tmp_path / "result.tar"

@@ -31,6 +31,10 @@ class RunnerError(RuntimeError):
     pass
 
 
+class SubmissionError(RuntimeError):
+    pass
+
+
 def _digest(path: Path) -> str:
     if path.is_file():
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -94,15 +98,15 @@ def _kill_group(pid: int, sig: signal.Signals) -> None:
 
 def _copy_regular(source: Path, destination: Path, workspace: Path) -> None:
     if stat.S_ISLNK(source.lstat().st_mode):
-        raise OSError(f"submission is a symlink: {source.name}")
+        raise SubmissionError(f"submission is a symlink: {source.name}")
     resolved = source.resolve(strict=True)
     if resolved == workspace or not resolved.is_relative_to(workspace):
-        raise OSError(f"submission escaped workspace: {source.name}")
+        raise SubmissionError(f"submission escaped workspace: {source.name}")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(source, flags)
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise OSError(f"submission is not a regular file: {source.name}")
+            raise SubmissionError(f"submission is not a regular file: {source.name}")
         with os.fdopen(descriptor, "rb", closefd=False) as incoming, destination.open("xb") as outgoing:
             shutil.copyfileobj(incoming, outgoing)
     finally:
@@ -162,6 +166,10 @@ class Controller:
             self.calls.append({"arguments": arguments})
             try:
                 return self._development_check()
+            except SubmissionError as error:
+                self.last_result = {"status": "submission_error",
+                                    "diagnostics": _bounded(error), "billed": True}
+                return self._wire(self.last_result, 2)
             except Exception as error:
                 self.last_result = {
                     "status": "infrastructure_error", "failure_type": "controller_error",
@@ -177,8 +185,9 @@ class Controller:
         for name in ("candidate.py", "candidate.manifest.json"):
             source = workspace / name
             if not source.is_file():
-                return self._wire({"status": "submission_error",
-                    "diagnostics": f"missing {name}", "billed": True}, 2)
+                self.last_result = {"status": "submission_error",
+                    "diagnostics": f"missing {name}", "billed": True}
+                return self._wire(self.last_result, 2)
             _copy_regular(source, snapshot / name, workspace)
         campaign = "agent-" + hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
         result = self.client.run({
@@ -336,8 +345,10 @@ class OneShotRunner:
                             "controller_usage": {"billed": controller.used, "calls": controller.calls}}
             milestones.append({"name": "agent_finished", "elapsed_seconds": time.monotonic() - started})
             output = (run.stdout + run.stderr).lower()
-            if controller.last_result and controller.last_result.get("status") == "infrastructure_error":
-                status = "infrastructure_error"
+            if (controller.last_result
+                    and controller.last_result.get("status") in {
+                        "infrastructure_error", "submission_error"}):
+                status = controller.last_result["status"]
             elif run.returncode == 0:
                 status = "ok"
             elif any(x in output for x in ("rate limit", "service unavailable", "connection", "api error")):
@@ -356,6 +367,9 @@ class OneShotRunner:
                 result.update(failure_type=controller.last_result.get("failure_type", "controller_infrastructure"),
                               diagnostics=controller.last_result.get("diagnostics", ""),
                               handle=controller.last_result.get("handle"),
+                              controller_result=controller.last_result)
+            elif status == "submission_error":
+                result.update(diagnostics=controller.last_result.get("diagnostics", ""),
                               controller_result=controller.last_result)
             return result
         except (RunnerError, OSError, KeyError, TypeError, ValueError) as error:

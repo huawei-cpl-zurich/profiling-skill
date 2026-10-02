@@ -172,10 +172,29 @@ def test_controller_rejects_submission_symlink_outside_workspace(
                            runner.assets, tmp_path / "snapshots") as controller:
         response = call_socket(str(socket_path), module.CHECK)
     result = json.loads(response["stdout"])
-    assert response["exit_code"] == 74 and result["status"] == "infrastructure_error"
+    assert response["exit_code"] == 2 and result["status"] == "submission_error"
     assert controller.used == 1 and controller.last_result == result
     assert not client.requests
     assert not (tmp_path / "snapshots/development-check" / name).exists()
+
+
+def test_symlink_submission_is_counted_when_codex_exits_zero(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        outside = tmp_path / "outside.py"; outside.write_text("host data\n")
+        (workspace / "candidate.py").symlink_to(outside)
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 2
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+    assert result["status"] == "submission_error"
+    assert result["controller_usage"]["billed"] == 1
+    assert result["controller_result"]["status"] == "submission_error"
 
 
 def test_standalone_sandbox_controller_client_needs_no_backend_module(tmp_path: Path):

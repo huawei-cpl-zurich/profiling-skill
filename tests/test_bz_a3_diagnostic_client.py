@@ -171,14 +171,20 @@ def test_candidate_kill_after_timeout_is_not_infrastructure(tmp_path: Path):
     assert result["handle"] == "bz-a3-1:killed"
 
 
-def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path):
+def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path,
+                                                                   monkeypatch):
     module = load()
     calls = []
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
 
     def invoke(argv, timeout):
         calls.append((argv, timeout))
         if "upload" in argv:
             return module.CommandResult(0)
+        # Simulate setup, the complete workload cap, ten-second kill-after,
+        # and result propagation without sleeping.
+        clock[0] += 2 + 5 + 10 + 2
         return module.CommandResult(124, "bz-a3-1:timed-out\n", "")
 
     transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
@@ -187,7 +193,8 @@ def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path
     adapter_argv, outer_timeout = calls[-1]
     assert outer_timeout == 30
     assert adapter_argv[adapter_argv.index("--timeout") + 1] == "30"
-    assert "timeout --signal=TERM --kill-after=10 15" in adapter_argv[-1]
+    assert "timeout --signal=TERM --kill-after=10 5" in adapter_argv[-1]
+    assert clock[0] < outer_timeout
 
 
 def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
@@ -205,7 +212,26 @@ def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "transport_error"
     assert calls[-1][1] == 30
-    assert "timeout --signal=TERM --kill-after=10 15" in calls[-1][0][-1]
+    assert "timeout --signal=TERM --kill-after=10 5" in calls[-1][0][-1]
+
+
+def test_observe_failure_preserves_handle_from_initial_dispatch():
+    module = load()
+
+    def invoke(argv, _timeout):
+        if "observe" in argv:
+            raise module.DiagnosticError("transport_error", "observer timed out")
+        return module.CommandResult(75, "CATLASS_VALIDATION_STATE=running\n",
+                                    "bz-a3-1:retained")
+
+    try:
+        module.AdapterTransport(["remote"], ["adapter"], invoke).execute(
+            "bz-a3-1", 2, "diagnostic", "true", 30)
+    except module.DiagnosticError as error:
+        assert error.failure_type == "observer_error"
+        assert error.handle == "bz-a3-1:retained"
+    else:
+        raise AssertionError("observer failure should preserve retained handle")
 
 
 def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):

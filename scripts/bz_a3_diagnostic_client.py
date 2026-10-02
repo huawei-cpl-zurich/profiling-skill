@@ -77,7 +77,12 @@ class AdapterTransport:
         result = self.invoke(argv, timeout)
         handle = _handle(result.stdout + result.stderr, profile)
         if handle and _nonterminal(result.stdout + result.stderr):
-            result = self.observe(profile, handle, _remaining(deadline, handle))
+            try:
+                result = self.observe(profile, handle, _remaining(deadline, handle))
+            except DiagnosticError as exc:
+                if exc.handle:
+                    raise
+                raise DiagnosticError("observer_error", str(exc), handle) from exc
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
@@ -101,8 +106,8 @@ def _remaining(deadline: float, handle: str | None = None) -> int:
 
 
 def _workload_timeout(outer_timeout: int) -> int:
-    """Reserve bounded adapter/result grace inside the caller's deadline."""
-    grace = min(15, max(0, outer_timeout - 1))
+    """Reserve kill-after and response grace inside the caller's deadline."""
+    grace = min(25, max(0, outer_timeout - 1))
     return outer_timeout - grace
 
 

@@ -101,6 +101,8 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
 
     def fake_run(argv, **kwargs):
         observed["argv"] = argv
+        shim = Path(argv[argv.index("/experiment/controller-client.py") - 1])
+        observed["shim"] = shim.read_text()
         socket_dir = argv[argv.index("/experiment-state") - 1]
         workspace = Path(request["workspace"])
         (workspace / "candidate.py").write_text("candidate\n")
@@ -141,6 +143,8 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         assert f"/workspace/.agents/skills/{name}" in argv
         assert f"--ro-bind\0{runner.skill_sources[name]}\0/workspace/.agents/skills/{name}" in joined
     assert "/codex-home/skills" not in joined and "/codex-home/plugins" not in joined
+    assert "/experiment/runner.py" not in joined
+    assert "class Controller" not in observed["shim"] and "socket.AF_UNIX" in observed["shim"]
     assert "reference_repos" not in joined and "controller.sock" not in json.dumps(client.requests)
     assert str(observed["snapshot"].parent.parent) not in joined
     assert not observed["snapshot"].exists()

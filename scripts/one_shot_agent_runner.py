@@ -25,6 +25,17 @@ from typing import Any
 CHECK = ["check", "--scope", "development", "--round", "1"]
 HELP = "usage:\n  $EXPERIMENT_CONTROLLER help\n  $EXPERIMENT_CONTROLLER budget\n  $EXPERIMENT_CONTROLLER check --scope development --round 1\n"
 MAX_DIAGNOSTIC = 64 * 1024
+INNER_TURN_TIMEOUT = 330
+CONTROLLER_CLIENT = '''#!/usr/bin/env python3
+import json, socket, sys
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+    client.connect(sys.argv[1])
+    client.sendall(json.dumps({"arguments": sys.argv[2:]}).encode() + b"\\n")
+    response = json.loads(client.makefile("rb").readline())
+print(response.get("stdout", ""), end="")
+print(response.get("stderr", ""), end="", file=sys.stderr)
+raise SystemExit(int(response["exit_code"]))
+'''
 
 
 class RunnerError(RuntimeError):
@@ -329,7 +340,7 @@ class OneShotRunner:
 
     def run(self, request: dict, timeout: int = 360) -> dict:
         started = time.monotonic(); milestones = [{"name": "request_validating", "elapsed_seconds": 0.0}]
-        state = socket_dir = snapshot_dir = None
+        state = socket_dir = snapshot_dir = shim_dir = None
         try:
             workspace, placement, prompt = self._validate(request)
             for name, source in (("baseline.py", self.assets["baseline"]),
@@ -348,7 +359,9 @@ class OneShotRunner:
             state = Path(tempfile.mkdtemp(prefix="oneshot-codex-")); (state / "auth.json").touch(mode=0o600)
             socket_dir = Path(tempfile.mkdtemp(prefix="oneshot-ctl-")); socket_path = socket_dir / "controller.sock"
             snapshot_dir = Path(tempfile.mkdtemp(prefix="oneshot-snapshot-"))
-            script = Path(__file__).resolve(); runtime = self._runtime()
+            shim_dir = Path(tempfile.mkdtemp(prefix="oneshot-shim-"))
+            shim = shim_dir / "controller-client.py"; shim.write_text(CONTROLLER_CLIENT); shim.chmod(0o444)
+            runtime = self._runtime()
             command = [self.bwrap, "--die-with-parent", "--new-session", "--unshare-all", "--share-net",
                        "--tmpfs", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
             for source in ("/usr", "/bin", "/lib", "/lib64", "/etc"):
@@ -357,11 +370,11 @@ class OneShotRunner:
             command += ["--dir", "/home", "--dir", "/home/agent", "--dir", "/runtime", "--dir", "/experiment",
                         "--bind", str(workspace), "/workspace", *skill_mounts,
                         "--bind", str(state), "/codex-home", "--ro-bind", str(self.auth_home / "auth.json"), "/codex-home/auth.json",
-                        "--ro-bind", str(runtime), "/runtime/node", "--ro-bind", str(script), "/experiment/runner.py",
+                        "--ro-bind", str(runtime), "/runtime/node", "--ro-bind", str(shim), "/experiment/controller-client.py",
                         "--bind", str(socket_dir), "/experiment-state", "--chdir", "/workspace",
                         "--setenv", "HOME", "/home/agent", "--setenv", "CODEX_HOME", "/codex-home",
                         "--setenv", "PATH", "/runtime/node/bin:/usr/bin:/bin", "--setenv", "EXPERIMENT_CONTROLLER",
-                        "/usr/bin/python3 /experiment/runner.py controller-client /experiment-state/controller.sock"]
+                        "/usr/bin/python3 /experiment/controller-client.py /experiment-state/controller.sock"]
             codex = ["/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config", "--skip-git-repo-check",
                      "--dangerously-bypass-approvals-and-sandbox", "-m", request["model"]["name"],
                      "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"', "-C", "/workspace", "-"]
@@ -422,7 +435,7 @@ class OneShotRunner:
             return {"status": "setup_error", "diagnostics": _bounded(error), "milestones": milestones,
                     "controller_usage": {"limit": 1, "billed": 0, "calls": []}}
         finally:
-            for temporary in (state, socket_dir, snapshot_dir):
+            for temporary in (state, socket_dir, snapshot_dir, shim_dir):
                 if temporary is not None:
                     shutil.rmtree(temporary, ignore_errors=True)
 
@@ -451,7 +464,7 @@ def main() -> int:
         runner = OneShotRunner(skill_sources=_load(args.skill_sources), assets=_load(args.assets),
             placements=_load(args.placements), client=BzA3DiagnosticClient(
                 AdapterTransport(remote, adapter), args.state_dir))
-        request = json.load(sys.stdin); result = runner.run(request)
+        request = json.load(sys.stdin); result = runner.run(request, timeout=INNER_TURN_TIMEOUT)
     except (RunnerError, OSError, ValueError, json.JSONDecodeError) as error:
         result = {"status": "setup_error", "diagnostics": _bounded(error),
                   "controller_usage": {"limit": 1, "billed": 0, "calls": []}}

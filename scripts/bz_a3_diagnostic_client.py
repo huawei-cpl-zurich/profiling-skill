@@ -100,6 +100,12 @@ def _remaining(deadline: float, handle: str | None = None) -> int:
     return remaining
 
 
+def _workload_timeout(outer_timeout: int) -> int:
+    """Reserve bounded adapter/result grace inside the caller's deadline."""
+    grace = min(15, max(0, outer_timeout - 1))
+    return outer_timeout - grace
+
+
 def _handle(output: str, profile: str) -> str | None:
     match = re.search(rf"\b({re.escape(profile)}:[A-Za-z0-9_.-]+)\b", output)
     return match.group(1) if match else None
@@ -251,11 +257,12 @@ class BzA3DiagnosticClient:
                    "logical_device": 0, "candidate": "candidate.py", "baseline": "baseline.py",
                    "case_spec": "cases.jsonl", "cases": cases, "scope": "diagnostic",
                    "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})}
+            operation_timeout = _remaining(deadline)
             script = _remote_script(common_remote, common_sha, candidate_remote, candidate_sha,
-                                    run_root, timeout, job)
+                                    run_root, _workload_timeout(operation_timeout), job)
             operation = f"diagnostic-{campaign}-{wave}-{cell}"[:80]
             completed, handle = self.transport.execute(
-                profile, device, operation, script, _remaining(deadline),
+                profile, device, operation, script, operation_timeout,
             )
             if handle:
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
@@ -265,9 +272,13 @@ class BzA3DiagnosticClient:
                     and "common-digest-mismatch" in output.lower()):
                 common_receipt.unlink(missing_ok=True)
                 self.transport.upload(profile, common_tar, common_remote, _remaining(deadline))
-                completed, handle = self.transport.execute(
-                    profile, device, operation, script, _remaining(deadline),
+                operation_timeout = _remaining(deadline)
+                retry_script = _remote_script(
+                    common_remote, common_sha, candidate_remote, candidate_sha,
+                    run_root, _workload_timeout(operation_timeout), job,
                 )
+                completed, handle = self.transport.execute(
+                    profile, device, operation, retry_script, operation_timeout)
                 if handle:
                     _write_receipt(dispatch_receipt, {"protocol_version": 1,
                                    "request_sha256": request_sha, "handle": handle})

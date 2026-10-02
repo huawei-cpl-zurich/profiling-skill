@@ -171,6 +171,43 @@ def test_candidate_kill_after_timeout_is_not_infrastructure(tmp_path: Path):
     assert result["handle"] == "bz-a3-1:killed"
 
 
+def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path):
+    module = load()
+    calls = []
+
+    def invoke(argv, timeout):
+        calls.append((argv, timeout))
+        if "upload" in argv:
+            return module.CommandResult(0)
+        return module.CommandResult(124, "bz-a3-1:timed-out\n", "")
+
+    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
+    assert result["status"] == result["failure_type"] == "candidate_timeout"
+    adapter_argv, outer_timeout = calls[-1]
+    assert outer_timeout == 30
+    assert adapter_argv[adapter_argv.index("--timeout") + 1] == "30"
+    assert "timeout --signal=TERM --kill-after=10 15" in adapter_argv[-1]
+
+
+def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
+    module = load()
+    calls = []
+
+    def invoke(argv, timeout):
+        calls.append((argv, timeout))
+        if "upload" in argv:
+            return module.CommandResult(0)
+        raise module.DiagnosticError("transport_error", "outer response deadline expired")
+
+    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert calls[-1][1] == 30
+    assert "timeout --signal=TERM --kill-after=10 15" in calls[-1][0][-1]
+
+
 def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "infrastructure_error")
     assert result["status"] == "infrastructure_error"

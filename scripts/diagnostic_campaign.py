@@ -101,8 +101,12 @@ class CommandTerminalHook:
         return _invoke(self.command, request, timeout_seconds)
 
     def resume(self, request: dict, handle: str, timeout_seconds: int) -> dict:
-        return _invoke(self.command, {**request, "operation": "terminal_observe",
-                                     "handle": handle}, timeout_seconds)
+        result = _invoke(self.command, {**request, "operation": "terminal_observe",
+                                        "handle": handle}, timeout_seconds)
+        if result.get("status") == "timeout":
+            return {**result, "status": "transport_or_observer_error",
+                    "handle": handle}
+        return result
 
 
 def validate_manifest(manifest: dict) -> None:

@@ -183,6 +183,35 @@ def test_outcome_taxonomy(tmp_path, agent, terminal, files, expected, category):
     assert diagnostic.classify(agent, terminal, tmp_path) == (expected, category)
 
 
+def test_terminal_command_timeout_distinguishes_workload_from_observer(
+    tmp_path: Path, monkeypatch,
+):
+    def timeout(*_args, **_kwargs):
+        raise diagnostic.subprocess.TimeoutExpired(["terminal"], 5)
+
+    monkeypatch.setattr(diagnostic.subprocess, "run", timeout)
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+    request = {"operation": "terminal_check", "cell_id": "wave-1-cannbot"}
+    handle = "bz-a3-1:retained-1"
+
+    workload = hook.check(request, 5)
+    observer = hook.resume(request, handle, 5)
+
+    assert workload["status"] == "timeout" and "handle" not in workload
+    assert observer["status"] == "transport_or_observer_error"
+    assert observer["handle"] == handle
+
+    (tmp_path / "candidate.py").write_text("candidate\n")
+    (tmp_path / "candidate.manifest.json").write_text("{}\n")
+    agent = {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+        {"arguments": ["check", "--scope", "development", "--round", "1"]}
+    ]}}
+    assert diagnostic.classify(agent, workload, tmp_path) == (
+        "candidate_timeout", "counted")
+    assert diagnostic.classify(agent, observer, tmp_path) == (
+        "transport_or_observer_error", "infrastructure")
+
+
 def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
     config = manifest(tmp_path)
     Path(config["prompt"]).write_text("changed")

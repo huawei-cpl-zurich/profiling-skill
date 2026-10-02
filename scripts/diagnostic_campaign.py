@@ -268,6 +268,8 @@ def classify(agent: dict, terminal: dict | None, workspace: Path) -> tuple[str, 
         return str(status), "infrastructure"
     if status in OBSERVED:
         return str(status), "observed"
+    if status == "submission_error":
+        return str(status), "counted"
     if status != "ok":
         return "protocol_error", "counted"
     usage = agent.get("controller_usage")

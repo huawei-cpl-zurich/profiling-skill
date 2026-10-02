@@ -10,6 +10,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,7 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         assert f"/workspace/.agents/skills/{name}" in argv
         assert f"--ro-bind\0{runner.skill_sources[name]}\0/workspace/.agents/skills/{name}" in joined
     assert "/codex-home/skills" not in joined and "/codex-home/plugins" not in joined
+    assert "--clearenv" in argv
     assert "/experiment/runner.py" not in joined
     assert "class Controller" not in observed["shim"] and "socket.AF_UNIX" in observed["shim"]
     assert "reference_repos" not in joined and "controller.sock" not in json.dumps(client.requests)
@@ -189,6 +191,25 @@ def test_post_check_regular_mutation_restores_checked_bytes(monkeypatch, tmp_pat
     monkeypatch.setattr(module, "_run_group", fake_group)
     result = runner.run(request)
     assert result["status"] == "ok"
+    assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
+
+
+@pytest.mark.parametrize("remote_status", ["compile_error", "runtime_error", "correctness_error"])
+def test_failed_check_still_restores_checked_bytes(monkeypatch, tmp_path: Path, remote_status: str):
+    runner, request, _ = fixture(tmp_path)
+    runner.client = Client({"status": remote_status, "diagnostics": "failed"})
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("checked candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"), module.CHECK)["exit_code"] == 2
+        (workspace / "candidate.py").write_text("unchecked mutation\n")
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    runner.run(request)
     assert (Path(request["workspace"]) / "candidate.py").read_text() == "checked candidate\n"
 
 
@@ -265,6 +286,21 @@ def test_compile_diagnostic_is_bounded_and_returned_to_agent(tmp_path: Path):
     assert document["diagnostics"].startswith("traceback:")
     assert document["diagnostics"].endswith("[diagnostic truncated]")
     assert len(document["diagnostics"]) < 66000 and ctl.used == 1
+
+
+def test_late_check_is_billed_without_starting_remote_work(tmp_path: Path):
+    runner, request, client = fixture(tmp_path)
+    workspace = Path(request["workspace"])
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    socket_path = tmp_path / "ctl/controller.sock"
+    with module.Controller(socket_path, client, request, {"profile": "bz-a3-1", "device": 0},
+                           runner.assets, tmp_path / "snapshots",
+                           deadline=time.monotonic() + 19) as controller:
+        response = call_socket(str(socket_path), module.CHECK)
+    result = json.loads(response["stdout"])
+    assert response["exit_code"] == 2 and result["status"] == "submission_error"
+    assert controller.used == 1 and not client.requests
 
 
 @pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
@@ -457,6 +493,14 @@ def test_process_group_timeout_kills_descendants(tmp_path: Path):
         state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], text=True,
                                capture_output=True, check=False).stdout.strip()
         assert not state or state.startswith("Z")
+
+
+def test_process_output_is_bounded_while_captured():
+    run = module._run_group(
+        [sys.executable, "-c", "import sys; print('x' * 1000000); print('y' * 1000000, file=sys.stderr)"],
+        "", 10)
+    assert len(run.stdout) < 66000 and "diagnostic truncated" in run.stdout
+    assert len(run.stderr) < 66000 and "diagnostic truncated" in run.stderr
 
 
 def test_in_band_prompt_hash_drift_fails_before_codex(tmp_path: Path):

@@ -99,9 +99,26 @@ def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path
     assert {(r["profile"], r["device"]) for r in client.requests[:3]} == {
         ("bz-a3-1", 0), ("bz-a3-1", 1), ("bz-a3-2", 0)}
     assert all(Path(r["candidate"]).name == "candidate.py" for r in client.requests)
+    assert set(ledger["assets"]["sha256"]) == {"baseline", "case_spec", "runner"}
+    assert all(Path(r[name]).parent == Path(ledger["assets"]["root"])
+               for r in client.requests for name in ("baseline", "case_spec", "runner"))
     wire = json.dumps([request for request, _ in agent.requests])
     assert "profile" not in wire and "msprof" not in wire
     assert json.loads((tmp_path / "campaign" / "ledger.json").read_text()) == ledger
+
+
+def test_common_assets_are_snapshotted_before_any_cell_runs(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+
+    class MutatingClient(Client):
+        def run(self, request):
+            for source in config["assets"].values():
+                Path(source).write_text("changed\n")
+            assert all(Path(request[name]).read_text() == "frozen\n"
+                       for name in ("baseline", "case_spec", "runner"))
+            return super().run(request)
+
+    module.run(config, manifest, placements, tmp_path / "campaign", Agent(), MutatingClient())
 
 
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):

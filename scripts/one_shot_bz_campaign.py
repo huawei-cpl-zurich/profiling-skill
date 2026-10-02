@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import threading
 import uuid
 from pathlib import Path
@@ -38,6 +40,24 @@ def validate_placements(value: dict) -> dict:
     if len(primary) != 3:
         raise DiagnosticError("primary cells require three distinct physical devices")
     return value
+
+
+def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dict]:
+    if set(assets) != {"baseline", "case_spec", "runner"}:
+        raise DiagnosticError("exactly the three frozen benchmark assets are required")
+    snapshot_root = root.parent / f".{root.name}-inputs-{campaign_id}"
+    snapshot_root.mkdir(parents=True, exist_ok=False)
+    frozen, hashes = {}, {}
+    for name, source_name in assets.items():
+        source = Path(source_name)
+        if not source.is_file():
+            raise DiagnosticError(f"benchmark asset is missing: {source}")
+        destination = snapshot_root / source.name
+        shutil.copyfile(source, destination)
+        os.chmod(destination, 0o444)
+        frozen[name] = str(destination)
+        hashes[name] = diagnostic_campaign.sha256_file(destination)
+    return frozen, {"root": str(snapshot_root), "sha256": hashes}
 
 
 class FrozenAgentLauncher:
@@ -160,10 +180,23 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
         raise DiagnosticError("diagnostic timeouts must remain 360/600/600 seconds")
     if config["waves"] != 4:
         raise DiagnosticError("diagnostic campaign requires exactly four waves")
-    hook = BzTerminalHook(client, placements, config["assets"], str(uuid.uuid4()))
-    return DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
-                              waves=4, agent_timeout=360, cell_timeout=600,
-                              wave_timeout=600).run()
+    campaign_id = str(uuid.uuid4())
+    assets, asset_evidence = freeze_assets(config["assets"], root, campaign_id)
+    hook = BzTerminalHook(client, placements, assets, campaign_id)
+    campaign = DiagnosticCampaign(manifest, root, FrozenAgentLauncher(launcher), hook,
+                                  waves=4, agent_timeout=360, cell_timeout=600,
+                                  wave_timeout=600)
+    try:
+        ledger = campaign.run()
+    except BaseException:
+        if campaign.ledger_path.is_file():
+            ledger = json.loads(campaign.ledger_path.read_text())
+            ledger["assets"] = asset_evidence
+            diagnostic_campaign._atomic_json(campaign.ledger_path, ledger)
+        raise
+    ledger["assets"] = asset_evidence
+    diagnostic_campaign._atomic_json(campaign.ledger_path, ledger)
+    return ledger
 
 
 def main() -> int:

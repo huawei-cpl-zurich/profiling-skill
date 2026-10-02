@@ -359,6 +359,38 @@ def test_retry_that_consumes_remaining_wave_budget_stays_pending(tmp_path: Path)
     assert result["status"] == "reschedule_pending"
 
 
+def test_retry_terminal_completion_after_deadline_stays_pending(tmp_path: Path,
+                                                               monkeypatch):
+    clock = [0.0]
+    monkeypatch.setattr(diagnostic.time, "monotonic", lambda: clock[0])
+
+    class RetryLauncher(RecordingLauncher):
+        def __init__(self):
+            super().__init__({(1, "cannbot", 1): "device_or_runtime_infra"})
+
+    class DeadlineCrossingTerminal(RecordingTerminal):
+        crossed = False
+
+        def check(self, request, timeout_seconds):
+            if request["cell_id"] == "wave-1-cannbot" and not self.crossed:
+                self.crossed = True
+                clock[0] += 0.06
+            return super().check(request, timeout_seconds)
+
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", RetryLauncher(),
+        DeadlineCrossingTerminal(), wave_timeout=0.05,
+    ).run()
+
+    retry = result["waves"][0]["cells"][0]["retry"]
+    assert retry["agent"]["status"] == "ok"
+    assert retry["terminal"]["failure_type"] == "wave_budget_exhausted"
+    assert retry["outcome"] == "wave_budget_exhausted"
+    assert retry["category"] == "infrastructure"
+    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert result["status"] == "reschedule_pending"
+
+
 @pytest.mark.parametrize("component", ["launcher", "terminal"])
 def test_hook_exception_is_checkpointed_and_sibling_cells_finish(tmp_path: Path, component: str):
     class RaisingLauncher(RecordingLauncher):

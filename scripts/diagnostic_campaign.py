@@ -204,6 +204,7 @@ class DiagnosticCampaign:
         workspace = self.root / "cells" / cell_id / f"attempt-{attempt}" / "workspace"
         workspace.mkdir(parents=True, exist_ok=False)
         started = time.time()
+        monotonic_started = time.monotonic()
         treatment_record = self.manifest["treatments"][treatment]
         request = {
             "protocol_version": 1, "operation": "one_shot", "cell_id": cell_id,
@@ -223,7 +224,7 @@ class DiagnosticCampaign:
         except Exception as error:
             agent = {"status": "transport_or_observer_error",
                      "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
-        elapsed = time.time() - started
+        elapsed = time.monotonic() - monotonic_started
         terminal = None
         candidate = workspace / "candidate.py"
         candidate_manifest = workspace / "candidate.manifest.json"
@@ -243,6 +244,10 @@ class DiagnosticCampaign:
                 terminal = {"status": "transport_or_observer_error",
                             "diagnostics":
                                 f"terminal hook raised {type(error).__name__}: {error}"}
+            if time.monotonic() - monotonic_started >= cap:
+                terminal = {"status": "infrastructure_error",
+                            "failure_type": "wave_budget_exhausted",
+                            "diagnostics": "terminal hook exceeded the remaining cell budget"}
         outcome, category = classify(agent, terminal, workspace)
         hashes = {}
         for name in ("candidate.py", "candidate.manifest.json"):

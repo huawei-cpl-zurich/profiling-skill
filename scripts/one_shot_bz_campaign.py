@@ -84,11 +84,14 @@ class FrozenAgentLauncher:
             result = {"status": "infrastructure_error", "failure_type": "launcher_error",
                       "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
         files = {}
+        # Cache the normalized launch outcome before touching agent-owned files.
+        # Snapshot failures may make this attempt infrastructure, but must never
+        # permit another billed invocation for the same logical cell.
+        self.frozen[cell] = (result, files)
         for name in ("candidate.py", "candidate.manifest.json"):
             path = workspace / name
             if path.is_file():
                 files[name] = path.read_bytes()
-        self.frozen[cell] = (result, files)
         return result
 
     def cancel(self) -> None:
@@ -155,8 +158,10 @@ class BzTerminalHook:
                               min(timeout_seconds, retained["timeout"])}
         deadline = time.monotonic() + timeout_seconds
         result = self.client.run(client_request)
+        uncertain = (result.get("status") == "infrastructure_error"
+                     and bool(result.get("handle")))
         if (retained is not None and result.get("status") == "infrastructure_error"
-                and result.get("failure_type") != "observer_error"):
+                and not uncertain):
             remaining = int(deadline - time.monotonic())
             if remaining < 1:
                 return result
@@ -166,9 +171,9 @@ class BzTerminalHook:
             }
             client_request.pop("observe_timeout", None)
             result = self.client.run(client_request)
-        if (result.get("status") == "infrastructure_error"
-                and result.get("failure_type") == "observer_error"
-                and result.get("handle")):
+            uncertain = (result.get("status") == "infrastructure_error"
+                         and bool(result.get("handle")))
+        if uncertain:
             self._uncertain[cell] = {key: value for key, value in client_request.items()
                                      if key != "observe_timeout"}
         else:

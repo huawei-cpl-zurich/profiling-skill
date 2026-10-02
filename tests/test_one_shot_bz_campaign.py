@@ -77,7 +77,7 @@ class Client:
                     "handle": "bz-a3-1:retained"}
         if self.fail_once and key not in self.failed:
             self.failed.add(key)
-            return {"status": "infrastructure_error", "failure_type": "device_error", "handle": "kept"}
+            return {"status": "infrastructure_error", "failure_type": "device_error"}
         if self.candidate_failure and request["wave"] == "1" and request["cell"] == "cannbot-attempt-1":
             return {"status": "compile_error", "diagnostics": "full compiler traceback"}
         return {"status": "ok", "passed": True, "artifacts": {"candidate_sha256": "remote"}}
@@ -177,6 +177,32 @@ def test_launcher_exception_is_replayed_without_second_agent_invocation(tmp_path
     assert second["submission_replayed"] is True
 
 
+def test_snapshot_failure_cannot_invoke_agent_twice(tmp_path: Path, monkeypatch):
+    agent = Agent()
+    frozen = module.FrozenAgentLauncher(agent)
+    request = {"cell_id": "wave-1-cannbot", "workspace": str(tmp_path / "one")}
+    Path(request["workspace"]).mkdir()
+    original = Path.read_bytes
+
+    def unreadable(path):
+        if path.name == "candidate.py":
+            raise PermissionError("candidate is unreadable")
+        return original(path)
+
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    try:
+        frozen.launch(request, 10)
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError("unreadable candidate accepted")
+    request["workspace"] = str(tmp_path / "two")
+    Path(request["workspace"]).mkdir()
+    replay = frozen.launch(request, 5)
+    assert len(agent.requests) == 1
+    assert replay["status"] == "ok" and replay["submission_replayed"] is True
+
+
 def test_observer_interruption_reuses_original_receipt_and_placement(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(observer_once=True)
@@ -213,7 +239,7 @@ def test_retained_observation_uses_remaining_attempt_budget(tmp_path: Path):
     assert client.requests[1]["observe_timeout"] == 7
 
 
-def test_failed_retained_job_uses_fallback_in_same_retry(tmp_path: Path):
+def test_failed_retained_observation_never_dispatches_fallback(tmp_path: Path):
     config, _manifest, placements = inputs(tmp_path)
 
     class RetainedFailure(Client):
@@ -223,9 +249,9 @@ def test_failed_retained_job_uses_fallback_in_same_retry(tmp_path: Path):
                 return {"status": "infrastructure_error", "failure_type": "observer_error",
                         "handle": "bz-a3-1:retained"}
             if len(self.requests) == 2:
-                return {"status": "infrastructure_error", "failure_type": "device_error",
+                return {"status": "infrastructure_error", "failure_type": "transport_error",
                         "handle": "bz-a3-1:retained"}
-            return {"status": "ok", "passed": True}
+            raise AssertionError("retained handle incorrectly dispatched a fallback")
 
     client = RetainedFailure()
     hook = module.BzTerminalHook(client, placements, config["assets"], "unique")
@@ -235,11 +261,11 @@ def test_failed_retained_job_uses_fallback_in_same_retry(tmp_path: Path):
         (workspace / "candidate.py").write_text("candidate\n")
         (workspace / "candidate.manifest.json").write_text("{}\n")
         result = hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace)}, 240)
-    assert result["status"] == "ok"
-    assert len(client.requests) == 3
+    assert result["status"] == "infrastructure_error"
+    assert len(client.requests) == 2
     assert client.requests[1]["cell"] == "cannbot-attempt-1"
-    assert (client.requests[2]["profile"], client.requests[2]["device"]) == ("bz-a3-2", 2)
-    assert client.requests[2]["cell"] == "cannbot-attempt-2"
+    assert (client.requests[1]["profile"], client.requests[1]["device"]) == ("bz-a3-1", 0)
+    assert client.requests[1]["observe_timeout"] == client.requests[1]["timeout"]
 
 
 def test_counted_compile_failure_is_not_retried(tmp_path: Path):

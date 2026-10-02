@@ -196,6 +196,10 @@ class BzA3DiagnosticClient:
 
     def resume(self, requests: list[dict], handle: str, observe_timeout: int) -> dict:
         """Observe the one candidate request whose durable receipt owns handle."""
+        if len(requests) != 1:
+            return {"status": "infrastructure_error", "failure_type": "request_error",
+                    "diagnostics": "resume requires one exact terminal request",
+                    "handle": handle}
         matches = []
         for request in requests:
             try:
@@ -214,13 +218,34 @@ class BzA3DiagnosticClient:
                     matches.append(request)
             except (OSError, json.JSONDecodeError, DiagnosticError):
                 continue
-        if not matches and requests:
+        if not matches:
             # The generic terminal receipt is authoritative for its selected
             # attempt. A supplied handle can reconstruct that one request when
             # the lower-level process died before persisting dispatch state.
-            # Never guess the fallback request without its own durable receipt.
             selected = requests[0]
-            if handle.startswith(str(selected.get("profile")) + ":"):
+            campaign = _safe_id(selected.get("campaign"), "campaign")
+            wave = _safe_id(selected.get("wave"), "wave")
+            cell = _safe_id(selected.get("cell"), "cell")
+            foreign = False
+            wave_root = self.state_dir / campaign / wave
+            for pattern in ("*/dispatch.json", "*/completed.json"):
+                for path in wave_root.glob(pattern):
+                    if path.parent.name == cell:
+                        continue
+                    try:
+                        record = json.loads(path.read_text())
+                        owner = (record.get("result", {}).get("handle")
+                                 if path.name == "completed.json"
+                                 else record.get("handle"))
+                        foreign = owner == handle
+                    except (OSError, json.JSONDecodeError, AttributeError):
+                        continue
+                    if foreign:
+                        break
+                if foreign:
+                    break
+            if (not foreign
+                    and handle.startswith(str(selected.get("profile")) + ":")):
                 matches.append(selected)
         if len(matches) != 1:
             return {"status": "infrastructure_error", "failure_type": "request_error",

@@ -699,7 +699,7 @@ def test_manual_handle_reconciliation_uses_bz_resume_without_redispatch(tmp_path
 
     class ResumeOnlyClient(Client):
         def resume(self, requests, handle, observe_timeout):
-            assert len(requests) == 2
+            assert len(requests) == 1
             request = requests[0]
             self.requests.append(request)
             assert handle == "bz-a3-1:reconciled"

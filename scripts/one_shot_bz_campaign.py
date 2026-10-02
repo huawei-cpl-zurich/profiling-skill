@@ -253,13 +253,8 @@ class BzTerminalHook:
         if manual_handle is not None:
             if not isinstance(manual_handle, str) or not manual_handle:
                 raise DiagnosticError("manual retained handle must be non-empty")
-            candidates = [client_request]
-            fallback_attempt = terminal_attempt + 1
-            fallback = self.placements[treatment][min(fallback_attempt - 1, 1)]
-            candidates.append({**client_request, **fallback,
-                               "cell": f"{treatment}-attempt-{fallback_attempt}"})
             result = self.client.resume(
-                candidates, manual_handle,
+                [client_request], manual_handle,
                 min(timeout_seconds, client_request["timeout"]))
             result_cell = str(result.get("cell", ""))
             result_suffix = result_cell.removeprefix(f"{treatment}-attempt-")

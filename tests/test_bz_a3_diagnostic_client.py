@@ -192,24 +192,42 @@ def test_retained_digest_mismatch_fails_without_redispatch(tmp_path: Path):
     assert len(transport.executions) == 1
 
 
-def test_resume_finds_exact_fallback_dispatch_receipt(tmp_path: Path):
+def test_resume_observes_exact_selected_fallback_dispatch_receipt(tmp_path: Path):
     module = load()
     transport = FakeTransport(module, "observer")
     client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
     primary = request(tmp_path)
     primary["cell"] = "arm-attempt-1"
-    fallback = {**primary, "cell": "arm-attempt-2", "profile": "bz-a3-2",
-                "device": 2}
+    fallback = {**primary, "cell": "arm-attempt-2", "device": 2}
     first = client.run(fallback)
-    assert first["handle"] == "bz-a3-2:kept"
+    assert first["handle"] == "bz-a3-1:kept"
     transport.mode = "ok"
 
-    result = client.resume([primary, fallback], first["handle"], 17)
+    result = client.resume([fallback], first["handle"], 17)
 
     assert result["status"] == "ok"
     assert result["cell"] == "arm-attempt-2"
     assert len(transport.executions) == 1
     assert transport.observations[-1][1] == first["handle"]
+
+
+def test_resume_rejects_handle_owned_by_different_attempt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, "observer")
+    client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
+    primary = request(tmp_path)
+    primary["cell"] = "arm-attempt-1"
+    fallback = {**primary, "cell": "arm-attempt-2", "device": 2}
+    first = client.run(fallback)
+    assert first["handle"] == "bz-a3-1:kept"
+    executions = len(transport.executions)
+
+    result = client.resume([primary], first["handle"], 17)
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert len(transport.executions) == executions
+    assert transport.observations == []
 
 
 def test_completed_result_is_durable_before_dispatch_cleanup(tmp_path: Path, monkeypatch):

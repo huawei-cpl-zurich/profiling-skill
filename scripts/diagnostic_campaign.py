@@ -366,7 +366,7 @@ class DiagnosticCampaign:
             terminal_request = {
                 "protocol_version": 1, "operation": "terminal_check", "cell_id": cell_id,
                 "workspace": str(workspace), "benchmark": "streaming-matmul-add",
-                "cases": list(range(7)),
+                "cases": list(range(7)), "terminal_attempt": attempt,
             }
             try:
                 terminal = copy.deepcopy(self.terminal.check(
@@ -426,7 +426,11 @@ class DiagnosticCampaign:
         destination = self.root / "inputs" / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
-            raise DiagnosticError(f"frozen prompt already exists: {destination}")
+            if sha256_file(destination) != manifest["prompt_sha256"]:
+                raise DiagnosticError(f"existing frozen prompt changed: {destination}")
+            self._prompt_bytes = destination.read_bytes()
+            manifest["prompt"] = str(destination)
+            return
         with tempfile.NamedTemporaryFile("wb", dir=destination.parent, delete=False) as stream:
             stream.write(content)
             temporary = Path(stream.name)
@@ -472,6 +476,7 @@ class DiagnosticCampaign:
                 or receipt.get("accepted") is not True
                 or not isinstance(citations, list) or not citations
                 or not all(isinstance(item, str) and item.startswith("ref://")
+                           and bool(item.removeprefix("ref://").strip())
                            for item in citations)
                 or not isinstance(queries, list) or not queries
                 or not all(isinstance(item, str) and item.strip() for item in queries)):
@@ -508,12 +513,31 @@ class DiagnosticCampaign:
         else:
             ledger = self._load_adaptive_ledger()
             self.campaign_id = ledger["campaign_id"]
+        if ledger["status"] == "running":
+            if wave == len(ledger["waves"]) + 1:
+                ledger["status"] = "ready_for_next"
+            elif wave == len(ledger["waves"]):
+                current = ledger["waves"][-1]
+                completed = {cell["treatment"] for cell in current["cells"]
+                             if cell["category"] != "infrastructure"}
+                ledger["reschedule"] = sorted(
+                    set(ledger["reschedule"]) |
+                    {f"wave-{wave}-{name}" for name in TREATMENTS if name not in completed}
+                )
+                ledger["status"] = "reschedule_pending"
+            else:
+                raise DiagnosticError("running adaptive ledger has inconsistent wave state")
+            _atomic_json(self.ledger_path, ledger)
         if ledger["status"] == "reschedule_pending":
             if wave != len(ledger["waves"]):
                 raise DiagnosticError(f"campaign must reschedule wave {len(ledger['waves'])}")
             if self.manifest["prompt_sha256"] != ledger["waves"][-1]["prompt_sha256"]:
                 raise DiagnosticError("prompt cannot change while a wave is reschedule pending")
-            self._prompt_bytes = Path(ledger["waves"][-1]["prompt"]).read_bytes()
+            frozen_prompt = Path(ledger["waves"][-1]["prompt"])
+            if (not frozen_prompt.is_file()
+                    or sha256_file(frozen_prompt) != ledger["waves"][-1]["prompt_sha256"]):
+                raise DiagnosticError("frozen wave prompt is missing or changed")
+            self._prompt_bytes = frozen_prompt.read_bytes()
             self.manifest["prompt"] = ledger["waves"][-1]["prompt"]
             self._resume_wave(ledger, wave)
             ledger["status"] = (
@@ -576,11 +600,18 @@ class DiagnosticCampaign:
                                for name in ("candidate.py", "candidate.manifest.json"))):
                     raise DiagnosticError(f"retained candidate digest mismatch for {cell_id}")
                 try:
+                    retained_request = (last.get("terminal") or {}).get(
+                        "retained_terminal_request")
+                    terminal_attempt = (last.get("terminal") or {}).get(
+                        "terminal_attempt", last["attempt"])
                     terminal = self.terminal.check({
                         "protocol_version": 1, "operation": "terminal_check",
                         "cell_id": cell_id, "workspace": str(workspace),
                         "benchmark": "streaming-matmul-add", "cases": list(range(7)),
                         "candidate_sha256": copy.deepcopy(expected),
+                        "terminal_attempt": (terminal_attempt if retained_request
+                                             else terminal_attempt + 1),
+                        "retained_terminal_request": copy.deepcopy(retained_request),
                     }, self.cell_timeout)
                 except DiagnosticError:
                     raise

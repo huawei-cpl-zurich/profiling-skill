@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -209,13 +210,17 @@ class BzTerminalHook:
                        for name in ("candidate.py", "candidate.manifest.json"))):
             raise DiagnosticError(f"frozen submission digest mismatch for {cell}")
         attempt = int(workspace.parent.name.removeprefix("attempt-"))
-        placement = self.placements[treatment][min(attempt - 1, 1)]
+        terminal_attempt = request.get("terminal_attempt", attempt)
+        if (isinstance(terminal_attempt, bool) or not isinstance(terminal_attempt, int)
+                or terminal_attempt < 1):
+            raise DiagnosticError("terminal attempt must be a positive integer")
+        placement = self.placements[treatment][min(terminal_attempt - 1, 1)]
         client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
             # observe its retained handle instead of redispatching it.
-            "cell": f"{treatment}-attempt-{attempt}",
+            "cell": f"{treatment}-attempt-{terminal_attempt}",
             **placement, "timeout": min(timeout_seconds, 240),
             "candidate": str(submission / "candidate.py"),
             "candidate_manifest": str(submission / "candidate.manifest.json"),
@@ -226,7 +231,7 @@ class BzTerminalHook:
         # fallback device. Re-enter the exact original request so the durable
         # client observes its receipt. Only terminal/pre-dispatch failures use
         # the attempt-2 placement.
-        retained = self._uncertain.get(cell)
+        retained = request.get("retained_terminal_request") or self._uncertain.get(cell)
         if retained is not None:
             client_request = {**retained, "observe_timeout":
                               min(timeout_seconds, retained["timeout"])}
@@ -241,7 +246,8 @@ class BzTerminalHook:
             if remaining < 1:
                 return result
             client_request = {
-                **client_request, **placement, "cell": f"{treatment}-attempt-{attempt}",
+                **client_request, **placement,
+                "cell": f"{treatment}-attempt-{terminal_attempt}",
                 "timeout": min(remaining, 240),
             }
             client_request.pop("observe_timeout", None)
@@ -254,6 +260,9 @@ class BzTerminalHook:
                                      if key != "observe_timeout"}
         else:
             self._uncertain.pop(cell, None)
+        result = {**result, "terminal_attempt": terminal_attempt}
+        if uncertain:
+            result["retained_terminal_request"] = copy.deepcopy(self._uncertain[cell])
         status = result.get("status")
         if status == "ok":
             return {**result, "passed": True}

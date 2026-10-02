@@ -100,6 +100,7 @@ def test_end_to_end_maps_controller_submission_and_bz_assignments(tmp_path: Path
         ("bz-a3-1", 0), ("bz-a3-1", 1), ("bz-a3-2", 0)}
     assert all(Path(r["candidate"]).name == "candidate.py" for r in client.requests)
     assert set(ledger["assets"]["sha256"]) == {"baseline", "case_spec", "runner"}
+    assert {request["campaign"] for request in client.requests} == {ledger["campaign_id"]}
     assert all(Path(r[name]).parent == Path(ledger["assets"]["root"])
                for r in client.requests for name in ("baseline", "case_spec", "runner"))
     wire = json.dumps([request for request, _ in agent.requests])

@@ -289,7 +289,8 @@ class DiagnosticCampaign:
     def __init__(self, manifest: dict, root: Path, launcher: Launcher,
                  terminal: TerminalHook, *, waves: int = 4,
                  agent_timeout: int = 360, cell_timeout: int = 600,
-                 wave_timeout: int = 600, ledger_metadata: dict | None = None):
+                 wave_timeout: int = 600, ledger_metadata: dict | None = None,
+                 campaign_id: str | None = None):
         validate_manifest(manifest)
         if waves != 4 or agent_timeout <= 0 or cell_timeout <= 0 or wave_timeout <= 0:
             raise DiagnosticError("four waves and positive timeouts are required")
@@ -298,6 +299,7 @@ class DiagnosticCampaign:
         self.waves, self.agent_timeout, self.cell_timeout = waves, agent_timeout, cell_timeout
         self.wave_timeout = wave_timeout
         self.ledger_metadata = copy.deepcopy(ledger_metadata or {})
+        self.campaign_id = campaign_id or str(uuid.uuid4())
         self.ledger_path = root / "ledger.json"
 
     def _cell(self, wave: int, treatment: str, attempt: int,
@@ -422,7 +424,7 @@ class DiagnosticCampaign:
         self.manifest = manifest
         ledger = {
             **self.ledger_metadata,
-            "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
+            "protocol_version": 1, "campaign_id": self.campaign_id, "status": "running",
             "prompt_sha256": self.manifest["prompt_sha256"],
             "model_sha256": self.manifest["model_sha256"], "waves": [], "reschedule": [],
         }

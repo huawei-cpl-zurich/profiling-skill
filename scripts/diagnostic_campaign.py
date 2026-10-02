@@ -107,6 +107,8 @@ class CommandTerminalHook:
         if result.get("status") == "timeout" and result.get("invocation_timeout") is True:
             return {**result, "status": "transport_or_observer_error",
                     "handle": handle}
+        if result.get("status") in INFRASTRUCTURE:
+            return {**result, "handle": handle}
         return result
 
 

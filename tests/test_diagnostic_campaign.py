@@ -237,6 +237,43 @@ def test_resume_preserves_parsed_terminal_workload_timeout(tmp_path: Path, monke
         "candidate_timeout", "counted")
 
 
+def test_resume_attaches_handle_to_all_observer_infrastructure(monkeypatch):
+    outcomes = [
+        diagnostic.subprocess.CompletedProcess(
+            ["terminal"], 7, stdout="not-json", stderr="observer failed"),
+        OSError("observer command unavailable"),
+        diagnostic.subprocess.CompletedProcess(
+            ["terminal"], 9,
+            stdout=json.dumps({"status": "transport_or_observer_error",
+                               "diagnostics": "listener unavailable"}),
+            stderr="",
+        ),
+    ]
+
+    def invoke(*_args, **_kwargs):
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(diagnostic.subprocess, "run", invoke)
+    hook = diagnostic.CommandTerminalHook(["terminal"])
+    request = {"operation": "terminal_check", "cell_id": "wave-1-cannbot"}
+    handle = "bz-a3-1:retained-1"
+
+    malformed = hook.resume(request, handle, 5)
+    unavailable = hook.resume(request, handle, 5)
+    nonzero = hook.resume(request, handle, 5)
+
+    for result in (malformed, unavailable, nonzero):
+        assert result["status"] == "transport_or_observer_error"
+        assert result["handle"] == handle
+    assert malformed["exit_code"] == 7
+    assert "invalid response" in malformed["diagnostics"]
+    assert "command unavailable" in unavailable["diagnostics"]
+    assert nonzero["exit_code"] == 9
+
+
 def test_manifest_drift_and_skill_inventory_are_rejected(tmp_path: Path):
     config = manifest(tmp_path)
     Path(config["prompt"]).write_text("changed")

@@ -232,9 +232,12 @@ def test_ledger_is_valid_at_every_atomic_checkpoint(tmp_path: Path, monkeypatch)
     real_replace = diagnostic.os.replace
 
     def replace(source, destination):
-        json.loads(Path(source).read_text())
+        is_ledger = Path(destination).name == "ledger.json"
+        if is_ledger:
+            json.loads(Path(source).read_text())
         real_replace(source, destination)
-        observed.append(json.loads(Path(destination).read_text()))
+        if is_ledger:
+            observed.append(json.loads(Path(destination).read_text()))
 
     monkeypatch.setattr(diagnostic.os, "replace", replace)
     result = diagnostic.DiagnosticCampaign(
@@ -283,7 +286,8 @@ def test_primary_infrastructure_attempt_is_checkpointed_before_retry(tmp_path: P
 
     def replace(source, destination):
         real_replace(source, destination)
-        observed.append(json.loads(Path(destination).read_text()))
+        if Path(destination).name == "ledger.json":
+            observed.append(json.loads(Path(destination).read_text()))
 
     monkeypatch.setattr(diagnostic.os, "replace", replace)
     outcomes = {(1, "cannbot", 1): "device_or_runtime_infra"}
@@ -324,6 +328,33 @@ def test_infrastructure_then_observed_retry_remains_pending(tmp_path: Path):
     cell = result["waves"][0]["cells"][0]
     assert cell["category"] == "infrastructure"
     assert cell["retry"]["category"] == "observed"
+    assert result["reschedule"] == ["wave-1-cannbot"]
+    assert result["status"] == "reschedule_pending"
+
+
+def test_retry_that_consumes_remaining_wave_budget_stays_pending(tmp_path: Path):
+    class BudgetConsumingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            if request["wave"] == 1 and request["treatment"] == "cannbot":
+                if request["attempt"] == 1:
+                    return {"status": "device_or_runtime_infra"}
+                workspace = Path(request["workspace"])
+                (workspace / "candidate.py").write_text("def kernel(): pass\n")
+                (workspace / "candidate.manifest.json").write_text("{}\n")
+                time.sleep(0.06)
+                return {"status": "ok", "controller_usage": {"billed": 1, "calls": [
+                    {"arguments": ["check", "--scope", "development", "--round", "1"]}
+                ]}}
+            return super().launch(request, timeout_seconds)
+
+    result = diagnostic.DiagnosticCampaign(
+        manifest(tmp_path), tmp_path / "run", BudgetConsumingLauncher(),
+        RecordingTerminal(), wave_timeout=0.05,
+    ).run()
+
+    retry = result["waves"][0]["cells"][0]["retry"]
+    assert retry["outcome"] == "wave_budget_exhausted"
+    assert retry["category"] == "infrastructure"
     assert result["reschedule"] == ["wave-1-cannbot"]
     assert result["status"] == "reschedule_pending"
 
@@ -514,3 +545,28 @@ def test_run_uses_manifest_snapshot_after_revalidation(tmp_path: Path):
     assert cannbot_requests
     assert all(request["skills"] == list(diagnostic.TREATMENT_SKILLS["cannbot"])
                for request in cannbot_requests)
+
+
+def test_run_freezes_prompt_bytes_before_launch(tmp_path: Path):
+    config = manifest(tmp_path)
+    source = Path(config["prompt"])
+    original = source.read_bytes()
+
+    class PromptMutatingLauncher(RecordingLauncher):
+        def launch(self, request, timeout_seconds):
+            source.write_text("mutated after run started\n")
+            frozen = Path(request["prompt"])
+            assert frozen != source
+            assert frozen.read_bytes() == original
+            assert frozen.stat().st_mode & 0o222 == 0
+            assert diagnostic.sha256_file(frozen) == request["prompt_sha256"]
+            return super().launch(request, timeout_seconds)
+
+    launcher = PromptMutatingLauncher()
+    result = diagnostic.DiagnosticCampaign(
+        config, tmp_path / "run", launcher, RecordingTerminal(),
+    ).run()
+
+    assert result["status"] == "complete"
+    frozen_paths = {request["prompt"] for request, _ in launcher.requests}
+    assert frozen_paths == {str(tmp_path / "run" / "inputs" / "prompt.md")}

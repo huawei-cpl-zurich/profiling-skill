@@ -227,7 +227,11 @@ class DiagnosticCampaign:
         terminal = None
         candidate = workspace / "candidate.py"
         candidate_manifest = workspace / "candidate.manifest.json"
-        if elapsed < cap and candidate.is_file() and candidate_manifest.is_file():
+        if elapsed >= cap:
+            terminal = {"status": "infrastructure_error",
+                        "failure_type": "wave_budget_exhausted",
+                        "diagnostics": "agent consumed the remaining cell budget"}
+        elif candidate.is_file() and candidate_manifest.is_file():
             terminal_request = {
                 "protocol_version": 1, "operation": "terminal_check", "cell_id": cell_id,
                 "workspace": str(workspace), "benchmark": "streaming-matmul-add",
@@ -277,12 +281,27 @@ class DiagnosticCampaign:
                 "elapsed_seconds": 0,
             }
 
+    def _freeze_prompt(self, manifest: dict) -> None:
+        source = Path(manifest["prompt"])
+        content = source.read_bytes()
+        if hashlib.sha256(content).hexdigest() != manifest["prompt_sha256"]:
+            raise DiagnosticError("prompt changed while campaign inputs were frozen")
+        destination = self.root / "inputs" / "prompt.md"
+        destination.parent.mkdir(parents=True, exist_ok=False)
+        with tempfile.NamedTemporaryFile("wb", dir=destination.parent, delete=False) as stream:
+            stream.write(content)
+            temporary = Path(stream.name)
+        os.chmod(temporary, 0o444)
+        os.replace(temporary, destination)
+        manifest["prompt"] = str(destination)
+
     def run(self) -> dict:
         manifest = copy.deepcopy(self.manifest)
         validate_manifest(manifest)
-        self.manifest = manifest
         if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
             raise DiagnosticError(f"diagnostic output root is not fresh: {self.root}")
+        self._freeze_prompt(manifest)
+        self.manifest = manifest
         ledger = {
             "protocol_version": 1, "campaign_id": str(uuid.uuid4()), "status": "running",
             "prompt_sha256": self.manifest["prompt_sha256"],

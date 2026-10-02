@@ -630,6 +630,67 @@ def test_retained_observation_uses_distinct_durable_terminal_receipt(tmp_path: P
                 if request["cell_id"] == "wave-1-cannbot"]) == 4
 
 
+def test_campaign_restart_retries_handle_only_started_observation(tmp_path: Path):
+    class InitialTerminal(RecordingTerminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append((request, timeout_seconds))
+            if request["cell_id"] != "wave-1-cannbot":
+                return {"status": "ok", "passed": True}
+            calls = sum(item[0]["cell_id"] == "wave-1-cannbot"
+                        for item in self.requests)
+            if calls == 1:
+                return {"status": "infrastructure_error", "failure_type": "device_error"}
+            return {"status": "infrastructure_error", "failure_type": "observer_error",
+                    "handle": "bz-a3-1:retained"}
+
+    class ResumingTerminal:
+        def __init__(self, result):
+            self.result = result
+            self.check_calls = 0
+            self.resume_calls = 0
+
+        def check(self, request, timeout_seconds):
+            self.check_calls += 1
+            raise AssertionError("retained observation must not dispatch another check")
+
+        def resume(self, request, handle, timeout_seconds):
+            self.resume_calls += 1
+            assert handle == "bz-a3-1:retained"
+            return self.result
+
+    root = tmp_path / "run"
+    config = manifest(tmp_path / "inputs")
+    initial = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), InitialTerminal(),
+        campaign_identity={"config_sha256": "fixed"},
+    )
+    assert initial.run_wave(1)["status"] == "reschedule_pending"
+
+    timed_out_terminal = ResumingTerminal({
+        "status": "transport_or_observer_error", "invocation_timeout": True,
+        "handle": "bz-a3-1:retained",
+    })
+    timed_out = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), timed_out_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert timed_out["status"] == "reschedule_pending"
+    assert timed_out_terminal.check_calls == 0
+    assert timed_out_terminal.resume_calls == 1
+
+    success_terminal = ResumingTerminal({"status": "ok", "passed": True})
+    recovered = diagnostic.DiagnosticCampaign(
+        config, root, RecordingLauncher(), success_terminal,
+        campaign_identity={"config_sha256": "fixed"},
+    ).run_wave(1)
+    assert recovered["status"] == "awaiting_curation"
+    assert success_terminal.check_calls == 0
+    assert success_terminal.resume_calls == 1
+    cannbot = next(cell for cell in recovered["waves"][0]["cells"]
+                   if cell["treatment"] == "cannbot")
+    assert [item["attempt"] for item in cannbot["reschedule_attempts"]] == [2, 2]
+
+
 def test_interruption_keeps_counted_retry_complete(tmp_path: Path):
     outcomes = {
         (1, "cannbot", 1): "device_or_runtime_infra",

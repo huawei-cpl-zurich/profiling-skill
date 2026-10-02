@@ -715,6 +715,7 @@ class DiagnosticCampaign:
                 attempts = prior.get("reschedule_attempts", [])
                 last = attempts[-1] if attempts else prior.get("retry", prior)
             durable_attempts = []
+            started_attempts = []
             for path in (self.root / "cells" / cell_id).glob(
                     "attempt-*/terminal-result-*.json"):
                 try:
@@ -727,15 +728,25 @@ class DiagnosticCampaign:
                     and isinstance(record.get("timeout_seconds"), int)
                     and isinstance(record.get("result"), dict)
                     and bool(record["result"].get("handle"))
-                    and isinstance(record["result"].get("retained_terminal_request"), dict))
+                    and (isinstance(
+                        record["result"].get("retained_terminal_request"), dict)
+                        or callable(getattr(self.terminal, "resume", None))))
                 if ((record.get("state") == "completed"
                      and isinstance(record.get("result"), dict)) or retriable_started):
-                    durable_attempts.append(int(path.parent.name.removeprefix("attempt-")))
+                    durable_attempt = int(path.parent.name.removeprefix("attempt-"))
+                    durable_attempts.append(durable_attempt)
+                    if retriable_started:
+                        started_attempts.append(durable_attempt)
             newest_durable = max(durable_attempts, default=0)
+            newest_started = max(started_attempts, default=0)
             workspace = None if last is None else (
                 self.root / "cells" / cell_id / f"attempt-{last['attempt']}" / "workspace"
             )
-            if last is not None and newest_durable > last["attempt"]:
+            if (last is not None and newest_started
+                    and newest_started >= last["attempt"]):
+                resumed = self._guarded_cell(
+                    wave, treatment, newest_started, remaining)
+            elif last is not None and newest_durable > last["attempt"]:
                 resumed = self._guarded_cell(
                     wave, treatment, newest_durable, remaining)
             elif (last is not None and last["category"] == "infrastructure"

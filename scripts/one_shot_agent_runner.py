@@ -23,8 +23,16 @@ from pathlib import Path
 from typing import Any
 
 
-CHECK = ["check", "--scope", "development", "--round", "1"]
-HELP = "usage:\n  $EXPERIMENT_CONTROLLER help\n  $EXPERIMENT_CONTROLLER budget\n  $EXPERIMENT_CONTROLLER check --scope development --round 1\n"
+def check_command(round_number: int) -> list[str]:
+    return ["check", "--scope", "development", "--round", str(round_number)]
+
+
+CHECK = check_command(1)
+def controller_help(limit: int) -> str:
+    checks = "".join(
+        f"  $EXPERIMENT_CONTROLLER check --scope development --round {round_number}\n"
+        for round_number in range(1, limit + 1))
+    return "usage:\n  $EXPERIMENT_CONTROLLER help\n  $EXPERIMENT_CONTROLLER budget\n" + checks
 MAX_DIAGNOSTIC = 64 * 1024
 INNER_TURN_TIMEOUT = 330
 CONTROLLER_CLIENT = '''#!/usr/bin/env python3
@@ -162,8 +170,10 @@ class Controller:
         self.placement, self.assets = placement, assets
         self.snapshot_root = snapshot_root
         self.deadline = deadline or float("inf")
+        self.limit = 2 if request.get("operation") == "two_shot" else 1
         self.used = self.invalid = self.over_budget = 0
         self.calls: list[dict] = []
+        self.results: list[dict] = []
         self.free_calls: list[dict] = []
         self.last_result: dict | None = None
         self.lock = threading.Lock()
@@ -177,41 +187,53 @@ class Controller:
         with self.lock:
             if arguments == ["help"]:
                 self.free_calls.append({"arguments": arguments})
-                return self._wire({"status": "ok", "operation": "help", "usage": HELP, "billed": False})
+                return self._wire({"status": "ok", "operation": "help",
+                                   "usage": controller_help(self.limit), "billed": False})
             if arguments == ["budget"]:
                 self.free_calls.append({"arguments": arguments})
-                return self._wire({"status": "ok", "operation": "budget", "limit": 1,
-                                   "used": self.used, "remaining": 1 - self.used, "billed": False})
-            if arguments != CHECK:
+                return self._wire({"status": "ok", "operation": "budget", "limit": self.limit,
+                                   "used": self.used, "remaining": self.limit - self.used,
+                                   "billed": False})
+            valid = [check_command(round_number) for round_number in range(1, self.limit + 1)]
+            if arguments not in valid:
                 self.invalid += 1
                 return self._wire({"status": "config_error", "diagnostics": "unsupported controller command",
-                                   "usage": HELP, "billed": False}, 4)
-            if self.used:
+                                   "usage": controller_help(self.limit), "billed": False}, 4)
+            if self.used >= self.limit:
                 self.over_budget += 1
                 return {"exit_code": 75, "stdout": "", "stderr": "remote request budget exhausted\n"}
-            self.used = 1
+            expected = check_command(self.used + 1)
+            if arguments != expected:
+                self.invalid += 1
+                return self._wire({"status": "config_error", "diagnostics": "unsupported controller command",
+                                   "usage": controller_help(self.limit), "billed": False}, 4)
+            self.used += 1
             self.calls.append({"arguments": arguments})
             try:
-                return self._development_check()
+                response = self._development_check(self.used)
             except SubmissionError as error:
                 self.last_result = {"status": "submission_error",
                                     "diagnostics": _bounded(error), "billed": True}
-                return self._wire(self.last_result, 2)
+                response = self._wire(self.last_result, 2)
             except Exception as error:
                 self.last_result = {
                     "status": "infrastructure_error", "failure_type": "controller_error",
                     "diagnostics": _bounded(f"controller failed: {type(error).__name__}: {error}"),
                     "handle": getattr(error, "handle", None),
                 }
-                return self._wire(self.last_result, 74)
+                response = self._wire(self.last_result, 74)
+            assert self.last_result is not None
+            self.results.append(json.loads(json.dumps(self.last_result)))
+            return response
 
-    def _development_check(self) -> dict:
+    def _development_check(self, round_number: int) -> dict:
         remote_timeout = (240 if self.deadline == float("inf") else
                           min(240, int(self.deadline - time.monotonic() - 20)))
         if remote_timeout < 26:
             raise SubmissionError("development check requested too late to complete")
         workspace = Path(self.request["workspace"])
-        snapshot = self.snapshot_root / "development-check"
+        snapshot = self.snapshot_root / (f"development-check-{round_number}"
+                                         if self.limit == 2 else "development-check")
         snapshot.mkdir(parents=True, exist_ok=False)
         for name in ("candidate.py", "candidate.manifest.json"):
             source = workspace / name
@@ -220,14 +242,26 @@ class Controller:
                     "diagnostics": f"missing {name}", "billed": True}
                 return self._wire(self.last_result, 2)
             _copy_regular(source, snapshot / name, workspace)
+        if round_number == 2:
+            previous = self.snapshot_root / "development-check-1" / "candidate.py"
+            if not previous.is_file():
+                raise SubmissionError("round 1 candidate snapshot is missing")
+            if _digest(previous) == _digest(snapshot / "candidate.py"):
+                raise SubmissionError("round 2 must modify candidate.py")
         campaign = "agent-" + hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
+        benchmark = self.request.get("benchmark", "matmul")
+        if benchmark == "streaming-matmul-add":
+            benchmark = "matmul"
         result = self.client.run({
-            "campaign": campaign, "wave": self.request["wave"], "cell": self.request["treatment"],
+            "campaign": campaign, "wave": self.request["wave"],
+            "cell": f'{self.request["treatment"]}-round-{round_number}',
             **self.placement, "logical_device": 0, "timeout": remote_timeout,
             "candidate": str(snapshot / "candidate.py"),
             "candidate_manifest": str(snapshot / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
-            "runner": self.assets["runner"], "cases": [1],
+            "runner": self.assets["runner"],
+            "benchmark": benchmark,
+            "cases": list(self.request.get("cases", [1])),
         })
         result["diagnostics"] = _bounded(result.get("diagnostics"))
         self.last_result = result
@@ -235,7 +269,10 @@ class Controller:
 
     def finalize_outputs(self) -> None:
         with self.lock:
-            snapshot = self.snapshot_root / "development-check"
+            available = ([self.snapshot_root / f"development-check-{round_number}"
+                          for round_number in range(1, self.limit + 1)]
+                         if self.limit == 2 else [self.snapshot_root / "development-check"])
+            snapshot = next((path for path in reversed(available) if path.is_dir()), available[0])
             if (not self.used or not self.last_result
                     or not all((snapshot / name).is_file()
                                for name in ("candidate.py", "candidate.manifest.json"))):
@@ -353,15 +390,29 @@ class OneShotRunner:
         required = {"protocol_version", "operation", "workspace", "prompt", "prompt_sha256",
                     "model", "model_sha256", "skills", "skill_sha256", "controller_contract",
                     "wave", "attempt", "treatment", "cell_id"}
-        if not required.issubset(request) or request["protocol_version"] != 2 or request["operation"] != "one_shot":
+        operation = request.get("operation")
+        if (not required.issubset(request) or request["protocol_version"] != 2
+                or operation not in {"one_shot", "two_shot"}):
             raise RunnerError("invalid one-shot request")
         prompt = _prompt_bytes(request)
         model_hash = hashlib.sha256(json.dumps(request["model"], sort_keys=True,
                                                separators=(",", ":")).encode()).hexdigest()
         if model_hash != request["model_sha256"]:
             raise RunnerError("frozen model changed")
-        if request["controller_contract"] != {"billed_limit": 1, "command": CHECK}:
+        expected_contract = ({"billed_limit": 1, "command": CHECK}
+                             if operation == "one_shot" else
+                             {"billed_limit": 2,
+                              "commands": [check_command(1), check_command(2)]})
+        if request["controller_contract"] != expected_contract:
             raise RunnerError("controller contract changed")
+        if operation == "two_shot":
+            cases = request.get("cases")
+            if (not isinstance(cases, list) or not cases
+                    or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
+                           for case in cases)):
+                raise RunnerError("two-shot cases must be non-empty nonnegative integers")
+            if request.get("benchmark") not in {"matmul", "bsa"}:
+                raise RunnerError("two-shot benchmark must be matmul or bsa")
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")
         from campaign import TREATMENT_SKILLS
@@ -405,7 +456,7 @@ class OneShotRunner:
         return ["--mount", value]
 
     def _docker_command(self, workspace: Path, prompt: Path, socket_dir: Path,
-                        shim: Path, request: dict, container_name: str) -> list[str]:
+                        shim: Path, state: Path, request: dict, container_name: str) -> list[str]:
         """Construct the complete allowlisted Docker boundary for one cell."""
         workspace = self._mount_source(workspace, kind="workspace")
         prompt = self._mount_source(prompt, kind="prompt")
@@ -413,13 +464,13 @@ class OneShotRunner:
         runtime = self._mount_source(self._runtime(), kind="Codex runtime")
         shim = self._mount_source(shim, kind="controller client")
         socket_dir = self._mount_source(socket_dir, kind="controller socket parent")
+        state = self._mount_source(state, kind="Codex state")
         uid, gid = os.getuid(), os.getgid()
         command = [
             self.docker, "run", "--rm", "--interactive", "--name", container_name,
             "--user", f"{uid}:{gid}", "--read-only", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--pids-limit", "512",
             "--memory", "8g", "--tmpfs", f"/tmp:rw,nosuid,nodev,mode=1777,uid={uid},gid={gid}",
-            "--tmpfs", f"/codex-home:rw,nosuid,nodev,mode=700,uid={uid},gid={gid}",
             "--tmpfs", f"/home/agent:rw,nosuid,nodev,mode=700,uid={uid},gid={gid}",
             "--workdir", "/workspace", "--env", "HOME=/home/agent",
             "--env", "CODEX_HOME=/codex-home",
@@ -427,6 +478,7 @@ class OneShotRunner:
             "--env", ("EXPERIMENT_CONTROLLER=/usr/local/bin/python3 "
                       "/experiment/controller-client.py /experiment-state/controller.sock"),
             *self._docker_mount(workspace, "/workspace", readonly=False),
+            *self._docker_mount(state, "/codex-home", readonly=False),
             *self._docker_mount(prompt, "/experiment/PROMPT.md", readonly=True),
             *self._docker_mount(auth, "/codex-home/auth.json", readonly=True),
             *self._docker_mount(runtime, "/runtime/node", readonly=True),
@@ -453,6 +505,17 @@ class OneShotRunner:
             evidence.update(image=self.docker_image, image_id=self.docker_image_id)
         return evidence
 
+    @staticmethod
+    def _session_id(output: str) -> str:
+        for line in output.splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "thread.started" and isinstance(event.get("thread_id"), str):
+                return event["thread_id"]
+        raise RunnerError("Codex did not report a persistent thread id")
+
     def run(self, request: dict, timeout: int = 360) -> dict:
         started = time.monotonic(); milestones = [{"name": "request_validating", "elapsed_seconds": 0.0}]
         state = socket_dir = snapshot_dir = shim_dir = None
@@ -462,9 +525,11 @@ class OneShotRunner:
                                  ("cases.jsonl", self.assets["case_spec"])):
                 shutil.copy2(source, workspace / name)
             shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
+            two_shot = request["operation"] == "two_shot"
             (workspace / "AGENTS.md").write_text(
                 "Write candidate.py and candidate.manifest.json. Use only declared local skills. "
-                "You have one turn and exactly one billed controller check. Do not profile.\n"
+                f"You have {'two turns and one billed development check per turn' if two_shot else 'one turn and exactly one billed controller check'}. "
+                "Do not profile or pursue broad optimization.\n"
             )
             skill_mounts: list[str] = []
             skill_root = workspace / ".agents/skills"; skill_root.mkdir(parents=True)
@@ -495,7 +560,7 @@ class OneShotRunner:
                             "/usr/bin/python3 /experiment/controller-client.py /experiment-state/controller.sock"]
             else:
                 command = self._docker_command(workspace, prompt_file, socket_dir,
-                                               shim, request, container_name)
+                                               shim, state, request, container_name)
             codex = ["/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config", "--skip-git-repo-check",
                      "--dangerously-bypass-approvals-and-sandbox", "-m", request["model"]["name"],
                      "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"', "-C", "/workspace", "-"]
@@ -509,8 +574,26 @@ class OneShotRunner:
                         raise KeyboardInterrupt
                     for watched in (signal.SIGTERM, signal.SIGHUP):
                         previous_handlers[watched] = signal.signal(watched, cancelled)
+                runs: list[subprocess.CompletedProcess] = []
                 try:
-                    run = _run_group([*command, *codex], prompt.decode(), timeout)
+                    first = _run_group([*command, *codex], prompt.decode(), timeout)
+                    runs.append(first)
+                    if (two_shot and first.returncode == 0 and controller.used == 1
+                            and controller.last_result is not None
+                            and controller.last_result.get("status") != "infrastructure_error"):
+                        session_id = self._session_id(first.stdout)
+                        resume = ["/runtime/node/bin/codex", "exec", "resume", "--json",
+                                  "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
+                                  "-m", request["model"]["name"],
+                                  "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"',
+                                  session_id, "-"]
+                        second_prompt = (
+                            "Continue the same smoke test. Inspect the Round 1 diagnostics, modify "
+                            "candidate.py, run exactly `check --scope development --round 2`, then "
+                            "stop. Do not profile or pursue broad optimization.\n")
+                        remaining = max(1, int(started + timeout - time.monotonic()))
+                        runs.append(_run_group([*command, *resume], second_prompt, remaining))
+                    run = runs[-1]
                 except subprocess.TimeoutExpired as error:
                     if self.sandbox_backend == "docker":
                         self._remove_container(container_name)
@@ -529,9 +612,11 @@ class OneShotRunner:
                                               "failure_type", "controller_infrastructure"),
                                           handle=controller.last_result.get("handle"))
                         result["sandbox"] = self._sandbox_evidence()
+                        result["controller_results"] = controller.results
                         return result
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
                             "controller_usage": {"billed": controller.used, "calls": controller.calls},
+                            "controller_results": controller.results,
                             "sandbox": self._sandbox_evidence()}
                 except KeyboardInterrupt:
                     if self.sandbox_backend == "docker":
@@ -559,9 +644,22 @@ class OneShotRunner:
                     "stdout": _bounded(run.stdout),
                     "stderr": _bounded(run.stderr), "milestones": milestones,
                     "sandbox": self._sandbox_evidence(),
-                    "controller_usage": {"limit": 1, "billed": controller.used, "calls": controller.calls,
+                    "rounds_completed": sum(item.returncode == 0 for item in runs),
+                    "turns": [{"round": index, "exit_code": item.returncode,
+                               "stdout": _bounded(item.stdout), "stderr": _bounded(item.stderr)}
+                              for index, item in enumerate(runs, 1)],
+                    "controller_usage": {"limit": controller.limit, "billed": controller.used, "calls": controller.calls,
                                          "free_calls": controller.free_calls, "invalid": controller.invalid,
                                          "over_budget": controller.over_budget}}
+            candidate_hashes = {}
+            for round_number in range(1, controller.limit + 1):
+                directory = (f"development-check-{round_number}"
+                             if controller.limit == 2 else "development-check")
+                checked = snapshot_dir / directory / "candidate.py"
+                if checked.is_file():
+                    candidate_hashes[str(round_number)] = _digest(checked)
+            result["candidate_sha256"] = candidate_hashes
+            result["controller_results"] = controller.results
             if status == "infrastructure_error":
                 result.update(failure_type=controller.last_result.get("failure_type", "controller_infrastructure"),
                               diagnostics=controller.last_result.get("diagnostics", ""),
@@ -574,7 +672,8 @@ class OneShotRunner:
         except (RunnerError, OSError, KeyError, TypeError, ValueError) as error:
             return {"status": "setup_error", "diagnostics": _bounded(error), "milestones": milestones,
                     "sandbox": self._sandbox_evidence(),
-                    "controller_usage": {"limit": 1, "billed": 0, "calls": []}}
+                    "controller_usage": {"limit": (2 if request.get("operation") == "two_shot" else 1),
+                                         "billed": 0, "calls": []}}
         finally:
             for temporary in (state, socket_dir, snapshot_dir, shim_dir):
                 if temporary is not None:
@@ -610,7 +709,10 @@ def main() -> int:
                 AdapterTransport(remote, adapter), args.state_dir),
             sandbox_backend=args.sandbox_backend, docker=args.docker,
             docker_image=args.docker_image, docker_image_id=args.docker_image_id)
-        request = json.load(sys.stdin); result = runner.run(request, timeout=INNER_TURN_TIMEOUT)
+        request = json.load(sys.stdin)
+        result = runner.run(
+            request, timeout=(INNER_TURN_TIMEOUT * 2 if request.get("operation") == "two_shot"
+                              else INNER_TURN_TIMEOUT))
     except (RunnerError, OSError, ValueError, json.JSONDecodeError) as error:
         result = {"status": "setup_error", "diagnostics": _bounded(error),
                   "controller_usage": {"limit": 1, "billed": 0, "calls": []}}

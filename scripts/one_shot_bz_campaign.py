@@ -19,6 +19,8 @@ import diagnostic_campaign
 from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
 from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
                                  DiagnosticCampaign, DiagnosticError, TREATMENTS)
+from two_shot_smoke_campaign import (TwoShotSmokeCampaign, manifest_identity,
+                                     validate_matmul_gate)
 
 
 def load_json(path: Path) -> dict:
@@ -235,17 +237,26 @@ class BzTerminalHook:
         if (isinstance(request_timeout, bool) or not isinstance(request_timeout, int)
                 or request_timeout < 1):
             raise DiagnosticError("terminal request timeout must be a positive integer")
+        cases = request.get("cases", list(range(7)))
+        if (not isinstance(cases, list) or not cases
+                or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
+                       for case in cases)):
+            raise DiagnosticError("terminal cases must be a non-empty list of nonnegative integers")
+        benchmark = request.get("benchmark", "matmul")
+        if benchmark == "streaming-matmul-add":
+            benchmark = "matmul"
         client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
             # observe its retained handle instead of redispatching it.
             "cell": f"{treatment}-attempt-{terminal_attempt}",
+            "benchmark": benchmark,
             **placement, "timeout": min(request_timeout, 240),
             "candidate": str(submission / "candidate.py"),
             "candidate_manifest": str(submission / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
-            "runner": self.assets["runner"], "cases": list(range(7)),
+            "runner": self.assets["runner"], "cases": cases,
         }
         snapshot_hashes = expected if isinstance(expected, dict) else (
             {name: diagnostic_campaign.sha256_file(submission / name)
@@ -274,7 +285,8 @@ class BzTerminalHook:
         # the attempt-2 placement.
         retained = request.get("retained_terminal_request") or self._uncertain.get(cell)
         if retained is not None:
-            immutable = ("campaign", "wave", "baseline", "case_spec", "runner", "cases")
+            immutable = ("campaign", "wave", "benchmark", "baseline", "case_spec",
+                         "runner", "cases")
             retained_candidate = Path(str(retained.get("candidate", "")))
             retained_manifest = Path(str(retained.get("candidate_manifest", "")))
             retained_hashes = retained.get("candidate_sha256")
@@ -411,6 +423,51 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
     return ledger
 
 
+def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launcher,
+              client: BzA3DiagnosticClient, matmul_gate: Path | None = None,
+              *, resume: bool = False) -> dict:
+    """Run the fixed two-wave smoke battery for one configured benchmark."""
+    required = {"prompt", "prompt_sha256", "assets", "benchmark", "cases"}
+    if not required.issubset(config):
+        raise DiagnosticError("smoke integration config is incomplete")
+    validate_placements(placements)
+    benchmark = config["benchmark"]
+    if benchmark == "bsa":
+        if matmul_gate is None:
+            raise DiagnosticError("BSA smoke requires --matmul-gate")
+        validate_matmul_gate(
+            matmul_gate, prompt_sha256=manifest.get("prompt_sha256"),
+            manifest_identity=manifest_identity(manifest))
+    elif benchmark != "matmul":
+        raise DiagnosticError("smoke benchmark must be matmul or bsa")
+    if (manifest.get("prompt") != config["prompt"]
+            or manifest.get("prompt_sha256") != config["prompt_sha256"]):
+        raise DiagnosticError("manifest does not use the frozen smoke prompt")
+    if resume:
+        ledger = load_json(root / "ledger.json")
+        campaign_id = ledger.get("campaign_id")
+        if not isinstance(campaign_id, str) or not campaign_id:
+            raise DiagnosticError("smoke ledger has no campaign identity")
+        evidence, assets = ledger.get("assets"), _retained_assets(ledger)
+    else:
+        campaign_id = str(uuid.uuid4())
+        assets, evidence = freeze_assets(config["assets"], root, campaign_id)
+    hook = BzTerminalHook(client, placements, assets, campaign_id)
+    campaign = TwoShotSmokeCampaign(
+        manifest, root, launcher, hook, benchmark=benchmark, cases=config["cases"],
+        resume=resume, ledger_metadata={"assets": evidence})
+    campaign.campaign_id = campaign_id
+    try:
+        ledger = campaign.run()
+    except BaseException:
+        if not (root / "ledger.json").exists():
+            shutil.rmtree(evidence["root"], ignore_errors=True)
+        raise
+    ledger["assets"] = evidence
+    diagnostic_campaign._atomic_json(root / "ledger.json", ledger)
+    return ledger
+
+
 def _adaptive_config_sha256(config: dict, placements: dict) -> str:
     frozen = {key: value for key, value in config.items()
               if key not in {"prompt", "prompt_sha256"}}
@@ -529,14 +586,16 @@ def reconcile_terminal(config: dict, manifest: dict, placements: dict,
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--action", choices=("run-all", "run-wave", "acknowledge-curation",
-                                              "reconcile-terminal"),
+    parser.add_argument("--action", choices=("run-all", "run-wave", "run-smoke",
+                                              "acknowledge-curation", "reconcile-terminal"),
                         default="run-all")
     parser.add_argument("--wave", type=int)
     parser.add_argument("--curation-receipt", type=Path)
     parser.add_argument("--cell-id")
     parser.add_argument("--agent-attempt", type=int)
     parser.add_argument("--terminal-attempt", type=int)
+    parser.add_argument("--matmul-gate", type=Path)
+    parser.add_argument("--resume-smoke", action="store_true")
     reconciliation = parser.add_mutually_exclusive_group()
     reconciliation.add_argument("--terminal-handle")
     reconciliation.add_argument("--terminal-result", type=Path)
@@ -549,6 +608,8 @@ def main() -> int:
     parser.add_argument("--remote-command-json", default='["cpl-remote"]')
     parser.add_argument("--adapter-command-json")
     args = parser.parse_args()
+    if args.resume_smoke and args.action != "run-smoke":
+        parser.error("--resume-smoke requires --action run-smoke")
     config, manifest = load_json(args.config), load_json(args.manifest)
     placements = load_json(args.placements)
     if args.action == "acknowledge-curation":
@@ -580,6 +641,10 @@ def main() -> int:
                 parser.error("--wave is required")
             result = run_wave(config, manifest, placements, args.run_root,
                               CommandLauncher(commands[0]), client, args.wave)
+        elif args.action == "run-smoke":
+            result = run_smoke(config, manifest, placements, args.run_root,
+                               CommandLauncher(commands[0]), client, args.matmul_gate,
+                               resume=args.resume_smoke)
         else:
             result = run(config, manifest, placements, args.run_root,
                          CommandLauncher(commands[0]), client)

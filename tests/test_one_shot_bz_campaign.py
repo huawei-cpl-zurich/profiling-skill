@@ -191,6 +191,18 @@ def test_partial_asset_snapshot_failure_is_cleaned_up(tmp_path: Path):
     assert list(tmp_path.glob(".campaign-inputs-*")) == []
 
 
+def test_run_smoke_rejects_invalid_placements_before_launch(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    config.update(benchmark="matmul", cases=list(range(7)))
+    placements["project-cannbot"][0] = placements["cannbot"][0].copy()
+    agent = Agent()
+    with pytest.raises(module.DiagnosticError, match="distinct physical devices"):
+        module.run_smoke(config, manifest, placements, tmp_path / "smoke",
+                         agent, Client())
+    assert agent.requests == []
+    assert not (tmp_path / "smoke").exists()
+
+
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)
@@ -292,10 +304,15 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     _config, _manifest, placements = inputs(tmp_path / "inputs")
     client = Client()
     hook = module.BzTerminalHook(client, placements, _config["assets"], "unique")
+    bsa_cases = [47, 46, 49, 44, 43]
     hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
-                "candidate_sha256": result["candidate_sha256"]}, 240)
+                "candidate_sha256": result["candidate_sha256"],
+                "benchmark": "bsa",
+                "cases": bsa_cases}, 240)
     assert Path(client.requests[0]["candidate"]).read_text() == "candidate\n"
     assert Path(client.requests[0]["candidate"]).parent == snapshot
+    assert client.requests[0]["cases"] == bsa_cases
+    assert client.requests[0]["benchmark"] == "bsa"
 
 
 def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):

@@ -60,7 +60,7 @@ def _validate_success_policy(value: object) -> dict[str, dict[str, int]]:
         target, minimum = rule["counted_trials"], rule["minimum_successes"]
         if (isinstance(target, bool) or not isinstance(target, int) or target < 1
                 or isinstance(minimum, bool) or not isinstance(minimum, int)
-                or minimum < 1 or minimum > target):
+                or minimum < 0 or minimum > target):
             raise SmokeError(f"invalid success policy for {treatment}")
     return policy
 
@@ -283,7 +283,7 @@ class TwoShotSmokeCampaign:
                  ledger_metadata: dict | None = None,
                  success_policy: dict | None = None):
         diagnostic_campaign.validate_manifest(manifest)
-        if benchmark not in {"matmul", "bsa"} or not cases or any(
+        if benchmark not in {"matmul", "bsa", "gdn"} or not cases or any(
                 isinstance(case, bool) or not isinstance(case, int) or case < 0 for case in cases):
             raise SmokeError("benchmark and non-empty nonnegative case list are required")
         self.manifest, self.root = manifest, root

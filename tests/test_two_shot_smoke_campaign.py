@@ -493,3 +493,28 @@ def test_bsa_uses_same_322_schedule(tmp_path: Path):
         success_policy=POLICY).run()
     assert len(launcher.requests) == 7
     assert result["benchmark"] == "bsa" and result["status"] == "complete"
+
+
+def test_gdn_uses_same_322_schedule_and_failure_accounting(tmp_path: Path):
+    policy = {
+        "cannbot": {"counted_trials": 3, "minimum_successes": 0},
+        "project-cannbot": {"counted_trials": 2, "minimum_successes": 0},
+        "project-guarded": {"counted_trials": 2, "minimum_successes": 1},
+    }
+    failures = {
+        **{(wave, "cannbot", 1): "compile_error" for wave in (1, 2, 3)},
+        **{(wave, "project-cannbot", 1): "runtime_error" for wave in (1, 2)},
+    }
+    launcher = Launcher(failures)
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", launcher, Terminal(),
+        benchmark="gdn", cases=[40, 49, 47, 46, 45],
+        success_policy=policy).run()
+
+    assert len(launcher.requests) == 7
+    assert result["benchmark"] == "gdn" and result["status"] == "complete"
+    assert result["gate"]["project-cannbot"] == {
+        "counted": 2, "successes": 0, "required": 0,
+        "target": 2, "passed": True,
+    }
+    assert result["failure_summaries"][0]["benchmark"] == "gdn"

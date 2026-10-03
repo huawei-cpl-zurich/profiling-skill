@@ -493,8 +493,8 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
             matmul_gate, prompt_sha256=manifest.get("prompt_sha256"),
             manifest_identity=manifest_identity(manifest),
             success_policy=success_policy)
-    elif benchmark != "matmul":
-        raise DiagnosticError("smoke benchmark must be matmul or bsa")
+    elif benchmark not in {"matmul", "gdn"}:
+        raise DiagnosticError("smoke benchmark must be matmul, bsa, or gdn")
     if (manifest.get("prompt") != config["prompt"]
             or manifest.get("prompt_sha256") != config["prompt_sha256"]):
         raise DiagnosticError("manifest does not use the frozen smoke prompt")

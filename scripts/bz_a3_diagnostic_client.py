@@ -282,8 +282,8 @@ class BzA3DiagnosticClient:
             device = request.get("device")
             if profile not in PROFILES or isinstance(device, bool) or not isinstance(device, int) or device < 0:
                 raise DiagnosticError("request_error", "profile must be bz-a3-1/2 and physical device non-negative")
-            if benchmark not in {"matmul", "bsa"}:
-                raise DiagnosticError("request_error", "benchmark must be matmul or bsa")
+            if benchmark not in {"matmul", "bsa", "gdn"}:
+                raise DiagnosticError("request_error", "benchmark must be matmul, bsa, or gdn")
             campaign = _safe_id(request.get("campaign"), "campaign")
             wave = _safe_id(request.get("wave"), "wave")
             cell = _safe_id(request.get("cell"), "cell")

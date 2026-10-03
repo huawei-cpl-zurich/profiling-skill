@@ -147,6 +147,23 @@ def test_common_assets_with_same_basename_remain_distinct(tmp_path: Path):
         "asset-0\n", "asset-1\n", "asset-2\n"]
 
 
+def test_supplementary_benchmark_asset_is_frozen_with_hash(tmp_path: Path):
+    config, _manifest, _placements = inputs(tmp_path)
+    metadata = tmp_path / "source/baseline.json"
+    metadata.parent.mkdir(exist_ok=True)
+    metadata.write_text('{"case": 47}\n')
+    config["assets"]["supplementary"] = {"baseline.json": str(metadata)}
+
+    frozen, evidence = module.freeze_assets(
+        config["assets"], tmp_path / "run", "supplementary")
+
+    frozen_metadata = Path(frozen["supplementary"]["baseline.json"])
+    assert frozen_metadata.read_bytes() == metadata.read_bytes()
+    assert frozen_metadata.stat().st_mode & 0o777 == 0o444
+    assert evidence["supplementary_sha256"]["baseline.json"] == (
+        module.diagnostic_campaign.sha256_file(frozen_metadata))
+
+
 def test_adaptive_bz_reuses_controller_snapshot_across_prompt_revision(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     root, agent, client = tmp_path / "campaign", Agent(), Client()
@@ -341,6 +358,9 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     (workspace / "candidate.py").write_text("delayed mutation\n")
     (tmp_path / "inputs").mkdir()
     _config, _manifest, placements = inputs(tmp_path / "inputs")
+    metadata = tmp_path / "inputs/baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    _config["assets"]["supplementary"] = {"baseline.json": str(metadata)}
     client = Client()
     hook = module.BzTerminalHook(client, placements, _config["assets"], "unique")
     bsa_cases = [47, 46, 49, 44, 43]
@@ -352,6 +372,8 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     assert Path(client.requests[0]["candidate"]).parent == snapshot
     assert client.requests[0]["cases"] == bsa_cases
     assert client.requests[0]["benchmark"] == "bsa"
+    assert client.requests[0]["supplementary_assets"] == {
+        "baseline.json": str(metadata)}
 
 
 def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):

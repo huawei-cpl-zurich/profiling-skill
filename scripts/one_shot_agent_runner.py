@@ -260,6 +260,8 @@ class Controller:
             "candidate_manifest": str(snapshot / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"],
+            **({"supplementary_assets": self.assets["supplementary"]}
+               if self.assets.get("supplementary") else {}),
             "benchmark": benchmark,
             "cases": list(self.request.get("cases", [1])),
         })
@@ -524,7 +526,11 @@ class OneShotRunner:
             for name, source in (("baseline.py", self.assets["baseline"]),
                                  ("cases.jsonl", self.assets["case_spec"])):
                 shutil.copy2(source, workspace / name)
-            shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
+            supplementary = self.assets.get("supplementary", {})
+            for name, source in supplementary.items():
+                shutil.copy2(source, workspace / name)
+            if "baseline.json" not in supplementary:
+                shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
             two_shot = request["operation"] == "two_shot"
             (workspace / "AGENTS.md").write_text(
                 "Write candidate.py and candidate.manifest.json. Use only declared local skills. "

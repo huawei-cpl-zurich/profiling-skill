@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -130,6 +131,25 @@ def test_bsa_identity_reaches_remote_job_and_receipt(tmp_path: Path):
                     if "job.json" in line and "printf" in line)
     assert '"benchmark":"bsa"' in job_line
     assert result["benchmark"] == "bsa"
+
+
+def test_supplementary_asset_is_packaged_beside_baseline(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = request(tmp_path)
+    metadata = tmp_path / "baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    value.update(benchmark="bsa", supplementary_assets={"baseline.json": str(metadata)})
+
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+
+    assert result["status"] == "ok"
+    common_tar = next(Path(upload[1]) for upload in transport.uploads
+                      if "diagnostic-common-" in upload[2])
+    with tarfile.open(common_tar, "r") as archive:
+        assert set(archive.getnames()) == {
+            "baseline.py", "cases.jsonl", "runner.py", "baseline.json"}
+        assert archive.extractfile("baseline.json").read() == metadata.read_bytes()
 
 
 def test_rejects_unknown_benchmark_before_dispatch(tmp_path: Path):

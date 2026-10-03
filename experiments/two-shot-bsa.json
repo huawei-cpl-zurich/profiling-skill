@@ -2,7 +2,10 @@
   "assets": {
     "baseline": "benchmarks/bsa/baseline.py",
     "case_spec": "benchmarks/bsa/cases.jsonl",
-    "runner": "scripts/a3_benchmark_runner.py"
+    "runner": "scripts/a3_benchmark_runner.py",
+    "supplementary": {
+      "baseline.json": "benchmarks/bsa/baseline.json"
+    }
   },
   "benchmark": "bsa",
   "cases": [47, 46, 49, 44, 43],

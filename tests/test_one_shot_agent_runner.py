@@ -176,6 +176,9 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
 
 def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeypatch, tmp_path: Path):
     runner, request, client = fixture(tmp_path)
+    metadata = tmp_path / "source/baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    runner.assets["supplementary"] = {"baseline.json": str(metadata)}
     request["operation"] = "two_shot"
     request["controller_contract"] = {
         "billed_limit": 2,
@@ -216,6 +219,9 @@ def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeyp
     assert "modify" in calls[1][1].lower()
     assert [sent["cases"] for sent in client.requests] == [request["cases"], request["cases"]]
     assert [sent["benchmark"] for sent in client.requests] == ["bsa", "bsa"]
+    assert [sent["supplementary_assets"] for sent in client.requests] == [
+        {"baseline.json": str(metadata)}, {"baseline.json": str(metadata)}]
+    assert (Path(request["workspace"]) / "baseline.json").read_bytes() == metadata.read_bytes()
     assert [item["status"] for item in result["controller_results"]] == ["ok", "ok"]
 
 

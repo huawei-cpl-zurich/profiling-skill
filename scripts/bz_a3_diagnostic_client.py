@@ -270,7 +270,10 @@ class BzA3DiagnosticClient:
         if not isinstance(request, dict):
             return {"status": "infrastructure_error", "failure_type": "request_error",
                     "diagnostics": "request must be a JSON object", "handle": None}
-        identity = {key: request.get(key) for key in ("campaign", "wave", "cell", "profile", "device")}
+        benchmark = request.get("benchmark", "matmul")
+        identity = {key: request.get(key) for key in (
+            "campaign", "wave", "cell", "profile", "device")}
+        identity["benchmark"] = benchmark
         handle = None
         dispatch_receipt = None
         request_sha = None
@@ -279,6 +282,8 @@ class BzA3DiagnosticClient:
             device = request.get("device")
             if profile not in PROFILES or isinstance(device, bool) or not isinstance(device, int) or device < 0:
                 raise DiagnosticError("request_error", "profile must be bz-a3-1/2 and physical device non-negative")
+            if benchmark not in {"matmul", "bsa"}:
+                raise DiagnosticError("request_error", "benchmark must be matmul or bsa")
             campaign = _safe_id(request.get("campaign"), "campaign")
             wave = _safe_id(request.get("wave"), "wave")
             cell = _safe_id(request.get("cell"), "cell")
@@ -378,7 +383,7 @@ class BzA3DiagnosticClient:
             if not common_cached:
                 self.transport.upload(profile, common_tar, common_remote, _remaining(deadline))
             self.transport.upload(profile, candidate_tar, candidate_remote, _remaining(deadline))
-            job = {"protocol_version": 1, "benchmark": "matmul", "action": "check", "device": 0,
+            job = {"protocol_version": 1, "benchmark": benchmark, "action": "check", "device": 0,
                    "logical_device": 0, "candidate": "candidate.py", "baseline": "baseline.py",
                    "case_spec": "cases.jsonl", "cases": cases, "scope": "diagnostic",
                    "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})}

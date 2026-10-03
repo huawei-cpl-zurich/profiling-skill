@@ -46,7 +46,7 @@ class Launcher:
             (workspace / "candidate.py").write_text("round two\n")
             (workspace / "candidate.manifest.json").write_text("{}\n")
         return {"status": outcome, "rounds_completed": 2,
-                "candidate_sha256": {"1": "first", "2": "second"},
+                "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
                 "controller_usage": {"billed": 2, "invalid": 0, "over_budget": 0,
                                      "calls": [
                     {"arguments": smoke.check_command(1)},
@@ -123,8 +123,28 @@ def test_protocol_rejects_non_exact_controller_usage(tmp_path: Path, usage: dict
     usage["calls"] = [{"arguments": smoke.check_command(1)},
                       {"arguments": smoke.check_command(2)}]
     agent = {"status": "ok", "rounds_completed": 2,
-             "candidate_sha256": {"1": "first", "2": "second"},
+             "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
              "controller_usage": usage}
+    assert smoke._classification(
+        agent, {"status": "ok", "passed": True}, workspace) == (
+            "protocol_error", "counted")
+
+
+@pytest.mark.parametrize("hashes", [
+    {"1": "a" * 64},
+    {"1": "not-a-digest", "2": "b" * 64},
+    {"1": "A" * 64, "2": "b" * 64},
+])
+def test_protocol_rejects_incomplete_or_malformed_candidate_hashes(
+        tmp_path: Path, hashes: dict):
+    workspace = tmp_path / "workspace"; workspace.mkdir()
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    agent = {"status": "ok", "rounds_completed": 2,
+             "candidate_sha256": hashes,
+             "controller_usage": {"billed": 2, "invalid": 0, "over_budget": 0,
+                                  "calls": [{"arguments": smoke.check_command(1)},
+                                            {"arguments": smoke.check_command(2)}]}}
     assert smoke._classification(
         agent, {"status": "ok", "passed": True}, workspace) == (
             "protocol_error", "counted")

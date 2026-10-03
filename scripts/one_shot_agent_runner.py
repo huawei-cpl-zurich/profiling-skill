@@ -246,6 +246,9 @@ class Controller:
             if _digest(previous) == _digest(snapshot / "candidate.py"):
                 raise SubmissionError("round 2 must modify candidate.py")
         campaign = "agent-" + hashlib.sha256(str(workspace).encode()).hexdigest()[:16]
+        benchmark = self.request.get("benchmark", "matmul")
+        if benchmark == "streaming-matmul-add":
+            benchmark = "matmul"
         result = self.client.run({
             "campaign": campaign, "wave": self.request["wave"],
             "cell": f'{self.request["treatment"]}-round-{round_number}',
@@ -253,7 +256,9 @@ class Controller:
             "candidate": str(snapshot / "candidate.py"),
             "candidate_manifest": str(snapshot / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
-            "runner": self.assets["runner"], "cases": list(self.request.get("cases", [1])),
+            "runner": self.assets["runner"],
+            "benchmark": benchmark,
+            "cases": list(self.request.get("cases", [1])),
         })
         result["diagnostics"] = _bounded(result.get("diagnostics"))
         self.last_result = result
@@ -403,6 +408,8 @@ class OneShotRunner:
                     or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
                            for case in cases)):
                 raise RunnerError("two-shot cases must be non-empty nonnegative integers")
+            if request.get("benchmark") not in {"matmul", "bsa"}:
+                raise RunnerError("two-shot benchmark must be matmul or bsa")
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")
         from campaign import TREATMENT_SKILLS

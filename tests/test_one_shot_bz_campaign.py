@@ -295,10 +295,12 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     bsa_cases = [47, 46, 49, 44, 43]
     hook.check({"cell_id": "wave-1-cannbot", "workspace": str(workspace),
                 "candidate_sha256": result["candidate_sha256"],
+                "benchmark": "bsa",
                 "cases": bsa_cases}, 240)
     assert Path(client.requests[0]["candidate"]).read_text() == "candidate\n"
     assert Path(client.requests[0]["candidate"]).parent == snapshot
     assert client.requests[0]["cases"] == bsa_cases
+    assert client.requests[0]["benchmark"] == "bsa"
 
 
 def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):

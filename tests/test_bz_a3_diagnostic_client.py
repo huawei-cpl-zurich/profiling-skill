@@ -114,8 +114,32 @@ def test_success_stages_content_addressed_assets_and_uses_logical_zero(tmp_path:
     assert (profile, device, timeout) == ("bz-a3-1", 3, 30)
     job_line = next(line for line in script.splitlines() if "job.json" in line and "printf" in line)
     assert '"device":0' in job_line and '"logical_device":0' in job_line
+    assert '"benchmark":"matmul"' in job_line
+    assert result["benchmark"] == "matmul"
     assert "host_elapsed_us" not in result
     assert "host_elapsed_us" not in result["case_evidence"][0]
+
+
+def test_bsa_identity_reaches_remote_job_and_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = request(tmp_path); value["benchmark"] = "bsa"
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    script = transport.executions[0][3]
+    job_line = next(line for line in script.splitlines()
+                    if "job.json" in line and "printf" in line)
+    assert '"benchmark":"bsa"' in job_line
+    assert result["benchmark"] == "bsa"
+
+
+def test_rejects_unknown_benchmark_before_dispatch(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = request(tmp_path); value["benchmark"] = "other"
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert transport.executions == []
 
 
 def test_verified_common_archive_is_reused(tmp_path: Path):

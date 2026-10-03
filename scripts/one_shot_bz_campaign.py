@@ -242,12 +242,16 @@ class BzTerminalHook:
                 or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
                        for case in cases)):
             raise DiagnosticError("terminal cases must be a non-empty list of nonnegative integers")
+        benchmark = request.get("benchmark", "matmul")
+        if benchmark == "streaming-matmul-add":
+            benchmark = "matmul"
         client_request = {
             "campaign": self.campaign_id, "wave": wave,
             # BZ dispatch receipts are keyed by cell. A fallback placement is
             # a new terminal attempt, while repeating this exact request must
             # observe its retained handle instead of redispatching it.
             "cell": f"{treatment}-attempt-{terminal_attempt}",
+            "benchmark": benchmark,
             **placement, "timeout": min(request_timeout, 240),
             "candidate": str(submission / "candidate.py"),
             "candidate_manifest": str(submission / "candidate.manifest.json"),
@@ -281,7 +285,8 @@ class BzTerminalHook:
         # the attempt-2 placement.
         retained = request.get("retained_terminal_request") or self._uncertain.get(cell)
         if retained is not None:
-            immutable = ("campaign", "wave", "baseline", "case_spec", "runner", "cases")
+            immutable = ("campaign", "wave", "benchmark", "baseline", "case_spec",
+                         "runner", "cases")
             retained_candidate = Path(str(retained.get("candidate", "")))
             retained_manifest = Path(str(retained.get("candidate_manifest", "")))
             retained_hashes = retained.get("candidate_sha256")

@@ -182,6 +182,7 @@ def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeyp
         "commands": [module.check_command(1), module.check_command(2)],
     }
     request["cases"] = [0, 1, 2, 3, 4, 5, 6]
+    request["benchmark"] = "bsa"
     calls = []
 
     def fake_group(argv, prompt, timeout):
@@ -214,6 +215,7 @@ def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeyp
     assert "thread-1" in calls[1][0]
     assert "modify" in calls[1][1].lower()
     assert [sent["cases"] for sent in client.requests] == [request["cases"], request["cases"]]
+    assert [sent["benchmark"] for sent in client.requests] == ["bsa", "bsa"]
     assert [item["status"] for item in result["controller_results"]] == ["ok", "ok"]
 
 
@@ -221,6 +223,7 @@ def test_two_shot_runner_counts_unchanged_second_submission(monkeypatch, tmp_pat
     runner, request, _ = fixture(tmp_path)
     request["operation"] = "two_shot"
     request["cases"] = [1]
+    request["benchmark"] = "matmul"
     request["controller_contract"] = {
         "billed_limit": 2,
         "commands": [module.check_command(1), module.check_command(2)],
@@ -251,7 +254,7 @@ def test_two_shot_runner_counts_unchanged_second_submission(monkeypatch, tmp_pat
 
 def test_two_shot_stops_after_round_one_infrastructure(monkeypatch, tmp_path: Path):
     runner, request, _ = fixture(tmp_path)
-    request.update(operation="two_shot", cases=[0, 1])
+    request.update(operation="two_shot", benchmark="matmul", cases=[0, 1])
     request["controller_contract"] = {
         "billed_limit": 2,
         "commands": [module.check_command(1), module.check_command(2)],

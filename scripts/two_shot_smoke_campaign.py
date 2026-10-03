@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -103,10 +104,15 @@ def _classification(agent: dict, terminal: dict | None, workspace: Path) -> tupl
     calls = usage.get("calls")
     expected = [{"arguments": check_command(1)}, {"arguments": check_command(2)}]
     hashes = agent.get("candidate_sha256")
+    valid_hashes = (isinstance(hashes, dict) and set(hashes) == {"1", "2"}
+                    and all(isinstance(value, str)
+                            and re.fullmatch(r"[0-9a-f]{64}", value)
+                            for value in hashes.values())
+                    and hashes["1"] != hashes["2"])
     if (status != "ok" or agent.get("rounds_completed") != 2 or calls != expected
             or usage.get("billed") != 2 or usage.get("invalid") != 0
             or usage.get("over_budget") != 0
-            or not isinstance(hashes, dict) or hashes.get("1") == hashes.get("2")
+            or not valid_hashes
             or not all((workspace / name).is_file()
                        for name in ("candidate.py", "candidate.manifest.json"))):
         return "protocol_error", "counted"

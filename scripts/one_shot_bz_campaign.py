@@ -20,7 +20,7 @@ from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
 from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
                                  DiagnosticCampaign, DiagnosticError, TREATMENTS)
 from two_shot_smoke_campaign import (TwoShotSmokeCampaign, manifest_identity,
-                                     validate_matmul_gate)
+                                     DEFAULT_SUCCESS_POLICY, validate_matmul_gate)
 
 
 def load_json(path: Path) -> dict:
@@ -52,13 +52,25 @@ def validate_placements(value: dict) -> dict:
 
 
 def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dict]:
-    if set(assets) != {"baseline", "case_spec", "runner"}:
-        raise DiagnosticError("exactly the three frozen benchmark assets are required")
+    core_names = {"baseline", "case_spec", "runner"}
+    if not isinstance(assets, dict) or set(assets) - core_names != ({"supplementary"}
+            if "supplementary" in assets else set()) or not core_names.issubset(assets):
+        raise DiagnosticError("three core assets and optional supplementary assets are required")
+    supplementary = assets.get("supplementary", {})
+    reserved = {"baseline.py", "cases.jsonl", "runner.py", "candidate.py",
+                "candidate.manifest.json", "AGENTS.md"}
+    if (not isinstance(supplementary, dict)
+            or any(not isinstance(name, str) or not name or name in {".", ".."}
+                   or name in reserved or Path(name).name != name
+                   or not isinstance(source, str)
+                   for name, source in supplementary.items())):
+        raise DiagnosticError("supplementary assets require safe filename-to-path entries")
     snapshot_root = root.parent / f".{root.name}-inputs-{campaign_id}"
     snapshot_root.mkdir(parents=True, exist_ok=False)
     frozen, hashes = {}, {}
     try:
-        for name, source_name in assets.items():
+        for name in ("baseline", "case_spec", "runner"):
+            source_name = assets[name]
             source = Path(source_name)
             if not source.is_file():
                 raise DiagnosticError(f"benchmark asset is missing: {source}")
@@ -67,10 +79,26 @@ def freeze_assets(assets: dict, root: Path, campaign_id: str) -> tuple[dict, dic
             os.chmod(destination, 0o444)
             frozen[name] = str(destination)
             hashes[name] = diagnostic_campaign.sha256_file(destination)
+        frozen_supplementary, supplementary_hashes = {}, {}
+        for name, source_name in sorted(supplementary.items()):
+            source = Path(source_name)
+            if not source.is_file():
+                raise DiagnosticError(f"benchmark asset is missing: {source}")
+            destination = snapshot_root / "supplementary" / name
+            destination.parent.mkdir(exist_ok=True)
+            shutil.copyfile(source, destination)
+            os.chmod(destination, 0o444)
+            frozen_supplementary[name] = str(destination)
+            supplementary_hashes[name] = diagnostic_campaign.sha256_file(destination)
+        if frozen_supplementary:
+            frozen["supplementary"] = frozen_supplementary
     except BaseException:
         shutil.rmtree(snapshot_root, ignore_errors=True)
         raise
-    return frozen, {"root": str(snapshot_root), "sha256": hashes}
+    evidence = {"root": str(snapshot_root), "sha256": hashes}
+    if supplementary_hashes:
+        evidence["supplementary_sha256"] = supplementary_hashes
+    return frozen, evidence
 
 
 class FrozenAgentLauncher:
@@ -258,6 +286,9 @@ class BzTerminalHook:
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"], "cases": cases,
         }
+        if self.assets.get("supplementary"):
+            client_request["supplementary_assets"] = copy.deepcopy(
+                self.assets["supplementary"])
         snapshot_hashes = expected if isinstance(expected, dict) else (
             {name: diagnostic_campaign.sha256_file(submission / name)
              for name in ("candidate.py", "candidate.manifest.json")}
@@ -285,8 +316,10 @@ class BzTerminalHook:
         # the attempt-2 placement.
         retained = request.get("retained_terminal_request") or self._uncertain.get(cell)
         if retained is not None:
-            immutable = ("campaign", "wave", "benchmark", "baseline", "case_spec",
-                         "runner", "cases")
+            immutable = ["campaign", "wave", "benchmark", "baseline", "case_spec",
+                         "runner", "cases"]
+            if "supplementary_assets" in client_request:
+                immutable.append("supplementary_assets")
             retained_candidate = Path(str(retained.get("candidate", "")))
             retained_manifest = Path(str(retained.get("candidate_manifest", "")))
             retained_hashes = retained.get("candidate_sha256")
@@ -423,6 +456,23 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
     return ledger
 
 
+def _legacy_supplementary_closure_matches(assets: object, evidence: object) -> bool:
+    if not isinstance(assets, dict) or not isinstance(evidence, dict):
+        return False
+    requested = assets.get("supplementary", {})
+    retained = evidence.get("supplementary_sha256", {})
+    if not isinstance(requested, dict) or not isinstance(retained, dict):
+        return False
+    if set(requested) != set(retained):
+        return False
+    try:
+        return all(isinstance(source, str) and Path(source).is_file()
+                   and diagnostic_campaign.sha256_file(Path(source)) == retained[name]
+                   for name, source in requested.items())
+    except OSError:
+        return False
+
+
 def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launcher,
               client: BzA3DiagnosticClient, matmul_gate: Path | None = None,
               *, resume: bool = False) -> dict:
@@ -432,12 +482,17 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
         raise DiagnosticError("smoke integration config is incomplete")
     validate_placements(placements)
     benchmark = config["benchmark"]
+    success_policy = config.get("success_policy", DEFAULT_SUCCESS_POLICY)
+    normalized_config = {**config, "success_policy": success_policy}
+    config_identity = hashlib.sha256(json.dumps(
+        normalized_config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if benchmark == "bsa":
         if matmul_gate is None:
             raise DiagnosticError("BSA smoke requires --matmul-gate")
         validate_matmul_gate(
             matmul_gate, prompt_sha256=manifest.get("prompt_sha256"),
-            manifest_identity=manifest_identity(manifest))
+            manifest_identity=manifest_identity(manifest),
+            success_policy=success_policy)
     elif benchmark != "matmul":
         raise DiagnosticError("smoke benchmark must be matmul or bsa")
     if (manifest.get("prompt") != config["prompt"]
@@ -445,6 +500,13 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
         raise DiagnosticError("manifest does not use the frozen smoke prompt")
     if resume:
         ledger = load_json(root / "ledger.json")
+        if ledger.get("config_identity") not in {None, config_identity}:
+            raise DiagnosticError("smoke resume config changed")
+        if (ledger.get("config_identity") is None
+                and not _legacy_supplementary_closure_matches(
+                    config.get("assets"), ledger.get("assets"))):
+            raise DiagnosticError(
+                "identity-less smoke resume supplementary asset closure is unproven")
         campaign_id = ledger.get("campaign_id")
         if not isinstance(campaign_id, str) or not campaign_id:
             raise DiagnosticError("smoke ledger has no campaign identity")
@@ -455,7 +517,9 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
     hook = BzTerminalHook(client, placements, assets, campaign_id)
     campaign = TwoShotSmokeCampaign(
         manifest, root, launcher, hook, benchmark=benchmark, cases=config["cases"],
-        resume=resume, ledger_metadata={"assets": evidence})
+        resume=resume, ledger_metadata={"assets": evidence,
+                                        "config_identity": config_identity},
+        success_policy=success_policy)
     campaign.campaign_id = campaign_id
     try:
         ledger = campaign.run()
@@ -464,6 +528,7 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
             shutil.rmtree(evidence["root"], ignore_errors=True)
         raise
     ledger["assets"] = evidence
+    ledger["config_identity"] = config_identity
     diagnostic_campaign._atomic_json(root / "ledger.json", ledger)
     return ledger
 
@@ -503,6 +568,18 @@ def _retained_assets(ledger: dict) -> dict:
     if any(diagnostic_campaign.sha256_file(Path(assets[name])) != digest
            for name, digest in evidence["sha256"].items()):
         raise DiagnosticError("frozen adaptive asset changed")
+    supplementary_hashes = evidence.get("supplementary_sha256", {})
+    if not isinstance(supplementary_hashes, dict):
+        raise DiagnosticError("frozen supplementary asset evidence is invalid")
+    supplementary = {name: str(root / "supplementary" / name)
+                     for name in supplementary_hashes}
+    if any(not Path(path).is_file() for path in supplementary.values()):
+        raise DiagnosticError("frozen supplementary asset is missing")
+    if any(diagnostic_campaign.sha256_file(Path(supplementary[name])) != digest
+           for name, digest in supplementary_hashes.items()):
+        raise DiagnosticError("frozen supplementary asset changed")
+    if supplementary:
+        assets["supplementary"] = supplementary
     return assets
 
 

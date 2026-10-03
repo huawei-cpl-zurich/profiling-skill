@@ -147,6 +147,23 @@ def test_common_assets_with_same_basename_remain_distinct(tmp_path: Path):
         "asset-0\n", "asset-1\n", "asset-2\n"]
 
 
+def test_supplementary_benchmark_asset_is_frozen_with_hash(tmp_path: Path):
+    config, _manifest, _placements = inputs(tmp_path)
+    metadata = tmp_path / "source/baseline.json"
+    metadata.parent.mkdir(exist_ok=True)
+    metadata.write_text('{"case": 47}\n')
+    config["assets"]["supplementary"] = {"baseline.json": str(metadata)}
+
+    frozen, evidence = module.freeze_assets(
+        config["assets"], tmp_path / "run", "supplementary")
+
+    frozen_metadata = Path(frozen["supplementary"]["baseline.json"])
+    assert frozen_metadata.read_bytes() == metadata.read_bytes()
+    assert frozen_metadata.stat().st_mode & 0o777 == 0o444
+    assert evidence["supplementary_sha256"]["baseline.json"] == (
+        module.diagnostic_campaign.sha256_file(frozen_metadata))
+
+
 def test_adaptive_bz_reuses_controller_snapshot_across_prompt_revision(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     root, agent, client = tmp_path / "campaign", Agent(), Client()
@@ -201,6 +218,90 @@ def test_run_smoke_rejects_invalid_placements_before_launch(tmp_path: Path):
                          agent, Client())
     assert agent.requests == []
     assert not (tmp_path / "smoke").exists()
+
+
+def test_run_smoke_applies_configured_relaxed_policy(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    policy = {
+        "cannbot": {"counted_trials": 3, "minimum_successes": 1},
+        "project-cannbot": {"counted_trials": 2, "minimum_successes": 1},
+        "project-guarded": {"counted_trials": 2, "minimum_successes": 1},
+    }
+    config.update(benchmark="matmul", cases=list(range(7)), success_policy=policy)
+
+    class TwoShotAgent(Agent):
+        def launch(self, request, timeout):
+            with self.lock:
+                self.requests.append((request, timeout))
+            workspace = Path(request["workspace"])
+            (workspace / "candidate.py").write_text("candidate\n")
+            (workspace / "candidate.manifest.json").write_text("{}\n")
+            return {"status": "ok", "rounds_completed": 2,
+                    "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
+                    "controller_usage": {"billed": 2, "invalid": 0,
+                        "over_budget": 0, "calls": [
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "1"]},
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "2"]},
+                        ]}}
+
+    agent = TwoShotAgent()
+    ledger = module.run_smoke(config, manifest, placements, tmp_path / "smoke",
+                              agent, Client())
+    assert len(agent.requests) == 7
+    assert ledger["status"] == "complete"
+    assert ledger["success_policy"] == policy
+    assert all(result["passed"] for result in ledger["gate"].values())
+    with pytest.raises(module.DiagnosticError, match="resume config changed"):
+        module.run_smoke({**config, "campaign_label": "changed"}, manifest,
+                         placements, tmp_path / "smoke", TwoShotAgent(), Client(),
+                         resume=True)
+
+
+def test_identityless_resume_requires_proven_supplementary_asset_closure(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    config.update(benchmark="matmul", cases=list(range(7)),
+                  success_policy=module.DEFAULT_SUCCESS_POLICY)
+
+    class TwoShotAgent(Agent):
+        def launch(self, request, timeout):
+            with self.lock:
+                self.requests.append((request, timeout))
+            workspace = Path(request["workspace"])
+            (workspace / "candidate.py").write_text("candidate\n")
+            (workspace / "candidate.manifest.json").write_text("{}\n")
+            return {"status": "ok", "rounds_completed": 2,
+                    "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
+                    "controller_usage": {"billed": 2, "invalid": 0,
+                        "over_budget": 0, "calls": [
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "1"]},
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "2"]}]}}
+
+    root = tmp_path / "smoke"
+    module.run_smoke(config, manifest, placements, root, TwoShotAgent(), Client())
+    ledger_path = root / "ledger.json"
+    legacy = json.loads(ledger_path.read_text())
+    legacy.pop("config_identity")
+    ledger_path.write_text(json.dumps(legacy))
+
+    resumed_agent = TwoShotAgent()
+    assert module.run_smoke(config, manifest, placements, root, resumed_agent,
+                            Client(), resume=True)["status"] == "complete"
+    assert resumed_agent.requests == []
+
+    legacy = json.loads(ledger_path.read_text())
+    legacy.pop("config_identity")
+    ledger_path.write_text(json.dumps(legacy))
+    metadata = tmp_path / "baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    changed = copy.deepcopy(config)
+    changed["assets"]["supplementary"] = {"baseline.json": str(metadata)}
+    with pytest.raises(module.DiagnosticError, match="supplementary asset closure"):
+        module.run_smoke(changed, manifest, placements, root, TwoShotAgent(),
+                         Client(), resume=True)
 
 
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
@@ -302,6 +403,9 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     (workspace / "candidate.py").write_text("delayed mutation\n")
     (tmp_path / "inputs").mkdir()
     _config, _manifest, placements = inputs(tmp_path / "inputs")
+    metadata = tmp_path / "inputs/baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    _config["assets"]["supplementary"] = {"baseline.json": str(metadata)}
     client = Client()
     hook = module.BzTerminalHook(client, placements, _config["assets"], "unique")
     bsa_cases = [47, 46, 49, 44, 43]
@@ -313,6 +417,8 @@ def test_first_terminal_attempt_uses_frozen_submission(tmp_path: Path, monkeypat
     assert Path(client.requests[0]["candidate"]).parent == snapshot
     assert client.requests[0]["cases"] == bsa_cases
     assert client.requests[0]["benchmark"] == "bsa"
+    assert client.requests[0]["supplementary_assets"] == {
+        "baseline.json": str(metadata)}
 
 
 def test_snapshot_failure_remains_reschedulable_in_campaign(tmp_path: Path, monkeypatch):

@@ -308,12 +308,25 @@ class BzA3DiagnosticClient:
             if any(not isinstance(request.get(name, ""), str) for name in path_names):
                 raise DiagnosticError("request_error", "asset paths must be JSON strings")
             paths = {name: Path(request.get(name, "")) for name in path_names}
+            supplementary = request.get("supplementary_assets", {})
+            reserved = {"baseline.py", "cases.jsonl", "runner.py", "candidate.py",
+                        "candidate.manifest.json", "AGENTS.md"}
+            if (not isinstance(supplementary, dict)
+                    or any(not isinstance(name, str) or not name or name in {".", ".."}
+                           or name in reserved or Path(name).name != name
+                           or not isinstance(source, str)
+                           for name, source in supplementary.items())):
+                raise DiagnosticError("request_error", "invalid supplementary asset map")
+            supplementary_paths = {name: Path(source)
+                                   for name, source in supplementary.items()}
             missing_submission = [name for name in ("candidate", "candidate_manifest") if not paths[name].is_file()]
             if missing_submission:
                 return {"status": "submission_error", "failure_type": "missing_submission",
                         "diagnostics": "missing " + ", ".join(missing_submission), **identity}
             if any(not paths[name].is_file() for name in ("baseline", "case_spec", "runner")):
                 raise DiagnosticError("staging_error", "a frozen common asset is missing")
+            if any(not path.is_file() for path in supplementary_paths.values()):
+                raise DiagnosticError("staging_error", "a frozen supplementary asset is missing")
             cases = request.get("cases", list(range(7)))
             if not isinstance(cases, list) or not cases or any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in cases):
                 raise DiagnosticError("request_error", "cases must be a non-empty integer list")
@@ -322,7 +335,9 @@ class BzA3DiagnosticClient:
             common_tar, candidate_tar = local / "common.tar", local / "candidate.tar"
             common_sha = _archive(common_tar, [(paths["baseline"], "baseline.py"),
                                                 (paths["case_spec"], "cases.jsonl"),
-                                                (paths["runner"], "runner.py")])
+                                                (paths["runner"], "runner.py"),
+                                                *[(supplementary_paths[name], name)
+                                                  for name in sorted(supplementary_paths)]])
             candidate_sha = _archive(candidate_tar, [(paths["candidate"], "candidate.py"),
                                                       (paths["candidate_manifest"], "candidate.manifest.json")])
             common_remote = f"/home/m00933363/diagnostic-common-{common_sha}.tar"

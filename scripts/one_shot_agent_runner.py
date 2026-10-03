@@ -91,6 +91,19 @@ def _prompt_bytes(request: dict) -> bytes:
     return content
 
 
+def _validated_supplementary_assets(assets: dict) -> dict[str, str]:
+    supplementary = assets.get("supplementary", {})
+    reserved = {"baseline.py", "cases.jsonl", "runner.py", "candidate.py",
+                "candidate.manifest.json", "AGENTS.md"}
+    if (not isinstance(supplementary, dict)
+            or any(not isinstance(name, str) or not name or name in {".", ".."}
+                   or name in reserved or Path(name).name != name
+                   or not isinstance(source, str) or not Path(source).is_file()
+                   for name, source in supplementary.items())):
+        raise RunnerError("supplementary assets require safe filenames and regular sources")
+    return supplementary
+
+
 def _run_group(command: list[str], prompt: str, timeout: int) -> subprocess.CompletedProcess:
     with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout_file, \
             tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stderr_file:
@@ -260,6 +273,8 @@ class Controller:
             "candidate_manifest": str(snapshot / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
             "runner": self.assets["runner"],
+            **({"supplementary_assets": self.assets["supplementary"]}
+               if self.assets.get("supplementary") else {}),
             "benchmark": benchmark,
             "cases": list(self.request.get("cases", [1])),
         })
@@ -413,6 +428,7 @@ class OneShotRunner:
                 raise RunnerError("two-shot cases must be non-empty nonnegative integers")
             if request.get("benchmark") not in {"matmul", "bsa"}:
                 raise RunnerError("two-shot benchmark must be matmul or bsa")
+        _validated_supplementary_assets(self.assets)
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")
         from campaign import TREATMENT_SKILLS
@@ -524,7 +540,11 @@ class OneShotRunner:
             for name, source in (("baseline.py", self.assets["baseline"]),
                                  ("cases.jsonl", self.assets["case_spec"])):
                 shutil.copy2(source, workspace / name)
-            shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
+            supplementary = _validated_supplementary_assets(self.assets)
+            for name, source in supplementary.items():
+                shutil.copy2(source, workspace / name)
+            if "baseline.json" not in supplementary:
+                shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
             two_shot = request["operation"] == "two_shot"
             (workspace / "AGENTS.md").write_text(
                 "Write candidate.py and candidate.manifest.json. Use only declared local skills. "

@@ -176,6 +176,9 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
 
 def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeypatch, tmp_path: Path):
     runner, request, client = fixture(tmp_path)
+    metadata = tmp_path / "source/baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    runner.assets["supplementary"] = {"baseline.json": str(metadata)}
     request["operation"] = "two_shot"
     request["controller_contract"] = {
         "billed_limit": 2,
@@ -216,7 +219,35 @@ def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeyp
     assert "modify" in calls[1][1].lower()
     assert [sent["cases"] for sent in client.requests] == [request["cases"], request["cases"]]
     assert [sent["benchmark"] for sent in client.requests] == ["bsa", "bsa"]
+    assert [sent["supplementary_assets"] for sent in client.requests] == [
+        {"baseline.json": str(metadata)}, {"baseline.json": str(metadata)}]
+    assert (Path(request["workspace"]) / "baseline.json").read_bytes() == metadata.read_bytes()
     assert [item["status"] for item in result["controller_results"]] == ["ok", "ok"]
+
+
+@pytest.mark.parametrize("destination_kind", ["traversal", "absolute", "reserved"])
+def test_runner_rejects_unsafe_supplementary_destination_before_copy(
+        monkeypatch, tmp_path: Path, destination_kind: str):
+    runner, request, _client = fixture(tmp_path)
+    workspace = Path(request["workspace"])
+    destinations = {
+        "traversal": "../escaped.py",
+        "absolute": str(tmp_path / "absolute-escape.py"),
+        "reserved": "candidate.py",
+    }
+    destination = destinations[destination_kind]
+    runner.assets["supplementary"] = {
+        destination: runner.assets["case_spec"]}
+    monkeypatch.setattr(module, "_run_group", lambda *_args, **_kwargs:
+                        (_ for _ in ()).throw(AssertionError("agent must not launch")))
+
+    result = runner.run(request)
+
+    assert result["status"] == "setup_error"
+    assert "supplementary asset" in result["diagnostics"]
+    assert list(workspace.iterdir()) == []
+    assert not (workspace.parent / "escaped.py").exists()
+    assert not (tmp_path / "absolute-escape.py").exists()
 
 
 def test_two_shot_runner_counts_unchanged_second_submission(monkeypatch, tmp_path: Path):

@@ -456,6 +456,23 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
     return ledger
 
 
+def _legacy_supplementary_closure_matches(assets: object, evidence: object) -> bool:
+    if not isinstance(assets, dict) or not isinstance(evidence, dict):
+        return False
+    requested = assets.get("supplementary", {})
+    retained = evidence.get("supplementary_sha256", {})
+    if not isinstance(requested, dict) or not isinstance(retained, dict):
+        return False
+    if set(requested) != set(retained):
+        return False
+    try:
+        return all(isinstance(source, str) and Path(source).is_file()
+                   and diagnostic_campaign.sha256_file(Path(source)) == retained[name]
+                   for name, source in requested.items())
+    except OSError:
+        return False
+
+
 def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launcher,
               client: BzA3DiagnosticClient, matmul_gate: Path | None = None,
               *, resume: bool = False) -> dict:
@@ -485,6 +502,11 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
         ledger = load_json(root / "ledger.json")
         if ledger.get("config_identity") not in {None, config_identity}:
             raise DiagnosticError("smoke resume config changed")
+        if (ledger.get("config_identity") is None
+                and not _legacy_supplementary_closure_matches(
+                    config.get("assets"), ledger.get("assets"))):
+            raise DiagnosticError(
+                "identity-less smoke resume supplementary asset closure is unproven")
         campaign_id = ledger.get("campaign_id")
         if not isinstance(campaign_id, str) or not campaign_id:
             raise DiagnosticError("smoke ledger has no campaign identity")

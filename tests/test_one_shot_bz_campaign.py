@@ -259,6 +259,51 @@ def test_run_smoke_applies_configured_relaxed_policy(tmp_path: Path):
                          resume=True)
 
 
+def test_identityless_resume_requires_proven_supplementary_asset_closure(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    config.update(benchmark="matmul", cases=list(range(7)),
+                  success_policy=module.DEFAULT_SUCCESS_POLICY)
+
+    class TwoShotAgent(Agent):
+        def launch(self, request, timeout):
+            with self.lock:
+                self.requests.append((request, timeout))
+            workspace = Path(request["workspace"])
+            (workspace / "candidate.py").write_text("candidate\n")
+            (workspace / "candidate.manifest.json").write_text("{}\n")
+            return {"status": "ok", "rounds_completed": 2,
+                    "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
+                    "controller_usage": {"billed": 2, "invalid": 0,
+                        "over_budget": 0, "calls": [
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "1"]},
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "2"]}]}}
+
+    root = tmp_path / "smoke"
+    module.run_smoke(config, manifest, placements, root, TwoShotAgent(), Client())
+    ledger_path = root / "ledger.json"
+    legacy = json.loads(ledger_path.read_text())
+    legacy.pop("config_identity")
+    ledger_path.write_text(json.dumps(legacy))
+
+    resumed_agent = TwoShotAgent()
+    assert module.run_smoke(config, manifest, placements, root, resumed_agent,
+                            Client(), resume=True)["status"] == "complete"
+    assert resumed_agent.requests == []
+
+    legacy = json.loads(ledger_path.read_text())
+    legacy.pop("config_identity")
+    ledger_path.write_text(json.dumps(legacy))
+    metadata = tmp_path / "baseline.json"
+    metadata.write_text('{"case": 47}\n')
+    changed = copy.deepcopy(config)
+    changed["assets"]["supplementary"] = {"baseline.json": str(metadata)}
+    with pytest.raises(module.DiagnosticError, match="supplementary asset closure"):
+        module.run_smoke(changed, manifest, placements, root, TwoShotAgent(),
+                         Client(), resume=True)
+
+
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)

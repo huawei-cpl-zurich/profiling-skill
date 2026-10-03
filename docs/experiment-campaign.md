@@ -111,6 +111,14 @@ Both configurations use the same prompt and treatment isolation. The usual
 manifest, placements, BZ adapter/state, agent-command, and run-root arguments
 remain required; use a fresh run root for each benchmark.
 
+The smoke ledger is written before dispatch and after every completed cell.
+If a run stops or ends in `infrastructure_pending`, repeat the same
+`run-smoke` command with `--resume-smoke`; resume verifies the frozen inputs,
+preserves successful and counted cells, and creates fresh attempts only for
+ordinary infrastructure exclusions. `reconciliation_required` means a durable
+terminal observation is uncertain and must be reconciled through its retained
+handle; resume will not redispatch that cell.
+
 ## Freeze and configure
 
 Use a new output directory for every freeze and campaign. The examples use

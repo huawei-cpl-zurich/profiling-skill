@@ -191,6 +191,18 @@ def test_partial_asset_snapshot_failure_is_cleaned_up(tmp_path: Path):
     assert list(tmp_path.glob(".campaign-inputs-*")) == []
 
 
+def test_run_smoke_rejects_invalid_placements_before_launch(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    config.update(benchmark="matmul", cases=list(range(7)))
+    placements["project-cannbot"][0] = placements["cannbot"][0].copy()
+    agent = Agent()
+    with pytest.raises(module.DiagnosticError, match="distinct physical devices"):
+        module.run_smoke(config, manifest, placements, tmp_path / "smoke",
+                         agent, Client())
+    assert agent.requests == []
+    assert not (tmp_path / "smoke").exists()
+
+
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)

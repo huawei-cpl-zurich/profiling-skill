@@ -7,9 +7,10 @@ import copy
 import hashlib
 import json
 import re
+import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Protocol
 
@@ -133,7 +134,8 @@ def _classification(agent: dict, terminal: dict | None, workspace: Path) -> tupl
 class TwoShotSmokeCampaign:
     def __init__(self, manifest: dict, root: Path, launcher: Launcher, terminal: Terminal,
                  *, benchmark: str, cases: list[int], agent_timeout: int = 720,
-                 terminal_timeout: int = 300):
+                 terminal_timeout: int = 300, resume: bool = False,
+                 ledger_metadata: dict | None = None):
         diagnostic_campaign.validate_manifest(manifest)
         if benchmark not in {"matmul", "bsa"} or not cases or any(
                 isinstance(case, bool) or not isinstance(case, int) or case < 0 for case in cases):
@@ -142,6 +144,8 @@ class TwoShotSmokeCampaign:
         self.launcher, self.terminal = launcher, terminal
         self.benchmark, self.cases = benchmark, list(cases)
         self.agent_timeout, self.terminal_timeout = agent_timeout, terminal_timeout
+        self.resume = resume
+        self.ledger_metadata = copy.deepcopy(ledger_metadata or {})
         self.campaign_id = str(uuid.uuid4())
 
     def _request(self, wave: int, treatment: str, attempt: int, workspace: Path) -> dict:
@@ -165,14 +169,19 @@ class TwoShotSmokeCampaign:
             "cases": self.cases,
         }
 
-    def _cell(self, wave: int, treatment: str) -> dict:
-        history = []
-        for attempt in (1, 2):
+    def _cell(self, wave: int, treatment: str, previous: dict | None = None) -> dict:
+        history = copy.deepcopy(previous.get("attempts", []) if previous else [])
+        first_attempt = len(history) + 1
+        for attempt in range(first_attempt, first_attempt + 2):
             workspace = self.root / "cells" / f"wave-{wave}-{treatment}" / f"attempt-{attempt}" / "workspace"
             workspace.mkdir(parents=True, exist_ok=False)
             request = self._request(wave, treatment, attempt, workspace)
             started = time.time()
-            agent = self.launcher.launch(request, self.agent_timeout)
+            try:
+                agent = self.launcher.launch(request, self.agent_timeout)
+            except Exception as error:
+                agent = {"status": "infrastructure_error", "failure_type": "launcher_error",
+                         "diagnostics": f"launcher raised {type(error).__name__}: {error}"}
             terminal = None
             if agent.get("status") == "ok" and all(
                     (workspace / name).is_file()
@@ -185,28 +194,80 @@ class TwoShotSmokeCampaign:
             record = {"attempt": attempt, "outcome": outcome, "category": category,
                       "started_at": started, "finished_at": time.time(),
                       "agent": agent, "terminal": terminal}
+            if (isinstance(terminal, dict)
+                    and terminal.get("manual_reconciliation_required") is True):
+                record["manual_reconciliation_required"] = True
             history.append(record)
+            if record.get("manual_reconciliation_required"):
+                return {"treatment": treatment, **record, "attempts": history}
             if category != "infrastructure":
                 return {"treatment": treatment, **record, "attempts": history}
         return {"treatment": treatment, **history[-1], "attempts": history}
 
     def run(self) -> dict:
-        if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
-            raise SmokeError(f"smoke output root is not fresh: {self.root}")
-        self.root.mkdir(parents=True, exist_ok=True)
-        ledger = {"protocol_version": 1, "campaign_id": self.campaign_id,
-                  "benchmark": self.benchmark, "cases": self.cases,
-                  "prompt_sha256": self.manifest["prompt_sha256"],
-                  "manifest_identity": manifest_identity(self.manifest),
-                  "status": "running", "waves": []}
+        ledger_path = self.root / "ledger.json"
+        if self.resume:
+            if not ledger_path.is_file():
+                raise SmokeError("smoke resume requires an existing ledger")
+            try:
+                ledger = json.loads(ledger_path.read_text())
+            except (OSError, json.JSONDecodeError) as error:
+                raise SmokeError(f"smoke ledger is unreadable: {error}") from error
+            expected = {"benchmark": self.benchmark, "cases": self.cases,
+                        "prompt_sha256": self.manifest["prompt_sha256"],
+                        "manifest_identity": manifest_identity(self.manifest)}
+            if any(ledger.get(key) != value for key, value in expected.items()):
+                raise SmokeError("smoke resume inputs changed")
+            self.campaign_id = ledger.get("campaign_id")
+            if not isinstance(self.campaign_id, str) or not self.campaign_id:
+                raise SmokeError("smoke ledger has no campaign identity")
+        else:
+            if self.root.exists() and (not self.root.is_dir() or any(self.root.iterdir())):
+                raise SmokeError(f"smoke output root is not fresh: {self.root}")
+            self.root.mkdir(parents=True, exist_ok=True)
+            ledger = {"protocol_version": 1, "campaign_id": self.campaign_id,
+                      "benchmark": self.benchmark, "cases": self.cases,
+                      "prompt_sha256": self.manifest["prompt_sha256"],
+                      "manifest_identity": manifest_identity(self.manifest),
+                      "status": "running", "waves": []}
+            ledger.update(self.ledger_metadata)
+            diagnostic_campaign._atomic_json(ledger_path, ledger)
         for wave in (1, 2):
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                futures = {name: pool.submit(self._cell, wave, name) for name in TREATMENTS}
-                cells = [futures[name].result() for name in TREATMENTS]
-            ledger["waves"].append({"wave": wave, "cells": cells})
-            diagnostic_campaign._atomic_json(self.root / "ledger.json", ledger)
-        ledger["status"] = ("complete" if all(
-            cell["outcome"] == "success" for wave in ledger["waves"] for cell in wave["cells"])
-                            else "smoke_failures")
-        diagnostic_campaign._atomic_json(self.root / "ledger.json", ledger)
+            wave_record = next((item for item in ledger["waves"] if item.get("wave") == wave), None)
+            if wave_record is None:
+                wave_record = {"wave": wave, "cells": []}
+                ledger["waves"].append(wave_record)
+                diagnostic_campaign._atomic_json(ledger_path, ledger)
+            by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
+            pending = [name for name in TREATMENTS
+                       if name not in by_treatment
+                       or (by_treatment[name].get("category") == "infrastructure"
+                           and not by_treatment[name].get("manual_reconciliation_required"))]
+            if pending:
+                checkpoint_lock = threading.Lock()
+
+                def run_and_checkpoint(name: str) -> dict:
+                    cell = self._cell(wave, name, by_treatment.get(name))
+                    with checkpoint_lock:
+                        by_treatment[name] = cell
+                        wave_record["cells"] = [by_treatment[item] for item in TREATMENTS
+                                                if item in by_treatment]
+                        diagnostic_campaign._atomic_json(ledger_path, ledger)
+                    return cell
+
+                with ThreadPoolExecutor(max_workers=len(pending)) as pool:
+                    futures = {pool.submit(run_and_checkpoint, name): name
+                               for name in pending}
+                    for future in as_completed(futures):
+                        future.result()
+        cells = [cell for wave in ledger["waves"] for cell in wave["cells"]]
+        if any(cell.get("manual_reconciliation_required") for cell in cells):
+            ledger["status"] = "reconciliation_required"
+        elif any(cell.get("category") == "infrastructure" for cell in cells):
+            ledger["status"] = "infrastructure_pending"
+        elif all(cell["outcome"] == "success" for cell in cells):
+            ledger["status"] = "complete"
+        else:
+            ledger["status"] = "smoke_failures"
+        diagnostic_campaign._atomic_json(ledger_path, ledger)
         return ledger

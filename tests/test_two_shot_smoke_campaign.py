@@ -5,6 +5,7 @@ import importlib
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -100,6 +101,111 @@ def test_only_infrastructure_failure_is_retried(tmp_path: Path):
     cells = {cell["treatment"]: cell for cell in result["waves"][0]["cells"]}
     assert cells["cannbot"]["outcome"] == "success"
     assert cells["project-cannbot"]["outcome"] == "compile_error"
+
+
+def test_checkpoints_each_cell_before_slow_siblings_finish(tmp_path: Path):
+    root = tmp_path / "run"
+
+    class DelayedLauncher(Launcher):
+        def launch(self, request, timeout_seconds):
+            if request["treatment"] != "cannbot":
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    if (root / "ledger.json").is_file():
+                        ledger = json.loads((root / "ledger.json").read_text())
+                        if ledger["waves"] and ledger["waves"][0]["cells"]:
+                            break
+                    time.sleep(.01)
+                else:
+                    raise AssertionError("fast cell was not checkpointed")
+            return super().launch(request, timeout_seconds)
+
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), root, DelayedLauncher(), Terminal(),
+        benchmark="matmul", cases=list(range(7))).run()
+    assert result["status"] == "complete"
+
+
+def test_resume_partial_wave_preserves_completed_cells(tmp_path: Path):
+    root = tmp_path / "run"; config = manifest(tmp_path)
+    first = smoke.TwoShotSmokeCampaign(
+        config, root, Launcher(), Terminal(), benchmark="matmul", cases=list(range(7)))
+    original = first._cell
+
+    def interrupted(wave, treatment, *args, **kwargs):
+        if wave == 1 and treatment == "project-cannbot":
+            time.sleep(.1)
+            raise KeyboardInterrupt
+        if treatment == "project-guarded":
+            time.sleep(.2)
+        return original(wave, treatment, *args, **kwargs)
+
+    first._cell = interrupted
+    with pytest.raises(KeyboardInterrupt):
+        first.run()
+    partial = json.loads((root / "ledger.json").read_text())
+    assert {cell["treatment"] for cell in partial["waves"][0]["cells"]} == {
+        "cannbot", "project-guarded"}
+
+    launcher = Launcher()
+    result = smoke.TwoShotSmokeCampaign(
+        config, root, launcher, Terminal(), benchmark="matmul",
+        cases=list(range(7)), resume=True).run()
+    assert result["status"] == "complete"
+    assert not any(request["wave"] == 1 and request["treatment"] == "cannbot"
+                   for request in launcher.requests)
+    assert not any(request["wave"] == 1 and request["treatment"] == "project-guarded"
+                   for request in launcher.requests)
+
+
+def test_resume_retries_only_infrastructure_and_preserves_counted(tmp_path: Path):
+    root = tmp_path / "run"; config = manifest(tmp_path)
+    outcomes = {(1, "cannbot", attempt): "device_or_runtime_infra"
+                for attempt in (1, 2)}
+    outcomes[(1, "project-cannbot", 1)] = "compile_error"
+    first = smoke.TwoShotSmokeCampaign(
+        config, root, Launcher(outcomes), Terminal(), benchmark="matmul",
+        cases=list(range(7))).run()
+    assert first["status"] == "infrastructure_pending"
+
+    launcher = Launcher()
+    resumed = smoke.TwoShotSmokeCampaign(
+        config, root, launcher, Terminal(), benchmark="matmul",
+        cases=list(range(7)), resume=True).run()
+    assert resumed["status"] == "smoke_failures"
+    assert {(request["wave"], request["treatment"]) for request in launcher.requests} == {
+        (1, "cannbot")}
+    cell = next(cell for cell in resumed["waves"][0]["cells"]
+                if cell["treatment"] == "project-cannbot")
+    assert cell["outcome"] == "compile_error" and len(cell["attempts"]) == 1
+
+
+def test_uncertain_terminal_requires_reconciliation_without_redispatch(tmp_path: Path):
+    class UncertainTerminal(Terminal):
+        def check(self, request, timeout_seconds):
+            self.requests.append(request)
+            if request["wave"] == 1 and request["treatment"] == "cannbot":
+                return {"status": "transport_or_observer_error",
+                        "manual_reconciliation_required": True,
+                        "handle": "bz-a3-1:kept"}
+            return {"status": "ok", "passed": True, "handle": "bz-a3-1:job"}
+
+    root = tmp_path / "run"; config = manifest(tmp_path)
+    first_launcher = Launcher()
+    first = smoke.TwoShotSmokeCampaign(
+        config, root, first_launcher, UncertainTerminal(), benchmark="matmul",
+        cases=list(range(7))).run()
+    assert first["status"] == "reconciliation_required"
+    assert len([request for request in first_launcher.requests
+                if request["wave"] == 1 and request["treatment"] == "cannbot"]) == 1
+
+    resumed_launcher = Launcher()
+    resumed = smoke.TwoShotSmokeCampaign(
+        config, root, resumed_launcher, Terminal(), benchmark="matmul",
+        cases=list(range(7)), resume=True).run()
+    assert resumed["status"] == "reconciliation_required"
+    assert not any(request["wave"] == 1 and request["treatment"] == "cannbot"
+                   for request in resumed_launcher.requests)
 
 
 def test_bsa_requires_complete_matmul_gate(tmp_path: Path):

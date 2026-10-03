@@ -424,11 +424,13 @@ def run(config: dict, manifest: dict, placements: dict, root: Path, launcher,
 
 
 def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launcher,
-              client: BzA3DiagnosticClient, matmul_gate: Path | None = None) -> dict:
+              client: BzA3DiagnosticClient, matmul_gate: Path | None = None,
+              *, resume: bool = False) -> dict:
     """Run the fixed two-wave smoke battery for one configured benchmark."""
     required = {"prompt", "prompt_sha256", "assets", "benchmark", "cases"}
     if not required.issubset(config):
         raise DiagnosticError("smoke integration config is incomplete")
+    validate_placements(placements)
     benchmark = config["benchmark"]
     if benchmark == "bsa":
         if matmul_gate is None:
@@ -441,11 +443,19 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
     if (manifest.get("prompt") != config["prompt"]
             or manifest.get("prompt_sha256") != config["prompt_sha256"]):
         raise DiagnosticError("manifest does not use the frozen smoke prompt")
-    campaign_id = str(uuid.uuid4())
-    assets, evidence = freeze_assets(config["assets"], root, campaign_id)
+    if resume:
+        ledger = load_json(root / "ledger.json")
+        campaign_id = ledger.get("campaign_id")
+        if not isinstance(campaign_id, str) or not campaign_id:
+            raise DiagnosticError("smoke ledger has no campaign identity")
+        evidence, assets = ledger.get("assets"), _retained_assets(ledger)
+    else:
+        campaign_id = str(uuid.uuid4())
+        assets, evidence = freeze_assets(config["assets"], root, campaign_id)
     hook = BzTerminalHook(client, placements, assets, campaign_id)
     campaign = TwoShotSmokeCampaign(
-        manifest, root, launcher, hook, benchmark=benchmark, cases=config["cases"])
+        manifest, root, launcher, hook, benchmark=benchmark, cases=config["cases"],
+        resume=resume, ledger_metadata={"assets": evidence})
     campaign.campaign_id = campaign_id
     try:
         ledger = campaign.run()
@@ -585,6 +595,7 @@ def main() -> int:
     parser.add_argument("--agent-attempt", type=int)
     parser.add_argument("--terminal-attempt", type=int)
     parser.add_argument("--matmul-gate", type=Path)
+    parser.add_argument("--resume-smoke", action="store_true")
     reconciliation = parser.add_mutually_exclusive_group()
     reconciliation.add_argument("--terminal-handle")
     reconciliation.add_argument("--terminal-result", type=Path)
@@ -597,6 +608,8 @@ def main() -> int:
     parser.add_argument("--remote-command-json", default='["cpl-remote"]')
     parser.add_argument("--adapter-command-json")
     args = parser.parse_args()
+    if args.resume_smoke and args.action != "run-smoke":
+        parser.error("--resume-smoke requires --action run-smoke")
     config, manifest = load_json(args.config), load_json(args.manifest)
     placements = load_json(args.placements)
     if args.action == "acknowledge-curation":
@@ -630,7 +643,8 @@ def main() -> int:
                               CommandLauncher(commands[0]), client, args.wave)
         elif args.action == "run-smoke":
             result = run_smoke(config, manifest, placements, args.run_root,
-                               CommandLauncher(commands[0]), client, args.matmul_gate)
+                               CommandLauncher(commands[0]), client, args.matmul_gate,
+                               resume=args.resume_smoke)
         else:
             result = run(config, manifest, placements, args.run_root,
                          CommandLauncher(commands[0]), client)

@@ -28,9 +28,11 @@ def check_command(round_number: int) -> list[str]:
 
 
 CHECK = check_command(1)
-HELP = ("usage:\n  $EXPERIMENT_CONTROLLER help\n  $EXPERIMENT_CONTROLLER budget\n"
-        "  $EXPERIMENT_CONTROLLER check --scope development --round 1\n"
-        "  $EXPERIMENT_CONTROLLER check --scope development --round 2\n")
+def controller_help(limit: int) -> str:
+    checks = "".join(
+        f"  $EXPERIMENT_CONTROLLER check --scope development --round {round_number}\n"
+        for round_number in range(1, limit + 1))
+    return "usage:\n  $EXPERIMENT_CONTROLLER help\n  $EXPERIMENT_CONTROLLER budget\n" + checks
 MAX_DIAGNOSTIC = 64 * 1024
 INNER_TURN_TIMEOUT = 330
 CONTROLLER_CLIENT = '''#!/usr/bin/env python3
@@ -185,7 +187,8 @@ class Controller:
         with self.lock:
             if arguments == ["help"]:
                 self.free_calls.append({"arguments": arguments})
-                return self._wire({"status": "ok", "operation": "help", "usage": HELP, "billed": False})
+                return self._wire({"status": "ok", "operation": "help",
+                                   "usage": controller_help(self.limit), "billed": False})
             if arguments == ["budget"]:
                 self.free_calls.append({"arguments": arguments})
                 return self._wire({"status": "ok", "operation": "budget", "limit": self.limit,
@@ -195,7 +198,7 @@ class Controller:
             if arguments not in valid:
                 self.invalid += 1
                 return self._wire({"status": "config_error", "diagnostics": "unsupported controller command",
-                                   "usage": HELP, "billed": False}, 4)
+                                   "usage": controller_help(self.limit), "billed": False}, 4)
             if self.used >= self.limit:
                 self.over_budget += 1
                 return {"exit_code": 75, "stdout": "", "stderr": "remote request budget exhausted\n"}
@@ -203,7 +206,7 @@ class Controller:
             if arguments != expected:
                 self.invalid += 1
                 return self._wire({"status": "config_error", "diagnostics": "unsupported controller command",
-                                   "usage": HELP, "billed": False}, 4)
+                                   "usage": controller_help(self.limit), "billed": False}, 4)
             self.used += 1
             self.calls.append({"arguments": arguments})
             try:

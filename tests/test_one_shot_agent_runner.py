@@ -422,6 +422,22 @@ def test_compile_diagnostic_is_bounded_and_returned_to_agent(tmp_path: Path):
     assert len(document["diagnostics"]) < 66000 and ctl.used == 1
 
 
+@pytest.mark.parametrize(("operation", "round_two_visible"), [
+    ("one_shot", False), ("two_shot", True),
+])
+def test_controller_help_matches_operation(tmp_path: Path, operation: str,
+                                           round_two_visible: bool):
+    runner, request, client = fixture(tmp_path)
+    request["operation"] = operation
+    socket_path = tmp_path / "ctl/controller.sock"
+    with module.Controller(socket_path, client, request,
+                           {"profile": "bz-a3-1", "device": 0}, runner.assets,
+                           tmp_path / "snapshots"):
+        response = call_socket(str(socket_path), ["help"])
+    usage = json.loads(response["stdout"])["usage"]
+    assert ("--round 2" in usage) is round_two_visible
+
+
 def test_late_check_is_billed_without_starting_remote_work(tmp_path: Path):
     runner, request, client = fixture(tmp_path)
     workspace = Path(request["workspace"])

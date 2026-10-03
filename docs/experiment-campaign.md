@@ -93,6 +93,24 @@ it fails closed when no unique receipt owns the handle. A supplied result must
 carry the campaign, request, cell, attempt, job-handle, and frozen-candidate
 identities recorded by the uncertain receipt.
 
+## Two-shot smoke gate
+
+Before a longer campaign, run the three treatments through two fresh matmul
+waves with `one_shot_bz_campaign.py --action run-smoke` and
+`experiments/two-shot-matmul.json`. Each cell is one persistent Codex session:
+Round 1 writes and checks a candidate, Round 2 receives the same context and
+diagnostics, must change `candidate.py`, and checks it once more. The host then
+runs the configured correctness cases against a read-only frozen submission.
+Profiling is unavailable in this mode.
+
+Infrastructure results are excluded and retried once; compiler, runtime,
+correctness, protocol, budget, and agent-time failures count. The matmul ledger
+must contain six successes before BSA can start with
+`experiments/two-shot-bsa.json` and `--matmul-gate` pointing to that ledger.
+Both configurations use the same prompt and treatment isolation. The usual
+manifest, placements, BZ adapter/state, agent-command, and run-root arguments
+remain required; use a fresh run root for each benchmark.
+
 ## Freeze and configure
 
 Use a new output directory for every freeze and campaign. The examples use

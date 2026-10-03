@@ -174,6 +174,78 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
     assert not observed["snapshot"].exists()
 
 
+def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeypatch, tmp_path: Path):
+    runner, request, client = fixture(tmp_path)
+    request["operation"] = "two_shot"
+    request["controller_contract"] = {
+        "billed_limit": 2,
+        "commands": [module.check_command(1), module.check_command(2)],
+    }
+    calls = []
+
+    def fake_group(argv, prompt, timeout):
+        calls.append((argv, prompt))
+        workspace = Path(request["workspace"])
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        round_number = len(calls)
+        (workspace / "candidate.py").write_text(f"candidate {round_number}\n")
+        (workspace / "candidate.manifest.json").write_text(
+            json.dumps({"round": round_number}) + "\n")
+        checked = call_socket(
+            str(socket_dir / "controller.sock"), module.check_command(round_number))
+        assert checked["exit_code"] == 0
+        output = ('{"type":"thread.started","thread_id":"thread-1"}\n'
+                  if round_number == 1 else '{"type":"turn.completed"}\n')
+        return subprocess.CompletedProcess(argv, 0, output, "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+
+    assert result["status"] == "ok", result
+    assert result["rounds_completed"] == 2
+    assert result["controller_usage"]["calls"] == [
+        {"arguments": module.check_command(1)},
+        {"arguments": module.check_command(2)},
+    ]
+    assert result["candidate_sha256"]["1"] != result["candidate_sha256"]["2"]
+    resume_index = calls[1][0].index("resume")
+    assert calls[1][0][resume_index - 1:resume_index + 2] == ["exec", "resume", "--json"]
+    assert "thread-1" in calls[1][0]
+    assert "modify" in calls[1][1].lower()
+    assert [request["cases"] for request in client.requests] == [[1], [1]]
+
+
+def test_two_shot_runner_counts_unchanged_second_submission(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+    request["operation"] = "two_shot"
+    request["controller_contract"] = {
+        "billed_limit": 2,
+        "commands": [module.check_command(1), module.check_command(2)],
+    }
+
+    def fake_group(argv, prompt, timeout):
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("same candidate\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        round_number = 1 if "resume" not in argv else 2
+        response = call_socket(
+            str(socket_dir / "controller.sock"), module.check_command(round_number))
+        if round_number == 1:
+            assert response["exit_code"] == 0
+            return subprocess.CompletedProcess(
+                argv, 0, '{"type":"thread.started","thread_id":"thread-1"}\n', "")
+        assert response["exit_code"] == 2
+        return subprocess.CompletedProcess(argv, 0, '{"type":"turn.completed"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+
+    assert result["status"] == "submission_error"
+    assert "must modify candidate.py" in result["diagnostics"]
+    assert result["controller_usage"]["billed"] == 2
+
+
 @pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
 def test_post_check_symlink_is_counted_and_canonical_output_restored(
         monkeypatch, tmp_path: Path, name: str):

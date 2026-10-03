@@ -1,0 +1,11 @@
+{
+  "assets": {
+    "baseline": "benchmarks/matmul/baseline.py",
+    "case_spec": "benchmarks/matmul/cases.jsonl",
+    "runner": "scripts/a3_benchmark_runner.py"
+  },
+  "benchmark": "matmul",
+  "cases": [0, 1, 2, 3, 4, 5, 6],
+  "prompt": "prompts/two-shot-triton.md",
+  "prompt_sha256": "3d36d3431de1850592495d849d9475ce9a2fe5f4e4f14ab68d70d9cd205ead7a"
+}

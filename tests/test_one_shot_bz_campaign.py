@@ -259,6 +259,53 @@ def test_run_smoke_applies_configured_relaxed_policy(tmp_path: Path):
                          resume=True)
 
 
+def test_checked_in_gdn_smoke_config_runs_322_with_supplementary_asset(tmp_path: Path):
+    (tmp_path / "inputs").mkdir()
+    config = json.loads((ROOT / "experiments/two-shot-gdn.json").read_text())
+    config["prompt"] = str(ROOT / config["prompt"])
+    config["assets"] = {
+        **{name: str(ROOT / path) for name, path in config["assets"].items()
+           if name != "supplementary"},
+        "supplementary": {
+            name: str(ROOT / path)
+            for name, path in config["assets"]["supplementary"].items()
+        },
+    }
+    _unused, manifest, placements = inputs(tmp_path / "inputs")
+    manifest = {
+        **manifest, "prompt": config["prompt"],
+        "prompt_sha256": config["prompt_sha256"],
+    }
+    client = Client()
+
+    class TwoShotAgent(Agent):
+        def launch(self, request, timeout):
+            with self.lock:
+                self.requests.append((request, timeout))
+            workspace = Path(request["workspace"])
+            (workspace / "candidate.py").write_text("candidate\n")
+            (workspace / "candidate.manifest.json").write_text("{}\n")
+            return {"status": "ok", "rounds_completed": 2,
+                    "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
+                    "controller_usage": {"billed": 2, "invalid": 0,
+                        "over_budget": 0, "calls": [
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "1"]},
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "2"]},
+                        ]}}
+
+    ledger = module.run_smoke(
+        config, manifest, placements, tmp_path / "smoke", TwoShotAgent(), client)
+
+    assert ledger["benchmark"] == "gdn"
+    assert ledger["cases"] == [40, 49, 47, 46, 45]
+    assert len(client.requests) == 7
+    assert all(request["supplementary_assets"] == {
+        "baseline.json": str(Path(ledger["assets"]["root"]) / "supplementary/baseline.json")
+    } for request in client.requests)
+
+
 def test_identityless_resume_requires_proven_supplementary_asset_closure(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     config.update(benchmark="matmul", cases=list(range(7)),

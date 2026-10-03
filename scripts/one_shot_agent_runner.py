@@ -426,8 +426,8 @@ class OneShotRunner:
                     or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
                            for case in cases)):
                 raise RunnerError("two-shot cases must be non-empty nonnegative integers")
-            if request.get("benchmark") not in {"matmul", "bsa"}:
-                raise RunnerError("two-shot benchmark must be matmul or bsa")
+            if request.get("benchmark") not in {"matmul", "bsa", "gdn"}:
+                raise RunnerError("two-shot benchmark must be matmul, bsa, or gdn")
         _validated_supplementary_assets(self.assets)
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")

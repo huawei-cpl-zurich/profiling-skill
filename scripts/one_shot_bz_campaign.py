@@ -19,7 +19,8 @@ import diagnostic_campaign
 from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
 from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
                                  DiagnosticCampaign, DiagnosticError, TREATMENTS)
-from two_shot_smoke_campaign import TwoShotSmokeCampaign, validate_matmul_gate
+from two_shot_smoke_campaign import (TwoShotSmokeCampaign, manifest_identity,
+                                     validate_matmul_gate)
 
 
 def load_json(path: Path) -> dict:
@@ -427,7 +428,9 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
     if benchmark == "bsa":
         if matmul_gate is None:
             raise DiagnosticError("BSA smoke requires --matmul-gate")
-        validate_matmul_gate(matmul_gate)
+        validate_matmul_gate(
+            matmul_gate, prompt_sha256=manifest.get("prompt_sha256"),
+            manifest_identity=manifest_identity(manifest))
     elif benchmark != "matmul":
         raise DiagnosticError("smoke benchmark must be matmul or bsa")
     if (manifest.get("prompt") != config["prompt"]

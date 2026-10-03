@@ -181,6 +181,7 @@ def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeyp
         "billed_limit": 2,
         "commands": [module.check_command(1), module.check_command(2)],
     }
+    request["cases"] = [0, 1, 2, 3, 4, 5, 6]
     calls = []
 
     def fake_group(argv, prompt, timeout):
@@ -212,12 +213,14 @@ def test_two_shot_runner_resumes_session_and_requires_modified_candidate(monkeyp
     assert calls[1][0][resume_index - 1:resume_index + 2] == ["exec", "resume", "--json"]
     assert "thread-1" in calls[1][0]
     assert "modify" in calls[1][1].lower()
-    assert [request["cases"] for request in client.requests] == [[1], [1]]
+    assert [sent["cases"] for sent in client.requests] == [request["cases"], request["cases"]]
+    assert [item["status"] for item in result["controller_results"]] == ["ok", "ok"]
 
 
 def test_two_shot_runner_counts_unchanged_second_submission(monkeypatch, tmp_path: Path):
     runner, request, _ = fixture(tmp_path)
     request["operation"] = "two_shot"
+    request["cases"] = [1]
     request["controller_contract"] = {
         "billed_limit": 2,
         "commands": [module.check_command(1), module.check_command(2)],
@@ -244,6 +247,40 @@ def test_two_shot_runner_counts_unchanged_second_submission(monkeypatch, tmp_pat
     assert result["status"] == "submission_error"
     assert "must modify candidate.py" in result["diagnostics"]
     assert result["controller_usage"]["billed"] == 2
+
+
+def test_two_shot_stops_after_round_one_infrastructure(monkeypatch, tmp_path: Path):
+    runner, request, _ = fixture(tmp_path)
+    request.update(operation="two_shot", cases=[0, 1])
+    request["controller_contract"] = {
+        "billed_limit": 2,
+        "commands": [module.check_command(1), module.check_command(2)],
+    }
+    runner.client = Client({"status": "infrastructure_error", "failure_type": "device_error",
+                            "diagnostics": "device unavailable", "handle": None})
+    calls = []
+
+    def fake_group(argv, prompt, timeout):
+        calls.append(argv)
+        workspace = Path(request["workspace"])
+        (workspace / "candidate.py").write_text("round one\n")
+        (workspace / "candidate.manifest.json").write_text("{}\n")
+        socket_dir = Path(argv[argv.index("/experiment-state") - 1])
+        assert call_socket(str(socket_dir / "controller.sock"),
+                           module.check_command(1))["exit_code"] == 2
+        return subprocess.CompletedProcess(
+            argv, 0, '{"type":"thread.started","thread_id":"thread-1"}\n', "")
+
+    monkeypatch.setattr(module, "_run_group", fake_group)
+    result = runner.run(request)
+
+    assert len(calls) == 1
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "device_error"
+    assert result["controller_results"] == [{
+        "status": "infrastructure_error", "failure_type": "device_error",
+        "diagnostics": "device unavailable", "handle": None,
+    }]
 
 
 @pytest.mark.parametrize("name", ["candidate.py", "candidate.manifest.json"])
@@ -631,7 +668,9 @@ def _docker_inputs(runner, request, tmp_path: Path):
 def test_docker_argv_is_an_explicit_minimal_allowlist(monkeypatch, tmp_path: Path):
     runner, request, _ = docker_fixture(tmp_path, monkeypatch)
     workspace, prompt, socket_dir, shim = _docker_inputs(runner, request, tmp_path)
-    argv = runner._docker_command(workspace, prompt, socket_dir, shim, request, "frozen-cell")
+    state = tmp_path / "state"; state.mkdir()
+    argv = runner._docker_command(workspace, prompt, socket_dir, shim, state,
+                                  request, "frozen-cell")
     joined = "\0".join(map(str, argv))
     assert argv[:3] == [str(runner.docker), "run", "--rm"]
     for item in ("--interactive", "--read-only", "--cap-drop", "ALL", "--pids-limit",
@@ -652,7 +691,27 @@ def test_docker_argv_is_an_explicit_minimal_allowlist(monkeypatch, tmp_path: Pat
     read_write = [value for value in argv if value.startswith("type=bind")
                   and not value.endswith(",readonly")]
     assert read_write == [f"type=bind,src={workspace.resolve()},dst=/workspace",
+                          f"type=bind,src={state.resolve()},dst=/codex-home",
                           f"type=bind,src={socket_dir.resolve()},dst=/experiment-state"]
+
+
+def test_two_docker_turns_share_writable_codex_state(monkeypatch, tmp_path: Path):
+    runner, request, _ = docker_fixture(tmp_path, monkeypatch)
+    request["operation"] = "two_shot"
+    workspace, prompt, socket_dir, shim = _docker_inputs(runner, request, tmp_path)
+    state = tmp_path / "cell-codex-state"
+    state.mkdir()
+
+    commands = [runner._docker_command(
+        workspace, prompt, socket_dir, shim, state, request, "frozen-cell")
+        for _ in range(2)]
+
+    state_mount = f"type=bind,src={state.resolve()},dst=/codex-home"
+    auth_mount = (f"type=bind,src={runner.auth_home / 'auth.json'},"
+                  "dst=/codex-home/auth.json,readonly")
+    assert all(state_mount in command and auth_mount in command for command in commands)
+    assert commands[0].count(state_mount) == commands[1].count(state_mount) == 1
+    assert all("/codex-home:rw" not in item for command in commands for item in command)
 
 
 def test_docker_rejects_drifted_image_and_symlink_mount(monkeypatch, tmp_path: Path):
@@ -663,7 +722,8 @@ def test_docker_rejects_drifted_image_and_symlink_mount(monkeypatch, tmp_path: P
     workspace, prompt, socket_dir, shim = _docker_inputs(runner, request, tmp_path / "link")
     linked = prompt.with_name("linked-prompt.md"); linked.symlink_to(prompt)
     with pytest.raises(module.RunnerError, match="must not be a symlink"):
-        runner._docker_command(workspace, linked, socket_dir, shim, request, "cell")
+        state = tmp_path / "link/state"; state.mkdir()
+        runner._docker_command(workspace, linked, socket_dir, shim, state, request, "cell")
 
 
 @pytest.mark.parametrize("cancelled", [False, True])

@@ -34,14 +34,32 @@ def check_command(round_number: int) -> list[str]:
     return ["check", "--scope", "development", "--round", str(round_number)]
 
 
-def validate_matmul_gate(path: Path) -> dict:
+def manifest_identity(manifest: dict) -> str:
+    frozen = {"prompt_sha256": manifest["prompt_sha256"],
+              "model_sha256": manifest["model_sha256"],
+              "treatments": manifest["treatments"]}
+    return hashlib.sha256(json.dumps(
+        frozen, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def validate_matmul_gate(path: Path, *, prompt_sha256: str | None = None,
+                         manifest_identity: str | None = None) -> dict:
     try:
         ledger = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise SmokeError(f"matmul gate is unreadable: {error}") from error
-    cells = [cell for wave in ledger.get("waves", []) for cell in wave.get("cells", [])]
-    if (ledger.get("benchmark") != "matmul" or len(ledger.get("waves", [])) != 2
-            or len(cells) != 6 or any(cell.get("outcome") != "success" for cell in cells)):
+    waves = ledger.get("waves", [])
+    valid_waves = (isinstance(waves, list) and len(waves) == 2
+                   and [wave.get("wave") for wave in waves] == [1, 2]
+                   and all([cell.get("treatment") for cell in wave.get("cells", [])]
+                           == list(TREATMENTS) for wave in waves)
+                   and all(cell.get("outcome") == "success"
+                           for wave in waves for cell in wave["cells"]))
+    if (ledger.get("status") != "complete" or ledger.get("benchmark") != "matmul"
+            or ledger.get("cases") != list(range(7)) or not valid_waves
+            or (prompt_sha256 is not None and ledger.get("prompt_sha256") != prompt_sha256)
+            or (manifest_identity is not None
+                and ledger.get("manifest_identity") != manifest_identity)):
         raise SmokeError("BSA requires six successful matmul cells across two waves")
     return ledger
 
@@ -81,10 +99,13 @@ def _classification(agent: dict, terminal: dict | None, workspace: Path) -> tupl
     if status in {"compile_error", "runtime_error", "correctness_error",
                   "submission_error"}:
         return str(status), "counted"
-    calls = agent.get("controller_usage", {}).get("calls")
+    usage = agent.get("controller_usage", {})
+    calls = usage.get("calls")
     expected = [{"arguments": check_command(1)}, {"arguments": check_command(2)}]
     hashes = agent.get("candidate_sha256")
     if (status != "ok" or agent.get("rounds_completed") != 2 or calls != expected
+            or usage.get("billed") != 2 or usage.get("invalid") != 0
+            or usage.get("over_budget") != 0
             or not isinstance(hashes, dict) or hashes.get("1") == hashes.get("2")
             or not all((workspace / name).is_file()
                        for name in ("candidate.py", "candidate.manifest.json"))):
@@ -135,6 +156,7 @@ class TwoShotSmokeCampaign:
             "skill_sha256": treatment_record["skill_sha256"],
             "controller_contract": {"billed_limit": 2,
                                     "commands": [check_command(1), check_command(2)]},
+            "cases": self.cases,
         }
 
     def _cell(self, wave: int, treatment: str) -> dict:
@@ -169,6 +191,7 @@ class TwoShotSmokeCampaign:
         ledger = {"protocol_version": 1, "campaign_id": self.campaign_id,
                   "benchmark": self.benchmark, "cases": self.cases,
                   "prompt_sha256": self.manifest["prompt_sha256"],
+                  "manifest_identity": manifest_identity(self.manifest),
                   "status": "running", "waves": []}
         for wave in (1, 2):
             with ThreadPoolExecutor(max_workers=3) as pool:

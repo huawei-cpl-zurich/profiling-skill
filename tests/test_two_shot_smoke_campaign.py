@@ -47,7 +47,8 @@ class Launcher:
             (workspace / "candidate.manifest.json").write_text("{}\n")
         return {"status": outcome, "rounds_completed": 2,
                 "candidate_sha256": {"1": "first", "2": "second"},
-                "controller_usage": {"billed": 2, "calls": [
+                "controller_usage": {"billed": 2, "invalid": 0, "over_budget": 0,
+                                     "calls": [
                     {"arguments": smoke.check_command(1)},
                     {"arguments": smoke.check_command(2)},
                 ]}}
@@ -108,3 +109,45 @@ def test_bsa_requires_complete_matmul_gate(tmp_path: Path):
     ]}))
     with pytest.raises(smoke.SmokeError, match="six successful"):
         smoke.validate_matmul_gate(ledger)
+
+
+@pytest.mark.parametrize("usage", [
+    {"billed": 1, "invalid": 0, "over_budget": 0},
+    {"billed": 2, "invalid": 1, "over_budget": 0},
+    {"billed": 2, "invalid": 0, "over_budget": 1},
+])
+def test_protocol_rejects_non_exact_controller_usage(tmp_path: Path, usage: dict):
+    workspace = tmp_path / "workspace"; workspace.mkdir()
+    (workspace / "candidate.py").write_text("candidate\n")
+    (workspace / "candidate.manifest.json").write_text("{}\n")
+    usage["calls"] = [{"arguments": smoke.check_command(1)},
+                      {"arguments": smoke.check_command(2)}]
+    agent = {"status": "ok", "rounds_completed": 2,
+             "candidate_sha256": {"1": "first", "2": "second"},
+             "controller_usage": usage}
+    assert smoke._classification(
+        agent, {"status": "ok", "passed": True}, workspace) == (
+            "protocol_error", "counted")
+
+
+def test_matmul_gate_requires_exact_two_wave_matrix(tmp_path: Path):
+    valid = {"status": "complete", "benchmark": "matmul", "cases": list(range(7)),
+             "prompt_sha256": "frozen", "waves": [
+                 {"wave": wave, "cells": [
+                     {"treatment": treatment, "outcome": "success"}
+                     for treatment in smoke.TREATMENTS]}
+                 for wave in (1, 2)]}
+    path = tmp_path / "ledger.json"; path.write_text(json.dumps(valid))
+    assert smoke.validate_matmul_gate(path)["prompt_sha256"] == "frozen"
+    with pytest.raises(smoke.SmokeError, match="six successful"):
+        smoke.validate_matmul_gate(path, prompt_sha256="different")
+    for mutate in (
+        lambda value: value.update(status="smoke_failures"),
+        lambda value: value.update(cases=[1]),
+        lambda value: value["waves"][1].update(wave=3),
+        lambda value: value["waves"][0]["cells"].__setitem__(
+            2, {"treatment": "cannbot", "outcome": "success"}),
+    ):
+        changed = json.loads(json.dumps(valid)); mutate(changed); path.write_text(json.dumps(changed))
+        with pytest.raises(smoke.SmokeError, match="six successful"):
+            smoke.validate_matmul_gate(path)

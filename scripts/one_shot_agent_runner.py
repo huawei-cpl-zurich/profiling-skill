@@ -171,6 +171,7 @@ class Controller:
         self.limit = 2 if request.get("operation") == "two_shot" else 1
         self.used = self.invalid = self.over_budget = 0
         self.calls: list[dict] = []
+        self.results: list[dict] = []
         self.free_calls: list[dict] = []
         self.last_result: dict | None = None
         self.lock = threading.Lock()
@@ -206,18 +207,21 @@ class Controller:
             self.used += 1
             self.calls.append({"arguments": arguments})
             try:
-                return self._development_check(self.used)
+                response = self._development_check(self.used)
             except SubmissionError as error:
                 self.last_result = {"status": "submission_error",
                                     "diagnostics": _bounded(error), "billed": True}
-                return self._wire(self.last_result, 2)
+                response = self._wire(self.last_result, 2)
             except Exception as error:
                 self.last_result = {
                     "status": "infrastructure_error", "failure_type": "controller_error",
                     "diagnostics": _bounded(f"controller failed: {type(error).__name__}: {error}"),
                     "handle": getattr(error, "handle", None),
                 }
-                return self._wire(self.last_result, 74)
+                response = self._wire(self.last_result, 74)
+            assert self.last_result is not None
+            self.results.append(json.loads(json.dumps(self.last_result)))
+            return response
 
     def _development_check(self, round_number: int) -> dict:
         remote_timeout = (240 if self.deadline == float("inf") else
@@ -249,7 +253,7 @@ class Controller:
             "candidate": str(snapshot / "candidate.py"),
             "candidate_manifest": str(snapshot / "candidate.manifest.json"),
             "baseline": self.assets["baseline"], "case_spec": self.assets["case_spec"],
-            "runner": self.assets["runner"], "cases": [1],
+            "runner": self.assets["runner"], "cases": list(self.request.get("cases", [1])),
         })
         result["diagnostics"] = _bounded(result.get("diagnostics"))
         self.last_result = result
@@ -393,6 +397,12 @@ class OneShotRunner:
                               "commands": [check_command(1), check_command(2)]})
         if request["controller_contract"] != expected_contract:
             raise RunnerError("controller contract changed")
+        if operation == "two_shot":
+            cases = request.get("cases")
+            if (not isinstance(cases, list) or not cases
+                    or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
+                           for case in cases)):
+                raise RunnerError("two-shot cases must be non-empty nonnegative integers")
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")
         from campaign import TREATMENT_SKILLS
@@ -436,7 +446,7 @@ class OneShotRunner:
         return ["--mount", value]
 
     def _docker_command(self, workspace: Path, prompt: Path, socket_dir: Path,
-                        shim: Path, request: dict, container_name: str) -> list[str]:
+                        shim: Path, state: Path, request: dict, container_name: str) -> list[str]:
         """Construct the complete allowlisted Docker boundary for one cell."""
         workspace = self._mount_source(workspace, kind="workspace")
         prompt = self._mount_source(prompt, kind="prompt")
@@ -444,13 +454,13 @@ class OneShotRunner:
         runtime = self._mount_source(self._runtime(), kind="Codex runtime")
         shim = self._mount_source(shim, kind="controller client")
         socket_dir = self._mount_source(socket_dir, kind="controller socket parent")
+        state = self._mount_source(state, kind="Codex state")
         uid, gid = os.getuid(), os.getgid()
         command = [
             self.docker, "run", "--rm", "--interactive", "--name", container_name,
             "--user", f"{uid}:{gid}", "--read-only", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--pids-limit", "512",
             "--memory", "8g", "--tmpfs", f"/tmp:rw,nosuid,nodev,mode=1777,uid={uid},gid={gid}",
-            "--tmpfs", f"/codex-home:rw,nosuid,nodev,mode=700,uid={uid},gid={gid}",
             "--tmpfs", f"/home/agent:rw,nosuid,nodev,mode=700,uid={uid},gid={gid}",
             "--workdir", "/workspace", "--env", "HOME=/home/agent",
             "--env", "CODEX_HOME=/codex-home",
@@ -458,6 +468,7 @@ class OneShotRunner:
             "--env", ("EXPERIMENT_CONTROLLER=/usr/local/bin/python3 "
                       "/experiment/controller-client.py /experiment-state/controller.sock"),
             *self._docker_mount(workspace, "/workspace", readonly=False),
+            *self._docker_mount(state, "/codex-home", readonly=False),
             *self._docker_mount(prompt, "/experiment/PROMPT.md", readonly=True),
             *self._docker_mount(auth, "/codex-home/auth.json", readonly=True),
             *self._docker_mount(runtime, "/runtime/node", readonly=True),
@@ -539,7 +550,7 @@ class OneShotRunner:
                             "/usr/bin/python3 /experiment/controller-client.py /experiment-state/controller.sock"]
             else:
                 command = self._docker_command(workspace, prompt_file, socket_dir,
-                                               shim, request, container_name)
+                                               shim, state, request, container_name)
             codex = ["/runtime/node/bin/codex", "exec", "--json", "--ignore-user-config", "--skip-git-repo-check",
                      "--dangerously-bypass-approvals-and-sandbox", "-m", request["model"]["name"],
                      "-c", f'model_reasoning_effort="{request["model"]["reasoning_effort"]}"', "-C", "/workspace", "-"]
@@ -557,7 +568,9 @@ class OneShotRunner:
                 try:
                     first = _run_group([*command, *codex], prompt.decode(), timeout)
                     runs.append(first)
-                    if two_shot and first.returncode == 0 and controller.used == 1:
+                    if (two_shot and first.returncode == 0 and controller.used == 1
+                            and controller.last_result is not None
+                            and controller.last_result.get("status") != "infrastructure_error"):
                         session_id = self._session_id(first.stdout)
                         resume = ["/runtime/node/bin/codex", "exec", "resume", "--json",
                                   "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
@@ -589,9 +602,11 @@ class OneShotRunner:
                                               "failure_type", "controller_infrastructure"),
                                           handle=controller.last_result.get("handle"))
                         result["sandbox"] = self._sandbox_evidence()
+                        result["controller_results"] = controller.results
                         return result
                     return {"status": "timeout", "diagnostics": _bounded(error.stderr), "milestones": milestones,
                             "controller_usage": {"billed": controller.used, "calls": controller.calls},
+                            "controller_results": controller.results,
                             "sandbox": self._sandbox_evidence()}
                 except KeyboardInterrupt:
                     if self.sandbox_backend == "docker":
@@ -634,6 +649,7 @@ class OneShotRunner:
                 if checked.is_file():
                     candidate_hashes[str(round_number)] = _digest(checked)
             result["candidate_sha256"] = candidate_hashes
+            result["controller_results"] = controller.results
             if status == "infrastructure_error":
                 result.update(failure_type=controller.last_result.get("failure_type", "controller_infrastructure"),
                               diagnostics=controller.last_result.get("diagnostics", ""),

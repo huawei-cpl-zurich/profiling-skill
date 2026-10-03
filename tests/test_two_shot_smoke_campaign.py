@@ -32,6 +32,13 @@ def manifest(tmp_path: Path) -> dict:
     }
 
 
+POLICY = {
+    "cannbot": {"counted_trials": 3, "minimum_successes": 1},
+    "project-cannbot": {"counted_trials": 2, "minimum_successes": 1},
+    "project-guarded": {"counted_trials": 2, "minimum_successes": 1},
+}
+
+
 class Launcher:
     def __init__(self, outcomes=None):
         self.outcomes = outcomes or {}
@@ -277,3 +284,130 @@ def test_matmul_gate_requires_exact_two_wave_matrix(tmp_path: Path):
         changed = json.loads(json.dumps(valid)); mutate(changed); path.write_text(json.dumps(changed))
         with pytest.raises(smoke.SmokeError, match="six successful"):
             smoke.validate_matmul_gate(path)
+
+
+def test_policy_dispatches_exact_322_and_runs_trials_after_success(tmp_path: Path):
+    launcher = Launcher()
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", launcher, Terminal(),
+        benchmark="matmul", cases=list(range(7)), success_policy=POLICY).run()
+
+    assert sorted((request["wave"], request["treatment"])
+                  for request in launcher.requests) == [
+        (1, "cannbot"), (1, "project-cannbot"), (1, "project-guarded"),
+        (2, "cannbot"), (2, "project-cannbot"), (2, "project-guarded"),
+        (3, "cannbot"),
+    ]
+    assert result["status"] == "complete"
+    assert result["success_policy"] == POLICY
+    assert result["gate"] == {
+        "cannbot": {"counted": 3, "successes": 3, "required": 1,
+                    "target": 3, "passed": True},
+        "project-cannbot": {"counted": 2, "successes": 2, "required": 1,
+                            "target": 2, "passed": True},
+        "project-guarded": {"counted": 2, "successes": 2, "required": 1,
+                            "target": 2, "passed": True},
+    }
+
+
+def test_each_treatment_threshold_is_independent(tmp_path: Path):
+    failures = {
+        (1, "cannbot", 1): "compile_error",
+        (2, "cannbot", 1): "runtime_error",
+        (1, "project-cannbot", 1): "compile_error",
+        (2, "project-cannbot", 1): "runtime_error",
+        (1, "project-guarded", 1): "correctness_error",
+    }
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", Launcher(failures), Terminal(),
+        benchmark="matmul", cases=list(range(7)), success_policy=POLICY).run()
+
+    assert result["status"] == "smoke_failures"
+    assert result["gate"]["cannbot"]["passed"] is True
+    assert result["gate"]["project-cannbot"]["passed"] is False
+    assert result["gate"]["project-guarded"]["passed"] is True
+
+
+def test_resume_legacy_two_wave_ledger_runs_only_third_cannbot_trial(tmp_path: Path):
+    root = tmp_path / "run"
+    config = manifest(tmp_path)
+    original = smoke.TwoShotSmokeCampaign(
+        config, root, Launcher(), Terminal(), benchmark="matmul",
+        cases=list(range(7))).run()
+    assert "success_policy" not in original
+
+    launcher = Launcher()
+    resumed = smoke.TwoShotSmokeCampaign(
+        config, root, launcher, Terminal(), benchmark="matmul",
+        cases=list(range(7)), resume=True, success_policy=POLICY).run()
+
+    assert [(request["wave"], request["treatment"])
+            for request in launcher.requests] == [(3, "cannbot")]
+    assert len(resumed["waves"]) == 3
+    assert [cell["treatment"] for cell in resumed["waves"][2]["cells"]] == ["cannbot"]
+
+
+def test_policy_infrastructure_exclusion_retries_without_consuming_trial(tmp_path: Path):
+    launcher = Launcher({(3, "cannbot", 1): "device_or_runtime_infra"})
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", launcher, Terminal(),
+        benchmark="bsa", cases=[47, 46, 49, 44, 43], success_policy=POLICY).run()
+
+    requests = [request for request in launcher.requests
+                if request["wave"] == 3 and request["treatment"] == "cannbot"]
+    assert [request["attempt"] for request in requests] == [1, 2]
+    assert result["gate"]["cannbot"]["counted"] == 3
+
+
+def test_failure_summary_is_structured_and_bounded(tmp_path: Path):
+    class FailingLauncher(Launcher):
+        def launch(self, request, timeout_seconds):
+            result = super().launch(request, timeout_seconds)
+            if request["wave"] == 1 and request["treatment"] == "cannbot":
+                result.update(status="compile_error", diagnostics="x" * 2000,
+                              handle="bz-a3-1:compile-job")
+            return result
+
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", FailingLauncher(), Terminal(),
+        benchmark="matmul", cases=list(range(7)), success_policy=POLICY).run()
+    summary = result["failure_summaries"][0]
+
+    assert summary["treatment"] == "cannbot"
+    assert summary["benchmark"] == "matmul"
+    assert summary["trial"] == summary["wave"] == 1
+    assert summary["phase"] == "agent"
+    assert summary["failure_type"] == summary["outcome"] == "compile_error"
+    assert len(summary["diagnostics"]) <= 500
+    assert summary["candidate_sha256"] == {"1": "a" * 64, "2": "b" * 64}
+    assert summary["durable_handles"] == ["bz-a3-1:compile-job"]
+
+
+def test_relaxed_matmul_gate_checks_targets_thresholds_and_identity(tmp_path: Path):
+    ledger = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", Launcher({
+            (1, "cannbot", 1): "compile_error",
+            (2, "project-cannbot", 1): "runtime_error",
+        }), Terminal(), benchmark="matmul", cases=list(range(7)),
+        success_policy=POLICY).run()
+    path = tmp_path / "run" / "ledger.json"
+
+    assert smoke.validate_matmul_gate(
+        path, prompt_sha256=ledger["prompt_sha256"],
+        manifest_identity=ledger["manifest_identity"],
+        success_policy=POLICY)["status"] == "complete"
+    changed = json.loads(path.read_text())
+    changed["waves"].pop()
+    path.write_text(json.dumps(changed))
+    with pytest.raises(smoke.SmokeError, match="configured success thresholds"):
+        smoke.validate_matmul_gate(path, success_policy=POLICY)
+
+
+def test_bsa_uses_same_322_schedule(tmp_path: Path):
+    launcher = Launcher()
+    result = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", launcher, Terminal(),
+        benchmark="bsa", cases=[47, 46, 49, 44, 43],
+        success_policy=POLICY).run()
+    assert len(launcher.requests) == 7
+    assert result["benchmark"] == "bsa" and result["status"] == "complete"

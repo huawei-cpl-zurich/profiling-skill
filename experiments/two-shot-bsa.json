@@ -7,5 +7,10 @@
   "benchmark": "bsa",
   "cases": [47, 46, 49, 44, 43],
   "prompt": "prompts/two-shot-triton.md",
-  "prompt_sha256": "3d36d3431de1850592495d849d9475ce9a2fe5f4e4f14ab68d70d9cd205ead7a"
+  "prompt_sha256": "3d36d3431de1850592495d849d9475ce9a2fe5f4e4f14ab68d70d9cd205ead7a",
+  "success_policy": {
+    "cannbot": {"counted_trials": 3, "minimum_successes": 1},
+    "project-cannbot": {"counted_trials": 2, "minimum_successes": 1},
+    "project-guarded": {"counted_trials": 2, "minimum_successes": 1}
+  }
 }

@@ -203,6 +203,45 @@ def test_run_smoke_rejects_invalid_placements_before_launch(tmp_path: Path):
     assert not (tmp_path / "smoke").exists()
 
 
+def test_run_smoke_applies_configured_relaxed_policy(tmp_path: Path):
+    config, manifest, placements = inputs(tmp_path)
+    policy = {
+        "cannbot": {"counted_trials": 3, "minimum_successes": 1},
+        "project-cannbot": {"counted_trials": 2, "minimum_successes": 1},
+        "project-guarded": {"counted_trials": 2, "minimum_successes": 1},
+    }
+    config.update(benchmark="matmul", cases=list(range(7)), success_policy=policy)
+
+    class TwoShotAgent(Agent):
+        def launch(self, request, timeout):
+            with self.lock:
+                self.requests.append((request, timeout))
+            workspace = Path(request["workspace"])
+            (workspace / "candidate.py").write_text("candidate\n")
+            (workspace / "candidate.manifest.json").write_text("{}\n")
+            return {"status": "ok", "rounds_completed": 2,
+                    "candidate_sha256": {"1": "a" * 64, "2": "b" * 64},
+                    "controller_usage": {"billed": 2, "invalid": 0,
+                        "over_budget": 0, "calls": [
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "1"]},
+                            {"arguments": ["check", "--scope", "development",
+                                           "--round", "2"]},
+                        ]}}
+
+    agent = TwoShotAgent()
+    ledger = module.run_smoke(config, manifest, placements, tmp_path / "smoke",
+                              agent, Client())
+    assert len(agent.requests) == 7
+    assert ledger["status"] == "complete"
+    assert ledger["success_policy"] == policy
+    assert all(result["passed"] for result in ledger["gate"].values())
+    with pytest.raises(module.DiagnosticError, match="resume config changed"):
+        module.run_smoke({**config, "campaign_label": "changed"}, manifest,
+                         placements, tmp_path / "smoke", TwoShotAgent(), Client(),
+                         resume=True)
+
+
 def test_infrastructure_retries_same_frozen_candidate_without_second_agent(tmp_path: Path):
     config, manifest, placements = inputs(tmp_path)
     agent, client = Agent(), Client(fail_once=True)

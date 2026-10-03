@@ -18,6 +18,11 @@ import diagnostic_campaign
 
 TREATMENTS = diagnostic_campaign.TREATMENTS
 INFRASTRUCTURE = diagnostic_campaign.INFRASTRUCTURE
+DEFAULT_SUCCESS_POLICY = {
+    "cannbot": {"counted_trials": 3, "minimum_successes": 1},
+    "project-cannbot": {"counted_trials": 2, "minimum_successes": 1},
+    "project-guarded": {"counted_trials": 2, "minimum_successes": 1},
+}
 
 
 class SmokeError(RuntimeError):
@@ -44,13 +49,61 @@ def manifest_identity(manifest: dict) -> str:
         frozen, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def _validate_success_policy(value: object) -> dict[str, dict[str, int]]:
+    if not isinstance(value, dict) or set(value) != set(TREATMENTS):
+        raise SmokeError("success policy must configure every treatment")
+    policy = copy.deepcopy(value)
+    for treatment, rule in policy.items():
+        if (not isinstance(rule, dict)
+                or set(rule) != {"counted_trials", "minimum_successes"}):
+            raise SmokeError(f"invalid success policy for {treatment}")
+        target, minimum = rule["counted_trials"], rule["minimum_successes"]
+        if (isinstance(target, bool) or not isinstance(target, int) or target < 1
+                or isinstance(minimum, bool) or not isinstance(minimum, int)
+                or minimum < 1 or minimum > target):
+            raise SmokeError(f"invalid success policy for {treatment}")
+    return policy
+
+
+def _gate_summary(waves: list[dict], policy: dict[str, dict[str, int]]) -> dict:
+    cells = [cell for wave in waves for cell in wave.get("cells", [])]
+    summary = {}
+    for treatment in TREATMENTS:
+        treatment_cells = [cell for cell in cells if cell.get("treatment") == treatment]
+        counted = sum(cell.get("category") == "counted" for cell in treatment_cells)
+        successes = sum(cell.get("category") == "counted"
+                        and cell.get("outcome") == "success" for cell in treatment_cells)
+        rule = policy[treatment]
+        summary[treatment] = {
+            "counted": counted, "successes": successes,
+            "required": rule["minimum_successes"], "target": rule["counted_trials"],
+            "passed": (counted == rule["counted_trials"]
+                       and successes >= rule["minimum_successes"]),
+        }
+    return summary
+
+
 def validate_matmul_gate(path: Path, *, prompt_sha256: str | None = None,
-                         manifest_identity: str | None = None) -> dict:
+                         manifest_identity: str | None = None,
+                         success_policy: dict | None = None) -> dict:
     try:
         ledger = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise SmokeError(f"matmul gate is unreadable: {error}") from error
     waves = ledger.get("waves", [])
+    if success_policy is not None:
+        policy = _validate_success_policy(success_policy)
+        valid = (ledger.get("success_policy") == policy
+                 and ledger.get("gate") == _gate_summary(waves, policy)
+                 and all(item["passed"] for item in ledger.get("gate", {}).values()))
+        if (ledger.get("status") != "complete" or ledger.get("benchmark") != "matmul"
+                or ledger.get("cases") != list(range(7)) or not valid
+                or (prompt_sha256 is not None
+                    and ledger.get("prompt_sha256") != prompt_sha256)
+                or (manifest_identity is not None
+                    and ledger.get("manifest_identity") != manifest_identity)):
+            raise SmokeError("BSA requires complete configured success thresholds for matmul")
+        return ledger
     valid_waves = (isinstance(waves, list) and len(waves) == 2
                    and [wave.get("wave") for wave in waves] == [1, 2]
                    and all([cell.get("treatment") for cell in wave.get("cells", [])]
@@ -64,6 +117,51 @@ def validate_matmul_gate(path: Path, *, prompt_sha256: str | None = None,
                 and ledger.get("manifest_identity") != manifest_identity)):
         raise SmokeError("BSA requires six successful matmul cells across two waves")
     return ledger
+
+
+def _concise_diagnostics(value: object, limit: int = 500) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+def _durable_handles(*documents: object) -> list[str]:
+    found: set[str] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"handle", "job_handle"} and isinstance(item, str) and item:
+                    found.add(item)
+                else:
+                    visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    for document in documents:
+        visit(document)
+    return sorted(found)
+
+
+def _failure_summaries(benchmark: str, waves: list[dict]) -> list[dict]:
+    summaries = []
+    for wave in waves:
+        trial = wave.get("wave")
+        for cell in wave.get("cells", []):
+            if cell.get("category") != "counted" or cell.get("outcome") == "success":
+                continue
+            agent, terminal = cell.get("agent") or {}, cell.get("terminal") or {}
+            phase = "agent" if agent.get("status") != "ok" else "terminal"
+            evidence = agent if phase == "agent" else terminal
+            summaries.append({
+                "treatment": cell.get("treatment"), "benchmark": benchmark,
+                "trial": trial, "wave": trial, "phase": phase,
+                "failure_type": cell.get("outcome"), "outcome": cell.get("outcome"),
+                "diagnostics": _concise_diagnostics(evidence.get("diagnostics")),
+                "candidate_sha256": copy.deepcopy(agent.get("candidate_sha256", {})),
+                "durable_handles": _durable_handles(agent, terminal),
+            })
+    return summaries
 
 
 def _freeze_submission(workspace: Path) -> tuple[Path, dict[str, str]]:
@@ -135,7 +233,8 @@ class TwoShotSmokeCampaign:
     def __init__(self, manifest: dict, root: Path, launcher: Launcher, terminal: Terminal,
                  *, benchmark: str, cases: list[int], agent_timeout: int = 720,
                  terminal_timeout: int = 300, resume: bool = False,
-                 ledger_metadata: dict | None = None):
+                 ledger_metadata: dict | None = None,
+                 success_policy: dict | None = None):
         diagnostic_campaign.validate_manifest(manifest)
         if benchmark not in {"matmul", "bsa"} or not cases or any(
                 isinstance(case, bool) or not isinstance(case, int) or case < 0 for case in cases):
@@ -145,6 +244,8 @@ class TwoShotSmokeCampaign:
         self.benchmark, self.cases = benchmark, list(cases)
         self.agent_timeout, self.terminal_timeout = agent_timeout, terminal_timeout
         self.resume = resume
+        self.success_policy = (_validate_success_policy(success_policy)
+                               if success_policy is not None else None)
         self.ledger_metadata = copy.deepcopy(ledger_metadata or {})
         self.campaign_id = str(uuid.uuid4())
 
@@ -218,6 +319,11 @@ class TwoShotSmokeCampaign:
                         "manifest_identity": manifest_identity(self.manifest)}
             if any(ledger.get(key) != value for key, value in expected.items()):
                 raise SmokeError("smoke resume inputs changed")
+            if self.success_policy is not None:
+                recorded = ledger.get("success_policy")
+                if recorded is not None and recorded != self.success_policy:
+                    raise SmokeError("smoke resume success policy changed")
+                ledger["success_policy"] = copy.deepcopy(self.success_policy)
             self.campaign_id = ledger.get("campaign_id")
             if not isinstance(self.campaign_id, str) or not self.campaign_id:
                 raise SmokeError("smoke ledger has no campaign identity")
@@ -230,16 +336,25 @@ class TwoShotSmokeCampaign:
                       "prompt_sha256": self.manifest["prompt_sha256"],
                       "manifest_identity": manifest_identity(self.manifest),
                       "status": "running", "waves": []}
+            if self.success_policy is not None:
+                ledger["success_policy"] = copy.deepcopy(self.success_policy)
             ledger.update(self.ledger_metadata)
             diagnostic_campaign._atomic_json(ledger_path, ledger)
-        for wave in (1, 2):
+        schedule = (self.success_policy or {
+            treatment: {"counted_trials": 2, "minimum_successes": 2}
+            for treatment in TREATMENTS
+        })
+        for wave in range(1, max(rule["counted_trials"]
+                                 for rule in schedule.values()) + 1):
             wave_record = next((item for item in ledger["waves"] if item.get("wave") == wave), None)
             if wave_record is None:
                 wave_record = {"wave": wave, "cells": []}
                 ledger["waves"].append(wave_record)
                 diagnostic_campaign._atomic_json(ledger_path, ledger)
             by_treatment = {cell["treatment"]: cell for cell in wave_record["cells"]}
-            pending = [name for name in TREATMENTS
+            scheduled = [name for name in TREATMENTS
+                         if wave <= schedule[name]["counted_trials"]]
+            pending = [name for name in scheduled
                        if name not in by_treatment
                        or (by_treatment[name].get("category") == "infrastructure"
                            and not by_treatment[name].get("manual_reconciliation_required"))]
@@ -250,7 +365,7 @@ class TwoShotSmokeCampaign:
                     cell = self._cell(wave, name, by_treatment.get(name))
                     with checkpoint_lock:
                         by_treatment[name] = cell
-                        wave_record["cells"] = [by_treatment[item] for item in TREATMENTS
+                        wave_record["cells"] = [by_treatment[item] for item in scheduled
                                                 if item in by_treatment]
                         diagnostic_campaign._atomic_json(ledger_path, ledger)
                     return cell
@@ -261,11 +376,18 @@ class TwoShotSmokeCampaign:
                     for future in as_completed(futures):
                         future.result()
         cells = [cell for wave in ledger["waves"] for cell in wave["cells"]]
+        if self.success_policy is not None:
+            ledger["gate"] = _gate_summary(ledger["waves"], self.success_policy)
+            ledger["failure_summaries"] = _failure_summaries(
+                self.benchmark, ledger["waves"])
         if any(cell.get("manual_reconciliation_required") for cell in cells):
             ledger["status"] = "reconciliation_required"
         elif any(cell.get("category") == "infrastructure" for cell in cells):
             ledger["status"] = "infrastructure_pending"
-        elif all(cell["outcome"] == "success" for cell in cells):
+        elif (self.success_policy is not None
+              and all(item["passed"] for item in ledger["gate"].values())):
+            ledger["status"] = "complete"
+        elif self.success_policy is None and all(cell["outcome"] == "success" for cell in cells):
             ledger["status"] = "complete"
         else:
             ledger["status"] = "smoke_failures"

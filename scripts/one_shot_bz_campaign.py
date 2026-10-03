@@ -20,7 +20,7 @@ from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
 from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
                                  DiagnosticCampaign, DiagnosticError, TREATMENTS)
 from two_shot_smoke_campaign import (TwoShotSmokeCampaign, manifest_identity,
-                                     validate_matmul_gate)
+                                     DEFAULT_SUCCESS_POLICY, validate_matmul_gate)
 
 
 def load_json(path: Path) -> dict:
@@ -432,12 +432,17 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
         raise DiagnosticError("smoke integration config is incomplete")
     validate_placements(placements)
     benchmark = config["benchmark"]
+    success_policy = config.get("success_policy", DEFAULT_SUCCESS_POLICY)
+    normalized_config = {**config, "success_policy": success_policy}
+    config_identity = hashlib.sha256(json.dumps(
+        normalized_config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if benchmark == "bsa":
         if matmul_gate is None:
             raise DiagnosticError("BSA smoke requires --matmul-gate")
         validate_matmul_gate(
             matmul_gate, prompt_sha256=manifest.get("prompt_sha256"),
-            manifest_identity=manifest_identity(manifest))
+            manifest_identity=manifest_identity(manifest),
+            success_policy=success_policy)
     elif benchmark != "matmul":
         raise DiagnosticError("smoke benchmark must be matmul or bsa")
     if (manifest.get("prompt") != config["prompt"]
@@ -445,6 +450,8 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
         raise DiagnosticError("manifest does not use the frozen smoke prompt")
     if resume:
         ledger = load_json(root / "ledger.json")
+        if ledger.get("config_identity") not in {None, config_identity}:
+            raise DiagnosticError("smoke resume config changed")
         campaign_id = ledger.get("campaign_id")
         if not isinstance(campaign_id, str) or not campaign_id:
             raise DiagnosticError("smoke ledger has no campaign identity")
@@ -455,7 +462,9 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
     hook = BzTerminalHook(client, placements, assets, campaign_id)
     campaign = TwoShotSmokeCampaign(
         manifest, root, launcher, hook, benchmark=benchmark, cases=config["cases"],
-        resume=resume, ledger_metadata={"assets": evidence})
+        resume=resume, ledger_metadata={"assets": evidence,
+                                        "config_identity": config_identity},
+        success_policy=success_policy)
     campaign.campaign_id = campaign_id
     try:
         ledger = campaign.run()
@@ -464,6 +473,7 @@ def run_smoke(config: dict, manifest: dict, placements: dict, root: Path, launch
             shutil.rmtree(evidence["root"], ignore_errors=True)
         raise
     ledger["assets"] = evidence
+    ledger["config_identity"] = config_identity
     diagnostic_campaign._atomic_json(root / "ledger.json", ledger)
     return ledger
 

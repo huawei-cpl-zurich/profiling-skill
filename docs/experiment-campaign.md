@@ -95,21 +95,32 @@ identities recorded by the uncertain receipt.
 
 ## Two-shot smoke gate
 
-Before a longer campaign, run the three treatments through two fresh matmul
-waves with `one_shot_bz_campaign.py --action run-smoke` and
-`experiments/two-shot-matmul.json`. Each cell is one persistent Codex session:
+Before a longer campaign, run the configured smoke schedule with
+`one_shot_bz_campaign.py --action run-smoke` and
+`experiments/two-shot-matmul.json`. Waves 1 and 2 run all three treatments;
+wave 3 runs only `cannbot`. Each cell is one persistent Codex session:
 Round 1 writes and checks a candidate, Round 2 receives the same context and
 diagnostics, must change `candidate.py`, and checks it once more. The host then
 runs the configured correctness cases against a read-only frozen submission.
 Profiling is unavailable in this mode.
 
 Infrastructure results are excluded and retried once; compiler, runtime,
-correctness, protocol, budget, and agent-time failures count. The matmul ledger
-must contain six successes before BSA can start with
+correctness, protocol, budget, and agent-time failures count. All configured
+trials run even after a treatment reaches its minimum. The gate requires at
+least one success in three counted `cannbot` trials and at least one success in
+two counted trials for each project treatment. Once all exact trial targets and
+their independent thresholds are satisfied, BSA can start with
 `experiments/two-shot-bsa.json` and `--matmul-gate` pointing to that ledger.
 Both configurations use the same prompt and treatment isolation. The usual
 manifest, placements, BZ adapter/state, agent-command, and run-root arguments
 remain required; use a fresh run root for each benchmark.
+
+The ledger retains raw cell evidence and adds a bounded structured summary for
+every counted failure, including phase, diagnostics, candidate hashes, and
+durable handles. In the existing failed `cannbot` matmul cell, round 1 omitted
+the required `Model` entry point. Round 2 repaired that entry point but used
+`triton.cdiv` inside the JIT kernel, which is invalid kernel-language code; the
+result was not caused by a missing `@triton.jit` decorator.
 
 The smoke ledger is written before dispatch and after every completed cell.
 If a run stops or ends in `infrastructure_pending`, repeat the same

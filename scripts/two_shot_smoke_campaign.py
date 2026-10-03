@@ -83,6 +83,25 @@ def _gate_summary(waves: list[dict], policy: dict[str, dict[str, int]]) -> dict:
     return summary
 
 
+def _valid_schedule_topology(waves: object,
+                             policy: dict[str, dict[str, int]]) -> bool:
+    if not isinstance(waves, list):
+        return False
+    maximum = max(rule["counted_trials"] for rule in policy.values())
+    if [wave.get("wave") if isinstance(wave, dict) else None for wave in waves] != list(
+            range(1, maximum + 1)):
+        return False
+    for wave_number, wave in enumerate(waves, 1):
+        cells = wave.get("cells")
+        expected = [treatment for treatment in TREATMENTS
+                    if policy[treatment]["counted_trials"] >= wave_number]
+        if (not isinstance(cells, list)
+                or [cell.get("treatment") if isinstance(cell, dict) else None
+                    for cell in cells] != expected):
+            return False
+    return True
+
+
 def validate_matmul_gate(path: Path, *, prompt_sha256: str | None = None,
                          manifest_identity: str | None = None,
                          success_policy: dict | None = None) -> dict:
@@ -94,6 +113,7 @@ def validate_matmul_gate(path: Path, *, prompt_sha256: str | None = None,
     if success_policy is not None:
         policy = _validate_success_policy(success_policy)
         valid = (ledger.get("success_policy") == policy
+                 and _valid_schedule_topology(waves, policy)
                  and ledger.get("gate") == _gate_summary(waves, policy)
                  and all(item["passed"] for item in ledger.get("gate", {}).values()))
         if (ledger.get("status") != "complete" or ledger.get("benchmark") != "matmul"
@@ -124,6 +144,31 @@ def _concise_diagnostics(value: object, limit: int = 500) -> str:
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
+def _diagnostic_fallback(*documents: dict) -> str:
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        candidates = [document.get("diagnostics")]
+        results = document.get("controller_results")
+        if isinstance(results, list):
+            candidates.extend(item.get("diagnostics") for item in reversed(results)
+                              if isinstance(item, dict))
+        result = document.get("controller_result")
+        if isinstance(result, dict):
+            candidates.append(result.get("diagnostics"))
+        turns = document.get("turns")
+        if isinstance(turns, list):
+            for turn in reversed(turns):
+                if isinstance(turn, dict):
+                    candidates.extend((turn.get("stderr"), turn.get("stdout")))
+        candidates.extend((document.get("agent_timeout"), document.get("stderr"),
+                           document.get("stdout")))
+        for candidate in candidates:
+            if _concise_diagnostics(candidate):
+                return _concise_diagnostics(candidate)
+    return ""
+
+
 def _durable_handles(*documents: object) -> list[str]:
     found: set[str] = set()
 
@@ -151,13 +196,15 @@ def _failure_summaries(benchmark: str, waves: list[dict]) -> list[dict]:
             if cell.get("category") != "counted" or cell.get("outcome") == "success":
                 continue
             agent, terminal = cell.get("agent") or {}, cell.get("terminal") or {}
-            phase = "agent" if agent.get("status") != "ok" else "terminal"
-            evidence = agent if phase == "agent" else terminal
+            agent_outcomes = {"agent_timeout", "protocol_error", "submission_error"}
+            phase = ("agent" if cell.get("outcome") in agent_outcomes
+                     or agent.get("status") != "ok" else "terminal")
+            evidence = ((agent, terminal) if phase == "agent" else (terminal, agent))
             summaries.append({
                 "treatment": cell.get("treatment"), "benchmark": benchmark,
                 "trial": trial, "wave": trial, "phase": phase,
                 "failure_type": cell.get("outcome"), "outcome": cell.get("outcome"),
-                "diagnostics": _concise_diagnostics(evidence.get("diagnostics")),
+                "diagnostics": _diagnostic_fallback(*evidence),
                 "candidate_sha256": copy.deepcopy(agent.get("candidate_sha256", {})),
                 "durable_handles": _durable_handles(agent, terminal),
             })

@@ -403,6 +403,88 @@ def test_relaxed_matmul_gate_checks_targets_thresholds_and_identity(tmp_path: Pa
         smoke.validate_matmul_gate(path, success_policy=POLICY)
 
 
+@pytest.mark.parametrize("mutate", [
+    lambda waves: waves[0]["cells"].reverse(),
+    lambda waves: (waves[0]["cells"].append(waves[1]["cells"].pop(0))),
+    lambda waves: waves[2].update(wave=4),
+])
+def test_relaxed_matmul_gate_rejects_malformed_schedule_topology(
+        tmp_path: Path, mutate):
+    ledger = smoke.TwoShotSmokeCampaign(
+        manifest(tmp_path), tmp_path / "run", Launcher(), Terminal(),
+        benchmark="matmul", cases=list(range(7)), success_policy=POLICY).run()
+    mutate(ledger["waves"])
+    ledger["gate"] = smoke._gate_summary(ledger["waves"], POLICY)
+    path = tmp_path / "tampered.json"
+    path.write_text(json.dumps(ledger))
+
+    with pytest.raises(smoke.SmokeError, match="configured success thresholds"):
+        smoke.validate_matmul_gate(path, success_policy=POLICY)
+
+
+def test_failure_summary_distinguishes_agent_and_terminal_phases_with_fallbacks():
+    waves = [{"wave": 1, "cells": [
+        {"treatment": "cannbot", "category": "counted",
+         "outcome": "protocol_error", "agent": {"status": "ok",
+             "controller_results": [{"diagnostics": "controller rejected candidate"}],
+             "turns": [{"stderr": "less useful stderr", "stdout": "turn output"}]},
+         "terminal": None},
+        {"treatment": "project-cannbot", "category": "counted",
+         "outcome": "compile_error", "agent": {"status": "ok",
+             "candidate_sha256": {"1": "a" * 64, "2": "b" * 64}},
+         "terminal": {"status": "compile_error", "diagnostics": "terminal compiler"}},
+        {"treatment": "project-guarded", "category": "counted",
+         "outcome": "runtime_error", "agent": {"status": "runtime_error",
+             "turns": [{"stderr": "agent runtime stderr", "stdout": ""}]},
+         "terminal": None},
+    ]}]
+
+    summaries = smoke._failure_summaries("matmul", waves)
+    assert [(item["treatment"], item["phase"], item["diagnostics"])
+            for item in summaries] == [
+        ("cannbot", "agent", "controller rejected candidate"),
+        ("project-cannbot", "terminal", "terminal compiler"),
+        ("project-guarded", "agent", "agent runtime stderr"),
+    ]
+
+
+@pytest.mark.parametrize("outcome", ["agent_timeout", "submission_error"])
+def test_failure_summary_labels_agent_owned_outcomes(outcome: str):
+    summary = smoke._failure_summaries("bsa", [{"wave": 2, "cells": [{
+        "treatment": "cannbot", "category": "counted", "outcome": outcome,
+        "agent": {"status": "ok", "stdout": "agent output"}, "terminal": None,
+    }]}])[0]
+    assert summary["phase"] == "agent"
+    assert summary["diagnostics"] == "agent output"
+
+
+@pytest.mark.parametrize("outcome", [
+    "compile_error", "runtime_error", "correctness_error",
+])
+def test_failure_summary_labels_agent_declared_kernel_failures(outcome: str):
+    summary = smoke._failure_summaries("bsa", [{"wave": 2, "cells": [{
+        "treatment": "cannbot", "category": "counted", "outcome": outcome,
+        "agent": {"status": outcome, "stderr": "agent kernel detail"},
+        "terminal": None,
+    }]}])[0]
+    assert summary["phase"] == "agent"
+    assert summary["diagnostics"] == "agent kernel detail"
+
+
+@pytest.mark.parametrize("outcome", [
+    "compile_error", "runtime_error", "correctness_error", "candidate_timeout",
+    "diagnostic_retrieval_error",
+])
+def test_failure_summary_labels_terminal_owned_outcomes(outcome: str):
+    summary = smoke._failure_summaries("bsa", [{"wave": 2, "cells": [{
+        "treatment": "cannbot", "category": "counted", "outcome": outcome,
+        "agent": {"status": "ok"},
+        "terminal": {"status": outcome, "stderr": "terminal detail"},
+    }]}])[0]
+    assert summary["phase"] == "terminal"
+    assert summary["diagnostics"] == "terminal detail"
+
+
 def test_bsa_uses_same_322_schedule(tmp_path: Path):
     launcher = Launcher()
     result = smoke.TwoShotSmokeCampaign(

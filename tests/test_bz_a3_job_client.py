@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import os
 import subprocess
 import sys
 import tarfile
@@ -373,6 +374,57 @@ def test_remote_root_drift_never_reuses_foreign_completed_receipt(tmp_path: Path
     assert len(second_transport.uploads) == len(second_transport.executions) == 1
     assert second_transport.observations == []
     assert len(list(state.glob("*/completed.json"))) == 2
+
+
+def test_effective_timeout_change_does_not_reuse_cached_terminal_result(tmp_path: Path):
+    module = load()
+    state = tmp_path / "state"
+
+    class TimeoutTransport(FakeTransport):
+        def execute(self, profile, device, operation, script, timeout):
+            self.executions.append((profile, device, operation, script, timeout))
+            return self.module.CommandResult(124, "candidate timed out", ""), f"{profile}:slow"
+
+    short_transport = TimeoutTransport(module)
+    short = production_client(
+        module, short_transport, state, "/srv/campaigns/root-a").run(
+            profile_job(tmp_path), timeout=60)
+    assert short["status"] == "runtime_error"
+
+    long_transport = FakeTransport(module)
+    long = production_client(
+        module, long_transport, state, "/srv/campaigns/root-a").run(
+            profile_job(tmp_path), timeout=120)
+
+    assert long["status"] == "ok"
+    assert len(long_transport.uploads) == len(long_transport.executions) == 1
+    assert len(list(state.glob("*/completed.json"))) == 2
+
+
+def test_atomic_receipt_fsyncs_parent_after_replace(monkeypatch, tmp_path: Path):
+    module = load()
+    path = tmp_path / "receipts" / "dispatch.json"
+    events = []
+    original_replace = os.replace
+
+    def replace(source, destination):
+        original_replace(source, destination)
+        events.append(("replace", Path(destination)))
+
+    monkeypatch.setattr(module.os, "replace", replace)
+    monkeypatch.setattr(module.os, "open", lambda target, flags: (
+        events.append(("open", Path(target), flags)) or 987))
+    monkeypatch.setattr(module.os, "fsync", lambda fd: events.append(("fsync", fd)))
+    monkeypatch.setattr(module.os, "close", lambda fd: events.append(("close", fd)))
+
+    module._write_json(path, {"state": "durable"})
+
+    replace_index = events.index(("replace", path))
+    open_event = next(event for event in events if event[0] == "open")
+    assert open_event[1:] == (path.parent, os.O_RDONLY)
+    assert events.index(open_event) > replace_index
+    assert events.index(("fsync", 987)) > events.index(open_event)
+    assert events.index(("close", 987)) > events.index(("fsync", 987))
 
 
 def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(

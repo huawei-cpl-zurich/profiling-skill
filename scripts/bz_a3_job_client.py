@@ -146,6 +146,11 @@ def _write_json(path: Path, value: dict) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, path)
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def validate_placements(value: object) -> dict[int, dict]:
@@ -285,6 +290,10 @@ class BzA3JobClient:
         try:
             if not isinstance(job, dict):
                 raise JobError("request_error", "job must be a JSON object")
+            if (isinstance(timeout, bool) or not isinstance(timeout, int)
+                    or timeout <= 25):
+                raise JobError("request_error",
+                               "effective timeout must be an integer greater than 25 seconds")
             self._validate_job(job)
             identity = _identity(job)
             logical = job["device"]
@@ -296,7 +305,8 @@ class BzA3JobClient:
             file_hashes = {name: _sha(path) for name, path in stage_files}
             request_sha = _json_sha({"job": remote_job, "files": file_hashes,
                                      "placements_sha256": self.placements_sha256,
-                                     "remote_root": self.remote_root})
+                                     "remote_root": self.remote_root,
+                                     "timeout_seconds": timeout})
             state = self.state_dir / request_sha
             archive = state / "payload.tar"
             dispatch, completed = state / "dispatch.json", state / "completed.json"

@@ -16,7 +16,7 @@ import sys
 import tarfile
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable
 
 
@@ -169,6 +169,15 @@ def validate_placements(value: object) -> dict[int, dict]:
     return result
 
 
+def validate_remote_root(value: object) -> str:
+    if (not isinstance(value, str) or len(value) < 2 or len(value) > 240
+            or not re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
+            or str(PurePosixPath(value)) != value
+            or any(part in {".", ".."} for part in PurePosixPath(value).parts)):
+        raise JobError("request_error", "remote root must be a normalized absolute path")
+    return value
+
+
 def _identity(job: dict) -> dict:
     result = {key: job[key] for key in ("benchmark", "action", "device")}
     if job["action"] == "check":
@@ -258,15 +267,14 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
 class BzA3JobClient:
     def __init__(self, transport: AdapterTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
-                 batch_profiler: Path,
-                 remote_root: str = "/home/m00933363/.profiling-skill/production"):
+                 batch_profiler: Path, remote_root: str):
         self.transport = transport
         self.state_dir = state_dir
         self.placements = validate_placements(placements)
         self.placements_sha256 = _json_sha(self.placements)
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler
-        self.remote_root = remote_root.rstrip("/")
+        self.remote_root = validate_remote_root(remote_root)
 
     def run(self, job: object, timeout: int = 3600) -> dict:
         identity: dict = {}
@@ -311,7 +319,7 @@ class BzA3JobClient:
                     placement["profile"], handle, self._remaining(deadline, handle))
             else:
                 self._archive(archive, stage_files, remote_job)
-                remote_archive = f"/home/m00933363/profiling-job-{request_sha}.tar"
+                remote_archive = f"{self.remote_root}/staging/{request_sha}/payload.tar"
                 self.transport.upload(placement["profile"], archive, remote_archive,
                                       self._remaining(deadline))
                 run_root = f"{self.remote_root}/runs/{request_sha}"
@@ -535,6 +543,7 @@ def main() -> int:
     parser.add_argument("--placements-json", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
     parser.add_argument("--adapter-json", required=True)
+    parser.add_argument("--remote-root", required=True)
     parser.add_argument("--timeout", type=int, default=3600)
     args = parser.parse_args()
     try:
@@ -546,6 +555,7 @@ def main() -> int:
             AdapterTransport(remote, adapter), args.state_dir, placements,
             runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
             batch_profiler=here / "batch_profile_a3.py",
+            remote_root=args.remote_root,
         )
         job = json.load(sys.stdin)
         result = client.run(job, args.timeout)

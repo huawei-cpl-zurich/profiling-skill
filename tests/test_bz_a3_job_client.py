@@ -118,6 +118,7 @@ def client(tmp_path: Path, transport, placements=None):
         runner=ROOT / "scripts/a3_benchmark_runner.py",
         profiler=ROOT / "scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+        remote_root="/srv/profiling-skill-production",
     )
 
 
@@ -212,6 +213,7 @@ def test_placement_and_profile_contract_are_validated_before_transport(tmp_path:
                 runner=ROOT / "scripts/a3_benchmark_runner.py",
                 profiler=ROOT / "scripts/profile_a3.py",
                 batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+                remote_root="/srv/profiling-skill-production",
             )
         except module.JobError as exc:
             assert exc.failure_type == "request_error"
@@ -270,6 +272,47 @@ def test_upload_and_profile_tool_failures_are_infrastructure(tmp_path: Path):
     assert failed["failure_type"] == "profile_tool_error"
 
 
+def test_configured_remote_root_owns_staging_runs_and_evidence(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    remote_root = "/srv/campaigns/profiling-skill"
+    subject = module.BzA3JobClient(
+        transport, tmp_path / "state", {"0": {"profile": "bz-a3-2", "device": 3}},
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        profiler=ROOT / "scripts/profile_a3.py",
+        batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+        remote_root=remote_root,
+    )
+
+    result = subject.run(profile_job(tmp_path))
+
+    assert result["status"] == "ok"
+    assert transport.uploads[0][2].startswith(remote_root + "/staging/")
+    assert result["artifacts"]["remote_run_root"].startswith(remote_root + "/runs/")
+    assert result["artifacts"]["remote_profile_evidence"].startswith(
+        remote_root + "/runs/")
+    assert remote_root in transport.executions[0][3]
+
+
+@pytest.mark.parametrize("remote_root", [
+    "relative/path", "/srv/../escape", "/srv/root;touch-pwned", "/srv/root\nnext",
+])
+def test_unsafe_remote_root_is_rejected_before_transport(
+        tmp_path: Path, remote_root: str):
+    module = load()
+    transport = FakeTransport(module)
+    with pytest.raises(module.JobError, match="remote root"):
+        module.BzA3JobClient(
+            transport, tmp_path / "state",
+            {"0": {"profile": "bz-a3-2", "device": 3}},
+            runner=ROOT / "scripts/a3_benchmark_runner.py",
+            profiler=ROOT / "scripts/profile_a3.py",
+            batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+            remote_root=remote_root,
+        )
+    assert transport.uploads == [] and transport.executions == []
+
+
 def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
         monkeypatch, tmp_path: Path):
     module = load()
@@ -311,6 +354,7 @@ def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
         runner=ROOT / "scripts/a3_benchmark_runner.py",
         profiler=ROOT / "scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+        remote_root="/srv/profiling-skill-production",
     )
 
     def route(_command, *, input, **_kwargs):

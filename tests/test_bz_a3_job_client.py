@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import fcntl
 import importlib.util
 import json
 import math
+import multiprocessing
 import os
 import subprocess
 import sys
 import tarfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -282,6 +285,79 @@ def test_concurrent_identical_payloads_on_distinct_placements_are_isolated(
     assert len({result["artifacts"]["remote_run_root"] for result in results}) == 2
     assert len({upload[2] for upload in transport.uploads}) == 2
     assert len(list((tmp_path / "state").glob("*/completed.json"))) == 2
+
+
+def test_multiprocess_identical_requests_dispatch_once_and_share_result(tmp_path: Path):
+    module = load()
+    context = multiprocessing.get_context("fork")
+    start = context.Barrier(2)
+    execute_count = context.Value("i", 0)
+    results = context.Queue()
+    job = profile_job(tmp_path)
+
+    class ProcessTransport(FakeTransport):
+        def execute(self, profile, device, operation, script, timeout):
+            with execute_count.get_lock():
+                execute_count.value += 1
+            time.sleep(0.2)
+            return self.completed(profile)
+
+    def invoke():
+        transport = ProcessTransport(module)
+        _module, subject = client(tmp_path, transport)
+        start.wait(timeout=5)
+        results.put(subject.run(job, timeout=60))
+
+    processes = [context.Process(target=invoke) for _ in range(2)]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=10)
+        assert process.exitcode == 0
+
+    observed = [results.get(timeout=2) for _ in processes]
+    assert execute_count.value == 1
+    assert observed[0] == observed[1]
+    assert observed[0]["status"] == "ok"
+    assert len(list((tmp_path / "state").glob("*/completed.json"))) == 1
+
+
+def test_request_lock_wait_honors_effective_deadline(monkeypatch, tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    assert subject.run(job, timeout=26)["status"] == "ok"
+    state = next((tmp_path / "state").iterdir())
+    (state / "completed.json").unlink()
+
+    context = multiprocessing.get_context("fork")
+    acquired = context.Event()
+    release = context.Event()
+
+    def hold_lock():
+        with (state / "request.lock").open("a+") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            acquired.set()
+            release.wait(timeout=5)
+
+    holder = context.Process(target=hold_lock)
+    holder.start()
+    assert acquired.wait(timeout=2)
+    ticks = iter((0.0, 10.0, 20.0, 30.0, 40.0))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+    try:
+        result = subject.run(job, timeout=26)
+    finally:
+        release.set()
+        holder.join(timeout=2)
+        assert holder.exitcode == 0
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert result["diagnostics"] == "BZ request lock deadline exhausted"
+    assert len(transport.executions) == 1
 
 
 def test_retained_dispatch_is_observed_without_duplicate_upload_or_execute(tmp_path: Path):

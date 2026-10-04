@@ -71,6 +71,7 @@ CONTROLLER_SCRIPTS = (
     "experimentctl.py",
     "benchmark_backend.py",
     "gz_a3_job_client.py",
+    "bz_a3_job_client.py",
     "a3_benchmark_runner.py",
     "profile_a3.py",
     "batch_profile_a3.py",
@@ -171,6 +172,21 @@ def _parse_controller_command(command: list[str], controller_config: Path) -> tu
     return command[0], script
 
 
+def _strict_option_index(command: list[str], flag: str, owner: str) -> int:
+    """Return an option value index, rejecting argparse override spellings."""
+    exact = []
+    for index, argument in enumerate(command):
+        option = argument.split("=", 1)[0]
+        if option == flag or (option.startswith("--") and flag.startswith(option)):
+            if argument != flag:
+                raise CampaignError(f"{owner} must use exact {flag} once")
+            exact.append(index)
+    if (len(exact) != 1 or exact[0] + 1 >= len(command)
+            or command[exact[0] + 1].startswith("--")):
+        raise CampaignError(f"{owner} requires exactly one {flag}")
+    return exact[0] + 1
+
+
 def _agent_runtime_contract(request_budget: int) -> tuple[dict, dict]:
     """Load metadata from the launcher that serves the actual agent endpoint."""
     path = Path(__file__).with_name("production_launcher.py")
@@ -183,7 +199,8 @@ def _agent_runtime_contract(request_budget: int) -> tuple[dict, dict]:
 
 
 def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
-                             command: list[str], request_budget: int = 18) -> dict:
+                             command: list[str], request_budget: int = 18,
+                             expected_cells: list[Cell] | None = None) -> dict:
     executable, script = _parse_controller_command(command, controller_config)
     scripts = script.parent
     repository = scripts.parent
@@ -213,22 +230,73 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
         try:
             config = json.loads(controller_config.read_text())
             cells_document = config["cells"]
+            if expected_cells is not None:
+                expected = {cell.cell_id: cell for cell in expected_cells}
+                if set(cells_document) != set(expected):
+                    raise CampaignError(
+                        "controller cell set does not match selected manifest cells"
+                    )
+                identity_fields = (
+                    "benchmark", "treatment", "device",
+                    "development_cases", "all_cases",
+                )
+                for cell_id, selected_cell in expected.items():
+                    selected_identity = asdict(selected_cell)
+                    actual = cells_document[cell_id]
+                    if any(actual.get(field) != selected_identity[field]
+                           for field in identity_fields):
+                        raise CampaignError(
+                            f"controller cell identity does not match manifest: {cell_id}"
+                        )
+            frozen_placements: Path | None = None
             for cell in cells_document.values():
                 backend_command = cell["backend"]["command"]
                 if (len(backend_command) < 2
                         or Path(backend_command[1]).resolve() != required_scripts["benchmark_backend.py"].resolve()):
                     raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
                 try:
-                    client_index = backend_command.index("--job-client-json") + 1
+                    client_index = _strict_option_index(
+                        backend_command, "--job-client-json", "controller backend"
+                    )
                     client_command = json.loads(backend_command[client_index])
                 except (ValueError, IndexError, json.JSONDecodeError) as error:
                     raise CampaignError("controller backend requires a JSON job-client command") from error
-                expected_client = required_scripts["gz_a3_job_client.py"].resolve()
                 if (not isinstance(client_command, list) or len(client_command) < 2
-                        or not all(isinstance(value, str) and value for value in client_command)
-                        or Path(client_command[1]).resolve() != expected_client):
-                    raise CampaignError("controller config must invoke gz_a3_job_client.py")
-                client_command[0:2] = ["{python}", "{bundle}/scripts/gz_a3_job_client.py"]
+                        or not all(isinstance(value, str) and value for value in client_command)):
+                    raise CampaignError("controller config must invoke a supported job client")
+                client_path = Path(client_command[1]).resolve()
+                supported = {
+                    required_scripts[name].resolve(): name
+                    for name in ("gz_a3_job_client.py", "bz_a3_job_client.py")
+                }
+                client_name = supported.get(client_path)
+                if client_name is None:
+                    raise CampaignError("controller config must invoke a supported job client")
+                if client_name == "bz_a3_job_client.py":
+                    singleton_flags = ("--placements-json", "--state-dir", "--remote-root")
+                    try:
+                        placements_index, state_index, remote_root_index = (
+                            _strict_option_index(client_command, flag, "BZ controller")
+                            for flag in singleton_flags
+                        )
+                        placements = Path(client_command[placements_index])
+                        remote_root = client_command[remote_root_index]
+                    except (ValueError, IndexError) as error:
+                        raise CampaignError(
+                            "BZ controller requires placements, state directory, and remote root"
+                        ) from error
+                    if not remote_root.strip():
+                        raise CampaignError("BZ controller remote root must be nonempty")
+                    if not placements.is_file() or placements.is_symlink():
+                        raise CampaignError("BZ controller placements must be a regular file")
+                    if frozen_placements is None:
+                        frozen_placements = placements
+                        shutil.copy2(placements, temporary / "placements.json")
+                    elif placements.read_bytes() != frozen_placements.read_bytes():
+                        raise CampaignError("all BZ cells must use identical placements")
+                    client_command[placements_index] = "{bundle}/placements.json"
+                    client_command[state_index] = "{bundle}/../job-state"
+                client_command[0:2] = ["{python}", f"{{bundle}}/scripts/{client_name}"]
                 backend_command[client_index] = json.dumps(client_command, separators=(",", ":"))
                 backend_command[0:2] = ["{python}", "{bundle}/scripts/benchmark_backend.py"]
         except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as error:
@@ -365,10 +433,27 @@ class Cell:
     all_cases: list[int]
 
 
-def cells(rounds: int = 3, request_budget: int = 18) -> list[Cell]:
+def cells(rounds: int = 3, request_budget: int = 18,
+          benchmarks: tuple[str, ...] | None = None) -> list[Cell]:
+    selected = tuple(BENCHMARK_DEVICE) if benchmarks is None else tuple(benchmarks)
+    if not selected or len(set(selected)) != len(selected):
+        raise CampaignError("benchmarks must be a nonempty unique selection")
+    unknown = set(selected) - set(BENCHMARK_DEVICE)
+    if unknown:
+        raise CampaignError(f"unknown benchmarks: {', '.join(sorted(unknown))}")
+    if len(selected) == 1:
+        benchmark = selected[0]
+        return [
+            Cell(f"{benchmark}-{treatment}", benchmark, treatment, device, 1,
+                 rounds, request_budget, DEVELOPMENT_CASES[benchmark],
+                 ALL_CASES[benchmark])
+            for device, treatment in enumerate(TREATMENT_SKILLS)
+        ]
     result = []
     for wave, pairs in enumerate(WAVES, 1):
         for benchmark, treatment in pairs:
+            if benchmark not in selected:
+                continue
             result.append(
                 Cell(
                     f"{benchmark}-{treatment}", benchmark, treatment,
@@ -383,7 +468,8 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
                    project_skill: Path, guarded_skill: Path, cannbot_freeze: Path,
                    controller_config: Path, controller_command: list[str],
                    rounds: int = 3, request_budget: int = 18,
-                   guarded_revision: str = "", calibration_max_drift: float = 0.10) -> dict:
+                   guarded_revision: str = "", calibration_max_drift: float = 0.10,
+                   benchmarks: tuple[str, ...] | None = None) -> dict:
     if rounds != 3 or request_budget != 18:
         raise CampaignError("production manifests require three rounds and an 18-request budget")
     if (len(guarded_revision) != 40
@@ -395,7 +481,9 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
             or calibration_max_drift <= 0):
         raise CampaignError("calibration max drift must be positive and finite")
     path.parent.mkdir(parents=True, exist_ok=True)
-    missing = {name for name in BENCHMARK_DEVICE if name not in baselines}
+    selected = tuple(BENCHMARK_DEVICE) if benchmarks is None else tuple(benchmarks)
+    selected_cells = cells(rounds, request_budget, selected)
+    missing = set(selected) - set(baselines)
     if missing:
         raise CampaignError(f"missing baselines: {', '.join(sorted(missing))}")
     freeze_file = cannbot_freeze / "freeze.json"
@@ -406,7 +494,7 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
         "prompt": {"path": str(prompt.resolve()), "sha256": digest_file(prompt)},
         "baselines": {
             name: {"path": str(value.resolve()), "sha256": digest_tree(value)}
-            for name, value in sorted(baselines.items())
+            for name, value in sorted(baselines.items()) if name in selected
         },
         "skill_sources": {
             "ascend-profiling": {
@@ -426,11 +514,12 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
             },
         },
         "controller": freeze_controller_bundle(
-            path, controller_config, controller_command, request_budget
+            path, controller_config, controller_command, request_budget,
+            selected_cells,
         ),
-        "cells": [asdict(cell) for cell in cells(rounds, request_budget)],
+        "cells": [asdict(cell) for cell in selected_cells],
         "max_parallel": 4,
-        "calibration": {"devices": [0, 1, 2, 3], "case": 7,
+        "calibration": {"devices": sorted({cell.device for cell in selected_cells}), "case": 7,
                         "selector": "streaming_matmul_add_kernel_mix_aic",
                         "max_drift_fraction": calibration_max_drift},
     }
@@ -882,9 +971,9 @@ def main() -> int:
     freeze.add_argument("--output", type=Path, required=True)
     generate = sub.add_parser("generate-manifest", help="freeze all campaign inputs in a manifest")
     generate.add_argument("--prompt", type=Path, required=True)
-    generate.add_argument("--gdn-baseline", type=Path, required=True)
-    generate.add_argument("--bsa-baseline", type=Path, required=True)
-    generate.add_argument("--matmul-baseline", type=Path, required=True)
+    generate.add_argument("--gdn-baseline", type=Path)
+    generate.add_argument("--bsa-baseline", type=Path)
+    generate.add_argument("--matmul-baseline", type=Path)
     generate.add_argument("--project-skill", type=Path, required=True)
     generate.add_argument("--guarded-skill", type=Path, required=True)
     generate.add_argument("--guarded-skill-revision", required=True)
@@ -896,6 +985,8 @@ def main() -> int:
     generate.add_argument("--rounds", type=int, default=3)
     generate.add_argument("--request-budget", type=int, default=18)
     generate.add_argument("--calibration-max-drift", type=float, default=0.10)
+    generate.add_argument("--benchmarks", nargs="+", choices=tuple(BENCHMARK_DEVICE),
+                          default=list(BENCHMARK_DEVICE))
     check = sub.add_parser("preflight")
     check.add_argument("--manifest", type=Path, required=True)
     check.add_argument("--sandbox", type=Path, required=True)
@@ -913,6 +1004,20 @@ def main() -> int:
     if args.command == "freeze-cannbot":
         print(json.dumps(freeze_cannbot(args.repository, args.output), sort_keys=True))
     elif args.command == "generate-manifest":
+        baselines = {
+            "gdn": args.gdn_baseline,
+            "bsa": args.bsa_baseline,
+            "matmul": args.matmul_baseline,
+        }
+        missing_baselines = [
+            f"--{name}-baseline" for name in args.benchmarks
+            if baselines[name] is None
+        ]
+        if missing_baselines:
+            parser.error(
+                "selected benchmarks require baseline flags: "
+                + ", ".join(missing_baselines)
+            )
         try:
             controller = json.loads(args.controller_json)
             if (not isinstance(controller, list) or not controller
@@ -922,12 +1027,12 @@ def main() -> int:
             parser.error(f"--controller-json must be a JSON string array: {error}")
         document = write_manifest(
             args.output, args.prompt,
-            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline,
-             "matmul": args.matmul_baseline},
+            {name: value for name, value in baselines.items() if value is not None},
             args.project_skill, args.guarded_skill, args.cannbot_freeze,
             args.controller_config, controller,
             args.rounds, args.request_budget, args.guarded_skill_revision,
             args.calibration_max_drift,
+            tuple(args.benchmarks),
         )
         print(json.dumps(document, sort_keys=True))
     elif args.command == "preflight":

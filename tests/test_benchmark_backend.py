@@ -375,3 +375,21 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]
     assert command[command.index("--job-client-json") + 1] == encoded_client
+
+
+@pytest.mark.parametrize("benchmark", ["gdn", "bsa", "matmul"])
+def test_generator_can_emit_any_single_benchmark_on_three_devices(
+        tmp_path: Path, benchmark: str):
+    output = tmp_path / f"{benchmark}.json"
+    encoded_client = json.dumps(["/opt/job-client", "--profile", "bz-a3"])
+    subprocess.run([
+        sys.executable, str(GENERATOR), "--job-client-json", encoded_client,
+        "--benchmarks", benchmark, "--output", str(output),
+    ], check=True)
+    cells = json.loads(output.read_text())["cells"]
+    assert list(cells) == [
+        f"{benchmark}-cannbot", f"{benchmark}-project-cannbot",
+        f"{benchmark}-project-guarded",
+    ]
+    assert [cell["device"] for cell in cells.values()] == [0, 1, 2]
+    assert {cell["benchmark"] for cell in cells.values()} == {benchmark}

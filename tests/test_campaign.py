@@ -26,7 +26,8 @@ def tree(path: Path, content: str = "content") -> Path:
     return path
 
 
-def fixture(tmp_path: Path, request_budget: int = 18):
+def fixture(tmp_path: Path, request_budget: int = 18,
+            benchmarks: tuple[str, ...] | None = None):
     tmp_path.mkdir(parents=True, exist_ok=True)
     prompt = tmp_path / "prompt.md"
     prompt.write_bytes((ROOT / "prompts/kernel-optimization.md").read_bytes())
@@ -71,7 +72,24 @@ def fixture(tmp_path: Path, request_budget: int = 18):
     }
     (frozen / "freeze.json").write_text(json.dumps(record, sort_keys=True))
     controller_config = tmp_path / "controller.json"
-    controller_config.write_text('{"schema_version":1,"cells":{}}\n')
+    selected_cells = campaign.cells(request_budget=request_budget, benchmarks=benchmarks)
+    client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
+              "--adapter-json", '["/approved/adapter"]',
+              "--state-dir", str(tmp_path / "job-state")]
+    controller_cells = {}
+    for cell in selected_cells:
+        controller_cells[cell.cell_id] = {
+            "benchmark": cell.benchmark, "treatment": cell.treatment,
+            "device": cell.device, "development_cases": cell.development_cases,
+            "all_cases": cell.all_cases, "backend": {"command": [
+                sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+                "--benchmark", cell.benchmark,
+                "--job-client-json", json.dumps(client),
+            ]},
+        }
+    controller_config.write_text(json.dumps({
+        "schema_version": 1, "cells": controller_cells,
+    }))
     controller_command = [
         sys.executable, str(ROOT / "scripts" / "experimentctl.py"), "--config",
         str(controller_config.resolve()), "--cell", "{cell_id}",
@@ -83,6 +101,7 @@ def fixture(tmp_path: Path, request_budget: int = 18):
         controller_config, controller_command,
         request_budget=request_budget,
         guarded_revision="b" * 40,
+        benchmarks=benchmarks,
     )
     return manifest, manifest_path
 
@@ -111,6 +130,28 @@ def test_fixed_schedule_has_nine_cells_in_collision_free_four_four_one_waves():
                for benchmark in campaign.BENCHMARK_DEVICE)
     assert {(c.benchmark, c.treatment): c.device for c in cells} == campaign.CELL_DEVICE
     assert all(c.rounds == 3 and c.request_budget == 18 for c in cells)
+
+
+def test_gdn_slice_is_one_concurrent_wave_with_three_treatments():
+    selected = campaign.cells(benchmarks=("gdn",))
+    assert [cell.cell_id for cell in selected] == [
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+    ]
+    assert [cell.device for cell in selected] == [0, 1, 2]
+    assert {cell.wave for cell in selected} == {1}
+    assert {cell.treatment for cell in selected} == set(campaign.TREATMENT_SKILLS)
+
+
+def test_gdn_manifest_calibrates_only_participating_devices(tmp_path: Path):
+    manifest, _ = fixture(tmp_path, benchmarks=("gdn",))
+    assert [cell["cell_id"] for cell in manifest["cells"]] == [
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+    ]
+    assert manifest["calibration"] == {
+        "devices": [0, 1, 2], "case": 7,
+        "selector": "streaming_matmul_add_kernel_mix_aic",
+        "max_drift_fraction": 0.10,
+    }
 
 
 def test_manifest_binds_agent_help_and_budget_and_rejects_drift(tmp_path: Path):
@@ -437,7 +478,7 @@ def test_run_cli_uses_private_frozen_controller_bundle(
 def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkeypatch, capsys):
     manifest, _ = fixture(tmp_path / "source")
     output = tmp_path / "nested" / "campaign.json"
-    controller_config = tmp_path / "source/campaign.controller/controller.json"
+    controller_config = tmp_path / "source/controller.json"
     controller_command = [sys.executable, str(ROOT / "scripts/experimentctl.py"),
                           "--config", str(controller_config.resolve()),
                           "--cell", "{cell_id}"]
@@ -467,6 +508,58 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
     assert len(written["cells"]) == 9
     sandbox = campaign.prepare_cell(written, written["cells"][0], tmp_path / "runs")
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
+
+
+def test_generate_manifest_cli_gdn_slice_needs_only_gdn_baseline(
+        tmp_path: Path, monkeypatch, capsys):
+    manifest, _ = fixture(tmp_path / "source", benchmarks=("gdn",))
+    output = tmp_path / "slice" / "campaign.json"
+    controller_config = tmp_path / "source/controller.json"
+    controller_command = [sys.executable, str(ROOT / "scripts/experimentctl.py"),
+                          "--config", str(controller_config.resolve()),
+                          "--cell", "{cell_id}"]
+    monkeypatch.setattr(sys, "argv", [
+        "campaign.py", "generate-manifest", "--benchmarks", "gdn",
+        "--prompt", manifest["prompt"]["path"],
+        "--gdn-baseline", manifest["baselines"]["gdn"]["path"],
+        "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
+        "--guarded-skill", manifest["skill_sources"]["triton-guarded-kernel"]["path"],
+        "--guarded-skill-revision", "b" * 40,
+        "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
+        "--controller-config", str(controller_config),
+        "--controller-json", json.dumps(controller_command),
+        "--output", str(output),
+    ])
+    assert campaign.main() == 0
+    written = json.loads(capsys.readouterr().out)
+    assert set(written["baselines"]) == {"gdn"}
+    assert [cell["device"] for cell in written["cells"]] == [0, 1, 2]
+    assert {cell["benchmark"] for cell in written["cells"]} == {"gdn"}
+
+
+@pytest.mark.parametrize(("selection", "provided", "missing"), [
+    (["--benchmarks", "gdn"], [], "--gdn-baseline"),
+    ([], ["--gdn-baseline", "gdn", "--matmul-baseline", "matmul"],
+     "--bsa-baseline"),
+])
+def test_generate_manifest_cli_rejects_missing_selected_baseline(
+        tmp_path: Path, monkeypatch, capsys, selection, provided, missing):
+    output = tmp_path / "campaign.json"
+    monkeypatch.setattr(sys, "argv", [
+        "campaign.py", "generate-manifest", *selection,
+        "--prompt", "prompt", *provided,
+        "--project-skill", "project", "--guarded-skill", "guarded",
+        "--guarded-skill-revision", "b" * 40, "--cannbot-freeze", "cannbot",
+        "--controller-config", "controller", "--controller-json", '["python"]',
+        "--output", str(output),
+    ])
+    with pytest.raises(SystemExit) as raised:
+        campaign.main()
+    assert raised.value.code == 2
+    error = capsys.readouterr().err
+    assert "selected benchmarks require baseline flags" in error
+    assert missing in error
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("value", [{}, 7, "command", [], ["python", 3], [""]])
@@ -821,6 +914,233 @@ def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
     assert str(ROOT) not in json.dumps(bundled)
 
 
+def test_controller_bundle_freezes_bz_client_and_placements(tmp_path: Path):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({
+        "0": {"profile": "bz-a3-1", "device": 0},
+        "1": {"profile": "bz-a3-1", "device": 1},
+        "2": {"profile": "bz-a3-2", "device": 2},
+    }))
+    client = [
+        sys.executable, str(ROOT / "scripts/bz_a3_job_client.py"),
+        "--state-dir", str(tmp_path / "job-state"),
+        "--placements-json", str(placements),
+        "--adapter-json", '["/approved/adapter"]',
+        "--remote-root", "/frozen/remote/root",
+    ]
+    config = tmp_path / "cells.json"
+    config.write_text(json.dumps({"cells": {"gdn-cannbot": {"backend": {"command": [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", json.dumps(client),
+    ]}}}}))
+    output = tmp_path / "campaign.json"
+    binding = campaign.freeze_controller_bundle(
+        output, config,
+        [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+         str(config.resolve()), "--cell", "{cell_id}"],
+    )
+    bundle = tmp_path / binding["bundle"]
+    bundled = json.loads((bundle / "controller.json").read_text())
+    command = bundled["cells"]["gdn-cannbot"]["backend"]["command"]
+    frozen_client = json.loads(command[command.index("--job-client-json") + 1])
+    assert frozen_client[1] == "{bundle}/scripts/bz_a3_job_client.py"
+    assert frozen_client[frozen_client.index("--placements-json") + 1] == \
+        "{bundle}/placements.json"
+    assert frozen_client[frozen_client.index("--state-dir") + 1] == \
+        "{bundle}/../job-state"
+    assert frozen_client[frozen_client.index("--remote-root") + 1] == \
+        "/frozen/remote/root"
+    assert json.loads((bundle / "placements.json").read_text()) == json.loads(
+        placements.read_text())
+    assert str(placements) not in json.dumps(bundled)
+    assert "placements.json" in binding["files"]
+
+
+def generated_controller(tmp_path: Path, benchmark: str = "gdn") -> Path:
+    config = tmp_path / "controller.json"
+    client = json.dumps([
+        sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
+        "--adapter-json", '["/approved/adapter"]',
+        "--state-dir", str(tmp_path / "job-state"),
+    ])
+    subprocess.run([
+        sys.executable, str(ROOT / "scripts/generate_benchmark_config.py"),
+        "--job-client-json", client, "--benchmarks", benchmark,
+        "--output", str(config),
+    ], check=True)
+    return config
+
+
+def test_controller_bundle_rejects_selected_cell_set_mismatch(tmp_path: Path):
+    config = generated_controller(tmp_path)
+    output = tmp_path / "campaign.json"
+    command = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+               str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="cell set does not match"):
+        campaign.freeze_controller_bundle(
+            output, config, command, expected_cells=campaign.cells())
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+def test_controller_bundle_rejects_selected_cell_identity_mismatch(tmp_path: Path):
+    config = generated_controller(tmp_path)
+    document = json.loads(config.read_text())
+    document["cells"]["gdn-project-cannbot"]["device"] = 0
+    config.write_text(json.dumps(document))
+    output = tmp_path / "campaign.json"
+    command = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+               str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError,
+                       match="cell identity does not match manifest"):
+        campaign.freeze_controller_bundle(
+            output, config, command,
+            expected_cells=campaign.cells(benchmarks=("gdn",)))
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+@pytest.mark.parametrize("flag", ["--placements-json", "--state-dir", "--remote-root"])
+def test_controller_bundle_rejects_duplicate_bz_frozen_flags(tmp_path: Path, flag: str):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({"0": {"profile": "bz-a3-1", "device": 0}}))
+    values = {
+        "--placements-json": str(placements),
+        "--state-dir": str(tmp_path / "state"),
+        "--remote-root": "/approved/root",
+    }
+    client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
+    for name, value in values.items():
+        client.extend([name, value])
+    client.extend(["--adapter-json", '["/approved/adapter"]', flag, values[flag]])
+    config = tmp_path / "cells.json"
+    backend = [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", json.dumps(client),
+    ]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match=f"exactly one {flag}"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+@pytest.mark.parametrize("flag", ["--placements-json", "--state-dir", "--remote-root"])
+@pytest.mark.parametrize("form", ["equals", "abbreviation"])
+def test_controller_bundle_rejects_noncanonical_bz_frozen_flags(
+        tmp_path: Path, flag: str, form: str):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({"0": {"profile": "bz-a3-1", "device": 0}}))
+    values = {
+        "--placements-json": str(placements),
+        "--state-dir": str(tmp_path / "state"),
+        "--remote-root": "/approved/root",
+    }
+    client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
+    for name, value in values.items():
+        if name != flag:
+            client.extend([name, value])
+        elif form == "equals":
+            client.append(f"{name}={value}")
+        else:
+            client.extend([name[:-2], value])
+    client.extend(["--adapter-json", '["/approved/adapter"]'])
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", "--job-client-json", json.dumps(client)]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match=f"must use exact {flag}"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+@pytest.mark.parametrize(("missing", "following"), [
+    ("--state-dir", "--remote-root"),
+    ("--remote-root", "--adapter-json"),
+])
+def test_controller_bundle_rejects_bz_flag_followed_by_another_option(
+        tmp_path: Path, missing: str, following: str):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({"0": {"profile": "bz-a3-1", "device": 0}}))
+    values = {
+        "--placements-json": str(placements),
+        "--state-dir": str(tmp_path / "state"),
+        "--remote-root": "/approved/root",
+        "--adapter-json": '["/approved/adapter"]',
+    }
+    order = ["--placements-json", "--state-dir", "--remote-root", "--adapter-json"]
+    order.remove(following)
+    order.insert(order.index(missing) + 1, following)
+    client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
+    for flag in order:
+        client.append(flag)
+        if flag != missing:
+            client.append(values[flag])
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", "--job-client-json", json.dumps(client)]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match=f"exactly one {missing}"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+def test_controller_bundle_rejects_duplicate_job_client_marker(tmp_path: Path):
+    config = tmp_path / "cells.json"
+    client = json.dumps([sys.executable, str(ROOT / "scripts/gz_a3_job_client.py")])
+    backend = [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", client, "--job-client-json", client,
+    ]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="exactly one --job-client-json"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+@pytest.mark.parametrize("form", ["equals", "abbreviation"])
+def test_controller_bundle_rejects_noncanonical_job_client_marker(
+        tmp_path: Path, form: str):
+    config = tmp_path / "cells.json"
+    client = json.dumps([sys.executable, str(ROOT / "scripts/gz_a3_job_client.py")])
+    marker = (f"--job-client-json={client}" if form == "equals"
+              else "--job-client-j")
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", marker]
+    if form == "abbreviation":
+        backend.append(client)
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError,
+                       match="must use exact --job-client-json"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+def test_controller_bundle_rejects_job_client_marker_followed_by_option(tmp_path: Path):
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", "--job-client-json", "--timeout", "30"]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="exactly one --job-client-json"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
 def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_path: Path):
     config = tmp_path / "cells.json"
     backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
@@ -829,7 +1149,7 @@ def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_pat
     output = tmp_path / "campaign.json"
     controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
                   str(config.resolve()), "--cell", "{cell_id}"]
-    with pytest.raises(campaign.CampaignError, match="requires a JSON job-client"):
+    with pytest.raises(campaign.CampaignError, match="exactly one --job-client-json"):
         campaign.freeze_controller_bundle(output, config, controller)
     assert not (tmp_path / "campaign.controller").exists()
     assert not list(tmp_path.glob(".campaign.controller.*"))

@@ -946,6 +946,40 @@ def test_controller_bundle_rejects_noncanonical_bz_frozen_flags(
     assert not (tmp_path / "campaign.controller").exists()
 
 
+@pytest.mark.parametrize(("missing", "following"), [
+    ("--state-dir", "--remote-root"),
+    ("--remote-root", "--adapter-json"),
+])
+def test_controller_bundle_rejects_bz_flag_followed_by_another_option(
+        tmp_path: Path, missing: str, following: str):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({"0": {"profile": "bz-a3-1", "device": 0}}))
+    values = {
+        "--placements-json": str(placements),
+        "--state-dir": str(tmp_path / "state"),
+        "--remote-root": "/approved/root",
+        "--adapter-json": '["/approved/adapter"]',
+    }
+    order = ["--placements-json", "--state-dir", "--remote-root", "--adapter-json"]
+    order.remove(following)
+    order.insert(order.index(missing) + 1, following)
+    client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
+    for flag in order:
+        client.append(flag)
+        if flag != missing:
+            client.append(values[flag])
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", "--job-client-json", json.dumps(client)]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match=f"exactly one {missing}"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
 def test_controller_bundle_rejects_duplicate_job_client_marker(tmp_path: Path):
     config = tmp_path / "cells.json"
     client = json.dumps([sys.executable, str(ROOT / "scripts/gz_a3_job_client.py")])
@@ -979,6 +1013,19 @@ def test_controller_bundle_rejects_noncanonical_job_client_marker(
                   str(config.resolve()), "--cell", "{cell_id}"]
     with pytest.raises(campaign.CampaignError,
                        match="must use exact --job-client-json"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+def test_controller_bundle_rejects_job_client_marker_followed_by_option(tmp_path: Path):
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", "--job-client-json", "--timeout", "30"]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="exactly one --job-client-json"):
         campaign.freeze_controller_bundle(output, config, controller)
     assert not (tmp_path / "campaign.controller").exists()
 

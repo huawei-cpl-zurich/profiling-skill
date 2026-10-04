@@ -181,7 +181,8 @@ def _strict_option_index(command: list[str], flag: str, owner: str) -> int:
             if argument != flag:
                 raise CampaignError(f"{owner} must use exact {flag} once")
             exact.append(index)
-    if len(exact) != 1 or exact[0] + 1 >= len(command):
+    if (len(exact) != 1 or exact[0] + 1 >= len(command)
+            or command[exact[0] + 1].startswith("--")):
         raise CampaignError(f"{owner} requires exactly one {flag}")
     return exact[0] + 1
 

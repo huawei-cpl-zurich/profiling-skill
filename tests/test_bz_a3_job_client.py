@@ -567,3 +567,13 @@ def test_profile_rejects_malformed_compact_evidence_before_receipting(
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "profile_tool_error"
     assert not list((tmp_path / "state").glob("*/completed.json"))
+
+
+def test_cli_rejects_abbreviated_singleton_flags(tmp_path: Path):
+    result = subprocess.run([
+        sys.executable, str(MODULE), "--state-d", str(tmp_path / "state"),
+        "--placements-json", str(tmp_path / "placements.json"),
+        "--adapter-json", '["adapter"]', "--remote-root", "/remote/root",
+    ], input="{}", text=True, capture_output=True, check=False)
+    assert result.returncode == 2
+    assert "required: --state-dir" in result.stderr

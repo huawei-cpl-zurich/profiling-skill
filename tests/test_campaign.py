@@ -72,7 +72,24 @@ def fixture(tmp_path: Path, request_budget: int = 18,
     }
     (frozen / "freeze.json").write_text(json.dumps(record, sort_keys=True))
     controller_config = tmp_path / "controller.json"
-    controller_config.write_text('{"schema_version":1,"cells":{}}\n')
+    selected_cells = campaign.cells(request_budget=request_budget, benchmarks=benchmarks)
+    client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
+              "--adapter-json", '["/approved/adapter"]',
+              "--state-dir", str(tmp_path / "job-state")]
+    controller_cells = {}
+    for cell in selected_cells:
+        controller_cells[cell.cell_id] = {
+            "benchmark": cell.benchmark, "treatment": cell.treatment,
+            "device": cell.device, "development_cases": cell.development_cases,
+            "all_cases": cell.all_cases, "backend": {"command": [
+                sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+                "--benchmark", cell.benchmark,
+                "--job-client-json", json.dumps(client),
+            ]},
+        }
+    controller_config.write_text(json.dumps({
+        "schema_version": 1, "cells": controller_cells,
+    }))
     controller_command = [
         sys.executable, str(ROOT / "scripts" / "experimentctl.py"), "--config",
         str(controller_config.resolve()), "--cell", "{cell_id}",
@@ -461,7 +478,7 @@ def test_run_cli_uses_private_frozen_controller_bundle(
 def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkeypatch, capsys):
     manifest, _ = fixture(tmp_path / "source")
     output = tmp_path / "nested" / "campaign.json"
-    controller_config = tmp_path / "source/campaign.controller/controller.json"
+    controller_config = tmp_path / "source/controller.json"
     controller_command = [sys.executable, str(ROOT / "scripts/experimentctl.py"),
                           "--config", str(controller_config.resolve()),
                           "--cell", "{cell_id}"]
@@ -495,9 +512,9 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
 
 def test_generate_manifest_cli_gdn_slice_needs_only_gdn_baseline(
         tmp_path: Path, monkeypatch, capsys):
-    manifest, _ = fixture(tmp_path / "source")
+    manifest, _ = fixture(tmp_path / "source", benchmarks=("gdn",))
     output = tmp_path / "slice" / "campaign.json"
-    controller_config = tmp_path / "source/campaign.controller/controller.json"
+    controller_config = tmp_path / "source/controller.json"
     controller_command = [sys.executable, str(ROOT / "scripts/experimentctl.py"),
                           "--config", str(controller_config.resolve()),
                           "--cell", "{cell_id}"]
@@ -937,6 +954,48 @@ def test_controller_bundle_freezes_bz_client_and_placements(tmp_path: Path):
         placements.read_text())
     assert str(placements) not in json.dumps(bundled)
     assert "placements.json" in binding["files"]
+
+
+def generated_controller(tmp_path: Path, benchmark: str = "gdn") -> Path:
+    config = tmp_path / "controller.json"
+    client = json.dumps([
+        sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
+        "--adapter-json", '["/approved/adapter"]',
+        "--state-dir", str(tmp_path / "job-state"),
+    ])
+    subprocess.run([
+        sys.executable, str(ROOT / "scripts/generate_benchmark_config.py"),
+        "--job-client-json", client, "--benchmarks", benchmark,
+        "--output", str(config),
+    ], check=True)
+    return config
+
+
+def test_controller_bundle_rejects_selected_cell_set_mismatch(tmp_path: Path):
+    config = generated_controller(tmp_path)
+    output = tmp_path / "campaign.json"
+    command = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+               str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="cell set does not match"):
+        campaign.freeze_controller_bundle(
+            output, config, command, expected_cells=campaign.cells())
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+def test_controller_bundle_rejects_selected_cell_identity_mismatch(tmp_path: Path):
+    config = generated_controller(tmp_path)
+    document = json.loads(config.read_text())
+    document["cells"]["gdn-project-cannbot"]["device"] = 0
+    config.write_text(json.dumps(document))
+    output = tmp_path / "campaign.json"
+    command = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+               str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError,
+                       match="cell identity does not match manifest"):
+        campaign.freeze_controller_bundle(
+            output, config, command,
+            expected_cells=campaign.cells(benchmarks=("gdn",)))
+    assert not (tmp_path / "campaign.controller").exists()
 
 
 @pytest.mark.parametrize("flag", ["--placements-json", "--state-dir", "--remote-root"])

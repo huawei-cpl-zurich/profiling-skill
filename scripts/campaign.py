@@ -199,7 +199,8 @@ def _agent_runtime_contract(request_budget: int) -> tuple[dict, dict]:
 
 
 def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
-                             command: list[str], request_budget: int = 18) -> dict:
+                             command: list[str], request_budget: int = 18,
+                             expected_cells: list[Cell] | None = None) -> dict:
     executable, script = _parse_controller_command(command, controller_config)
     scripts = script.parent
     repository = scripts.parent
@@ -229,6 +230,24 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
         try:
             config = json.loads(controller_config.read_text())
             cells_document = config["cells"]
+            if expected_cells is not None:
+                expected = {cell.cell_id: cell for cell in expected_cells}
+                if set(cells_document) != set(expected):
+                    raise CampaignError(
+                        "controller cell set does not match selected manifest cells"
+                    )
+                identity_fields = (
+                    "benchmark", "treatment", "device",
+                    "development_cases", "all_cases",
+                )
+                for cell_id, selected_cell in expected.items():
+                    selected_identity = asdict(selected_cell)
+                    actual = cells_document[cell_id]
+                    if any(actual.get(field) != selected_identity[field]
+                           for field in identity_fields):
+                        raise CampaignError(
+                            f"controller cell identity does not match manifest: {cell_id}"
+                        )
             frozen_placements: Path | None = None
             for cell in cells_document.values():
                 backend_command = cell["backend"]["command"]
@@ -495,7 +514,8 @@ def write_manifest(path: Path, prompt: Path, baselines: dict[str, Path],
             },
         },
         "controller": freeze_controller_bundle(
-            path, controller_config, controller_command, request_budget
+            path, controller_config, controller_command, request_budget,
+            selected_cells,
         ),
         "cells": [asdict(cell) for cell in selected_cells],
         "max_parallel": 4,

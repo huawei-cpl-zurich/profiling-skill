@@ -304,6 +304,8 @@ class BzA3JobClient:
             stage_files, remote_job = self._files_and_job(job)
             file_hashes = {name: _sha(path) for name, path in stage_files}
             request_sha = _json_sha({"job": remote_job, "files": file_hashes,
+                                     "campaign_device": logical,
+                                     "placement": placement,
                                      "placements_sha256": self.placements_sha256,
                                      "remote_root": self.remote_root,
                                      "timeout_seconds": timeout})

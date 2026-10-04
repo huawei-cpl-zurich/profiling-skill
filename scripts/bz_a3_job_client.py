@@ -553,7 +553,7 @@ def _command(value: str, name: str) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--placements-json", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')

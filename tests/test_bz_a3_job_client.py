@@ -427,6 +427,34 @@ def test_atomic_receipt_fsyncs_parent_after_replace(monkeypatch, tmp_path: Path)
     assert events.index(("close", 987)) > events.index(("fsync", 987))
 
 
+def test_cli_rejects_abbreviated_critical_flags_and_accepts_exact_forms(tmp_path: Path):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps(
+        {"0": {"profile": "bz-a3-1", "device": 0}}))
+    base = [
+        sys.executable, str(MODULE), "--state-dir", str(tmp_path / "state"),
+        f"--placements-json={placements}", "--adapter-json", '["/bin/false"]',
+    ]
+
+    abbreviated = subprocess.run(
+        [*base, "--remote-roo=/srv/profiling"], input="{}", text=True,
+        capture_output=True, check=False,
+    )
+    assert abbreviated.returncode == 2
+    assert "required: --remote-root" in abbreviated.stderr
+    assert abbreviated.stdout == ""
+
+    exact = subprocess.run(
+        [*base, "--remote-root=/srv/profiling"], input="{}", text=True,
+        capture_output=True, check=False,
+    )
+    assert exact.returncode == 2
+    assert exact.stderr == ""
+    result = json.loads(exact.stdout)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+
+
 def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
         monkeypatch, tmp_path: Path):
     module = load()

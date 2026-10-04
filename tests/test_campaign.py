@@ -887,6 +887,49 @@ def test_controller_bundle_freezes_bz_client_and_placements(tmp_path: Path):
     assert "placements.json" in binding["files"]
 
 
+@pytest.mark.parametrize("flag", ["--placements-json", "--state-dir", "--remote-root"])
+def test_controller_bundle_rejects_duplicate_bz_frozen_flags(tmp_path: Path, flag: str):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({"0": {"profile": "bz-a3-1", "device": 0}}))
+    values = {
+        "--placements-json": str(placements),
+        "--state-dir": str(tmp_path / "state"),
+        "--remote-root": "/approved/root",
+    }
+    client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
+    for name, value in values.items():
+        client.extend([name, value])
+    client.extend(["--adapter-json", '["/approved/adapter"]', flag, values[flag]])
+    config = tmp_path / "cells.json"
+    backend = [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", json.dumps(client),
+    ]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match=f"exactly one {flag}"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
+def test_controller_bundle_rejects_duplicate_job_client_marker(tmp_path: Path):
+    config = tmp_path / "cells.json"
+    client = json.dumps([sys.executable, str(ROOT / "scripts/gz_a3_job_client.py")])
+    backend = [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", client, "--job-client-json", client,
+    ]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match="exactly one --job-client-json"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
 def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_path: Path):
     config = tmp_path / "cells.json"
     backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),

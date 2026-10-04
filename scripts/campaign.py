@@ -220,6 +220,11 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                 if (len(backend_command) < 2
                         or Path(backend_command[1]).resolve() != required_scripts["benchmark_backend.py"].resolve()):
                     raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
+                if backend_command.count("--job-client-json") != 1:
+                    raise CampaignError(
+                        "controller backend requires a JSON job-client command: "
+                        "exactly one --job-client-json"
+                    )
                 try:
                     client_index = backend_command.index("--job-client-json") + 1
                     client_command = json.loads(backend_command[client_index])
@@ -237,6 +242,10 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                 if client_name is None:
                     raise CampaignError("controller config must invoke a supported job client")
                 if client_name == "bz_a3_job_client.py":
+                    singleton_flags = ("--placements-json", "--state-dir", "--remote-root")
+                    for flag in singleton_flags:
+                        if client_command.count(flag) != 1:
+                            raise CampaignError(f"BZ controller requires exactly one {flag}")
                     try:
                         placements_index = client_command.index("--placements-json") + 1
                         state_index = client_command.index("--state-dir") + 1

@@ -274,8 +274,16 @@ def test_upload_and_profile_tool_failures_are_infrastructure(tmp_path: Path):
 
 def test_configured_remote_root_owns_staging_runs_and_evidence(tmp_path: Path):
     module = load()
-    transport = FakeTransport(module)
     remote_root = "/srv/campaigns/profiling-skill"
+
+    class ExistingRootTransport(FakeTransport):
+        def upload(self, profile, source, destination, timeout):
+            if str(Path(destination).parent) != remote_root:
+                raise self.module.JobError(
+                    "staging_error", "rsync destination parent does not exist")
+            super().upload(profile, source, destination, timeout)
+
+    transport = ExistingRootTransport(module)
     subject = module.BzA3JobClient(
         transport, tmp_path / "state", {"0": {"profile": "bz-a3-2", "device": 3}},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
@@ -287,7 +295,8 @@ def test_configured_remote_root_owns_staging_runs_and_evidence(tmp_path: Path):
     result = subject.run(profile_job(tmp_path))
 
     assert result["status"] == "ok"
-    assert transport.uploads[0][2].startswith(remote_root + "/staging/")
+    assert transport.uploads[0][2].startswith(remote_root + "/payload-")
+    assert transport.uploads[0][2].endswith(".tar")
     assert result["artifacts"]["remote_run_root"].startswith(remote_root + "/runs/")
     assert result["artifacts"]["remote_profile_evidence"].startswith(
         remote_root + "/runs/")
@@ -340,7 +349,7 @@ def test_remote_root_drift_never_observes_foreign_retained_dispatch(tmp_path: Pa
     assert second["status"] == "ok"
     assert replacement.observations == []
     assert len(replacement.uploads) == len(replacement.executions) == 1
-    assert replacement.uploads[0][2].startswith(root_b + "/staging/")
+    assert replacement.uploads[0][2].startswith(root_b + "/payload-")
     assert len(list(state.glob("*/dispatch.json"))) == 1
     assert len(list(state.glob("*/completed.json"))) == 1
 

@@ -320,7 +320,11 @@ class BzA3JobClient:
                     placement["profile"], handle, self._remaining(deadline, handle))
             else:
                 self._archive(archive, stage_files, remote_job)
-                remote_archive = f"{self.remote_root}/staging/{request_sha}/payload.tar"
+                # cpl-remote's rsync transport does not create destination
+                # parents. The configured root is therefore a pre-provisioned
+                # writable staging directory, while the content-addressed
+                # filename keeps concurrent requests collision-free.
+                remote_archive = f"{self.remote_root}/payload-{request_sha}.tar"
                 self.transport.upload(placement["profile"], archive, remote_archive,
                                       self._remaining(deadline))
                 run_root = f"{self.remote_root}/runs/{request_sha}"
@@ -544,7 +548,10 @@ def main() -> int:
     parser.add_argument("--placements-json", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
     parser.add_argument("--adapter-json", required=True)
-    parser.add_argument("--remote-root", required=True)
+    parser.add_argument(
+        "--remote-root", required=True,
+        help="existing writable remote staging root; run artifacts use its runs/ child",
+    )
     parser.add_argument("--timeout", type=int, default=3600)
     args = parser.parse_args()
     try:

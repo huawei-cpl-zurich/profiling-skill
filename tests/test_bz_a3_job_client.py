@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
+import subprocess
 import sys
 import tarfile
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "scripts/bz_a3_job_client.py"
+BACKEND = ROOT / "scripts/benchmark_backend.py"
 
 
 def load():
@@ -16,6 +21,14 @@ def load():
     module = importlib.util.module_from_spec(spec)
     assert spec.loader
     sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_backend():
+    spec = importlib.util.spec_from_file_location("benchmark_backend_for_bz", BACKEND)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
     spec.loader.exec_module(module)
     return module
 
@@ -42,20 +55,28 @@ class FakeTransport:
         return self.completed(profile)[0]
 
     def completed(self, profile):
+        rows = [
+            {"case": 40, "samples_us": [8.0, 9.0, 10.0], "median_us": 9.0},
+            {"case": 49, "samples_us": [10.0, 11.0, 12.0], "median_us": 11.0},
+        ]
+        captures = [
+            {"case": row["case"], "iteration": iteration,
+             "duration_us": sample, "kernel_name": "gdn_kernel",
+             "evidence_sha256": "a" * 64, "msprof_log_sha256": "b" * 64}
+            for row in rows for iteration, sample in enumerate(row["samples_us"])
+        ]
         payload = {
             "status": self.status,
             "diagnostics": "NameError: tl" if self.status == "compile_error" else "",
             "benchmark": "gdn", "action": "profile", "device": 0,
             "cases": [40, 49], "repeats": 3, "round": 1,
             "kernel_name": "gdn_kernel", "passed": self.status == "ok",
-            "profile_cases": [
-                {"case": 40, "samples_us": [8.0, 9.0, 10.0], "median_us": 9.0},
-                {"case": 49, "samples_us": [10.0, 11.0, 12.0], "median_us": 11.0},
-            ],
+            "profile_cases": rows,
             "profile": {
                 "schema_version": 1, "status": "success", "profiler": "msprof-op",
                 "kernel_name": "gdn_kernel", "repeats": 3,
-                "geomean_us": 9.949874371,
+                "cases": rows, "captures": captures,
+                "geomean_us": math.sqrt(99.0),
             },
         }
         if self.status != "ok":
@@ -206,7 +227,7 @@ def test_check_and_measure_use_runner_and_preserve_logical_identity(tmp_path: Pa
         def completed(self, profile):
             job = self.current
             payload = {"status": "ok", "diagnostics": "", "passed": True,
-                       "benchmark": "gdn", "action": job["action"], "device": 2}
+                       "benchmark": "gdn", "action": job["action"], "device": 0}
             if job["action"] == "check":
                 payload.update(cases=[40], scope="full")
             else:
@@ -219,7 +240,7 @@ def test_check_and_measure_use_runner_and_preserve_logical_identity(tmp_path: Pa
                               {"2": {"profile": "bz-a3-1", "device": 1}})
     base = profile_job(tmp_path)
     for action in ("check", "measure"):
-        job = {**base, "action": action, "device": 2, "logical_device": 2}
+        job = {**base, "action": action, "device": 2, "logical_device": 0}
         job.pop("profiling")
         job.pop("repeats")
         job.pop("round")
@@ -247,3 +268,113 @@ def test_upload_and_profile_tool_failures_are_infrastructure(tmp_path: Path):
     failed = subject.run(profile_job(tmp_path / "other"))
     assert failed["status"] == "infrastructure_error"
     assert failed["failure_type"] == "profile_tool_error"
+
+
+def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
+        monkeypatch, tmp_path: Path):
+    module = load()
+    backend = load_backend()
+
+    class BackendTransport(FakeTransport):
+        def completed(self, profile):
+            job = self.controller_job
+            payload = {"status": "ok", "diagnostics": "", "passed": True,
+                       "benchmark": job["benchmark"], "action": job["action"],
+                       "device": 0}
+            if job["action"] == "check":
+                payload.update(cases=job["cases"], scope=job["scope"])
+            elif job["action"] == "measure":
+                payload.update(case=job["case"], phase=job["phase"], latency_us=8.5)
+            else:
+                cases, repeats = job["cases"], job["repeats"]
+                rows = [{"case": case, "samples_us": [8.0] * repeats,
+                         "median_us": 8.0} for case in cases]
+                captures = [{"case": case, "iteration": iteration,
+                             "duration_us": 8.0,
+                             "kernel_name": job["profiling"]["kernel_name"]}
+                            for case in cases for iteration in range(repeats)]
+                payload.update(
+                    cases=cases, repeats=repeats, round=job["round"],
+                    kernel_name=job["profiling"]["kernel_name"],
+                    profile_cases=rows,
+                    profile={"status": "success", "profiler": "msprof-op",
+                             "kernel_name": job["profiling"]["kernel_name"],
+                             "repeats": repeats, "cases": rows,
+                             "captures": captures, "geomean_us": 8.0},
+                )
+            return self.module.CommandResult(
+                0, "BZ_PRODUCTION_RESULT=" + json.dumps(payload) + "\n", ""), f"{profile}:x"
+
+    transport = BackendTransport(module)
+    subject = module.BzA3JobClient(
+        transport, tmp_path / "state", {"2": {"profile": "bz-a3-1", "device": 5}},
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        profiler=ROOT / "scripts/profile_a3.py",
+        batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+    )
+
+    def route(_command, *, input, **_kwargs):
+        transport.controller_job = json.loads(input)
+        result = subject.run(transport.controller_job)
+        return subprocess.CompletedProcess([], 0 if result["status"] == "ok" else 2,
+                                           json.dumps(result), "")
+
+    monkeypatch.setattr(backend.subprocess, "run", route)
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("# candidate\n")
+    requests = [
+        {"action": "check", "device": 2, "cases": [40], "scope": "full"},
+        {"action": "measure", "device": 2, "case": 40, "phase": "sample"},
+        {"action": "profile", "device": 2, "cases": [40], "repeats": 3,
+         "round": 1},
+    ]
+    for request in requests:
+        job = backend.make_job(
+            request, "gdn", candidate, ROOT,
+            "gdn_kernel" if request["action"] == "profile" else None,
+        )
+        result = backend.invoke(["bz-client"], job, 60)
+        assert result["status"] == "ok"
+        assert result["device"] == 2
+        assert result["placement"] == {"profile": "bz-a3-1", "device": 5}
+        assert transport.controller_job["logical_device"] == 0
+
+
+@pytest.mark.parametrize("corruption", [
+    "missing", "kernel", "repeats", "cases", "sample_count", "nonfinite",
+    "captures", "geomean",
+])
+def test_profile_rejects_malformed_compact_evidence_before_receipting(
+        tmp_path: Path, corruption: str):
+    module = load()
+
+    class MalformedTransport(FakeTransport):
+        def completed(self, profile):
+            result, handle = super().completed(profile)
+            payload = json.loads(result.stdout.removeprefix("BZ_PRODUCTION_RESULT="))
+            evidence = payload["profile"]
+            if corruption == "missing":
+                payload.pop("profile")
+            elif corruption == "kernel":
+                evidence["kernel_name"] = "other_kernel"
+            elif corruption == "repeats":
+                evidence["repeats"] = 2
+            elif corruption == "cases":
+                evidence["cases"] = list(reversed(evidence["cases"]))
+            elif corruption == "sample_count":
+                evidence["cases"][0]["samples_us"].pop()
+            elif corruption == "nonfinite":
+                evidence["cases"][0]["samples_us"][0] = float("nan")
+            elif corruption == "captures":
+                evidence["captures"].pop()
+            else:
+                evidence["geomean_us"] = float("inf")
+            return self.module.CommandResult(
+                0, "BZ_PRODUCTION_RESULT=" + json.dumps(payload) + "\n", ""), handle
+
+    transport = MalformedTransport(module)
+    _module, subject = client(tmp_path, transport)
+    result = subject.run(profile_job(tmp_path))
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "profile_tool_error"
+    assert not list((tmp_path / "state").glob("*/completed.json"))

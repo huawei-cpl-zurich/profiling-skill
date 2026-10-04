@@ -10,6 +10,7 @@ import math
 import os
 import re
 import shlex
+import statistics
 import subprocess
 import sys
 import tarfile
@@ -201,6 +202,58 @@ def _parse_result(stdout: str, expected: dict) -> dict:
     return result
 
 
+def _positive_number(value: object) -> bool:
+    return (not isinstance(value, bool) and isinstance(value, (int, float))
+            and math.isfinite(value) and value > 0)
+
+
+def _validate_profile_evidence(result: dict, job: dict) -> None:
+    evidence = result.get("profile")
+    rows = result.get("profile_cases")
+    kernel = job["profiling"]["kernel_name"]
+    repeats = job["repeats"]
+    if (not isinstance(evidence, dict) or evidence.get("status") != "success"
+            or evidence.get("profiler") != "msprof-op"
+            or evidence.get("kernel_name") != kernel
+            or evidence.get("repeats") != repeats
+            or not isinstance(rows, list) or evidence.get("cases") != rows
+            or [row.get("case") for row in rows if isinstance(row, dict)]
+            != job["cases"]):
+        raise JobError("profile_tool_error", "compact msprof evidence identity mismatch")
+    medians = []
+    for row in rows:
+        samples = row.get("samples_us")
+        median = row.get("median_us")
+        if (not isinstance(samples, list) or len(samples) != repeats
+                or not all(_positive_number(sample) for sample in samples)
+                or not _positive_number(median)
+                or not math.isclose(median, statistics.median(samples),
+                                    rel_tol=1e-12, abs_tol=1e-12)):
+            raise JobError("profile_tool_error", "compact msprof case samples are invalid")
+        medians.append(median)
+    captures = evidence.get("captures")
+    expected = [(row["case"], iteration, sample) for row in rows
+                for iteration, sample in enumerate(row["samples_us"])]
+    if (not isinstance(captures, list) or len(captures) != len(expected)
+            or any(not isinstance(capture, dict)
+                   or (capture.get("case"), capture.get("iteration")) != identity[:2]
+                   or capture.get("kernel_name") != kernel
+                   or not _positive_number(capture.get("duration_us"))
+                   or not math.isclose(capture["duration_us"], identity[2],
+                                       rel_tol=1e-12, abs_tol=1e-12)
+                   for capture, identity in zip(captures, expected))):
+        raise JobError("profile_tool_error", "compact msprof captures are invalid")
+    geomean = evidence.get("geomean_us")
+    expected_geomean = math.exp(sum(math.log(value) for value in medians) / len(medians))
+    if (not _positive_number(geomean)
+            or not math.isclose(geomean, expected_geomean,
+                                rel_tol=1e-12, abs_tol=1e-12)
+            or not _positive_number(result.get("geomean_us", geomean))
+            or not math.isclose(result.get("geomean_us", geomean), geomean,
+                                rel_tol=1e-12, abs_tol=1e-12)):
+        raise JobError("profile_tool_error", "compact msprof geomean is invalid")
+
+
 class BzA3JobClient:
     def __init__(self, transport: AdapterTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
@@ -322,8 +375,9 @@ class BzA3JobClient:
         device = job.get("device")
         if isinstance(device, bool) or not isinstance(device, int) or device < 0:
             raise JobError("request_error", "device must be a non-negative logical ID")
-        if job.get("logical_device", device) != device:
-            raise JobError("request_error", "device and logical_device must match")
+        logical_device = job.get("logical_device", 0)
+        if isinstance(logical_device, bool) or logical_device != 0:
+            raise JobError("request_error", "remote logical_device must be 0")
         cases = job.get("cases")
         valid_cases = (isinstance(cases, list) and bool(cases)
                        and all(not isinstance(case, bool)
@@ -368,7 +422,7 @@ class BzA3JobClient:
         remote = json.loads(json.dumps(job))
         remote.update(candidate="candidate.py", baseline="baseline.py",
                       case_spec="cases.jsonl", device=0,
-                      logical_device=job["device"])
+                      logical_device=0)
         if job["action"] == "profile":
             remote["profiling"]["driver"] = "profile_a3.py"
         return files, remote
@@ -445,7 +499,9 @@ exit 0'''
             else:
                 failure = "transport_error"
             raise JobError(failure, _bounded(output), handle)
-        result = _parse_result(response.stdout, identity)
+        remote_identity = {**identity, "device": 0}
+        result = _parse_result(response.stdout, remote_identity)
+        result["device"] = identity["device"]
         result.update(handle=handle, placement=placement,
                       artifacts={"request_digest": request_sha,
                                  "placements_sha256": placements_sha256,
@@ -453,10 +509,8 @@ exit 0'''
         if job["action"] == "profile":
             result["artifacts"]["remote_profile_evidence"] = (
                 result["artifacts"]["remote_run_root"] + "/work/profile/evidence.json")
-            if result["status"] == "ok" and (
-                    not isinstance(result.get("profile"), dict)
-                    or result["profile"].get("status") != "success"):
-                raise JobError("profile_tool_error", "missing valid compact msprof evidence", handle)
+            if result["status"] == "ok":
+                _validate_profile_evidence(result, job)
         if result["status"] == "infrastructure_error":
             result["failure_type"] = ("profile_tool_error" if job["action"] == "profile"
                                       else "remote_infrastructure_error")

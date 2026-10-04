@@ -313,6 +313,59 @@ def test_unsafe_remote_root_is_rejected_before_transport(
     assert transport.uploads == [] and transport.executions == []
 
 
+def production_client(module, transport, state: Path, remote_root: str):
+    return module.BzA3JobClient(
+        transport, state, {"0": {"profile": "bz-a3-2", "device": 3}},
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        profiler=ROOT / "scripts/profile_a3.py",
+        batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+        remote_root=remote_root,
+    )
+
+
+def test_remote_root_drift_never_observes_foreign_retained_dispatch(tmp_path: Path):
+    module = load()
+    state = tmp_path / "state"
+    root_a = "/srv/campaigns/root-a"
+    root_b = "/srv/campaigns/root-b"
+    interrupted = FakeTransport(module, fail="observer")
+    first = production_client(module, interrupted, state, root_a).run(
+        profile_job(tmp_path))
+    assert first["handle"] == "bz-a3-2:retained"
+
+    replacement = FakeTransport(module)
+    second = production_client(module, replacement, state, root_b).run(
+        profile_job(tmp_path))
+
+    assert second["status"] == "ok"
+    assert replacement.observations == []
+    assert len(replacement.uploads) == len(replacement.executions) == 1
+    assert replacement.uploads[0][2].startswith(root_b + "/staging/")
+    assert len(list(state.glob("*/dispatch.json"))) == 1
+    assert len(list(state.glob("*/completed.json"))) == 1
+
+
+def test_remote_root_drift_never_reuses_foreign_completed_receipt(tmp_path: Path):
+    module = load()
+    state = tmp_path / "state"
+    root_a = "/srv/campaigns/root-a"
+    root_b = "/srv/campaigns/root-b"
+    first_transport = FakeTransport(module)
+    first = production_client(module, first_transport, state, root_a).run(
+        profile_job(tmp_path))
+
+    second_transport = FakeTransport(module)
+    second = production_client(module, second_transport, state, root_b).run(
+        profile_job(tmp_path))
+
+    assert first["artifacts"]["request_digest"] != second["artifacts"]["request_digest"]
+    assert first["artifacts"]["remote_run_root"].startswith(root_a + "/runs/")
+    assert second["artifacts"]["remote_run_root"].startswith(root_b + "/runs/")
+    assert len(second_transport.uploads) == len(second_transport.executions) == 1
+    assert second_transport.observations == []
+    assert len(list(state.glob("*/completed.json"))) == 2
+
+
 def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
         monkeypatch, tmp_path: Path):
     module = load()

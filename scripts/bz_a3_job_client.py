@@ -393,6 +393,11 @@ class BzA3JobClient:
         while True:
             try:
                 fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if time.monotonic() >= deadline:
+                    fcntl.flock(stream, fcntl.LOCK_UN)
+                    stream.close()
+                    raise JobError(
+                        "transport_error", "BZ request lock deadline exhausted")
                 return stream
             except BlockingIOError:
                 if time.monotonic() >= deadline:

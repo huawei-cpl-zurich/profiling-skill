@@ -344,12 +344,16 @@ def test_request_lock_wait_honors_effective_deadline(monkeypatch, tmp_path: Path
     holder = context.Process(target=hold_lock)
     holder.start()
     assert acquired.wait(timeout=2)
+    real_monotonic = module.time.monotonic
+    real_sleep = module.time.sleep
     ticks = iter((0.0, 10.0, 20.0, 30.0, 40.0))
     monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
     monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
     try:
         result = subject.run(job, timeout=26)
     finally:
+        module.time.monotonic = real_monotonic
+        module.time.sleep = real_sleep
         release.set()
         holder.join(timeout=2)
         assert holder.exitcode == 0
@@ -357,6 +361,57 @@ def test_request_lock_wait_honors_effective_deadline(monkeypatch, tmp_path: Path
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "transport_error"
     assert result["diagnostics"] == "BZ request lock deadline exhausted"
+    assert len(transport.executions) == 1
+
+
+def test_request_lock_released_after_deadline_does_not_return_cached_success(
+        monkeypatch, tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    cached = subject.run(job, timeout=26)
+    assert cached["status"] == "ok"
+    state = next((tmp_path / "state").iterdir())
+
+    context = multiprocessing.get_context("fork")
+    acquired = context.Event()
+    release = context.Event()
+    released = context.Event()
+
+    def hold_lock():
+        with (state / "request.lock").open("a+") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            acquired.set()
+            release.wait(timeout=5)
+        released.set()
+
+    holder = context.Process(target=hold_lock)
+    holder.start()
+    assert acquired.wait(timeout=2)
+    real_monotonic = module.time.monotonic
+    real_sleep = module.time.sleep
+    ticks = iter((0.0, 10.0, 20.0, 30.0))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+
+    def release_after_deadline(_seconds):
+        release.set()
+        released.wait()
+
+    monkeypatch.setattr(module.time, "sleep", release_after_deadline)
+    try:
+        result = subject.run(job, timeout=26)
+    finally:
+        module.time.monotonic = real_monotonic
+        module.time.sleep = real_sleep
+        release.set()
+        holder.join(timeout=2)
+        assert holder.exitcode == 0
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert result["diagnostics"] == "BZ request lock deadline exhausted"
+    assert result != cached
     assert len(transport.executions) == 1
 
 

@@ -342,7 +342,7 @@ def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
 
 @pytest.mark.parametrize("corruption", [
     "missing", "kernel", "repeats", "cases", "sample_count", "nonfinite",
-    "captures", "geomean",
+    "captures", "geomean", "non_object_row",
 ])
 def test_profile_rejects_malformed_compact_evidence_before_receipting(
         tmp_path: Path, corruption: str):
@@ -367,8 +367,11 @@ def test_profile_rejects_malformed_compact_evidence_before_receipting(
                 evidence["cases"][0]["samples_us"][0] = float("nan")
             elif corruption == "captures":
                 evidence["captures"].pop()
-            else:
+            elif corruption == "geomean":
                 evidence["geomean_us"] = float("inf")
+            else:
+                payload["profile_cases"].append("not-a-case-row")
+                evidence["cases"].append("not-a-case-row")
             return self.module.CommandResult(
                 0, "BZ_PRODUCTION_RESULT=" + json.dumps(payload) + "\n", ""), handle
 

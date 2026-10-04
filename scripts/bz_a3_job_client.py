@@ -217,8 +217,9 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
             or evidence.get("kernel_name") != kernel
             or evidence.get("repeats") != repeats
             or not isinstance(rows, list) or evidence.get("cases") != rows
-            or [row.get("case") for row in rows if isinstance(row, dict)]
-            != job["cases"]):
+            or len(rows) != len(job["cases"])
+            or not all(isinstance(row, dict) for row in rows)
+            or [row.get("case") for row in rows] != job["cases"]):
         raise JobError("profile_tool_error", "compact msprof evidence identity mismatch")
     medians = []
     for row in rows:

@@ -133,6 +133,18 @@ def test_bsa_identity_reaches_remote_job_and_receipt(tmp_path: Path):
     assert result["benchmark"] == "bsa"
 
 
+def test_gdn_identity_reaches_remote_job_and_receipt(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    value = request(tmp_path); value["benchmark"] = "gdn"
+    result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(value)
+    script = transport.executions[0][3]
+    job_line = next(line for line in script.splitlines()
+                    if "job.json" in line and "printf" in line)
+    assert '"benchmark":"gdn"' in job_line
+    assert result["benchmark"] == "gdn"
+
+
 def test_supplementary_asset_is_packaged_beside_baseline(tmp_path: Path):
     module = load()
     transport = FakeTransport(module)

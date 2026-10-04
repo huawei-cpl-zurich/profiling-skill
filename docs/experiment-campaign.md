@@ -115,6 +115,16 @@ Both configurations use the same prompt and treatment isolation. The usual
 manifest, placements, BZ adapter/state, agent-command, and run-root arguments
 remain required; use a fresh run root for each benchmark.
 
+GDN uses `experiments/two-shot-gdn.json` with development cases 40, 49, 47,
+46, and 45. Its `baseline.json` companion is frozen and staged beside
+`baseline.py`, matching the benchmark's import-time contract. The schedule is
+the same three/two/two counted-trial matrix. The upstream CANNBot treatments
+are immutable external controls: their trials and failure evidence are always
+retained, but zero successes do not block this GDN smoke phase. The
+project-guarded treatment must succeed in at least one of its two trials.
+CANNBot must be refreshed and frozen before the run; never patch its frozen
+contents to make a control pass.
+
 The ledger retains raw cell evidence and adds a bounded structured summary for
 every counted failure, including phase, diagnostics, candidate hashes, and
 durable handles. In the existing failed `cannbot` matmul cell, round 1 omitted

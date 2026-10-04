@@ -31,11 +31,14 @@ def main() -> int:
                         help="JSON string array containing the executable and exact arguments")
     parser.add_argument("--candidate", default="candidate.py")
     parser.add_argument("--candidate-manifest", default="candidate.manifest.json")
+    parser.add_argument("--benchmarks", nargs="+", choices=tuple(BENCHMARKS),
+                        default=list(BENCHMARKS))
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     backend = Path(__file__).resolve().with_name("benchmark_backend.py")
     cells = {}
-    for benchmark, spec in BENCHMARKS.items():
+    for benchmark in args.benchmarks:
+        spec = BENCHMARKS[benchmark]
         for treatment in TREATMENTS:
             cell_id = f"{benchmark}-{treatment}"
             cells[cell_id] = {

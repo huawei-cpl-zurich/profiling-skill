@@ -26,7 +26,8 @@ def tree(path: Path, content: str = "content") -> Path:
     return path
 
 
-def fixture(tmp_path: Path, request_budget: int = 18):
+def fixture(tmp_path: Path, request_budget: int = 18,
+            benchmarks: tuple[str, ...] | None = None):
     tmp_path.mkdir(parents=True, exist_ok=True)
     prompt = tmp_path / "prompt.md"
     prompt.write_bytes((ROOT / "prompts/kernel-optimization.md").read_bytes())
@@ -83,6 +84,7 @@ def fixture(tmp_path: Path, request_budget: int = 18):
         controller_config, controller_command,
         request_budget=request_budget,
         guarded_revision="b" * 40,
+        benchmarks=benchmarks,
     )
     return manifest, manifest_path
 
@@ -111,6 +113,28 @@ def test_fixed_schedule_has_nine_cells_in_collision_free_four_four_one_waves():
                for benchmark in campaign.BENCHMARK_DEVICE)
     assert {(c.benchmark, c.treatment): c.device for c in cells} == campaign.CELL_DEVICE
     assert all(c.rounds == 3 and c.request_budget == 18 for c in cells)
+
+
+def test_gdn_slice_is_one_concurrent_wave_with_three_treatments():
+    selected = campaign.cells(benchmarks=("gdn",))
+    assert [cell.cell_id for cell in selected] == [
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+    ]
+    assert [cell.device for cell in selected] == [0, 1, 2]
+    assert {cell.wave for cell in selected} == {1}
+    assert {cell.treatment for cell in selected} == set(campaign.TREATMENT_SKILLS)
+
+
+def test_gdn_manifest_calibrates_only_participating_devices(tmp_path: Path):
+    manifest, _ = fixture(tmp_path, benchmarks=("gdn",))
+    assert [cell["cell_id"] for cell in manifest["cells"]] == [
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+    ]
+    assert manifest["calibration"] == {
+        "devices": [0, 1, 2], "case": 7,
+        "selector": "streaming_matmul_add_kernel_mix_aic",
+        "max_drift_fraction": 0.10,
+    }
 
 
 def test_manifest_binds_agent_help_and_budget_and_rejects_drift(tmp_path: Path):
@@ -819,6 +843,48 @@ def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
     assert frozen_client[:2] == ["{python}", "{bundle}/scripts/gz_a3_job_client.py"]
     assert frozen_client[2:] == client[2:]
     assert str(ROOT) not in json.dumps(bundled)
+
+
+def test_controller_bundle_freezes_bz_client_and_placements(tmp_path: Path):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({
+        "0": {"profile": "bz-a3-1", "device": 0},
+        "1": {"profile": "bz-a3-1", "device": 1},
+        "2": {"profile": "bz-a3-2", "device": 2},
+    }))
+    client = [
+        sys.executable, str(ROOT / "scripts/bz_a3_job_client.py"),
+        "--state-dir", str(tmp_path / "job-state"),
+        "--placements-json", str(placements),
+        "--adapter-json", '["/approved/adapter"]',
+        "--remote-root", "/frozen/remote/root",
+    ]
+    config = tmp_path / "cells.json"
+    config.write_text(json.dumps({"cells": {"gdn-cannbot": {"backend": {"command": [
+        sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
+        "--job-client-json", json.dumps(client),
+    ]}}}}))
+    output = tmp_path / "campaign.json"
+    binding = campaign.freeze_controller_bundle(
+        output, config,
+        [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+         str(config.resolve()), "--cell", "{cell_id}"],
+    )
+    bundle = tmp_path / binding["bundle"]
+    bundled = json.loads((bundle / "controller.json").read_text())
+    command = bundled["cells"]["gdn-cannbot"]["backend"]["command"]
+    frozen_client = json.loads(command[command.index("--job-client-json") + 1])
+    assert frozen_client[1] == "{bundle}/scripts/bz_a3_job_client.py"
+    assert frozen_client[frozen_client.index("--placements-json") + 1] == \
+        "{bundle}/placements.json"
+    assert frozen_client[frozen_client.index("--state-dir") + 1] == \
+        "{bundle}/../job-state"
+    assert frozen_client[frozen_client.index("--remote-root") + 1] == \
+        "/frozen/remote/root"
+    assert json.loads((bundle / "placements.json").read_text()) == json.loads(
+        placements.read_text())
+    assert str(placements) not in json.dumps(bundled)
+    assert "placements.json" in binding["files"]
 
 
 def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_path: Path):

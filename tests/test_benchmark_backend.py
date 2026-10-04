@@ -375,3 +375,18 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]
     assert command[command.index("--job-client-json") + 1] == encoded_client
+
+
+def test_generator_can_emit_single_gdn_wave_on_three_devices(tmp_path: Path):
+    output = tmp_path / "gdn.json"
+    encoded_client = json.dumps(["/opt/job-client", "--profile", "bz-a3"])
+    subprocess.run([
+        sys.executable, str(GENERATOR), "--job-client-json", encoded_client,
+        "--benchmarks", "gdn", "--output", str(output),
+    ], check=True)
+    cells = json.loads(output.read_text())["cells"]
+    assert list(cells) == [
+        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
+    ]
+    assert [cell["device"] for cell in cells.values()] == [0, 1, 2]
+    assert {cell["benchmark"] for cell in cells.values()} == {"gdn"}

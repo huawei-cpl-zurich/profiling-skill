@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import math
@@ -287,6 +288,7 @@ class BzA3JobClient:
         handle = None
         request_sha = None
         dispatch = completed = None
+        request_lock = None
         try:
             if not isinstance(job, dict):
                 raise JobError("request_error", "job must be a JSON object")
@@ -304,12 +306,17 @@ class BzA3JobClient:
             stage_files, remote_job = self._files_and_job(job)
             file_hashes = {name: _sha(path) for name, path in stage_files}
             request_sha = _json_sha({"job": remote_job, "files": file_hashes,
+                                     "campaign_device": logical,
+                                     "placement": placement,
                                      "placements_sha256": self.placements_sha256,
                                      "remote_root": self.remote_root,
                                      "timeout_seconds": timeout})
             state = self.state_dir / request_sha
             archive = state / "payload.tar"
             dispatch, completed = state / "dispatch.json", state / "completed.json"
+            deadline = time.monotonic() + timeout
+            state.mkdir(parents=True, exist_ok=True)
+            request_lock = self._acquire_request_lock(state / "request.lock", deadline)
             if completed.is_file():
                 record = json.loads(completed.read_text())
                 if record.get("request_sha256") != request_sha:
@@ -318,7 +325,6 @@ class BzA3JobClient:
                 if not isinstance(result, dict):
                     raise JobError("request_error", "completed receipt is invalid")
                 return result
-            deadline = time.monotonic() + timeout
             if dispatch.is_file():
                 record = json.loads(dispatch.read_text())
                 if record.get("request_sha256") != request_sha:
@@ -376,6 +382,29 @@ class BzA3JobClient:
             return {"status": "infrastructure_error", "failure_type": "staging_error",
                     "diagnostics": _bounded(str(exc)), "handle": handle, **identity,
                     **({"placement": placement} if placement else {})}
+        finally:
+            if request_lock is not None:
+                fcntl.flock(request_lock, fcntl.LOCK_UN)
+                request_lock.close()
+
+    @staticmethod
+    def _acquire_request_lock(path: Path, deadline: float):
+        stream = path.open("a+")
+        while True:
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                if time.monotonic() >= deadline:
+                    fcntl.flock(stream, fcntl.LOCK_UN)
+                    stream.close()
+                    raise JobError(
+                        "transport_error", "BZ request lock deadline exhausted")
+                return stream
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    stream.close()
+                    raise JobError(
+                        "transport_error", "BZ request lock deadline exhausted")
+                time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
 
     @staticmethod
     def _remaining(deadline: float, handle: str | None = None) -> int:

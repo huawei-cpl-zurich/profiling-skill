@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import fcntl
 import importlib.util
 import json
 import math
+import multiprocessing
 import os
 import subprocess
 import sys
 import tarfile
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -168,6 +173,245 @@ def test_completed_receipt_is_idempotent_and_receipt_drift_is_rejected(tmp_path:
     assert drift["status"] == "infrastructure_error"
     assert drift["failure_type"] == "request_error"
     assert "request" in drift["diagnostics"]
+    assert len(transport.executions) == 1
+
+
+def test_request_identity_binds_campaign_device_and_resolved_placement(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    placements = {
+        "0": {"profile": "bz-a3-1", "device": 2},
+        "1": {"profile": "bz-a3-2", "device": 5},
+    }
+    _module, subject = client(tmp_path, transport, placements)
+    first_job = profile_job(tmp_path)
+    second_job = {**first_job, "device": 1}
+
+    first = subject.run(first_job)
+    second = subject.run(second_job)
+    resumed = subject.run(first_job)
+
+    assert first["status"] == second["status"] == "ok"
+    assert resumed == first
+    assert first["artifacts"]["request_digest"] != second["artifacts"]["request_digest"]
+    assert first["artifacts"]["remote_run_root"] != second["artifacts"]["remote_run_root"]
+    assert first["placement"] == placements["0"]
+    assert second["placement"] == placements["1"]
+    assert len(list((tmp_path / "state").glob("*/completed.json"))) == 2
+    assert len({upload[2] for upload in transport.uploads}) == 2
+    assert len({call[3].split("run_root=", 1)[1].splitlines()[0]
+                for call in transport.executions}) == 2
+    assert len(transport.executions) == 2
+
+
+def test_campaign_device_is_bound_when_resolved_placement_matches(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    placement = {"profile": "bz-a3-2", "device": 5}
+    _module, subject = client(tmp_path, transport, {"0": placement, "1": placement})
+    first_job = profile_job(tmp_path)
+
+    first = subject.run(first_job)
+    second = subject.run({**first_job, "device": 1})
+
+    assert first["artifacts"]["request_digest"] != second["artifacts"]["request_digest"]
+    assert len(transport.executions) == 2
+
+
+@pytest.mark.parametrize("placement", [
+    {"profile": "bz-a3-1", "device": 3},
+    {"profile": "bz-a3-2", "device": 2},
+])
+def test_resolved_placement_change_does_not_reuse_request_state(
+        tmp_path: Path, placement: dict):
+    module = load()
+    state = tmp_path / "state"
+    job = profile_job(tmp_path)
+    original_transport = FakeTransport(module)
+    original = module.BzA3JobClient(
+        original_transport, state, {"0": {"profile": "bz-a3-1", "device": 2}},
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        profiler=ROOT / "scripts/profile_a3.py",
+        batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+        remote_root="/srv/profiling-skill-production",
+    ).run(job)
+    changed_transport = FakeTransport(module)
+    changed = module.BzA3JobClient(
+        changed_transport, state, {"0": placement},
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        profiler=ROOT / "scripts/profile_a3.py",
+        batch_profiler=ROOT / "scripts/batch_profile_a3.py",
+        remote_root="/srv/profiling-skill-production",
+    ).run(job)
+
+    assert original["artifacts"]["request_digest"] != changed["artifacts"]["request_digest"]
+    assert len(changed_transport.executions) == 1
+
+
+def test_concurrent_identical_payloads_on_distinct_placements_are_isolated(
+        tmp_path: Path):
+    module = load()
+
+    class ConcurrentTransport(FakeTransport):
+        def __init__(self, loaded_module):
+            super().__init__(loaded_module)
+            self.lock = threading.Lock()
+            self.upload_barrier = threading.Barrier(2)
+
+        def upload(self, profile, source, destination, timeout):
+            with self.lock:
+                self.uploads.append((profile, source, destination, timeout))
+            self.upload_barrier.wait(timeout=5)
+
+        def execute(self, profile, device, operation, script, timeout):
+            with self.lock:
+                self.executions.append((profile, device, operation, script, timeout))
+            return self.completed(profile)
+
+    transport = ConcurrentTransport(module)
+    placements = {
+        "0": {"profile": "bz-a3-1", "device": 2},
+        "1": {"profile": "bz-a3-2", "device": 5},
+    }
+    _module, subject = client(tmp_path, transport, placements)
+    first_job = profile_job(tmp_path)
+    jobs = [first_job, {**first_job, "device": 1}]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(subject.run, jobs))
+
+    assert [result["status"] for result in results] == ["ok", "ok"]
+    assert len({result["artifacts"]["request_digest"] for result in results}) == 2
+    assert len({result["artifacts"]["remote_run_root"] for result in results}) == 2
+    assert len({upload[2] for upload in transport.uploads}) == 2
+    assert len(list((tmp_path / "state").glob("*/completed.json"))) == 2
+
+
+def test_multiprocess_identical_requests_dispatch_once_and_share_result(tmp_path: Path):
+    module = load()
+    context = multiprocessing.get_context("fork")
+    start = context.Barrier(2)
+    execute_count = context.Value("i", 0)
+    results = context.Queue()
+    job = profile_job(tmp_path)
+
+    class ProcessTransport(FakeTransport):
+        def execute(self, profile, device, operation, script, timeout):
+            with execute_count.get_lock():
+                execute_count.value += 1
+            time.sleep(0.2)
+            return self.completed(profile)
+
+    def invoke():
+        transport = ProcessTransport(module)
+        _module, subject = client(tmp_path, transport)
+        start.wait(timeout=5)
+        results.put(subject.run(job, timeout=60))
+
+    processes = [context.Process(target=invoke) for _ in range(2)]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=10)
+        assert process.exitcode == 0
+
+    observed = [results.get(timeout=2) for _ in processes]
+    assert execute_count.value == 1
+    assert observed[0] == observed[1]
+    assert observed[0]["status"] == "ok"
+    assert len(list((tmp_path / "state").glob("*/completed.json"))) == 1
+
+
+def test_request_lock_wait_honors_effective_deadline(monkeypatch, tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    assert subject.run(job, timeout=26)["status"] == "ok"
+    state = next((tmp_path / "state").iterdir())
+    (state / "completed.json").unlink()
+
+    context = multiprocessing.get_context("fork")
+    acquired = context.Event()
+    release = context.Event()
+
+    def hold_lock():
+        with (state / "request.lock").open("a+") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            acquired.set()
+            release.wait(timeout=5)
+
+    holder = context.Process(target=hold_lock)
+    holder.start()
+    assert acquired.wait(timeout=2)
+    real_monotonic = module.time.monotonic
+    real_sleep = module.time.sleep
+    ticks = iter((0.0, 10.0, 20.0, 30.0, 40.0))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+    try:
+        result = subject.run(job, timeout=26)
+    finally:
+        module.time.monotonic = real_monotonic
+        module.time.sleep = real_sleep
+        release.set()
+        holder.join(timeout=2)
+        assert holder.exitcode == 0
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert result["diagnostics"] == "BZ request lock deadline exhausted"
+    assert len(transport.executions) == 1
+
+
+def test_request_lock_released_after_deadline_does_not_return_cached_success(
+        monkeypatch, tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    cached = subject.run(job, timeout=26)
+    assert cached["status"] == "ok"
+    state = next((tmp_path / "state").iterdir())
+
+    context = multiprocessing.get_context("fork")
+    acquired = context.Event()
+    release = context.Event()
+    released = context.Event()
+
+    def hold_lock():
+        with (state / "request.lock").open("a+") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            acquired.set()
+            release.wait(timeout=5)
+        released.set()
+
+    holder = context.Process(target=hold_lock)
+    holder.start()
+    assert acquired.wait(timeout=2)
+    real_monotonic = module.time.monotonic
+    real_sleep = module.time.sleep
+    ticks = iter((0.0, 10.0, 20.0, 30.0))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+
+    def release_after_deadline(_seconds):
+        release.set()
+        released.wait()
+
+    monkeypatch.setattr(module.time, "sleep", release_after_deadline)
+    try:
+        result = subject.run(job, timeout=26)
+    finally:
+        module.time.monotonic = real_monotonic
+        module.time.sleep = real_sleep
+        release.set()
+        holder.join(timeout=2)
+        assert holder.exitcode == 0
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "transport_error"
+    assert result["diagnostics"] == "BZ request lock deadline exhausted"
+    assert result != cached
     assert len(transport.executions) == 1
 
 

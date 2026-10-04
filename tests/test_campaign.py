@@ -493,6 +493,58 @@ def test_generate_manifest_cli_writes_reproducible_inputs(tmp_path: Path, monkey
     assert campaign.preflight(written, sandbox)["cell"]["cell_id"] == "gdn-cannbot"
 
 
+def test_generate_manifest_cli_gdn_slice_needs_only_gdn_baseline(
+        tmp_path: Path, monkeypatch, capsys):
+    manifest, _ = fixture(tmp_path / "source")
+    output = tmp_path / "slice" / "campaign.json"
+    controller_config = tmp_path / "source/campaign.controller/controller.json"
+    controller_command = [sys.executable, str(ROOT / "scripts/experimentctl.py"),
+                          "--config", str(controller_config.resolve()),
+                          "--cell", "{cell_id}"]
+    monkeypatch.setattr(sys, "argv", [
+        "campaign.py", "generate-manifest", "--benchmarks", "gdn",
+        "--prompt", manifest["prompt"]["path"],
+        "--gdn-baseline", manifest["baselines"]["gdn"]["path"],
+        "--project-skill", manifest["skill_sources"]["ascend-profiling"]["path"],
+        "--guarded-skill", manifest["skill_sources"]["triton-guarded-kernel"]["path"],
+        "--guarded-skill-revision", "b" * 40,
+        "--cannbot-freeze", manifest["skill_sources"]["cannbot"]["path"],
+        "--controller-config", str(controller_config),
+        "--controller-json", json.dumps(controller_command),
+        "--output", str(output),
+    ])
+    assert campaign.main() == 0
+    written = json.loads(capsys.readouterr().out)
+    assert set(written["baselines"]) == {"gdn"}
+    assert [cell["device"] for cell in written["cells"]] == [0, 1, 2]
+    assert {cell["benchmark"] for cell in written["cells"]} == {"gdn"}
+
+
+@pytest.mark.parametrize(("selection", "provided", "missing"), [
+    (["--benchmarks", "gdn"], [], "--gdn-baseline"),
+    ([], ["--gdn-baseline", "gdn", "--matmul-baseline", "matmul"],
+     "--bsa-baseline"),
+])
+def test_generate_manifest_cli_rejects_missing_selected_baseline(
+        tmp_path: Path, monkeypatch, capsys, selection, provided, missing):
+    output = tmp_path / "campaign.json"
+    monkeypatch.setattr(sys, "argv", [
+        "campaign.py", "generate-manifest", *selection,
+        "--prompt", "prompt", *provided,
+        "--project-skill", "project", "--guarded-skill", "guarded",
+        "--guarded-skill-revision", "b" * 40, "--cannbot-freeze", "cannbot",
+        "--controller-config", "controller", "--controller-json", '["python"]',
+        "--output", str(output),
+    ])
+    with pytest.raises(SystemExit) as raised:
+        campaign.main()
+    assert raised.value.code == 2
+    error = capsys.readouterr().err
+    assert "selected benchmarks require baseline flags" in error
+    assert missing in error
+    assert not output.exists()
+
+
 @pytest.mark.parametrize("value", [{}, 7, "command", [], ["python", 3], [""]])
 def test_generate_manifest_cli_rejects_non_string_array_controller_json(
     tmp_path: Path, monkeypatch, capsys, value,

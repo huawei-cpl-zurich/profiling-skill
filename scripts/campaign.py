@@ -951,9 +951,9 @@ def main() -> int:
     freeze.add_argument("--output", type=Path, required=True)
     generate = sub.add_parser("generate-manifest", help="freeze all campaign inputs in a manifest")
     generate.add_argument("--prompt", type=Path, required=True)
-    generate.add_argument("--gdn-baseline", type=Path, required=True)
-    generate.add_argument("--bsa-baseline", type=Path, required=True)
-    generate.add_argument("--matmul-baseline", type=Path, required=True)
+    generate.add_argument("--gdn-baseline", type=Path)
+    generate.add_argument("--bsa-baseline", type=Path)
+    generate.add_argument("--matmul-baseline", type=Path)
     generate.add_argument("--project-skill", type=Path, required=True)
     generate.add_argument("--guarded-skill", type=Path, required=True)
     generate.add_argument("--guarded-skill-revision", required=True)
@@ -984,6 +984,20 @@ def main() -> int:
     if args.command == "freeze-cannbot":
         print(json.dumps(freeze_cannbot(args.repository, args.output), sort_keys=True))
     elif args.command == "generate-manifest":
+        baselines = {
+            "gdn": args.gdn_baseline,
+            "bsa": args.bsa_baseline,
+            "matmul": args.matmul_baseline,
+        }
+        missing_baselines = [
+            f"--{name}-baseline" for name in args.benchmarks
+            if baselines[name] is None
+        ]
+        if missing_baselines:
+            parser.error(
+                "selected benchmarks require baseline flags: "
+                + ", ".join(missing_baselines)
+            )
         try:
             controller = json.loads(args.controller_json)
             if (not isinstance(controller, list) or not controller
@@ -993,8 +1007,7 @@ def main() -> int:
             parser.error(f"--controller-json must be a JSON string array: {error}")
         document = write_manifest(
             args.output, args.prompt,
-            {"gdn": args.gdn_baseline, "bsa": args.bsa_baseline,
-             "matmul": args.matmul_baseline},
+            {name: value for name, value in baselines.items() if value is not None},
             args.project_skill, args.guarded_skill, args.cannbot_freeze,
             args.controller_config, controller,
             args.rounds, args.request_budget, args.guarded_skill_revision,

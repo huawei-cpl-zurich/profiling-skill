@@ -37,14 +37,16 @@ def main() -> int:
     args = parser.parse_args()
     backend = Path(__file__).resolve().with_name("benchmark_backend.py")
     cells = {}
+    single_benchmark = len(args.benchmarks) == 1
     for benchmark in args.benchmarks:
         spec = BENCHMARKS[benchmark]
-        for treatment in TREATMENTS:
+        for treatment_index, treatment in enumerate(TREATMENTS):
             cell_id = f"{benchmark}-{treatment}"
             cells[cell_id] = {
                 "benchmark": benchmark,
                 "treatment": treatment,
-                "device": CELL_DEVICE[(benchmark, treatment)],
+                "device": (treatment_index if single_benchmark
+                           else CELL_DEVICE[(benchmark, treatment)]),
                 "development_cases": spec["development_cases"],
                 "all_cases": spec["all_cases"],
                 "tolerances": spec["tolerances"],

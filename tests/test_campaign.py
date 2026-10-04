@@ -914,6 +914,38 @@ def test_controller_bundle_rejects_duplicate_bz_frozen_flags(tmp_path: Path, fla
     assert not (tmp_path / "campaign.controller").exists()
 
 
+@pytest.mark.parametrize("flag", ["--placements-json", "--state-dir", "--remote-root"])
+@pytest.mark.parametrize("form", ["equals", "abbreviation"])
+def test_controller_bundle_rejects_noncanonical_bz_frozen_flags(
+        tmp_path: Path, flag: str, form: str):
+    placements = tmp_path / "placements.json"
+    placements.write_text(json.dumps({"0": {"profile": "bz-a3-1", "device": 0}}))
+    values = {
+        "--placements-json": str(placements),
+        "--state-dir": str(tmp_path / "state"),
+        "--remote-root": "/approved/root",
+    }
+    client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
+    for name, value in values.items():
+        if name != flag:
+            client.extend([name, value])
+        elif form == "equals":
+            client.append(f"{name}={value}")
+        else:
+            client.extend([name[:-2], value])
+    client.extend(["--adapter-json", '["/approved/adapter"]'])
+    config = tmp_path / "cells.json"
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", "--job-client-json", json.dumps(client)]
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError, match=f"must use exact {flag}"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
 def test_controller_bundle_rejects_duplicate_job_client_marker(tmp_path: Path):
     config = tmp_path / "cells.json"
     client = json.dumps([sys.executable, str(ROOT / "scripts/gz_a3_job_client.py")])
@@ -930,6 +962,27 @@ def test_controller_bundle_rejects_duplicate_job_client_marker(tmp_path: Path):
     assert not (tmp_path / "campaign.controller").exists()
 
 
+@pytest.mark.parametrize("form", ["equals", "abbreviation"])
+def test_controller_bundle_rejects_noncanonical_job_client_marker(
+        tmp_path: Path, form: str):
+    config = tmp_path / "cells.json"
+    client = json.dumps([sys.executable, str(ROOT / "scripts/gz_a3_job_client.py")])
+    marker = (f"--job-client-json={client}" if form == "equals"
+              else "--job-client-j")
+    backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
+               "--benchmark", "gdn", marker]
+    if form == "abbreviation":
+        backend.append(client)
+    config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
+    output = tmp_path / "campaign.json"
+    controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
+                  str(config.resolve()), "--cell", "{cell_id}"]
+    with pytest.raises(campaign.CampaignError,
+                       match="must use exact --job-client-json"):
+        campaign.freeze_controller_bundle(output, config, controller)
+    assert not (tmp_path / "campaign.controller").exists()
+
+
 def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_path: Path):
     config = tmp_path / "cells.json"
     backend = [sys.executable, str(ROOT / "scripts/benchmark_backend.py"),
@@ -938,7 +991,7 @@ def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_pat
     output = tmp_path / "campaign.json"
     controller = [sys.executable, str(ROOT / "scripts/experimentctl.py"), "--config",
                   str(config.resolve()), "--cell", "{cell_id}"]
-    with pytest.raises(campaign.CampaignError, match="requires a JSON job-client"):
+    with pytest.raises(campaign.CampaignError, match="exactly one --job-client-json"):
         campaign.freeze_controller_bundle(output, config, controller)
     assert not (tmp_path / "campaign.controller").exists()
     assert not list(tmp_path.glob(".campaign.controller.*"))

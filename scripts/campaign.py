@@ -172,6 +172,20 @@ def _parse_controller_command(command: list[str], controller_config: Path) -> tu
     return command[0], script
 
 
+def _strict_option_index(command: list[str], flag: str, owner: str) -> int:
+    """Return an option value index, rejecting argparse override spellings."""
+    exact = []
+    for index, argument in enumerate(command):
+        option = argument.split("=", 1)[0]
+        if option == flag or (option.startswith("--") and flag.startswith(option)):
+            if argument != flag:
+                raise CampaignError(f"{owner} must use exact {flag} once")
+            exact.append(index)
+    if len(exact) != 1 or exact[0] + 1 >= len(command):
+        raise CampaignError(f"{owner} requires exactly one {flag}")
+    return exact[0] + 1
+
+
 def _agent_runtime_contract(request_budget: int) -> tuple[dict, dict]:
     """Load metadata from the launcher that serves the actual agent endpoint."""
     path = Path(__file__).with_name("production_launcher.py")
@@ -220,13 +234,10 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                 if (len(backend_command) < 2
                         or Path(backend_command[1]).resolve() != required_scripts["benchmark_backend.py"].resolve()):
                     raise CampaignError("controller config must invoke the bundled benchmark_backend.py")
-                if backend_command.count("--job-client-json") != 1:
-                    raise CampaignError(
-                        "controller backend requires a JSON job-client command: "
-                        "exactly one --job-client-json"
-                    )
                 try:
-                    client_index = backend_command.index("--job-client-json") + 1
+                    client_index = _strict_option_index(
+                        backend_command, "--job-client-json", "controller backend"
+                    )
                     client_command = json.loads(backend_command[client_index])
                 except (ValueError, IndexError, json.JSONDecodeError) as error:
                     raise CampaignError("controller backend requires a JSON job-client command") from error
@@ -243,13 +254,11 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                     raise CampaignError("controller config must invoke a supported job client")
                 if client_name == "bz_a3_job_client.py":
                     singleton_flags = ("--placements-json", "--state-dir", "--remote-root")
-                    for flag in singleton_flags:
-                        if client_command.count(flag) != 1:
-                            raise CampaignError(f"BZ controller requires exactly one {flag}")
                     try:
-                        placements_index = client_command.index("--placements-json") + 1
-                        state_index = client_command.index("--state-dir") + 1
-                        remote_root_index = client_command.index("--remote-root") + 1
+                        placements_index, state_index, remote_root_index = (
+                            _strict_option_index(client_command, flag, "BZ controller")
+                            for flag in singleton_flags
+                        )
                         placements = Path(client_command[placements_index])
                         remote_root = client_command[remote_root_index]
                     except (ValueError, IndexError) as error:

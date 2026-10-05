@@ -28,8 +28,12 @@ def diagnostic(exc: BaseException) -> str:
 
 
 def classify(exc: BaseException) -> str:
-    text = f"{type(exc).__name__}: {exc}".lower()
-    compile_markers = ("compile", "compiler", "triton", "lowering", "codegen", "semantic")
+    exception_name = f"{type(exc).__module__}.{type(exc).__qualname__}".lower()
+    text = f"{exception_name}: {exc}".lower()
+    compile_markers = (
+        "compileerror", "compilationerror", "compilation", "compiler",
+        "lowering", "codegen", "semantic",
+    )
     compile_types = (ImportError, NameError, SyntaxError)
     return "compile_error" if isinstance(exc, compile_types) or any(item in text for item in compile_markers) else "runtime_error"
 

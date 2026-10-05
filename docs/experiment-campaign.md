@@ -165,7 +165,7 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --output /absolute/campaign-inputs/cannbot-freeze
 
 python "$ABS_REPOSITORY/scripts/generate_benchmark_config.py" \
-  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/bz_a3_job_client.py","--state-dir","/absolute/campaign-state/bz-a3-jobs","--placements-json","/absolute/campaign-inputs/bz-a3-placements.json","--remote-root","/existing/remote/profiling-skill"]' \
+  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/bz_a3_job_client.py","--state-dir","/absolute/campaign-state/bz-a3-jobs","--placements-json","/absolute/campaign-inputs/bz-a3-placements.json","--remote-root","/existing/remote/profiling-skill","--runtime-activate","/profile/configured/python/bin/activate"]' \
   --candidate candidate.py \
   --candidate-manifest candidate.manifest.json \
   --output /absolute/campaign-inputs/controller.json
@@ -176,7 +176,10 @@ retrieval through the globally installed `cpl-remote` command. The placements
 file maps campaign logical devices to `bz-a3-1` or `bz-a3-2` plus a physical
 device; the retained workload sees that device as logical device 0. The remote
 root must already exist and be writable in the target's registered execution
-context. After an interrupted observation, rerun the identical request so the
+context. `--runtime-activate` is the profile-configured absolute path to the
+target's Python activation script; the retained command sources it before
+selecting the physical device or invoking Python. Do not record a
+machine-specific value in repository configuration. After an interrupted observation, rerun the identical request so the
 client observes its recorded `remote:bz-a3-*:job:*` handle without dispatching
 a duplicate workload.
 

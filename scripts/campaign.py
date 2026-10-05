@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -17,11 +18,21 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Protocol
 
 
 BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1, "matmul": 2}
+
+
+def valid_runtime_activate(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and 2 <= len(value) <= 240
+        and re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
+        and str(PurePosixPath(value)) == value
+        and not any(part in {".", ".."} for part in PurePosixPath(value).parts)
+    )
 DEVELOPMENT_CASES = {
     "gdn": [40, 49, 47, 46, 45],
     "bsa": [47, 46, 49, 44, 43],
@@ -272,6 +283,16 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                 client_name = supported.get(client_path)
                 if client_name is None:
                     raise CampaignError("controller config must invoke a supported job client")
+                try:
+                    runtime_index = _strict_option_index(
+                        client_command, "--runtime-activate", "A3 controller")
+                    runtime_activate = client_command[runtime_index]
+                except (ValueError, IndexError) as error:
+                    raise CampaignError(
+                        "A3 controller requires one runtime activation path") from error
+                if not valid_runtime_activate(runtime_activate):
+                    raise CampaignError(
+                        "A3 controller runtime activation must be a normalized absolute path")
                 if client_name == "bz_a3_job_client.py":
                     singleton_flags = ("--placements-json", "--state-dir", "--remote-root")
                     try:
@@ -296,6 +317,16 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                         raise CampaignError("all BZ cells must use identical placements")
                     client_command[placements_index] = "{bundle}/placements.json"
                     client_command[state_index] = "{bundle}/../job-state"
+                else:
+                    try:
+                        remote_root_index = _strict_option_index(
+                            client_command, "--remote-root", "GZ controller")
+                        remote_root = client_command[remote_root_index]
+                    except (ValueError, IndexError) as error:
+                        raise CampaignError(
+                            "GZ controller requires one remote root") from error
+                    if not remote_root.strip():
+                        raise CampaignError("GZ controller remote root must be nonempty")
                 client_command[0:2] = ["{python}", f"{{bundle}}/scripts/{client_name}"]
                 backend_command[client_index] = json.dumps(client_command, separators=(",", ":"))
                 backend_command[0:2] = ["{python}", "{bundle}/scripts/benchmark_backend.py"]

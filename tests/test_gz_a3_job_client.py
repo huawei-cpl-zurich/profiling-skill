@@ -131,51 +131,49 @@ def test_protocol_v1_default_tolerance_and_reference_setup_failure(monkeypatch, 
     assert events.index("clone") < events.index("timer")
 
 
-def fake_adapter(tmp_path: Path) -> Path:
-    path = tmp_path / "adapter.py"
+def fake_remote(tmp_path: Path) -> Path:
+    path = tmp_path / "cpl-remote.py"
     path.write_text(r"""#!/usr/bin/env python3
-import hashlib, json, os, shutil, sys, tarfile
+import json, math, os, sys, tarfile
 from pathlib import Path
 args=sys.argv[1:]
-action=next(x for x in ("stage","run-bundle","fetch-bundle-result") if x in args)
 def value(name): return args[args.index(name)+1]
-if action == "stage":
- root=Path(value("--source-root")); receipt=Path(value("--receipt"))
- digest=hashlib.sha256(b"payload").hexdigest()
- receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"upload","root_digest":digest,"archive_sha256":"a"*64,"remote":"a3-gz","remote_path":f"incoming/profiling-workloads/{digest}/bundle.tar","state":"succeeded","transfer_handle":"upload-1"}))
- Path(os.environ["FAKE_ROOT"]).write_text(str(root))
-elif action == "run-bundle":
- receipt=Path(value("--run-receipt")); root=Path(os.environ["FAKE_ROOT"]).read_text(); root=Path(root)
- run_id=value("--run-id")
- if os.environ.get("FAKE_RUN_LOG"):
-  with open(os.environ["FAKE_RUN_LOG"],"a") as stream: stream.write(run_id+"\n")
+handle="remote:gz-a3:job:command-1"
+if Path(os.environ["FAKE_ROOT"]).is_file():
+ handle="remote:gz-a3:job:"+Path(Path(os.environ["FAKE_ROOT"]).read_text()).parent.name[:24]
+if "upload" in args:
+ Path(os.environ["FAKE_ROOT"]).write_text(args[args.index("upload")+2])
+elif "run" in args:
+ archive=Path(Path(os.environ["FAKE_ROOT"]).read_text())
+ handle="remote:gz-a3:job:"+archive.parent.name[:24]
+ root=Path(os.environ["FAKE_OUT"]); root.mkdir(exist_ok=True)
+ with tarfile.open(archive) as stream: stream.extractall(root,filter="data")
  job=json.loads((root/"job.json").read_text()); mode=os.environ.get("FAKE_MODE","ok")
+ if os.environ.get("FAKE_RUN_LOG"):
+  with open(os.environ["FAKE_RUN_LOG"],"a") as log: log.write(handle+"\n")
  identity={k:job[k] for k in ("benchmark","action","device")}
  if job["action"]=="check": identity.update(cases=job["cases"],scope=job["scope"])
  elif job["action"]=="profile": identity.update(cases=job["cases"],repeats=job["repeats"])
  else: identity["case"]=job["case"]
  if job["action"]=="measure": identity["phase"]=job["phase"]
  if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"])
- out=Path(os.environ["FAKE_OUT"]); out.mkdir(exist_ok=True)
  rows=[{"case":case,"samples_us":[7.0,7.5,8.0],"median_us":7.5} for case in job.get("cases",[])]
  result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok","profile_cases":rows}
  if job["action"]=="measure": result["latency_us"]=10.0
- (out/"response.json").write_text(json.dumps(result))
- if job["action"]=="profile":
-  (out/"profile").mkdir(exist_ok=True)
-  (out/"profile/evidence.json").write_text(json.dumps({"status":"success","cases":rows}))
-  (out/"profile/msprof.log").write_text("Profiling finished\n")
- archive=Path(os.environ["FAKE_TAR"])
- with tarfile.open(archive,"w") as stream:
-  stream.add(out/"response.json",arcname="response.json")
-  if job["action"]=="profile":
-   stream.add(out/"profile/evidence.json",arcname="profile/evidence.json")
-   stream.add(out/"profile/msprof.log",arcname="profile/msprof.log")
- sha=hashlib.sha256(archive.read_bytes()).hexdigest()
- handle="command-"+run_id if os.environ.get("FAKE_RUN_LOG") else "command-1"
- receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"run","state":"succeeded","command_handle":handle,"result_sha256":sha,"result_path":"results/x/result.tar"}))
-elif action == "fetch-bundle-result":
- shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
+ if job["action"]=="profile" and mode=="ok":
+  captures=[{"case":row["case"],"iteration":i,"duration_us":sample,
+   "kernel_name":job["profiling"]["kernel_name"]} for row in rows
+   for i,sample in enumerate(row["samples_us"])]
+  result["profile"]={"schema_version":1,"status":"success","profiler":"msprof-op",
+   "kernel_name":job["profiling"]["kernel_name"],"repeats":job["repeats"],
+   "cases":rows,"captures":captures,"geomean_us":math.exp(sum(math.log(7.5) for _ in rows)/len(rows))}
+ Path(os.environ["FAKE_LOG"]).write_text("BZ_PRODUCTION_RESULT="+json.dumps(result)+"\n")
+ print(json.dumps({"state":"running","handle":handle}))
+elif "observe" in args:
+ print(json.dumps({"state":"completed","handle":handle,"exit":0}))
+elif "logs" in args:
+ content=Path(os.environ["FAKE_LOG"]).read_text() if value("--stream")=="stdout" else ""
+ print(json.dumps({"state":"completed","handle":handle,"content":content}))
 """)
     path.chmod(0o755)
     return path
@@ -243,10 +241,13 @@ def inputs(tmp_path: Path) -> tuple[dict, dict]:
         "case_spec": str(tmp_path / "cases.jsonl"), "cases": [40], "repeats": 3, "round": 1,
         "profiling": {"kernel_name": "candidate_kernel"},
     }
-    adapter = fake_adapter(tmp_path)
+    remote = fake_remote(tmp_path)
     env = {**os.environ, "FAKE_ROOT": str(tmp_path / "root.txt"),
-           "FAKE_OUT": str(tmp_path / "remote"), "FAKE_TAR": str(tmp_path / "result.tar")}
-    command = [sys.executable, str(CLIENT), "--adapter-json", json.dumps([str(adapter)]),
+           "FAKE_OUT": str(tmp_path / "remote"),
+           "FAKE_LOG": str(tmp_path / "remote.log")}
+    command = [sys.executable, str(CLIENT), "--remote-json", json.dumps([str(remote)]),
+               "--remote-root", "/remote/profiling",
+               "--runtime-activate", "/runtime/bin/activate",
                "--state-dir", str(tmp_path / "state")]
     return job, {"env": env, "command": command}
 
@@ -263,11 +264,12 @@ def test_profile_returns_bound_msprof_evidence_and_handle(tmp_path: Path):
     process, result = run(tmp_path)
     assert process.returncode == 0
     assert result["status"] == "ok"
-    assert result["handle"] == "gz-a3:command-1"
+    assert result["handle"].startswith("remote:gz-a3:job:")
     assert result["kernel_name"] == "candidate_kernel"
     assert result["profile_cases"][0]["median_us"] == 7.5
     assert result["profile"]["status"] == "success"
-    assert Path(result["artifacts"]["msprof_log"]).read_text() == "Profiling finished\n"
+    assert result["artifacts"]["remote_profile_evidence"].endswith(
+        "/profile/evidence.json")
 
 
 def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
@@ -275,35 +277,27 @@ def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
     assert process.returncode == 2
     assert result["status"] == "compile_error"
     assert "NameError" in result["diagnostics"]
-    assert result["handle"] == "gz-a3:command-1"
+    assert result["handle"].startswith("remote:gz-a3:job:")
 
 
 def test_batch_compile_failure_is_packaged_and_returned_by_managed_client(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    adapter = executing_compile_adapter(tmp_path)
-    config["command"][3] = json.dumps([str(adapter)])
-    process = subprocess.run(
-        config["command"], input=json.dumps(job), text=True,
-        capture_output=True, env=config["env"], check=False,
-    )
-    result = json.loads(process.stdout)
+    process, result = run(tmp_path, "compile_error")
 
     assert process.returncode == 2
     assert result["status"] == "compile_error"
-    assert result["diagnostics"] == "NameError from candidate.py"
-    assert result["handle"] == "gz-a3:command-compile"
-    assert Path(result["artifacts"]["profile"]).is_file()
+    assert "candidate.py" in result["diagnostics"]
+    assert result["handle"].startswith("remote:gz-a3:job:")
 
 
-def test_adapter_failure_is_infrastructure_and_keeps_identity(tmp_path: Path):
+def test_remote_failure_is_infrastructure_and_keeps_identity(tmp_path: Path):
     job, config = inputs(tmp_path)
-    config["command"][3] = json.dumps(["/missing/adapter"])
+    config["command"][3] = json.dumps(["/missing/cpl-remote"])
     process = subprocess.run(config["command"], input=json.dumps(job), text=True,
                              capture_output=True, env=config["env"], check=False)
     result = json.loads(process.stdout)
     assert result["status"] == "infrastructure_error"
     assert (result["benchmark"], result["cases"], result["device"]) == ("gdn", [40], 0)
-    assert "managed adapter unavailable" in result["diagnostics"]
+    assert "transport unavailable" in result["diagnostics"]
 
 
 def test_same_content_reuses_state_and_receipts(tmp_path: Path):
@@ -332,7 +326,7 @@ def test_calibration_phases_create_distinct_digests_run_ids_and_results(tmp_path
     digests = [result["artifacts"]["request_digest"] for result in results]
     run_ids = run_log.read_text().splitlines()
     assert len(set(digests)) == len(set(run_ids)) == 2
-    assert run_ids == [digest[:24] for digest in digests]
+    assert run_ids == ["remote:gz-a3:job:" + digest[:24] for digest in digests]
     assert results[0]["handle"] != results[1]["handle"]
     assert len(list((tmp_path / "state").iterdir())) == 2
 
@@ -347,13 +341,27 @@ def test_digest_ignores_caller_checkout_in_profile_driver(tmp_path: Path):
     assert first == second
 
 
-def test_partial_retained_fetch_is_quarantined_and_refetched(tmp_path: Path):
-    first, result = run(tmp_path)
-    assert first.returncode == 0
-    state = tmp_path / "state" / result["artifacts"]["request_digest"]
-    shutil.rmtree(state / "result")
-    (state / "result.tar").write_bytes(b"partial")
-    second, recovered = run(tmp_path)
-    assert second.returncode == 0
-    assert recovered["status"] == "ok"
-    assert list(state.glob("result.invalid-*.tar"))
+def test_completed_receipt_reuses_result_without_redispatch(tmp_path: Path):
+    job, config = inputs(tmp_path)
+    run_log = tmp_path / "run-ids.txt"
+    config["env"]["FAKE_RUN_LOG"] = str(run_log)
+    results = []
+    for _ in range(2):
+        process = subprocess.run(
+            config["command"], input=json.dumps(job), text=True,
+            capture_output=True, env=config["env"], check=False)
+        assert process.returncode == 0
+        results.append(json.loads(process.stdout))
+    assert results[0] == results[1]
+    assert len(run_log.read_text().splitlines()) == 1
+def test_cli_returns_structured_error_for_invalid_runtime_activation(tmp_path: Path):
+    result = subprocess.run(
+        [sys.executable, str(CLIENT), "--state-dir", str(tmp_path / "state"),
+         "--remote-root", "/remote", "--runtime-activate", "/runtime/../bad"],
+        input=json.dumps({"action": "check", "benchmark": "bsa", "device": 0,
+                          "cases": [0], "scope": "development"}),
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["status"] == "infrastructure_error"
+    assert "Traceback" not in result.stderr

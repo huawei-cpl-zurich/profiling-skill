@@ -929,6 +929,7 @@ def test_production_bz_hook_reconstructs_primary_handle_without_dispatch_receipt
     class ObserveOnlyTransport:
         def __init__(self):
             self.observations = []
+            self.runtime_activate = "/runtime/bin/activate"
 
         def upload(self, *_args):
             raise AssertionError("reconciliation must not upload")
@@ -1015,7 +1016,8 @@ def test_remote_timeout_after_possible_dispatch_never_falls_back_or_replays(
     # Import the same module object used by the production hook so this test
     # exercises RemoteTransport.execute rather than a synthetic terminal.
     import bz_a3_diagnostic_client as bz_client
-    transport = bz_client.RemoteTransport(["remote"], invoke)
+    transport = bz_client.RemoteTransport(
+        ["remote"], "/runtime/bin/activate", invoke)
     client = bz_client.BzA3DiagnosticClient(transport, tmp_path / "state")
     hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
     campaign = module.DiagnosticCampaign(

@@ -26,6 +26,7 @@ def load():
 class FakeTransport:
     def __init__(self, module, mode="ok"):
         self.module, self.mode = module, mode
+        self.runtime_activate = "/runtime/bin/activate"
         self.uploads = []
         self.executions = []
         self.observations = []
@@ -461,7 +462,7 @@ def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path
         return module.CommandResult(124, json.dumps({"state": "failed",
             "handle": "remote:bz-a3-1:job:timed-out", "exit": 124}), "")
 
-    transport = module.RemoteTransport(["remote"], invoke)
+    transport = module.RemoteTransport(["remote"], "/runtime/bin/activate", invoke)
     result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
     assert result["status"] == result["failure_type"] == "candidate_timeout"
     adapter_argv, outer_timeout = next(call for call in calls if "run" in call[0])
@@ -490,7 +491,7 @@ def test_remote_over_response_grace_remains_infrastructure(tmp_path: Path):
             return module.CommandResult(0)
         raise module.DiagnosticError("transport_error", "outer response deadline expired")
 
-    transport = module.RemoteTransport(["remote"], invoke)
+    transport = module.RemoteTransport(["remote"], "/runtime/bin/activate", invoke)
     result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "transport_error"
@@ -507,7 +508,7 @@ def test_observe_failure_preserves_handle_from_initial_dispatch():
             "handle": "remote:bz-a3-1:job:retained"}), "")
 
     try:
-        module.RemoteTransport(["remote"], invoke).execute(
+        module.RemoteTransport(["remote"], "/runtime/bin/activate", invoke).execute(
             "bz-a3-1", 2, "/remote", "true", 30)
     except module.DiagnosticError as error:
         assert error.failure_type == "observer_error"
@@ -593,7 +594,8 @@ def test_remote_transport_observes_same_handle_after_interruption(state):
         return module.CommandResult(0, json.dumps({"state": state,
             "handle": "remote:bz-a3-2:job:retained-7"}), "")
 
-    transport = module.RemoteTransport(["cpl-remote"], invoke)
+    transport = module.RemoteTransport(
+        ["cpl-remote"], "/runtime/bin/activate", invoke)
     result, handle = transport.execute("bz-a3-2", 6, "/remote", "true", 30)
     assert result.returncode == 0
     assert handle == "remote:bz-a3-2:job:retained-7"
@@ -632,7 +634,7 @@ def test_execute_observation_shares_one_deadline(monkeypatch):
             "handle": "remote:bz-a3-1:job:kept", "content": ""}), "")
 
     monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
-    module.RemoteTransport(["remote"], invoke).execute(
+    module.RemoteTransport(["remote"], "/runtime/bin/activate", invoke).execute(
         "bz-a3-1", 2, "/remote", "true", 30)
     assert [timeout for argv, timeout in calls if "run" in argv or "observe" in argv] == [30, 10]
 

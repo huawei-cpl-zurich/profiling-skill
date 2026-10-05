@@ -714,26 +714,28 @@ def main() -> int:
     parser.add_argument("--skill-sources", type=Path); parser.add_argument("--assets", type=Path)
     parser.add_argument("--placements", type=Path); parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
+    parser.add_argument("--runtime-activate")
     parser.add_argument("--sandbox-backend", choices=("bubblewrap", "docker"), default="bubblewrap")
     parser.add_argument("--docker", default="docker"); parser.add_argument("--docker-image")
     parser.add_argument("--docker-image-id")
     args = parser.parse_args()
     if args.command == "controller-client": return controller_client(args.socket, args.arguments)
     try:
-        if not all((args.skill_sources, args.assets, args.placements, args.state_dir)):
+        if not all((args.skill_sources, args.assets, args.placements, args.state_dir,
+                    args.runtime_activate)):
             raise RunnerError("runner configuration is incomplete")
         remote = json.loads(args.remote_json)
         from bz_a3_diagnostic_client import RemoteTransport, BzA3DiagnosticClient
         runner = OneShotRunner(skill_sources=_load(args.skill_sources), assets=_load(args.assets),
             placements=_load(args.placements), client=BzA3DiagnosticClient(
-                RemoteTransport(remote), args.state_dir),
+                RemoteTransport(remote, args.runtime_activate), args.state_dir),
             sandbox_backend=args.sandbox_backend, docker=args.docker,
             docker_image=args.docker_image, docker_image_id=args.docker_image_id)
         request = json.load(sys.stdin)
         result = runner.run(
             request, timeout=(INNER_TURN_TIMEOUT * 2 if request.get("operation") == "two_shot"
                               else INNER_TURN_TIMEOUT))
-    except (RunnerError, OSError, ValueError, json.JSONDecodeError) as error:
+    except (RunnerError, OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         result = {"status": "setup_error", "diagnostics": _bounded(error),
                   "controller_usage": {"limit": 1, "billed": 0, "calls": []}}
     print(json.dumps(result, sort_keys=True))

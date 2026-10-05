@@ -42,6 +42,7 @@ def load_backend():
 class FakeTransport:
     def __init__(self, module, status="ok", fail=None):
         self.module, self.status, self.fail = module, status, fail
+        self.runtime_activate = "/runtime/bin/activate"
         self.uploads, self.executions, self.observations = [], [], []
 
     def upload(self, profile, source, destination, timeout):
@@ -559,6 +560,7 @@ def test_remote_transport_runs_file_in_registered_context_and_reads_logs():
         if "run" in argv:
             command_file = Path(argv[argv.index("--file") + 1])
             payload = command_file.read_text()
+            assert "source /runtime/bin/activate" in payload
             assert "export ASCEND_RT_VISIBLE_DEVICES=6" in payload
             assert "export DEVICE_ID=0" in payload
             assert payload.endswith("printf result")
@@ -569,7 +571,8 @@ def test_remote_transport_runs_file_in_registered_context_and_reads_logs():
         return module.CommandResult(0, json.dumps(
             {"state": "completed", "handle": handle, "content": content}), "")
 
-    result, returned = module.RemoteTransport(["cpl-remote"], invoke).execute(
+    result, returned = module.RemoteTransport(
+        ["cpl-remote"], "/runtime/bin/activate", invoke).execute(
         "bz-a3-2", 6, "/srv/profiling", "printf result", 30)
 
     assert returned == handle
@@ -579,6 +582,15 @@ def test_remote_transport_runs_file_in_registered_context_and_reads_logs():
     assert run[run.index("--cwd") + 1] == "/srv/profiling"
     assert "--wait" not in run and run[run.index("--timeout") + 1] == "30"
     assert [call[0][2] for call in calls[1:]] == ["logs", "logs"]
+
+
+@pytest.mark.parametrize("runtime", [
+    "runtime/bin/activate", "/runtime/../escape", "/runtime/a;touch-pwned",
+])
+def test_remote_transport_rejects_unsafe_runtime_activation(runtime: str):
+    module = load()
+    with pytest.raises(module.JobError, match="runtime activation"):
+        module.RemoteTransport(["cpl-remote"], runtime)
 
 
 @pytest.mark.parametrize("state", [
@@ -600,7 +612,8 @@ def test_remote_transport_observes_same_nonterminal_handle_without_redispatch(st
         return module.CommandResult(0, json.dumps(
             {"state": "completed", "handle": handle, "content": ""}), "")
 
-    _result, returned = module.RemoteTransport(["cpl-remote"], invoke).execute(
+    _result, returned = module.RemoteTransport(
+        ["cpl-remote"], "/runtime/bin/activate", invoke).execute(
         "bz-a3-1", 0, "/srv/profiling", "true", 30)
 
     assert returned == handle
@@ -740,6 +753,7 @@ def test_cli_rejects_abbreviated_critical_flags_and_accepts_exact_forms(tmp_path
     base = [
         sys.executable, str(MODULE), "--state-dir", str(tmp_path / "state"),
         f"--placements-json={placements}",
+        "--runtime-activate", "/runtime/bin/activate",
     ]
 
     abbreviated = subprocess.run(
@@ -880,6 +894,7 @@ def test_cli_rejects_abbreviated_singleton_flags(tmp_path: Path):
         sys.executable, str(MODULE), "--state-d", str(tmp_path / "state"),
         "--placements-json", str(tmp_path / "placements.json"),
         "--remote-json", '["remote"]', "--remote-root", "/remote/root",
+        "--runtime-activate", "/runtime/bin/activate",
     ], input="{}", text=True, capture_output=True, check=False)
     assert result.returncode == 2
     assert "required: --state-dir" in result.stderr

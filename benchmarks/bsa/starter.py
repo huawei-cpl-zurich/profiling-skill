@@ -58,7 +58,7 @@ def _bsa_reference_fwd(
                             (row[:, None] < q_len) & (key[None, :] < k_len)
                             & (mask_row[:, None] < NROW)
                             & (mask_col[None, :] < NCOL), other=0)
-            keep = keep & block
+            keep = keep & (block != 0)
         elif mask_type == -1:
             if EXACT:
                 diagonal = row[:, None] + k_len - q_len

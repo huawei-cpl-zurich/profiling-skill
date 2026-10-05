@@ -155,7 +155,7 @@ elif action == "run-bundle":
  elif job["action"]=="profile": identity.update(cases=job["cases"],repeats=job["repeats"])
  else: identity["case"]=job["case"]
  if job["action"]=="measure": identity["phase"]=job["phase"]
- if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"])
+ if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"],replay_mode=job["profiling"].get("replay_mode","kernel"))
  out=Path(os.environ["FAKE_OUT"]); out.mkdir(exist_ok=True)
  rows=[{"case":case,"samples_us":[7.0,7.5,8.0],"median_us":7.5} for case in job.get("cases",[])]
  result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok","profile_cases":rows}
@@ -163,7 +163,8 @@ elif action == "run-bundle":
  (out/"response.json").write_text(json.dumps(result))
  if job["action"]=="profile":
   (out/"profile").mkdir(exist_ok=True)
-  (out/"profile/evidence.json").write_text(json.dumps({"status":"success","cases":rows}))
+  captures=[{"case":row["case"],"iteration":iteration,"replay_mode":job["profiling"].get("replay_mode","kernel")} for row in rows for iteration,_sample in enumerate(row["samples_us"])]
+  (out/"profile/evidence.json").write_text(json.dumps({"status":"success","cases":rows,"captures":captures,"replay_mode":job["profiling"].get("replay_mode","kernel")}))
   (out/"profile/msprof.log").write_text("Profiling finished\n")
  archive=Path(os.environ["FAKE_TAR"])
  with tarfile.open(archive,"w") as stream:

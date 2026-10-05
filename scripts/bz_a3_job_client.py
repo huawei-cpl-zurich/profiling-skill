@@ -193,7 +193,8 @@ def _identity(job: dict) -> dict:
     else:
         result.update(cases=job["cases"], repeats=job["repeats"],
                       round=job["round"],
-                      kernel_name=job["profiling"]["kernel_name"])
+                      kernel_name=job["profiling"]["kernel_name"],
+                      replay_mode=job["profiling"].get("replay_mode", "kernel"))
     return result
 
 
@@ -226,10 +227,12 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     evidence = result.get("profile")
     rows = result.get("profile_cases")
     kernel = job["profiling"]["kernel_name"]
+    replay_mode = job["profiling"].get("replay_mode", "kernel")
     repeats = job["repeats"]
     if (not isinstance(evidence, dict) or evidence.get("status") != "success"
             or evidence.get("profiler") != "msprof-op"
             or evidence.get("kernel_name") != kernel
+            or evidence.get("replay_mode") != replay_mode
             or evidence.get("repeats") != repeats
             or not isinstance(rows, list) or evidence.get("cases") != rows
             or len(rows) != len(job["cases"])
@@ -254,6 +257,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
             or any(not isinstance(capture, dict)
                    or (capture.get("case"), capture.get("iteration")) != identity[:2]
                    or capture.get("kernel_name") != kernel
+                   or capture.get("replay_mode") != replay_mode
                    or not _positive_number(capture.get("duration_us"))
                    or not math.isclose(capture["duration_us"], identity[2],
                                        rel_tol=1e-12, abs_tol=1e-12)
@@ -448,6 +452,7 @@ class BzA3JobClient:
             if (not isinstance(profile, dict) or profile.get("tool") != "msprof op"
                     or not isinstance(profile.get("kernel_name"), str)
                     or not profile["kernel_name"].strip() or not valid_cases
+                    or profile.get("replay_mode", "kernel") not in {"kernel", "application"}
                     or isinstance(job.get("repeats"), bool)
                     or not isinstance(job.get("repeats"), int)
                     or job["repeats"] < 1

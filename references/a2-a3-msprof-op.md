@@ -4,7 +4,7 @@ Use `scripts/profile_a3.py` inside the managed `$gz-a3` native Python 3.11
 runtime. The profile wrapper selects the physical device; the workload and
 profiler see logical device 0. Do not pass a host physical ID to Triton code.
 
-The helper runs one bounded `BasicInfo` capture with kernel replay and writes:
+The helper runs one bounded `BasicInfo` capture and writes:
 
 - `raw/`: retained vendor output;
 - `msprof.log`: the complete profiler transcript;
@@ -20,6 +20,22 @@ python scripts/profile_a3.py \
   --warm-up 3 --launch-count 1 -- \
   python benchmark_case.py --case 47
 ```
+
+`--replay-mode` accepts exactly `kernel` or `application` and defaults to
+`kernel`. Use `application` for BSA, where large cases can fail before capture
+when kernel replay cannot create its memory snapshot:
+
+```bash
+python scripts/profile_a3.py \
+  --output artifacts/profile/bsa-case-47 \
+  --kernel-name '<exact exported kernel>' \
+  --replay-mode application --warm-up 3 --launch-count 1 -- \
+  python benchmark_case.py --case 47
+```
+
+The compact evidence records the actual mode in `protocol.replay_mode`.
+Managed batch evidence also binds `replay_mode` at the result and capture
+levels; evidence with a mode different from the frozen job is invalid.
 
 For performance measurements, `--kernel-name` is required: an unfiltered
 capture may select the first framework setup operator rather than the Triton

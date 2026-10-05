@@ -72,7 +72,8 @@ def identity(job: dict) -> dict:
     if job["action"] == "measure":
         result["phase"] = job["phase"]
     if job["action"] == "profile":
-        result.update(round=job["round"], kernel_name=job["profiling"]["kernel_name"])
+        result.update(round=job["round"], kernel_name=job["profiling"]["kernel_name"],
+                      replay_mode=job["profiling"].get("replay_mode", "kernel"))
     return result
 
 
@@ -117,6 +118,10 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
     # ``profile_cases`` contains the rows exposed as ``cases`` by experimentctl.
     if result.get("profile_cases") != evidence.get("cases"):
         raise ClientError("remote response does not match compact profiling evidence")
+    if (result.get("replay_mode", "kernel") != evidence.get("replay_mode")
+            or any(capture.get("replay_mode") != evidence.get("replay_mode")
+                   for capture in evidence.get("captures", []))):
+        raise ClientError("remote response does not match compact profiling replay mode")
     result["profile"] = evidence
 
 

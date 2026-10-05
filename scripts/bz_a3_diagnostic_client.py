@@ -97,7 +97,7 @@ class RemoteTransport:
                 "observer_error", "could not retrieve retained job logs", handle)
         return metadata["content"]
 
-    def _completed(self, result: CommandResult, handle: str, timeout: int) -> CommandResult:
+    def _completed(self, result: CommandResult, handle: str, deadline: float) -> CommandResult:
         metadata = self._metadata(result, handle)
         state = metadata.get("state")
         if state in {"running", "reconnecting", "observation-unavailable",
@@ -110,8 +110,8 @@ class RemoteTransport:
         if isinstance(exit_code, bool) or not isinstance(exit_code, int):
             exit_code = 0 if state == "completed" else 1
         return CommandResult(
-            exit_code, self._logs(handle, "stdout", timeout),
-            self._logs(handle, "stderr", timeout))
+            exit_code, self._logs(handle, "stdout", _remaining(deadline, handle)),
+            self._logs(handle, "stderr", _remaining(deadline, handle)))
 
     def execute(self, profile: str, device: int, remote_cwd: str, script: str,
                 timeout: int) -> tuple[CommandResult, str | None]:
@@ -137,7 +137,7 @@ class RemoteTransport:
         if handle is None:
             raise DiagnosticError(
                 "transport_error", "cpl-remote run returned no durable handle",
-                dispatch_uncertain=result.returncode != 0)
+                dispatch_uncertain=True)
         if _nonterminal(result.stdout + result.stderr):
             try:
                 result = self.observe(profile, handle, _remaining(deadline, handle))
@@ -146,17 +146,17 @@ class RemoteTransport:
                     raise
                 raise DiagnosticError("observer_error", str(exc), handle) from exc
         else:
-            result = self._completed(
-                result, handle, max(1, math.ceil(deadline - time.monotonic())))
+            result = self._completed(result, handle, deadline)
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
+        deadline = time.monotonic() + timeout
         result = self.invoke(
             self.remote + ["--json", "observe", handle, "--wait", "--timeout",
                            str(timeout)], timeout)
         if _nonterminal(result.stdout + result.stderr):
             raise DiagnosticError("observer_error", "retained job is not terminal", handle)
-        return self._completed(result, handle, timeout)
+        return self._completed(result, handle, deadline)
 
 
 def _bounded(value: str, limit: int = 64 * 1024) -> str:

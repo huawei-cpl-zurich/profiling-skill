@@ -654,7 +654,7 @@ def reconcile_terminal(config: dict, manifest: dict, placements: dict,
                 or terminal_attempt < 1):
             raise DiagnosticError("invalid reconciliation cell or terminal attempt")
         profile = placements[parts[2]][min(terminal_attempt - 1, 1)]["profile"]
-        if not handle.startswith(profile + ":"):
+        if not handle.startswith("remote:" + profile + ":job:"):
             raise DiagnosticError("reconciliation handle does not match terminal placement")
     receipt = campaign.reconcile_terminal(
         cell_id, agent_attempt, terminal_attempt, handle=handle, result=result)

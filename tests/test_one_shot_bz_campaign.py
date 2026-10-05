@@ -1069,14 +1069,14 @@ def test_reconcile_terminal_cli_updates_uncertain_receipt(
         "--config", str(paths["config"]), "--manifest", str(paths["manifest"]),
         "--placements", str(paths["placements"]), "--run-root", str(root),
         "--cell-id", cell, "--agent-attempt", "1", "--terminal-attempt", "1",
-        "--terminal-handle", "bz-a3-1:recovered",
+        "--terminal-handle", "remote:bz-a3-1:job:recovered",
     ])
 
     assert module.main() == 0
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "reconciled"
     assert output["receipt"]["state"] == "started"
-    assert output["receipt"]["result"]["handle"] == "bz-a3-1:recovered"
+    assert output["receipt"]["result"]["handle"] == "remote:bz-a3-1:job:recovered"
 
 
 @pytest.mark.parametrize("reconciliation", ["handle", "result"])
@@ -1114,7 +1114,7 @@ def test_fixed_run_reconciliation_resumes_without_redispatch(
         if reconciliation == "handle":
             module.reconcile_terminal(
                 config, manifest, placements, root, cell_id, 1, 1,
-                handle="bz-a3-1:recovered-" + cell_id)
+                handle="remote:bz-a3-1:job:recovered-" + cell_id)
         else:
             module.reconcile_terminal(
                 config, manifest, placements, root, cell_id, 1, 1,

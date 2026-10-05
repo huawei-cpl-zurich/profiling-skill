@@ -89,6 +89,17 @@ def test_batch_profiles_ordered_matrix_and_returns_compact_evidence(tmp_path: Pa
     assert result["profile"]["cases"] == result["profile_cases"]
 
 
+def test_batch_accepts_application_generated_task_suffix(tmp_path: Path):
+    command, output, response = fixture(tmp_path)
+    profiler = Path(command[command.index("--profiler") + 1])
+    profiler.write_text(profiler.read_text().replace(
+        '"name":"chosen_kernel"', '"name":"chosen_kernel_mix_aic"'
+    ))
+    run = subprocess.run(command, text=True, capture_output=True, check=False)
+    assert run.returncode == 0
+    assert json.loads(response.read_text())["status"] == "ok"
+
+
 def test_batch_preserves_candidate_failure_and_partial_evidence(tmp_path: Path):
     command, output, response = fixture(tmp_path, "compile")
     run = subprocess.run(command, text=True, capture_output=True, check=False)

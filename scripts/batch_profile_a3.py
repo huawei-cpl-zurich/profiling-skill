@@ -129,8 +129,14 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
             try:
                 evidence = json.loads(evidence_path.read_text())
                 kernels = evidence["kernels"]
+                selected_name = kernels[0].get("name") if len(kernels) == 1 else None
+                name_matches = selected_name == kernel_name or (
+                    replay_mode == "application"
+                    and isinstance(selected_name, str)
+                    and selected_name.startswith(kernel_name + "_")
+                )
                 if (run.returncode or evidence.get("status") != "success" or len(kernels) != 1
-                        or kernels[0].get("name") != kernel_name
+                        or not name_matches
                         or evidence.get("protocol", {}).get("replay_mode") != replay_mode):
                     raise ValueError(evidence.get("failure", "invalid selected kernel evidence"))
                 latency = float(kernels[0]["duration_us"]["median"])

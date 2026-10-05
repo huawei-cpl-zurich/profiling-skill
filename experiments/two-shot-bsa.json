@@ -2,6 +2,8 @@
   "assets": {
     "baseline": "benchmarks/bsa/baseline.py",
     "case_spec": "benchmarks/bsa/cases.jsonl",
+    "starter": "benchmarks/bsa/starter.py",
+    "candidate_manifest": "benchmarks/bsa/candidate.manifest.json",
     "runner": "scripts/a3_benchmark_runner.py",
     "supplementary": {
       "baseline.json": "benchmarks/bsa/baseline.json"

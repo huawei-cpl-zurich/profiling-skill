@@ -120,6 +120,9 @@ def call_socket(socket_path: str, arguments: list[str]) -> dict:
 
 def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, tmp_path: Path):
     runner, request, client = fixture(tmp_path)
+    starter = tmp_path / "starter.py"; starter.write_text("starter\n")
+    manifest = tmp_path / "candidate.manifest.json"; manifest.write_text('{"kernel_name":"starter"}\n')
+    runner.assets.update(starter=str(starter), candidate_manifest=str(manifest))
     observed = {}
 
     def fake_run(argv, **kwargs):
@@ -128,6 +131,10 @@ def test_real_runner_materializes_minimum_and_enforces_controller(monkeypatch, t
         observed["shim"] = shim.read_text()
         socket_dir = argv[argv.index("/experiment-state") - 1]
         workspace = Path(request["workspace"])
+        assert (workspace / "candidate.py").read_text() == "starter\n"
+        assert json.loads((workspace / "candidate.manifest.json").read_text()) == {
+            "kernel_name": "starter"
+        }
         (workspace / "candidate.py").write_text("candidate\n")
         (workspace / "candidate.manifest.json").write_text("{}\n")
         assert json.loads(call_socket(str(Path(socket_dir) / "controller.sock"), ["help"])["stdout"])["billed"] is False

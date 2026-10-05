@@ -317,6 +317,16 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                         raise CampaignError("all BZ cells must use identical placements")
                     client_command[placements_index] = "{bundle}/placements.json"
                     client_command[state_index] = "{bundle}/../job-state"
+                else:
+                    try:
+                        remote_root_index = _strict_option_index(
+                            client_command, "--remote-root", "GZ controller")
+                        remote_root = client_command[remote_root_index]
+                    except (ValueError, IndexError) as error:
+                        raise CampaignError(
+                            "GZ controller requires one remote root") from error
+                    if not remote_root.strip():
+                        raise CampaignError("GZ controller remote root must be nonempty")
                 client_command[0:2] = ["{python}", f"{{bundle}}/scripts/{client_name}"]
                 backend_command[client_index] = json.dumps(client_command, separators=(",", ":"))
                 backend_command[0:2] = ["{python}", "{bundle}/scripts/benchmark_backend.py"]

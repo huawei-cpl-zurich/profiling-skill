@@ -981,6 +981,25 @@ def generated_controller(tmp_path: Path, benchmark: str = "gdn") -> Path:
     return config
 
 
+def test_controller_bundle_rejects_missing_gz_remote_root(tmp_path: Path):
+    config = generated_controller(tmp_path)
+    document = json.loads(config.read_text())
+    for cell in document["cells"].values():
+        backend = cell["backend"]["command"]
+        index = backend.index("--job-client-json") + 1
+        client = json.loads(backend[index])
+        root_index = client.index("--remote-root")
+        del client[root_index:root_index + 2]
+        backend[index] = json.dumps(client)
+    config.write_text(json.dumps(document))
+    with pytest.raises(campaign.CampaignError, match="exactly one --remote-root"):
+        campaign.freeze_controller_bundle(
+            tmp_path / "campaign.json", config,
+            [sys.executable, str(ROOT / "scripts/experimentctl.py"),
+             "--config", str(config.resolve()), "--cell", "{cell_id}"],
+        )
+
+
 def test_controller_bundle_rejects_selected_cell_set_mismatch(tmp_path: Path):
     config = generated_controller(tmp_path)
     output = tmp_path / "campaign.json"

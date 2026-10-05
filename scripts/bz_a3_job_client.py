@@ -49,7 +49,8 @@ def _invoke(argv: list[str], timeout: int) -> CommandResult:
                                 check=False)
     except subprocess.TimeoutExpired as exc:
         output = _text(exc.stdout) + _text(exc.stderr)
-        match = re.search(r"\b(remote:bz-a3-[12]:job:[A-Za-z0-9_.-]+)\b", output)
+        match = re.search(
+            r"\b(remote:(?:gz-a3|bz-a3-[12]):job:[A-Za-z0-9_.-]+)\b", output)
         handle = match.group(1) if match else None
         raise JobError("observer_error" if handle else "transport_error",
                        f"transport timed out after {timeout}s", handle,
@@ -210,7 +211,7 @@ def _write_json(path: Path, value: dict) -> None:
         os.close(directory)
 
 
-def validate_placements(value: object) -> dict[int, dict]:
+def validate_placements(value: object, profiles: set[str] = PROFILES) -> dict[int, dict]:
     if not isinstance(value, dict) or not value:
         raise JobError("request_error", "placements must be a non-empty JSON object")
     result = {}
@@ -222,7 +223,7 @@ def validate_placements(value: object) -> dict[int, dict]:
         if (str(logical_id) != str(logical) or logical_id < 0
                 or not isinstance(placement, dict)
                 or set(placement) != {"profile", "device"}
-                or placement.get("profile") not in PROFILES
+                or placement.get("profile") not in profiles
                 or isinstance(placement.get("device"), bool)
                 or not isinstance(placement.get("device"), int)
                 or placement["device"] < 0):
@@ -329,10 +330,11 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
 class BzA3JobClient:
     def __init__(self, transport: RemoteTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
-                 batch_profiler: Path, remote_root: str):
+                 batch_profiler: Path, remote_root: str,
+                 allowed_profiles: set[str] = PROFILES):
         self.transport = transport
         self.state_dir = state_dir
-        self.placements = validate_placements(placements)
+        self.placements = validate_placements(placements, allowed_profiles)
         self.placements_sha256 = _json_sha(self.placements)
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler

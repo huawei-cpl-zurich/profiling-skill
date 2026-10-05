@@ -952,11 +952,12 @@ def test_production_bz_hook_reconstructs_primary_handle_without_dispatch_receipt
 
     result = hook.resume(
         {"cell_id": "wave-1-cannbot", "workspace": str(workspace),
-         "terminal_attempt": 1}, "bz-a3-1:recovered", 30)
+         "terminal_attempt": 1}, "remote:bz-a3-1:job:recovered", 30)
 
     assert result["status"] == "ok"
     assert result["terminal_attempt"] == 1
-    assert transport.observations[0][0:2] == ("bz-a3-1", "bz-a3-1:recovered")
+    assert transport.observations[0][0:2] == (
+        "bz-a3-1", "remote:bz-a3-1:job:recovered")
 
 
 @pytest.mark.parametrize("failure_type", [
@@ -989,7 +990,7 @@ def test_failed_manual_bz_observation_requires_reconciliation(
     assert result["handle"] == "bz-a3-1:recovered"
 
 
-def test_adapter_timeout_after_possible_dispatch_never_falls_back_or_replays(
+def test_remote_timeout_after_possible_dispatch_never_falls_back_or_replays(
     tmp_path: Path,
 ):
     config, manifest, placements = inputs(tmp_path)
@@ -1001,20 +1002,20 @@ def test_adapter_timeout_after_possible_dispatch_never_falls_back_or_replays(
     for name in ("candidate.py", "candidate.manifest.json"):
         (workspace / name).write_text("{}\n")
         (snapshot / name).write_text("{}\n")
-    adapter_runs = []
+    remote_runs = []
 
     def invoke(argv, timeout):
-        if argv[0] == "remote":
+        if "upload" in argv:
             return module.diagnostic_campaign.subprocess.CompletedProcess(argv, 0, "", "")
-        adapter_runs.append((argv, timeout))
+        remote_runs.append((argv, timeout))
         raise bz_client.DiagnosticError(
-            "transport_error", "adapter response timed out",
+            "transport_error", "remote response timed out",
             invocation_timeout=True)
 
     # Import the same module object used by the production hook so this test
-    # exercises AdapterTransport.execute rather than a synthetic terminal.
+    # exercises RemoteTransport.execute rather than a synthetic terminal.
     import bz_a3_diagnostic_client as bz_client
-    transport = bz_client.AdapterTransport(["remote"], ["adapter"], invoke)
+    transport = bz_client.RemoteTransport(["remote"], invoke)
     client = bz_client.BzA3DiagnosticClient(transport, tmp_path / "state")
     hook = module.BzTerminalHook(client, placements, config["assets"], "campaign")
     campaign = module.DiagnosticCampaign(
@@ -1036,7 +1037,7 @@ def test_adapter_timeout_after_possible_dispatch_never_falls_back_or_replays(
     assert first == second
     assert first["manual_reconciliation_required"] is True
     assert first["dispatch_uncertain"] is True
-    assert len(adapter_runs) == 1
+    assert len(remote_runs) == 1
 
 
 def test_reconcile_terminal_cli_updates_uncertain_receipt(

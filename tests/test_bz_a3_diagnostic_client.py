@@ -43,22 +43,22 @@ class FakeTransport:
         if self.mode == "transport":
             raise self.module.DiagnosticError("transport_error", "vpn unavailable")
         if self.mode == "observer":
-            raise self.module.DiagnosticError("observer_error", "retained job is not terminal", f"{profile}:kept")
+            raise self.module.DiagnosticError("observer_error", "retained job is not terminal", f"remote:{profile}:job:kept")
         if self.mode == "observer_then_stale" and not self.observer_returned:
             self.observer_returned = True
             raise self.module.DiagnosticError("observer_error", "retained job is not terminal",
-                                              f"{profile}:kept")
+                                              f"remote:{profile}:job:kept")
         if self.mode == "candidate_timeout":
-            return self.module.CommandResult(124, "timed out", ""), f"{profile}:timeout"
+            return self.module.CommandResult(124, "timed out", ""), f"remote:{profile}:job:timeout"
         if self.mode == "candidate_kill_timeout":
-            return self.module.CommandResult(137, "killed after timeout", ""), f"{profile}:killed"
+            return self.module.CommandResult(137, "killed after timeout", ""), f"remote:{profile}:job:killed"
         if self.mode == "device":
-            return self.module.CommandResult(1, "", "NPU device unavailable"), f"{profile}:device"
+            return self.module.CommandResult(1, "", "NPU device unavailable"), f"remote:{profile}:job:device"
         if self.mode == "digest":
-            return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:digest"
+            return self.module.CommandResult(91, "", "common-digest-mismatch"), f"remote:{profile}:job:digest"
         if self.mode in {"stale_common", "stale_common_upload_failure"} and not self.stale_returned:
             self.stale_returned = True
-            return self.module.CommandResult(91, "", "common-digest-mismatch"), f"{profile}:stale"
+            return self.module.CommandResult(91, "", "common-digest-mismatch"), f"remote:{profile}:job:stale"
         return self.completed(profile)
 
     def observe(self, profile, handle, timeout):
@@ -79,7 +79,7 @@ class FakeTransport:
         if status == "infrastructure_error":
             payload.update(failure_type="runner_setup_error", diagnostics="torch import failed")
         stdout = "BZ_DIAGNOSTIC_RESULT=" + json.dumps(payload) + "\n"
-        return self.module.CommandResult(0, stdout, ""), f"{profile}:job-1"
+        return self.module.CommandResult(0, stdout, ""), f"remote:{profile}:job:job-1"
 
 
 def request(tmp_path: Path):
@@ -105,7 +105,7 @@ def test_success_stages_content_addressed_assets_and_uses_logical_zero(tmp_path:
     _module, transport, result = run(tmp_path)
     assert result["status"] == "ok"
     assert result["failure_type"] == "success"
-    assert result["handle"] == "bz-a3-1:job-1"
+    assert result["handle"] == "remote:bz-a3-1:job:job-1"
     assert len(transport.uploads) == 2
     common, candidate = transport.uploads
     assert f"diagnostic-common-{result['artifacts']['common_sha256']}.tar" in common[2]
@@ -195,17 +195,17 @@ def test_retained_handle_observes_without_upload_or_execute(tmp_path: Path):
     module = load()
     transport = FakeTransport(module)
     value = request(tmp_path)
-    value.update(retained_handle="bz-a3-1:reconciled", observe_timeout=17)
+    value.update(retained_handle="remote:bz-a3-1:job:reconciled", observe_timeout=17)
 
     result = module.BzA3DiagnosticClient(
         transport, tmp_path / "state").run(value)
 
     assert result["status"] == "ok"
-    assert result["handle"] == "bz-a3-1:reconciled"
+    assert result["handle"] == "remote:bz-a3-1:job:reconciled"
     assert transport.uploads == []
     assert transport.executions == []
     assert transport.observations == [
-        ("bz-a3-1", "bz-a3-1:reconciled", pytest.approx(17, abs=1)),
+        ("bz-a3-1", "remote:bz-a3-1:job:reconciled", pytest.approx(17, abs=1)),
     ]
 
 
@@ -219,10 +219,11 @@ def test_retained_handle_rejects_conflicting_durable_receipt(
     value = request(tmp_path)
     first = client.run(value)
     assert first["handle"] == (
-        "bz-a3-1:kept" if receipt == "dispatch" else "bz-a3-1:job-1")
+        "remote:bz-a3-1:job:kept" if receipt == "dispatch" else
+        "remote:bz-a3-1:job:job-1")
     executions = len(transport.executions)
 
-    result = client.run({**value, "retained_handle": "bz-a3-1:other",
+    result = client.run({**value, "retained_handle": "remote:bz-a3-1:job:other",
                          "observe_timeout": 17})
 
     assert result["status"] == "infrastructure_error"
@@ -237,7 +238,7 @@ def test_retained_digest_mismatch_fails_without_redispatch(tmp_path: Path):
     client = module.BzA3DiagnosticClient(transport, tmp_path / "state")
     value = request(tmp_path)
     first = client.run(value)
-    assert first["handle"] == "bz-a3-1:kept"
+    assert first["handle"] == "remote:bz-a3-1:job:kept"
 
     result = client.run({**value, "retained_handle": first["handle"],
                          "observe_timeout": 17})
@@ -256,7 +257,7 @@ def test_resume_observes_exact_selected_fallback_dispatch_receipt(tmp_path: Path
     primary["cell"] = "arm-attempt-1"
     fallback = {**primary, "cell": "arm-attempt-2", "device": 2}
     first = client.run(fallback)
-    assert first["handle"] == "bz-a3-1:kept"
+    assert first["handle"] == "remote:bz-a3-1:job:kept"
     transport.mode = "ok"
 
     result = client.resume([fallback], first["handle"], 17)
@@ -282,7 +283,7 @@ def test_resume_rejects_handle_owned_by_different_request(
     elif owner == "campaign":
         fallback["campaign"] = "other-campaign"
     first = client.run(fallback)
-    assert first["handle"] == "bz-a3-1:kept"
+    assert first["handle"] == "remote:bz-a3-1:job:kept"
     executions = len(transport.executions)
 
     result = client.resume([primary], first["handle"], 17)
@@ -367,10 +368,10 @@ def test_resumed_stale_common_result_repairs_instead_of_reobserving(tmp_path: Pa
     transport.mode = "observer_then_stale"
     interrupted = client.run(value)
     assert interrupted["status"] == "infrastructure_error"
-    assert interrupted["handle"] == "bz-a3-1:kept"
+    assert interrupted["handle"] == "remote:bz-a3-1:job:kept"
     resumed = client.run(value)
     assert resumed["status"] == "ok"
-    assert transport.observations[-1][1] == "bz-a3-1:kept"
+    assert transport.observations[-1][1] == "remote:bz-a3-1:job:kept"
     assert len([upload for upload in transport.uploads
                 if "diagnostic-common-" in upload[2]]) == 2
 
@@ -382,7 +383,7 @@ def test_first_dispatch_observed_digest_mismatch_is_repaired(tmp_path: Path):
     value = request(tmp_path)
     interrupted = client.run(value)
     assert interrupted["status"] == "infrastructure_error"
-    assert interrupted["handle"] == "bz-a3-1:kept"
+    assert interrupted["handle"] == "remote:bz-a3-1:job:kept"
     resumed = client.run({**value, "observe_timeout": 30})
     assert resumed["status"] == "ok"
     assert transport.observations[-1][2] == 30
@@ -404,7 +405,7 @@ def test_compiler_traceback_is_complete_and_counted(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "compile_error")
     assert result["status"] == result["failure_type"] == "compile_error"
     assert "candidate.py, line 17" in result["diagnostics"]
-    assert result["handle"] == "bz-a3-1:job-1"
+    assert result["handle"] == "remote:bz-a3-1:job:job-1"
 
 
 def test_runtime_and_correctness_are_candidate_failures(tmp_path: Path):
@@ -428,14 +429,14 @@ def test_candidate_timeout_is_not_infrastructure(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "candidate_timeout")
     assert result["status"] == "candidate_timeout"
     assert result["failure_type"] == "candidate_timeout"
-    assert result["handle"] == "bz-a3-1:timeout"
+    assert result["handle"] == "remote:bz-a3-1:job:timeout"
 
 
 def test_candidate_kill_after_timeout_is_not_infrastructure(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "candidate_kill_timeout")
     assert result["status"] == "candidate_timeout"
     assert result["failure_type"] == "candidate_timeout"
-    assert result["handle"] == "bz-a3-1:killed"
+    assert result["handle"] == "remote:bz-a3-1:job:killed"
 
 
 def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path,
@@ -449,18 +450,23 @@ def test_remote_timeout_returns_counted_result_within_outer_grace(tmp_path: Path
         calls.append((argv, timeout))
         if "upload" in argv:
             return module.CommandResult(0)
+        if "logs" in argv:
+            return module.CommandResult(0, json.dumps({"state": "completed",
+                "handle": "remote:bz-a3-1:job:timed-out", "content": ""}), "")
         # Simulate setup, the complete workload cap, ten-second kill-after,
         # and result propagation without sleeping.
         clock[0] += 2 + 5 + 10 + 2
-        return module.CommandResult(124, "bz-a3-1:timed-out\n", "")
+        command = Path(argv[argv.index("--file") + 1]).read_text()
+        assert "timeout --signal=TERM --kill-after=10 5" in command
+        return module.CommandResult(124, json.dumps({"state": "failed",
+            "handle": "remote:bz-a3-1:job:timed-out", "exit": 124}), "")
 
-    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    transport = module.RemoteTransport(["remote"], invoke)
     result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
     assert result["status"] == result["failure_type"] == "candidate_timeout"
-    adapter_argv, outer_timeout = calls[-1]
+    adapter_argv, outer_timeout = next(call for call in calls if "run" in call[0])
     assert outer_timeout == 30
     assert adapter_argv[adapter_argv.index("--timeout") + 1] == "30"
-    assert "timeout --signal=TERM --kill-after=10 5" in adapter_argv[-1]
     assert clock[0] < outer_timeout
 
 
@@ -474,7 +480,7 @@ def test_timeout_without_response_grace_is_rejected_before_staging(tmp_path: Pat
     assert not transport.uploads and not transport.executions
 
 
-def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
+def test_remote_over_response_grace_remains_infrastructure(tmp_path: Path):
     module = load()
     calls = []
 
@@ -484,12 +490,11 @@ def test_adapter_over_response_grace_remains_infrastructure(tmp_path: Path):
             return module.CommandResult(0)
         raise module.DiagnosticError("transport_error", "outer response deadline expired")
 
-    transport = module.AdapterTransport(["remote"], ["adapter"], invoke)
+    transport = module.RemoteTransport(["remote"], invoke)
     result = module.BzA3DiagnosticClient(transport, tmp_path / "state").run(request(tmp_path))
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "transport_error"
     assert calls[-1][1] == 30
-    assert "timeout --signal=TERM --kill-after=10 5" in calls[-1][0][-1]
 
 
 def test_observe_failure_preserves_handle_from_initial_dispatch():
@@ -498,15 +503,15 @@ def test_observe_failure_preserves_handle_from_initial_dispatch():
     def invoke(argv, _timeout):
         if "observe" in argv:
             raise module.DiagnosticError("transport_error", "observer timed out")
-        return module.CommandResult(75, "CATLASS_VALIDATION_STATE=running\n",
-                                    "bz-a3-1:retained")
+        return module.CommandResult(0, json.dumps({"state": "running",
+            "handle": "remote:bz-a3-1:job:retained"}), "")
 
     try:
-        module.AdapterTransport(["remote"], ["adapter"], invoke).execute(
-            "bz-a3-1", 2, "diagnostic", "true", 30)
+        module.RemoteTransport(["remote"], invoke).execute(
+            "bz-a3-1", 2, "/remote", "true", 30)
     except module.DiagnosticError as error:
         assert error.failure_type == "observer_error"
-        assert error.handle == "bz-a3-1:retained"
+        assert error.handle == "remote:bz-a3-1:job:retained"
     else:
         raise AssertionError("observer failure should preserve retained handle")
 
@@ -516,7 +521,7 @@ def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "runner_setup_error"
     assert result["diagnostics"] == "torch import failed"
-    assert result["handle"] == "bz-a3-1:job-1"
+    assert result["handle"] == "remote:bz-a3-1:job:job-1"
 
 
 def test_non_object_request_returns_structured_request_error(tmp_path: Path):
@@ -549,13 +554,14 @@ def test_second_invocation_observes_durable_handle_without_redispatch(tmp_path: 
     value = request(tmp_path)
     interrupted = client.run(value)
     assert interrupted["status"] == "infrastructure_error"
-    assert interrupted["handle"] == "bz-a3-1:kept"
+    assert interrupted["handle"] == "remote:bz-a3-1:job:kept"
     assert len(transport.uploads) == 2 and len(transport.executions) == 1
 
     transport.mode = "ok"
     resumed = client.run(value)
     assert resumed["status"] == "ok"
-    assert transport.observations == [("bz-a3-1", "bz-a3-1:kept", 30)]
+    assert transport.observations == [(
+        "bz-a3-1", "remote:bz-a3-1:job:kept", 30)]
     assert len(transport.uploads) == 2 and len(transport.executions) == 1
 
 
@@ -569,22 +575,27 @@ def test_infrastructure_failures_are_disjoint(tmp_path: Path):
         assert result["failure_type"] == failure
 
 
-def test_adapter_transport_observes_same_handle_after_interruption():
+def test_remote_transport_observes_same_handle_after_interruption():
     module = load()
     calls = []
 
     def invoke(argv, _timeout):
         calls.append(argv)
         if "observe" in argv:
-            return module.CommandResult(0, "CATLASS_VALIDATION_STATE=completed\n", "")
-        return module.CommandResult(75, "CATLASS_VALIDATION_STATE=observation-unavailable\n",
-                                    "next bz-a3-2:retained-7")
+            return module.CommandResult(0, json.dumps({"state": "completed",
+                "handle": "remote:bz-a3-2:job:retained-7", "exit": 0}), "")
+        if "logs" in argv:
+            return module.CommandResult(0, json.dumps({"state": "completed",
+                "handle": "remote:bz-a3-2:job:retained-7", "content": ""}), "")
+        return module.CommandResult(0, json.dumps({"state": "observation-unavailable",
+            "handle": "remote:bz-a3-2:job:retained-7"}), "")
 
-    transport = module.AdapterTransport(["cpl-remote"], ["adapter"], invoke)
-    result, handle = transport.execute("bz-a3-2", 6, "diagnostic-x", "true", 30)
+    transport = module.RemoteTransport(["cpl-remote"], invoke)
+    result, handle = transport.execute("bz-a3-2", 6, "/remote", "true", 30)
     assert result.returncode == 0
-    assert handle == "bz-a3-2:retained-7"
-    assert calls[1] == ["adapter", "--profile", "bz-a3-2", "observe", "--handle", handle]
+    assert handle == "remote:bz-a3-2:job:retained-7"
+    assert calls[1] == ["cpl-remote", "--json", "observe", handle,
+                        "--wait", "--timeout", "30"]
     assert sum("run" in call for call in calls) == 1
 
 
@@ -607,31 +618,35 @@ def test_execute_observation_shares_one_deadline(monkeypatch):
 
     def invoke(argv, timeout):
         calls.append((argv, timeout))
-        if "observe" not in argv:
+        if "run" in argv:
             clock[0] = 20.0
-            return module.CommandResult(75, "CATLASS_VALIDATION_STATE=running\n",
-                                        "bz-a3-1:kept")
-        return module.CommandResult(0, "CATLASS_VALIDATION_STATE=completed\n", "")
+            return module.CommandResult(0, json.dumps({"state": "running",
+                "handle": "remote:bz-a3-1:job:kept"}), "")
+        if "observe" in argv:
+            return module.CommandResult(0, json.dumps({"state": "completed",
+                "handle": "remote:bz-a3-1:job:kept", "exit": 0}), "")
+        return module.CommandResult(0, json.dumps({"state": "completed",
+            "handle": "remote:bz-a3-1:job:kept", "content": ""}), "")
 
     monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
-    module.AdapterTransport(["remote"], ["adapter"], invoke).execute(
-        "bz-a3-1", 2, "diagnostic", "true", 30)
-    assert [timeout for _argv, timeout in calls] == [30, 10]
+    module.RemoteTransport(["remote"], invoke).execute(
+        "bz-a3-1", 2, "/remote", "true", 30)
+    assert [timeout for argv, timeout in calls if "run" in argv or "observe" in argv] == [30, 10]
 
 
 def test_host_timeout_preserves_handle_from_partial_adapter_output(monkeypatch):
     module = load()
 
     def timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired(["adapter"], 30,
-                                        output=b"submitted bz-a3-2:retained-timeout\n")
+        raise subprocess.TimeoutExpired(["remote"], 30,
+            output=b"submitted remote:bz-a3-2:job:retained-timeout\n")
 
     monkeypatch.setattr(module.subprocess, "run", timeout)
     try:
-        module._run(["adapter"], 30)
+        module._run(["remote"], 30)
     except module.DiagnosticError as error:
         assert error.failure_type == "observer_error"
-        assert error.handle == "bz-a3-2:retained-timeout"
+        assert error.handle == "remote:bz-a3-2:job:retained-timeout"
     else:
         raise AssertionError("timeout should raise DiagnosticError")
 

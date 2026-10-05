@@ -108,7 +108,8 @@ class Model(nn.Module):
                 softmax_scale, is_causal, exact_streaming):
         total_q, h, d = q.shape
         total_k, hk, _ = k.shape
-        assert v.shape == k.shape and q.dtype == k.dtype == v.dtype
+        assert v.shape == k.shape and k.shape[2] == d
+        assert q.dtype == k.dtype == v.dtype
         assert q.dtype in (torch.float16, torch.bfloat16)
         assert h % hk == 0 and d <= 128
         batch = cu_seqlens_q.numel() - 1

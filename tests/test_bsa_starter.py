@@ -96,3 +96,26 @@ def test_packed_sequences_launch_once_and_preserve_mapping(monkeypatch, dtype):
     assert [item[1][4:8] for item in launches] == [(0, 5, 0, 8), (5, 21, 8, 40)]
     assert torch.all(out[:5] == 1)
     assert torch.all(out[5:] == 14)
+
+
+def test_mismatched_key_value_head_dimension_rejected_before_launch(monkeypatch):
+    starter = load_starter()
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            launches.append(grid)
+            return lambda *args, **kwargs: None
+
+    monkeypatch.setattr(starter, "_bsa_reference_fwd", FakeKernel())
+    q = torch.zeros((2, 3, 64), dtype=torch.float16)
+    k = v = torch.zeros((4, 1, 32), dtype=torch.float16)
+    cuq = torch.tensor([0, 2], dtype=torch.int32)
+    cuk = torch.tensor([0, 4], dtype=torch.int32)
+    hmt = torch.tensor([0, 1, -1], dtype=torch.int32)
+    sinfo = torch.tensor([1, 1] * 3, dtype=torch.int32)
+    mask = torch.ones((1, 1, 1, 1), dtype=torch.bool)
+
+    with pytest.raises(AssertionError):
+        starter.Model()(q, k, v, cuq, cuk, hmt, sinfo, mask, None, True, False)
+    assert launches == []

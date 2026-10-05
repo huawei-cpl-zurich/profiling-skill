@@ -11,6 +11,8 @@ from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CLIENT = ROOT / "scripts/gz_a3_job_client.py"
@@ -358,3 +360,16 @@ def test_partial_retained_fetch_is_quarantined_and_refetched(tmp_path: Path):
     assert second.returncode == 0
     assert recovered["status"] == "ok"
     assert list(state.glob("result.invalid-*.tar"))
+@pytest.mark.parametrize("captures", [None, [], ["not-an-object"]])
+def test_profile_evidence_rejects_missing_or_malformed_capture_bindings(
+        tmp_path: Path, captures):
+    module = load_client()
+    path = tmp_path / "evidence.json"
+    evidence = {"status": "success", "cases": [{"case": 7}],
+                "replay_mode": "application"}
+    if captures is not None:
+        evidence["captures"] = captures
+    path.write_text(json.dumps(evidence))
+    result = {"profile_cases": [{"case": 7}], "replay_mode": "application"}
+    with pytest.raises(module.ClientError, match="replay mode"):
+        module.attach_profile_evidence(result, path)

@@ -71,6 +71,16 @@ def _bounded(value: str, limit: int = 64 * 1024) -> str:
     return value if len(value) <= limit else value[:limit] + "\n...[diagnostic truncated]"
 
 
+def validate_runtime_activate(value: object) -> str:
+    if (not isinstance(value, str) or len(value) < 2 or len(value) > 240
+            or not re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
+            or str(PurePosixPath(value)) != value
+            or any(part in {".", ".."} for part in PurePosixPath(value).parts)):
+        raise JobError(
+            "request_error", "runtime activation must be a normalized absolute path")
+    return value
+
+
 def _handle(output: str, profile: str) -> str | None:
     match = re.search(
         rf"\b(remote:{re.escape(profile)}:job:[A-Za-z0-9_.-]+)\b", output)
@@ -90,8 +100,11 @@ def _nonterminal(output: str) -> bool:
 class RemoteTransport:
     """Global cpl-remote retained execution boundary; replaceable in tests."""
 
-    def __init__(self, remote: list[str], invoke: Callable = _invoke):
-        self.remote, self.invoke = remote, invoke
+    def __init__(self, remote: list[str], runtime_activate: str,
+                 invoke: Callable = _invoke):
+        self.remote = remote
+        self.runtime_activate = validate_runtime_activate(runtime_activate)
+        self.invoke = invoke
 
     def upload(self, profile: str, source: Path, destination: str, timeout: int) -> None:
         result = self.invoke(
@@ -145,6 +158,7 @@ class RemoteTransport:
                 timeout: int) -> tuple[CommandResult, str | None]:
         deadline = time.monotonic() + timeout
         payload = ("#!/usr/bin/env bash\nset -euo pipefail\n"
+                   f"source {shlex.quote(self.runtime_activate)}\n"
                    f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
                    "export DEVICE_ID=0\n" + script)
         with tempfile.NamedTemporaryFile("w", suffix=".sh") as command_file:
@@ -368,6 +382,7 @@ class BzA3JobClient:
                                      "placement": placement,
                                      "placements_sha256": self.placements_sha256,
                                      "remote_root": self.remote_root,
+                                     "runtime_activate": self.transport.runtime_activate,
                                      "timeout_seconds": timeout})
             state = self.state_dir / request_sha
             archive = state / "payload.tar"
@@ -645,6 +660,7 @@ def main() -> int:
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--placements-json", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
+    parser.add_argument("--runtime-activate", required=True)
     parser.add_argument(
         "--remote-root", required=True,
         help="existing writable remote staging root; run artifacts use its runs/ child",
@@ -656,7 +672,7 @@ def main() -> int:
         placements = json.loads(args.placements_json.read_text())
         here = Path(__file__).resolve().parent
         client = BzA3JobClient(
-            RemoteTransport(remote), args.state_dir, placements,
+            RemoteTransport(remote, args.runtime_activate), args.state_dir, placements,
             runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
             batch_profiler=here / "batch_profile_a3.py",
             remote_root=args.remote_root,

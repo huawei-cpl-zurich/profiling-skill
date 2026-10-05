@@ -272,6 +272,16 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                 client_name = supported.get(client_path)
                 if client_name is None:
                     raise CampaignError("controller config must invoke a supported job client")
+                try:
+                    runtime_index = _strict_option_index(
+                        client_command, "--runtime-activate", "A3 controller")
+                    runtime_activate = client_command[runtime_index]
+                except (ValueError, IndexError) as error:
+                    raise CampaignError(
+                        "A3 controller requires one runtime activation path") from error
+                if not runtime_activate.startswith("/") or not runtime_activate.strip():
+                    raise CampaignError(
+                        "A3 controller runtime activation must be an absolute path")
                 if client_name == "bz_a3_job_client.py":
                     singleton_flags = ("--placements-json", "--state-dir", "--remote-root")
                     try:

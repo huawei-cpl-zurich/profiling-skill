@@ -246,7 +246,9 @@ def inputs(tmp_path: Path) -> tuple[dict, dict]:
            "FAKE_OUT": str(tmp_path / "remote"),
            "FAKE_LOG": str(tmp_path / "remote.log")}
     command = [sys.executable, str(CLIENT), "--remote-json", json.dumps([str(remote)]),
-               "--remote-root", "/remote/profiling", "--state-dir", str(tmp_path / "state")]
+               "--remote-root", "/remote/profiling",
+               "--runtime-activate", "/runtime/bin/activate",
+               "--state-dir", str(tmp_path / "state")]
     return job, {"env": env, "command": command}
 
 

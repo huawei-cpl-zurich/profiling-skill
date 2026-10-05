@@ -130,7 +130,7 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
     device = job.get("device")
     placements = {str(device): {"profile": "gz-a3", "device": device}}
     return BzA3JobClient(
-        RemoteTransport(args.remote), args.state_dir, placements,
+        RemoteTransport(args.remote, args.runtime_activate), args.state_dir, placements,
         runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
         batch_profiler=here / "batch_profile_a3.py", remote_root=args.remote_root,
         allowed_profiles={"gz-a3"},
@@ -141,6 +141,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--remote-json", default='["cpl-remote"]')
     parser.add_argument("--remote-root", required=True)
+    parser.add_argument("--runtime-activate", required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=3600)
     args = parser.parse_args()

@@ -15,7 +15,7 @@ import tarfile
 import tempfile
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable
 
 
@@ -66,8 +66,11 @@ def _text(value: str | bytes | None) -> str:
 class RemoteTransport:
     """Global cpl-remote retained execution boundary; replaceable in tests."""
 
-    def __init__(self, remote: list[str], invoke: Callable = _run):
-        self.remote, self.invoke = remote, invoke
+    def __init__(self, remote: list[str], runtime_activate: str,
+                 invoke: Callable = _run):
+        self.remote = remote
+        self.runtime_activate = validate_runtime_activate(runtime_activate)
+        self.invoke = invoke
 
     def upload(self, profile: str, source: Path, destination: str, timeout: int) -> None:
         result = self.invoke(self.remote + ["upload", profile, str(source), destination], timeout)
@@ -117,6 +120,7 @@ class RemoteTransport:
                 timeout: int) -> tuple[CommandResult, str | None]:
         deadline = time.monotonic() + timeout
         payload = ("#!/usr/bin/env bash\nset -euo pipefail\n"
+                   f"source {shlex.quote(self.runtime_activate)}\n"
                    f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
                    "export DEVICE_ID=0\n" + script)
         try:
@@ -162,6 +166,16 @@ class RemoteTransport:
 def _bounded(value: str, limit: int = 64 * 1024) -> str:
     value = value.strip()
     return value if len(value) <= limit else value[:limit] + "\n...[diagnostic truncated]"
+
+
+def validate_runtime_activate(value: object) -> str:
+    if (not isinstance(value, str) or len(value) < 2 or len(value) > 240
+            or not re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
+            or str(PurePosixPath(value)) != value
+            or any(part in {".", ".."} for part in PurePosixPath(value).parts)):
+        raise DiagnosticError(
+            "request_error", "runtime activation must be a normalized absolute path")
+    return value
 
 
 def _remaining(deadline: float, handle: str | None = None) -> int:
@@ -408,6 +422,7 @@ class BzA3DiagnosticClient:
             completed_receipt = local / "completed.json"
             request_sha = _json_sha({"identity": identity, "timeout": timeout, "cases": cases,
                                      "common_sha256": common_sha, "candidate_sha256": candidate_sha,
+                                     "runtime_activate": self.transport.runtime_activate,
                                      "tolerances": request.get("tolerances", {"rtol": 2e-2, "atol": 2e-2})})
             if retained_handle is not None and not dispatch_receipt.is_file():
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
@@ -576,6 +591,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
+    parser.add_argument("--runtime-activate", required=True)
     args = parser.parse_args()
     try:
         remote = json.loads(args.remote_json)
@@ -583,7 +599,8 @@ def main() -> int:
                 or not all(isinstance(x, str) and x for x in remote)):
             raise ValueError("remote command must be a non-empty JSON string array")
         request = json.load(__import__("sys").stdin)
-        result = BzA3DiagnosticClient(RemoteTransport(remote), args.state_dir).run(request)
+        result = BzA3DiagnosticClient(
+            RemoteTransport(remote, args.runtime_activate), args.state_dir).run(request)
     except (ValueError, json.JSONDecodeError) as exc:
         result = {"status": "infrastructure_error", "failure_type": "request_error", "diagnostics": str(exc)}
     print(json.dumps(result, sort_keys=True))

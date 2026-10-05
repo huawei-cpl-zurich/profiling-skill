@@ -683,6 +683,7 @@ def main() -> int:
     parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--agent-command-json")
     parser.add_argument("--remote-command-json", default='["cpl-remote"]')
+    parser.add_argument("--runtime-activate")
     args = parser.parse_args()
     if args.resume_smoke and args.action != "run-smoke":
         parser.error("--resume-smoke requires --action run-smoke")
@@ -704,13 +705,14 @@ def main() -> int:
             handle=args.terminal_handle,
             result=(load_json(args.terminal_result) if args.terminal_result else None))
     else:
-        if not args.agent_command_json or args.state_dir is None:
-            parser.error("agent and state arguments are required to run waves")
+        if (not args.agent_command_json or args.state_dir is None
+                or not args.runtime_activate):
+            parser.error("agent, state, and runtime activation arguments are required to run waves")
         commands = [json.loads(value) for value in (args.agent_command_json,
                     args.remote_command_json)]
         if any(not isinstance(value, list) or not value for value in commands):
             parser.error("commands must be non-empty JSON arrays")
-        transport = RemoteTransport(commands[1])
+        transport = RemoteTransport(commands[1], args.runtime_activate)
         client = BzA3DiagnosticClient(transport, args.state_dir)
         if args.action == "run-wave":
             if args.wave is None:

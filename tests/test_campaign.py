@@ -75,7 +75,8 @@ def fixture(tmp_path: Path, request_budget: int = 18,
     selected_cells = campaign.cells(request_budget=request_budget, benchmarks=benchmarks)
     client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
               "--state-dir", str(tmp_path / "job-state"),
-              "--remote-root", "/approved/remote/root"]
+              "--remote-root", "/approved/remote/root",
+              "--runtime-activate", "/runtime/bin/activate"]
     controller_cells = {}
     for cell in selected_cells:
         controller_cells[cell.cell_id] = {
@@ -891,7 +892,8 @@ def test_private_bundle_executes_after_relocation_and_ignores_source_mutation(tm
 def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
     client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
               "--state-dir", "/private/job-state",
-              "--remote-root", "/approved/remote/root"]
+              "--remote-root", "/approved/remote/root",
+              "--runtime-activate", "/runtime/bin/activate"]
     config = tmp_path / "cells.json"
     config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": [
         sys.executable, str(ROOT / "scripts/benchmark_backend.py"), "--benchmark", "gdn",
@@ -926,6 +928,7 @@ def test_controller_bundle_freezes_bz_client_and_placements(tmp_path: Path):
         "--state-dir", str(tmp_path / "job-state"),
         "--placements-json", str(placements),
         "--remote-root", "/frozen/remote/root",
+        "--runtime-activate", "/runtime/bin/activate",
     ]
     config = tmp_path / "cells.json"
     config.write_text(json.dumps({"cells": {"gdn-cannbot": {"backend": {"command": [
@@ -961,6 +964,7 @@ def generated_controller(tmp_path: Path, benchmark: str = "gdn") -> Path:
         sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
         "--state-dir", str(tmp_path / "job-state"),
         "--remote-root", "/approved/remote/root",
+        "--runtime-activate", "/runtime/bin/activate",
     ])
     subprocess.run([
         sys.executable, str(ROOT / "scripts/generate_benchmark_config.py"),
@@ -1005,6 +1009,7 @@ def test_controller_bundle_rejects_duplicate_bz_frozen_flags(tmp_path: Path, fla
         "--placements-json": str(placements),
         "--state-dir": str(tmp_path / "state"),
         "--remote-root": "/approved/root",
+        "--runtime-activate": "/runtime/bin/activate",
     }
     client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
     for name, value in values.items():
@@ -1034,6 +1039,7 @@ def test_controller_bundle_rejects_noncanonical_bz_frozen_flags(
         "--placements-json": str(placements),
         "--state-dir": str(tmp_path / "state"),
         "--remote-root": "/approved/root",
+        "--runtime-activate": "/runtime/bin/activate",
     }
     client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
     for name, value in values.items():
@@ -1067,8 +1073,10 @@ def test_controller_bundle_rejects_bz_flag_followed_by_another_option(
         "--placements-json": str(placements),
         "--state-dir": str(tmp_path / "state"),
         "--remote-root": "/approved/root",
+        "--runtime-activate": "/runtime/bin/activate",
     }
-    order = ["--placements-json", "--state-dir", "--remote-root"]
+    order = ["--placements-json", "--state-dir", "--remote-root",
+             "--runtime-activate"]
     order.remove(following)
     order.insert(order.index(missing) + 1, following)
     client = [sys.executable, str(ROOT / "scripts/bz_a3_job_client.py")]
@@ -1153,7 +1161,8 @@ def test_controller_freeze_failure_cleans_private_build_and_allows_retry(tmp_pat
 
     client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
               "--state-dir", "/private/job-state",
-              "--remote-root", "/approved/remote/root"]
+              "--remote-root", "/approved/remote/root",
+              "--runtime-activate", "/runtime/bin/activate"]
     backend.extend(["--job-client-json", json.dumps(client)])
     config.write_text(json.dumps({"cells": {"cell": {"backend": {"command": backend}}}}))
     binding = campaign.freeze_controller_bundle(output, config, controller)
@@ -1170,7 +1179,8 @@ def test_staged_matmul_backend_uses_complete_closure_after_source_is_removed(tmp
     client = [sys.executable, str(source / "scripts/gz_a3_job_client.py"),
               "--remote-json", json.dumps([str(remote)]),
               "--state-dir", str(tmp_path / "job-state"),
-              "--remote-root", "/approved/remote/root"]
+              "--remote-root", "/approved/remote/root",
+              "--runtime-activate", "/runtime/bin/activate"]
     config = tmp_path / "controller.json"
     config.write_text(json.dumps({"cells": {"matmul-cannbot": {
         "device": 2, "benchmark": "matmul", "development_cases": [7, 8, 9],

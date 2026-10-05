@@ -601,7 +601,7 @@ def main() -> int:
         request = json.load(__import__("sys").stdin)
         result = BzA3DiagnosticClient(
             RemoteTransport(remote, args.runtime_activate), args.state_dir).run(request)
-    except (ValueError, json.JSONDecodeError) as exc:
+    except (ValueError, json.JSONDecodeError, DiagnosticError) as exc:
         result = {"status": "infrastructure_error", "failure_type": "request_error", "diagnostics": str(exc)}
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2

@@ -354,3 +354,14 @@ def test_completed_receipt_reuses_result_without_redispatch(tmp_path: Path):
         results.append(json.loads(process.stdout))
     assert results[0] == results[1]
     assert len(run_log.read_text().splitlines()) == 1
+def test_cli_returns_structured_error_for_invalid_runtime_activation(tmp_path: Path):
+    result = subprocess.run(
+        [sys.executable, str(CLIENT), "--state-dir", str(tmp_path / "state"),
+         "--remote-root", "/remote", "--runtime-activate", "/runtime/../bad"],
+        input=json.dumps({"action": "check", "benchmark": "bsa", "device": 0,
+                          "cases": [0], "scope": "development"}),
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["status"] == "infrastructure_error"
+    assert "Traceback" not in result.stderr

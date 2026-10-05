@@ -889,6 +889,13 @@ def test_private_bundle_executes_after_relocation_and_ignores_source_mutation(tm
     assert str(tmp_path) not in json.dumps(ledger["controller"])
 
 
+@pytest.mark.parametrize("value", [
+    "relative/bin/activate", "/runtime/../bad", "/runtime/bad path", "/runtime//activate",
+])
+def test_runtime_activation_contract_rejects_non_normalized_paths(value):
+    assert not campaign.valid_runtime_activate(value)
+
+
 def test_controller_bundle_rewrites_backend_to_private_runtime(tmp_path: Path):
     client = [sys.executable, str(ROOT / "scripts/gz_a3_job_client.py"),
               "--state-dir", "/private/job-state",

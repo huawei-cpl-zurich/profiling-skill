@@ -712,7 +712,13 @@ def main() -> int:
                     args.remote_command_json)]
         if any(not isinstance(value, list) or not value for value in commands):
             parser.error("commands must be non-empty JSON arrays")
-        transport = RemoteTransport(commands[1], args.runtime_activate)
+        try:
+            transport = RemoteTransport(commands[1], args.runtime_activate)
+        except DiagnosticError as error:
+            result = {"status": "infrastructure_error", "failure_type": "request_error",
+                      "diagnostics": str(error)}
+            print(json.dumps(result, sort_keys=True))
+            return 2
         client = BzA3DiagnosticClient(transport, args.state_dir)
         if args.action == "run-wave":
             if args.wave is None:

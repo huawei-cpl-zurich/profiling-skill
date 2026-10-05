@@ -152,7 +152,7 @@ def main() -> int:
             raise ClientError("--remote-json must be a non-empty JSON string array")
         job = json.load(sys.stdin)
         result = execute(job, args)
-    except (ClientError, OSError, ValueError, json.JSONDecodeError) as exc:
+    except (ClientError, OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         bound = identity(job) if "job" in locals() and isinstance(job, dict) else {}
         result = {"status": "infrastructure_error", "diagnostics": str(exc), **bound}
     print(json.dumps(result, sort_keys=True))

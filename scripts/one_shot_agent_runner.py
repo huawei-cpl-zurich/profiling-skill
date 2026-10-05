@@ -735,7 +735,7 @@ def main() -> int:
         result = runner.run(
             request, timeout=(INNER_TURN_TIMEOUT * 2 if request.get("operation") == "two_shot"
                               else INNER_TURN_TIMEOUT))
-    except (RunnerError, OSError, ValueError, json.JSONDecodeError) as error:
+    except (RunnerError, OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         result = {"status": "setup_error", "diagnostics": _bounded(error),
                   "controller_usage": {"limit": 1, "billed": 0, "calls": []}}
     print(json.dumps(result, sort_keys=True))

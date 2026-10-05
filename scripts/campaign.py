@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -17,11 +18,21 @@ import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Protocol
 
 
 BENCHMARK_DEVICE = {"gdn": 0, "bsa": 1, "matmul": 2}
+
+
+def valid_runtime_activate(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and 2 <= len(value) <= 240
+        and re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
+        and str(PurePosixPath(value)) == value
+        and not any(part in {".", ".."} for part in PurePosixPath(value).parts)
+    )
 DEVELOPMENT_CASES = {
     "gdn": [40, 49, 47, 46, 45],
     "bsa": [47, 46, 49, 44, 43],
@@ -279,9 +290,9 @@ def freeze_controller_bundle(manifest_path: Path, controller_config: Path,
                 except (ValueError, IndexError) as error:
                     raise CampaignError(
                         "A3 controller requires one runtime activation path") from error
-                if not runtime_activate.startswith("/") or not runtime_activate.strip():
+                if not valid_runtime_activate(runtime_activate):
                     raise CampaignError(
-                        "A3 controller runtime activation must be an absolute path")
+                        "A3 controller runtime activation must be a normalized absolute path")
                 if client_name == "bz_a3_job_client.py":
                     singleton_flags = ("--placements-json", "--state-dir", "--remote-root")
                     try:

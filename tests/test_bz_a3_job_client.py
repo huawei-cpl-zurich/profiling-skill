@@ -581,7 +581,10 @@ def test_remote_transport_runs_file_in_registered_context_and_reads_logs():
     assert [call[0][2] for call in calls[1:]] == ["logs", "logs"]
 
 
-def test_remote_transport_observes_same_nonterminal_handle_without_redispatch():
+@pytest.mark.parametrize("state", [
+    "queued", "dispatching", "running", "reconnecting", "observation-unavailable",
+])
+def test_remote_transport_observes_same_nonterminal_handle_without_redispatch(state):
     module = load()
     calls = []
     handle = "remote:bz-a3-1:job:kept"
@@ -590,7 +593,7 @@ def test_remote_transport_observes_same_nonterminal_handle_without_redispatch():
         calls.append(list(argv))
         if "run" in argv:
             return module.CommandResult(0, json.dumps(
-                {"state": "observation-unavailable", "handle": handle}), "")
+                {"state": state, "handle": handle}), "")
         if "observe" in argv:
             return module.CommandResult(0, json.dumps(
                 {"state": "completed", "handle": handle, "exit": 0}), "")

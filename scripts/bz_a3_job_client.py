@@ -77,12 +77,13 @@ def _handle(output: str, profile: str) -> str | None:
 
 
 def _nonterminal(output: str) -> bool:
-    return any(marker in output for marker in (
-        '"state": "observation-unavailable"',
-        '"state": "running"',
-        "REMOTE_STATE=observation-unavailable",
-        "REMOTE_STATE=running",
-    ))
+    states = ("queued", "dispatching", "running", "reconnecting",
+              "observation-unavailable")
+    return any(
+        marker in output
+        for state in states
+        for marker in (f'"state": "{state}"', f"REMOTE_STATE={state}")
+    )
 
 
 class RemoteTransport:

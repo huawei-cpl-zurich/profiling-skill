@@ -575,7 +575,10 @@ def test_infrastructure_failures_are_disjoint(tmp_path: Path):
         assert result["failure_type"] == failure
 
 
-def test_remote_transport_observes_same_handle_after_interruption():
+@pytest.mark.parametrize("state", [
+    "queued", "dispatching", "running", "reconnecting", "observation-unavailable",
+])
+def test_remote_transport_observes_same_handle_after_interruption(state):
     module = load()
     calls = []
 
@@ -587,7 +590,7 @@ def test_remote_transport_observes_same_handle_after_interruption():
         if "logs" in argv:
             return module.CommandResult(0, json.dumps({"state": "completed",
                 "handle": "remote:bz-a3-2:job:retained-7", "content": ""}), "")
-        return module.CommandResult(0, json.dumps({"state": "observation-unavailable",
+        return module.CommandResult(0, json.dumps({"state": state,
             "handle": "remote:bz-a3-2:job:retained-7"}), "")
 
     transport = module.RemoteTransport(["cpl-remote"], invoke)

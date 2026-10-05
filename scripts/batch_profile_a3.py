@@ -133,7 +133,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                 name_matches = selected_name == kernel_name or (
                     replay_mode == "application"
                     and isinstance(selected_name, str)
-                    and selected_name.startswith(kernel_name + "_")
+                    and selected_name == kernel_name + "_mix_aic"
                 )
                 if (run.returncode or evidence.get("status") != "success" or len(kernels) != 1
                         or not name_matches

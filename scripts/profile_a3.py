@@ -85,7 +85,7 @@ def summarize(
                 # Triton symbol accepted by kernel replay.  Keep selection
                 # narrow while accepting that stable msprof suffix.
                 if kernel and name != kernel and not (
-                    replay_mode == "application" and name.startswith(kernel + "_")
+                    replay_mode == "application" and name == kernel + "_mix_aic"
                 ):
                     continue
                 try:

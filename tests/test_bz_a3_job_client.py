@@ -50,8 +50,8 @@ class FakeTransport:
         if self.fail == "upload":
             raise self.module.JobError("staging_error", "cpl-remote upload failed")
 
-    def execute(self, profile, device, operation, script, timeout):
-        self.executions.append((profile, device, operation, script, timeout))
+    def execute(self, profile, device, runtime, operation, script, timeout):
+        self.executions.append((profile, device, runtime, operation, script, timeout))
         if self.fail == "observer":
             raise self.module.JobError("observer_error", "observer interrupted",
                                        f"remote:{profile}:job:retained")
@@ -150,8 +150,9 @@ def test_profile_stages_supplement_and_returns_compact_remote_evidence(tmp_path:
             "candidate.py", "baseline.py", "baseline.json", "cases.jsonl",
             "runner.py", "profile_a3.py", "batch_profile_a3.py", "job.json",
         }
-    profile, device, _operation, script, _timeout = transport.executions[0]
+    profile, device, runtime, _operation, script, _timeout = transport.executions[0]
     assert (profile, device) == ("bz-a3-2", 3)
+    assert runtime == "py311-torch"
     assert "batch_profile_a3.py" in script
     assert "--kernel-name gdn_kernel" in script
 
@@ -200,7 +201,7 @@ def test_request_identity_binds_campaign_device_and_resolved_placement(tmp_path:
     assert second["placement"] == placements["1"]
     assert len(list((tmp_path / "state").glob("*/completed.json"))) == 2
     assert len({upload[2] for upload in transport.uploads}) == 2
-    assert len({call[3].split("run_root=", 1)[1].splitlines()[0]
+    assert len({call[4].split("run_root=", 1)[1].splitlines()[0]
                 for call in transport.executions}) == 2
     assert len(transport.executions) == 2
 
@@ -264,9 +265,10 @@ def test_concurrent_identical_payloads_on_distinct_placements_are_isolated(
                 self.uploads.append((profile, source, destination, timeout))
             self.upload_barrier.wait(timeout=5)
 
-        def execute(self, profile, device, operation, script, timeout):
+        def execute(self, profile, device, runtime, operation, script, timeout):
             with self.lock:
-                self.executions.append((profile, device, operation, script, timeout))
+                self.executions.append(
+                    (profile, device, runtime, operation, script, timeout))
             return self.completed(profile)
 
     transport = ConcurrentTransport(module)
@@ -297,7 +299,7 @@ def test_multiprocess_identical_requests_dispatch_once_and_share_result(tmp_path
     job = profile_job(tmp_path)
 
     class ProcessTransport(FakeTransport):
-        def execute(self, profile, device, operation, script, timeout):
+        def execute(self, profile, device, runtime, operation, script, timeout):
             with execute_count.get_lock():
                 execute_count.value += 1
             time.sleep(0.2)
@@ -501,7 +503,7 @@ def test_check_and_measure_use_runner_and_preserve_logical_identity(tmp_path: Pa
         transport.current = job
         result = subject.run(job)
         assert result["status"] == "ok" and result["device"] == 2
-    assert all("runner.py" in call[3] for call in transport.executions)
+    assert all("runner.py" in call[4] for call in transport.executions)
 
 
 def test_upload_and_profile_tool_failures_are_infrastructure(tmp_path: Path):
@@ -547,7 +549,7 @@ def test_configured_remote_root_owns_staging_runs_and_evidence(tmp_path: Path):
     assert result["artifacts"]["remote_run_root"].startswith(remote_root + "/runs/")
     assert result["artifacts"]["remote_profile_evidence"].startswith(
         remote_root + "/runs/")
-    assert remote_root in transport.executions[0][3]
+    assert remote_root in transport.executions[0][4]
 
 
 @pytest.mark.parametrize("remote_root", [
@@ -627,8 +629,9 @@ def test_effective_timeout_change_does_not_reuse_cached_terminal_result(tmp_path
     state = tmp_path / "state"
 
     class TimeoutTransport(FakeTransport):
-        def execute(self, profile, device, operation, script, timeout):
-            self.executions.append((profile, device, operation, script, timeout))
+        def execute(self, profile, device, runtime, operation, script, timeout):
+            self.executions.append(
+                (profile, device, runtime, operation, script, timeout))
             return (self.module.CommandResult(124, "candidate timed out", ""),
                     f"remote:{profile}:job:slow")
 
@@ -884,7 +887,7 @@ def test_global_transport_hash_pins_skill_client_and_recovers_same_handle(
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     actions = [call[call.index("--json") + 1] for call in calls]
     assert actions == ["upload", "run", "observe", "observe", "result", "logs", "logs"]
-    assert calls[1][2:4] == ["bz-a3-2", "--file"]
+    assert calls[1][2:6] == ["bz-a3-2", "--runtime", "py311-torch", "--file"]
     assert calls[1][calls[1].index("--cwd") + 1] == "/srv/profiling-skill-production"
     assert all("remote:bz-a3-2:job:retained" in call
                for call in calls if call[1] in {"observe", "result", "logs"})
@@ -945,3 +948,23 @@ def test_global_transport_accepts_only_real_global_job_handle_format():
                     "remote:bz-a3-1:session:job-1"):
         with pytest.raises(module.JobError, match="invalid job handle"):
             module.GlobalCplRemoteTransport._validate_handle("bz-a3-1", invalid)
+
+
+@pytest.mark.parametrize("runtime", [None, "", "py310", "py311-torch; id", True])
+def test_unsupported_runtime_is_rejected_before_transport(tmp_path: Path, runtime):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    if runtime is None:
+        job.pop("runtime")
+    else:
+        job["runtime"] = runtime
+
+    result = subject.run(job)
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert "runtime" in result["diagnostics"]
+    assert transport.uploads == []
+    assert transport.executions == []

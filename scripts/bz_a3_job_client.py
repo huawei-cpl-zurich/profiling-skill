@@ -154,8 +154,8 @@ class GlobalCplRemoteTransport:
         if (payload.get("target") != target or payload.get("state") != "completed"):
             raise JobError("staging_error", "cpl-remote upload did not complete")
 
-    def execute(self, target: str, device: int, operation: str, script: str,
-                timeout: int) -> tuple[CommandResult, str | None]:
+    def execute(self, target: str, device: int, runtime: str, operation: str,
+                script: str, timeout: int) -> tuple[CommandResult, str | None]:
         del operation
         wrapped = ("#!/usr/bin/env bash\nset -euo pipefail\n"
                    f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
@@ -167,8 +167,8 @@ class GlobalCplRemoteTransport:
                 stream.flush()
                 path = Path(stream.name)
             payload = self._call([
-                "run", target, "--file", str(path), "--cwd", self.remote_root,
-                "--timeout", str(timeout),
+                "run", target, "--runtime", runtime, "--file", str(path),
+                "--cwd", self.remote_root, "--timeout", str(timeout),
             ], timeout)
         finally:
             if path is not None:
@@ -448,7 +448,7 @@ class BzA3JobClient:
                 )
                 try:
                     response, handle = self.transport.execute(
-                        placement["target"], placement["device"],
+                        placement["target"], placement["device"], job["runtime"],
                         f"profiling-job-{request_sha[:16]}", script,
                         self._remaining(deadline),
                     )
@@ -523,6 +523,8 @@ class BzA3JobClient:
         if job.get("protocol_version") != 1 or job.get("action") not in {
                 "check", "measure", "profile"}:
             raise JobError("request_error", "unsupported job protocol or action")
+        if job.get("runtime") != "py311-torch":
+            raise JobError("request_error", "runtime must be py311-torch")
         device = job.get("device")
         if isinstance(device, bool) or not isinstance(device, int) or device < 0:
             raise JobError("request_error", "device must be a non-negative logical ID")

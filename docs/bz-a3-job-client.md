@@ -2,7 +2,9 @@
 
 `scripts/bz_a3_job_client.py` is the production JSON client for native Triton
 checks and compact `msprof op` captures on BZ-A3. It accepts one JSON job on
-standard input and prints one JSON result.
+standard input and prints one JSON result. Every job must declare
+`"runtime":"py311-torch"`; missing or different runtime names are rejected
+before staging.
 
 The caller must provide:
 
@@ -28,6 +30,10 @@ SSH route, or raw remote client.
 
 Payload upload, retained dispatch, observation, terminal result lookup, and
 compact stdout/stderr retrieval all use the global client's JSON interface.
+Dispatch forwards the validated name as
+`cpl-remote --json run TARGET --runtime py311-torch ...`, so runtime activation
+is owned by the remote registry rather than encoded as a machine path in the
+job client.
 Once dispatch returns `remote:TARGET:job:ID`, the local state receipt records
 that handle. A later invocation observes the same handle and never uploads or
 dispatches a replacement. Full vendor profiling trees remain remote; the

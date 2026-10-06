@@ -41,10 +41,10 @@ The host, not the agent, owns the lifecycle:
 5. Commit: materialize evidence and make one host-controlled, agent-attributed
    commit. A revert restores the prior candidate but archives the tested one.
 
-After three completed experiments, the branch is exactly one seed plus three
-linear commits. All three evidence records cite one persistent session. There
-are no agent-created commits, merges, or pushes. Run the independent verifier
-before comparing results.
+After the host-declared round count completes, the branch is exactly one seed
+plus that many linear commits. Every evidence record cites one persistent
+session. There are no agent-created commits, merges, or pushes. Run the
+independent verifier before comparing results.
 
 If the run is interrupted, preserve the repository and private state directory.
 The runner commits `.experiment/blocked.json` with the session, stage, frozen
@@ -116,6 +116,7 @@ Run one real agent (Docker is the supported default):
 python scripts/audited_experiment.py \
   --repo /isolated/agent-1 --prompt prompts/audited-three-experiment.md \
   --task /campaign/TASK.md --run-id campaign-01 --agent-id agent-1 \
+  --rounds 4 \
   --controller '/path/to/controller --profile treatment-a' \
   --auth-home /path/to/codex-home
 ```

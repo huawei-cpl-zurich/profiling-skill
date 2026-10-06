@@ -79,7 +79,7 @@ def invalid_command_events(thread: str, report: dict) -> str:
     ]) + "\n"
 
 
-def build_branch(tmp_path: Path, *, revert: int | None = 2,
+def build_branch(tmp_path: Path, *, revert: int | None = 2, round_count: int = 3,
                  invalid_identity: str | None = None,
                  repaired_attempts: bool = False) -> Path:
     repo = tmp_path / "repo"
@@ -156,7 +156,7 @@ def build_branch(tmp_path: Path, *, revert: int | None = 2,
     }, invalid_identity if invalid_identity == "stale-controller" else None)
 
     lifecycle.AuditedExperimentRunner(
-        repo, prompt, task, invoke, controller,
+        repo, prompt, task, invoke, controller, round_count=round_count,
     ).run("validation", "agent-a")
     return repo
 
@@ -191,6 +191,25 @@ def test_validates_complete_unmerged_branch_and_revert(tmp_path: Path):
     assert [item["decision"] for item in result["experiments"]] == [
         "retain", "revert", "retain",
     ]
+
+
+def test_validates_v2_seed_with_four_rounds(tmp_path: Path):
+    repo = build_branch(tmp_path, round_count=4)
+
+    result = verifier.validate_branch(repo)
+
+    assert result["round_count"] == 4
+    assert len(result["experiments"]) == 4
+    assert [item["experiment"] for item in result["experiments"]] == [1, 2, 3, 4]
+
+
+def test_legacy_v1_seed_still_means_three_rounds(tmp_path: Path):
+    repo = build_branch(tmp_path)
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+
+    assert seed["schema"] == "profiling-skill/audited-seed/v1"
+    result = verifier.validate_branch(repo)
+    assert result["status"] == "valid" and result["round_count"] == 3
 
 
 def test_repaired_malformed_attempt_markers_validate_but_extra_fields_reject(
@@ -314,7 +333,7 @@ def test_rejects_dirty_merged_or_non_linear_history(tmp_path: Path):
     (extra / "extra").write_text("unexpected\n")
     git(extra, "add", "extra")
     git(extra, "commit", "-m", "extra")
-    with pytest.raises(contract.AuditError, match="seed and three"):
+    with pytest.raises(contract.AuditError, match="one seed and 3"):
         verifier.validate_branch(extra)
 
 

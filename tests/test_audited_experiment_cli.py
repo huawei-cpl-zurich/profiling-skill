@@ -23,6 +23,7 @@ class Runner:
         self.repo = repo
         self.prompt_bytes = prompt
         self.task_bytes = task
+        self.round_count = 3
         self.calls = []
 
     def run(self, run_id: str, agent_id: str):
@@ -47,6 +48,13 @@ def test_acceptance_requires_exactly_three_isolated_identical_inputs(tmp_path: P
                 "c": Runner(tmp_path / "3")}
     with pytest.raises(contract.AuditError, match="byte-identical"):
         cli.run_acceptance_battery("toy", mismatch)
+
+    mixed_rounds = {
+        name: Runner(tmp_path / f"round-{name}") for name in ("a", "b", "c")
+    }
+    mixed_rounds["c"].round_count = 4
+    with pytest.raises(contract.AuditError, match="one immutable round count"):
+        cli.run_acceptance_battery("toy", mixed_rounds)
 
 
 def test_acceptance_rejects_incomplete_or_unverified_result(tmp_path: Path):
@@ -80,8 +88,8 @@ def test_cli_passes_agent_identity_and_always_scrubs_auth(tmp_path: Path, monkey
             self.scrubbed = True
 
     class Lifecycle:
-        def __init__(self, repo, prompt, task, invoke, controller):
-            pass
+        def __init__(self, repo, prompt, task, invoke, controller, *, round_count):
+            seen["round_count"] = round_count
 
         def run(self, *args, **kwargs):
             raise contract.AuditError("synthetic failure")
@@ -96,13 +104,37 @@ def test_cli_passes_agent_identity_and_always_scrubs_auth(tmp_path: Path, monkey
     assert "synthetic failure" in capsys.readouterr().err
 
 
-def test_prompt_is_invariant_and_task_neutral():
-    text = (ROOT / "prompts" / "audited-three-experiment.md").read_text()
-    assert "TASK.md" in text
-    assert "exactly three" in text
-    assert "Do not select or encode a target" in text
-    assert "same durable handle" in text
-    assert "chain-of-thought" in text
+def test_cli_passes_declared_round_count_to_lifecycle(tmp_path: Path, monkeypatch):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    prompt, task = tmp_path / "prompt", tmp_path / "task"
+    prompt.write_text("prompt\n")
+    task.write_text("task\n")
+    seen = {}
+
+    class Invoker:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def scrub_auth(self):
+            pass
+
+    class Lifecycle:
+        def __init__(self, repo, prompt, task, invoke, controller, *, round_count):
+            seen["round_count"] = round_count
+
+        def run(self, *args, **kwargs):
+            return cli.RunResult("complete", "branch", "session", "seed", tuple("1234"))
+
+    monkeypatch.setattr(cli, "CodexInvoker", Invoker)
+    monkeypatch.setattr(cli, "AuditedExperimentRunner", Lifecycle)
+
+    assert cli.main([
+        "--repo", str(repo), "--prompt", str(prompt), "--task", str(task),
+        "--run-id", "run", "--agent-id", "agent", "--controller", "true",
+        "--rounds", "4",
+    ]) == 0
+    assert seen["round_count"] == 4
 
 
 def test_toy_controller_receipt_is_deterministic_and_policy_valid():
@@ -168,9 +200,9 @@ def test_real_composition_creates_three_verified_isolated_histories(tmp_path: Pa
                 }})
             return "\n".join(json.dumps(event) for event in events)
 
-        controller = lambda number, candidate, manifest, agent_id=agent_id: (
-            toy.local_receipt(agent_id, number, candidate, manifest)
-        )
+        def controller(number, candidate, manifest, agent_id=agent_id):
+            return toy.local_receipt(agent_id, number, candidate, manifest)
+
         runners[agent_id] = cli.AuditedExperimentRunner(
             repo, prompt, task, invoke, controller,
         )

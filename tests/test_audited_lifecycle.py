@@ -150,6 +150,51 @@ def test_three_host_commits_use_one_session_and_immutable_seed(tmp_path: Path):
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=repo, text=True)
 
 
+def test_host_declared_four_rounds_are_seeded_and_completed(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    invoke, calls = updating_invoker(repo)
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke,
+        lambda number, candidate, manifest: receipt(candidate, manifest, number),
+        round_count=4,
+    )
+
+    result = runner.run("four", "agent-a")
+
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+    assert seed["schema"] == "profiling-skill/audited-seed/v2"
+    assert seed["round_count"] == 4
+    assert len(result.commits) == 4
+    assert [
+        number for number, _, instruction in calls if instruction is None
+    ] == [1, 2, 3, 4]
+    assert (repo / "experiments/04/evidence.json").is_file()
+
+
+def test_resume_rejects_changed_host_round_count(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    invoke, _ = updating_invoker(repo)
+
+    def blocked_controller(number, candidate, manifest):
+        return {"status": "infrastructure_error", "reason": "not admitted"}
+
+    first = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, blocked_controller, round_count=4,
+    )
+    with pytest.raises(contract.AuditError, match="blocked by controller"):
+        first.run("immutable-rounds", "agent")
+
+    changed = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, blocked_controller, round_count=3,
+    )
+    with pytest.raises(contract.AuditError, match="round count"):
+        changed.run("immutable-rounds", "agent", resume=True)
+
+
 def test_revert_archives_tested_source_and_restores_prior_best(tmp_path: Path):
     repo = tmp_path / "repo"
     init_repo(repo)

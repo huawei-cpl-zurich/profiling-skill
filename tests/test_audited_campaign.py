@@ -1,0 +1,289 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+
+ROOT = Path(__file__).parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "audited_campaign", ROOT / "scripts" / "audited_campaign.py"
+)
+audited_campaign = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader
+sys.modules[SPEC.name] = audited_campaign
+SPEC.loader.exec_module(audited_campaign)
+
+
+def inputs(tmp_path: Path) -> tuple[Path, dict[str, Path], dict]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text("invariant prompt\n")
+    tasks = {}
+    for name in ("matmul", "gdn", "bsa"):
+        path = tmp_path / f"{name}.md"
+        path.write_text(f"optimize {name}\n")
+        tasks[name] = path
+    provenance = {
+        "source_revision": "a" * 40,
+        "controller_sha256": "b" * 64,
+        "runtime_image_digest": "sha256:" + "c" * 64,
+        "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
+        "baselines": {name: "d" * 64 for name in tasks},
+        "skills": {
+            "cannbot": "e" * 64,
+            "ascend-profiling": "f" * 64,
+            "triton-guarded-kernel": "1" * 64,
+        },
+    }
+    return prompt, tasks, provenance
+
+
+def manifest(tmp_path: Path, seed: str = "campaign-1") -> dict:
+    prompt, tasks, provenance = inputs(tmp_path)
+    return audited_campaign.build_manifest(
+        run_id="run-2026-10-06",
+        prompt=prompt,
+        task_files=tasks,
+        provenance=provenance,
+        ordering_seed=seed,
+        rounds=4,
+        request_budget=24,
+    )
+
+
+def test_manifest_is_exact_three_by_three_with_four_rounds(tmp_path: Path):
+    document = manifest(tmp_path)
+    cells = document["cells"]
+    assert len(cells) == 9
+    assert {(cell["task"], cell["treatment"]) for cell in cells} == {
+        (task, treatment)
+        for task in audited_campaign.TASKS
+        for treatment in audited_campaign.TREATMENTS
+    }
+    assert {cell["round_count"] for cell in cells} == {4}
+    assert {cell["request_budget"] for cell in cells} == {24}
+    assert len({cell["branch"] for cell in cells}) == 9
+    assert all("device" not in cell and "target" not in cell for cell in cells)
+
+
+def test_order_is_deterministic_fair_and_recorded(tmp_path: Path):
+    first = manifest(tmp_path / "a")
+    second = manifest(tmp_path / "b")
+    assert first["order"] == second["order"]
+    assert first["ordering"]["algorithm"] == "balanced-latin-v1"
+    for start in range(0, 9, 3):
+        block = [
+            next(cell for cell in first["cells"] if cell["cell_id"] == cell_id)
+            for cell_id in first["order"][start : start + 3]
+        ]
+        assert {cell["task"] for cell in block} == set(audited_campaign.TASKS)
+        assert {cell["treatment"] for cell in block} == set(
+            audited_campaign.TREATMENTS
+        )
+
+
+def test_treatment_visibility_is_exact_and_task_prompt_is_treatment_independent(
+    tmp_path: Path,
+):
+    document = manifest(tmp_path)
+    by_task = {}
+    for cell in document["cells"]:
+        by_task.setdefault(cell["task"], set()).add(cell["task_sha256"])
+        assert cell["skills"] == list(
+            audited_campaign.TREATMENT_SKILLS[cell["treatment"]]
+        )
+    assert all(len(digests) == 1 for digests in by_task.values())
+    assert not any("device" in json.dumps(cell["prompt_contract"]).lower()
+                   for cell in document["cells"])
+
+
+class StaticPool:
+    def __init__(self, slots):
+        self.slots = slots
+        self.calls = 0
+
+    def admit(self):
+        self.calls += 1
+        return self.slots
+
+
+class RecordingLauncher:
+    def __init__(self, fail_once: str | None = None):
+        self.calls = []
+        self.fail_once = fail_once
+
+    def launch(self, cell, slot):
+        self.calls.append((cell["cell_id"], slot.copy()))
+        if cell["cell_id"] == self.fail_once:
+            self.fail_once = None
+            raise audited_campaign.InfrastructureFailure("temporary transport loss")
+        return {
+            "status": "complete",
+            "durable_handle": f"{slot['target']}:job-{cell['cell_id']}",
+            "rounds_completed": 4,
+            "baseline_median_us": 12.0,
+            "rounds": [
+                {"round": round_number, "median_us": 10.0 - round_number}
+                for round_number in range(1, 5)
+            ],
+        }
+
+
+class HandleRecoveryLauncher(RecordingLauncher):
+    def __init__(self, failing_cell):
+        super().__init__()
+        self.failing_cell = failing_cell
+        self.observe_calls = []
+
+    def launch(self, cell, slot):
+        if cell["cell_id"] == self.failing_cell:
+            self.calls.append((cell["cell_id"], slot.copy()))
+            self.failing_cell = None
+            raise audited_campaign.InfrastructureFailure(
+                "observer disconnected", f"{slot['target']}:retained-123"
+            )
+        return super().launch(cell, slot)
+
+    def observe(self, cell, placement, durable_handle):
+        self.observe_calls.append((cell["cell_id"], placement, durable_handle))
+        return {
+            "status": "complete", "durable_handle": durable_handle,
+            "rounds_completed": 4,
+            "rounds": [{"round": number, "median_us": 20.0 - number}
+                       for number in range(1, 5)],
+        }
+
+
+def test_dynamic_admission_uses_all_unique_healthy_idle_devices(tmp_path: Path):
+    document = manifest(tmp_path)
+    pool = StaticPool([
+        {"target": "bz-a3-1", "device": 0, "healthy": True, "idle": True},
+        {"target": "bz-a3-1", "device": 1, "healthy": False, "idle": True},
+        {"target": "bz-a3-2", "device": 2, "healthy": True, "idle": True},
+        {"target": "bz-a3-2", "device": 3, "healthy": True, "idle": False},
+        {"target": "bz-a3-2", "device": 2, "healthy": True, "idle": True},
+    ])
+    launcher = RecordingLauncher()
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json", pool, launcher
+    )
+    assert ledger["status"] == "complete"
+    assert len(launcher.calls) == 9
+    assert {call[1]["target"] for call in launcher.calls} == {
+        "bz-a3-1", "bz-a3-2"
+    }
+    assert all(entry["status"] == "complete" for entry in ledger["cells"].values())
+    assert all(entry["attempts"][0]["durable_handle"] for entry in ledger["cells"].values())
+
+
+def test_resume_preserves_completed_and_retries_only_infrastructure_failure(
+    tmp_path: Path,
+):
+    document = manifest(tmp_path)
+    slots = StaticPool([
+        {"target": "bz-a3-1", "device": 0, "healthy": True, "idle": True},
+        {"target": "bz-a3-2", "device": 1, "healthy": True, "idle": True},
+    ])
+    failed_cell = document["order"][1]
+    first = RecordingLauncher(fail_once=failed_cell)
+    ledger_path = tmp_path / "ledger.json"
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(document, ledger_path, slots, first)
+    completed = {
+        cell_id for cell_id, state in json.loads(ledger_path.read_text())["cells"].items()
+        if state["status"] == "complete"
+    }
+    resumed = RecordingLauncher()
+    ledger = audited_campaign.run_campaign(
+        document, ledger_path, slots, resumed, resume=True
+    )
+    assert ledger["status"] == "complete"
+    assert completed.isdisjoint({cell_id for cell_id, _ in resumed.calls})
+    assert failed_cell in {cell_id for cell_id, _ in resumed.calls}
+    assert len(ledger["cells"][failed_cell]["attempts"]) == 2
+
+
+def test_resume_observes_existing_durable_handle_without_redispatch(tmp_path: Path):
+    document = manifest(tmp_path)
+    pool = StaticPool([
+        {"target": "bz-a3-1", "device": 0, "healthy": True, "idle": True},
+    ])
+    target = document["order"][0]
+    launcher = HandleRecoveryLauncher(target)
+    ledger_path = tmp_path / "ledger.json"
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(document, ledger_path, pool, launcher)
+    launches_before = [cell for cell, _ in launcher.calls].count(target)
+    ledger = audited_campaign.run_campaign(
+        document, ledger_path, pool, launcher, resume=True
+    )
+    assert ledger["status"] == "complete"
+    assert [cell for cell, _ in launcher.calls].count(target) == launches_before
+    assert launcher.observe_calls == [
+        (target, {"target": "bz-a3-1", "device": 0},
+         "bz-a3-1:retained-123")
+    ]
+
+
+def test_report_contains_evolution_best_round_and_failures(tmp_path: Path):
+    document = manifest(tmp_path)
+    pool = StaticPool([
+        {"target": "bz-a3-1", "device": 0, "healthy": True, "idle": True},
+    ])
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json", pool, RecordingLauncher()
+    )
+    report = audited_campaign.build_report(document, ledger)
+    assert report["summary"] == {"complete": 9, "candidate_failed": 0,
+                                  "infrastructure_pending": 0}
+    assert len(report["cells"]) == 9
+    assert all(row["best_round"] == 4 and row["best_median_us"] == 6.0
+               for row in report["cells"])
+    assert all(row["speedup_vs_baseline"] == 2.0 for row in report["cells"])
+    assert all(len(row["evolution"]) == 4 for row in report["cells"])
+
+
+def test_manifest_rejects_unpinned_provenance_and_wrong_dimensions(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path)
+    provenance["controller_sha256"] = "mutable"
+    with pytest.raises(audited_campaign.CampaignError, match="controller_sha256"):
+        audited_campaign.build_manifest(
+            "run", prompt, tasks, provenance, "seed", rounds=4, request_budget=24
+        )
+    _, _, provenance = inputs(tmp_path / "other")
+    with pytest.raises(audited_campaign.CampaignError, match="exactly four rounds"):
+        audited_campaign.build_manifest(
+            "run", prompt, tasks, provenance, "seed", rounds=3, request_budget=24
+        )
+
+
+def test_cli_fake_controller_end_to_end(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path / "inputs")
+    provenance_path = tmp_path / "provenance.json"
+    provenance_path.write_text(json.dumps(provenance))
+    manifest_path = tmp_path / "manifest.json"
+    ledger_path = tmp_path / "ledger.json"
+    report_path = tmp_path / "report.json"
+    script = ROOT / "scripts" / "audited_campaign.py"
+    subprocess.run([
+        sys.executable, str(script), "generate", "--run-id", "cli-e2e",
+        "--prompt", str(prompt), "--matmul-task", str(tasks["matmul"]),
+        "--gdn-task", str(tasks["gdn"]), "--bsa-task", str(tasks["bsa"]),
+        "--provenance", str(provenance_path), "--ordering-seed", "fixed",
+        "--output", str(manifest_path),
+    ], check=True)
+    subprocess.run([
+        sys.executable, str(script), "simulate", "--manifest", str(manifest_path),
+        "--ledger", str(ledger_path), "--slots", "3",
+    ], check=True)
+    subprocess.run([
+        sys.executable, str(script), "report", "--manifest", str(manifest_path),
+        "--ledger", str(ledger_path), "--output", str(report_path),
+    ], check=True)
+    assert json.loads(ledger_path.read_text())["status"] == "complete"
+    assert json.loads(report_path.read_text())["summary"]["complete"] == 9

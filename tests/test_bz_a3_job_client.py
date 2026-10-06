@@ -43,6 +43,7 @@ def load_backend():
 class FakeTransport:
     def __init__(self, module, status="ok", fail=None):
         self.module, self.status, self.fail = module, status, fail
+        self.expected_sha256 = "f" * 64
         self.uploads, self.executions, self.observations = [], [], []
 
     def upload(self, profile, source, destination, timeout):
@@ -50,15 +51,15 @@ class FakeTransport:
         if self.fail == "upload":
             raise self.module.JobError("staging_error", "cpl-remote upload failed")
 
-    def execute(self, profile, device, runtime, operation, script, timeout):
+    def dispatch(self, profile, device, runtime, operation, script, timeout):
         self.executions.append((profile, device, runtime, operation, script, timeout))
-        if self.fail == "observer":
-            raise self.module.JobError("observer_error", "observer interrupted",
-                                       f"remote:{profile}:job:retained")
-        return self.completed(profile)
+        suffix = "retained" if self.fail == "observer" else "job-1"
+        return f"remote:{profile}:job:{suffix}"
 
     def observe(self, profile, handle, timeout):
         self.observations.append((profile, handle, timeout))
+        if self.fail == "observer":
+            raise self.module.JobError("observer_error", "observer interrupted", handle)
         return self.completed(profile)[0]
 
     def completed(self, profile):
@@ -265,11 +266,11 @@ def test_concurrent_identical_payloads_on_distinct_placements_are_isolated(
                 self.uploads.append((profile, source, destination, timeout))
             self.upload_barrier.wait(timeout=5)
 
-        def execute(self, profile, device, runtime, operation, script, timeout):
+        def dispatch(self, profile, device, runtime, operation, script, timeout):
             with self.lock:
                 self.executions.append(
                     (profile, device, runtime, operation, script, timeout))
-            return self.completed(profile)
+            return f"remote:{profile}:job:job-1"
 
     transport = ConcurrentTransport(module)
     placements = {
@@ -299,11 +300,11 @@ def test_multiprocess_identical_requests_dispatch_once_and_share_result(tmp_path
     job = profile_job(tmp_path)
 
     class ProcessTransport(FakeTransport):
-        def execute(self, profile, device, runtime, operation, script, timeout):
+        def dispatch(self, profile, device, runtime, operation, script, timeout):
             with execute_count.get_lock():
                 execute_count.value += 1
             time.sleep(0.2)
-            return self.completed(profile)
+            return f"remote:{profile}:job:job-1"
 
     def invoke():
         transport = ProcessTransport(module)
@@ -434,6 +435,75 @@ def test_retained_dispatch_is_observed_without_duplicate_upload_or_execute(tmp_p
     assert resumed.uploads == [] and resumed.executions == []
     assert resumed.observations[0][:2] == (
         "bz-a3-2", "remote:bz-a3-2:job:retained")
+
+
+def test_crash_after_dispatch_persistence_resumes_exact_handle_without_redispatch(
+        tmp_path: Path):
+    module = load()
+
+    class CrashBeforeObserve(FakeTransport):
+        def observe(self, profile, handle, timeout):
+            raise KeyboardInterrupt("simulated process interruption")
+
+    interrupted = CrashBeforeObserve(module)
+    _module, first_client = client(tmp_path, interrupted)
+    with pytest.raises(KeyboardInterrupt, match="simulated process interruption"):
+        first_client.run(profile_job(tmp_path))
+
+    dispatch = next((tmp_path / "state").glob("*/dispatch.json"))
+    receipt = json.loads(dispatch.read_text())
+    assert receipt["handle"] == "remote:bz-a3-2:job:job-1"
+
+    resumed = FakeTransport(module)
+    _module, second_client = client(tmp_path, resumed)
+    result = second_client.run(profile_job(tmp_path))
+    assert result["status"] == "ok"
+    assert resumed.uploads == [] and resumed.executions == []
+    assert resumed.observations[0][:2] == (
+        "bz-a3-2", "remote:bz-a3-2:job:job-1")
+
+
+def test_client_digest_provenance_prevents_completed_cache_reuse(tmp_path: Path):
+    module = load()
+    state = tmp_path / "state"
+    job = profile_job(tmp_path)
+    first_transport = FakeTransport(module)
+    first_transport.expected_sha256 = "a" * 64
+    first = production_client(
+        module, first_transport, state, "/srv/campaigns/root-a").run(job)
+
+    second_transport = FakeTransport(module)
+    second_transport.expected_sha256 = "b" * 64
+    second = production_client(
+        module, second_transport, state, "/srv/campaigns/root-a").run(job)
+
+    assert first["status"] == second["status"] == "ok"
+    assert first["artifacts"]["request_digest"] != second["artifacts"]["request_digest"]
+    assert first["artifacts"]["execution_provenance"] == {
+        "cpl_remote_sha256": "a" * 64, "runtime": "py311-torch"}
+    assert second["artifacts"]["execution_provenance"] == {
+        "cpl_remote_sha256": "b" * 64, "runtime": "py311-torch"}
+    assert len(second_transport.executions) == 1
+    assert len(list(state.glob("*/completed.json"))) == 2
+
+
+def test_completed_receipt_provenance_drift_is_rejected_without_transport(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    assert subject.run(job)["status"] == "ok"
+    receipt = next((tmp_path / "state").glob("*/completed.json"))
+    record = json.loads(receipt.read_text())
+    record["execution_provenance"]["cpl_remote_sha256"] = "0" * 64
+    receipt.write_text(json.dumps(record))
+
+    result = subject.run(job)
+
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert "provenance" in result["diagnostics"]
+    assert len(transport.executions) == 1
 
 
 def test_counted_candidate_failures_are_not_infrastructure(tmp_path: Path):
@@ -596,7 +666,8 @@ def test_remote_root_drift_never_observes_foreign_retained_dispatch(tmp_path: Pa
         profile_job(tmp_path))
 
     assert second["status"] == "ok"
-    assert replacement.observations == []
+    assert replacement.observations[0][:2] == (
+        "bz-a3-2", "remote:bz-a3-2:job:job-1")
     assert len(replacement.uploads) == len(replacement.executions) == 1
     assert replacement.uploads[0][2].startswith(root_b + "/payload-")
     assert len(list(state.glob("*/dispatch.json"))) == 1
@@ -620,7 +691,8 @@ def test_remote_root_drift_never_reuses_foreign_completed_receipt(tmp_path: Path
     assert first["artifacts"]["remote_run_root"].startswith(root_a + "/runs/")
     assert second["artifacts"]["remote_run_root"].startswith(root_b + "/runs/")
     assert len(second_transport.uploads) == len(second_transport.executions) == 1
-    assert second_transport.observations == []
+    assert second_transport.observations[0][:2] == (
+        "bz-a3-2", "remote:bz-a3-2:job:job-1")
     assert len(list(state.glob("*/completed.json"))) == 2
 
 
@@ -629,11 +701,14 @@ def test_effective_timeout_change_does_not_reuse_cached_terminal_result(tmp_path
     state = tmp_path / "state"
 
     class TimeoutTransport(FakeTransport):
-        def execute(self, profile, device, runtime, operation, script, timeout):
+        def dispatch(self, profile, device, runtime, operation, script, timeout):
             self.executions.append(
                 (profile, device, runtime, operation, script, timeout))
-            return (self.module.CommandResult(124, "candidate timed out", ""),
-                    f"remote:{profile}:job:slow")
+            return f"remote:{profile}:job:slow"
+
+        def observe(self, profile, handle, timeout):
+            self.observations.append((profile, handle, timeout))
+            return self.module.CommandResult(124, "candidate timed out", "")
 
     short_transport = TimeoutTransport(module)
     short = production_client(

@@ -35,6 +35,13 @@ Dispatch forwards the validated name as
 is owned by the remote registry rather than encoded as a machine path in the
 job client.
 Once dispatch returns `remote:TARGET:job:ID`, the local state receipt records
-that handle. A later invocation observes the same handle and never uploads or
-dispatches a replacement. Full vendor profiling trees remain remote; the
-response contains only the validated compact evidence and its remote path.
+and fsyncs that handle before starting observation or collecting results and
+logs. A later invocation observes the same handle and never uploads or
+dispatches a replacement, including when the original process is interrupted
+immediately after dispatch.
+
+The content-addressed request and completed receipt also bind the validated
+runtime and pinned global-client SHA-256. Changing either provenance value
+creates a distinct request namespace, so a result produced by one transport
+version cannot satisfy another. Full vendor profiling trees remain remote;
+the response contains only the validated compact evidence and its remote path.

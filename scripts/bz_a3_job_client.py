@@ -154,8 +154,8 @@ class GlobalCplRemoteTransport:
         if (payload.get("target") != target or payload.get("state") != "completed"):
             raise JobError("staging_error", "cpl-remote upload did not complete")
 
-    def execute(self, target: str, device: int, runtime: str, operation: str,
-                script: str, timeout: int) -> tuple[CommandResult, str | None]:
+    def dispatch(self, target: str, device: int, runtime: str, operation: str,
+                 script: str, timeout: int) -> str:
         del operation
         wrapped = ("#!/usr/bin/env bash\nset -euo pipefail\n"
                    f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
@@ -175,12 +175,11 @@ class GlobalCplRemoteTransport:
                 path.unlink(missing_ok=True)
         handle = self._validate_handle(target, payload.get("handle"))
         state = payload.get("state")
-        if state in {"running", "reconnecting", "observation-unavailable"}:
-            return self.observe(target, handle, timeout), handle
-        if state not in {"completed", "failed", "cancelled"}:
+        if state not in {"running", "reconnecting", "observation-unavailable",
+                         "completed", "failed", "cancelled"}:
             raise JobError("transport_error", "cpl-remote returned an invalid run state",
                            handle)
-        return self._collect(target, handle, timeout), handle
+        return handle
 
     def observe(self, target: str, handle: str, timeout: int) -> CommandResult:
         self._validate_handle(target, handle)
@@ -395,6 +394,7 @@ class BzA3JobClient:
                                "effective timeout must be an integer greater than 25 seconds")
             self._validate_job(job)
             identity = _identity(job)
+            provenance = self._execution_provenance(job["runtime"])
             logical = job["device"]
             placement = self.placements.get(logical)
             if placement is None:
@@ -407,6 +407,7 @@ class BzA3JobClient:
                                      "placement": placement,
                                      "placements_sha256": self.placements_sha256,
                                      "remote_root": self.remote_root,
+                                     "execution_provenance": provenance,
                                      "timeout_seconds": timeout})
             state = self.state_dir / request_sha
             archive = state / "payload.tar"
@@ -418,6 +419,8 @@ class BzA3JobClient:
                 record = json.loads(completed.read_text())
                 if record.get("request_sha256") != request_sha:
                     raise JobError("request_error", "completed receipt request mismatch")
+                if record.get("execution_provenance") != provenance:
+                    raise JobError("request_error", "completed receipt provenance mismatch")
                 result = record.get("result")
                 if not isinstance(result, dict):
                     raise JobError("request_error", "completed receipt is invalid")
@@ -426,6 +429,8 @@ class BzA3JobClient:
                 record = json.loads(dispatch.read_text())
                 if record.get("request_sha256") != request_sha:
                     raise JobError("request_error", "dispatch receipt request mismatch")
+                if record.get("execution_provenance") != provenance:
+                    raise JobError("request_error", "dispatch receipt provenance mismatch")
                 handle = record.get("handle")
                 expected = f'remote:{placement["target"]}:job:'
                 if not isinstance(handle, str) or not handle.startswith(expected):
@@ -447,25 +452,31 @@ class BzA3JobClient:
                     self._workload_timeout(self._remaining(deadline)), job,
                 )
                 try:
-                    response, handle = self.transport.execute(
+                    handle = self.transport.dispatch(
                         placement["target"], placement["device"], job["runtime"],
                         f"profiling-job-{request_sha[:16]}", script,
                         self._remaining(deadline),
                     )
+                    _write_json(dispatch, {"protocol_version": 1,
+                                "request_sha256": request_sha,
+                                "execution_provenance": provenance,
+                                "handle": handle})
+                    response = self.transport.observe(
+                        placement["target"], handle,
+                        self._remaining(deadline, handle))
                 except JobError as exc:
                     if exc.handle:
                         _write_json(dispatch, {"protocol_version": 1,
                                     "request_sha256": request_sha,
+                                    "execution_provenance": provenance,
                                     "handle": exc.handle})
                     raise
-                if handle:
-                    _write_json(dispatch, {"protocol_version": 1,
-                                "request_sha256": request_sha, "handle": handle})
             result = self._complete(response, handle, identity, placement,
                                     request_sha, job, self.remote_root,
-                                    self.placements_sha256)
+                                    self.placements_sha256, provenance)
             _write_json(completed, {"protocol_version": 1,
-                        "request_sha256": request_sha, "result": result})
+                        "request_sha256": request_sha,
+                        "execution_provenance": provenance, "result": result})
             dispatch.unlink(missing_ok=True)
             return result
         except JobError as exc:
@@ -484,6 +495,12 @@ class BzA3JobClient:
             if request_lock is not None:
                 fcntl.flock(request_lock, fcntl.LOCK_UN)
                 request_lock.close()
+
+    def _execution_provenance(self, runtime: str) -> dict[str, str]:
+        digest = getattr(self.transport, "expected_sha256", None)
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise JobError("request_error", "transport cpl-remote digest is invalid")
+        return {"cpl_remote_sha256": digest, "runtime": runtime}
 
     @staticmethod
     def _acquire_request_lock(path: Path, deadline: float):
@@ -635,7 +652,8 @@ exit 0'''
     @staticmethod
     def _complete(response: CommandResult, handle: str | None, identity: dict,
                   placement: dict, request_sha: str, job: dict,
-                  remote_root: str, placements_sha256: str) -> dict:
+                  remote_root: str, placements_sha256: str,
+                  execution_provenance: dict[str, str]) -> dict:
         output = response.stdout + response.stderr
         if response.returncode in (124, 137):
             return {"status": "runtime_error", "failure_type": "runtime_error",
@@ -658,6 +676,7 @@ exit 0'''
         result.update(handle=handle, placement=placement,
                       artifacts={"request_digest": request_sha,
                                  "placements_sha256": placements_sha256,
+                                 "execution_provenance": execution_provenance,
                                  "remote_run_root": f"{remote_root}/runs/{request_sha}"})
         if job["action"] == "profile":
             result["artifacts"]["remote_profile_evidence"] = (

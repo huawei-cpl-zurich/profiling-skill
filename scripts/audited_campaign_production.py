@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import shutil
 import stat
 import subprocess
@@ -59,6 +60,17 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def document_sha256(document: dict) -> str:
+    return hashlib.sha256(json.dumps(
+        document, sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
+
+
+def _positive_number(value: object) -> bool:
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) and value > 0)
 
 
 def digest_tree(root: Path) -> str:
@@ -271,11 +283,9 @@ class ProductionCellLauncher:
         for task, binding in baseline_sources.items():
             path = Path(binding.get("path", "")) if isinstance(binding, dict) else Path("")
             actual = file_sha256(path) if path.is_file() else None
-            expected_path = (Path(self.config["benchmark_assets"]["path"]).resolve()
-                             / task / "baseline.json")
-            if (path.resolve() != expected_path or actual != binding.get("sha256")
-                    or actual != baseline_pins[task]):
+            if actual != binding.get("sha256") or actual != baseline_pins[task]:
                 raise ProductionError(f"baseline provenance does not match runtime input: {task}")
+            self._baseline(task)
         skill_pins = provenance.get("skills")
         skill_sources = self.config.get("skill_sources", {})
         if not isinstance(skill_pins, dict):
@@ -287,6 +297,29 @@ class ProductionCellLauncher:
             if (not isinstance(binding, dict)
                     or skill_pins.get(name) != binding.get("sha256")):
                 raise ProductionError(f"{name} skill provenance does not match runtime tree")
+
+    def _baseline(self, task: str) -> dict:
+        path = Path(self.config["baseline_sources"][task]["path"])
+        try:
+            document = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise ProductionError(f"timing baseline is invalid JSON: {task}") from error
+        required = {"schema", "benchmark", "case_medians_us",
+                    "control_median_us", "sha256"}
+        rows = document.get("case_medians_us") if isinstance(document, dict) else None
+        if (not isinstance(document, dict) or set(document) != required
+                or document.get("schema") != "profiling-skill/baseline-timing/v1"
+                or document.get("benchmark") != task or not isinstance(rows, list)
+                or [row.get("case") if isinstance(row, dict) else None for row in rows]
+                != DEVELOPMENT_CASES[task]
+                or any(set(row) != {"case", "median_us"}
+                       or not _positive_number(row["median_us"]) for row in rows)
+                or not _positive_number(document.get("control_median_us"))
+                or document.get("sha256") != document_sha256({
+                    key: value for key, value in document.items() if key != "sha256"
+                })):
+            raise ProductionError(f"timing baseline contract is invalid: {task}")
+        return document
 
     def _prepare_repo(self, cell: dict) -> tuple[Path, bool]:
         root = self.run_root / cell["cell_id"]
@@ -373,13 +406,16 @@ class ProductionCellLauncher:
             "control_drift_threshold": 0.2, "infrastructure_retry_budget": 3,
             "devices": [{"id": f"{slot['target']}/device-{slot['device']}", "device": 0}],
             "development_cases": DEVELOPMENT_CASES[cell["task"]],
-            "all_cases": ALL_CASES[cell["task"]], "backend_command": backend,
+            "all_cases": ALL_CASES[cell["task"]],
+            "baseline": self._baseline(cell["task"]), "backend_command": backend,
         }
         controller_config = state / "controller.json"
         controller_config.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+        controller_state = state / "controller"
+        controller_state.mkdir(exist_ok=True)
         command = [
             sys.executable, str(self.scripts / "audited_bz_controller.py"),
-            "--config", str(controller_config), "--state-dir", str(state / "controller"),
+            "--config", str(controller_config), "--state-dir", str(controller_state),
         ]
         return self.controller_factory(command, repo, timeout=self.config.get("timeout", 900))
 
@@ -425,8 +461,14 @@ class ProductionCellLauncher:
         if any(not isinstance(commit, str) or not commit for commit in commits):
             raise ProductionError("independent verifier omitted experiment commits")
         terminal = rounds[-1]
+        terminal_status = (
+            "candidate_failed"
+            if any(round_receipt.get("status") == "candidate_error"
+                   for round_receipt in rounds)
+            else "complete"
+        )
         result = {
-            "status": "complete", "durable_handle": terminal["handle"],
+            "status": terminal_status, "durable_handle": terminal["handle"],
             "rounds_completed": 4, "rounds": rounds,
             "branch": verified.get("branch"), "session_id": verified.get("session_id"),
             "seed_commit": verified.get("seed_commit"), "commits": list(commits),
@@ -446,7 +488,8 @@ class ProductionCellLauncher:
             raise ProductionError("blocked checkpoint is invalid JSON") from error
         expected_branch = f"experiment/{self.config['run_id']}/{cell['cell_id']}"
         if (not isinstance(state, dict)
-                or state.get("schema") != "profiling-skill/audited-blocked/v1"
+                or state.get("schema") != "profiling-skill/audited-blocked/v2"
+                or state.get("round_count") != cell["round_count"]
                 or state.get("stage") not in {"prepare", "controller", "measurement", "finalize"}
                 or state.get("experiment") not in {1, 2, 3, 4}
                 or state.get("branch") != expected_branch):

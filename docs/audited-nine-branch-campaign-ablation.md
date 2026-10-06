@@ -47,8 +47,16 @@ meaning rather than merely simplifying code:
   the hash-pinned global `cpl-remote`; caller-selected adapter argv was removed.
 - A branch is resumed only from a valid blocked checkpoint. A completed branch
   whose ledger was lost is independently verified and reconstructed in place.
+- Four-round resume accepts only the v2 checkpoint with immutable
+  `round_count: 4`; accepting legacy v1 would erase the campaign's round-count
+  identity at the recovery boundary.
 - No lifecycle exception is relabeled as a kernel failure. Genuine candidate
-  failures remain controller receipts and retain their full compact evidence.
+  failures remain controller receipts and retain their full compact evidence;
+  one `candidate_error` in any verified round makes the branch terminal
+  `candidate_failed` rather than complete.
+- Frozen timing baselines have their own semantic schema and internal canonical
+  digest, and the exact validated document is passed into the controller. This
+  keeps normalization inputs distinct from benchmark correctness assets.
 - The independent offline verifier is a terminal success gate, not a reporting
   convenience. This is intentionally separate from the lifecycle's own checks.
 
@@ -56,9 +64,11 @@ meaning rather than merely simplifying code:
 
 - Focused: `pytest -q tests/test_audited_campaign.py` — 9 passed.
 - Production hardening: `pytest -q tests/test_audited_campaign_production.py`
-  — 18 passed, including the real `CommandController` with a fake BZ boundary.
+  — 23 passed and one configurable-round dependency-gated composition test
+  skipped. In a temporary integrated checkout, that test runs unskipped and
+  passes with the real runner, `CommandController`, and offline verifier.
 - Broader: `PYTHONPATH=. pytest -q -k 'not test_real_bwrap_with_functional_fake_codex_runs_persistent_rounds'`
-  — 713 passed, 1 deselected after production hardening.
+  — 718 passed, 1 skipped, and 1 deselected after production hardening.
 - The excluded existing test requires unprivileged Bubblewrap namespaces,
   which this local host disables before any campaign code runs.
 

@@ -114,9 +114,13 @@ For production, create a hash-pinned runtime configuration with schema
 pinned source repository and commit for each task, exact per-skill source trees
 and hashes, the pinned runtime scripts closure containing
 `audited_bz_controller.py`, its sibling benchmark-assets tree and hash, the
-exact `benchmarks/<task>/baseline.json` bindings, invariant prompt and task
-bindings, remote staging root, Codex authentication home, model, reasoning
-effort, immutable runtime-image digest, and timeout. `runtime_mode` must be
+exact frozen timing-baseline bindings, invariant prompt and task bindings,
+remote staging root, Codex authentication home, model, reasoning effort,
+immutable runtime-image digest, and timeout. Each timing baseline uses schema
+`profiling-skill/baseline-timing/v1`, names the benchmark, lists positive
+per-case medians in exact development-case order, records a positive control
+median, and includes the SHA-256 of the canonical JSON for those four fields.
+`runtime_mode` must be
 `docker`; direct Codex execution is rejected. The configuration repeats the
 manifest provenance object exactly, and every pin is checked against the
 source revision, complete controller closure, baseline files, composite
@@ -145,11 +149,13 @@ controller checkpoint, physical placement, and BZ job receipts. A retained
 handle is reobserved through `CommandController`; it is never replaced by a
 new dispatch. Runtime controller configuration uses logical device zero and
 stores the physical target/device only in the private placement evidence.
-Resume is permitted only from a lifecycle-validated blocked checkpoint. If a
-ledger is lost after a branch completed, the launcher independently runs
-`validate_audited_experiment.py` and reconstructs the terminal receipt instead
-of restarting the agent. Every new completion also passes that independent
-verifier before it can be recorded as successful.
+Resume is permitted only from a lifecycle-validated blocked checkpoint. A
+four-round cell requires `profiling-skill/audited-blocked/v2` with immutable
+`round_count: 4`; the v1 checkpoint remains a legacy three-round format and is
+rejected here. If a ledger is lost after a branch completed, the launcher
+independently runs `validate_audited_experiment.py` and reconstructs the
+terminal receipt instead of restarting the agent. Every new completion also
+passes that independent verifier before it can be recorded as successful.
 
 Cell receipts retain each complete compact controller receipt, including
 per-case measurements, admission and post-run controls, infrastructure
@@ -157,6 +163,9 @@ attempts, baseline fields, and calibration fields. Codex, controller,
 verification, and local lifecycle failures are infrastructure failures.
 Compilation, runtime, and correctness failures are candidate evidence only
 when they arrive in a contract-valid `candidate_error` controller receipt.
+Any independently verified branch containing such a receipt is terminal
+`candidate_failed`, never `complete`, while all round and verifier evidence is
+retained for offline analysis.
 
 ## Acceptance
 

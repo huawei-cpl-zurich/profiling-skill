@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import inspect
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -31,6 +33,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 try:
     import audited_runtime
     import audited_campaign as runtime_campaign
+    import audited_lifecycle
 finally:
     sys.path.pop(0)
 
@@ -61,6 +64,20 @@ def isolated_global_remote(tmp_path: Path, monkeypatch):
 
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def timing_baseline(task: str) -> dict:
+    document = {
+        "schema": "profiling-skill/baseline-timing/v1",
+        "benchmark": task,
+        "case_medians_us": [
+            {"case": case, "median_us": float(index + 10)}
+            for index, case in enumerate(production.DEVELOPMENT_CASES[task])
+        ],
+        "control_median_us": 20.0,
+    }
+    document["sha256"] = production.document_sha256(document)
+    return document
 
 
 def test_resource_pool_uses_only_capabilities_preflight_and_pinned_admission(tmp_path: Path):
@@ -133,11 +150,14 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         (scripts / name).write_text("# pinned\n")
     assets = tmp_path / "benchmarks"
     assets.mkdir()
+    baseline_root = tmp_path / "timing-baselines"
+    baseline_root.mkdir()
     baselines = {}
     for task_name in production.DEVELOPMENT_CASES:
-        baseline = assets / task_name / "baseline.json"
-        baseline.parent.mkdir()
-        baseline.write_text(json.dumps({"task": task_name}))
+        (assets / task_name).mkdir()
+        (assets / task_name / "cases.json").write_text(json.dumps({"task": task_name}))
+        baseline = baseline_root / f"{task_name}.json"
+        baseline.write_text(json.dumps(timing_baseline(task_name)))
         baselines[task_name] = {"path": str(baseline), "sha256": sha(baseline)}
     cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     prompt = tmp_path / "prompt.md"
@@ -267,6 +287,9 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
     assert controller_config["request_budget"] == 24
     assert controller_config["development_cases"] == [40, 49, 47, 46, 45]
     assert controller_config["all_cases"] == list(range(50))
+    assert controller_config["baseline"] == json.loads(
+        Path(config["baseline_sources"]["gdn"]["path"]).read_text()
+    )
     assert controller_config["devices"] == [{"id": "bz-a3-2/device-6", "device": 0}]
     nested = json.loads(controller_config["backend_command"][-1])
     assert "--device" not in nested
@@ -316,6 +339,43 @@ def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pi
     else:
         config["provenance"]["skills"]["cannbot"] = "a" * 64
     with pytest.raises(production.ProductionError, match="provenance"):
+        production.ProductionCellLauncher(config)
+
+
+def test_launcher_rejects_invalid_timing_baseline_contract(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    baseline = Path(config["baseline_sources"]["matmul"]["path"])
+    document = json.loads(baseline.read_text())
+    document["case_medians_us"][0]["median_us"] = 999.0
+    baseline.write_text(json.dumps(document))
+    pin = sha(baseline)
+    config["baseline_sources"]["matmul"]["sha256"] = pin
+    config["provenance"]["baselines"]["matmul"] = pin
+
+    with pytest.raises(production.ProductionError, match="timing baseline contract"):
+        production.ProductionCellLauncher(config)
+
+
+def test_launcher_rejects_nonfinite_timing_baseline_value(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    baseline = Path(config["baseline_sources"]["matmul"]["path"])
+    document = json.loads(baseline.read_text())
+    document["control_median_us"] = float("inf")
+    document["sha256"] = production.document_sha256({
+        key: value for key, value in document.items() if key != "sha256"
+    })
+    baseline.write_text(json.dumps(document))
+    pin = sha(baseline)
+    config["baseline_sources"]["matmul"]["sha256"] = pin
+    config["provenance"]["baselines"]["matmul"] = pin
+
+    with pytest.raises(production.ProductionError, match="timing baseline contract"):
         production.ProductionCellLauncher(config)
 
 
@@ -384,6 +444,38 @@ def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: 
     (repo / ".experiment" / "seed.json").write_text("{}")
     with pytest.raises(runtime_campaign.InfrastructureFailure, match="blocked checkpoint"):
         launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+
+
+@pytest.mark.parametrize(("schema", "round_count", "accepted"), [
+    ("profiling-skill/audited-blocked/v2", 4, True),
+    ("profiling-skill/audited-blocked/v2", 3, False),
+    ("profiling-skill/audited-blocked/v1", None, False),
+])
+def test_four_round_campaign_accepts_only_v2_four_round_checkpoint(
+        tmp_path: Path, schema: str, round_count: int | None, accepted: bool):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    blocked = {
+        "schema": schema, "experiment": 2, "stage": "controller",
+        "branch": "experiment/production-e2e/matmul-cannbot",
+    }
+    if round_count is not None:
+        blocked["round_count"] = round_count
+    (repo / ".experiment").mkdir()
+    (repo / ".experiment" / "blocked.json").write_text(json.dumps(blocked))
+    if accepted:
+        assert launcher._resume_checkpoint(repo, cell) == blocked
+    else:
+        with pytest.raises(production.ProductionError, match="checkpoint"):
+            launcher._resume_checkpoint(repo, cell)
 
 
 def test_complete_branch_is_verified_and_reconstructed_with_full_receipts(tmp_path: Path):
@@ -493,9 +585,191 @@ print(json.dumps({
         runner_factory=ControllerRunner, verifier_invoke=valid_verifier,
     )
     receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
-    assert receipt["status"] == "complete"
+    assert receipt["status"] == "candidate_failed"
+    assert receipt["rounds_completed"] == 4
     assert [item["status"] for item in receipt["rounds"]] == ["candidate_error"] * 4
     assert receipt["rounds"][0]["reason"] == "Triton compilation failed"
+
+
+def test_real_four_round_composition_resumes_verifies_and_reconstructs(
+        tmp_path: Path, monkeypatch):
+    if "round_count" not in inspect.signature(
+            audited_lifecycle.AuditedExperimentRunner).parameters:
+        pytest.skip(
+            "requires stacked audited-configurable-rounds prerequisite; "
+            "this test runs unskipped once that PR is integrated"
+        )
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    runtime_root = Path(config["runtime_scripts"]["path"])
+    for name in production.RUNTIME_FILES - {"audited_bz_controller.py"}:
+        source = ROOT / "scripts" / name
+        if source.is_file():
+            shutil.copy2(source, runtime_root / name)
+    fake_codex = runtime_root / "fake_codex.py"
+    fake_codex.write_text(r'''\
+import hashlib, json, sys
+from pathlib import Path
+
+request = json.load(sys.stdin)
+repo = Path(request["repo"])
+number = request["number"]
+instruction = request["instruction"]
+thread = "thread-composed"
+events = [{"type": "thread.started", "thread_id": thread}]
+if instruction is None:
+    (repo / "candidate.py").write_text(f"VALUE = {number + 1}\n")
+    events.append({"type": "item.completed", "item": {
+        "type": "command_execution", "command": "python local-check.py",
+        "exit_code": 0, "aggregated_output": "ok\n"}})
+    document = {"prepared": True}
+else:
+    marker = "exact host controller receipt:\n"
+    receipt_line = instruction.split(marker, 1)[1].splitlines()[0]
+    receipt = json.loads(receipt_line)
+    candidate = hashlib.sha256((repo / "candidate.py").read_bytes()).hexdigest()
+    manifest = hashlib.sha256((repo / "candidate.manifest.json").read_bytes()).hexdigest()
+    encoded = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    document = {
+        "hypothesis": f"round {number} changes the candidate",
+        "expected_result": "the controller returns attributable evidence",
+        "change": f"set VALUE for round {number}",
+        "evidence": "local check plus compact controller receipt",
+        "observed_result": receipt["status"],
+        "decision": "revert" if receipt["status"] == "candidate_error" else "retain",
+        "postmortem": "the retained receipt determines the decision",
+        "next_experiment": "continue with the next host-directed round",
+        "candidate_sha256": candidate, "manifest_sha256": manifest,
+        "controller_handle": receipt["handle"],
+        "controller_receipt_sha256": hashlib.sha256(encoded).hexdigest(),
+        "sources": [], "no_sources_reason": "self-contained composition fixture",
+    }
+events.append({"type": "item.completed", "item": {
+    "type": "agent_message", "text": json.dumps(document)}})
+print("\n".join(json.dumps(event) for event in events))
+''')
+    controller_script = runtime_root / "audited_bz_controller.py"
+    controller_script.write_text(r'''\
+import argparse, json
+from pathlib import Path
+
+p = argparse.ArgumentParser()
+p.add_argument("--config", required=True)
+p.add_argument("--state-dir", required=True)
+p.add_argument("--experiment", required=True, type=int)
+p.add_argument("--candidate-sha256", required=True)
+p.add_argument("--manifest-sha256", required=True)
+p.add_argument("--observe-handle")
+p.add_argument("--remeasure-handle")
+a = p.parse_args()
+cell = Path.cwd().parent.name
+state_path = Path(a.config).parent / "fake-controller-state.json"
+state = json.loads(state_path.read_text()) if state_path.is_file() else {}
+key = f"{cell}:{a.experiment}"
+state[key] = state.get(key, 0) + 1
+state_path.write_text(json.dumps(state))
+handle = a.observe_handle or a.remeasure_handle or f"remote:bz-a3-1:job:{cell}-{a.experiment}"
+
+def policy(post="stable", samples=True):
+    result = {
+        "schema": "profiling-skill/controller-policy/v1",
+        "selected_device": "bz-a3-1/device-1",
+        "admission_controls": [{"device": "bz-a3-1/device-1", "status": "pass",
+            "healthy": True, "idle": True, "warmed": True}],
+        "submission_candidate_sha256": a.candidate_sha256,
+        "submitted_handles": [handle], "observed_handles": [handle],
+        "infra_retries": 0, "retry_budget": 3, "quarantined_devices": [],
+        "quarantine_controls": {}, "confirmation_count": 0,
+        "post_control": post, "variability_threshold": 0.25,
+    }
+    if samples:
+        result.update({"sample_count": 3, "variability_ratio": 0.02})
+    return result
+
+base = {"candidate_sha256": a.candidate_sha256,
+        "manifest_sha256": a.manifest_sha256, "handle": handle,
+        "device": "bz-a3-1/device-1"}
+if cell.startswith("matmul-") and a.experiment == 1 and not a.observe_handle:
+    print(json.dumps({**base, "status": "infrastructure_error",
+                      "reason": "observer disconnected"}))
+elif cell.startswith("matmul-") and a.experiment == 2 and not a.remeasure_handle:
+    print(json.dumps({**base, "status": "measurement_pending",
+        "samples_us": [1.0, 2.0, 3.0], "median_us": 2.0,
+        "policy": {**policy(), "variability_ratio": 1.0}}))
+elif cell.startswith("gdn-") and a.experiment == 2:
+    print(json.dumps({**base, "status": "candidate_error",
+        "reason": "Triton compilation failed", "policy": policy("not_run", False)}))
+else:
+    samples = [10.0 + a.experiment, 10.1 + a.experiment, 10.2 + a.experiment]
+    print(json.dumps({**base, "status": "ok", "samples_us": samples,
+        "median_us": samples[1],
+        "policy": {**policy(), "variability_ratio": 0.2 / samples[1]}}))
+''')
+    closure_hash = production.digest_tree(runtime_root)
+    config["runtime_scripts"]["sha256"] = closure_hash
+    config["provenance"]["controller_sha256"] = closure_hash
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "Composition Host")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "host@example.invalid")
+
+    class SubprocessCodex:
+        docker_image_id = config["runtime_image_digest"]
+
+        def __init__(self, repo: Path):
+            self.repo = repo
+
+        def __call__(self, number, session, instruction):
+            run = subprocess.run(
+                [sys.executable, str(fake_codex)], input=json.dumps({
+                    "repo": str(self.repo), "number": number,
+                    "session": session, "instruction": instruction,
+                }), text=True, capture_output=True, check=True,
+            )
+            return run.stdout
+
+        def scrub_auth(self):
+            pass
+
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SubprocessCodex(repo),
+        controller_factory=audited_runtime.CommandController,
+        runner_factory=audited_lifecycle.AuditedExperimentRunner,
+    )
+    slot = {"target": "bz-a3-1", "device": 1}
+    with pytest.raises(runtime_campaign.InfrastructureFailure) as controller_block:
+        launcher.launch(cell, slot)
+    first_checkpoint = json.loads((
+        Path(config["run_root"]) / cell["cell_id"] / "repo/.experiment/blocked.json"
+    ).read_text())
+    assert (first_checkpoint["schema"], first_checkpoint["round_count"],
+            first_checkpoint["stage"]) == (
+                "profiling-skill/audited-blocked/v2", 4, "controller")
+
+    with pytest.raises(runtime_campaign.InfrastructureFailure) as measurement_block:
+        launcher.observe(cell, slot, controller_block.value.durable_handle)
+    second_checkpoint = json.loads((
+        Path(config["run_root"]) / cell["cell_id"] / "repo/.experiment/blocked.json"
+    ).read_text())
+    assert (second_checkpoint["schema"], second_checkpoint["round_count"],
+            second_checkpoint["stage"]) == (
+                "profiling-skill/audited-blocked/v2", 4, "measurement")
+
+    complete = launcher.observe(cell, slot, measurement_block.value.durable_handle)
+    assert complete["status"] == "complete" and complete["rounds_completed"] == 4
+    assert launcher.launch(cell, slot) == complete
+
+    failed_cell = dict(cell, cell_id="gdn-cannbot", task="gdn")
+    failed_cell["task_sha256"] = config["tasks"]["gdn"]["sha256"]
+    failed_cell["prompt_contract"] = {
+        "invariant_sha256": config["prompt"]["sha256"],
+        "task_sha256": config["tasks"]["gdn"]["sha256"],
+    }
+    failed = launcher.launch(failed_cell, slot)
+    assert failed["status"] == "candidate_failed"
+    assert failed["rounds"][1]["status"] == "candidate_error"
+    assert failed["rounds_completed"] == 4
 
 
 @pytest.mark.parametrize(("task", "development", "count"), [
@@ -531,11 +805,14 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         (scripts / name).write_text("# pinned\n")
     assets = tmp_path / "benchmarks"
     assets.mkdir()
+    baseline_root = tmp_path / "timing-baselines"
+    baseline_root.mkdir()
     baselines = {}
     for task in tasks:
-        path = assets / task / "baseline.json"
-        path.parent.mkdir()
-        path.write_text(json.dumps({"task": task}))
+        (assets / task).mkdir()
+        (assets / task / "cases.json").write_text(json.dumps({"task": task}))
+        path = baseline_root / f"{task}.json"
+        path.write_text(json.dumps(timing_baseline(task)))
         baselines[task] = {"path": str(path), "sha256": sha(path)}
     provenance = {
         "source_revision": revision,
@@ -597,3 +874,6 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         assert controller_config["benchmark"] == cell["task"]
         assert controller_config["development_cases"] == production.DEVELOPMENT_CASES[cell["task"]]
         assert controller_config["all_cases"] == production.ALL_CASES[cell["task"]]
+        assert controller_config["baseline"] == json.loads(
+            Path(baselines[cell["task"]]["path"]).read_text()
+        )

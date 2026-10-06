@@ -92,7 +92,7 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
         capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
 
 
-def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
+def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: Path):
     payload = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
                "device": 3, "phase": "before", "wave": 2,
                "attempt_id": "wave-2-first"}
@@ -108,7 +108,17 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["job"]["calibration_phase"] == "before"
     assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
-    assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+    assert result["job"]["profiling"] == {
+        "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
+        "tool": "msprof op",
+        "captures": 3,
+        "aic_metrics": "BasicInfo",
+        "warm_up": 3,
+        "launch_count": 1,
+        "replay_mode": "kernel",
+        "kernel_name": result["selector"],
+        "driver_arguments": ["--kernel-name", result["selector"]],
+    }
 
 
 def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):

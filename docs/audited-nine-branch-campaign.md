@@ -64,11 +64,15 @@ cell; independent queued cells continue. The campaign pauses with failed cells
 pending only after otherwise runnable work is exhausted.
 
 Each launcher result must include a terminal status, durable handle, completed
-round count, and four round evidence records. Candidate compilation, runtime,
-correctness, or budget failure is a terminal `candidate_failed` result and is
-not retried. Infrastructure failure before submission leaves the cell pending
-for a later resume. If a durable handle exists, resume calls `observe` for that
-exact handle and cannot dispatch a replacement.
+round count, four distinct experiment commits, and four ordered controller
+receipts. This contract applies equally to `complete` and `candidate_failed`.
+A candidate-failed result must contain at least one fully classified
+`candidate_error` round; partial or contradictory evidence remains
+infrastructure-pending rather than terminalizing. Candidate compilation,
+runtime, correctness, or budget failure is not retried. Infrastructure failure
+before submission leaves the cell pending for a later resume. If a durable
+handle exists, resume calls `observe` for that exact handle and cannot dispatch
+a replacement.
 
 The ledger is atomically updated before dispatch and after every result. Repeat
 the same operation with `resume=True` after infrastructure recovery; completed
@@ -109,4 +113,6 @@ and diagnostic. Infrastructure-pending cells remain visibly separate from
 candidate failures. Each round's normalized samples, median, calibration,
 baseline, and speedup are propagated from the validated controller receipt.
 Best-round and cross-device/cross-run comparison fields use normalized timing
-when present; raw timing remains available for device-local diagnosis.
+when present; raw timing remains available for device-local diagnosis. The
+report also aggregates every candidate-error round, including earlier rounds,
+with its round number, failure type, and reason.

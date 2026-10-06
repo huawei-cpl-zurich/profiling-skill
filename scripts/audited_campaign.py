@@ -242,19 +242,43 @@ def _admitted_slots(pool: ResourcePool) -> list[dict]:
 
 
 def _validate_receipt(cell: dict, receipt: dict) -> None:
-    if receipt.get("status") not in {"complete", "candidate_failed"}:
+    status = receipt.get("status")
+    if status not in {"complete", "candidate_failed"}:
         raise InfrastructureFailure("launcher returned a nonterminal receipt",
                                     receipt.get("durable_handle"))
     if not receipt.get("durable_handle"):
         raise InfrastructureFailure("terminal receipt lacks durable handle")
-    if receipt["status"] == "complete":
-        if receipt.get("rounds_completed") != cell["round_count"]:
-            raise InfrastructureFailure("terminal receipt has incomplete round count",
-                                        receipt["durable_handle"])
-        rounds = receipt.get("rounds")
-        if not isinstance(rounds, list) or len(rounds) != cell["round_count"]:
-            raise InfrastructureFailure("terminal receipt lacks round evidence",
-                                        receipt["durable_handle"])
+    count = cell["round_count"]
+    if receipt.get("rounds_completed") != count:
+        raise InfrastructureFailure("terminal receipt has incomplete round count",
+                                    receipt["durable_handle"])
+    rounds = receipt.get("rounds")
+    commits = receipt.get("commits")
+    if (not isinstance(rounds, list) or len(rounds) != count
+            or not isinstance(commits, list) or len(commits) != count
+            or any(not isinstance(commit, str) or not commit for commit in commits)
+            or len(set(commits)) != count):
+        raise InfrastructureFailure("terminal receipt lacks four commits and receipts",
+                                    receipt["durable_handle"])
+    expected_rounds = list(range(1, count + 1))
+    if (any(not isinstance(item, dict) for item in rounds)
+            or [item.get("round") for item in rounds] != expected_rounds
+            or any(item.get("status") not in {"ok", "candidate_error"}
+                   or not isinstance(item.get("handle"), str) or not item["handle"]
+                   for item in rounds)):
+        raise InfrastructureFailure("terminal receipt has malformed round evidence",
+                                    receipt["durable_handle"])
+    failures = [item for item in rounds if item["status"] == "candidate_error"]
+    if any(not isinstance(item.get(field), str) or not item[field]
+           for item in failures for field in ("failure_type", "reason")):
+        raise InfrastructureFailure("candidate_error round lacks failure evidence",
+                                    receipt["durable_handle"])
+    if status == "candidate_failed" and not failures:
+        raise InfrastructureFailure("candidate_failed lacks a candidate_error round",
+                                    receipt["durable_handle"])
+    if status == "complete" and failures:
+        raise InfrastructureFailure("complete receipt contains a candidate_error round",
+                                    receipt["durable_handle"])
 
 
 def run_campaign(
@@ -409,6 +433,11 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         terminal = next((attempt.get("receipt") for attempt in reversed(state["attempts"])
                          if attempt.get("receipt")), {})
         evolution = terminal.get("rounds", [])
+        candidate_errors = [
+            {"round": item.get("round"), "failure_type": item.get("failure_type"),
+             "reason": item.get("reason")}
+            for item in evolution if item.get("status") == "candidate_error"
+        ]
         raw = [item for item in evolution
                if isinstance(item.get("median_us"), (int, float))
                and math.isfinite(item["median_us"]) and item["median_us"] > 0]
@@ -486,7 +515,10 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "baseline": baseline,
             "baseline_median_us": baseline_us,
             "speedup_vs_baseline": speedup,
-            "failure": terminal.get("failure") if terminal else None,
+            "candidate_errors": candidate_errors,
+            "failure": candidate_errors or (
+                terminal.get("failure") if terminal else None
+            ),
         })
     return {"schema_version": 2, "run_id": manifest["run_id"],
             "manifest_sha256": manifest["manifest_sha256"],
@@ -508,8 +540,11 @@ class _FakeLauncher:
         del slot
         return {"status": "complete", "durable_handle": f"fake:{cell['cell_id']}",
                 "rounds_completed": 4,
-                "rounds": [{"round": number, "median_us": 10.0 - number}
-                           for number in range(1, 5)]}
+                "rounds": [{"round": number, "status": "ok",
+                            "handle": f"fake:round-{number}",
+                            "median_us": 10.0 - number}
+                           for number in range(1, 5)],
+                "commits": [f"fake-commit-{number}" for number in range(1, 5)]}
 
     def observe(self, cell: dict, placement: dict, durable_handle: str) -> dict:
         del placement

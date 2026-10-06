@@ -132,6 +132,8 @@ class RecordingLauncher:
             "rounds": [
                 {
                     "round": round_number,
+                    "status": "ok",
+                    "handle": f"{slot['target']}:round-{round_number}",
                     "median_us": 10.0 - round_number,
                     "normalized_median_us": 9.0 - round_number,
                     "samples_us": [10.0 - round_number] * 3,
@@ -141,6 +143,7 @@ class RecordingLauncher:
                 }
                 for round_number in range(1, 5)
             ],
+            "commits": [f"commit-{number}" for number in range(1, 5)],
         }
 
 
@@ -164,8 +167,11 @@ class HandleRecoveryLauncher(RecordingLauncher):
         return {
             "status": "complete", "durable_handle": durable_handle,
             "rounds_completed": 4,
-            "rounds": [{"round": number, "median_us": 20.0 - number}
+            "rounds": [{"round": number, "status": "ok",
+                        "handle": f"handle-{number}",
+                        "median_us": 20.0 - number}
                        for number in range(1, 5)],
+            "commits": [f"commit-{number}" for number in range(1, 5)],
         }
 
 
@@ -328,6 +334,90 @@ def test_report_retains_discarded_infrastructure_attempts(tmp_path: Path):
     }]
 
 
+@pytest.mark.parametrize("malformation", ["partial", "no-candidate-error"])
+def test_malformed_candidate_failure_remains_infrastructure_pending(
+    tmp_path: Path, malformation: str,
+):
+    document = manifest(tmp_path)
+
+    class MalformedLauncher:
+        def launch(self, cell, slot):
+            count = 2 if malformation == "partial" else 4
+            return {
+                "status": "candidate_failed", "durable_handle": "local:failed",
+                "rounds_completed": count,
+                "rounds": [{"round": number, "status": "ok",
+                            "handle": f"local:round-{number}"}
+                           for number in range(1, count + 1)],
+                "commits": [f"commit-{number}" for number in range(1, count + 1)],
+            }
+
+    ledger_path = tmp_path / "ledger.json"
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(
+            document, ledger_path,
+            StaticPool([{"target": "bz-a3-1", "device": 0,
+                         "healthy": True, "idle": True}]),
+            MalformedLauncher(),
+        )
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["cells"][document["order"][0]]["status"] == "infrastructure_pending"
+
+
+def test_complete_without_four_commits_remains_infrastructure_pending(tmp_path: Path):
+    document = manifest(tmp_path)
+
+    class MissingCommitLauncher(RecordingLauncher):
+        def launch(self, cell, slot):
+            receipt = super().launch(cell, slot)
+            receipt["commits"].pop()
+            return receipt
+
+    ledger_path = tmp_path / "ledger.json"
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(
+            document, ledger_path,
+            StaticPool([{"target": "bz-a3-1", "device": 0,
+                         "healthy": True, "idle": True}]),
+            MissingCommitLauncher(),
+        )
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["cells"][document["order"][0]]["status"] == "infrastructure_pending"
+
+
+def test_report_aggregates_all_candidate_error_rounds(tmp_path: Path):
+    document = manifest(tmp_path)
+
+    class CandidateFailureLauncher:
+        def launch(self, cell, slot):
+            rounds = [
+                {"round": 1, "status": "candidate_error", "handle": "h1",
+                 "failure_type": "compile_error", "reason": "bad tl.load"},
+                {"round": 2, "status": "ok", "handle": "h2"},
+                {"round": 3, "status": "candidate_error", "handle": "h3",
+                 "failure_type": "correctness_error", "reason": "mismatch"},
+                {"round": 4, "status": "ok", "handle": "h4"},
+            ]
+            return {
+                "status": "candidate_failed", "durable_handle": "h4",
+                "rounds_completed": 4, "rounds": rounds,
+                "commits": ["c1", "c2", "c3", "c4"],
+            }
+
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json",
+        StaticPool([{"target": "bz-a3-1", "device": 0,
+                     "healthy": True, "idle": True}]),
+        CandidateFailureLauncher(),
+    )
+    report = audited_campaign.build_report(document, ledger)
+    assert report["summary"]["candidate_failed"] == 9
+    assert report["cells"][0]["candidate_errors"] == [
+        {"round": 1, "failure_type": "compile_error", "reason": "bad tl.load"},
+        {"round": 3, "failure_type": "correctness_error", "reason": "mismatch"},
+    ]
+
+
 def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: Path):
     document = manifest(tmp_path)
     baseline = {
@@ -345,6 +435,7 @@ def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: P
             ]:
                 rounds.append({
                     "round": number, "median_us": raw,
+                    "status": "ok", "handle": f"round-{number}",
                     "samples_us": [raw] * 3,
                     "normalized_samples_us": [normalized] * 3,
                     "normalized_median_us": normalized,
@@ -361,6 +452,7 @@ def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: P
             return {
                 "status": "complete", "durable_handle": f"{slot['target']}:job",
                 "rounds_completed": 4, "rounds": rounds,
+                "commits": ["c1", "c2", "c3", "c4"],
             }
 
     ledger = audited_campaign.run_campaign(

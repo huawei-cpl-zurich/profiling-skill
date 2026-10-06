@@ -55,6 +55,7 @@ branch-wide accounting.
 | `pytest -q tests/test_audited_bz_controller.py` | 7 passed | Focused adapter suite |
 | `PYTHONPATH=. pytest -q -k 'not test_real_bwrap_with_functional_fake_codex_runs_persistent_rounds'` | 695 passed, 1 deselected | Known host-kernel Bubblewrap restriction excluded |
 | `git diff --check` | passed | No whitespace errors |
+| `python -m ruff check scripts/audited_bz_controller.py scripts/audited_runtime.py tests/test_audited_bz_controller.py tests/test_audited_runtime.py` | passed | Final integrated lint cleanup |
 
 ## Residual Risks
 

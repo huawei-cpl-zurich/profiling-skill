@@ -17,9 +17,8 @@ import math
 import os
 import statistics
 import subprocess
-import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 
 CONFIG_SCHEMA = "profiling-skill/audited-bz-controller-config/v1"

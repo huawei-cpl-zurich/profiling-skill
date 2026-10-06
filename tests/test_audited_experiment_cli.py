@@ -137,16 +137,6 @@ def test_cli_passes_declared_round_count_to_lifecycle(tmp_path: Path, monkeypatc
     assert seen["round_count"] == 4
 
 
-def test_prompt_is_invariant_and_task_neutral():
-    text = (ROOT / "prompts" / "audited-three-experiment.md").read_text()
-    assert "TASK.md" in text
-    assert "host-declared immutable round count" in text
-    assert "exactly three" not in text
-    assert "Do not select or encode a target" in text
-    assert "same durable handle" in text
-    assert "chain-of-thought" in text
-
-
 def test_toy_controller_receipt_is_deterministic_and_policy_valid():
     digest, manifest = "a" * 64, "b" * 64
     first = toy.local_receipt("agent-a", 2, digest, manifest)

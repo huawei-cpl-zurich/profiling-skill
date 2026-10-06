@@ -60,6 +60,7 @@ def isolated_global_remote(tmp_path: Path, monkeypatch):
     remote.parent.mkdir(parents=True)
     remote.write_text("#!/bin/sh\n")
     remote.chmod(0o755)
+    remote.with_name("cpl_remote.py").write_text("# pinned implementation\n")
     monkeypatch.setattr(Path, "home", lambda: home)
 
 
@@ -154,7 +155,11 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     }
     resource_module = ROOT / "scripts" / "audited_resource_admission.py"
     provenance["resource_admission_sha256"] = sha(resource_module)
-    provenance["cpl_remote_sha256"] = sha(cpl_remote)
+    provenance["cpl_remote_closure_sha256"] = (
+        production.cpl_remote_closure_sha256(cpl_remote)
+    )
+    provenance["admission_provider_id"] = "campaign-operator"
+    provenance["admission_allowlist_sha256"] = "d" * 64
     config = {
         "run_id": "production-e2e",
         "run_root": str(tmp_path / "runs"),
@@ -167,7 +172,9 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "benchmark_assets": {"path": str(assets),
                              "sha256": production.digest_tree(assets)},
         "baseline_sources": baselines,
-        "cpl_remote_sha256": sha(cpl_remote),
+        "admission_provider_id": "campaign-operator",
+        "admission_allowlist_sha256": "d" * 64,
+        "cpl_remote_closure_sha256": production.cpl_remote_closure_sha256(cpl_remote),
         "resource_admission": {
             "path": str(resource_module), "sha256": sha(resource_module),
         },
@@ -439,9 +446,89 @@ def test_launcher_binds_resource_module_and_client_to_manifest_provenance(
             "round_count": 4, "request_budget": 24,
             "skills": list(production.TREATMENT_SKILLS["cannbot"])}
     config = runtime_fixture(tmp_path, cell)
-    key = "resource_admission_sha256" if pin == "resource" else "cpl_remote_sha256"
+    key = ("resource_admission_sha256" if pin == "resource"
+           else "cpl_remote_closure_sha256")
     config["provenance"][key] = "a" * 64
     with pytest.raises(production.ProductionError, match="resource admission provenance"):
+        production_launcher(config)
+
+
+def test_admission_refresh_evidence_is_durable_before_slots_are_returned(tmp_path: Path):
+    receipt = SimpleNamespace(
+        receipt_sha256="a" * 64, provider_id="campaign-operator",
+        allowlist_sha256="d" * 64,
+        generated_at="2026-10-06T09:00:00Z",
+        expires_at="2026-10-06T09:03:00Z",
+        as_slots=lambda: [
+            {"target": "bz-a3-1", "device": 2, "healthy": True, "idle": True}
+        ],
+    )
+    evidence = tmp_path / "admission-evidence.json"
+    pool = production.DurableAdmissionPool(
+        SimpleNamespace(admit_snapshot=lambda: receipt), evidence, "run-id",
+    )
+
+    assert pool.admit() == receipt.as_slots()
+    assert pool.admit() == receipt.as_slots()
+    document = json.loads(evidence.read_text())
+    assert document == {
+        "schema": "profiling-skill/admission-evidence/v1",
+        "run_id": "run-id",
+        "refreshes": [
+            {"sequence": 1, "receipt_sha256": "a" * 64,
+             "provider_id": "campaign-operator", "allowlist_sha256": "d" * 64,
+             "generated_at": "2026-10-06T09:00:00Z",
+             "expires_at": "2026-10-06T09:03:00Z"},
+            {"sequence": 2, "receipt_sha256": "a" * 64,
+             "provider_id": "campaign-operator", "allowlist_sha256": "d" * 64,
+             "generated_at": "2026-10-06T09:00:00Z",
+             "expires_at": "2026-10-06T09:03:00Z"},
+        ],
+    }
+
+
+def test_expired_admission_pauses_without_launch_or_evidence(tmp_path: Path):
+    prompt = tmp_path / "prompt.md"
+    tasks = {}
+    provenance = {
+        "source_revision": "a" * 40, "controller_sha256": "b" * 64,
+        "runtime_image_digest": "sha256:" + "c" * 64,
+        "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
+        "baselines": {name: "d" * 64 for name in production.DEVELOPMENT_CASES},
+        "skills": {"cannbot": "e" * 64, "ascend-profiling": "f" * 64,
+                   "triton-guarded-kernel": "1" * 64},
+    }
+    prompt.write_text("prompt")
+    for name in production.DEVELOPMENT_CASES:
+        tasks[name] = tmp_path / f"{name}.md"
+        tasks[name].write_text(name)
+    manifest = campaign.build_manifest("expired", prompt, tasks, provenance, "fixed")
+    launches = []
+
+    class ExpiredPool:
+        def admit_snapshot(self):
+            raise production.AdmissionError("admission receipt is expired")
+
+    class NeverLauncher:
+        def launch(self, cell, slot):
+            launches.append((cell, slot))
+
+    evidence = tmp_path / "admission-evidence.json"
+    pool = production.DurableAdmissionPool(ExpiredPool(), evidence, "expired")
+    with pytest.raises(campaign.CampaignPaused, match="expired"):
+        campaign.run_campaign(manifest, tmp_path / "ledger.json", pool, NeverLauncher())
+    assert launches == []
+    assert not evidence.exists()
+
+
+def test_launcher_rejects_global_client_implementation_drift(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    client = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
+    client.with_name("cpl_remote.py").write_text("# implementation drift\n")
+    with pytest.raises(production.ProductionError, match="closure hash"):
         production_launcher(config)
 
 
@@ -502,7 +589,8 @@ def test_controller_uses_pinned_global_boundary_without_adapter_argv(tmp_path: P
     ).read_text())
     client = json.loads(controller_config["backend_command"][-1])
     assert "--adapter-json" not in client
-    assert client[client.index("--cpl-remote-sha256") + 1] == config["cpl_remote_sha256"]
+    global_client = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
+    assert client[client.index("--cpl-remote-sha256") + 1] == sha(global_client)
     placements = json.loads((
         Path(config["run_root"]) / cell["cell_id"] / "state" / "placements.json"
     ).read_text())
@@ -960,7 +1048,11 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     resource_module = ROOT / "scripts" / "audited_resource_admission.py"
     provenance["resource_admission_sha256"] = sha(resource_module)
-    provenance["cpl_remote_sha256"] = sha(cpl_remote)
+    provenance["cpl_remote_closure_sha256"] = (
+        production.cpl_remote_closure_sha256(cpl_remote)
+    )
+    provenance["admission_provider_id"] = "campaign-operator"
+    provenance["admission_allowlist_sha256"] = "d" * 64
     manifest = campaign.build_manifest(
         "fake-production", prompt, tasks, provenance, "fixed"
     )
@@ -976,7 +1068,9 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "benchmark_assets": {"path": str(assets),
                              "sha256": production.digest_tree(assets)},
         "baseline_sources": baselines,
-        "cpl_remote_sha256": sha(cpl_remote),
+        "admission_provider_id": "campaign-operator",
+        "admission_allowlist_sha256": "d" * 64,
+        "cpl_remote_closure_sha256": production.cpl_remote_closure_sha256(cpl_remote),
         "resource_admission": {
             "path": str(resource_module), "sha256": sha(resource_module),
         },

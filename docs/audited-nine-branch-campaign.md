@@ -19,7 +19,9 @@ shape is:
   "source_revision": "<40 hex characters>",
   "controller_sha256": "<64 hex characters>",
   "resource_admission_sha256": "<64 hex characters>",
-  "cpl_remote_sha256": "<64 hex characters>",
+  "admission_provider_id": "campaign-operator",
+  "admission_allowlist_sha256": "<64 hex characters>",
+  "cpl_remote_closure_sha256": "<64 hex characters>",
   "runtime_image_digest": "sha256:<64 hex characters>",
   "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
   "baselines": {"matmul": "<sha256>", "gdn": "<sha256>", "bsa": "<sha256>"},
@@ -110,8 +112,10 @@ exact frozen timing-baseline bindings, invariant prompt and task bindings,
 remote staging root, Codex authentication home, model, reasoning effort,
 immutable runtime-image digest, and the five timeout-budget fields described
 below. It also binds the fixed sibling `audited_resource_admission.py` path and
-digest to `provenance.resource_admission_sha256`, and binds the authenticated
-global client digest to `provenance.cpl_remote_sha256`. Each timing baseline uses schema
+digest to `provenance.resource_admission_sha256`; pins the static provider and
+target/device allowlist identities; and binds both the authenticated global
+client launcher and its sibling implementation to
+`provenance.cpl_remote_closure_sha256`. Each timing baseline uses schema
 `profiling-skill/baseline-timing/v1`, names the benchmark, lists positive
 per-case medians in exact development-case order, records a positive control
 median, and includes the SHA-256 of the canonical JSON for those four fields.
@@ -148,6 +152,12 @@ python scripts/audited_campaign_production.py \
 ```
 
 Repeat the identical command with `--resume` after infrastructure recovery.
+Every successful admission refresh is atomically recorded before its slots are
+returned in `RUN_ROOT/state/admission-evidence.json`, including its sequence,
+complete receipt SHA-256, provider and allowlist identities, and exact
+generation and expiration timestamps. An expired v2 receipt admits no slot, so
+the scheduler pauses without dispatching duplicate work; resume requires a new
+hash-pinned receipt with the same provider and allowlist identities.
 Each cell retains its isolated clone, experiment branch, Codex state,
 controller checkpoint, physical placement, and BZ job receipts. A retained
 handle is reobserved through `CommandController`; it is never replaced by a

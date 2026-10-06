@@ -80,7 +80,14 @@ The safe vertical slice identified during review is now the prerequisite
 admission schema/parser, global-client pin checks, documentation, and focused
 tests. Production imports and compatibility-re-exports the required names; it
 does not retain another parser, probe loop, or copy of those tests. The runtime
-and manifest bind both the prerequisite module digest and global-client digest.
+and manifest bind the prerequisite module, static provider and device
+allowlist, and complete global-client launcher/implementation closure.
+
+Production adds only the campaign-owned durability boundary: every accepted
+v2 admission snapshot is atomically recorded before its slots reach the
+scheduler. Expiration propagates as admission infrastructure failure, leaving
+queued work undispatched and retained running work observable rather than
+creating a replacement dispatch.
 
 The remaining provenance checks are not a second safe mechanical split. They
 bind the same source revision, copied treatment trees, runtime closure,

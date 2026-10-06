@@ -18,7 +18,8 @@ _SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIRECTORY))
 try:
     from audited_resource_admission import (
-        TARGETS, CplRemoteResourcePool, file_sha256,
+        TARGETS, AdmissionError, CplRemoteResourcePool,
+        cpl_remote_closure_sha256, file_sha256,
     )
 finally:
     sys.path.pop(0)
@@ -131,6 +132,47 @@ def _write_json_atomic(path: Path, document: dict) -> None:
     temporary.replace(path)
 
 
+class DurableAdmissionPool:
+    """Record every accepted admission refresh before exposing its slots."""
+
+    def __init__(self, pool, evidence_path: Path, run_id: str):
+        self.pool = pool
+        self.evidence_path = Path(evidence_path)
+        self.run_id = run_id
+        self.last_receipt = None
+
+    def _document(self) -> dict:
+        if not self.evidence_path.exists():
+            return {"schema": "profiling-skill/admission-evidence/v1",
+                    "run_id": self.run_id, "refreshes": []}
+        try:
+            document = json.loads(self.evidence_path.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            raise ProductionError("admission evidence is unreadable") from error
+        if (not isinstance(document, dict)
+                or set(document) != {"schema", "run_id", "refreshes"}
+                or document.get("schema") != "profiling-skill/admission-evidence/v1"
+                or document.get("run_id") != self.run_id
+                or not isinstance(document.get("refreshes"), list)):
+            raise ProductionError("admission evidence does not match this campaign")
+        return document
+
+    def admit(self) -> list[dict]:
+        snapshot = self.pool.admit_snapshot()
+        document = self._document()
+        document["refreshes"].append({
+            "sequence": len(document["refreshes"]) + 1,
+            "receipt_sha256": snapshot.receipt_sha256,
+            "provider_id": snapshot.provider_id,
+            "allowlist_sha256": snapshot.allowlist_sha256,
+            "generated_at": snapshot.generated_at,
+            "expires_at": snapshot.expires_at,
+        })
+        _write_json_atomic(self.evidence_path, document)
+        self.last_receipt = snapshot
+        return snapshot.as_slots()
+
+
 def _git(repo: Path, *arguments: str) -> str:
     result = subprocess.run(["git", *arguments], cwd=repo, text=True,
                             capture_output=True, check=False)
@@ -164,9 +206,12 @@ class ProductionCellLauncher:
         self.cpl_remote = str(
             Path.home() / ".agents" / "skills" / "remote-access" / "scripts" / "cpl-remote"
         )
-        if (not Path(self.cpl_remote).is_file()
-                or file_sha256(Path(self.cpl_remote)) != config.get("cpl_remote_sha256")):
-            raise ProductionError("global cpl-remote hash does not match pinned input")
+        try:
+            actual_remote_closure = cpl_remote_closure_sha256(Path(self.cpl_remote))
+        except AdmissionError as error:
+            raise ProductionError("global cpl-remote closure is unavailable") from error
+        if actual_remote_closure != config.get("cpl_remote_closure_sha256"):
+            raise ProductionError("global cpl-remote closure hash does not match pinned input")
         if config.get("runtime_mode") != "docker":
             raise ProductionError("production agents require an isolated Docker runtime")
         if "adapter_command" in config or "remote_command" in config:
@@ -258,8 +303,12 @@ class ProductionCellLauncher:
         if (resource_path != expected_resource
                 or actual_resource != resource.get("sha256")
                 or actual_resource != provenance.get("resource_admission_sha256")
-                or self.config.get("cpl_remote_sha256") !=
-                provenance.get("cpl_remote_sha256")):
+                or self.config.get("cpl_remote_closure_sha256") !=
+                provenance.get("cpl_remote_closure_sha256")
+                or self.config.get("admission_provider_id") !=
+                provenance.get("admission_provider_id")
+                or self.config.get("admission_allowlist_sha256") !=
+                provenance.get("admission_allowlist_sha256")):
             raise ProductionError(
                 "resource admission provenance does not match runtime inputs"
             )
@@ -419,7 +468,7 @@ class ProductionCellLauncher:
             sys.executable, str(self.scripts / "bz_a3_job_client.py"),
             "--state-dir", str(state / "jobs"), "--placements-json", str(placements),
             "--remote-root", self.config["remote_root"],
-            "--cpl-remote-sha256", self.config["cpl_remote_sha256"],
+            "--cpl-remote-sha256", file_sha256(Path(self.cpl_remote)),
             "--timeout", str(self.config["backend_job_timeout"]),
         ]
         backend = [
@@ -631,9 +680,15 @@ def main(argv: list[str] | None = None) -> int:
     from audited_campaign import InfrastructureFailure, run_campaign
     ledger = run_campaign(
         manifest, args.ledger,
-        CplRemoteResourcePool(
-            args.admission, args.admission_sha256,
-            cpl_remote_sha256=config["cpl_remote_sha256"],
+        DurableAdmissionPool(
+            CplRemoteResourcePool(
+                args.admission, args.admission_sha256,
+                provider_id=config["admission_provider_id"],
+                allowlist_sha256=config["admission_allowlist_sha256"],
+                cpl_remote_closure_sha256=config["cpl_remote_closure_sha256"],
+            ),
+            Path(config["run_root"]) / "state" / "admission-evidence.json",
+            config["run_id"],
         ),
         ProductionCellLauncher(
             config, infrastructure_failure_type=InfrastructureFailure,

@@ -181,6 +181,13 @@ def _copy_tree(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=False)
 
 
+def _write_json_atomic(path: Path, document: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(document, sort_keys=True) + "\n")
+    temporary.replace(path)
+
+
 def _git(repo: Path, *arguments: str) -> str:
     result = subprocess.run(["git", *arguments], cwd=repo, text=True,
                             capture_output=True, check=False)
@@ -221,6 +228,7 @@ class ProductionCellLauncher:
             raise ProductionError("production agents require an isolated Docker runtime")
         if "adapter_command" in config or "remote_command" in config:
             raise ProductionError("runtime config cannot supply an adapter or remote command")
+        self._validate_timeouts()
         self._validate_files()
         if invoker_factory is None or controller_factory is None or runner_factory is None:
             sys.path.insert(0, str(self.scripts))
@@ -235,6 +243,25 @@ class ProductionCellLauncher:
         self.invoker_factory = invoker_factory
         self.controller_factory = controller_factory
         self.runner_factory = runner_factory
+
+    def _validate_timeouts(self) -> None:
+        names = (
+            "agent_turn_timeout", "controller_transaction_timeout",
+            "verifier_timeout", "backend_job_timeout", "timeout_grace",
+        )
+        if "timeout" in self.config:
+            raise ProductionError("ambiguous legacy timeout is not allowed")
+        for name in names:
+            value = self.config.get(name)
+            if type(value) is not int or value <= 0:
+                raise ProductionError(f"{name} must be a positive integer")
+        backend_outer = self.config["backend_job_timeout"] + self.config["timeout_grace"]
+        if self.config["controller_transaction_timeout"] <= (
+                backend_outer + self.config["timeout_grace"]):
+            raise ProductionError(
+                "controller transaction timeout must exceed the backend job timeout "
+                "and both timeout grace intervals"
+            )
 
     def _validate_files(self) -> None:
         assets = self.config.get("benchmark_assets", {})
@@ -328,6 +355,7 @@ class ProductionCellLauncher:
 
     def _prepare_repo(self, cell: dict) -> tuple[Path, bool]:
         root = self.run_root / cell["cell_id"]
+        staging = self.run_root / f".{cell['cell_id']}.initializing"
         repo = root / "repo"
         source = self.config["source_repositories"].get(cell["task"])
         if not isinstance(source, dict):
@@ -339,43 +367,79 @@ class ProductionCellLauncher:
         identity = {"cell_id": cell["cell_id"], "task": cell["task"],
                     "treatment": cell["treatment"], "source_revision": revision}
         identity_path = root / "state" / "cell.json"
+        expected = tuple(TREATMENT_SKILLS[cell["treatment"]])
+        if tuple(cell["skills"]) != expected:
+            raise ProductionError("cell treatment allowlist does not match campaign policy")
         if repo.exists():
             if (not identity_path.is_file()
                     or json.loads(identity_path.read_text()) != identity):
                 raise ProductionError("existing isolated repository has a different identity")
+            self._validate_isolated_skills(repo, expected)
             return repo, (repo / ".experiment" / "seed.json").is_file()
-        root.mkdir(parents=True, exist_ok=False)
+        if root.exists():
+            raise ProductionError("existing isolated cell is incomplete")
+        self.run_root.mkdir(parents=True, exist_ok=True)
+        bootstrap = {
+            "schema": "profiling-skill/cell-bootstrap/v1",
+            "identity": identity,
+        }
+        marker = staging / "state" / "bootstrap.json"
+        if staging.exists():
+            try:
+                existing_bootstrap = json.loads(marker.read_text())
+            except (OSError, json.JSONDecodeError) as error:
+                raise ProductionError("unowned partial bootstrap cannot be recreated") from error
+            if existing_bootstrap != bootstrap:
+                raise ProductionError("unowned partial bootstrap cannot be recreated")
+            shutil.rmtree(staging)
+        staging.mkdir()
+        _write_json_atomic(marker, bootstrap)
+        staging_repo = staging / "repo"
         result = subprocess.run(
-            ["git", "clone", "--quiet", "--no-hardlinks", str(source_path), str(repo)],
+            ["git", "clone", "--quiet", "--no-hardlinks", str(source_path),
+             str(staging_repo)],
             text=True, capture_output=True, check=False,
         )
         if result.returncode:
             raise ProductionError(f"isolated clone failed: {result.stderr.strip()}")
-        _git(repo, "checkout", "--quiet", "--detach", revision)
-        if _git(repo, "rev-parse", "HEAD") != revision:
+        _git(staging_repo, "checkout", "--quiet", "--detach", revision)
+        if _git(staging_repo, "rev-parse", "HEAD") != revision:
             raise ProductionError("isolated repository revision does not match pin")
-        exclusions = repo / ".git" / "info" / "exclude"
+        exclusions = staging_repo / ".git" / "info" / "exclude"
         with exclusions.open("a") as stream:
             stream.write("\n.agents/\nAGENTS.md\n")
-        skills = repo / ".agents" / "skills"
+        skills = staging_repo / ".agents" / "skills"
         skills.mkdir(parents=True)
-        expected = tuple(TREATMENT_SKILLS[cell["treatment"]])
-        if tuple(cell["skills"]) != expected:
-            raise ProductionError("cell treatment allowlist does not match campaign policy")
         for name in expected:
             binding = self.config["skill_sources"].get(name)
             if not isinstance(binding, dict):
                 raise ProductionError(f"pinned skill source is missing: {name}")
             _copy_tree(Path(binding["path"]), skills / name)
-        (repo / "AGENTS.md").write_text(
+        (staging_repo / "AGENTS.md").write_text(
             "Use only the repository-local skills under .agents/skills. "
             "Do not inspect host or global skills.\n"
         )
-        if _git(repo, "status", "--porcelain"):
+        self._validate_isolated_skills(staging_repo, expected)
+        if _git(staging_repo, "status", "--porcelain"):
             raise ProductionError("isolated experiment repository is not clean")
-        identity_path.parent.mkdir(parents=True, exist_ok=True)
-        identity_path.write_text(json.dumps(identity, sort_keys=True) + "\n")
+        _write_json_atomic(staging / "state" / "cell.json", identity)
+        staging.rename(root)
         return repo, False
+
+    def _validate_isolated_skills(self, repo: Path, expected: tuple[str, ...]) -> None:
+        skills = repo / ".agents" / "skills"
+        try:
+            entries = list(skills.iterdir())
+        except OSError as error:
+            raise ProductionError("isolated treatment skills are unavailable") from error
+        if ({entry.name for entry in entries} != set(expected)
+                or any(not entry.is_dir() or entry.is_symlink() for entry in entries)):
+            raise ProductionError("isolated treatment skills do not match the exact allowlist")
+        for name in expected:
+            binding = self.config["skill_sources"].get(name)
+            if (not isinstance(binding, dict)
+                    or digest_tree(skills / name) != binding.get("sha256")):
+                raise ProductionError(f"isolated treatment skills have drifted: {name}")
 
     def _controller(self, cell: dict, slot: dict, root: Path, repo: Path):
         state = root / "state"
@@ -399,6 +463,7 @@ class ProductionCellLauncher:
             "--state-dir", str(state / "jobs"), "--placements-json", str(placements),
             "--remote-root", self.config["remote_root"],
             "--cpl-remote-sha256", self.config["cpl_remote_sha256"],
+            "--timeout", str(self.config["backend_job_timeout"]),
         ]
         backend = [
             sys.executable, str(self.scripts / "benchmark_backend.py"),
@@ -409,6 +474,9 @@ class ProductionCellLauncher:
             "benchmark": cell["task"], "round_count": 4, "request_budget": 24,
             "profile_repeats": 3, "variability_threshold": 0.25,
             "control_drift_threshold": 0.2, "infrastructure_retry_budget": 3,
+            "timeout_seconds": (
+                self.config["backend_job_timeout"] + self.config["timeout_grace"]
+            ),
             "devices": [{"id": f"{slot['target']}/device-{slot['device']}", "device": 0}],
             "development_cases": DEVELOPMENT_CASES[cell["task"]],
             "all_cases": ALL_CASES[cell["task"]],
@@ -422,7 +490,9 @@ class ProductionCellLauncher:
             sys.executable, str(self.scripts / "audited_bz_controller.py"),
             "--config", str(controller_config), "--state-dir", str(controller_state),
         ]
-        return self.controller_factory(command, repo, timeout=self.config.get("timeout", 900))
+        return self.controller_factory(
+            command, repo, timeout=self.config["controller_transaction_timeout"]
+        )
 
     def _verify(self, repo: Path, cell: dict) -> dict:
         command = [
@@ -432,7 +502,7 @@ class ProductionCellLauncher:
         try:
             result = self.verifier_invoke(
                 command, text=True, capture_output=True,
-                timeout=self.config.get("timeout", 900), check=False,
+                timeout=self.config["verifier_timeout"], check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ProductionError(f"independent audited verifier could not run: {error}") from error
@@ -523,7 +593,7 @@ class ProductionCellLauncher:
                 ) from error
         resume = checkpoint is not None
         invoker = self.invoker_factory(
-            repo, timeout=self.config.get("timeout", 900),
+            repo, timeout=self.config["agent_turn_timeout"],
             auth_home=Path(self.config["auth_home"]),
             state_dir=root / "state" / "codex", runtime_mode=self.config["runtime_mode"],
             model=self.config["model"], reasoning_effort=self.config["reasoning_effort"],

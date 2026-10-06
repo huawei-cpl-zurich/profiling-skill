@@ -116,7 +116,8 @@ and hashes, the pinned runtime scripts closure containing
 `audited_bz_controller.py`, its sibling benchmark-assets tree and hash, the
 exact frozen timing-baseline bindings, invariant prompt and task bindings,
 remote staging root, Codex authentication home, model, reasoning effort,
-immutable runtime-image digest, and timeout. Each timing baseline uses schema
+immutable runtime-image digest, and the five timeout-budget fields described
+below. Each timing baseline uses schema
 `profiling-skill/baseline-timing/v1`, names the benchmark, lists positive
 per-case medians in exact development-case order, records a positive control
 median, and includes the SHA-256 of the canonical JSON for those four fields.
@@ -125,6 +126,15 @@ median, and includes the SHA-256 of the canonical JSON for those four fields.
 manifest provenance object exactly, and every pin is checked against the
 source revision, complete controller closure, baseline files, composite
 CANNBot skill bundle, project skill trees, model, and resolved Docker image.
+
+The runtime has five separate positive-integer timeout settings:
+`agent_turn_timeout`, `controller_transaction_timeout`, `verifier_timeout`,
+`backend_job_timeout`, and `timeout_grace`. The BZ job client receives
+`backend_job_timeout`; the controller backend receives that value plus one
+grace interval; and `controller_transaction_timeout` must exceed the backend
+job timeout plus two grace intervals. Agent and verifier budgets are
+independent. The ambiguous legacy `timeout` setting is rejected, so changing
+one boundary cannot silently shorten a different subprocess or remote job.
 
 The BZ job client is part of that pinned controller closure. It accepts only
 the fixed global `remote-access/scripts/cpl-remote` boundary and its required
@@ -156,6 +166,26 @@ rejected here. If a ledger is lost after a branch completed, the launcher
 independently runs `validate_audited_experiment.py` and reconstructs the
 terminal receipt instead of restarting the agent. Every new completion also
 passes that independent verifier before it can be recorded as successful.
+
+Initial cell materialization uses a sibling initializing directory with an
+atomically written, exact cell-identity marker. Clone, checkout, skill copy,
+and identity creation finish there before one atomic rename publishes the
+cell. A restart may delete and recreate only a partial directory whose marker
+matches that exact cell identity; malformed, absent, or different markers fail
+closed and are preserved for inspection. Every fresh start and resume also
+requires the repository-local skill directory to contain exactly the declared
+treatment allowlist and re-hashes each copied tree against its pinned source
+binding before Codex is invoked.
+
+## Stacked integration order
+
+Production execution is intentionally a dependent stack. PR #48 supplies the
+configurable four-round lifecycle and v2 checkpoint contract. PR #50 supplies
+the pinned global `cpl-remote` BZ job-client boundary, and PR #51 supplies the
+controller and compact timing evidence contract. This production integration
+PR (#52) lands only after #48, #50, and #51. Its real-composition test may be
+dependency-gated on the isolated branch, but must run unskipped in a checkout
+containing all four heads before #52 is merged.
 
 Cell receipts retain each complete compact controller receipt, including
 per-case measurements, admission and post-run controls, infrastructure

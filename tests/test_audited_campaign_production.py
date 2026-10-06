@@ -207,7 +207,11 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "auth_home": str(tmp_path / "auth"),
         "model": "gpt-5.6-sol", "reasoning_effort": "low",
         "runtime_mode": "docker", "runtime_image_digest": provenance["runtime_image_digest"],
-        "timeout": 10,
+        "agent_turn_timeout": 20,
+        "controller_transaction_timeout": 15,
+        "verifier_timeout": 20,
+        "backend_job_timeout": 10,
+        "timeout_grace": 2,
         "provenance": provenance,
     }
     return config
@@ -269,15 +273,21 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         created["controller"] = (command, repo, kwargs)
         return object()
 
+    def verifier(*args, **kwargs):
+        created["verifier"] = (args, kwargs)
+        return SimpleNamespace(
+            returncode=0, stdout=json.dumps({
+                "status": "valid",
+                "branch": "experiment/production-e2e/gdn-project-guarded",
+                "seed_commit": "seed", "session_id": "thread",
+                "experiments": [{"commit": str(number)} for number in range(1, 5)],
+            }), stderr="",
+        )
+
     launcher = production_launcher(
         config, invoker_factory=invoker, controller_factory=controller,
         runner_factory=FakeRunner,
-        verifier_invoke=lambda *args, **kwargs: SimpleNamespace(
-            returncode=0, stdout=json.dumps({
-                "status": "valid", "branch": "experiment/production-e2e/gdn-project-guarded",
-                "seed_commit": "seed", "session_id": "thread",
-                "experiments": [{"commit": str(number)} for number in range(1, 5)],
-            }), stderr=""),
+        verifier_invoke=verifier,
     )
     slot = {"target": "bz-a3-2", "device": 6}
     receipt = launcher.launch(cell, slot)
@@ -299,10 +309,15 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         Path(config["baseline_sources"]["gdn"]["path"]).read_text()
     )
     assert controller_config["devices"] == [{"id": "bz-a3-2/device-6", "device": 0}]
+    assert controller_config["timeout_seconds"] == 12
     nested = json.loads(controller_config["backend_command"][-1])
     assert "--device" not in nested
+    assert nested[nested.index("--timeout") + 1] == "10"
     assert created["controller"][0][1].endswith("audited_bz_controller.py")
+    assert created["controller"][2]["timeout"] == 15
     assert created["invoker"][1]["agent_id"] == cell["cell_id"]
+    assert created["invoker"][1]["timeout"] == 20
+    assert created["verifier"][1]["timeout"] == 20
     assert FakeRunner.calls[-1][-1] is False
 
     launcher.launch(cell, slot)
@@ -318,6 +333,102 @@ def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
     config = runtime_fixture(tmp_path, cell)
     Path(config["runtime_scripts"]["path"], "benchmark_backend.py").write_text("drift")
     with pytest.raises(production.ProductionError, match="runtime scripts hash"):
+        production_launcher(config)
+
+
+@pytest.mark.parametrize("failure", ["clone", "copy"])
+def test_cell_bootstrap_recovers_only_owned_interrupted_staging(
+        tmp_path: Path, monkeypatch, failure: str):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    if failure == "clone":
+        original = production.subprocess.run
+
+        def interrupted_clone(argv, **kwargs):
+            if argv[:3] == ["git", "clone", "--quiet"]:
+                return SimpleNamespace(returncode=1, stderr="interrupted", stdout="")
+            return original(argv, **kwargs)
+
+        monkeypatch.setattr(production.subprocess, "run", interrupted_clone)
+    else:
+        original = production._copy_tree
+        monkeypatch.setattr(
+            production, "_copy_tree",
+            lambda *args, **kwargs: (_ for _ in ()).throw(OSError("interrupted")),
+        )
+
+    with pytest.raises((production.ProductionError, OSError), match="interrupted"):
+        launcher._prepare_repo(cell)
+    staging = Path(config["run_root"]) / f".{cell['cell_id']}.initializing"
+    assert json.loads((staging / "state/bootstrap.json").read_text())["identity"][
+        "cell_id"] == cell["cell_id"]
+
+    if failure == "clone":
+        monkeypatch.setattr(production.subprocess, "run", original)
+    else:
+        monkeypatch.setattr(production, "_copy_tree", original)
+    repo, existing = launcher._prepare_repo(cell)
+    assert repo.is_dir() and existing is False
+    assert not staging.exists()
+
+
+def test_cell_bootstrap_rejects_unowned_partial_staging(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    staging = Path(config["run_root"]) / f".{cell['cell_id']}.initializing"
+    (staging / "state").mkdir(parents=True)
+    (staging / "state/bootstrap.json").write_text(json.dumps({"identity": {}}))
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    with pytest.raises(production.ProductionError, match="unowned partial bootstrap"):
+        launcher._prepare_repo(cell)
+    assert staging.exists()
+
+
+@pytest.mark.parametrize("mutation", ["drift", "extra"])
+def test_resume_rejects_treatment_skill_tree_drift_or_extras(
+        tmp_path: Path, mutation: str):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    if mutation == "drift":
+        (repo / ".agents/skills/triton-op-coding/SKILL.md").write_text("changed")
+    else:
+        (repo / ".agents/skills/unapproved").mkdir()
+    with pytest.raises(production.ProductionError, match="isolated treatment skills"):
+        launcher._prepare_repo(cell)
+
+
+@pytest.mark.parametrize(("key", "value"), [
+    ("agent_turn_timeout", 0),
+    ("verifier_timeout", True),
+    ("backend_job_timeout", -1),
+    ("controller_transaction_timeout", 14),
+])
+def test_launcher_rejects_invalid_or_overlapping_timeout_contract(
+        tmp_path: Path, key: str, value: object):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config[key] = value
+    with pytest.raises(production.ProductionError, match="timeout"):
         production_launcher(config)
 
 
@@ -883,7 +994,12 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "remote_root": "/remote/campaign", "provenance": provenance,
         "auth_home": str(tmp_path / "auth"), "model": "gpt-5.6-sol",
         "reasoning_effort": "low", "runtime_mode": "docker",
-        "runtime_image_digest": provenance["runtime_image_digest"], "timeout": 10,
+        "runtime_image_digest": provenance["runtime_image_digest"],
+        "agent_turn_timeout": 20,
+        "controller_transaction_timeout": 15,
+        "verifier_timeout": 20,
+        "backend_job_timeout": 10,
+        "timeout_grace": 2,
     }
     launcher = production_launcher(
         config,

@@ -328,6 +328,68 @@ def test_report_retains_discarded_infrastructure_attempts(tmp_path: Path):
     }]
 
 
+def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: Path):
+    document = manifest(tmp_path)
+    baseline = {
+        "schema": "profiling-skill/baseline-timing/v1",
+        "benchmark": "matmul", "case_medians_us": [{"case": 7, "median_us": 16.0}],
+        "control_median_us": 10.0, "sha256": "a" * 64,
+    }
+
+    class NormalizedLauncher(RecordingLauncher):
+        def launch(self, cell, slot):
+            rounds = []
+            for number, raw, normalized in [
+                (1, 5.0, 10.0), (2, 6.0, 8.0),
+                (3, 7.0, 9.0), (4, 8.0, 11.0),
+            ]:
+                rounds.append({
+                    "round": number, "median_us": raw,
+                    "samples_us": [raw] * 3,
+                    "normalized_samples_us": [normalized] * 3,
+                    "normalized_median_us": normalized,
+                    "baseline_median_us": 16.0, "baseline": baseline,
+                    "speedup_vs_baseline": 16.0 / normalized,
+                    "calibration": {
+                        "before": {"median_us": 10.0},
+                        "after": {"median_us": 10.0},
+                        "normalization_factor": normalized / raw,
+                    },
+                    "policy": {"post_control": "pass"},
+                    "case_results": [{"case": 7, "median_us": raw}],
+                })
+            return {
+                "status": "complete", "durable_handle": f"{slot['target']}:job",
+                "rounds_completed": 4, "rounds": rounds,
+            }
+
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json",
+        StaticPool([{"target": "bz-a3-1", "device": 0,
+                     "healthy": True, "idle": True}]),
+        NormalizedLauncher(),
+    )
+    row = audited_campaign.build_report(document, ledger)["cells"][0]
+    assert row["best_round"] == 2
+    assert row["best_median_us"] == 5.0
+    assert row["best_normalized_median_us"] == 8.0
+    assert row["comparison_basis"] == "calibration_normalized_median_us"
+    assert row["comparison_median_us"] == 8.0
+    assert row["speedup_vs_baseline"] == 2.0
+    assert row["baseline"] == baseline
+    expected_calibration = {
+        "before": {"median_us": 10.0}, "after": {"median_us": 10.0},
+        "normalization_factor": 8.0 / 6.0,
+    }
+    assert row["normalized_evolution"][1] == {
+        "round": 2, "normalized_samples_us": [8.0, 8.0, 8.0],
+        "normalized_median_us": 8.0, "speedup_vs_baseline": 2.0,
+        "baseline_median_us": 16.0,
+        "calibration": expected_calibration,
+    }
+    assert row["controls"][1]["calibration"] == expected_calibration
+
+
 def test_manifest_rejects_unpinned_provenance_and_wrong_dimensions(tmp_path: Path):
     prompt, tasks, provenance = inputs(tmp_path)
     provenance["controller_sha256"] = "mutable"

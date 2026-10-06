@@ -106,4 +106,7 @@ calibration-normalized timing, best raw and normalized medians, frozen baseline
 evidence, speedup, and retained failure detail. A separate discarded-attempts
 table records every infrastructure exclusion with its target, device, handle,
 and diagnostic. Infrastructure-pending cells remain visibly separate from
-candidate failures.
+candidate failures. Each round's normalized samples, median, calibration,
+baseline, and speedup are propagated from the validated controller receipt.
+Best-round and cross-device/cross-run comparison fields use normalized timing
+when present; raw timing remains available for device-local diagnosis.

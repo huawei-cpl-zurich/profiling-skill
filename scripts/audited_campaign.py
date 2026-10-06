@@ -426,10 +426,22 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         best_raw = min(raw, key=lambda item: item["median_us"]) if raw else None
         best_normalized = min(normalized, key=lambda pair: pair[1]) if normalized else None
         best = best_normalized[0] if best_normalized else best_raw
-        baseline = terminal.get("baseline")
+        baseline = terminal.get("baseline") or (best.get("baseline") if best else None)
         baseline_us = terminal.get("baseline_median_us")
+        if baseline_us is None and best:
+            baseline_us = best.get("baseline_median_us")
         if isinstance(baseline, dict):
             baseline_us = baseline.get("median_us", baseline_us)
+        comparison_us = best_normalized[1] if best_normalized else (
+            best_raw["median_us"] if best_raw else None
+        )
+        controller_speedup = best.get("speedup_vs_baseline") if best else None
+        speedup = (controller_speedup
+                   if best_normalized and isinstance(controller_speedup, (int, float))
+                   and math.isfinite(controller_speedup) and controller_speedup > 0
+                   else baseline_us / comparison_us
+                   if comparison_us and isinstance(baseline_us, (int, float))
+                   and math.isfinite(baseline_us) and baseline_us > 0 else None)
         for number, attempt in enumerate(state["attempts"], 1):
             if attempt.get("status") == "infrastructure_error":
                 discarded.append({
@@ -446,8 +458,11 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "raw_evolution": evolution,
             "normalized_evolution": [
                 {"round": item["round"],
+                 "normalized_samples_us": item.get("normalized_samples_us"),
                  "normalized_median_us": value,
-                 "normalization": item.get("normalization")}
+                 "speedup_vs_baseline": item.get("speedup_vs_baseline"),
+                 "baseline_median_us": item.get("baseline_median_us"),
+                 "calibration": item.get("calibration")}
                 for item, value in normalized
             ],
             "per_case_evidence": [
@@ -465,14 +480,12 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "best_normalized_median_us": (
                 best_normalized[1] if best_normalized else None
             ),
+            "comparison_basis": ("calibration_normalized_median_us"
+                                 if best_normalized else "raw_median_us"),
+            "comparison_median_us": comparison_us,
             "baseline": baseline,
             "baseline_median_us": baseline_us,
-            "speedup_vs_baseline": (
-                baseline_us / (best_normalized[1]
-                               if best_normalized else best["median_us"])
-                if best and isinstance(baseline_us, (int, float))
-                and math.isfinite(baseline_us) and baseline_us > 0 else None
-            ),
+            "speedup_vs_baseline": speedup,
             "failure": terminal.get("failure") if terminal else None,
         })
     return {"schema_version": 2, "run_id": manifest["run_id"],

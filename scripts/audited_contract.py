@@ -134,6 +134,83 @@ def _timing_summary(samples: object, sample_count: object, median: object,
     return computed
 
 
+def _validate_performance_evidence(receipt: dict) -> None:
+    fields = {"baseline_median_us", "baseline", "calibration",
+              "normalized_samples_us", "normalized_median_us",
+              "speedup_vs_baseline"}
+    present = fields & receipt.keys()
+    if not present:
+        return
+    if present != fields:
+        raise AuditError("normalized performance evidence is incomplete")
+    baseline = receipt["baseline"]
+    if (not isinstance(baseline, dict)
+            or set(baseline) != {"schema", "benchmark", "case_medians_us",
+                                 "control_median_us", "sha256"}
+            or baseline.get("schema") != "profiling-skill/baseline-timing/v1"):
+        raise AuditError("baseline timing evidence is invalid")
+    bound = {key: value for key, value in baseline.items() if key != "sha256"}
+    if baseline.get("sha256") != sha256_json(bound):
+        raise AuditError("baseline timing hash does not bind its values")
+    rows = baseline["case_medians_us"]
+    if (not isinstance(rows, list) or not rows
+            or any(not isinstance(row, dict)
+                   or set(row) != {"case", "median_us"}
+                   or type(row["case"]) is not int or row["case"] < 0
+                   or not _is_number(row["median_us"]) or row["median_us"] <= 0
+                   for row in rows)
+            or len({row["case"] for row in rows}) != len(rows)
+            or not _is_number(baseline["control_median_us"])
+            or baseline["control_median_us"] <= 0):
+        raise AuditError("baseline timing values are invalid")
+    baseline_median = math.exp(sum(math.log(row["median_us"]) for row in rows) / len(rows))
+    if (not _is_number(receipt["baseline_median_us"])
+            or not math.isclose(receipt["baseline_median_us"], baseline_median,
+                                rel_tol=1e-12)):
+        raise AuditError("baseline aggregate timing is invalid")
+    calibration = receipt["calibration"]
+    if (not isinstance(calibration, dict)
+            or set(calibration) != {"before", "after", "local_reference_median_us",
+                                    "baseline_reference_median_us", "normalization_factor"}):
+        raise AuditError("calibration evidence is invalid")
+    medians = []
+    for phase in ("before", "after"):
+        evidence = calibration[phase]
+        samples = evidence.get("samples_us") if isinstance(evidence, dict) else None
+        median = evidence.get("median_us") if isinstance(evidence, dict) else None
+        if (not isinstance(evidence, dict)
+                or set(evidence) != {"samples_us", "median_us", "handle"}
+                or not isinstance(samples, list) or len(samples) < 3
+                or not all(_is_number(value) and value > 0 for value in samples)
+                or not _is_number(median) or median <= 0
+                or not math.isclose(median, statistics.median(samples), rel_tol=1e-12)
+                or not isinstance(evidence["handle"], str) or not evidence["handle"]):
+            raise AuditError("calibration control timing is invalid")
+        medians.append(median)
+    reference = math.sqrt(medians[0] * medians[1])
+    factor = baseline["control_median_us"] / reference
+    if (not all(_is_number(calibration[field]) for field in (
+                "local_reference_median_us", "baseline_reference_median_us",
+                "normalization_factor"))
+            or not math.isclose(calibration["local_reference_median_us"], reference, rel_tol=1e-12)
+            or not math.isclose(calibration["baseline_reference_median_us"],
+                                baseline["control_median_us"], rel_tol=1e-12)
+            or not math.isclose(calibration["normalization_factor"], factor, rel_tol=1e-12)):
+        raise AuditError("calibration normalization inputs are invalid")
+    normalized = receipt["normalized_samples_us"]
+    expected = [value * factor for value in receipt["samples_us"]]
+    if (not isinstance(normalized, list) or len(normalized) != len(expected)
+            or any(not _is_number(value) or not math.isclose(value, wanted, rel_tol=1e-12)
+                   for value, wanted in zip(normalized, expected))
+            or not _is_number(receipt["normalized_median_us"])
+            or not _is_number(receipt["speedup_vs_baseline"])
+            or not math.isclose(receipt["normalized_median_us"], statistics.median(expected),
+                                rel_tol=1e-12)
+            or not math.isclose(receipt["speedup_vs_baseline"],
+                                baseline_median / statistics.median(expected), rel_tol=1e-12)):
+        raise AuditError("normalized timing evidence is invalid")
+
+
 def _validate_handles(receipt: dict, policy: dict) -> None:
     submitted = policy["submitted_handles"]
     observed = policy["observed_handles"]
@@ -142,14 +219,45 @@ def _validate_handles(receipt: dict, policy: dict) -> None:
         and all(isinstance(value, str) and value for value in values)
         and len(set(values)) == len(values)
     )
-    if (
-        not valid_list(submitted)
-        or not valid_list(observed)
-        or receipt["handle"] not in submitted
-        or receipt["handle"] not in observed
-        or any(handle not in submitted for handle in observed)
-    ):
+    if (not valid_list(submitted) or not valid_list(observed)
+            or receipt["handle"] not in submitted or receipt["handle"] not in observed
+            or any(handle not in submitted for handle in observed)):
         raise AuditError("controller handle submission/observation proof is invalid")
+    history = policy.get("operation_history")
+    if history is None:
+        return
+    if (not isinstance(history, list) or not history
+            or type(policy.get("measurement_generation")) is not int
+            or policy["measurement_generation"] < 0):
+        raise AuditError("controller operation history is invalid")
+    expected_submitted = []
+    expected_observed = []
+    retry_count = 0
+    for record in history:
+        if (not isinstance(record, dict)
+                or set(record) != {"request_sha256", "mode", "status", "terminal",
+                                   "handle", "action", "attempt_id"}
+                or not _valid_hash(record["request_sha256"])
+                or record["mode"] not in {"submit", "retry_submit", "observe"}
+                or not isinstance(record["status"], str)
+                or type(record["terminal"]) is not bool
+                or not isinstance(record["action"], str)
+                or (record["attempt_id"] is not None
+                    and not isinstance(record["attempt_id"], str))
+                or (record["handle"] is not None
+                    and not isinstance(record["handle"], str))):
+            raise AuditError("controller operation history record is invalid")
+        retained = record["handle"]
+        if record["mode"] != "submit":
+            retry_count += 1
+        if (record["mode"] in {"submit", "retry_submit"} and retained
+                and retained not in expected_submitted):
+            expected_submitted.append(retained)
+        if record["terminal"] and retained and retained not in expected_observed:
+            expected_observed.append(retained)
+    if (submitted != expected_submitted or observed != expected_observed
+            or policy.get("infra_retries") != retry_count):
+        raise AuditError("controller operation history does not bind handle or retry proof")
 
 
 def validate_controller_receipt(receipt: object, candidate_hash: str,
@@ -196,14 +304,10 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
 
     _validate_handles(receipt, policy)
     retries, budget = policy["infra_retries"], policy["retry_budget"]
-    if (
-        type(retries) is not int
-        or retries < 0
-        or type(budget) is not int
-        or budget < 0
-        or retries > budget
-        or retries != len(policy["submitted_handles"]) - 1
-    ):
+    if (type(retries) is not int or retries < 0 or type(budget) is not int
+            or budget < 0 or retries > budget
+            or (policy.get("operation_history") is None
+                and retries != len(policy["submitted_handles"]) - 1)):
         raise AuditError("controller retry count is invalid")
 
     quarantined, controls = policy["quarantined_devices"], policy["quarantine_controls"]
@@ -239,7 +343,9 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
         or "variability_ratio" in policy
     )
     if status == "candidate_error":
-        if timing_fields_present:
+        if timing_fields_present or ({"baseline_median_us", "baseline", "calibration",
+                                      "normalized_samples_us", "normalized_median_us",
+                                      "speedup_vs_baseline"} & receipt.keys()):
             raise AuditError("candidate_error must not contain performance timing")
         if post_control != "not_run":
             raise AuditError("candidate_error requires post_control=not_run")
@@ -259,13 +365,54 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
         policy["variability_threshold"], policy.get("variability_ratio"), "controller",
     )
     noisy = variability > policy["variability_threshold"]
-    if not noisy and (count or confirmation is not None):
-        raise AuditError("stable timing must not consume a confirmation")
-    if noisy and receipt.get("status") != "measurement_pending" and (
-        count != 1 or not isinstance(confirmation, dict)
-    ):
-        raise AuditError("noisy timing requires one confirmation or measurement_pending")
-    if count:
+    accepted = policy.get("accepted_timing")
+    primary = policy.get("primary")
+    if accepted is not None:
+        if accepted not in {"primary", "confirmation"} or not isinstance(primary, dict):
+            raise AuditError("accepted timing selection is invalid")
+        proofs = {"primary": primary, "confirmation": confirmation}
+        for name, proof in proofs.items():
+            if proof is None:
+                continue
+            if (not isinstance(proof, dict)
+                    or proof.get("candidate_sha256") != candidate_hash
+                    or not isinstance(proof.get("kernel_name"), str)
+                    or not proof["kernel_name"]
+                    or not isinstance(proof.get("handle"), str) or not proof["handle"]
+                    or not isinstance(proof.get("case_results"), list)
+                    or not isinstance(proof.get("compact_artifacts"), list)):
+                raise AuditError(f"{name} timing identity is invalid")
+            _timing_summary(
+                proof.get("samples_us"), proof.get("sample_count"), proof.get("median_us"),
+                policy["variability_threshold"], proof.get("variability_ratio"), name,
+            )
+        selected = proofs.get(accepted)
+        if (selected is None or receipt.get("handle") != selected["handle"]
+                or receipt.get("kernel_name") != selected["kernel_name"]
+                or receipt.get("samples_us") != selected["samples_us"]
+                or receipt.get("median_us") != selected["median_us"]
+                or receipt.get("case_results") != selected["case_results"]
+                or receipt.get("compact_artifacts") != selected["compact_artifacts"]):
+            raise AuditError("published timing does not match the accepted capture")
+        if accepted == "confirmation":
+            if (count != 1 or confirmation is None
+                    or primary["kernel_name"] != confirmation["kernel_name"]
+                    or [row.get("case") for row in primary["case_results"]]
+                    != [row.get("case") for row in confirmation["case_results"]]
+                    or primary["variability_ratio"] <= policy["variability_threshold"]):
+                raise AuditError("confirmation timing identity or trigger is invalid")
+        elif count or confirmation is not None:
+            raise AuditError("primary timing cannot carry a confirmation")
+        if noisy and receipt.get("status") != "measurement_pending":
+            raise AuditError("noisy accepted timing must be measurement_pending")
+    else:
+        if not noisy and (count or confirmation is not None):
+            raise AuditError("stable timing must not consume a confirmation")
+        if noisy and receipt.get("status") != "measurement_pending" and (
+            count != 1 or not isinstance(confirmation, dict)
+        ):
+            raise AuditError("noisy timing requires one confirmation or measurement_pending")
+    if count and accepted is None:
         if (
             not isinstance(confirmation, dict)
             or confirmation.get("candidate_sha256") != candidate_hash
@@ -281,6 +428,7 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
             and receipt.get("status") != "measurement_pending"
         ):
             raise AuditError("noisy timing confirmation must be measurement_pending")
+    _validate_performance_evidence(receipt)
     return receipt
 
 

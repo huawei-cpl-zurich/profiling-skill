@@ -387,12 +387,38 @@ class CommandController:
             executable = self.repo / executable
         return executable.resolve()
 
-    def _file_arguments(self, executable: Path) -> list[dict]:
+    def _mutable_directory_arguments(self) -> list[dict]:
+        retained = []
+        for index, argument in enumerate(self.command[1:], 1):
+            if argument == "--state-dir":
+                value_index = index + 1
+                value = self.command[value_index] if value_index < len(self.command) else ""
+            elif argument.startswith("--state-dir="):
+                value_index = index
+                value = argument.partition("=")[2]
+            else:
+                continue
+            path = Path(value)
+            if not path.is_absolute() or not path.is_dir():
+                raise AuditError("mutable controller directory must be an existing absolute directory")
+            resolved = path.resolve()
+            metadata = resolved.stat()
+            retained.append({
+                "argument_index": value_index, "option": "--state-dir",
+                "path": str(resolved), "device": metadata.st_dev,
+                "inode": metadata.st_ino, "uid": metadata.st_uid,
+                "mode": metadata.st_mode & 0o7777,
+            })
+        return retained
+
+    def _file_arguments(self, executable: Path,
+                        mutable_indices: set[int] | None = None) -> list[dict]:
         sanitized = sanitize_argv(self.command)
+        mutable_indices = mutable_indices or set()
         pinned = []
         missing = []
         for index, argument in enumerate(self.command[1:], 1):
-            if "<redacted>" in sanitized[index]:
+            if index in mutable_indices or "<redacted>" in sanitized[index]:
                 continue
             option, separator, value = argument.partition("=")
             candidate = value if separator and option.startswith("-") else argument
@@ -423,7 +449,9 @@ class CommandController:
 
     def reproducibility_metadata(self) -> dict:
         executable = self._executable()
-        file_arguments = self._file_arguments(executable)
+        mutable_directories = self._mutable_directory_arguments()
+        file_arguments = self._file_arguments(
+            executable, {item["argument_index"] for item in mutable_directories})
         version = "unavailable"
         if executable.is_file():
             try:
@@ -441,6 +469,7 @@ class CommandController:
             "executable_sha256": _file_hash(executable),
             "executable_version": version,
             "file_arguments": file_arguments,
+            "mutable_directories": mutable_directories,
             "model": "not-applicable",
             "reasoning_effort": "not-applicable",
             "codex_version": "not-applicable",
@@ -466,6 +495,19 @@ class CommandController:
             raise AuditError("controller observe requires a durable handle")
         command = [
             *self.command, "--observe-handle", handle, "--experiment", str(number),
+            "--candidate-sha256", candidate_hash, "--manifest-sha256", manifest_hash,
+        ]
+        return self._execute(
+            command, number, candidate_hash, manifest_hash, expected_handle=handle,
+        )
+
+    def remeasure(self, number: int, candidate_hash: str, manifest_hash: str,
+                  handle: str) -> dict:
+        """Remeasure a pending receipt without preparing another candidate."""
+        if not isinstance(handle, str) or not handle:
+            raise AuditError("controller remeasure requires a durable handle")
+        command = [
+            *self.command, "--remeasure-handle", handle, "--experiment", str(number),
             "--candidate-sha256", candidate_hash, "--manifest-sha256", manifest_hash,
         ]
         return self._execute(

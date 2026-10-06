@@ -107,6 +107,9 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         if (isinstance(raw.get("round"), bool) or not isinstance(raw.get("round"), int)
                 or raw["round"] < 1):
             return None, response("infrastructure_error", "profile round must be a positive integer")
+        if ("attempt_id" in raw and (not isinstance(raw["attempt_id"], str)
+                                     or not raw["attempt_id"].strip())):
+            return None, response("infrastructure_error", "profile attempt identity must be non-empty")
     elif action == "measure":
         case = raw.get("case")
         if isinstance(case, bool) or case not in spec["all_cases"]:
@@ -161,6 +164,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         job["phase"] = request["phase"]
     else:
         job.update(cases=request["cases"], repeats=request["repeats"], round=request["round"])
+        if "attempt_id" in request:
+            job["profile_attempt_id"] = request["attempt_id"]
         if kernel_name is None:
             raise ValueError("profile job requires a kernel selector")
         job["profiling"] = {
@@ -274,7 +279,7 @@ def main() -> int:
             elif request["action"] == "calibrate":
                 calibration_request = {
                     "action": "profile", "device": request["device"],
-                    "cases": [7], "repeats": 1, "round": request["wave"],
+                    "cases": [7], "repeats": 3, "round": request["wave"],
                 }
                 calibration = root / "benchmarks/matmul/calibration.py"
                 job = make_job(calibration_request, "matmul", calibration, root,
@@ -293,7 +298,9 @@ def main() -> int:
                     selector="streaming_matmul_add_kernel_mix_aic",
                 )
                 if result.get("status") == "ok":
-                    result["latency_us"] = result["cases"][0]["samples_us"][0]
+                    result["samples_us"] = result["cases"][0]["samples_us"]
+                    result["median_us"] = result["cases"][0]["median_us"]
+                    result["latency_us"] = result["median_us"]
             elif not args.candidate.is_file():
                 result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:

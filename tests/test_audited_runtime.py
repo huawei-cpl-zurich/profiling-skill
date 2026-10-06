@@ -315,6 +315,34 @@ def test_controller_provenance_pins_interpreter_script_and_config(tmp_path: Path
     assert first["argv"] == command
 
 
+def test_controller_provenance_identity_binds_sanctioned_state_directory(tmp_path: Path):
+    script = tmp_path / "controller.py"
+    script.write_text("print('ok')\n")
+    state = tmp_path / "mutable-controller-state"
+    state.mkdir()
+    command = [sys.executable, str(script), "--state-dir", str(state)]
+
+    metadata = runtime.CommandController(command, tmp_path).reproducibility_metadata()
+
+    assert [item["argument_index"] for item in metadata["file_arguments"]] == [1]
+    assert metadata["mutable_directories"] == [{
+        "argument_index": 3, "option": "--state-dir", "path": str(state),
+        "device": state.stat().st_dev, "inode": state.stat().st_ino,
+        "uid": state.stat().st_uid, "mode": state.stat().st_mode & 0o7777,
+    }]
+
+
+def test_controller_provenance_rejects_missing_sanctioned_state_directory(tmp_path: Path):
+    script = tmp_path / "controller.py"
+    script.write_text("print('ok')\n")
+    adapter = runtime.CommandController(
+        [sys.executable, str(script), "--state-dir", str(tmp_path / "missing")], tmp_path,
+    )
+
+    with pytest.raises(contract.AuditError, match="mutable controller directory"):
+        adapter.reproducibility_metadata()
+
+
 def test_controller_provenance_rejects_unpinned_interpreter_module(tmp_path: Path):
     adapter = runtime.CommandController([sys.executable, "-m", "controller"], tmp_path)
 
@@ -501,6 +529,46 @@ def test_controller_observe_rejects_replaced_handle(tmp_path: Path, monkeypatch)
 
     assert result["status"] == "infrastructure_error"
     assert result["handle"] == "job:retained"
+    assert "different handle" in result["reason"]
+
+
+def test_controller_remeasure_uses_exact_pending_handle(tmp_path: Path, monkeypatch):
+    adapter = runtime.CommandController(["controller", "--mode", "profile"], tmp_path)
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command, 0, '{"status":"ok","handle":"job:pending"}', "",
+        )
+
+    monkeypatch.setattr(runtime.subprocess, "run", fake_run)
+
+    result = adapter.remeasure(3, "candidate", "manifest", "job:pending")
+
+    assert result["handle"] == "job:pending"
+    assert calls == [[
+        "controller", "--mode", "profile", "--remeasure-handle", "job:pending",
+        "--experiment", "3", "--candidate-sha256", "candidate",
+        "--manifest-sha256", "manifest",
+    ]]
+
+
+def test_controller_remeasure_rejects_missing_or_replaced_handle(tmp_path: Path, monkeypatch):
+    adapter = runtime.CommandController(["controller"], tmp_path)
+    with pytest.raises(runtime.AuditError, match="remeasure requires a durable handle"):
+        adapter.remeasure(1, "candidate", "manifest", "")
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, '{"status":"ok","handle":"job:other"}', "",
+        ),
+    )
+
+    result = adapter.remeasure(1, "candidate", "manifest", "job:pending")
+
+    assert result["status"] == "infrastructure_error"
+    assert result["handle"] == "job:pending"
     assert "different handle" in result["reason"]
 
 

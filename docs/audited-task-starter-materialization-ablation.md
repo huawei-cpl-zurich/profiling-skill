@@ -20,6 +20,8 @@
 | --- | --- | --- | --- |
 | Per-task candidate and manifest bindings | essential | A common revision cannot contain three different root starters | Keep |
 | Seed-commit blob verification | essential | Resume must preserve agent work without trusting mutable worktree bytes | Keep |
+| Seed-only crash recovery | essential | A process may die before the first blocked checkpoint exists | Keep, bounded to exact seed HEAD and two allowed files |
+| Manifest v2 plus legacy v1 reader | essential | New starter provenance must not reinterpret historical manifests | Keep |
 | Separate starter validation receipt | speculative | Existing canary/controller gates own executable kernel validation | Omit |
 | Hash then reread frozen inputs | accidental | Creates a time-of-check/time-of-use window | Read once and hash those bytes |
 
@@ -30,6 +32,7 @@
 | Omitted a second pre-agent backend protocol | Starter manifests intentionally begin unresolved | Existing controller and canary gates remain authoritative |
 | Replaced the stale matmul selector with an explicit sentinel | It named an export absent from the starter | Functional manifest-loader test |
 | Hash the same starter bytes later copied | Avoid source drift between validation and materialization | Starter drift and materialization tests |
+| Reject unresolved selector before controller | Prevent guaranteed profiling failure while preserving repair flow | Functional repair test proves zero premature controller requests |
 
 ## Final Validation
 

@@ -24,7 +24,7 @@ try:
 finally:
     sys.path.pop(0)
 
-RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v1"
+RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v2"
 DEVELOPMENT_CASES = {
     "matmul": [7, 8, 9],
     "gdn": [40, 49, 47, 46, 45],
@@ -198,7 +198,7 @@ class ProductionCellLauncher:
                  invoker_factory=None,
                  controller_factory=None, runner_factory=None,
                  verifier_invoke: Callable = subprocess.run):
-        if config.get("schema", RUNTIME_SCHEMA) != RUNTIME_SCHEMA:
+        if config.get("schema") != RUNTIME_SCHEMA:
             raise ProductionError(f"runtime config requires schema {RUNTIME_SCHEMA}")
         self.config = config
         if (not isinstance(infrastructure_failure_type, type)
@@ -653,6 +653,18 @@ class ProductionCellLauncher:
             raise ProductionError("blocked checkpoint is invalid for this cell")
         return state
 
+    def _is_seed_only_resume(self, repo: Path, cell: dict) -> bool:
+        seed_commit = _git(repo, "log", "-1", "--format=%H", "--", ".experiment/seed.json")
+        expected_branch = f"experiment/{self.config['run_id']}/{cell['cell_id']}"
+        if (not seed_commit or _git(repo, "rev-parse", "HEAD") != seed_commit
+                or _git(repo, "branch", "--show-current") != expected_branch):
+            return False
+        changed = set(_git(repo, "diff", "--name-only", "HEAD").splitlines())
+        changed.update(_git(repo, "ls-files", "--others", "--exclude-standard").splitlines())
+        if changed - {"candidate.py", "candidate.manifest.json"}:
+            raise ProductionError("seed-only recovery contains unrelated worktree changes")
+        return True
+
     def launch(self, cell: dict, slot: dict) -> dict:
         if (cell.get("round_count"), cell.get("request_budget")) != (4, 24):
             raise ProductionError("production cells require four rounds and 24 requests")
@@ -666,14 +678,15 @@ class ProductionCellLauncher:
         repo, existing = self._prepare_repo(cell)
         root = repo.parent
         checkpoint = self._resume_checkpoint(repo, cell) if existing else None
-        if existing and checkpoint is None:
+        seed_only = existing and checkpoint is None and self._is_seed_only_resume(repo, cell)
+        if existing and checkpoint is None and not seed_only:
             try:
                 return self._receipt(repo, self._verify(repo, cell))
             except ProductionError as error:
                 raise self.infrastructure_failure_type(
                     f"existing branch has no valid blocked checkpoint and is not complete: {error}"
                 ) from error
-        resume = checkpoint is not None
+        resume = checkpoint is not None or seed_only
         invoker = self.invoker_factory(
             repo, timeout=self.config["agent_turn_timeout"],
             auth_home=Path(self.config["auth_home"]),
@@ -744,6 +757,8 @@ def main(argv: list[str] | None = None) -> int:
     if config.get("schema") != RUNTIME_SCHEMA:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")
     manifest = json.loads(args.manifest.read_text())
+    if manifest.get("schema_version") != 2:
+        parser.error("production campaign requires starter-bound manifest schema_version 2")
     config["run_id"] = manifest["run_id"]
     if config.get("provenance") != manifest.get("provenance"):
         parser.error("runtime provenance does not exactly match manifest provenance")

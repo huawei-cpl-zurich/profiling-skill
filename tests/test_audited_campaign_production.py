@@ -176,6 +176,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     provenance["admission_provider_id"] = "campaign-operator"
     provenance["admission_allowlist_sha256"] = "d" * 64
     config = {
+        "schema": production.RUNTIME_SCHEMA,
         "run_id": "production-e2e",
         "run_root": str(tmp_path / "runs"),
         "source_repositories": {
@@ -217,6 +218,17 @@ def production_launcher(config: dict, **kwargs):
         infrastructure_failure_type=runtime_campaign.InfrastructureFailure,
         **kwargs,
     )
+
+
+def test_production_runtime_uses_starter_bound_v2_schema(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    assert production.RUNTIME_SCHEMA == "profiling-skill/audited-campaign-runtime/v2"
+    config["schema"] = "profiling-skill/audited-campaign-runtime/v1"
+    with pytest.raises(production.ProductionError, match="runtime config requires schema"):
+        production_launcher(config)
 
 
 def test_three_task_starters_share_revision_and_materialize_distinct_pairs(tmp_path: Path):
@@ -303,6 +315,36 @@ def test_seed_contains_pinned_starter_and_resume_does_not_overwrite_work(tmp_pat
         launcher._prepare_repo(cell)
 
 
+def test_launcher_recovers_exact_seed_only_branch_without_verifier_shortcut(tmp_path: Path):
+    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    FakeRunner.calls.clear()
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    audited_lifecycle.AuditedExperimentRunner(
+        repo, Path(config["prompt"]["path"]), Path(config["tasks"]["gdn"]["path"]),
+        lambda *args: "", lambda *args: {}, round_count=4,
+    )._initialize(config["run_id"], cell["cell_id"])
+    (repo / "candidate.py").write_text("VALUE = 9\n")
+    (repo / "candidate.manifest.json").write_text(json.dumps({
+        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "prepared",
+    }) + "\n")
+
+    receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+
+    assert receipt["status"] == "complete"
+    assert FakeRunner.calls[-1][-1] is True
+
+
 def test_starter_manifest_contract_is_validated_before_materialization(tmp_path: Path):
     cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
             "round_count": 4, "request_budget": 24,
@@ -356,6 +398,12 @@ class FakeRunner:
                 "status": "ok", "handle": f"bz-a3-1:round-{number}",
                 "median_us": 10.0 - number,
             }))
+            subprocess.run(["git", "add", str(directory.relative_to(self.repo))],
+                           cwd=self.repo, check=True)
+            subprocess.run(
+                ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                 "commit", "-qm", f"experiment {number}"], cwd=self.repo, check=True,
+            )
         return SimpleNamespace(status="complete", branch=branch,
                                session_id="thread", seed_commit="seed",
                                commits=("1", "2", "3", "4"))
@@ -782,7 +830,7 @@ def test_infrastructure_exception_identity_is_injected_not_looked_up_late(
         launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
 
 
-def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
+def test_existing_nonseed_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
     cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
             "round_count": 4, "request_budget": 24,
             "skills": list(production.TREATMENT_SKILLS["cannbot"])}
@@ -798,6 +846,9 @@ def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: 
         repo, Path(config["prompt"]["path"]), Path(config["tasks"]["matmul"]["path"]),
         lambda *args: "", lambda *args: {}, round_count=4,
     )._initialize(config["run_id"], cell["cell_id"])
+    (repo / "unexpected.txt").write_text("committed but not an experiment\n")
+    subprocess.run(["git", "add", "unexpected.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "unexpected"], cwd=repo, check=True)
     with pytest.raises(runtime_campaign.InfrastructureFailure, match="blocked checkpoint"):
         launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
 

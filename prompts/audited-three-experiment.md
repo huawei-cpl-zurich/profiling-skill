@@ -8,6 +8,10 @@ commits and will resume this same session.
 
 For each experiment, first make one material candidate change, run relevant
 local checks, summarize readiness, and stop. Do not begin the next experiment.
+Before reporting readiness, update `candidate.manifest.json` to schema
+`profiling-skill/candidate-kernel/v1` with a nonempty `kernel_name` equal to the
+exact exported kernel selector used by `msprof op`. Never submit the initial
+`REPLACE_WITH_EXACT_EXPORTED_KERNEL` sentinel to the controller.
 The host freezes the candidate and manifest hashes and invokes the controller.
 When the host asks you to finalize, do not edit either frozen file. Return only
 the requested JSON report. Describe concise evidence and conclusions, never

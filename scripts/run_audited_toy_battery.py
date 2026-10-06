@@ -37,7 +37,10 @@ def initialize_repo(repo: Path) -> None:
         subprocess.run(command, cwd=repo, check=True)
     (repo / "candidate.py").write_text("VALUE = 0\n")
     (repo / "candidate.manifest.json").write_text(
-        json.dumps({"candidate": "candidate.py"}, sort_keys=True) + "\n"
+        json.dumps({
+            "schema": "profiling-skill/candidate-kernel/v1",
+            "kernel_name": "toy_kernel",
+        }, sort_keys=True) + "\n"
     )
     subprocess.run(("git", "add", "."), cwd=repo, check=True)
     subprocess.run(("git", "commit", "-qm", "toy baseline"), cwd=repo, check=True)
@@ -107,9 +110,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 reasoning_effort=args.reasoning_effort, agent_id=agent_id,
             )
             invokers.append(invoker)
-            controller = lambda number, candidate, manifest, agent_id=agent_id: (
-                local_receipt(agent_id, number, candidate, manifest)
-            )
+            def controller(number, candidate, manifest, agent_id=agent_id):
+                return local_receipt(agent_id, number, candidate, manifest)
             runners[agent_id] = AuditedExperimentRunner(
                 repo, args.prompt, task, invoker, controller,
             )

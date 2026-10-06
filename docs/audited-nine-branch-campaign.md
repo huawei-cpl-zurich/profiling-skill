@@ -103,8 +103,11 @@ python scripts/audited_campaign.py report \
   --output /absolute/campaign/report.json
 ```
 
-For production, create a hash-pinned runtime configuration with schema
-`profiling-skill/audited-campaign-runtime/v1`. It declares the run root, a
+Newly generated manifests use `schema_version: 2`, which requires starter
+provenance. Verification and reporting continue to accept historical
+`schema_version: 1` manifests without starter bindings. Production launch is
+v2-only: create a hash-pinned runtime configuration with schema
+`profiling-skill/audited-campaign-runtime/v2`. It declares the run root, a
 pinned source repository and commit for each task, exact per-skill source trees
 and hashes, the pinned runtime scripts closure containing
 `audited_bz_controller.py`, its sibling benchmark-assets tree and hash, the
@@ -150,7 +153,16 @@ it re-hashes the frozen sources and verifies the seed commit's candidate and
 manifest blobs, while preserving any checkpointed in-progress candidate.
 Initial manifests may use `REPLACE_WITH_EXACT_EXPORTED_KERNEL`; the invariant
 prompt requires the agent to replace that sentinel with the actual exported
-kernel selector before profiling.
+kernel selector before profiling. Lifecycle validation rejects an invalid
+schema, blank selector, or unresolved sentinel and repairs it in the same agent
+session before any controller request.
+
+If the host stops after the seed commit but before writing a blocked
+checkpoint, resume is allowed only while `HEAD` is exactly that seed commit.
+The worktree may be clean or may modify only `candidate.py` and
+`candidate.manifest.json`. Recovery preserves those bytes, starts a new agent
+session to inspect and locally check them, and continues experiment one.
+Additional history or unrelated worktree changes fail closed.
 
 The runtime has five separate positive-integer timeout settings:
 `agent_turn_timeout`, `controller_transaction_timeout`, `verifier_timeout`,

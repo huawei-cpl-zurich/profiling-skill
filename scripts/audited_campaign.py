@@ -69,7 +69,7 @@ def _require_hex(value: object, length: int, field: str) -> None:
         raise CampaignError(f"{field} must be hexadecimal") from error
 
 
-def _validate_provenance(provenance: dict) -> None:
+def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> None:
     if not isinstance(provenance, dict):
         raise CampaignError("provenance must be an object")
     _require_hex(provenance.get("source_revision"), 40, "source_revision")
@@ -88,9 +88,11 @@ def _validate_provenance(provenance: dict) -> None:
     for task in TASKS:
         _require_hex(baselines[task], 64, f"baselines.{task}")
     starters = provenance.get("starters")
-    if not isinstance(starters, dict) or set(starters) != set(TASKS):
+    if starters is None and not require_starters:
+        starters = None
+    elif not isinstance(starters, dict) or set(starters) != set(TASKS):
         raise CampaignError("all task starters must be pinned")
-    for task in TASKS:
+    for task in TASKS if starters is not None else ():
         starter = starters[task]
         if not isinstance(starter, dict) or set(starter) != {"candidate", "manifest"}:
             raise CampaignError(f"starter.{task} must pin candidate and manifest")
@@ -167,7 +169,7 @@ def build_manifest(
             },
         })
     document = {
-        "schema_version": 1,
+        "schema_version": 2,
         "run_id": run_id,
         "dimensions": {"tasks": list(TASKS), "treatments": list(TREATMENTS),
                        "round_count": rounds},
@@ -192,6 +194,9 @@ def _document_digest(document: dict) -> str:
 
 
 def verify_manifest(document: dict) -> None:
+    version = document.get("schema_version")
+    if version not in {1, 2}:
+        raise CampaignError("manifest schema_version must be 1 or 2")
     if document.get("manifest_sha256") != _document_digest(document):
         raise CampaignError("manifest hash mismatch")
     if document.get("order") != [cell.get("cell_id") for cell in document.get("cells", [])]:
@@ -209,7 +214,7 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
-    _validate_provenance(document["provenance"])
+    _validate_provenance(document["provenance"], require_starters=version == 2)
 
 
 def _atomic_json(path: Path, document: dict) -> None:

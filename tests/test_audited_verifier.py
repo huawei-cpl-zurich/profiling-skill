@@ -87,7 +87,9 @@ def build_branch(tmp_path: Path, *, revert: int | None = 2, round_count: int = 3
     git(repo, "config", "user.name", "Host Runner")
     git(repo, "config", "user.email", "host@example.test")
     (repo / "candidate.py").write_text("VALUE = 0\n")
-    (repo / "candidate.manifest.json").write_text('{"candidate":"candidate.py"}\n')
+    (repo / "candidate.manifest.json").write_text(
+        '{"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"toy_kernel"}\n'
+    )
     git(repo, "add", ".")
     git(repo, "commit", "-m", "base")
     prompt, task = tmp_path / "prompt.md", tmp_path / "task.md"

@@ -200,9 +200,9 @@ def test_real_composition_creates_three_verified_isolated_histories(tmp_path: Pa
                 }})
             return "\n".join(json.dumps(event) for event in events)
 
-        controller = lambda number, candidate, manifest, agent_id=agent_id: (
-            toy.local_receipt(agent_id, number, candidate, manifest)
-        )
+        def controller(number, candidate, manifest, agent_id=agent_id):
+            return toy.local_receipt(agent_id, number, candidate, manifest)
+
         runners[agent_id] = cli.AuditedExperimentRunner(
             repo, prompt, task, invoke, controller,
         )

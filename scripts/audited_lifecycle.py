@@ -618,7 +618,10 @@ class AuditedExperimentRunner:
         required = ("reason", "seed_commit", "seed_hash", "resume_parent",
                     "prior_candidate_sha256")
         expected_branch = f"experiment/{run_id}/{agent_id}"
-        valid_hash = lambda value: isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+
+        def valid_hash(value: object) -> bool:
+            return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
         checkpoint_schema = state.get("schema") if isinstance(state, dict) else None
         checkpoint_rounds = 3 if checkpoint_schema == "profiling-skill/audited-blocked/v1" \
             else state.get("round_count") if isinstance(state, dict) else None

@@ -77,6 +77,34 @@ def _user_home() -> Path:
     return Path(pwd.getpwuid(os.getuid()).pw_dir)
 
 
+def _cpl_json_receipt(result: CommandResult, handle: str | None) -> dict:
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    diagnostics = _bounded(result.stdout + result.stderr)
+    if not lines:
+        raise JobError("transport_error",
+                       "cpl-remote JSON receipt is missing: " + diagnostics, handle)
+    try:
+        payload = json.loads(lines[-1])
+    except json.JSONDecodeError as exc:
+        raise JobError("transport_error",
+                       "cpl-remote trailing JSON receipt is missing: " + diagnostics,
+                       handle) from exc
+    if not isinstance(payload, dict):
+        raise JobError("transport_error",
+                       "cpl-remote trailing JSON receipt is not an object: " + diagnostics,
+                       handle)
+    for line in lines[:-1]:
+        try:
+            earlier = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(earlier, dict):
+            raise JobError("transport_error",
+                           "cpl-remote JSON receipt is ambiguous: " + diagnostics,
+                           handle)
+    return payload
+
+
 class GlobalCplRemoteTransport:
     """Hash-pinned access to the installed global remote-access client."""
 
@@ -110,17 +138,7 @@ class GlobalCplRemoteTransport:
             if handle is None:
                 raise
             raise JobError("observer_error", str(exc), handle) from exc
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise JobError("transport_error",
-                           _bounded(result.stdout + result.stderr)
-                           or "cpl-remote returned invalid JSON", handle) from exc
-        if not isinstance(payload, dict):
-            raise JobError("transport_error",
-                           _bounded(result.stdout + result.stderr)
-                           or "cpl-remote command failed", handle)
-        return payload
+        return _cpl_json_receipt(result, handle)
 
     @staticmethod
     def _validate_handle(target: str, handle: object) -> str:

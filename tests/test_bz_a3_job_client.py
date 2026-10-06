@@ -850,6 +850,7 @@ elif action == "logs":
  result={"status":"ok","diagnostics":"","benchmark":"gdn","action":"profile","device":0,"cases":[40,49],"repeats":3,"round":1,"kernel_name":"gdn_kernel","passed":True,"profile_cases":rows,"profile":{"status":"success","profiler":"msprof-op","kernel_name":"gdn_kernel","repeats":3,"cases":rows,"captures":captures,"geomean_us":(99.0 ** .5)}}
  payload={"target":"bz-a3-2","operation":"logs","state":"completed","handle":handle,"content":("BZ_PRODUCTION_RESULT="+json.dumps(result)+"\\n") if stream == "stdout" else ""}
 else: raise SystemExit(9)
+if action == "upload": print("sending incremental file list")
 print(json.dumps(payload,sort_keys=True))
 ''')
     executable.chmod(0o755)
@@ -901,3 +902,46 @@ def test_global_transport_rejects_unpinned_or_changed_client_before_invocation(
         module.GlobalCplRemoteTransport(
             digest.upper(), "/srv/profiling-skill-production")
     assert not log.exists()
+
+
+@pytest.mark.parametrize("stdout", [
+    '{"state":"completed"}\n{"state":"completed"}\n',
+    '{"state":"completed"}\nrsync trailing output\n',
+    'rsync output without a receipt\n',
+])
+def test_global_transport_rejects_ambiguous_or_missing_trailing_json_receipt(
+        monkeypatch, tmp_path: Path, stdout: str):
+    module = load()
+    _executable, digest, _log = _install_fake_global_cpl_remote(tmp_path)
+    monkeypatch.setattr(module, "_user_home", lambda: tmp_path)
+    transport = module.GlobalCplRemoteTransport(
+        digest, "/srv/profiling-skill-production",
+        invoke=lambda _argv, _timeout: module.CommandResult(0, stdout, "diagnostic"),
+    )
+    with pytest.raises(module.JobError, match="JSON receipt") as caught:
+        transport._call(["upload"], 30)
+    assert len(str(caught.value)) < 66_000
+
+
+def test_global_transport_bounds_missing_receipt_diagnostics(monkeypatch, tmp_path: Path):
+    module = load()
+    _executable, digest, _log = _install_fake_global_cpl_remote(tmp_path)
+    monkeypatch.setattr(module, "_user_home", lambda: tmp_path)
+    transport = module.GlobalCplRemoteTransport(
+        digest, "/srv/profiling-skill-production",
+        invoke=lambda _argv, _timeout: module.CommandResult(0, "x" * 100_000, ""),
+    )
+    with pytest.raises(module.JobError) as caught:
+        transport._call(["upload"], 30)
+    assert str(caught.value).endswith("...[diagnostic truncated]")
+    assert len(str(caught.value)) < 66_000
+
+
+def test_global_transport_accepts_only_real_global_job_handle_format():
+    module = load()
+    handle = "remote:bz-a3-1:job:20261006T123456Z-a1b2c3d4e5f6"
+    assert module.GlobalCplRemoteTransport._validate_handle("bz-a3-1", handle) == handle
+    for invalid in ("bz-a3-1:job-1", "remote:bz-a3-2:job:job-1",
+                    "remote:bz-a3-1:session:job-1"):
+        with pytest.raises(module.JobError, match="invalid job handle"):
+            module.GlobalCplRemoteTransport._validate_handle("bz-a3-1", invalid)

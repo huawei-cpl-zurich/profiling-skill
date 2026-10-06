@@ -57,9 +57,11 @@ or push their experiment branches.
 The production resource provider calls `cpl-remote capabilities` and
 `cpl-remote preflight` for `bz-a3-1` and `bz-a3-2`, then returns every healthy,
 idle physical device. `run_campaign` launches one cell per unique admitted
-target/device and fills all available slots. After each batch, it asks the
-provider for a fresh set of eligible devices and continues in the recorded
-fair order.
+target/device and fills all available slots. It has no batch barrier: whenever
+any cell finishes, it refreshes admission and immediately fills that free slot
+in the recorded fair order. An infrastructure failure checkpoints only its
+cell; independent queued cells continue. The campaign pauses with failed cells
+pending only after otherwise runnable work is exhausted.
 
 Each launcher result must include a terminal status, durable handle, completed
 round count, and four round evidence records. Candidate compilation, runtime,
@@ -98,8 +100,10 @@ handle, and measurement-only resume. Then run one matmul canary per treatment.
 Do not start the nine branches while an infrastructure fault remains
 unclassified.
 
-The final report contains one row per branch with status, attempt count,
-four-round evolution, best round, best median, and retained failure detail.
-When the controller receipt supplies the frozen baseline median, it also
-reports speedup versus that baseline. Infrastructure-pending cells remain
-visibly separate from candidate failures.
+The version-two final report contains one row per branch with status, attempt
+count, unchanged raw round receipts, per-case evidence, controls and policy,
+calibration-normalized timing, best raw and normalized medians, frozen baseline
+evidence, speedup, and retained failure detail. A separate discarded-attempts
+table records every infrastructure exclusion with its target, device, handle,
+and diagnostic. Infrastructure-pending cells remain visibly separate from
+candidate failures.

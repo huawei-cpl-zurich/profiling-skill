@@ -32,3 +32,13 @@ independent acceptance boundaries rather than speculative extension points.
   — 695 passed, 1 deselected.
 - The excluded existing test requires unprivileged Bubblewrap namespaces,
   which this local host disables before any campaign code runs.
+
+## Final-verifier follow-up
+
+The original batch barrier was accidental complexity: a fast cell could not
+release its device until every peer in that batch finished, and one
+infrastructure failure stopped unrelated queued work. The scheduler now has a
+single continuous future set, refreshes admission for every assignment, and
+defers only the failed cell. Raw receipts remain intact in report schema v2;
+derived per-case, control, normalization, baseline, speedup, and discarded
+infrastructure views are additive.

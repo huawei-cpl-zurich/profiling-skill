@@ -10,7 +10,7 @@ import math
 import os
 import random
 import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Protocol
 
@@ -278,90 +278,118 @@ def run_campaign(
         ledger = _new_ledger(manifest)
         _atomic_json(ledger_path, ledger)
     cell_by_id = {cell["cell_id"]: cell for cell in manifest["cells"]}
-    # A retained handle is an already-submitted workload. Recover it before
-    # admitting new work, and never turn observer loss into duplicate dispatch.
-    for cell_id in manifest["order"]:
+    deferred = set()
+    occupied = set()
+    running = {}
+    admission_error = None
+
+    def finish(future) -> None:
+        cell_id, attempt, slot = running.pop(future)
+        occupied.discard((slot["target"], slot["device"]))
         state = ledger["cells"][cell_id]
-        if state["status"] != "infrastructure_pending" or not state["attempts"]:
-            continue
-        attempt = state["attempts"][-1]
-        handle = attempt.get("durable_handle")
-        if not handle:
-            continue
-        observe = getattr(launcher, "observe", None)
-        if not callable(observe):
-            ledger["status"] = "infrastructure_pending"
-            _atomic_json(ledger_path, ledger)
-            raise CampaignPaused(
-                f"{cell_id} has retained handle {handle}; launcher cannot observe it"
-            )
-        placement = {"target": attempt["target"], "device": attempt["device"]}
         try:
-            receipt = observe(cell_by_id[cell_id], placement, handle)
+            receipt = future.result()
             _validate_receipt(cell_by_id[cell_id], receipt)
         except InfrastructureFailure as error:
-            attempt["error"] = str(error)
-            _atomic_json(ledger_path, ledger)
-            raise CampaignPaused("retained handle is still pending") from error
-        except Exception as error:
-            attempt["error"] = str(error)
-            _atomic_json(ledger_path, ledger)
-            raise CampaignPaused("retained handle observation failed") from error
-        attempt.update({"status": receipt["status"], "receipt": receipt})
-        state["status"] = receipt["status"]
+            attempt.update({"status": "infrastructure_error", "error": str(error)})
+            if error.durable_handle:
+                attempt["durable_handle"] = error.durable_handle
+            state["status"] = "infrastructure_pending"
+            deferred.add(cell_id)
+        except Exception as error:  # launcher crashes are infrastructure, not kernels
+            attempt.update({"status": "infrastructure_error", "error": str(error)})
+            state["status"] = "infrastructure_pending"
+            deferred.add(cell_id)
+        else:
+            attempt.update({"status": receipt["status"],
+                            "durable_handle": receipt["durable_handle"],
+                            "receipt": receipt})
+            state["status"] = receipt["status"]
         _atomic_json(ledger_path, ledger)
-    pending = [cell_id for cell_id in manifest["order"]
-               if ledger["cells"][cell_id]["status"] not in
-               {"complete", "candidate_failed"}]
-    while pending:
-        slots = _admitted_slots(pool)
-        if not slots:
-            ledger["status"] = "infrastructure_pending"
-            _atomic_json(ledger_path, ledger)
-            raise CampaignPaused("no healthy idle BZ-A3 devices were admitted")
-        batch = pending[:len(slots)]
-        failures = False
-        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
-            futures = {}
-            for cell_id, slot in zip(batch, slots):
+
+    with ThreadPoolExecutor(max_workers=len(manifest["cells"])) as executor:
+        # Retained handles are already-running work. Observe them concurrently,
+        # reserve their placements, and never convert observation loss into a
+        # fresh launch. Handleless failures become runnable once on resume.
+        for cell_id in manifest["order"]:
+            state = ledger["cells"][cell_id]
+            if state["status"] != "infrastructure_pending":
+                continue
+            attempt = state["attempts"][-1]
+            handle = attempt.get("durable_handle")
+            if not handle:
+                state["status"] = "queued"
+                continue
+            observe = getattr(launcher, "observe", None)
+            if not callable(observe):
+                attempt["error"] = "launcher cannot observe its retained handle"
+                deferred.add(cell_id)
+                continue
+            slot = {"target": attempt["target"], "device": attempt["device"]}
+            observation = {
+                "target": slot["target"], "device": slot["device"],
+                "status": "running", "durable_handle": handle,
+                "kind": "observe",
+            }
+            state["attempts"].append(observation)
+            occupied.add((slot["target"], slot["device"]))
+            state["status"] = "running"
+            future = executor.submit(
+                observe, cell_by_id[cell_id], slot, handle
+            )
+            running[future] = (cell_id, observation, slot)
+        _atomic_json(ledger_path, ledger)
+
+        while True:
+            # Refresh admission for every assignment. This continuously fills
+            # newly free slots rather than waiting for an earlier batch.
+            while True:
+                cell_id = next((candidate for candidate in manifest["order"]
+                                if ledger["cells"][candidate]["status"] == "queued"
+                                and candidate not in deferred), None)
+                if cell_id is None:
+                    break
+                try:
+                    slots = [slot for slot in _admitted_slots(pool)
+                             if (slot["target"], slot["device"]) not in occupied]
+                    admission_error = None
+                except Exception as error:
+                    slots = []
+                    admission_error = str(error)
+                if not slots:
+                    break
+                slot = slots[0]
                 state = ledger["cells"][cell_id]
                 state["status"] = "running"
                 attempt = {"target": slot["target"], "device": slot["device"],
                            "status": "running"}
                 state["attempts"].append(attempt)
-                _atomic_json(ledger_path, ledger)
-                futures[executor.submit(launcher.launch, cell_by_id[cell_id], slot)] = (
-                    cell_id, attempt
+                occupied.add((slot["target"], slot["device"]))
+                future = executor.submit(
+                    launcher.launch, cell_by_id[cell_id], slot
                 )
-            for future in as_completed(futures):
-                cell_id, attempt = futures[future]
-                state = ledger["cells"][cell_id]
-                try:
-                    receipt = future.result()
-                    _validate_receipt(cell_by_id[cell_id], receipt)
-                except InfrastructureFailure as error:
-                    attempt.update({"status": "infrastructure_error", "error": str(error)})
-                    if error.durable_handle:
-                        attempt["durable_handle"] = error.durable_handle
-                    state["status"] = "infrastructure_pending"
-                    failures = True
-                except Exception as error:  # launcher crashes are infrastructure, not kernels
-                    attempt.update({"status": "infrastructure_error", "error": str(error)})
-                    state["status"] = "infrastructure_pending"
-                    failures = True
-                else:
-                    attempt.update({"status": receipt["status"],
-                                    "durable_handle": receipt["durable_handle"],
-                                    "receipt": receipt})
-                    state["status"] = receipt["status"]
+                running[future] = (cell_id, attempt, slot)
                 _atomic_json(ledger_path, ledger)
-        if failures:
-            ledger["status"] = "infrastructure_pending"
-            _atomic_json(ledger_path, ledger)
-            raise CampaignPaused("infrastructure failed; resume from the durable ledger")
-        pending = [cell_id for cell_id in manifest["order"]
-                   if ledger["cells"][cell_id]["status"] not in
-                   {"complete", "candidate_failed"}]
+
+            if running:
+                completed, _ = wait(running, return_when=FIRST_COMPLETED)
+                for future in completed:
+                    finish(future)
+                continue
+
+            queued = [cell_id for cell_id in manifest["order"]
+                      if ledger["cells"][cell_id]["status"] == "queued"]
+            pending_infra = [cell_id for cell_id in manifest["order"]
+                             if ledger["cells"][cell_id]["status"] ==
+                             "infrastructure_pending"]
+            if queued or pending_infra:
+                ledger["status"] = "infrastructure_pending"
+                _atomic_json(ledger_path, ledger)
+                reason = ("infrastructure failed; independent cells completed"
+                          if pending_infra else admission_error
+                          or "no healthy idle BZ-A3 devices were admitted")
+                raise CampaignPaused(reason)
+            break
     ledger["status"] = "complete"
     _atomic_json(ledger_path, ledger)
     return ledger
@@ -370,6 +398,7 @@ def run_campaign(
 def build_report(manifest: dict, ledger: dict) -> dict:
     verify_manifest(manifest)
     rows = []
+    discarded = []
     summary = {"complete": 0, "candidate_failed": 0,
                "infrastructure_pending": 0}
     by_id = {cell["cell_id"]: cell for cell in manifest["cells"]}
@@ -380,30 +409,76 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         terminal = next((attempt.get("receipt") for attempt in reversed(state["attempts"])
                          if attempt.get("receipt")), {})
         evolution = terminal.get("rounds", [])
-        valid = [item for item in evolution
-                 if isinstance(item.get("median_us"), (int, float))
-                 and math.isfinite(item["median_us"]) and item["median_us"] > 0]
-        best = min(valid, key=lambda item: item["median_us"]) if valid else None
+        raw = [item for item in evolution
+               if isinstance(item.get("median_us"), (int, float))
+               and math.isfinite(item["median_us"]) and item["median_us"] > 0]
+        def normalized_value(item: dict) -> float | None:
+            value = item.get("normalized_median_us")
+            if not isinstance(value, (int, float)):
+                normalization = item.get("normalization")
+                value = (normalization.get("normalized_latency_us")
+                         if isinstance(normalization, dict) else None)
+            return (float(value) if isinstance(value, (int, float))
+                    and math.isfinite(value) and value > 0 else None)
+
+        normalized = [(item, normalized_value(item)) for item in evolution]
+        normalized = [(item, value) for item, value in normalized if value is not None]
+        best_raw = min(raw, key=lambda item: item["median_us"]) if raw else None
+        best_normalized = min(normalized, key=lambda pair: pair[1]) if normalized else None
+        best = best_normalized[0] if best_normalized else best_raw
+        baseline = terminal.get("baseline")
+        baseline_us = terminal.get("baseline_median_us")
+        if isinstance(baseline, dict):
+            baseline_us = baseline.get("median_us", baseline_us)
+        for number, attempt in enumerate(state["attempts"], 1):
+            if attempt.get("status") == "infrastructure_error":
+                discarded.append({
+                    "cell_id": cell_id, "attempt": number,
+                    "target": attempt.get("target"), "device": attempt.get("device"),
+                    "durable_handle": attempt.get("durable_handle"),
+                    "error": attempt.get("error"),
+                })
         cell = by_id[cell_id]
         rows.append({
             "cell_id": cell_id, "task": cell["task"],
             "treatment": cell["treatment"], "branch": cell["branch"],
             "status": status, "attempt_count": len(state["attempts"]),
-            "evolution": evolution,
+            "raw_evolution": evolution,
+            "normalized_evolution": [
+                {"round": item["round"],
+                 "normalized_median_us": value,
+                 "normalization": item.get("normalization")}
+                for item, value in normalized
+            ],
+            "per_case_evidence": [
+                {"round": item.get("round"), "case_results": item["case_results"]}
+                for item in evolution if isinstance(item.get("case_results"), list)
+            ],
+            "controls": [
+                {"round": item.get("round"), "controls": item.get("controls"),
+                 "calibration": item.get("calibration"), "policy": item.get("policy")}
+                for item in evolution
+                if any(key in item for key in ("controls", "calibration", "policy"))
+            ],
             "best_round": best["round"] if best else None,
-            "best_median_us": best["median_us"] if best else None,
-            "baseline_median_us": terminal.get("baseline_median_us"),
+            "best_median_us": best_raw["median_us"] if best_raw else None,
+            "best_normalized_median_us": (
+                best_normalized[1] if best_normalized else None
+            ),
+            "baseline": baseline,
+            "baseline_median_us": baseline_us,
             "speedup_vs_baseline": (
-                terminal["baseline_median_us"] / best["median_us"]
-                if best and isinstance(terminal.get("baseline_median_us"), (int, float))
-                and math.isfinite(terminal["baseline_median_us"])
-                and terminal["baseline_median_us"] > 0 else None
+                baseline_us / (best_normalized[1]
+                               if best_normalized else best["median_us"])
+                if best and isinstance(baseline_us, (int, float))
+                and math.isfinite(baseline_us) and baseline_us > 0 else None
             ),
             "failure": terminal.get("failure") if terminal else None,
         })
-    return {"schema_version": 1, "run_id": manifest["run_id"],
+    return {"schema_version": 2, "run_id": manifest["run_id"],
             "manifest_sha256": manifest["manifest_sha256"],
-            "summary": summary, "cells": rows}
+            "summary": summary, "cells": rows,
+            "discarded_infrastructure_attempts": discarded}
 
 
 class _FakePool:

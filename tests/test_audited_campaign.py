@@ -4,6 +4,8 @@ import importlib.util
 import json
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -128,7 +130,15 @@ class RecordingLauncher:
             "rounds_completed": 4,
             "baseline_median_us": 12.0,
             "rounds": [
-                {"round": round_number, "median_us": 10.0 - round_number}
+                {
+                    "round": round_number,
+                    "median_us": 10.0 - round_number,
+                    "normalized_median_us": 9.0 - round_number,
+                    "samples_us": [10.0 - round_number] * 3,
+                    "case_results": [{"case": 7, "median_us": 10.0 - round_number}],
+                    "controls": {"before_us": 10.0, "after_us": 10.1},
+                    "policy": {"post_control": "pass"},
+                }
                 for round_number in range(1, 5)
             ],
         }
@@ -181,6 +191,41 @@ def test_dynamic_admission_uses_all_unique_healthy_idle_devices(tmp_path: Path):
     assert all(entry["attempts"][0]["durable_handle"] for entry in ledger["cells"].values())
 
 
+def test_scheduler_refills_each_free_slot_without_waiting_for_batch(tmp_path: Path):
+    document = manifest(tmp_path)
+    first_two = document["order"][:2]
+    started = {cell_id: threading.Event() for cell_id in first_two}
+    releases = {cell_id: threading.Event() for cell_id in first_two}
+    third_started = threading.Event()
+
+    class BlockingLauncher(RecordingLauncher):
+        def launch(self, cell, slot):
+            cell_id = cell["cell_id"]
+            if cell_id in started:
+                started[cell_id].set()
+                assert releases[cell_id].wait(5)
+            else:
+                third_started.set()
+            return super().launch(cell, slot)
+
+    pool = StaticPool([
+        {"target": "bz-a3-1", "device": 0, "healthy": True, "idle": True},
+        {"target": "bz-a3-2", "device": 1, "healthy": True, "idle": True},
+    ])
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        running = executor.submit(
+            audited_campaign.run_campaign, document, tmp_path / "ledger.json",
+            pool, BlockingLauncher(),
+        )
+        assert all(event.wait(5) for event in started.values())
+        releases[first_two[0]].set()
+        assert third_started.wait(5)
+        assert not releases[first_two[1]].is_set()
+        releases[first_two[1]].set()
+        assert running.result(timeout=5)["status"] == "complete"
+    assert pool.calls >= 3
+
+
 def test_resume_preserves_completed_and_retries_only_infrastructure_failure(
     tmp_path: Path,
 ):
@@ -194,10 +239,13 @@ def test_resume_preserves_completed_and_retries_only_infrastructure_failure(
     ledger_path = tmp_path / "ledger.json"
     with pytest.raises(audited_campaign.CampaignPaused):
         audited_campaign.run_campaign(document, ledger_path, slots, first)
+    checkpoint = json.loads(ledger_path.read_text())
     completed = {
         cell_id for cell_id, state in json.loads(ledger_path.read_text())["cells"].items()
         if state["status"] == "complete"
     }
+    assert len(completed) == 8
+    assert checkpoint["cells"][failed_cell]["status"] == "infrastructure_pending"
     resumed = RecordingLauncher()
     ledger = audited_campaign.run_campaign(
         document, ledger_path, slots, resumed, resume=True
@@ -228,6 +276,10 @@ def test_resume_observes_existing_durable_handle_without_redispatch(tmp_path: Pa
         (target, {"target": "bz-a3-1", "device": 0},
          "bz-a3-1:retained-123")
     ]
+    report = audited_campaign.build_report(document, ledger)
+    assert report["discarded_infrastructure_attempts"][0]["durable_handle"] == (
+        "bz-a3-1:retained-123"
+    )
 
 
 def test_report_contains_evolution_best_round_and_failures(tmp_path: Path):
@@ -239,13 +291,41 @@ def test_report_contains_evolution_best_round_and_failures(tmp_path: Path):
         document, tmp_path / "ledger.json", pool, RecordingLauncher()
     )
     report = audited_campaign.build_report(document, ledger)
+    assert report["schema_version"] == 2
     assert report["summary"] == {"complete": 9, "candidate_failed": 0,
                                   "infrastructure_pending": 0}
     assert len(report["cells"]) == 9
     assert all(row["best_round"] == 4 and row["best_median_us"] == 6.0
                for row in report["cells"])
-    assert all(row["speedup_vs_baseline"] == 2.0 for row in report["cells"])
-    assert all(len(row["evolution"]) == 4 for row in report["cells"])
+    assert all(row["speedup_vs_baseline"] == 12.0 / 5.0 for row in report["cells"])
+    assert all(len(row["raw_evolution"]) == 4 for row in report["cells"])
+    assert all(len(row["per_case_evidence"]) == 4 for row in report["cells"])
+    assert all(len(row["controls"]) == 4 for row in report["cells"])
+    assert all(row["best_normalized_median_us"] == 5.0 for row in report["cells"])
+    assert report["discarded_infrastructure_attempts"] == []
+
+
+def test_report_retains_discarded_infrastructure_attempts(tmp_path: Path):
+    document = manifest(tmp_path)
+    pool = StaticPool([
+        {"target": "bz-a3-1", "device": 0, "healthy": True, "idle": True},
+    ])
+    failed = document["order"][0]
+    ledger_path = tmp_path / "ledger.json"
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(
+            document, ledger_path, pool, RecordingLauncher(fail_once=failed)
+        )
+    audited_campaign.run_campaign(
+        document, ledger_path, pool, RecordingLauncher(), resume=True
+    )
+    report = audited_campaign.build_report(
+        document, json.loads(ledger_path.read_text())
+    )
+    assert report["discarded_infrastructure_attempts"] == [{
+        "cell_id": failed, "attempt": 1, "target": "bz-a3-1", "device": 0,
+        "durable_handle": None, "error": "temporary transport loss",
+    }]
 
 
 def test_manifest_rejects_unpinned_provenance_and_wrong_dimensions(tmp_path: Path):

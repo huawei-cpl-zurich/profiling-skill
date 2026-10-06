@@ -24,7 +24,7 @@ def fixture(tmp_path: Path, mode: str = "ok") -> tuple[list[str], Path, Path]:
     job = {
         "benchmark": "matmul", "action": "profile", "device": 2,
         "cases": [7, 9], "repeats": 3, "round": 2,
-        "profiling": {"kernel_name": "chosen_kernel"},
+        "profiling": {"kernel_name": "chosen_kernel", "replay_mode": "application"},
     }
     job_path = tmp_path / "job.json"
     job_path.write_text(json.dumps(job))
@@ -49,6 +49,7 @@ log=out/"msprof.log"; log.write_text(f"capture {{case}}/{{iteration}}\\n")
 evidence={{"status":"failure"}}
 if status == "ok":
  evidence={{"status":"success","msprof_log_sha256":hashlib.sha256(log.read_bytes()).hexdigest(),
+            "protocol":{{"replay_mode":job["profiling"]["replay_mode"]}},
             "kernels":[{{"name":"chosen_kernel","duration_us":{{"median":case*10+iteration+1}}}}]}}
 (out/"evidence.json").write_text(json.dumps(evidence))
 raise SystemExit(0 if status == "ok" else 1)
@@ -76,6 +77,8 @@ def test_batch_profiles_ordered_matrix_and_returns_compact_evidence(tmp_path: Pa
     assert [(item["case"], item["iteration"]) for item in evidence["captures"]] == [
         (7, 0), (7, 1), (7, 2), (9, 0), (9, 1), (9, 2),
     ]
+    assert evidence["replay_mode"] == result["replay_mode"] == "application"
+    assert all(item["replay_mode"] == "application" for item in evidence["captures"])
     assert len((output / "msprof.log").read_text()) < 64 * 1024
 
     # Exercise the production client's wire validation against artifacts made
@@ -84,6 +87,17 @@ def test_batch_profiles_ordered_matrix_and_returns_compact_evidence(tmp_path: Pa
     client.attach_profile_evidence(result, output / "evidence.json")
     assert result["cases"] == [7, 9]
     assert result["profile"]["cases"] == result["profile_cases"]
+
+
+def test_batch_accepts_application_generated_task_suffix(tmp_path: Path):
+    command, output, response = fixture(tmp_path)
+    profiler = Path(command[command.index("--profiler") + 1])
+    profiler.write_text(profiler.read_text().replace(
+        '"name":"chosen_kernel"', '"name":"chosen_kernel_mix_aic"'
+    ))
+    run = subprocess.run(command, text=True, capture_output=True, check=False)
+    assert run.returncode == 0
+    assert json.loads(response.read_text())["status"] == "ok"
 
 
 def test_batch_preserves_candidate_failure_and_partial_evidence(tmp_path: Path):
@@ -97,3 +111,4 @@ def test_batch_preserves_candidate_failure_and_partial_evidence(tmp_path: Path):
     assert "NameError" in result["diagnostics"]
     assert len(result["completed_captures"]) == 3
     assert evidence["failure"]["kind"] == "compile_error"
+    assert evidence["replay_mode"] == "application"

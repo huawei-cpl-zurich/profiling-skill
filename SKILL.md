@@ -27,8 +27,11 @@ For reproducible kernel latency, run the correctness-checked workload through
 `scripts/profile_a3.py`. It performs a bounded `msprof op` `BasicInfo` capture
 and emits compact JSON with device-task durations and source hashes. Prefer an
 exact exported kernel name for timing; an unfiltered capture can select a
-framework setup operator instead. Run independent captures for repetitions and use
-their median; do not use profiled Python wall time.
+framework setup operator instead. Kernel replay is the default; use application
+replay only when the benchmark configuration requires it, such as large BSA
+cases whose memory snapshot cannot be created reliably. Run independent
+captures for repetitions and use their median; do not use profiled Python wall
+time.
 
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, acceptance rules, and interpretation boundaries. Preserve the

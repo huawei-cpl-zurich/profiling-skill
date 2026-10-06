@@ -34,6 +34,7 @@ def identity(job: dict) -> dict:
         "repeats": job["repeats"],
         "round": job["round"],
         "kernel_name": job["profiling"]["kernel_name"],
+        "replay_mode": job["profiling"].get("replay_mode", "kernel"),
     }
 
 
@@ -58,12 +59,15 @@ def failure(job: dict, status: str, diagnostics: str, captures: list[dict]) -> d
 def emit_failure(output: Path, response_path: Path, result: dict,
                  captures: list[dict], logs: list[str]) -> int:
     write_json(response_path, result)
-    write_json(output / "evidence.json", {
+    evidence = {
         "schema_version": 1,
         "status": "failure",
         "failure": {"kind": result["status"], "message": result["diagnostics"]},
         "captures": captures,
-    })
+    }
+    if "replay_mode" in result:
+        evidence["replay_mode"] = result["replay_mode"]
+    write_json(output / "evidence.json", evidence)
     (output / "msprof.log").write_text(bounded_log(logs))
     return 1
 
@@ -71,6 +75,11 @@ def emit_failure(output: Path, response_path: Path, result: dict,
 def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
             response_path: Path, kernel_name: str) -> int:
     bound = identity(job)
+    replay_mode = bound["replay_mode"]
+    if replay_mode not in {"kernel", "application"}:
+        result = failure(job, "infrastructure_error",
+                         f"unsupported replay mode: {replay_mode!r}", [])
+        return emit_failure(output, response_path, result, [], [])
     if kernel_name != bound["kernel_name"]:
         result = failure(job, "infrastructure_error",
                          "batch kernel selector does not match job", [])
@@ -97,7 +106,8 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
             write_json(item_job_path, item_job)
             command = [
                 sys.executable, str(profiler), "--output", str(capture_dir),
-                "--kernel-name", kernel_name, "--", sys.executable, str(runner),
+                "--kernel-name", kernel_name, "--replay-mode", replay_mode,
+                "--", sys.executable, str(runner),
                 "--job", str(item_job_path), "--output", str(item_response),
             ]
             run = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -119,8 +129,15 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
             try:
                 evidence = json.loads(evidence_path.read_text())
                 kernels = evidence["kernels"]
+                selected_name = kernels[0].get("name") if len(kernels) == 1 else None
+                name_matches = selected_name == kernel_name or (
+                    replay_mode == "application"
+                    and isinstance(selected_name, str)
+                    and selected_name == kernel_name + "_mix_aic"
+                )
                 if (run.returncode or evidence.get("status") != "success" or len(kernels) != 1
-                        or kernels[0].get("name") != kernel_name):
+                        or not name_matches
+                        or evidence.get("protocol", {}).get("replay_mode") != replay_mode):
                     raise ValueError(evidence.get("failure", "invalid selected kernel evidence"))
                 latency = float(kernels[0]["duration_us"]["median"])
                 if not math.isfinite(latency) or latency <= 0:
@@ -134,6 +151,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                 "iteration": iteration,
                 "duration_us": latency,
                 "kernel_name": kernel_name,
+                "replay_mode": replay_mode,
                 "evidence_sha256": digest(evidence_path),
                 "msprof_log_sha256": evidence["msprof_log_sha256"],
             })
@@ -147,6 +165,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
         "profiler": "msprof-op",
         "timing_scope": "device-task",
         "kernel_name": kernel_name,
+        "replay_mode": replay_mode,
         "captures": captures,
         "cases": rows,
         "repeats": job["repeats"],

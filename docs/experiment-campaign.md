@@ -318,6 +318,14 @@ explicitly to `msprof`; host-observed timing is diagnostic only and is not the
 score. Completion therefore does not depend on trusting that the agent chose
 to profile during its optimization turns.
 
+The A2/A3 driver accepts only `--replay-mode kernel` or
+`--replay-mode application`. Kernel replay remains the default for GDN,
+streaming matmul, and direct driver use. BSA uses application replay because
+its large cases cannot reliably create the memory snapshot required by kernel
+replay. Batch results and every compact capture record the selected mode, and
+the managed clients reject evidence whose replay mode does not match the
+frozen profiling job.
+
 ## Failures, evidence, and replay
 
 Compilation, runtime, correctness, and time-budget failures count as candidate

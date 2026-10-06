@@ -1,0 +1,690 @@
+#!/usr/bin/env python3
+"""Host-controlled lifecycle for three-round audited experiments."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from audited_contract import (
+    AuditError,
+    ParsedEvents,
+    REPORT_FIELDS,
+    extract_thread_id,
+    parse_agent_events,
+    parse_command_events,
+    sha256_bytes,
+    sha256_json,
+    validate_controller_receipt,
+)
+
+MAX_PARTIAL_OUTPUT = 65536
+
+
+def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
+    result = subprocess.run(
+        ["git", *arguments], cwd=repo, text=True, capture_output=True, env=env,
+        check=False,
+    )
+    if result.returncode:
+        raise AuditError(f"git {' '.join(arguments)} failed: {result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def _git_blob(repo: Path, revision: str, path: str) -> bytes:
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{path}"], cwd=repo, capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise AuditError(f"{path} is not tracked at {revision}")
+    return result.stdout
+
+
+def _identity(component: object) -> dict:
+    metadata = getattr(component, "reproducibility_metadata", None)
+    if callable(metadata):
+        return metadata()
+    name = f"{getattr(component, '__module__', 'unknown')}." \
+           f"{getattr(component, '__qualname__', type(component).__name__)}"
+    return {"adapter": name, "identity_sha256": sha256_bytes(name.encode())}
+
+
+@dataclass(frozen=True)
+class RunResult:
+    status: str
+    branch: str
+    session_id: str
+    seed_commit: str
+    commits: tuple[str, ...]
+
+
+class AuditedExperimentRunner:
+    """Drive one persistent agent and make exactly one host commit per round."""
+
+    def __init__(self, repo: Path, prompt: Path, task: Path,
+                 invoke: Callable[[int, str | None, str | None], str],
+                 controller: Callable[[int, str, str], dict], *, max_repairs: int = 2,
+                 max_controller_resubmits: int = 2, max_remeasurements: int = 1):
+        self.repo = repo.resolve()
+        self.prompt_bytes = prompt.resolve().read_bytes()
+        self.task_bytes = task.resolve().read_bytes()
+        self.prompt_hash = sha256_bytes(self.prompt_bytes)
+        self.task_hash = sha256_bytes(self.task_bytes)
+        self.invoke = invoke
+        self.controller = controller
+        self.max_repairs = max_repairs
+        self.max_controller_resubmits = max_controller_resubmits
+        self.max_remeasurements = max_remeasurements
+        self.reproducibility = {
+            "agent": _identity(invoke), "controller": _identity(controller),
+        }
+
+    def run(self, run_id: str, agent_id: str, *, resume: bool = False) -> RunResult:
+        state = self._resume(run_id, agent_id) if resume else None
+        if state:
+            branch = state["branch"]
+            seed_commit = state["seed_commit"]
+            seed_hash = state["seed_hash"]
+            session = state["session_id"]
+            start = state["experiment"]
+            prior_hash = state["prior_candidate_sha256"]
+            commits = _git(
+                self.repo, "rev-list", "--first-parent", "--reverse",
+                f"{seed_commit}..HEAD",
+            ).splitlines()
+        else:
+            branch, seed_commit, seed_hash = self._initialize(run_id, agent_id)
+            session = None
+            start = 1
+            prior_hash = sha256_bytes((self.repo / "candidate.py").read_bytes())
+            commits = []
+
+        for number in range(start, 4):
+            prior_candidate = _git_blob(self.repo, "HEAD", "candidate.py")
+            prior_manifest = _git_blob(self.repo, "HEAD", "candidate.manifest.json")
+            continuing = state if state and number == start else None
+            commands = tuple(continuing.get("commands", ())) if continuing else ()
+            stage = continuing.get("stage") if continuing else "prepare"
+
+            if not continuing:
+                session, commands = self._preparation_turn(
+                    number, session, None, commands, branch, seed_commit, seed_hash,
+                    prior_hash,
+                )
+            elif stage == "prepare":
+                session, commands = self._preparation_turn(
+                    number, session,
+                    None if continuing.get("pre_session") else (
+                        f"Resume blocked experiment {number}: repair the prepared candidate. "
+                        "Do not start another experiment; stop after a local check."
+                    ),
+                    commands, branch, seed_commit, seed_hash, prior_hash,
+                )
+
+            candidate_hash, manifest, commands, session = self._repair_candidate(
+                number, session, prior_hash, commands, branch, seed_commit, seed_hash,
+            )
+            manifest_hash = sha256_bytes(manifest.read_bytes())
+
+            receipt = self._controller_turn(
+                number, session, candidate_hash, manifest_hash, continuing, stage,
+                branch, seed_commit, seed_hash, prior_hash, commands,
+            )
+
+            tested_candidate = (self.repo / "candidate.py").read_bytes()
+            tested_manifest = manifest.read_bytes()
+            parsed, session = self._finalize(
+                number, session, candidate_hash, manifest_hash, receipt, commands,
+                tested_candidate, tested_manifest, branch, seed_commit, seed_hash,
+                prior_hash,
+            )
+
+            restored_hash = None
+            committed_hash = candidate_hash
+            if parsed.report["decision"] == "revert":
+                (self.repo / "candidate.py").write_bytes(prior_candidate)
+                manifest.write_bytes(prior_manifest)
+                restored_hash = sha256_bytes(prior_candidate)
+                committed_hash = restored_hash
+
+            self._write_evidence(
+                number, session, candidate_hash, tested_manifest, parsed, receipt,
+                committed_hash, restored_hash, tested_candidate,
+            )
+            _git(self.repo, "add", "candidate.py", "candidate.manifest.json",
+                 f"experiments/{number:02d}")
+            author = dict(os.environ)
+            author.update({
+                "GIT_AUTHOR_NAME": f"Experiment Agent {agent_id}",
+                "GIT_AUTHOR_EMAIL": f"{agent_id}@experiment.invalid",
+            })
+            _git(self.repo, "commit", "-m", f"experiment {number}: {agent_id}", env=author)
+            commits.append(_git(self.repo, "rev-parse", "HEAD"))
+            prior_hash = committed_hash
+
+        assert session is not None
+        self._verify_history(seed_commit, seed_hash, commits)
+        return RunResult("complete", branch, session, seed_commit, tuple(commits))
+
+    def _controller_turn(self, number: int, session: str, candidate_hash: str,
+                         manifest_hash: str, continuing: dict | None, stage: str,
+                         branch: str, seed_commit: str, seed_hash: str,
+                         prior_hash: str, commands: tuple[dict, ...]) -> dict:
+        submissions = int(continuing.get("controller_submissions", 0)) if continuing else 0
+        measurements = int(continuing.get("measurement_attempts", 0)) if continuing else 0
+        previous = continuing.get("receipt") if continuing else None
+
+        if continuing and stage == "finalize":
+            return previous
+        if continuing and stage == "controller":
+            handle = previous.get("handle") if isinstance(previous, dict) else None
+            if isinstance(handle, str) and handle:
+                observe = getattr(self.controller, "observe", None)
+                if not callable(observe):
+                    self._controller_checkpoint(
+                        number, session, "controller lacks durable-handle observation",
+                        branch, seed_commit, seed_hash, prior_hash, commands, previous,
+                        submissions, measurements,
+                    )
+                    raise AuditError("controller does not support durable-handle observation")
+                try:
+                    receipt = observe(number, candidate_hash, manifest_hash, handle)
+                except Exception as failure:
+                    self._controller_checkpoint(
+                        number, session, f"controller observation failed: {failure}",
+                        branch, seed_commit, seed_hash, prior_hash, commands, previous,
+                        submissions, measurements,
+                    )
+                    raise AuditError(
+                        f"controller observation failed for durable handle {handle}"
+                    ) from failure
+                if not isinstance(receipt, dict) or receipt.get("handle") != handle:
+                    self._controller_checkpoint(
+                        number, session, "controller observation changed durable handle",
+                        branch, seed_commit, seed_hash, prior_hash, commands, previous,
+                        submissions, measurements,
+                    )
+                    raise AuditError("controller observation changed the durable handle")
+            else:
+                if submissions > self.max_controller_resubmits:
+                    self._controller_checkpoint(
+                        number, session, "pre-handle resubmission budget exhausted",
+                        branch, seed_commit, seed_hash, prior_hash, commands, previous,
+                        submissions, measurements,
+                    )
+                    raise AuditError("pre-handle controller resubmission budget exhausted")
+                submissions += 1
+                try:
+                    receipt = self.controller(number, candidate_hash, manifest_hash)
+                except Exception as failure:
+                    self._controller_checkpoint(
+                        number, session, f"controller submission failed: {failure}",
+                        branch, seed_commit, seed_hash, prior_hash, commands, {},
+                        submissions, measurements,
+                    )
+                    raise AuditError("pre-handle controller submission failed") from failure
+        elif continuing and stage == "measurement":
+            if measurements >= self.max_remeasurements:
+                self._measurement_checkpoint(
+                    number, session, "remeasurement budget exhausted", branch,
+                    seed_commit, seed_hash, prior_hash, commands, previous,
+                    submissions, measurements,
+                )
+                raise AuditError("remeasurement budget exhausted")
+            remeasure = getattr(self.controller, "remeasure", None)
+            if not callable(remeasure):
+                self._measurement_checkpoint(
+                    number, session, "controller lacks explicit remeasurement", branch,
+                    seed_commit, seed_hash, prior_hash, commands, previous,
+                    submissions, measurements,
+                )
+                raise AuditError("controller does not support explicit remeasurement")
+            handle = previous.get("handle") if isinstance(previous, dict) else None
+            measurements += 1
+            try:
+                receipt = remeasure(number, candidate_hash, manifest_hash, handle)
+            except Exception as failure:
+                self._measurement_checkpoint(
+                    number, session, f"controller remeasurement failed: {failure}",
+                    branch, seed_commit, seed_hash, prior_hash, commands, previous,
+                    submissions, measurements,
+                )
+                raise AuditError("controller remeasurement failed") from failure
+        else:
+            submissions = 1
+            try:
+                receipt = self.controller(number, candidate_hash, manifest_hash)
+            except Exception as failure:
+                self._controller_checkpoint(
+                    number, session, f"controller submission failed: {failure}", branch,
+                    seed_commit, seed_hash, prior_hash, commands, {}, submissions,
+                    measurements,
+                )
+                raise AuditError("pre-handle controller submission failed") from failure
+
+        terminal = {"ok", "candidate_error", "measurement_pending"}
+        if not isinstance(receipt, dict) or receipt.get("status") not in terminal:
+            reason = receipt.get("reason", receipt) if isinstance(receipt, dict) else receipt
+            self._controller_checkpoint(
+                number, session, str(reason), branch, seed_commit, seed_hash, prior_hash,
+                commands, receipt if isinstance(receipt, dict) else {}, submissions,
+                measurements,
+            )
+            status = receipt.get("status") if isinstance(receipt, dict) else None
+            raise AuditError(f"experiment {number} blocked by controller status {status!r}")
+        try:
+            receipt = validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+        except AuditError as failure:
+            self._controller_checkpoint(
+                number, session, str(failure), branch, seed_commit, seed_hash,
+                prior_hash, commands, receipt, submissions, measurements,
+            )
+            raise
+        if receipt["status"] == "measurement_pending":
+            self._measurement_checkpoint(
+                number, session, "measurement remains pending", branch, seed_commit,
+                seed_hash, prior_hash, commands, receipt, submissions, measurements,
+            )
+            raise AuditError(f"experiment {number} measurement pending; resume to remeasure")
+        return receipt
+
+    def _controller_checkpoint(self, number: int, session: str, reason: str,
+                               branch: str, seed_commit: str, seed_hash: str,
+                               prior_hash: str, commands: tuple[dict, ...], receipt: dict,
+                               submissions: int, measurements: int) -> None:
+        self._checkpoint(
+            number, session, reason, "controller", branch, seed_commit, seed_hash,
+            prior_hash, commands, receipt, controller_submissions=submissions,
+            measurement_attempts=measurements,
+        )
+
+    def _measurement_checkpoint(self, number: int, session: str, reason: str,
+                                branch: str, seed_commit: str, seed_hash: str,
+                                prior_hash: str, commands: tuple[dict, ...], receipt: dict,
+                                submissions: int, measurements: int) -> None:
+        self._checkpoint(
+            number, session, reason, "measurement", branch, seed_commit, seed_hash,
+            prior_hash, commands, receipt, controller_submissions=submissions,
+            measurement_attempts=measurements,
+        )
+
+    def _initialize(self, run_id: str, agent_id: str) -> tuple[str, str, str]:
+        if _git(self.repo, "status", "--porcelain"):
+            raise AuditError("experiment repository must start clean")
+        branch = f"experiment/{run_id}/{agent_id}"
+        _git(self.repo, "switch", "-c", branch)
+        directory = self.repo / ".experiment"
+        directory.mkdir()
+        (self.repo / "PROMPT.md").write_bytes(self.prompt_bytes)
+        (self.repo / "TASK.md").write_bytes(self.task_bytes)
+        seed = directory / "seed.json"
+        seed.write_text(json.dumps({
+            "schema": "profiling-skill/audited-seed/v1", "run_id": run_id,
+            "agent_id": agent_id, "prompt_sha256": self.prompt_hash,
+            "task_sha256": self.task_hash, "reproducibility": self.reproducibility,
+        }, indent=2, sort_keys=True) + "\n")
+        _git(self.repo, "add", ".experiment/seed.json", "PROMPT.md", "TASK.md")
+        _git(self.repo, "commit", "-m", f"experiment seed: {run_id}/{agent_id}")
+        return branch, _git(self.repo, "rev-parse", "HEAD"), sha256_bytes(seed.read_bytes())
+
+    def _preparation_turn(self, number: int, session: str | None,
+                          instruction: str | None, commands: tuple[dict, ...],
+                          branch: str, seed_commit: str, seed_hash: str,
+                          prior_hash: str) -> tuple[str, tuple[dict, ...]]:
+        failure = ""
+        for attempt in range(self.max_repairs + 1):
+            turn_instruction = instruction if attempt == 0 else (
+                f"Repair preparation evidence for experiment {number}: {failure}. "
+                "Stay in this experiment and session; run a local check and stop."
+            )
+            output = self._invoke_or_checkpoint(
+                number, session, turn_instruction, commands, "prepare", branch,
+                seed_commit, seed_hash, prior_hash,
+            )
+            session = extract_thread_id(output, session)
+            try:
+                _, new_commands = parse_command_events(output, session)
+                return session, commands + new_commands
+            except AuditError as error:
+                failure = str(error)
+                if failure != "structured preparation contains no command evidence":
+                    commands += (self._invalid_attempt(output, failure),)
+        assert session is not None
+        self._checkpoint(number, session, failure, "prepare", branch, seed_commit,
+                         seed_hash, prior_hash, commands)
+        raise AuditError(failure)
+
+    def _repair_candidate(self, number: int, session: str, prior_hash: str,
+                          commands: tuple[dict, ...], branch: str, seed_commit: str,
+                          seed_hash: str) -> tuple[str, Path, tuple[dict, ...], str]:
+        failure = ""
+        for attempt in range(self.max_repairs + 1):
+            try:
+                candidate_hash, manifest = self._validate_candidate(prior_hash)
+                return candidate_hash, manifest, commands, session
+            except AuditError as error:
+                failure = str(error)
+                if attempt == self.max_repairs:
+                    self._checkpoint(number, session, failure, "prepare", branch,
+                                     seed_commit, seed_hash, prior_hash, commands)
+                    raise
+                session, commands = self._preparation_turn(
+                    number, session,
+                    f"Repair the prepared candidate for experiment {number}: {error}. "
+                    "Do not start another experiment; stop after a local check.",
+                    commands, branch, seed_commit, seed_hash, prior_hash,
+                )
+        raise AuditError(failure)
+
+    def _validate_candidate(self, prior_hash: str) -> tuple[str, Path]:
+        candidate = self.repo / "candidate.py"
+        manifest = self.repo / "candidate.manifest.json"
+        allowed = {"candidate.py", "candidate.manifest.json"}
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"], cwd=self.repo,
+            text=True, capture_output=True, check=True,
+        ).stdout
+        undeclared = [line[3:] for line in status.splitlines()
+                      if len(line) >= 4 and line[3:] not in allowed]
+        if undeclared:
+            raise AuditError(
+                "prepared experiment has undeclared worktree changes: "
+                + ", ".join(sorted(undeclared))
+            )
+        if not candidate.is_file() or not manifest.is_file():
+            raise AuditError("candidate.py and candidate.manifest.json are required")
+        try:
+            document = json.loads(manifest.read_text())
+        except json.JSONDecodeError as failure:
+            raise AuditError(f"candidate manifest is invalid JSON: {failure}") from failure
+        if not isinstance(document, dict):
+            raise AuditError("candidate manifest must be a JSON object")
+        candidate_hash = sha256_bytes(candidate.read_bytes())
+        if candidate_hash == prior_hash:
+            raise AuditError("prepared candidate is unchanged")
+        if document.get("candidate_sha256") not in {None, candidate_hash}:
+            raise AuditError("candidate manifest hash is stale")
+        return candidate_hash, manifest
+
+    def _finalize(self, number: int, session: str, candidate_hash: str,
+                  manifest_hash: str, receipt: dict, commands: tuple[dict, ...],
+                  candidate_bytes: bytes, manifest_bytes: bytes, branch: str,
+                  seed_commit: str, seed_hash: str, prior_hash: str
+                  ) -> tuple[ParsedEvents, str]:
+        instruction = (
+            f"Finalize experiment {number} from this exact host controller receipt:\n"
+            f"{json.dumps(receipt, sort_keys=True)}\n"
+            f"The frozen candidate SHA-256 is {candidate_hash}; manifest SHA-256 is "
+            f"{manifest_hash}; controller receipt SHA-256 is {sha256_json(receipt)}. "
+            "Return the required JSON report citing those values. Do not edit files."
+        )
+        failure = ""
+        for attempt in range(self.max_repairs + 1):
+            turn_instruction = instruction if attempt == 0 else (
+                f"Repair only the experiment {number} JSON report: {failure}. "
+                "Do not edit files; cite the same controller receipt."
+            )
+            output = self._invoke_or_checkpoint(
+                number, session, turn_instruction, commands, "finalize", branch,
+                seed_commit, seed_hash, prior_hash, receipt,
+            )
+            session = extract_thread_id(output, session)
+            command_error = ""
+            try:
+                _, attempt_commands = parse_command_events(output, session)
+                commands += attempt_commands
+            except AuditError as error:
+                command_error = str(error)
+                if command_error != "structured preparation contains no command evidence":
+                    commands += (self._invalid_attempt(output, command_error),)
+            candidate_changed = sha256_bytes((self.repo / "candidate.py").read_bytes()) != candidate_hash
+            manifest_changed = sha256_bytes((self.repo / "candidate.manifest.json").read_bytes()) != manifest_hash
+            if candidate_changed or manifest_changed:
+                (self.repo / "candidate.py").write_bytes(candidate_bytes)
+                (self.repo / "candidate.manifest.json").write_bytes(manifest_bytes)
+                self._checkpoint(number, session, "candidate or manifest changed during finalize",
+                                 "finalize", branch, seed_commit, seed_hash, prior_hash,
+                                 commands, receipt)
+                raise AuditError("candidate or manifest changed during finalize")
+            try:
+                parsed = parse_agent_events(output, session, require_commands=False)
+                expected = {
+                    "controller_handle": receipt["handle"],
+                    "candidate_sha256": candidate_hash,
+                    "manifest_sha256": manifest_hash,
+                    "controller_receipt_sha256": sha256_json(receipt),
+                }
+                if any(parsed.report.get(key) != value for key, value in expected.items()):
+                    raise AuditError("final report does not cite the frozen receipt and candidate")
+                if not commands:
+                    raise AuditError("completed experiment contains no command evidence")
+                return ParsedEvents(parsed.thread_id, parsed.report, commands), session
+            except AuditError as error:
+                failure = command_error or str(error)
+        self._checkpoint(number, session, failure, "finalize", branch, seed_commit,
+                         seed_hash, prior_hash, commands, receipt)
+        raise AuditError(failure)
+
+    def _invoke_or_checkpoint(self, number: int, session: str | None,
+                              instruction: str | None, commands: tuple[dict, ...],
+                              stage: str, branch: str, seed_commit: str,
+                              seed_hash: str, prior_hash: str,
+                              receipt: dict | None = None) -> str:
+        """Honor the invoker's duck-typed ``structured_stdout`` failure field."""
+        try:
+            return self.invoke(number, session, instruction)
+        except Exception as failure:
+            partial = getattr(failure, "structured_stdout", "")
+            if isinstance(partial, bytes):
+                partial = partial.decode(errors="replace")
+            if not isinstance(partial, str):
+                partial = ""
+            partial = partial[:MAX_PARTIAL_OUTPUT]
+            recovered = session
+            if partial:
+                try:
+                    recovered = extract_thread_id(partial, session)
+                    try:
+                        _, partial_commands = parse_command_events(partial, recovered)
+                        commands += partial_commands
+                    except AuditError as parse_failure:
+                        if str(parse_failure) != "structured preparation contains no command evidence":
+                            commands += (self._invalid_attempt(partial, str(parse_failure)),)
+                except AuditError:
+                    pass
+            reason = f"agent invocation failed: {failure}"
+            if recovered:
+                self._checkpoint(number, recovered, reason, stage, branch, seed_commit,
+                                 seed_hash, prior_hash, commands, receipt)
+                raise AuditError(
+                    f"{reason}; checkpointed session {recovered} for resume"
+                ) from failure
+            if stage == "prepare" and number == 1:
+                self._checkpoint(number, None, reason, stage, branch, seed_commit,
+                                 seed_hash, prior_hash, commands, receipt)
+                raise AuditError(
+                    f"{reason}; checkpointed before session start for resume"
+                ) from failure
+            raise AuditError(f"{reason}; no durable session id was available") from failure
+
+    @staticmethod
+    def _invalid_attempt(output: str, error: str) -> dict:
+        """Retain bounded proof of rejected command events without trusting their fields."""
+        excerpt = f"structured event stream rejected: {error}"
+        return {
+            "command": "<invalid structured command event>", "exit_code": 255,
+            "output_sha256": sha256_bytes(output.encode()),
+            "output_excerpt": excerpt[:512],
+            "output_truncated": len(excerpt) > 512,
+        }
+
+    def _write_evidence(self, number: int, session: str, candidate_hash: str,
+                        manifest_bytes: bytes, parsed: ParsedEvents, receipt: dict,
+                        committed_hash: str, restored_hash: str | None,
+                        tested_candidate: bytes) -> None:
+        directory = self.repo / "experiments" / f"{number:02d}"
+        directory.mkdir(parents=True, exist_ok=False)
+        if restored_hash:
+            (directory / "tested_candidate.py").write_bytes(tested_candidate)
+            (directory / "tested_candidate.manifest.json").write_bytes(manifest_bytes)
+        report = parsed.report
+        sections = [f"# Experiment {number}"] + [
+            f"## {field.replace('_', ' ').title()}\n\n{report[field]}"
+            for field in REPORT_FIELDS
+        ]
+        (directory / "report.md").write_text("\n\n".join(sections) + "\n")
+        evidence = {
+            "schema": "profiling-skill/audited-evidence/v1", "session_id": session,
+            "candidate_sha256": candidate_hash, "tested_candidate_sha256": candidate_hash,
+            "committed_candidate_sha256": committed_hash,
+            "restored_candidate_sha256": restored_hash, "decision": report["decision"],
+            "controller_receipt_sha256": sha256_json(receipt),
+            "manifest_sha256": sha256_bytes(manifest_bytes),
+            "prompt_sha256": self.prompt_hash, "task_sha256": self.task_hash,
+            "reproducibility": self.reproducibility, "controller": receipt,
+        }
+        (directory / "evidence.json").write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+        )
+        (directory / "results.json").write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+        )
+        (directory / "sources.json").write_text(json.dumps({
+            "sources": report["sources"],
+            "no_sources_reason": report.get("no_sources_reason", ""),
+        }, indent=2, sort_keys=True) + "\n")
+        (directory / "commands.jsonl").write_text("".join(
+            json.dumps(command, sort_keys=True) + "\n" for command in parsed.commands
+        ))
+
+    def _checkpoint(self, number: int, session: str | None, reason: str, stage: str,
+                    branch: str, seed_commit: str, seed_hash: str, prior_hash: str,
+                    commands: tuple[dict, ...], receipt: dict | None = None, *,
+                    controller_submissions: int = 0,
+                    measurement_attempts: int = 0) -> None:
+        if session is None and (stage != "prepare" or number != 1):
+            raise AuditError("only the initial preparation may checkpoint before a session")
+        path = self.repo / ".experiment" / "blocked.json"
+        candidate = self.repo / "candidate.py"
+        manifest = self.repo / "candidate.manifest.json"
+        path.write_text(json.dumps({
+            "schema": "profiling-skill/audited-blocked/v1", "experiment": number,
+            "session_id": session, "reason": reason, "stage": stage, "branch": branch,
+            "pre_session": session is None,
+            "controller_submissions": controller_submissions,
+            "measurement_attempts": measurement_attempts,
+            "seed_commit": seed_commit, "seed_hash": seed_hash,
+            "resume_parent": _git(self.repo, "rev-parse", "HEAD"),
+            "prior_candidate_sha256": prior_hash, "commands": commands,
+            "receipt": receipt,
+            "candidate_sha256": sha256_bytes(candidate.read_bytes()) if candidate.is_file() else None,
+            "manifest_sha256": sha256_bytes(manifest.read_bytes()) if manifest.is_file() else None,
+        }, indent=2, sort_keys=True) + "\n")
+        paths = [".experiment/blocked.json"] + [
+            name for name in ("candidate.py", "candidate.manifest.json")
+            if (self.repo / name).is_file()
+        ]
+        _git(self.repo, "add", *paths)
+        _git(self.repo, "commit", "-m", f"checkpoint blocked experiment {number}")
+
+    def _resume(self, run_id: str, agent_id: str) -> dict:
+        path = self.repo / ".experiment" / "blocked.json"
+        if not path.is_file():
+            raise AuditError("resume requested but no blocked checkpoint exists")
+        if _git(self.repo, "status", "--porcelain"):
+            raise AuditError("blocked experiment repository must be clean before resume")
+        try:
+            state = json.loads(path.read_text())
+        except json.JSONDecodeError as failure:
+            raise AuditError("blocked checkpoint is invalid JSON") from failure
+        required = ("reason", "seed_commit", "seed_hash", "resume_parent",
+                    "prior_candidate_sha256")
+        expected_branch = f"experiment/{run_id}/{agent_id}"
+        valid_hash = lambda value: isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+        if (not isinstance(state, dict)
+                or state.get("schema") != "profiling-skill/audited-blocked/v1"
+                or state.get("stage") not in {"prepare", "controller", "measurement", "finalize"}
+                or state.get("experiment") not in {1, 2, 3}
+                or any(not isinstance(state.get(key), str) or not state[key] for key in required)
+                or type(state.get("pre_session")) is not bool
+                or not (
+                    isinstance(state.get("session_id"), str) and state["session_id"]
+                    or (state.get("session_id") is None and state["pre_session"]
+                        and state["stage"] == "prepare" and state["experiment"] == 1)
+                )
+                or (state["pre_session"] and state.get("session_id") is not None)
+                or not isinstance(state.get("commands"), list)
+                or type(state.get("controller_submissions")) is not int
+                or state["controller_submissions"] < 0
+                or type(state.get("measurement_attempts")) is not int
+                or state["measurement_attempts"] < 0
+                or (state["stage"] in {"controller", "measurement", "finalize"}
+                    and (not valid_hash(state.get("candidate_sha256"))
+                         or not valid_hash(state.get("manifest_sha256"))))
+                or (state["stage"] in {"controller", "measurement", "finalize"}
+                    and not isinstance(state.get("receipt"), dict))):
+            raise AuditError("blocked checkpoint schema is invalid")
+        if state.get("branch") != expected_branch or _git(
+            self.repo, "branch", "--show-current"
+        ) != expected_branch:
+            raise AuditError("blocked checkpoint belongs to a different experiment branch")
+        completed = _git(
+            self.repo, "rev-list", "--first-parent", "--reverse",
+            f"{state['seed_commit']}..HEAD^",
+        ).splitlines()
+        all_commits = _git(self.repo, "rev-list", f"{state['seed_commit']}..HEAD^").splitlines()
+        if (len(completed) != state["experiment"] - 1 or len(all_commits) != len(completed)
+                or _git(self.repo, "rev-parse", "HEAD^") != state["resume_parent"]
+                or sha256_bytes(_git_blob(self.repo, state["seed_commit"], ".experiment/seed.json"))
+                != state["seed_hash"]
+                or sha256_bytes(_git_blob(self.repo, "HEAD^", "candidate.py"))
+                != state["prior_candidate_sha256"]
+                or sha256_bytes((self.repo / "PROMPT.md").read_bytes()) != self.prompt_hash
+                or sha256_bytes((self.repo / "TASK.md").read_bytes()) != self.task_hash):
+            raise AuditError("blocked checkpoint history is invalid")
+        try:
+            seed = json.loads(_git_blob(self.repo, state["seed_commit"], ".experiment/seed.json"))
+        except json.JSONDecodeError as failure:
+            raise AuditError("experiment seed provenance is invalid") from failure
+        current_reproducibility = {
+            "agent": _identity(self.invoke), "controller": _identity(self.controller),
+        }
+        if seed.get("reproducibility") != current_reproducibility:
+            raise AuditError("current reproducibility metadata differs from experiment seed")
+        if state["stage"] in {"controller", "measurement", "finalize"} and (
+            sha256_bytes((self.repo / "candidate.py").read_bytes()) != state["candidate_sha256"]
+            or sha256_bytes((self.repo / "candidate.manifest.json").read_bytes())
+            != state["manifest_sha256"]
+        ):
+            raise AuditError("blocked checkpoint candidate is invalid")
+        handle = (state.get("receipt") or {}).get("handle")
+        bound_receipt = state["stage"] != "controller" or isinstance(handle, str) and handle
+        if bound_receipt and state["stage"] in {"controller", "measurement", "finalize"} and (
+            state["receipt"].get("candidate_sha256") != state["candidate_sha256"]
+            or state["receipt"].get("manifest_sha256") != state["manifest_sha256"]
+        ):
+            raise AuditError("blocked checkpoint receipt is invalid")
+        _git(self.repo, "reset", "--mixed", "HEAD^")
+        path.unlink()
+        return state
+
+    def _verify_history(self, seed_commit: str, seed_hash: str,
+                        commits: list[str]) -> None:
+        history = _git(
+            self.repo, "rev-list", "--first-parent", "--reverse", f"{seed_commit}..HEAD",
+        ).splitlines()
+        all_history = _git(self.repo, "rev-list", f"{seed_commit}..HEAD").splitlines()
+        if (history != commits or len(history) != 3 or len(all_history) != 3
+                or sha256_bytes(_git_blob(self.repo, seed_commit, ".experiment/seed.json"))
+                != seed_hash
+                or sha256_bytes((self.repo / ".experiment/seed.json").read_bytes()) != seed_hash
+                or sha256_bytes((self.repo / "PROMPT.md").read_bytes()) != self.prompt_hash
+                or sha256_bytes((self.repo / "TASK.md").read_bytes()) != self.task_hash
+                or _git(self.repo, "status", "--porcelain")):
+            raise AuditError("seed plus three-commit linear history was not preserved")

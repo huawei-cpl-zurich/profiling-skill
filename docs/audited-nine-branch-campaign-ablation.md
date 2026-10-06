@@ -3,7 +3,7 @@
 - **Implementation branch:** `codex/audited-nine-branch-campaign`
 - **Comparison base:** `main`
 - **Status:** Complete
-- **Next action:** Integrate the production BZ controller adapter, then run remote canaries.
+- **Next action:** Re-review the corrected durable-state and report boundaries.
 
 ## Required behavior
 
@@ -42,3 +42,29 @@ single continuous future set, refreshes admission for every assignment, and
 defers only the failed cell. Raw receipts remain intact in report schema v2;
 derived per-case, control, normalization, baseline, speedup, and discarded
 infrastructure views are additive.
+
+## PR 49 durable-state follow-up
+
+Three apparent simplifications were unsafe and have been made explicit:
+
+- A terminal controller handle proves that execution ended, not that its
+  receipt is structurally complete. Malformed terminal evidence is therefore
+  handleless in the ledger so resume reconstructs it instead of observing the
+  same terminal job forever.
+- A persisted `running` attempt with a retained handle is observable. Without
+  a handle its dispatch outcome is unknown, so it is left non-retryable and
+  infrastructure-pending rather than silently completed or duplicated.
+- Reports validate the ledger version, run identity, manifest digest, exact
+  order, and cell set before consuming any result rows.
+
+The manifest, scheduler, and report are separable concepts but are not a safe
+mid-fix PR split. The scheduler's durable ledger is keyed and ordered by the
+hashed manifest, while the report must validate that exact same contract
+before interpreting attempts. The review findings specifically cross both
+boundaries: terminal receipt classification controls scheduler recovery and
+report eligibility, and ledger identity controls both resume and reporting.
+Splitting now would either duplicate those invariants or temporarily expose a
+report/scheduler pair with incompatible ledger semantics. A later module-only
+extraction could improve navigation but would not reduce review scope or
+changed lines. The current change therefore remains one coherent workflow
+despite exceeding the approximate 500-line review target.

@@ -385,6 +385,103 @@ def test_complete_without_four_commits_remains_infrastructure_pending(tmp_path: 
     assert ledger["cells"][document["order"][0]]["status"] == "infrastructure_pending"
 
 
+def test_malformed_terminal_receipt_relaunches_instead_of_observing(tmp_path: Path):
+    document = manifest(tmp_path)
+    target = document["order"][0]
+
+    class RepairingLauncher(RecordingLauncher):
+        def __init__(self):
+            super().__init__()
+            self.malformed = True
+            self.observe_calls = []
+
+        def launch(self, cell, slot):
+            receipt = super().launch(cell, slot)
+            if cell["cell_id"] == target and self.malformed:
+                self.malformed = False
+                receipt["commits"].pop()
+            return receipt
+
+        def observe(self, cell, placement, durable_handle):
+            self.observe_calls.append((cell["cell_id"], durable_handle))
+            raise AssertionError("malformed terminal evidence must be reconstructed")
+
+    launcher = RepairingLauncher()
+    ledger_path = tmp_path / "ledger.json"
+    pool = StaticPool([{"target": "bz-a3-1", "device": 0,
+                        "healthy": True, "idle": True}])
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(document, ledger_path, pool, launcher)
+    failed_attempt = json.loads(ledger_path.read_text())["cells"][target]["attempts"][0]
+    assert "durable_handle" not in failed_attempt
+
+    ledger = audited_campaign.run_campaign(
+        document, ledger_path, pool, launcher, resume=True
+    )
+    assert ledger["status"] == "complete"
+    assert [cell_id for cell_id, _ in launcher.calls].count(target) == 2
+    assert launcher.observe_calls == []
+
+
+def test_malformed_observation_drops_retained_handle_before_relaunch(tmp_path: Path):
+    document = manifest(tmp_path)
+    target = document["order"][0]
+
+    class MalformedObservationLauncher(HandleRecoveryLauncher):
+        def observe(self, cell, placement, durable_handle):
+            receipt = super().observe(cell, placement, durable_handle)
+            receipt["commits"].pop()
+            return receipt
+
+    launcher = MalformedObservationLauncher(target)
+    ledger_path = tmp_path / "ledger.json"
+    pool = StaticPool([{"target": "bz-a3-1", "device": 0,
+                        "healthy": True, "idle": True}])
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(document, ledger_path, pool, launcher)
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(
+            document, ledger_path, pool, launcher, resume=True
+        )
+    latest = json.loads(ledger_path.read_text())["cells"][target]["attempts"][-1]
+    assert "durable_handle" not in latest
+
+    ledger = audited_campaign.run_campaign(
+        document, ledger_path, pool, launcher, resume=True
+    )
+    assert ledger["status"] == "complete"
+    assert [cell_id for cell_id, _ in launcher.calls].count(target) == 2
+
+
+def test_resume_does_not_skip_running_dispatch_without_retained_handle(tmp_path: Path):
+    document = manifest(tmp_path)
+    target = document["order"][0]
+    ledger_path = tmp_path / "ledger.json"
+    ledger = audited_campaign._new_ledger(document)
+    ledger["cells"][target] = {
+        "status": "running",
+        "attempts": [{"target": "bz-a3-1", "device": 0, "status": "running"}],
+    }
+    ledger_path.write_text(json.dumps(ledger))
+    launcher = RecordingLauncher()
+
+    with pytest.raises(audited_campaign.CampaignPaused):
+        audited_campaign.run_campaign(
+            document, ledger_path,
+            StaticPool([{"target": "bz-a3-1", "device": 0,
+                         "healthy": True, "idle": True}]),
+            launcher, resume=True,
+        )
+
+    checkpoint = json.loads(ledger_path.read_text())
+    assert checkpoint["status"] == "infrastructure_pending"
+    assert checkpoint["cells"][target]["status"] == "infrastructure_pending"
+    assert checkpoint["cells"][target]["attempts"][0]["retryable"] is False
+    assert target not in {cell_id for cell_id, _ in launcher.calls}
+    assert sum(state["status"] == "complete"
+               for state in checkpoint["cells"].values()) == 8
+
+
 def test_report_aggregates_all_candidate_error_rounds(tmp_path: Path):
     document = manifest(tmp_path)
 
@@ -416,6 +513,17 @@ def test_report_aggregates_all_candidate_error_rounds(tmp_path: Path):
         {"round": 1, "failure_type": "compile_error", "reason": "bad tl.load"},
         {"round": 3, "failure_type": "correctness_error", "reason": "mismatch"},
     ]
+
+
+def test_report_rejects_ledger_from_another_run_before_consuming_cells(tmp_path: Path):
+    first = manifest(tmp_path / "first")
+    second = manifest(tmp_path / "second", seed="campaign-2")
+    second["run_id"] = "different-run"
+    second["manifest_sha256"] = audited_campaign._document_digest(second)
+    ledger = audited_campaign._new_ledger(first)
+
+    with pytest.raises(audited_campaign.CampaignError, match="ledger run_id"):
+        audited_campaign.build_report(second, ledger)
 
 
 def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: Path):

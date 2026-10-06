@@ -227,6 +227,24 @@ def _new_ledger(manifest: dict) -> dict:
     }
 
 
+def _validate_ledger(manifest: dict, ledger: dict) -> None:
+    if not isinstance(ledger, dict) or ledger.get("schema_version") != 1:
+        raise CampaignError("ledger schema_version must be 1")
+    if ledger.get("run_id") != manifest["run_id"]:
+        raise CampaignError("ledger run_id does not match manifest")
+    if ledger.get("manifest_sha256") != manifest["manifest_sha256"]:
+        raise CampaignError("ledger manifest_sha256 does not match manifest")
+    if ledger.get("order") != manifest["order"]:
+        raise CampaignError("ledger cell order does not match manifest")
+    cells = ledger.get("cells")
+    if not isinstance(cells, dict) or set(cells) != set(manifest["order"]):
+        raise CampaignError("ledger cells do not match manifest")
+    if any(not isinstance(cells[cell_id], dict)
+           or not isinstance(cells[cell_id].get("attempts"), list)
+           for cell_id in manifest["order"]):
+        raise CampaignError("ledger cell state is malformed")
+
+
 def _admitted_slots(pool: ResourcePool) -> list[dict]:
     admitted = []
     seen = set()
@@ -250,35 +268,29 @@ def _validate_receipt(cell: dict, receipt: dict) -> None:
         raise InfrastructureFailure("terminal receipt lacks durable handle")
     count = cell["round_count"]
     if receipt.get("rounds_completed") != count:
-        raise InfrastructureFailure("terminal receipt has incomplete round count",
-                                    receipt["durable_handle"])
+        raise InfrastructureFailure("terminal receipt has incomplete round count")
     rounds = receipt.get("rounds")
     commits = receipt.get("commits")
     if (not isinstance(rounds, list) or len(rounds) != count
             or not isinstance(commits, list) or len(commits) != count
             or any(not isinstance(commit, str) or not commit for commit in commits)
             or len(set(commits)) != count):
-        raise InfrastructureFailure("terminal receipt lacks four commits and receipts",
-                                    receipt["durable_handle"])
+        raise InfrastructureFailure("terminal receipt lacks four commits and receipts")
     expected_rounds = list(range(1, count + 1))
     if (any(not isinstance(item, dict) for item in rounds)
             or [item.get("round") for item in rounds] != expected_rounds
             or any(item.get("status") not in {"ok", "candidate_error"}
                    or not isinstance(item.get("handle"), str) or not item["handle"]
                    for item in rounds)):
-        raise InfrastructureFailure("terminal receipt has malformed round evidence",
-                                    receipt["durable_handle"])
+        raise InfrastructureFailure("terminal receipt has malformed round evidence")
     failures = [item for item in rounds if item["status"] == "candidate_error"]
     if any(not isinstance(item.get(field), str) or not item[field]
            for item in failures for field in ("failure_type", "reason")):
-        raise InfrastructureFailure("candidate_error round lacks failure evidence",
-                                    receipt["durable_handle"])
+        raise InfrastructureFailure("candidate_error round lacks failure evidence")
     if status == "candidate_failed" and not failures:
-        raise InfrastructureFailure("candidate_failed lacks a candidate_error round",
-                                    receipt["durable_handle"])
+        raise InfrastructureFailure("candidate_failed lacks a candidate_error round")
     if status == "complete" and failures:
-        raise InfrastructureFailure("complete receipt contains a candidate_error round",
-                                    receipt["durable_handle"])
+        raise InfrastructureFailure("complete receipt contains a candidate_error round")
 
 
 def run_campaign(
@@ -294,8 +306,7 @@ def run_campaign(
         if not resume:
             raise CampaignError("ledger exists; use resume to continue")
         ledger = json.loads(ledger_path.read_text())
-        if ledger.get("manifest_sha256") != manifest["manifest_sha256"]:
-            raise CampaignError("resume manifest does not match ledger")
+        _validate_ledger(manifest, ledger)
     else:
         if resume:
             raise CampaignError("cannot resume without a ledger")
@@ -318,6 +329,8 @@ def run_campaign(
             attempt.update({"status": "infrastructure_error", "error": str(error)})
             if error.durable_handle:
                 attempt["durable_handle"] = error.durable_handle
+            else:
+                attempt.pop("durable_handle", None)
             state["status"] = "infrastructure_pending"
             deferred.add(cell_id)
         except Exception as error:  # launcher crashes are infrastructure, not kernels
@@ -334,15 +347,28 @@ def run_campaign(
     with ThreadPoolExecutor(max_workers=len(manifest["cells"])) as executor:
         # Retained handles are already-running work. Observe them concurrently,
         # reserve their placements, and never convert observation loss into a
-        # fresh launch. Handleless failures become runnable once on resume.
+        # fresh launch. Known handleless failures are retryable; an interrupted
+        # dispatch without a handle remains pending because relaunch could
+        # duplicate remote work.
         for cell_id in manifest["order"]:
             state = ledger["cells"][cell_id]
-            if state["status"] != "infrastructure_pending":
+            if state["status"] not in {"infrastructure_pending", "running"}:
                 continue
             attempt = state["attempts"][-1]
             handle = attempt.get("durable_handle")
             if not handle:
-                state["status"] = "queued"
+                if state["status"] == "running":
+                    attempt.update({
+                        "status": "infrastructure_error",
+                        "error": "interrupted dispatch has no retained handle",
+                        "retryable": False,
+                    })
+                    state["status"] = "infrastructure_pending"
+                    deferred.add(cell_id)
+                elif attempt.get("retryable", True):
+                    state["status"] = "queued"
+                else:
+                    deferred.add(cell_id)
                 continue
             observe = getattr(launcher, "observe", None)
             if not callable(observe):
@@ -421,6 +447,7 @@ def run_campaign(
 
 def build_report(manifest: dict, ledger: dict) -> dict:
     verify_manifest(manifest)
+    _validate_ledger(manifest, ledger)
     rows = []
     discarded = []
     summary = {"complete": 0, "candidate_failed": 0,

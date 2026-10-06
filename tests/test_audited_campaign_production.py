@@ -119,12 +119,26 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     baseline_root = tmp_path / "timing-baselines"
     baseline_root.mkdir()
     baselines = {}
+    starters = {}
     for task_name in production.DEVELOPMENT_CASES:
         (assets / task_name).mkdir()
         (assets / task_name / "cases.json").write_text(json.dumps({"task": task_name}))
         baseline = baseline_root / f"{task_name}.json"
         baseline.write_text(json.dumps(timing_baseline(task_name)))
         baselines[task_name] = {"path": str(baseline), "sha256": sha(baseline)}
+        starter = tmp_path / "starters" / task_name
+        starter.mkdir(parents=True)
+        candidate = starter / "candidate.py"
+        manifest = starter / "candidate.manifest.json"
+        candidate.write_text(f"TASK = {task_name!r}\nVALUE = 0\n")
+        manifest.write_text(json.dumps({
+            "schema": "profiling-skill/candidate-kernel/v1",
+            "kernel_name": task_name,
+        }) + "\n")
+        starters[task_name] = {
+            "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
+            "manifest": {"path": str(manifest.resolve()), "sha256": sha(manifest)},
+        }
     cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     prompt = tmp_path / "prompt.md"
     task = tmp_path / "task.md"
@@ -145,6 +159,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "runtime_image_digest": "sha256:" + "b" * 64,
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "baselines": {name: binding["sha256"] for name, binding in baselines.items()},
+        "starters": starters,
         "skills": {
             "cannbot": production.digest_skill_bundle(skills, cannbot_names),
             **({"ascend-profiling": skills["ascend-profiling"]["sha256"]}
@@ -161,6 +176,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     provenance["admission_provider_id"] = "campaign-operator"
     provenance["admission_allowlist_sha256"] = "d" * 64
     config = {
+        "schema": production.RUNTIME_SCHEMA,
         "run_id": "production-e2e",
         "run_root": str(tmp_path / "runs"),
         "source_repositories": {
@@ -172,6 +188,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "benchmark_assets": {"path": str(assets),
                              "sha256": production.digest_tree(assets)},
         "baseline_sources": baselines,
+        "starter_sources": starters,
         "admission_provider_id": "campaign-operator",
         "admission_allowlist_sha256": "d" * 64,
         "cpl_remote_closure_sha256": production.cpl_remote_closure_sha256(cpl_remote),
@@ -203,6 +220,148 @@ def production_launcher(config: dict, **kwargs):
     )
 
 
+def test_production_runtime_uses_starter_bound_v2_schema(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    assert production.RUNTIME_SCHEMA == "profiling-skill/audited-campaign-runtime/v2"
+    config["schema"] = "profiling-skill/audited-campaign-runtime/v1"
+    with pytest.raises(production.ProductionError, match="runtime config requires schema"):
+        production_launcher(config)
+
+
+def test_three_task_starters_share_revision_and_materialize_distinct_pairs(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    assert len({binding["revision"] for binding in
+                config["source_repositories"].values()}) == 1
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+
+    observed = {}
+    for task in production.DEVELOPMENT_CASES:
+        task_cell = {**cell, "cell_id": f"{task}-cannbot", "task": task}
+        repo, existing = launcher._prepare_repo(task_cell)
+        assert existing is False
+        observed[task] = (repo / "candidate.py").read_text()
+        assert (repo / "candidate.manifest.json").read_bytes() == Path(
+            config["starter_sources"][task]["manifest"]["path"]
+        ).read_bytes()
+    assert len(set(observed.values())) == 3
+
+
+@pytest.mark.parametrize("mutation", ["missing", "hash-drift"])
+def test_starter_failure_precedes_invoker(tmp_path: Path, mutation: str):
+    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    invocations = []
+    candidate = Path(config["starter_sources"]["gdn"]["candidate"]["path"])
+    if mutation == "missing":
+        candidate.unlink()
+    else:
+        candidate.write_text("drift\n")
+
+    with pytest.raises(production.ProductionError, match="starter"):
+        production_launcher(
+            config, invoker_factory=lambda *args, **kwargs: invocations.append(args),
+            controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        )
+    assert invocations == []
+
+
+def test_seed_contains_pinned_starter_and_resume_does_not_overwrite_work(tmp_path: Path):
+    cell = {"cell_id": "bsa-project-guarded", "task": "bsa",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    runner = audited_lifecycle.AuditedExperimentRunner(
+        repo, Path(config["prompt"]["path"]), Path(config["tasks"]["bsa"]["path"]),
+        lambda *args: "", lambda *args: {}, round_count=4,
+    )
+    _, seed_commit, _ = runner._initialize(config["run_id"], cell["cell_id"])
+    expected = config["starter_sources"]["bsa"]
+    assert subprocess.check_output(
+        ["git", "show", f"{seed_commit}:candidate.py"], cwd=repo
+    ) == Path(expected["candidate"]["path"]).read_bytes()
+    assert subprocess.check_output(
+        ["git", "show", f"{seed_commit}:candidate.manifest.json"], cwd=repo
+    ) == Path(expected["manifest"]["path"]).read_bytes()
+
+    (repo / "candidate.py").write_text("agent work in progress\n")
+    resumed, existing = launcher._prepare_repo(cell)
+    assert existing is True and resumed == repo
+    assert (repo / "candidate.py").read_text() == "agent work in progress\n"
+
+    subprocess.run(["git", "add", "candidate.py"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+         "commit", "--amend", "--no-edit", "-q"], cwd=repo, check=True,
+    )
+    with pytest.raises(production.ProductionError, match="seed commit starter"):
+        launcher._prepare_repo(cell)
+
+
+def test_launcher_recovers_exact_seed_only_branch_without_verifier_shortcut(tmp_path: Path):
+    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    FakeRunner.calls.clear()
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    audited_lifecycle.AuditedExperimentRunner(
+        repo, Path(config["prompt"]["path"]), Path(config["tasks"]["gdn"]["path"]),
+        lambda *args: "", lambda *args: {}, round_count=4,
+    )._initialize(config["run_id"], cell["cell_id"])
+    (repo / "candidate.py").write_text("VALUE = 9\n")
+    (repo / "candidate.manifest.json").write_text(json.dumps({
+        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "prepared",
+    }) + "\n")
+
+    receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+
+    assert receipt["status"] == "complete"
+    assert FakeRunner.calls[-1][-1] is True
+
+
+def test_starter_manifest_contract_is_validated_before_materialization(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    binding = config["starter_sources"]["matmul"]["manifest"]
+    path = Path(binding["path"])
+    path.write_text(json.dumps({
+        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "",
+    }))
+    binding["sha256"] = sha(path)
+    config["provenance"]["starters"]["matmul"]["manifest"]["sha256"] = sha(path)
+
+    with pytest.raises(production.ProductionError, match="manifest contract"):
+        production_launcher(config)
+
+
 class FakeRunner:
     calls = []
 
@@ -220,7 +379,18 @@ class FakeRunner:
             subprocess.run(["git", "checkout", "-qb", branch], cwd=self.repo, check=True)
         experiment = self.repo / ".experiment"
         experiment.mkdir(exist_ok=True)
-        (experiment / "seed.json").write_text("{}")
+        seed = experiment / "seed.json"
+        if not seed.is_file():
+            seed.write_text("{}")
+            subprocess.run(
+                ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                 "add", ".experiment/seed.json", "candidate.py", "candidate.manifest.json"],
+                cwd=self.repo, check=True,
+            )
+            subprocess.run(
+                ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                 "commit", "-qm", "experiment seed"], cwd=self.repo, check=True,
+            )
         for number in range(1, 5):
             directory = self.repo / "experiments" / f"{number:02d}"
             directory.mkdir(parents=True, exist_ok=True)
@@ -228,6 +398,12 @@ class FakeRunner:
                 "status": "ok", "handle": f"bz-a3-1:round-{number}",
                 "median_us": 10.0 - number,
             }))
+            subprocess.run(["git", "add", str(directory.relative_to(self.repo))],
+                           cwd=self.repo, check=True)
+            subprocess.run(
+                ["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                 "commit", "-qm", f"experiment {number}"], cwd=self.repo, check=True,
+            )
         return SimpleNamespace(status="complete", branch=branch,
                                session_id="thread", seed_commit="seed",
                                commits=("1", "2", "3", "4"))
@@ -495,6 +671,13 @@ def test_expired_admission_pauses_without_launch_or_evidence(tmp_path: Path):
         "runtime_image_digest": "sha256:" + "c" * 64,
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "baselines": {name: "d" * 64 for name in production.DEVELOPMENT_CASES},
+        "starters": {
+            name: {
+                "candidate": {"path": f"/frozen/{name}/candidate.py", "sha256": "2" * 64},
+                "manifest": {"path": f"/frozen/{name}/candidate.manifest.json",
+                             "sha256": "3" * 64},
+            } for name in production.DEVELOPMENT_CASES
+        },
         "skills": {"cannbot": "e" * 64, "ascend-profiling": "f" * 64,
                    "triton-guarded-kernel": "1" * 64},
     }
@@ -647,7 +830,7 @@ def test_infrastructure_exception_identity_is_injected_not_looked_up_late(
         launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
 
 
-def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
+def test_existing_nonseed_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
     cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
             "round_count": 4, "request_budget": 24,
             "skills": list(production.TREATMENT_SKILLS["cannbot"])}
@@ -659,8 +842,13 @@ def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: 
         controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
     )
     repo, _ = launcher._prepare_repo(cell)
-    (repo / ".experiment").mkdir()
-    (repo / ".experiment" / "seed.json").write_text("{}")
+    audited_lifecycle.AuditedExperimentRunner(
+        repo, Path(config["prompt"]["path"]), Path(config["tasks"]["matmul"]["path"]),
+        lambda *args: "", lambda *args: {}, round_count=4,
+    )._initialize(config["run_id"], cell["cell_id"])
+    (repo / "unexpected.txt").write_text("committed but not an experiment\n")
+    subprocess.run(["git", "add", "unexpected.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "unexpected"], cwd=repo, check=True)
     with pytest.raises(runtime_campaign.InfrastructureFailure, match="blocked checkpoint"):
         launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
 
@@ -1027,18 +1215,33 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     baseline_root = tmp_path / "timing-baselines"
     baseline_root.mkdir()
     baselines = {}
+    starters = {}
     for task in tasks:
         (assets / task).mkdir()
         (assets / task / "cases.json").write_text(json.dumps({"task": task}))
         path = baseline_root / f"{task}.json"
         path.write_text(json.dumps(timing_baseline(task)))
         baselines[task] = {"path": str(path), "sha256": sha(path)}
+        starter = tmp_path / "starters" / task
+        starter.mkdir(parents=True)
+        candidate = starter / "candidate.py"
+        candidate.write_text(f"TASK = {task!r}\nVALUE = 0\n")
+        candidate_manifest = starter / "candidate.manifest.json"
+        candidate_manifest.write_text(json.dumps({
+            "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": task,
+        }) + "\n")
+        starters[task] = {
+            "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
+            "manifest": {"path": str(candidate_manifest.resolve()),
+                         "sha256": sha(candidate_manifest)},
+        }
     provenance = {
         "source_revision": revision,
         "controller_sha256": production.digest_tree(scripts),
         "runtime_image_digest": "sha256:" + "b" * 64,
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "baselines": {task: binding["sha256"] for task, binding in baselines.items()},
+        "starters": starters,
         "skills": {
             "cannbot": production.digest_skill_bundle(skills, production.CANNBOT_SKILLS),
             "ascend-profiling": skills["ascend-profiling"]["sha256"],
@@ -1068,6 +1271,7 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "benchmark_assets": {"path": str(assets),
                              "sha256": production.digest_tree(assets)},
         "baseline_sources": baselines,
+        "starter_sources": starters,
         "admission_provider_id": "campaign-operator",
         "admission_allowlist_sha256": "d" * 64,
         "cpl_remote_closure_sha256": production.cpl_remote_closure_sha256(cpl_remote),

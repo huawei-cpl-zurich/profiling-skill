@@ -24,6 +24,8 @@ from audited_contract import (
 )
 
 MAX_PARTIAL_OUTPUT = 65536
+MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
+STARTER_SELECTOR = "REPLACE_WITH_EXACT_EXPORTED_KERNEL"
 
 
 def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
@@ -124,6 +126,11 @@ class AuditedExperimentRunner:
             elif stage == "prepare":
                 session, commands = self._preparation_turn(
                     number, session,
+                    (
+                        "Recover seed-only experiment 1 using the candidate and manifest "
+                        "already present. Preserve that work, inspect it, run a local check, "
+                        "and stop without starting another experiment."
+                    ) if continuing.get("seed_only_recovery") else
                     None if continuing.get("pre_session") else (
                         f"Resume blocked experiment {number}: repair the prepared candidate. "
                         "Do not start another experiment; stop after a local check."
@@ -319,8 +326,15 @@ class AuditedExperimentRunner:
         )
 
     def _initialize(self, run_id: str, agent_id: str) -> tuple[str, str, str]:
-        if _git(self.repo, "status", "--porcelain"):
-            raise AuditError("experiment repository must start clean")
+        changed = set(_git(self.repo, "diff", "--name-only", "HEAD").splitlines())
+        changed.update(_git(
+            self.repo, "ls-files", "--others", "--exclude-standard",
+        ).splitlines())
+        allowed = {"candidate.py", "candidate.manifest.json"}
+        if changed - allowed or any(not (self.repo / path).is_file() for path in allowed):
+            raise AuditError(
+                "experiment repository may contain only pinned starter materialization"
+            )
         branch = f"experiment/{run_id}/{agent_id}"
         _git(self.repo, "switch", "-c", branch)
         directory = self.repo / ".experiment"
@@ -337,7 +351,8 @@ class AuditedExperimentRunner:
         if self.round_count != 3:
             seed_document["round_count"] = self.round_count
         seed.write_text(json.dumps(seed_document, indent=2, sort_keys=True) + "\n")
-        _git(self.repo, "add", ".experiment/seed.json", "PROMPT.md", "TASK.md")
+        _git(self.repo, "add", ".experiment/seed.json", "PROMPT.md", "TASK.md",
+             "candidate.py", "candidate.manifest.json")
         _git(self.repo, "commit", "-m", f"experiment seed: {run_id}/{agent_id}")
         return branch, _git(self.repo, "rev-parse", "HEAD"), sha256_bytes(seed.read_bytes())
 
@@ -413,6 +428,14 @@ class AuditedExperimentRunner:
             raise AuditError(f"candidate manifest is invalid JSON: {failure}") from failure
         if not isinstance(document, dict):
             raise AuditError("candidate manifest must be a JSON object")
+        kernel_name = document.get("kernel_name")
+        if document.get("schema") != MANIFEST_SCHEMA:
+            raise AuditError(f"candidate manifest requires schema {MANIFEST_SCHEMA}")
+        if (not isinstance(kernel_name, str) or not kernel_name.strip()
+                or kernel_name != kernel_name.strip()):
+            raise AuditError("candidate manifest requires a nonempty exact kernel selector")
+        if kernel_name == STARTER_SELECTOR:
+            raise AuditError("candidate manifest has the unresolved starter selector")
         candidate_hash = sha256_bytes(candidate.read_bytes())
         if candidate_hash == prior_hash:
             raise AuditError("prepared candidate is unchanged")
@@ -608,7 +631,7 @@ class AuditedExperimentRunner:
     def _resume(self, run_id: str, agent_id: str) -> dict:
         path = self.repo / ".experiment" / "blocked.json"
         if not path.is_file():
-            raise AuditError("resume requested but no blocked checkpoint exists")
+            return self._resume_seed_only(run_id, agent_id)
         if _git(self.repo, "status", "--porcelain"):
             raise AuditError("blocked experiment repository must be clean before resume")
         try:
@@ -704,6 +727,50 @@ class AuditedExperimentRunner:
         _git(self.repo, "reset", "--mixed", "HEAD^")
         path.unlink()
         return state
+
+    def _resume_seed_only(self, run_id: str, agent_id: str) -> dict:
+        expected_branch = f"experiment/{run_id}/{agent_id}"
+        seed_commit = _git(
+            self.repo, "log", "-1", "--format=%H", "--", ".experiment/seed.json",
+        )
+        changed = set(_git(self.repo, "diff", "--name-only", "HEAD").splitlines())
+        changed.update(_git(
+            self.repo, "ls-files", "--others", "--exclude-standard",
+        ).splitlines())
+        allowed = {"candidate.py", "candidate.manifest.json"}
+        if (not seed_commit or _git(self.repo, "rev-parse", "HEAD") != seed_commit
+                or _git(self.repo, "branch", "--show-current") != expected_branch
+                or changed - allowed
+                or any(not (self.repo / name).is_file() for name in allowed)):
+            raise AuditError("seed-only resume history or worktree is invalid")
+        try:
+            seed_bytes = _git_blob(self.repo, seed_commit, ".experiment/seed.json")
+            seed = json.loads(seed_bytes)
+        except json.JSONDecodeError as failure:
+            raise AuditError("seed-only resume provenance is invalid") from failure
+        seed_rounds = 3 if seed.get("schema") == "profiling-skill/audited-seed/v1" \
+            else seed.get("round_count")
+        current_reproducibility = {
+            "agent": _identity(self.invoke), "controller": _identity(self.controller),
+        }
+        if (seed.get("run_id") != run_id or seed.get("agent_id") != agent_id
+                or seed_rounds != self.round_count
+                or seed.get("prompt_sha256") != self.prompt_hash
+                or seed.get("task_sha256") != self.task_hash
+                or seed.get("reproducibility") != current_reproducibility
+                or sha256_bytes((self.repo / "PROMPT.md").read_bytes()) != self.prompt_hash
+                or sha256_bytes((self.repo / "TASK.md").read_bytes()) != self.task_hash):
+            raise AuditError("seed-only resume provenance differs from current inputs")
+        return {
+            "branch": expected_branch, "seed_commit": seed_commit,
+            "seed_hash": sha256_bytes(seed_bytes), "session_id": None,
+            "experiment": 1, "stage": "prepare", "pre_session": True,
+            "seed_only_recovery": True, "commands": [],
+            "controller_submissions": 0, "measurement_attempts": 0,
+            "prior_candidate_sha256": sha256_bytes(
+                _git_blob(self.repo, seed_commit, "candidate.py")
+            ),
+        }
 
     def _verify_history(self, seed_commit: str, seed_hash: str,
                         commits: list[str]) -> None:

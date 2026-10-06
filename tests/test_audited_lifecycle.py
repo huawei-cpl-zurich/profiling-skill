@@ -23,7 +23,9 @@ def init_repo(path: Path) -> None:
     subprocess.run(["git", "config", "user.name", "Host Runner"], cwd=path, check=True)
     subprocess.run(["git", "config", "user.email", "host@example.test"], cwd=path, check=True)
     (path / "candidate.py").write_text("VALUE = 0\n")
-    (path / "candidate.manifest.json").write_text('{"candidate":"candidate.py"}\n')
+    (path / "candidate.manifest.json").write_text(
+        '{"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"kernel"}\n'
+    )
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-qm", "fixture base"], cwd=path, check=True)
 
@@ -173,6 +175,100 @@ def test_host_declared_four_rounds_are_seeded_and_completed(tmp_path: Path):
     assert (repo / "experiments/04/evidence.json").is_file()
 
 
+def test_seed_accepts_and_commits_only_materialized_starter_changes(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    (repo / "candidate.py").write_text("TASK = 'gdn'\nVALUE = 0\n")
+    (repo / "candidate.manifest.json").write_text(
+        '{"candidate":"candidate.py","kernel_name":"gdn"}\n'
+    )
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=4,
+    )
+
+    _, seed_commit, _ = runner._initialize("starters", "gdn-agent")
+
+    assert subprocess.check_output(
+        ["git", "show", f"{seed_commit}:candidate.py"], cwd=repo, text=True
+    ) == "TASK = 'gdn'\nVALUE = 0\n"
+    assert not subprocess.check_output(
+        ["git", "status", "--porcelain"], cwd=repo, text=True
+    )
+
+
+def test_seed_rejects_materialized_starter_with_unrelated_changes(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    (repo / "candidate.py").write_text("VALUE = 2\n")
+    (repo / "unexpected.txt").write_text("not starter materialization\n")
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=4,
+    )
+
+    with pytest.raises(contract.AuditError, match="starter materialization"):
+        runner._initialize("starters", "agent")
+
+
+def test_seed_only_resume_retains_prepared_work_and_starts_new_session(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    controller_calls = []
+    invocations = []
+
+    def invoke(number, session, instruction):
+        invocations.append((session, instruction, (repo / "candidate.py").read_text()))
+        if instruction and instruction.startswith("Recover seed-only"):
+            return events("thread-recovered", {"prepared": True})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        return events("thread-recovered", report(number, candidate, manifest), command=False)
+
+    def controller(number, candidate, manifest):
+        controller_calls.append((number, candidate, manifest))
+        return receipt(candidate, manifest, number)
+
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    )
+    runner._initialize("seed-crash", "agent")
+    (repo / "candidate.py").write_text("VALUE = 7\n")
+    (repo / "candidate.manifest.json").write_text(
+        '{"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"recovered"}\n'
+    )
+
+    result = runner.run("seed-crash", "agent", resume=True)
+
+    assert result.status == "complete" and len(result.commits) == 1
+    assert invocations[0][0] is None
+    assert invocations[0][1].startswith("Recover seed-only")
+    assert invocations[0][2] == "VALUE = 7\n"
+    assert len(controller_calls) == 1
+
+
+@pytest.mark.parametrize("mutation", ["extra-commit", "unrelated-dirt"])
+def test_seed_only_resume_rejects_nonseed_history_or_unrelated_dirt(
+        tmp_path: Path, mutation: str):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=1,
+    )
+    runner._initialize("seed-crash", "agent")
+    if mutation == "extra-commit":
+        (repo / "extra.txt").write_text("committed\n")
+        subprocess.run(["git", "add", "extra.txt"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "unexpected"], cwd=repo, check=True)
+    else:
+        (repo / "extra.txt").write_text("dirty\n")
+
+    with pytest.raises(contract.AuditError, match="seed-only"):
+        runner.run("seed-crash", "agent", resume=True)
+
+
 def test_resume_rejects_changed_host_round_count(tmp_path: Path):
     repo = tmp_path / "repo"
     init_repo(repo)
@@ -250,13 +346,19 @@ def test_stale_manifest_is_repaired_before_controller_submission(tmp_path: Path)
             (repo / "candidate.py").write_text(f"VALUE = {number}\n")
             if number == 1:
                 (repo / "candidate.manifest.json").write_text(
-                    json.dumps({"candidate_sha256": "0" * 64}) + "\n"
+                    json.dumps({
+                        "schema": "profiling-skill/candidate-kernel/v1",
+                        "kernel_name": "kernel", "candidate_sha256": "0" * 64,
+                    }) + "\n"
                 )
             return events("thread-repair", {"prepared": True})
         if instruction.startswith("Repair the prepared"):
             candidate = sha((repo / "candidate.py").read_bytes())
             (repo / "candidate.manifest.json").write_text(
-                json.dumps({"candidate_sha256": candidate}) + "\n"
+                json.dumps({
+                    "schema": "profiling-skill/candidate-kernel/v1",
+                    "kernel_name": "kernel", "candidate_sha256": candidate,
+                }) + "\n"
             )
             return events("thread-repair", {"repaired": True})
         candidate = sha((repo / "candidate.py").read_bytes())
@@ -272,6 +374,46 @@ def test_stale_manifest_is_repaired_before_controller_submission(tmp_path: Path)
                for _, _, instruction in calls)
     assert all(session == "thread-repair" for _, session, _ in calls[1:])
     assert len((repo / "experiments/01/commands.jsonl").read_text().splitlines()) == 2
+
+
+def test_unresolved_selector_is_repaired_before_controller_submission(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    calls = []
+    controller_calls = []
+
+    def invoke(number, session, instruction):
+        calls.append((number, session, instruction))
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 2\n")
+            (repo / "candidate.manifest.json").write_text(json.dumps({
+                "schema": "profiling-skill/candidate-kernel/v1",
+                "kernel_name": "REPLACE_WITH_EXACT_EXPORTED_KERNEL",
+            }) + "\n")
+            return events("thread-selector", {"prepared": True})
+        if instruction.startswith("Repair the prepared"):
+            (repo / "candidate.manifest.json").write_text(json.dumps({
+                "schema": "profiling-skill/candidate-kernel/v1",
+                "kernel_name": "actual_exported_kernel",
+            }) + "\n")
+            return events("thread-selector", {"repaired": True})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        return events("thread-selector", report(number, candidate, manifest), command=False)
+
+    def controller(number, candidate, manifest):
+        controller_calls.append((number, json.loads(
+            (repo / "candidate.manifest.json").read_text())["kernel_name"]))
+        return receipt(candidate, manifest, number)
+
+    lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    ).run("selector", "agent")
+
+    assert any(instruction and "unresolved starter selector" in instruction
+               for _, _, instruction in calls)
+    assert controller_calls == [(1, "actual_exported_kernel")]
 
 
 def test_missing_preparation_commands_repair_in_reported_session(tmp_path: Path):

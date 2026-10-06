@@ -32,7 +32,8 @@ The host, not the agent, owns the lifecycle:
 1. Seed: require a clean repository, create the experiment branch, copy the
    immutable prompt and task, record runtime/controller provenance, and commit.
 2. Prepare: ask the persistent agent to make one material candidate change and
-   run local checks. Repair a missing, unchanged, or stale candidate manifest
+   run local checks. Repair a missing, unchanged, stale, schema-invalid, blank,
+   or unresolved-sentinel candidate manifest
    in that same session before any controller submission.
 3. Controller: freeze candidate and manifest hashes and submit those exact
    hashes. The agent does not see or select hosts or physical devices.

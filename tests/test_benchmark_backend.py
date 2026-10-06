@@ -102,6 +102,9 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["device"] == 3
     assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
     assert result["job"]["cases"] == [7]
+    assert result["job"]["repeats"] == 3
+    assert result["samples_us"] == [12.5, 12.5, 12.5]
+    assert result["median_us"] == 12.5
     assert result["job"]["calibration_phase"] == "before"
     assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")

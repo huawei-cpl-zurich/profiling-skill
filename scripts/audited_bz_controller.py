@@ -42,6 +42,11 @@ def _sha(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _json_sha(document: object) -> str:
+    return hashlib.sha256(json.dumps(
+        document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def _bounded(value: object) -> str:
     text = str(value or "").strip()
     return text if len(text) <= MAX_DIAGNOSTICS else text[:MAX_DIAGNOSTICS] + "...[truncated]"
@@ -108,6 +113,7 @@ class AuditedBzController:
         self, *, repo: Path, state_dir: Path, benchmark: str,
         backend: Callable[[dict], dict], devices: list[dict],
         development_cases: list[int], all_cases: list[int], round_count: int,
+        baseline: dict,
         request_budget: int = 24, profile_repeats: int = 3,
         variability_threshold: float = 0.25, control_drift_threshold: float = 0.2,
         infrastructure_retry_budget: int = 3,
@@ -115,6 +121,7 @@ class AuditedBzController:
         self.repo, self.state_dir, self.benchmark = repo.resolve(), state_dir.resolve(), benchmark
         self.backend, self.devices = backend, devices
         self.development_cases, self.all_cases = development_cases, all_cases
+        self.baseline = baseline
         self.round_count, self.request_budget = round_count, request_budget
         self.profile_repeats = profile_repeats
         self.variability_threshold = variability_threshold
@@ -150,6 +157,29 @@ class AuditedBzController:
                     or len(set(cases)) != len(cases)
                     or any(type(case) is not int or case < 0 for case in cases)):
                 raise ControllerError(f"{name} must contain unique case indices")
+        self._validate_baseline()
+
+    def _validate_baseline(self) -> None:
+        value = self.baseline
+        required = {"schema", "benchmark", "case_medians_us",
+                    "control_median_us", "sha256"}
+        if (not isinstance(value, dict) or set(value) != required
+                or value.get("schema") != "profiling-skill/baseline-timing/v1"
+                or value.get("benchmark") != self.benchmark):
+            raise ControllerError("baseline timing document is invalid")
+        expected_hash = _json_sha({key: item for key, item in value.items()
+                                   if key != "sha256"})
+        if value.get("sha256") != expected_hash:
+            raise ControllerError("baseline sha256 does not bind its timing values")
+        rows = value.get("case_medians_us")
+        if (not isinstance(rows, list)
+                or [row.get("case") if isinstance(row, dict) else None for row in rows]
+                != self.development_cases
+                or any(set(row) != {"case", "median_us"}
+                       or not _positive(row["median_us"]) for row in rows)):
+            raise ControllerError("baseline cases must match development cases exactly")
+        if not _positive(value.get("control_median_us")):
+            raise ControllerError("baseline control median must be positive")
 
     def run(self, experiment: int, candidate_hash: str, manifest_hash: str,
             *, observe_handle: str | None = None,
@@ -191,6 +221,8 @@ class AuditedBzController:
                     return self._infrastructure("controller state is corrupt")
             else:
                 state = self._new_state(experiment, candidate_hash, manifest_hash)
+            if state.get("baseline_sha256") != self.baseline["sha256"]:
+                return self._infrastructure("controller baseline changed during the experiment")
             state["operations_consumed"] = budget["operations_consumed"]
             terminal = state.get("terminal")
             if terminal:
@@ -241,6 +273,7 @@ class AuditedBzController:
             "schema": "profiling-skill/audited-bz-controller-state/v1",
             "experiment": experiment, "candidate_sha256": candidate_hash,
             "manifest_sha256": manifest_hash, "selected": selected,
+            "baseline_sha256": self.baseline["sha256"],
             "stage": "admission", "operations_consumed": 0,
             "infrastructure_attempts": 0, "operations": [], "pending": None,
             "admission_controls": [], "quarantined_devices": [],
@@ -295,10 +328,13 @@ class AuditedBzController:
                 result = self._request(state, state_path, request, budget, budget_path)
                 if result.get("status") == "infrastructure_error":
                     return result
-                if result.get("status") != "ok" or not _positive(result.get("latency_us")):
+                if result.get("status") != "ok":
                     return self._infrastructure("known-good admission control did not pass",
                                                 handle=result.get("handle"))
-                state["before_latency_us"] = float(result["latency_us"])
+                try:
+                    state["calibration_before"] = self._calibration(result)
+                except ControllerError as failure:
+                    return self._infrastructure(str(failure), handle=result.get("handle"))
                 state["admission_controls"].append({
                     "device": selected["id"], "status": "pass", "healthy": True,
                     "idle": True, "warmed": True, "handle": result.get("handle"),
@@ -352,10 +388,15 @@ class AuditedBzController:
                 result = self._request(state, state_path, request, budget, budget_path)
                 if result.get("status") == "infrastructure_error":
                     return result
-                if result.get("status") != "ok" or not _positive(result.get("latency_us")):
+                if result.get("status") != "ok":
                     return self._infrastructure("known-good post control did not pass",
                                                 handle=result.get("handle"))
-                before, after = state["before_latency_us"], float(result["latency_us"])
+                try:
+                    state["calibration_after"] = self._calibration(result)
+                except ControllerError as failure:
+                    return self._infrastructure(str(failure), handle=result.get("handle"))
+                before = state["calibration_before"]["median_us"]
+                after = state["calibration_after"]["median_us"]
                 drift = abs(after - before) / before
                 state["post_control"] = "drift" if drift > self.control_drift_threshold else "stable"
                 state["post_control_drift_ratio"] = drift
@@ -387,6 +428,17 @@ class AuditedBzController:
         median = statistics.median(aggregate)
         return {"case_results": normalized, "samples_us": aggregate, "median_us": median,
                 "variability_ratio": (max(aggregate) - min(aggregate)) / median}
+
+    def _calibration(self, result: dict) -> dict:
+        samples = result.get("samples_us")
+        median = result.get("median_us")
+        if (not isinstance(samples, list) or len(samples) != self.profile_repeats
+                or not all(_positive(value) for value in samples)
+                or not _positive(median)
+                or not math.isclose(statistics.median(samples), median, rel_tol=1e-12)):
+            raise ControllerError("known-good control lacks fixed-sample timing")
+        return {"samples_us": [float(value) for value in samples],
+                "median_us": float(median), "handle": result.get("handle")}
 
     @staticmethod
     def _compact_artifacts(result: dict) -> list[str]:
@@ -451,12 +503,30 @@ class AuditedBzController:
                 "median_us": confirmation["median_us"],
                 "variability_ratio": confirmation["variability_ratio"],
             }
+        baseline_median = math.exp(sum(
+            math.log(row["median_us"]) for row in self.baseline["case_medians_us"]
+        ) / len(self.baseline["case_medians_us"]))
+        before, after = state["calibration_before"], state["calibration_after"]
+        local_reference = math.sqrt(before["median_us"] * after["median_us"])
+        factor = self.baseline["control_median_us"] / local_reference
+        normalized_samples = [value * factor for value in profile["samples_us"]]
+        normalized_median = statistics.median(normalized_samples)
         return {
             "status": status, "experiment": state["experiment"],
             "candidate_sha256": state["candidate_sha256"],
             "manifest_sha256": state["manifest_sha256"],
             "handle": profile["handle"], "device": state["selected"]["id"],
             "samples_us": profile["samples_us"], "median_us": profile["median_us"],
+            "baseline_median_us": baseline_median, "baseline": self.baseline,
+            "calibration": {
+                "before": before, "after": after,
+                "local_reference_median_us": local_reference,
+                "baseline_reference_median_us": self.baseline["control_median_us"],
+                "normalization_factor": factor,
+            },
+            "normalized_samples_us": normalized_samples,
+            "normalized_median_us": normalized_median,
+            "speedup_vs_baseline": baseline_median / normalized_median,
             "case_results": profile["case_results"],
             "compact_artifacts": profile["compact_artifacts"], "policy": policy,
         }
@@ -503,6 +573,7 @@ def main() -> int:
             repo=repo, state_dir=args.state_dir, benchmark=config["benchmark"],
             backend=backend, devices=config["devices"],
             development_cases=config["development_cases"], all_cases=config["all_cases"],
+            baseline=config["baseline"],
             round_count=config["round_count"], request_budget=config.get("request_budget", 24),
             profile_repeats=config.get("profile_repeats", 3),
             variability_threshold=config.get("variability_threshold", 0.25),

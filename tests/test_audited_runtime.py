@@ -315,6 +315,34 @@ def test_controller_provenance_pins_interpreter_script_and_config(tmp_path: Path
     assert first["argv"] == command
 
 
+def test_controller_provenance_identity_binds_sanctioned_state_directory(tmp_path: Path):
+    script = tmp_path / "controller.py"
+    script.write_text("print('ok')\n")
+    state = tmp_path / "mutable-controller-state"
+    state.mkdir()
+    command = [sys.executable, str(script), "--state-dir", str(state)]
+
+    metadata = runtime.CommandController(command, tmp_path).reproducibility_metadata()
+
+    assert [item["argument_index"] for item in metadata["file_arguments"]] == [1]
+    assert metadata["mutable_directories"] == [{
+        "argument_index": 3, "option": "--state-dir", "path": str(state),
+        "device": state.stat().st_dev, "inode": state.stat().st_ino,
+        "uid": state.stat().st_uid, "mode": state.stat().st_mode & 0o7777,
+    }]
+
+
+def test_controller_provenance_rejects_missing_sanctioned_state_directory(tmp_path: Path):
+    script = tmp_path / "controller.py"
+    script.write_text("print('ok')\n")
+    adapter = runtime.CommandController(
+        [sys.executable, str(script), "--state-dir", str(tmp_path / "missing")], tmp_path,
+    )
+
+    with pytest.raises(contract.AuditError, match="mutable controller directory"):
+        adapter.reproducibility_metadata()
+
+
 def test_controller_provenance_rejects_unpinned_interpreter_module(tmp_path: Path):
     adapter = runtime.CommandController([sys.executable, "-m", "controller"], tmp_path)
 

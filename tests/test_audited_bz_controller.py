@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -53,6 +55,7 @@ class FakeBackend:
         handle = f"bz-a3-1:job-{self.serial}"
         if request["action"] == "calibrate":
             return {"status": "ok", "handle": handle, "latency_us": 10.0,
+                    "samples_us": [9.0, 10.0, 11.0], "median_us": 10.0,
                     "artifacts": {"remote_profile_evidence": "/remote/calibration.json"}}
         if request["action"] == "check":
             return {"status": "ok", "handle": handle, "passed": True}
@@ -65,8 +68,23 @@ class FakeBackend:
                 "artifacts": {"remote_profile_evidence": "/remote/evidence.json"}}
 
 
+def baseline(values=(30.0, 33.0, 36.0), control=20.0):
+    document = {
+        "schema": "profiling-skill/baseline-timing/v1", "benchmark": "matmul",
+        "case_medians_us": [
+            {"case": case, "median_us": value}
+            for case, value in zip([7, 8, 9], values)
+        ],
+        "control_median_us": control,
+    }
+    document["sha256"] = hashlib.sha256(json.dumps(
+        document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return document
+
+
 def make_controller(repo: Path, backend, **options):
-    settings = {"variability_threshold": 2.0, "request_budget": 24, **options}
+    settings = {"variability_threshold": 2.0, "request_budget": 24,
+                "baseline": baseline(), **options}
     return controller.AuditedBzController(
         repo=repo,
         state_dir=repo.parent / "state",
@@ -100,6 +118,15 @@ def test_success_runs_controls_full_final_check_and_three_profile_repetitions(tm
     assert receipt["samples_us"] == expected
     assert receipt["policy"]["operations_consumed"] == 4
     assert receipt["compact_artifacts"] == ["/remote/evidence.json"]
+    expected_baseline = math.exp(sum(math.log(value) for value in [30.0, 33.0, 36.0]) / 3)
+    assert receipt["baseline_median_us"] == expected_baseline
+    assert receipt["baseline"]["sha256"] == baseline()["sha256"]
+    assert receipt["calibration"]["before"]["median_us"] == 10.0
+    assert receipt["calibration"]["after"]["median_us"] == 10.0
+    assert receipt["normalized_median_us"] == receipt["median_us"] * 2
+    assert receipt["speedup_vs_baseline"] == (
+        receipt["baseline_median_us"] / receipt["normalized_median_us"]
+    )
 
 
 def test_compile_error_is_counted_without_profile_or_post_control(tmp_path: Path):
@@ -117,6 +144,38 @@ def test_compile_error_is_counted_without_profile_or_post_control(tmp_path: Path
     assert receipt["policy"]["post_control"] == "not_run"
     assert receipt["policy"]["operations_consumed"] == 2
     assert [request["action"] for request in backend.requests] == ["calibrate", "check"]
+    assert not ({"samples_us", "median_us", "baseline_median_us", "baseline",
+                 "calibration", "normalized_median_us", "speedup_vs_baseline"} & receipt.keys())
+
+
+def test_rejects_baseline_hash_or_case_value_mismatch(tmp_path: Path):
+    repo, _candidate_hash, _manifest_hash = repository(tmp_path)
+    wrong_hash = baseline()
+    wrong_hash["sha256"] = "0" * 64
+    with pytest.raises(controller.ControllerError, match="baseline sha256"):
+        make_controller(repo, FakeBackend(), baseline=wrong_hash)
+    wrong_cases = baseline()
+    wrong_cases["case_medians_us"][0]["case"] = 6
+    wrong_cases["sha256"] = hashlib.sha256(json.dumps(
+        {key: value for key, value in wrong_cases.items() if key != "sha256"},
+        sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
+    with pytest.raises(controller.ControllerError, match="baseline cases"):
+        make_controller(repo, FakeBackend(), baseline=wrong_cases)
+
+
+def test_receipt_validation_binds_baseline_and_normalized_values(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    receipt = make_controller(repo, FakeBackend()).run(
+        1, candidate_hash, manifest_hash)
+    tampered_hash = json.loads(json.dumps(receipt))
+    tampered_hash["baseline"]["sha256"] = "0" * 64
+    with pytest.raises(contract.AuditError, match="baseline timing hash"):
+        contract.validate_controller_receipt(tampered_hash, candidate_hash, manifest_hash)
+    tampered_value = json.loads(json.dumps(receipt))
+    tampered_value["normalized_median_us"] *= 2
+    with pytest.raises(contract.AuditError, match="normalized timing"):
+        contract.validate_controller_receipt(tampered_value, candidate_hash, manifest_hash)
 
 
 def test_infrastructure_handle_is_checkpointed_and_observed_without_budget_charge(tmp_path: Path):
@@ -167,7 +226,8 @@ def test_measurement_pending_can_remeasure_without_rechecking_candidate(tmp_path
             {"case": case, "samples_us": [10.0, 10.0, 10.0], "median_us": 10.0}
             for case in [7, 8, 9]
         ]},
-        {"status": "ok", "handle": "bz-a3-1:post-stable", "latency_us": 10.0},
+        {"status": "ok", "handle": "bz-a3-1:post-stable", "latency_us": 10.0,
+         "samples_us": [9.0, 10.0, 11.0], "median_us": 10.0},
     ])
 
     receipt = adapter.run(
@@ -203,7 +263,7 @@ def test_cli_matches_command_controller_arguments(tmp_path: Path):
 request=json.load(sys.stdin)
 action=request['action']
 handle='bz-a3-1:'+action
-if action == 'calibrate': result={'status':'ok','handle':handle,'latency_us':10.0}
+if action == 'calibrate': result={'status':'ok','handle':handle,'latency_us':10.0,'samples_us':[9.0,10.0,11.0],'median_us':10.0}
 elif action == 'check': result={'status':'ok','handle':handle,'passed':True}
 else:
  rows=[{'case':c,'samples_us':[10.0,10.0,10.0],'median_us':10.0} for c in request['cases']]
@@ -217,6 +277,7 @@ print(json.dumps(result))
         "benchmark": "matmul", "round_count": 4, "request_budget": 24,
         "profile_repeats": 3, "variability_threshold": 0.25,
         "control_drift_threshold": 0.2,
+        "baseline": baseline(),
         "devices": [{"id": "bz-a3-1/device-0", "device": 0}],
         "development_cases": [7, 8, 9], "all_cases": list(range(10)),
         "backend_command": [sys.executable, str(backend)],

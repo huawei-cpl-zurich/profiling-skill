@@ -274,7 +274,7 @@ def main() -> int:
             elif request["action"] == "calibrate":
                 calibration_request = {
                     "action": "profile", "device": request["device"],
-                    "cases": [7], "repeats": 1, "round": request["wave"],
+                    "cases": [7], "repeats": 3, "round": request["wave"],
                 }
                 calibration = root / "benchmarks/matmul/calibration.py"
                 job = make_job(calibration_request, "matmul", calibration, root,
@@ -293,7 +293,9 @@ def main() -> int:
                     selector="streaming_matmul_add_kernel_mix_aic",
                 )
                 if result.get("status") == "ok":
-                    result["latency_us"] = result["cases"][0]["samples_us"][0]
+                    result["samples_us"] = result["cases"][0]["samples_us"]
+                    result["median_us"] = result["cases"][0]["median_us"]
+                    result["latency_us"] = result["median_us"]
             elif not args.candidate.is_file():
                 result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:

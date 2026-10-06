@@ -134,6 +134,83 @@ def _timing_summary(samples: object, sample_count: object, median: object,
     return computed
 
 
+def _validate_performance_evidence(receipt: dict) -> None:
+    fields = {"baseline_median_us", "baseline", "calibration",
+              "normalized_samples_us", "normalized_median_us",
+              "speedup_vs_baseline"}
+    present = fields & receipt.keys()
+    if not present:
+        return
+    if present != fields:
+        raise AuditError("normalized performance evidence is incomplete")
+    baseline = receipt["baseline"]
+    if (not isinstance(baseline, dict)
+            or set(baseline) != {"schema", "benchmark", "case_medians_us",
+                                 "control_median_us", "sha256"}
+            or baseline.get("schema") != "profiling-skill/baseline-timing/v1"):
+        raise AuditError("baseline timing evidence is invalid")
+    bound = {key: value for key, value in baseline.items() if key != "sha256"}
+    if baseline.get("sha256") != sha256_json(bound):
+        raise AuditError("baseline timing hash does not bind its values")
+    rows = baseline["case_medians_us"]
+    if (not isinstance(rows, list) or not rows
+            or any(not isinstance(row, dict)
+                   or set(row) != {"case", "median_us"}
+                   or type(row["case"]) is not int or row["case"] < 0
+                   or not _is_number(row["median_us"]) or row["median_us"] <= 0
+                   for row in rows)
+            or len({row["case"] for row in rows}) != len(rows)
+            or not _is_number(baseline["control_median_us"])
+            or baseline["control_median_us"] <= 0):
+        raise AuditError("baseline timing values are invalid")
+    baseline_median = math.exp(sum(math.log(row["median_us"]) for row in rows) / len(rows))
+    if (not _is_number(receipt["baseline_median_us"])
+            or not math.isclose(receipt["baseline_median_us"], baseline_median,
+                                rel_tol=1e-12)):
+        raise AuditError("baseline aggregate timing is invalid")
+    calibration = receipt["calibration"]
+    if (not isinstance(calibration, dict)
+            or set(calibration) != {"before", "after", "local_reference_median_us",
+                                    "baseline_reference_median_us", "normalization_factor"}):
+        raise AuditError("calibration evidence is invalid")
+    medians = []
+    for phase in ("before", "after"):
+        evidence = calibration[phase]
+        samples = evidence.get("samples_us") if isinstance(evidence, dict) else None
+        median = evidence.get("median_us") if isinstance(evidence, dict) else None
+        if (not isinstance(evidence, dict)
+                or set(evidence) != {"samples_us", "median_us", "handle"}
+                or not isinstance(samples, list) or len(samples) < 3
+                or not all(_is_number(value) and value > 0 for value in samples)
+                or not _is_number(median) or median <= 0
+                or not math.isclose(median, statistics.median(samples), rel_tol=1e-12)
+                or not isinstance(evidence["handle"], str) or not evidence["handle"]):
+            raise AuditError("calibration control timing is invalid")
+        medians.append(median)
+    reference = math.sqrt(medians[0] * medians[1])
+    factor = baseline["control_median_us"] / reference
+    if (not all(_is_number(calibration[field]) for field in (
+                "local_reference_median_us", "baseline_reference_median_us",
+                "normalization_factor"))
+            or not math.isclose(calibration["local_reference_median_us"], reference, rel_tol=1e-12)
+            or not math.isclose(calibration["baseline_reference_median_us"],
+                                baseline["control_median_us"], rel_tol=1e-12)
+            or not math.isclose(calibration["normalization_factor"], factor, rel_tol=1e-12)):
+        raise AuditError("calibration normalization inputs are invalid")
+    normalized = receipt["normalized_samples_us"]
+    expected = [value * factor for value in receipt["samples_us"]]
+    if (not isinstance(normalized, list) or len(normalized) != len(expected)
+            or any(not _is_number(value) or not math.isclose(value, wanted, rel_tol=1e-12)
+                   for value, wanted in zip(normalized, expected))
+            or not _is_number(receipt["normalized_median_us"])
+            or not _is_number(receipt["speedup_vs_baseline"])
+            or not math.isclose(receipt["normalized_median_us"], statistics.median(expected),
+                                rel_tol=1e-12)
+            or not math.isclose(receipt["speedup_vs_baseline"],
+                                baseline_median / statistics.median(expected), rel_tol=1e-12)):
+        raise AuditError("normalized timing evidence is invalid")
+
+
 def _validate_handles(receipt: dict, policy: dict) -> None:
     submitted = policy["submitted_handles"]
     observed = policy["observed_handles"]
@@ -239,7 +316,9 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
         or "variability_ratio" in policy
     )
     if status == "candidate_error":
-        if timing_fields_present:
+        if timing_fields_present or ({"baseline_median_us", "baseline", "calibration",
+                                      "normalized_samples_us", "normalized_median_us",
+                                      "speedup_vs_baseline"} & receipt.keys()):
             raise AuditError("candidate_error must not contain performance timing")
         if post_control != "not_run":
             raise AuditError("candidate_error requires post_control=not_run")
@@ -281,6 +360,7 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
             and receipt.get("status") != "measurement_pending"
         ):
             raise AuditError("noisy timing confirmation must be measurement_pending")
+    _validate_performance_evidence(receipt)
     return receipt
 
 

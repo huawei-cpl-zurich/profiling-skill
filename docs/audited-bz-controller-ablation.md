@@ -31,6 +31,8 @@
 | Reused the BZ client's content-addressed replay instead of adding transport code | Prevents duplicate remote submission and policy bypass | Durable-handle test |
 | Shared one branch budget ledger instead of per-round counters | Implements 24-operation branch semantics with less state ambiguity | Cross-round budget test |
 | Reused `CommandController._execute` for remeasurement | Preserves receipt bounds, redaction, timeout handling, and exact-handle checks without a parallel execution path | Runtime and lifecycle focused suites |
+| Bound frozen baseline and calibration inputs directly in compact receipts | Makes normalized timing and speedup reproducible without retaining profiler trees | Adapter, contract, and backend tests |
+| Sanctioned only `--state-dir` as mutable controller provenance | Allows production composition while binding the exact directory identity and keeping all other path arguments immutable | Runtime provenance tests |
 
 ## Complexity Intentionally Kept
 
@@ -56,6 +58,9 @@ branch-wide accounting.
 | `PYTHONPATH=. pytest -q -k 'not test_real_bwrap_with_functional_fake_codex_runs_persistent_rounds'` | 695 passed, 1 deselected | Known host-kernel Bubblewrap restriction excluded |
 | `git diff --check` | passed | No whitespace errors |
 | `python -m ruff check scripts/audited_bz_controller.py scripts/audited_runtime.py tests/test_audited_bz_controller.py tests/test_audited_runtime.py` | passed | Final integrated lint cleanup |
+| `python -m ruff check --select F` on changed controller, contract, backend, and tests | passed | No unused/import errors |
+| Focused adapter, contract, runtime, lifecycle, and backend suite | 124 passed | Baseline/calibration evidence and mutable state provenance |
+| Full applicable suite | 699 passed, 1 deselected | Known host-kernel Bubblewrap restriction excluded |
 
 ## Residual Risks
 

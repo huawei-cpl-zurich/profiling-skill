@@ -54,6 +54,10 @@ meaning rather than merely simplifying code:
   failures remain controller receipts and retain their full compact evidence;
   one `candidate_error` in any verified round makes the branch terminal
   `candidate_failed` rather than complete.
+- The scheduler's infrastructure exception type is injected once when the
+  launcher is constructed. Failure paths never import a mutable same-named
+  module, so combined test or plugin import order cannot change exception
+  identity.
 - Frozen timing baselines have their own semantic schema and internal canonical
   digest, and the exact validated document is passed into the controller. This
   keeps normalization inputs distinct from benchmark correctness assets.
@@ -64,11 +68,11 @@ meaning rather than merely simplifying code:
 
 - Focused: `pytest -q tests/test_audited_campaign.py` — 9 passed.
 - Production hardening: `pytest -q tests/test_audited_campaign_production.py`
-  — 23 passed and one configurable-round dependency-gated composition test
+  — 24 passed and one configurable-round dependency-gated composition test
   skipped. In a temporary integrated checkout, that test runs unskipped and
   passes with the real runner, `CommandController`, and offline verifier.
 - Broader: `PYTHONPATH=. pytest -q -k 'not test_real_bwrap_with_functional_fake_codex_runs_persistent_rounds'`
-  — 718 passed, 1 skipped, and 1 deselected after production hardening.
+  — 719 passed, 1 skipped, and 1 deselected after production hardening.
 - The excluded existing test requires unprivileged Bubblewrap namespaces,
   which this local host disables before any campaign code runs.
 

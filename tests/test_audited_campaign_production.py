@@ -213,6 +213,14 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     return config
 
 
+def production_launcher(config: dict, **kwargs):
+    return production.ProductionCellLauncher(
+        config,
+        infrastructure_failure_type=runtime_campaign.InfrastructureFailure,
+        **kwargs,
+    )
+
+
 class FakeRunner:
     calls = []
 
@@ -261,7 +269,7 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         created["controller"] = (command, repo, kwargs)
         return object()
 
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config, invoker_factory=invoker, controller_factory=controller,
         runner_factory=FakeRunner,
         verifier_invoke=lambda *args, **kwargs: SimpleNamespace(
@@ -310,7 +318,7 @@ def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
     config = runtime_fixture(tmp_path, cell)
     Path(config["runtime_scripts"]["path"], "benchmark_backend.py").write_text("drift")
     with pytest.raises(production.ProductionError, match="runtime scripts hash"):
-        production.ProductionCellLauncher(config)
+        production_launcher(config)
 
 
 def test_launcher_rejects_direct_runtime_and_arbitrary_adapter(tmp_path: Path):
@@ -321,7 +329,7 @@ def test_launcher_rejects_direct_runtime_and_arbitrary_adapter(tmp_path: Path):
     config["runtime_mode"] = "direct"
     config["adapter_command"] = ["untrusted-adapter"]
     with pytest.raises(production.ProductionError, match="isolated Docker"):
-        production.ProductionCellLauncher(config)
+        production_launcher(config)
 
 
 @pytest.mark.parametrize("pin", ["source_revision", "controller_sha256", "baseline", "skill"])
@@ -339,7 +347,7 @@ def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pi
     else:
         config["provenance"]["skills"]["cannbot"] = "a" * 64
     with pytest.raises(production.ProductionError, match="provenance"):
-        production.ProductionCellLauncher(config)
+        production_launcher(config)
 
 
 def test_launcher_rejects_invalid_timing_baseline_contract(tmp_path: Path):
@@ -356,7 +364,7 @@ def test_launcher_rejects_invalid_timing_baseline_contract(tmp_path: Path):
     config["provenance"]["baselines"]["matmul"] = pin
 
     with pytest.raises(production.ProductionError, match="timing baseline contract"):
-        production.ProductionCellLauncher(config)
+        production_launcher(config)
 
 
 def test_launcher_rejects_nonfinite_timing_baseline_value(tmp_path: Path):
@@ -376,7 +384,7 @@ def test_launcher_rejects_nonfinite_timing_baseline_value(tmp_path: Path):
     config["provenance"]["baselines"]["matmul"] = pin
 
     with pytest.raises(production.ProductionError, match="timing baseline contract"):
-        production.ProductionCellLauncher(config)
+        production_launcher(config)
 
 
 def test_controller_uses_pinned_global_boundary_without_adapter_argv(tmp_path: Path):
@@ -385,7 +393,7 @@ def test_controller_uses_pinned_global_boundary_without_adapter_argv(tmp_path: P
             "skills": list(production.TREATMENT_SKILLS["cannbot"])}
     config = runtime_fixture(tmp_path, cell)
     created = {}
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
@@ -416,7 +424,7 @@ def test_runner_crash_is_infrastructure_not_candidate_failure(tmp_path: Path):
         def run(self, *args, **kwargs):
             raise RuntimeError("codex transport vanished")
 
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
@@ -428,12 +436,40 @@ def test_runner_crash_is_infrastructure_not_candidate_failure(tmp_path: Path):
         launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
 
 
+def test_infrastructure_exception_identity_is_injected_not_looked_up_late(
+        tmp_path: Path, monkeypatch):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+
+    class CrashingRunner(FakeRunner):
+        def run(self, *args, **kwargs):
+            raise RuntimeError("controller transport vanished")
+
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(),
+        runner_factory=CrashingRunner,
+    )
+    replacement = SimpleNamespace(InfrastructureFailure=type(
+        "DifferentInfrastructureFailure", (RuntimeError,), {}
+    ))
+    monkeypatch.setitem(sys.modules, "audited_campaign", replacement)
+
+    with pytest.raises(runtime_campaign.InfrastructureFailure,
+                       match="controller transport vanished"):
+        launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+
+
 def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
     cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
             "round_count": 4, "request_budget": 24,
             "skills": list(production.TREATMENT_SKILLS["cannbot"])}
     config = runtime_fixture(tmp_path, cell)
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
@@ -457,7 +493,7 @@ def test_four_round_campaign_accepts_only_v2_four_round_checkpoint(
             "round_count": 4, "request_budget": 24,
             "skills": list(production.TREATMENT_SKILLS["cannbot"])}
     config = runtime_fixture(tmp_path, cell)
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda *args, **kwargs: object(),
         controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
@@ -509,7 +545,7 @@ def test_complete_branch_is_verified_and_reconstructed_with_full_receipts(tmp_pa
             "experiments": [{"commit": str(number)} for number in range(1, 5)],
         }), stderr="")
 
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
@@ -577,7 +613,7 @@ print(json.dumps({
                 path.write_text(json.dumps(receipt))
             return result
 
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
@@ -731,7 +767,7 @@ else:
         def scrub_auth(self):
             pass
 
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SubprocessCodex(repo),
         controller_factory=audited_runtime.CommandController,
@@ -849,7 +885,7 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "reasoning_effort": "low", "runtime_mode": "docker",
         "runtime_image_digest": provenance["runtime_image_digest"], "timeout": 10,
     }
-    launcher = production.ProductionCellLauncher(
+    launcher = production_launcher(
         config,
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=provenance["runtime_image_digest"]),

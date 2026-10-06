@@ -192,12 +192,17 @@ def _git(repo: Path, *arguments: str) -> str:
 class ProductionCellLauncher:
     """Create or resume one isolated four-round branch and its controller."""
 
-    def __init__(self, config: dict, *, invoker_factory=None,
+    def __init__(self, config: dict, *, infrastructure_failure_type: type[Exception],
+                 invoker_factory=None,
                  controller_factory=None, runner_factory=None,
                  verifier_invoke: Callable = subprocess.run):
         if config.get("schema", RUNTIME_SCHEMA) != RUNTIME_SCHEMA:
             raise ProductionError(f"runtime config requires schema {RUNTIME_SCHEMA}")
         self.config = config
+        if (not isinstance(infrastructure_failure_type, type)
+                or not issubclass(infrastructure_failure_type, Exception)):
+            raise ProductionError("infrastructure failure type must be an exception class")
+        self.infrastructure_failure_type = infrastructure_failure_type
         runtime = config.get("runtime_scripts", {})
         self.scripts = Path(runtime.get("path", "")).resolve()
         if digest_tree(self.scripts) != runtime.get("sha256"):
@@ -513,8 +518,7 @@ class ProductionCellLauncher:
             try:
                 return self._receipt(repo, self._verify(repo, cell))
             except ProductionError as error:
-                from audited_campaign import InfrastructureFailure
-                raise InfrastructureFailure(
+                raise self.infrastructure_failure_type(
                     f"existing branch has no valid blocked checkpoint and is not complete: {error}"
                 ) from error
         resume = checkpoint is not None
@@ -555,15 +559,13 @@ class ProductionCellLauncher:
                     blocked = {}
                 retained = blocked.get("receipt") if isinstance(blocked, dict) else None
                 handle = retained.get("handle") if isinstance(retained, dict) else None
-                from audited_campaign import InfrastructureFailure
-                raise InfrastructureFailure(str(error), handle) from error
+                raise self.infrastructure_failure_type(str(error), handle) from error
         finally:
             invoker.scrub_auth()
         try:
             return self._receipt(repo, self._verify(repo, cell))
         except ProductionError as error:
-            from audited_campaign import InfrastructureFailure
-            raise InfrastructureFailure(str(error)) from error
+            raise self.infrastructure_failure_type(str(error)) from error
 
     def observe(self, cell: dict, placement: dict, durable_handle: str) -> dict:
         # AuditedExperimentRunner reads its checkpoint and CommandController
@@ -599,14 +601,16 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("runtime model does not match manifest provenance")
     if config.get("runtime_image_digest") != manifest["provenance"]["runtime_image_digest"]:
         parser.error("runtime image does not match manifest provenance")
-    from audited_campaign import run_campaign
+    from audited_campaign import InfrastructureFailure, run_campaign
     ledger = run_campaign(
         manifest, args.ledger,
         CplRemoteResourcePool(
             args.admission, args.admission_sha256,
             cpl_remote_sha256=config["cpl_remote_sha256"],
         ),
-        ProductionCellLauncher(config), resume=args.resume,
+        ProductionCellLauncher(
+            config, infrastructure_failure_type=InfrastructureFailure,
+        ), resume=args.resume,
     )
     print(json.dumps({"status": ledger["status"], "ledger": str(args.ledger)}))
     return 0

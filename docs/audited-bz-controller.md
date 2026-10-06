@@ -94,3 +94,6 @@ uses:
 This reruns only profiling and the post-control, retaining the already accepted
 candidate and correctness proof. All controller state, including the shared
 operation ledger, is atomically persisted below `--state-dir`.
+`CommandController.remeasure` supplies this argument, binds the returned receipt
+to the exact pending handle, and applies the same size and redaction rules as a
+normal submission or observation.

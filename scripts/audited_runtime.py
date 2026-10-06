@@ -472,6 +472,19 @@ class CommandController:
             command, number, candidate_hash, manifest_hash, expected_handle=handle,
         )
 
+    def remeasure(self, number: int, candidate_hash: str, manifest_hash: str,
+                  handle: str) -> dict:
+        """Remeasure a pending receipt without preparing another candidate."""
+        if not isinstance(handle, str) or not handle:
+            raise AuditError("controller remeasure requires a durable handle")
+        command = [
+            *self.command, "--remeasure-handle", handle, "--experiment", str(number),
+            "--candidate-sha256", candidate_hash, "--manifest-sha256", manifest_hash,
+        ]
+        return self._execute(
+            command, number, candidate_hash, manifest_hash, expected_handle=handle,
+        )
+
     def _execute(self, command: Sequence[str], number: int, candidate_hash: str,
                  manifest_hash: str, *, expected_handle: str | None = None) -> dict:
         try:

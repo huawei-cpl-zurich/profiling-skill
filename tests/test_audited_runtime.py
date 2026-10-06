@@ -504,6 +504,46 @@ def test_controller_observe_rejects_replaced_handle(tmp_path: Path, monkeypatch)
     assert "different handle" in result["reason"]
 
 
+def test_controller_remeasure_uses_exact_pending_handle(tmp_path: Path, monkeypatch):
+    adapter = runtime.CommandController(["controller", "--mode", "profile"], tmp_path)
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command, 0, '{"status":"ok","handle":"job:pending"}', "",
+        )
+
+    monkeypatch.setattr(runtime.subprocess, "run", fake_run)
+
+    result = adapter.remeasure(3, "candidate", "manifest", "job:pending")
+
+    assert result["handle"] == "job:pending"
+    assert calls == [[
+        "controller", "--mode", "profile", "--remeasure-handle", "job:pending",
+        "--experiment", "3", "--candidate-sha256", "candidate",
+        "--manifest-sha256", "manifest",
+    ]]
+
+
+def test_controller_remeasure_rejects_missing_or_replaced_handle(tmp_path: Path, monkeypatch):
+    adapter = runtime.CommandController(["controller"], tmp_path)
+    with pytest.raises(runtime.AuditError, match="remeasure requires a durable handle"):
+        adapter.remeasure(1, "candidate", "manifest", "")
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, '{"status":"ok","handle":"job:other"}', "",
+        ),
+    )
+
+    result = adapter.remeasure(1, "candidate", "manifest", "job:pending")
+
+    assert result["status"] == "infrastructure_error"
+    assert result["handle"] == "job:pending"
+    assert "different handle" in result["reason"]
+
+
 def test_controller_bounds_receipt(tmp_path: Path, monkeypatch):
     adapter = runtime.CommandController(["controller"], tmp_path)
     monkeypatch.setattr(

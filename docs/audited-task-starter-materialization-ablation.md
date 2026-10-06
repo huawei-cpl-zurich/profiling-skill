@@ -37,8 +37,8 @@
 | --- | --- |
 | Focused campaign/production/lifecycle tests | 87 passed |
 | Full applicable pytest excluding real Bubblewrap | 806 passed, 1 deselected |
-| Ruff and diff checks | Pending final rerun |
-| BZ-A3 validation | Pending |
+| Scoped Ruff and diff checks | Passed |
+| BZ-A3 validation | 98 passed on retained handle `remote:bz-a3-1:job:20261006T102553Z-22309e1bde65` |
 
 ## PR Review Assessment
 
@@ -56,4 +56,4 @@ the agent to publish the exact exported kernel name before profiling.
 
 ## Next Action
 
-Run final local checks and validate the focused suite on one BZ-A3 target.
+Open the pull request and complete the required review wave.

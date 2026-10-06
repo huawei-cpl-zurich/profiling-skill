@@ -680,24 +680,37 @@ def test_atomic_receipt_fsyncs_parent_after_replace(monkeypatch, tmp_path: Path)
 def test_cli_rejects_abbreviated_critical_flags_and_accepts_exact_forms(tmp_path: Path):
     placements = tmp_path / "placements.json"
     placements.write_text(json.dumps(
-        {"0": {"target": "bz-a3-1", "device": 0}}))
-    base = [
-        sys.executable, str(MODULE), "--state-dir", str(tmp_path / "state"),
+            {"0": {"target": "bz-a3-1", "device": 0}}))
+    arguments = [
+        "--state-dir", str(tmp_path / "state"),
         f"--placements-json={placements}", "--cpl-remote-sha256", "0" * 64,
     ]
 
     abbreviated = subprocess.run(
-        [*base, "--remote-roo=/srv/profiling"], input="{}", text=True,
+        [sys.executable, str(MODULE), *arguments,
+         "--remote-roo=/srv/profiling"], input="{}", text=True,
         capture_output=True, check=False,
     )
     assert abbreviated.returncode == 2
     assert "required: --remote-root" in abbreviated.stderr
     assert abbreviated.stdout == ""
 
-    exact = subprocess.run(
-        [*base, "--remote-root=/srv/profiling"], input="{}", text=True,
-        capture_output=True, check=False,
-    )
+    fake_home = tmp_path / "fake-home"
+    _install_fake_global_cpl_remote(fake_home)
+    bootstrap = '''
+import importlib.util, io, pathlib, sys
+module_path=pathlib.Path(sys.argv[1]); fake_home=pathlib.Path(sys.argv[2])
+spec=importlib.util.spec_from_file_location("hermetic_bz_cli", module_path)
+module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module
+spec.loader.exec_module(module)
+module._user_home=lambda: fake_home
+sys.argv=[str(module_path), *sys.argv[3:]]; sys.stdin=io.StringIO("{}")
+raise SystemExit(module.main())
+'''
+    exact = subprocess.run([
+        sys.executable, "-c", bootstrap, str(MODULE), str(fake_home),
+        *arguments, "--remote-root=/srv/profiling",
+    ], text=True, capture_output=True, check=False)
     assert exact.returncode == 2
     assert exact.stderr == ""
     result = json.loads(exact.stdout)

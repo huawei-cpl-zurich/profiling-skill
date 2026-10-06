@@ -19,7 +19,8 @@ from audited_contract import (
     validate_sources,
 )
 
-SEED_SCHEMA = "profiling-skill/audited-seed/v1"
+SEED_SCHEMA_V1 = "profiling-skill/audited-seed/v1"
+SEED_SCHEMA_V2 = "profiling-skill/audited-seed/v2"
 EVIDENCE_SCHEMA = "profiling-skill/audited-evidence/v1"
 STANDARD_ARTIFACTS = {
     "commands.jsonl", "evidence.json", "report.md", "results.json", "sources.json",
@@ -188,17 +189,27 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
     commits = _git(repo, "rev-list", "--first-parent", "--reverse",
                    f"{base}..HEAD").splitlines()
     all_commits = _git(repo, "rev-list", f"{base}..HEAD").splitlines()
-    if len(commits) != 4 or len(all_commits) != 4:
-        raise AuditError("audited branch must contain exactly one seed and three linear commits")
+    if not commits:
+        raise AuditError("audited branch must contain a seed commit")
     seed_commit, experiment_commits = commits[0], commits[1:]
     seed = _json_blob(repo, seed_commit, ".experiment/seed.json")
     seed_fields = {"schema", "run_id", "agent_id", "prompt_sha256", "task_sha256",
                    "reproducibility"}
-    if (set(seed) != seed_fields or seed.get("schema") != SEED_SCHEMA
+    schema = seed.get("schema")
+    round_count = 3 if schema == SEED_SCHEMA_V1 else seed.get("round_count")
+    if schema == SEED_SCHEMA_V2:
+        seed_fields.add("round_count")
+    if (set(seed) != seed_fields or schema not in {SEED_SCHEMA_V1, SEED_SCHEMA_V2}
+            or type(round_count) is not int or round_count < 1
             or not all(isinstance(seed.get(field), str) and seed[field]
                        for field in ("run_id", "agent_id"))
             or not _hash(seed.get("prompt_sha256")) or not _hash(seed.get("task_sha256"))):
         raise AuditError("seed contract schema is invalid")
+    expected_commits = round_count + 1
+    if len(commits) != expected_commits or len(all_commits) != expected_commits:
+        raise AuditError(
+            f"audited branch must contain exactly one seed and {round_count} linear commits"
+        )
     provenance = _validate_provenance(seed["reproducibility"])
     prompt, task = _blob(repo, seed_commit, "PROMPT.md"), _blob(repo, seed_commit, "TASK.md")
     seed_bytes = _blob(repo, seed_commit, ".experiment/seed.json")
@@ -295,4 +306,5 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
     if len(sessions) != 1:
         raise AuditError("experiments did not retain one persistent session")
     return {"status": "valid", "branch": branch, "seed_commit": seed_commit,
+            "round_count": round_count,
             "session_id": sessions.pop(), "experiments": summaries}

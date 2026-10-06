@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host-controlled lifecycle for three-round audited experiments."""
+"""Host-controlled lifecycle for audited multi-round experiments."""
 
 from __future__ import annotations
 
@@ -70,7 +70,10 @@ class AuditedExperimentRunner:
     def __init__(self, repo: Path, prompt: Path, task: Path,
                  invoke: Callable[[int, str | None, str | None], str],
                  controller: Callable[[int, str, str], dict], *, max_repairs: int = 2,
-                 max_controller_resubmits: int = 2, max_remeasurements: int = 1):
+                 max_controller_resubmits: int = 2, max_remeasurements: int = 1,
+                 round_count: int = 3):
+        if type(round_count) is not int or round_count < 1:
+            raise AuditError("round count must be a positive integer")
         self.repo = repo.resolve()
         self.prompt_bytes = prompt.resolve().read_bytes()
         self.task_bytes = task.resolve().read_bytes()
@@ -81,6 +84,7 @@ class AuditedExperimentRunner:
         self.max_repairs = max_repairs
         self.max_controller_resubmits = max_controller_resubmits
         self.max_remeasurements = max_remeasurements
+        self.round_count = round_count
         self.reproducibility = {
             "agent": _identity(invoke), "controller": _identity(controller),
         }
@@ -105,7 +109,7 @@ class AuditedExperimentRunner:
             prior_hash = sha256_bytes((self.repo / "candidate.py").read_bytes())
             commits = []
 
-        for number in range(start, 4):
+        for number in range(start, self.round_count + 1):
             prior_candidate = _git_blob(self.repo, "HEAD", "candidate.py")
             prior_manifest = _git_blob(self.repo, "HEAD", "candidate.manifest.json")
             continuing = state if state and number == start else None
@@ -324,11 +328,15 @@ class AuditedExperimentRunner:
         (self.repo / "PROMPT.md").write_bytes(self.prompt_bytes)
         (self.repo / "TASK.md").write_bytes(self.task_bytes)
         seed = directory / "seed.json"
-        seed.write_text(json.dumps({
-            "schema": "profiling-skill/audited-seed/v1", "run_id": run_id,
+        seed_document = {
+            "schema": ("profiling-skill/audited-seed/v1" if self.round_count == 3
+                       else "profiling-skill/audited-seed/v2"), "run_id": run_id,
             "agent_id": agent_id, "prompt_sha256": self.prompt_hash,
             "task_sha256": self.task_hash, "reproducibility": self.reproducibility,
-        }, indent=2, sort_keys=True) + "\n")
+        }
+        if self.round_count != 3:
+            seed_document["round_count"] = self.round_count
+        seed.write_text(json.dumps(seed_document, indent=2, sort_keys=True) + "\n")
         _git(self.repo, "add", ".experiment/seed.json", "PROMPT.md", "TASK.md")
         _git(self.repo, "commit", "-m", f"experiment seed: {run_id}/{agent_id}")
         return branch, _git(self.repo, "rev-parse", "HEAD"), sha256_bytes(seed.read_bytes())
@@ -573,8 +581,9 @@ class AuditedExperimentRunner:
         path = self.repo / ".experiment" / "blocked.json"
         candidate = self.repo / "candidate.py"
         manifest = self.repo / "candidate.manifest.json"
-        path.write_text(json.dumps({
-            "schema": "profiling-skill/audited-blocked/v1", "experiment": number,
+        checkpoint = {
+            "schema": ("profiling-skill/audited-blocked/v1" if self.round_count == 3
+                       else "profiling-skill/audited-blocked/v2"), "experiment": number,
             "session_id": session, "reason": reason, "stage": stage, "branch": branch,
             "pre_session": session is None,
             "controller_submissions": controller_submissions,
@@ -585,7 +594,10 @@ class AuditedExperimentRunner:
             "receipt": receipt,
             "candidate_sha256": sha256_bytes(candidate.read_bytes()) if candidate.is_file() else None,
             "manifest_sha256": sha256_bytes(manifest.read_bytes()) if manifest.is_file() else None,
-        }, indent=2, sort_keys=True) + "\n")
+        }
+        if self.round_count != 3:
+            checkpoint["round_count"] = self.round_count
+        path.write_text(json.dumps(checkpoint, indent=2, sort_keys=True) + "\n")
         paths = [".experiment/blocked.json"] + [
             name for name in ("candidate.py", "candidate.manifest.json")
             if (self.repo / name).is_file()
@@ -607,10 +619,22 @@ class AuditedExperimentRunner:
                     "prior_candidate_sha256")
         expected_branch = f"experiment/{run_id}/{agent_id}"
         valid_hash = lambda value: isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+        checkpoint_schema = state.get("schema") if isinstance(state, dict) else None
+        checkpoint_rounds = 3 if checkpoint_schema == "profiling-skill/audited-blocked/v1" \
+            else state.get("round_count") if isinstance(state, dict) else None
+        if checkpoint_rounds != self.round_count:
+            raise AuditError("blocked checkpoint round count differs from the host declaration")
         if (not isinstance(state, dict)
-                or state.get("schema") != "profiling-skill/audited-blocked/v1"
+                or checkpoint_schema not in {
+                    "profiling-skill/audited-blocked/v1",
+                    "profiling-skill/audited-blocked/v2",
+                }
+                or (checkpoint_schema == "profiling-skill/audited-blocked/v2"
+                    and (type(state.get("round_count")) is not int
+                         or state["round_count"] < 1))
                 or state.get("stage") not in {"prepare", "controller", "measurement", "finalize"}
-                or state.get("experiment") not in {1, 2, 3}
+                or type(state.get("experiment")) is not int
+                or not 1 <= state["experiment"] <= self.round_count
                 or any(not isinstance(state.get(key), str) or not state[key] for key in required)
                 or type(state.get("pre_session")) is not bool
                 or not (
@@ -652,6 +676,10 @@ class AuditedExperimentRunner:
             seed = json.loads(_git_blob(self.repo, state["seed_commit"], ".experiment/seed.json"))
         except json.JSONDecodeError as failure:
             raise AuditError("experiment seed provenance is invalid") from failure
+        seed_rounds = 3 if seed.get("schema") == "profiling-skill/audited-seed/v1" \
+            else seed.get("round_count")
+        if seed_rounds != self.round_count or seed_rounds != checkpoint_rounds:
+            raise AuditError("experiment seed round count differs from the checkpoint")
         current_reproducibility = {
             "agent": _identity(self.invoke), "controller": _identity(self.controller),
         }
@@ -680,11 +708,14 @@ class AuditedExperimentRunner:
             self.repo, "rev-list", "--first-parent", "--reverse", f"{seed_commit}..HEAD",
         ).splitlines()
         all_history = _git(self.repo, "rev-list", f"{seed_commit}..HEAD").splitlines()
-        if (history != commits or len(history) != 3 or len(all_history) != 3
+        if (history != commits or len(history) != self.round_count
+                or len(all_history) != self.round_count
                 or sha256_bytes(_git_blob(self.repo, seed_commit, ".experiment/seed.json"))
                 != seed_hash
                 or sha256_bytes((self.repo / ".experiment/seed.json").read_bytes()) != seed_hash
                 or sha256_bytes((self.repo / "PROMPT.md").read_bytes()) != self.prompt_hash
                 or sha256_bytes((self.repo / "TASK.md").read_bytes()) != self.task_hash
                 or _git(self.repo, "status", "--porcelain")):
-            raise AuditError("seed plus three-commit linear history was not preserved")
+            raise AuditError(
+                f"seed plus {self.round_count}-commit linear history was not preserved"
+            )

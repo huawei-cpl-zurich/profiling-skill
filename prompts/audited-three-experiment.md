@@ -1,8 +1,8 @@
-# Audited three-experiment contract
+# Audited experiment contract
 
 Read `TASK.md` for the experiment-specific task. This prompt is invariant:
 do not rewrite it for a new benchmark. Work in the supplied isolated repository
-and persistent session for exactly three host-directed experiments. Never
+and persistent session for the host-declared immutable round count. Never
 merge, push, switch branches, or create commits. The host owns the branch and
 commits and will resume this same session.
 

@@ -31,12 +31,18 @@ def run_acceptance_battery(
     contracts = {(runner.prompt_bytes, runner.task_bytes) for runner in runners.values()}
     if len(contracts) != 1:
         raise AuditError("acceptance prompt and task must be byte-identical")
+    round_counts = {getattr(runner, "round_count", 3) for runner in runners.values()}
+    if len(round_counts) != 1:
+        raise AuditError("acceptance agents must use one immutable round count")
 
     def execute(item: tuple[str, AuditedExperimentRunner]) -> tuple[str, RunResult]:
         agent_id, runner = item
         result = runner.run(run_id, agent_id)
-        if result.status != "complete" or len(result.commits) != 3:
-            raise AuditError(f"acceptance agent {agent_id} did not complete three experiments")
+        round_count = getattr(runner, "round_count", 3)
+        if result.status != "complete" or len(result.commits) != round_count:
+            raise AuditError(
+                f"acceptance agent {agent_id} did not complete {round_count} experiments"
+            )
         checked = verify(runner.repo)
         if checked.get("status") != "valid":
             raise AuditError(f"acceptance agent {agent_id} failed offline verification")
@@ -68,6 +74,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--auth-home", type=Path)
     parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument("--rounds", type=int, default=3,
+                        help="immutable number of host-directed experiment rounds")
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -89,6 +97,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         result = AuditedExperimentRunner(
             args.repo, args.prompt, args.task, invoker, controller,
+            round_count=args.rounds,
         ).run(args.run_id, args.agent_id, resume=args.resume)
     except AuditError as error:
         parser.error(str(error))

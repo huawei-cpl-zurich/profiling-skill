@@ -53,7 +53,7 @@ class FakeTransport:
         self.executions.append((profile, device, operation, script, timeout))
         if self.fail == "observer":
             raise self.module.JobError("observer_error", "observer interrupted",
-                                       f"{profile}:retained")
+                                       f"remote:{profile}:job:retained")
         return self.completed(profile)
 
     def observe(self, profile, handle, timeout):
@@ -89,7 +89,7 @@ class FakeTransport:
             payload.pop("profile", None)
             payload.pop("profile_cases", None)
         line = "BZ_PRODUCTION_RESULT=" + json.dumps(payload) + "\n"
-        return self.module.CommandResult(0, line, ""), f"{profile}:job-1"
+        return self.module.CommandResult(0, line, ""), f"remote:{profile}:job:job-1"
 
 
 def files(tmp_path: Path):
@@ -138,7 +138,7 @@ def test_profile_stages_supplement_and_returns_compact_remote_evidence(tmp_path:
     assert result["status"] == "ok"
     assert result["device"] == 0
     assert result["placement"] == {"profile": "bz-a3-2", "device": 3}
-    assert result["handle"] == "bz-a3-2:job-1"
+    assert result["handle"] == "remote:bz-a3-2:job:job-1"
     assert result["profile"]["profiler"] == "msprof-op"
     assert len(result["artifacts"]["placements_sha256"]) == 64
     assert result["artifacts"]["remote_profile_evidence"].endswith("/profile/evidence.json")
@@ -422,14 +422,15 @@ def test_retained_dispatch_is_observed_without_duplicate_upload_or_execute(tmp_p
     first = first_client.run(profile_job(tmp_path))
     assert first["status"] == "infrastructure_error"
     assert first["failure_type"] == "observer_error"
-    assert first["handle"] == "bz-a3-2:retained"
+    assert first["handle"] == "remote:bz-a3-2:job:retained"
 
     resumed = FakeTransport(module)
     _module, second_client = client(tmp_path, resumed)
     result = second_client.run(profile_job(tmp_path))
     assert result["status"] == "ok"
     assert resumed.uploads == [] and resumed.executions == []
-    assert resumed.observations[0][:2] == ("bz-a3-2", "bz-a3-2:retained")
+    assert resumed.observations[0][:2] == (
+        "bz-a3-2", "remote:bz-a3-2:job:retained")
 
 
 def test_counted_candidate_failures_are_not_infrastructure(tmp_path: Path):
@@ -548,6 +549,67 @@ def test_configured_remote_root_owns_staging_runs_and_evidence(tmp_path: Path):
     assert remote_root in transport.executions[0][3]
 
 
+def test_remote_transport_runs_file_in_registered_context_and_reads_logs():
+    module = load()
+    calls = []
+    handle = "remote:bz-a3-2:job:retained-7"
+
+    def invoke(argv, timeout):
+        calls.append((list(argv), timeout))
+        if "run" in argv:
+            command_file = Path(argv[argv.index("--file") + 1])
+            payload = command_file.read_text()
+            assert "export ASCEND_RT_VISIBLE_DEVICES=6" in payload
+            assert "export DEVICE_ID=0" in payload
+            assert payload.endswith("printf result")
+            return module.CommandResult(0, json.dumps(
+                {"state": "completed", "handle": handle, "exit": 0}), "")
+        stream = argv[argv.index("--stream") + 1]
+        content = "result" if stream == "stdout" else ""
+        return module.CommandResult(0, json.dumps(
+            {"state": "completed", "handle": handle, "content": content}), "")
+
+    result, returned = module.RemoteTransport(["cpl-remote"], invoke).execute(
+        "bz-a3-2", 6, "/srv/profiling", "printf result", 30)
+
+    assert returned == handle
+    assert result == module.CommandResult(0, "result", "")
+    run = calls[0][0]
+    assert run[:4] == ["cpl-remote", "--json", "run", "bz-a3-2"]
+    assert run[run.index("--cwd") + 1] == "/srv/profiling"
+    assert "--wait" not in run and run[run.index("--timeout") + 1] == "30"
+    assert [call[0][2] for call in calls[1:]] == ["logs", "logs"]
+
+
+@pytest.mark.parametrize("state", [
+    "queued", "dispatching", "running", "reconnecting", "observation-unavailable",
+])
+def test_remote_transport_observes_same_nonterminal_handle_without_redispatch(state):
+    module = load()
+    calls = []
+    handle = "remote:bz-a3-1:job:kept"
+
+    def invoke(argv, _timeout):
+        calls.append(list(argv))
+        if "run" in argv:
+            return module.CommandResult(0, json.dumps(
+                {"state": state, "handle": handle}), "")
+        if "observe" in argv:
+            return module.CommandResult(0, json.dumps(
+                {"state": "completed", "handle": handle, "exit": 0}), "")
+        return module.CommandResult(0, json.dumps(
+            {"state": "completed", "handle": handle, "content": ""}), "")
+
+    _result, returned = module.RemoteTransport(["cpl-remote"], invoke).execute(
+        "bz-a3-1", 0, "/srv/profiling", "true", 30)
+
+    assert returned == handle
+    assert sum("run" in argv for argv in calls) == 1
+    observe = next(argv for argv in calls if "observe" in argv)
+    assert observe == ["cpl-remote", "--json", "observe", handle,
+                       "--wait", "--timeout", "30"]
+
+
 @pytest.mark.parametrize("remote_root", [
     "relative/path", "/srv/../escape", "/srv/root;touch-pwned", "/srv/root\nnext",
 ])
@@ -585,7 +647,7 @@ def test_remote_root_drift_never_observes_foreign_retained_dispatch(tmp_path: Pa
     interrupted = FakeTransport(module, fail="observer")
     first = production_client(module, interrupted, state, root_a).run(
         profile_job(tmp_path))
-    assert first["handle"] == "bz-a3-2:retained"
+    assert first["handle"] == "remote:bz-a3-2:job:retained"
 
     replacement = FakeTransport(module)
     second = production_client(module, replacement, state, root_b).run(
@@ -677,7 +739,7 @@ def test_cli_rejects_abbreviated_critical_flags_and_accepts_exact_forms(tmp_path
         {"0": {"profile": "bz-a3-1", "device": 0}}))
     base = [
         sys.executable, str(MODULE), "--state-dir", str(tmp_path / "state"),
-        f"--placements-json={placements}", "--adapter-json", '["/bin/false"]',
+        f"--placements-json={placements}",
     ]
 
     abbreviated = subprocess.run(
@@ -817,7 +879,7 @@ def test_cli_rejects_abbreviated_singleton_flags(tmp_path: Path):
     result = subprocess.run([
         sys.executable, str(MODULE), "--state-d", str(tmp_path / "state"),
         "--placements-json", str(tmp_path / "placements.json"),
-        "--adapter-json", '["adapter"]', "--remote-root", "/remote/root",
+        "--remote-json", '["remote"]', "--remote-root", "/remote/root",
     ], input="{}", text=True, capture_output=True, check=False)
     assert result.returncode == 2
     assert "required: --state-dir" in result.stderr

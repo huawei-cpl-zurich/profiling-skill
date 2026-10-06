@@ -12,6 +12,7 @@ import re
 import shlex
 import subprocess
 import tarfile
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,7 +47,7 @@ def _run(argv: list[str], timeout: int) -> CommandResult:
         result = subprocess.run(argv, text=True, capture_output=True, timeout=timeout, check=False)
     except subprocess.TimeoutExpired as exc:
         partial = "".join(_text(value) for value in (exc.stdout, exc.stderr))
-        match = re.search(r"\b(bz-a3-[12]:[A-Za-z0-9_.-]+)\b", partial)
+        match = re.search(r"\b(remote:bz-a3-[12]:job:[A-Za-z0-9_.-]+)\b", partial)
         handle = match.group(1) if match else None
         raise DiagnosticError("observer_error" if handle else "transport_error",
                               f"transport timed out after {timeout}s", handle,
@@ -62,25 +63,70 @@ def _text(value: str | bytes | None) -> str:
     return value or ""
 
 
-class AdapterTransport:
-    """Approved transfer and neutral-adapter boundary; replaceable in tests."""
+class RemoteTransport:
+    """Global cpl-remote retained execution boundary; replaceable in tests."""
 
-    def __init__(self, remote: list[str], adapter: list[str], invoke: Callable = _run):
-        self.remote, self.adapter, self.invoke = remote, adapter, invoke
+    def __init__(self, remote: list[str], invoke: Callable = _run):
+        self.remote, self.invoke = remote, invoke
 
     def upload(self, profile: str, source: Path, destination: str, timeout: int) -> None:
         result = self.invoke(self.remote + ["upload", profile, str(source), destination], timeout)
         if result.returncode:
             raise DiagnosticError("staging_error", _bounded(result.stdout + result.stderr))
 
-    def execute(self, profile: str, device: int, operation: str, script: str,
+    @staticmethod
+    def _metadata(result: CommandResult, handle: str | None = None) -> dict:
+        try:
+            value = json.loads(result.stdout.strip())
+        except json.JSONDecodeError as exc:
+            raise DiagnosticError(
+                "observer_error" if handle else "transport_error",
+                "cpl-remote returned invalid JSON", handle) from exc
+        if not isinstance(value, dict):
+            raise DiagnosticError(
+                "observer_error" if handle else "transport_error",
+                "cpl-remote returned invalid metadata", handle)
+        return value
+
+    def _logs(self, handle: str, stream: str, timeout: int) -> str:
+        result = self.invoke(
+            self.remote + ["--json", "logs", handle, "--stream", stream], timeout)
+        metadata = self._metadata(result, handle)
+        if result.returncode or not isinstance(metadata.get("content"), str):
+            raise DiagnosticError(
+                "observer_error", "could not retrieve retained job logs", handle)
+        return metadata["content"]
+
+    def _completed(self, result: CommandResult, handle: str, deadline: float) -> CommandResult:
+        metadata = self._metadata(result, handle)
+        state = metadata.get("state")
+        if state in {"running", "reconnecting", "observation-unavailable",
+                     "queued", "dispatching"}:
+            raise DiagnosticError("observer_error", "retained job is not terminal", handle)
+        if state not in {"completed", "failed", "cancelled"}:
+            raise DiagnosticError(
+                "observer_error", "retained job returned an unknown state", handle)
+        exit_code = metadata.get("exit")
+        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+            exit_code = 0 if state == "completed" else 1
+        return CommandResult(
+            exit_code, self._logs(handle, "stdout", _remaining(deadline, handle)),
+            self._logs(handle, "stderr", _remaining(deadline, handle)))
+
+    def execute(self, profile: str, device: int, remote_cwd: str, script: str,
                 timeout: int) -> tuple[CommandResult, str | None]:
         deadline = time.monotonic() + timeout
-        argv = self.adapter + ["--profile", profile, "--operation", operation, "run",
-                               "--native", "--runtime", "py311-torch", "--device", str(device),
-                               "--timeout", str(timeout), "--", "bash", "-c", script]
+        payload = ("#!/usr/bin/env bash\nset -euo pipefail\n"
+                   f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
+                   "export DEVICE_ID=0\n" + script)
         try:
-            result = self.invoke(argv, timeout)
+            with tempfile.NamedTemporaryFile("w", suffix=".sh") as command_file:
+                command_file.write(payload)
+                command_file.flush()
+                result = self.invoke(self.remote + [
+                    "--json", "run", profile, "--file", command_file.name,
+                    "--cwd", remote_cwd, "--timeout", str(timeout),
+                ], timeout)
         except DiagnosticError as exc:
             if exc.invocation_timeout and not exc.handle:
                 raise DiagnosticError(
@@ -88,20 +134,29 @@ class AdapterTransport:
                     invocation_timeout=True) from exc
             raise
         handle = _handle(result.stdout + result.stderr, profile)
-        if handle and _nonterminal(result.stdout + result.stderr):
+        if handle is None:
+            raise DiagnosticError(
+                "transport_error", "cpl-remote run returned no durable handle",
+                dispatch_uncertain=True)
+        if _nonterminal(result.stdout + result.stderr):
             try:
                 result = self.observe(profile, handle, _remaining(deadline, handle))
             except DiagnosticError as exc:
                 if exc.handle:
                     raise
                 raise DiagnosticError("observer_error", str(exc), handle) from exc
+        else:
+            result = self._completed(result, handle, deadline)
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
-        result = self.invoke(self.adapter + ["--profile", profile, "observe", "--handle", handle], timeout)
+        deadline = time.monotonic() + timeout
+        result = self.invoke(
+            self.remote + ["--json", "observe", handle, "--wait", "--timeout",
+                           str(timeout)], timeout)
         if _nonterminal(result.stdout + result.stderr):
             raise DiagnosticError("observer_error", "retained job is not terminal", handle)
-        return result
+        return self._completed(result, handle, deadline)
 
 
 def _bounded(value: str, limit: int = 64 * 1024) -> str:
@@ -126,16 +181,19 @@ def _workload_timeout(outer_timeout: int) -> int:
 
 
 def _handle(output: str, profile: str) -> str | None:
-    match = re.search(rf"\b({re.escape(profile)}:[A-Za-z0-9_.-]+)\b", output)
+    match = re.search(
+        rf"\b(remote:{re.escape(profile)}:job:[A-Za-z0-9_.-]+)\b", output)
     return match.group(1) if match else None
 
 
 def _nonterminal(output: str) -> bool:
-    return any(marker in output for marker in (
-        "CATLASS_VALIDATION_STATE=observation-unavailable",
-        "CATLASS_VALIDATION_STATE=running",
-        "BZ_A3_JOB_STATE=observation-unavailable",
-    ))
+    states = ("queued", "dispatching", "running", "reconnecting",
+              "observation-unavailable")
+    return any(
+        marker in output
+        for state in states
+        for marker in (f'"state": "{state}"', f"REMOTE_STATE={state}")
+    )
 
 
 def _sha(path: Path) -> str:
@@ -203,7 +261,7 @@ def _result(stdout: str) -> dict:
 
 
 class BzA3DiagnosticClient:
-    def __init__(self, transport: AdapterTransport, state_dir: Path, remote_root: str = "/home/m00933363/.profiling-skill/diagnostic"):
+    def __init__(self, transport: RemoteTransport, state_dir: Path, remote_root: str = "/home/m00933363/.profiling-skill/diagnostic"):
         self.transport, self.state_dir, self.remote_root = transport, state_dir, remote_root.rstrip("/")
 
     def resume(self, requests: list[dict], handle: str, observe_timeout: int) -> dict:
@@ -257,7 +315,8 @@ class BzA3DiagnosticClient:
                 if foreign:
                     break
             if (not foreign
-                    and handle.startswith(str(selected.get("profile")) + ":")):
+                    and handle.startswith(
+                        f"remote:{selected.get('profile')}:job:")):
                 matches.append(selected)
         if len(matches) != 1:
             return {"status": "infrastructure_error", "failure_type": "request_error",
@@ -300,7 +359,8 @@ class BzA3DiagnosticClient:
             retained_handle = request.get("retained_handle")
             if (retained_handle is not None
                     and (not isinstance(retained_handle, str)
-                         or not retained_handle.startswith(profile + ":"))):
+                         or not retained_handle.startswith(
+                             f"remote:{profile}:job:"))):
                 raise DiagnosticError("request_error",
                                       "retained_handle must match the selected profile")
             deadline = time.monotonic() + (observe_timeout or timeout)
@@ -405,9 +465,8 @@ class BzA3DiagnosticClient:
             operation_timeout = _remaining(deadline)
             script = _remote_script(common_remote, common_sha, candidate_remote, candidate_sha,
                                     run_root, _workload_timeout(operation_timeout), job)
-            operation = f"diagnostic-{campaign}-{wave}-{cell}"[:80]
             completed, handle = self.transport.execute(
-                profile, device, operation, script, operation_timeout,
+                profile, device, self.remote_root, script, operation_timeout,
             )
             if handle:
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
@@ -425,7 +484,8 @@ class BzA3DiagnosticClient:
                     run_root, _workload_timeout(operation_timeout), job,
                 )
                 completed, handle = self.transport.execute(
-                    profile, device, operation, retry_script, operation_timeout)
+                    profile, device, self.remote_root, retry_script,
+                    operation_timeout)
             if handle:
                 _write_receipt(dispatch_receipt, {"protocol_version": 1,
                                "request_sha256": request_sha, "handle": handle})
@@ -516,15 +576,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
-    parser.add_argument("--adapter-json", required=True)
     args = parser.parse_args()
     try:
-        remote, adapter = json.loads(args.remote_json), json.loads(args.adapter_json)
-        if not all(isinstance(value, list) and value and all(isinstance(x, str) and x for x in value)
-                   for value in (remote, adapter)):
-            raise ValueError("transport commands must be non-empty JSON string arrays")
+        remote = json.loads(args.remote_json)
+        if (not isinstance(remote, list) or not remote
+                or not all(isinstance(x, str) and x for x in remote)):
+            raise ValueError("remote command must be a non-empty JSON string array")
         request = json.load(__import__("sys").stdin)
-        result = BzA3DiagnosticClient(AdapterTransport(remote, adapter), args.state_dir).run(request)
+        result = BzA3DiagnosticClient(RemoteTransport(remote), args.state_dir).run(request)
     except (ValueError, json.JSONDecodeError) as exc:
         result = {"status": "infrastructure_error", "failure_type": "request_error", "diagnostics": str(exc)}
     print(json.dumps(result, sort_keys=True))

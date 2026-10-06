@@ -713,20 +713,20 @@ def main() -> int:
     client_parser.add_argument("socket", type=Path); client_parser.add_argument("arguments", nargs=argparse.REMAINDER)
     parser.add_argument("--skill-sources", type=Path); parser.add_argument("--assets", type=Path)
     parser.add_argument("--placements", type=Path); parser.add_argument("--state-dir", type=Path)
-    parser.add_argument("--remote-json", default='["cpl-remote"]'); parser.add_argument("--adapter-json")
+    parser.add_argument("--remote-json", default='["cpl-remote"]')
     parser.add_argument("--sandbox-backend", choices=("bubblewrap", "docker"), default="bubblewrap")
     parser.add_argument("--docker", default="docker"); parser.add_argument("--docker-image")
     parser.add_argument("--docker-image-id")
     args = parser.parse_args()
     if args.command == "controller-client": return controller_client(args.socket, args.arguments)
     try:
-        if not all((args.skill_sources, args.assets, args.placements, args.state_dir, args.adapter_json)):
+        if not all((args.skill_sources, args.assets, args.placements, args.state_dir)):
             raise RunnerError("runner configuration is incomplete")
-        remote, adapter = json.loads(args.remote_json), json.loads(args.adapter_json)
-        from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
+        remote = json.loads(args.remote_json)
+        from bz_a3_diagnostic_client import RemoteTransport, BzA3DiagnosticClient
         runner = OneShotRunner(skill_sources=_load(args.skill_sources), assets=_load(args.assets),
             placements=_load(args.placements), client=BzA3DiagnosticClient(
-                AdapterTransport(remote, adapter), args.state_dir),
+                RemoteTransport(remote), args.state_dir),
             sandbox_backend=args.sandbox_backend, docker=args.docker,
             docker_image=args.docker_image, docker_image_id=args.docker_image_id)
         request = json.load(sys.stdin)

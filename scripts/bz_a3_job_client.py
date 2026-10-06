@@ -15,6 +15,7 @@ import statistics
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -48,7 +49,7 @@ def _invoke(argv: list[str], timeout: int) -> CommandResult:
                                 check=False)
     except subprocess.TimeoutExpired as exc:
         output = _text(exc.stdout) + _text(exc.stderr)
-        match = re.search(r"\b(bz-a3-[12]:[A-Za-z0-9_.-]+)\b", output)
+        match = re.search(r"\b(remote:bz-a3-[12]:job:[A-Za-z0-9_.-]+)\b", output)
         handle = match.group(1) if match else None
         raise JobError("observer_error" if handle else "transport_error",
                        f"transport timed out after {timeout}s", handle,
@@ -70,24 +71,26 @@ def _bounded(value: str, limit: int = 64 * 1024) -> str:
 
 
 def _handle(output: str, profile: str) -> str | None:
-    match = re.search(rf"\b({re.escape(profile)}:[A-Za-z0-9_.-]+)\b", output)
+    match = re.search(
+        rf"\b(remote:{re.escape(profile)}:job:[A-Za-z0-9_.-]+)\b", output)
     return match.group(1) if match else None
 
 
 def _nonterminal(output: str) -> bool:
-    return any(marker in output for marker in (
-        "CATLASS_VALIDATION_STATE=observation-unavailable",
-        "CATLASS_VALIDATION_STATE=running",
-        "BZ_A3_JOB_STATE=observation-unavailable",
-    ))
+    states = ("queued", "dispatching", "running", "reconnecting",
+              "observation-unavailable")
+    return any(
+        marker in output
+        for state in states
+        for marker in (f'"state": "{state}"', f"REMOTE_STATE={state}")
+    )
 
 
-class AdapterTransport:
-    """Approved cpl-remote and neutral cat_dev adapter boundary."""
+class RemoteTransport:
+    """Global cpl-remote retained execution boundary; replaceable in tests."""
 
-    def __init__(self, remote: list[str], adapter: list[str],
-                 invoke: Callable = _invoke):
-        self.remote, self.adapter, self.invoke = remote, adapter, invoke
+    def __init__(self, remote: list[str], invoke: Callable = _invoke):
+        self.remote, self.invoke = remote, invoke
 
     def upload(self, profile: str, source: Path, destination: str, timeout: int) -> None:
         result = self.invoke(
@@ -95,17 +98,66 @@ class AdapterTransport:
         if result.returncode:
             raise JobError("staging_error", _bounded(result.stdout + result.stderr))
 
-    def execute(self, profile: str, device: int, operation: str, script: str,
+    @staticmethod
+    def _metadata(result: CommandResult, handle: str | None = None) -> dict:
+        try:
+            value = json.loads(result.stdout.strip())
+        except json.JSONDecodeError as exc:
+            raise JobError("observer_error" if handle else "transport_error",
+                           "cpl-remote returned invalid JSON", handle) from exc
+        if not isinstance(value, dict):
+            raise JobError("observer_error" if handle else "transport_error",
+                           "cpl-remote returned invalid metadata", handle)
+        return value
+
+    def _logs(self, handle: str, stream: str, timeout: int) -> str:
+        result = self.invoke(
+            self.remote + ["--json", "logs", handle, "--stream", stream], timeout)
+        metadata = self._metadata(result, handle)
+        if result.returncode or not isinstance(metadata.get("content"), str):
+            raise JobError("observer_error", "could not retrieve retained job logs", handle)
+        return metadata["content"]
+
+    def _completed(self, result: CommandResult, handle: str, deadline: float) -> CommandResult:
+        metadata = self._metadata(result, handle)
+        state = metadata.get("state")
+        if state in {"running", "reconnecting", "observation-unavailable",
+                     "queued", "dispatching"}:
+            raise JobError("observer_error", "retained job is not terminal", handle)
+        if state not in {"completed", "failed", "cancelled"}:
+            raise JobError("observer_error", "retained job returned an unknown state", handle)
+        exit_code = metadata.get("exit")
+        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+            exit_code = 0 if state == "completed" else 1
+        return CommandResult(
+            exit_code, self._logs(handle, "stdout", self._remaining(deadline, handle)),
+            self._logs(handle, "stderr", self._remaining(deadline, handle)))
+
+    @staticmethod
+    def _remaining(deadline: float, handle: str) -> int:
+        remaining = math.ceil(deadline - time.monotonic())
+        if remaining < 1:
+            raise JobError("observer_error", "BZ job deadline exhausted", handle)
+        return remaining
+
+    def execute(self, profile: str, device: int, remote_cwd: str, script: str,
                 timeout: int) -> tuple[CommandResult, str | None]:
         deadline = time.monotonic() + timeout
-        argv = self.adapter + [
-            "--profile", profile, "--operation", operation, "run", "--native",
-            "--runtime", "py311-torch", "--device", str(device), "--timeout",
-            str(timeout), "--", "bash", "-c", script,
-        ]
-        result = self.invoke(argv, timeout)
+        payload = ("#!/usr/bin/env bash\nset -euo pipefail\n"
+                   f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
+                   "export DEVICE_ID=0\n" + script)
+        with tempfile.NamedTemporaryFile("w", suffix=".sh") as command_file:
+            command_file.write(payload)
+            command_file.flush()
+            result = self.invoke(self.remote + [
+                "--json", "run", profile, "--file", command_file.name,
+                "--cwd", remote_cwd, "--timeout", str(timeout),
+            ], timeout)
         handle = _handle(result.stdout + result.stderr, profile)
-        if handle and _nonterminal(result.stdout + result.stderr):
+        if handle is None:
+            raise JobError("transport_error", "cpl-remote run returned no durable handle",
+                           dispatch_uncertain=True)
+        if _nonterminal(result.stdout + result.stderr):
             remaining = math.ceil(deadline - time.monotonic())
             if remaining < 1:
                 raise JobError("observer_error", "BZ job deadline exhausted", handle)
@@ -113,16 +165,20 @@ class AdapterTransport:
                 result = self.observe(profile, handle, remaining)
             except JobError as exc:
                 raise JobError("observer_error", str(exc), exc.handle or handle) from exc
+        else:
+            result = self._completed(result, handle, deadline)
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
+        deadline = time.monotonic() + timeout
         result = self.invoke(
-            self.adapter + ["--profile", profile, "observe", "--handle", handle],
+            self.remote + ["--json", "observe", handle, "--wait", "--timeout",
+                           str(timeout)],
             timeout,
         )
         if _nonterminal(result.stdout + result.stderr):
             raise JobError("observer_error", "retained job is not terminal", handle)
-        return result
+        return self._completed(result, handle, deadline)
 
 
 def _json_sha(value: object) -> str:
@@ -271,7 +327,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
 
 
 class BzA3JobClient:
-    def __init__(self, transport: AdapterTransport, state_dir: Path,
+    def __init__(self, transport: RemoteTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
                  batch_profiler: Path, remote_root: str):
         self.transport = transport
@@ -330,7 +386,8 @@ class BzA3JobClient:
                 if record.get("request_sha256") != request_sha:
                     raise JobError("request_error", "dispatch receipt request mismatch")
                 handle = record.get("handle")
-                if not isinstance(handle, str) or not handle.startswith(placement["profile"] + ":"):
+                if (not isinstance(handle, str)
+                        or not handle.startswith(f"remote:{placement['profile']}:job:")):
                     raise JobError("request_error", "dispatch receipt handle mismatch")
                 response = self.transport.observe(
                     placement["profile"], handle, self._remaining(deadline, handle))
@@ -351,7 +408,7 @@ class BzA3JobClient:
                 try:
                     response, handle = self.transport.execute(
                         placement["profile"], placement["device"],
-                        f"profiling-job-{request_sha[:16]}", script,
+                        self.remote_root, script,
                         self._remaining(deadline),
                     )
                 except JobError as exc:
@@ -586,7 +643,6 @@ def main() -> int:
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--placements-json", type=Path, required=True)
     parser.add_argument("--remote-json", default='["cpl-remote"]')
-    parser.add_argument("--adapter-json", required=True)
     parser.add_argument(
         "--remote-root", required=True,
         help="existing writable remote staging root; run artifacts use its runs/ child",
@@ -595,11 +651,10 @@ def main() -> int:
     args = parser.parse_args()
     try:
         remote = _command(args.remote_json, "--remote-json")
-        adapter = _command(args.adapter_json, "--adapter-json")
         placements = json.loads(args.placements_json.read_text())
         here = Path(__file__).resolve().parent
         client = BzA3JobClient(
-            AdapterTransport(remote, adapter), args.state_dir, placements,
+            RemoteTransport(remote), args.state_dir, placements,
             runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
             batch_profiler=here / "batch_profile_a3.py",
             remote_root=args.remote_root,

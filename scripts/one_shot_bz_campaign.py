@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 
 import diagnostic_campaign
-from bz_a3_diagnostic_client import AdapterTransport, BzA3DiagnosticClient
+from bz_a3_diagnostic_client import RemoteTransport, BzA3DiagnosticClient
 from diagnostic_campaign import (CommandLauncher, CommandTerminalHook,
                                  DiagnosticCampaign, DiagnosticError, TREATMENTS)
 from two_shot_smoke_campaign import (TwoShotSmokeCampaign, manifest_identity,
@@ -654,7 +654,7 @@ def reconcile_terminal(config: dict, manifest: dict, placements: dict,
                 or terminal_attempt < 1):
             raise DiagnosticError("invalid reconciliation cell or terminal attempt")
         profile = placements[parts[2]][min(terminal_attempt - 1, 1)]["profile"]
-        if not handle.startswith(profile + ":"):
+        if not handle.startswith("remote:" + profile + ":job:"):
             raise DiagnosticError("reconciliation handle does not match terminal placement")
     receipt = campaign.reconcile_terminal(
         cell_id, agent_attempt, terminal_attempt, handle=handle, result=result)
@@ -683,7 +683,6 @@ def main() -> int:
     parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--agent-command-json")
     parser.add_argument("--remote-command-json", default='["cpl-remote"]')
-    parser.add_argument("--adapter-command-json")
     args = parser.parse_args()
     if args.resume_smoke and args.action != "run-smoke":
         parser.error("--resume-smoke requires --action run-smoke")
@@ -705,13 +704,13 @@ def main() -> int:
             handle=args.terminal_handle,
             result=(load_json(args.terminal_result) if args.terminal_result else None))
     else:
-        if not args.agent_command_json or not args.adapter_command_json or args.state_dir is None:
-            parser.error("agent, adapter, and state arguments are required to run waves")
+        if not args.agent_command_json or args.state_dir is None:
+            parser.error("agent and state arguments are required to run waves")
         commands = [json.loads(value) for value in (args.agent_command_json,
-                    args.remote_command_json, args.adapter_command_json)]
+                    args.remote_command_json)]
         if any(not isinstance(value, list) or not value for value in commands):
             parser.error("commands must be non-empty JSON arrays")
-        transport = AdapterTransport(commands[1], commands[2])
+        transport = RemoteTransport(commands[1])
         client = BzA3DiagnosticClient(transport, args.state_dir)
         if args.action == "run-wave":
             if args.wave is None:

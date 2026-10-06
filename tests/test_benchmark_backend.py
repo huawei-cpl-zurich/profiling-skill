@@ -92,7 +92,7 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
         capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
 
 
-def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
+def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: Path):
     payload = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
                "device": 3, "phase": "before", "wave": 2,
                "attempt_id": "wave-2-first"}
@@ -108,7 +108,17 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["job"]["calibration_phase"] == "before"
     assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
-    assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+    assert result["job"]["profiling"] == {
+        "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
+        "tool": "msprof op",
+        "captures": 3,
+        "aic_metrics": "BasicInfo",
+        "warm_up": 3,
+        "launch_count": 1,
+        "replay_mode": "kernel",
+        "kernel_name": result["selector"],
+        "driver_arguments": ["--kernel-name", result["selector"]],
+    }
 
 
 def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):
@@ -164,6 +174,15 @@ def test_relocated_calibration_candidate_imports_and_launches_without_source_tre
     fake_language.constexpr = int
     fake_language.float32 = "float32"
     fake_triton.language = fake_language
+    fake_driver = types.ModuleType("triton.runtime.driver")
+    fake_driver.active = types.SimpleNamespace(
+        utils=types.SimpleNamespace(
+            get_device_properties=lambda _device: {"num_aicore": 24}
+        )
+    )
+    fake_runtime = types.ModuleType("triton.runtime")
+    fake_runtime.driver = fake_driver
+    fake_triton.runtime = fake_runtime
     fake_torch = types.ModuleType("torch")
     fake_torch.float32 = "float32"
     output = object()
@@ -171,22 +190,34 @@ def test_relocated_calibration_candidate_imports_and_launches_without_source_tre
     fake_nn = types.ModuleType("torch.nn")
     fake_nn.Module = object
     fake_torch.nn = fake_nn
+    fake_torch_npu = types.ModuleType("torch_npu")
+    fake_torch_npu.npu = types.SimpleNamespace(current_device=lambda: 0)
     monkeypatch.setitem(sys.modules, "triton", fake_triton)
     monkeypatch.setitem(sys.modules, "triton.language", fake_language)
+    monkeypatch.setitem(sys.modules, "triton.runtime", fake_runtime)
+    monkeypatch.setitem(sys.modules, "triton.runtime.driver", fake_driver)
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "torch.nn", fake_nn)
+    monkeypatch.setitem(sys.modules, "torch_npu", fake_torch_npu)
 
     spec = importlib.util.spec_from_file_location("relocated_calibration", relocated)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    tensor = lambda shape: types.SimpleNamespace(shape=shape, device="npu:0")
+    def tensor(shape):
+        return types.SimpleNamespace(shape=shape, device="npu:0")
+
     actual = module.Model().forward(tensor((256, 256)), tensor((256, 256)), tensor((256,)))
 
     assert actual is output
     assert module.KERNEL_NAME == "streaming_matmul_add_kernel_mix_aic"
-    assert launches[0][0] == (8, 8)
-    assert launches[0][2] == {"BLOCK_M": 32, "BLOCK_N": 32, "BLOCK_K": 32}
+    assert launches[0][0] == (24,)
+    assert launches[0][2] == {
+        "num_cores": 24,
+        "BLOCK_M": 32,
+        "BLOCK_N": 32,
+        "BLOCK_K": 32,
+    }
 
 
 def test_pinned_repository_assets_are_exact_and_have_fifty_cases():

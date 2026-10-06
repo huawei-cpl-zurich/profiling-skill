@@ -26,6 +26,37 @@ campaign = importlib.util.module_from_spec(CAMPAIGN_SPEC)
 assert CAMPAIGN_SPEC.loader
 sys.modules[CAMPAIGN_SPEC.name] = campaign
 CAMPAIGN_SPEC.loader.exec_module(campaign)
+sys.modules.setdefault("audited_campaign", campaign)
+sys.path.insert(0, str(ROOT / "scripts"))
+try:
+    import audited_runtime
+    import audited_campaign as runtime_campaign
+finally:
+    sys.path.pop(0)
+
+
+def valid_verifier(*args, **kwargs):
+    del kwargs
+    command = args[0]
+    repo = Path(command[2])
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=repo, text=True,
+        capture_output=True, check=True,
+    ).stdout.strip()
+    return SimpleNamespace(returncode=0, stdout=json.dumps({
+        "status": "valid", "branch": branch,
+        "seed_commit": "seed", "session_id": "thread",
+        "experiments": [{"commit": str(number)} for number in range(1, 5)],
+    }), stderr="")
+
+
+@pytest.fixture(autouse=True)
+def isolated_global_remote(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home"
+    remote = home / ".agents/skills/remote-access/scripts/cpl-remote"
+    remote.parent.mkdir(parents=True)
+    remote.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(Path, "home", lambda: home)
 
 
 def sha(path: Path) -> str:
@@ -88,7 +119,7 @@ def git_repo(path: Path) -> tuple[Path, str]:
 def runtime_fixture(tmp_path: Path, cell: dict):
     repo, revision = git_repo(tmp_path / "source")
     skills = {}
-    for name in cell["skills"]:
+    for name in {skill for names in production.TREATMENT_SKILLS.values() for skill in names}:
         skill = tmp_path / "skills" / name
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text(name)
@@ -96,13 +127,19 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py"):
+                 "bz_a3_job_client.py",
+                 "validate_audited_experiment.py", "audited_verifier.py",
+                 "audited_contract.py", "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
     assets = tmp_path / "benchmarks"
     assets.mkdir()
-    (assets / "pinned.txt").write_text("assets")
-    cpl_remote = tmp_path / "cpl-remote"
-    cpl_remote.write_text("#!/bin/sh\n")
+    baselines = {}
+    for task_name in production.DEVELOPMENT_CASES:
+        baseline = assets / task_name / "baseline.json"
+        baseline.parent.mkdir()
+        baseline.write_text(json.dumps({"task": task_name}))
+        baselines[task_name] = {"path": str(baseline), "sha256": sha(baseline)}
+    cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     prompt = tmp_path / "prompt.md"
     task = tmp_path / "task.md"
     prompt.write_text("prompt")
@@ -111,23 +148,49 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     cell["prompt_contract"] = {
         "invariant_sha256": sha(prompt), "task_sha256": sha(task),
     }
-    return {
+    runtime_digest = production.digest_tree(scripts)
+    cannbot_names = sorted({
+        name for names in production.TREATMENT_SKILLS.values() for name in names
+        if name not in {"ascend-profiling", "triton-guarded-kernel"}
+    })
+    provenance = {
+        "source_revision": revision,
+        "controller_sha256": runtime_digest,
+        "runtime_image_digest": "sha256:" + "b" * 64,
+        "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
+        "baselines": {name: binding["sha256"] for name, binding in baselines.items()},
+        "skills": {
+            "cannbot": production.digest_skill_bundle(skills, cannbot_names),
+            **({"ascend-profiling": skills["ascend-profiling"]["sha256"]}
+               if "ascend-profiling" in skills else {}),
+            **({"triton-guarded-kernel": skills["triton-guarded-kernel"]["sha256"]}
+               if "triton-guarded-kernel" in skills else {}),
+        },
+    }
+    config = {
         "run_id": "production-e2e",
         "run_root": str(tmp_path / "runs"),
-        "source_repositories": {cell["task"]: {"path": str(repo), "revision": revision}},
+        "source_repositories": {
+            name: {"path": str(repo), "revision": revision}
+            for name in production.DEVELOPMENT_CASES
+        },
         "skill_sources": skills,
-        "runtime_scripts": {"path": str(scripts), "sha256": production.digest_tree(scripts)},
+        "runtime_scripts": {"path": str(scripts), "sha256": runtime_digest},
         "benchmark_assets": {"path": str(assets),
                              "sha256": production.digest_tree(assets)},
-        "cpl_remote": str(cpl_remote), "cpl_remote_sha256": sha(cpl_remote),
+        "baseline_sources": baselines,
+        "cpl_remote_sha256": sha(cpl_remote),
         "prompt": {"path": str(prompt), "sha256": sha(prompt)},
-        "tasks": {cell["task"]: {"path": str(task), "sha256": sha(task)}},
-        "adapter_command": ["approved-adapter"],
+        "tasks": {name: {"path": str(task), "sha256": sha(task)}
+                  for name in production.DEVELOPMENT_CASES},
         "remote_root": "/remote/campaign",
         "auth_home": str(tmp_path / "auth"),
         "model": "gpt-5.6-sol", "reasoning_effort": "low",
-        "runtime_mode": "direct", "timeout": 10,
+        "runtime_mode": "docker", "runtime_image_digest": provenance["runtime_image_digest"],
+        "timeout": 10,
+        "provenance": provenance,
     }
+    return config
 
 
 class FakeRunner:
@@ -139,6 +202,12 @@ class FakeRunner:
 
     def run(self, run_id, agent_id, *, resume=False):
         self.calls.append((self.repo, run_id, agent_id, resume))
+        branch = f"experiment/{run_id}/{agent_id}"
+        if subprocess.run(
+            ["git", "branch", "--show-current"], cwd=self.repo, text=True,
+            capture_output=True, check=True,
+        ).stdout.strip() != branch:
+            subprocess.run(["git", "checkout", "-qb", branch], cwd=self.repo, check=True)
         experiment = self.repo / ".experiment"
         experiment.mkdir(exist_ok=True)
         (experiment / "seed.json").write_text("{}")
@@ -149,7 +218,7 @@ class FakeRunner:
                 "status": "ok", "handle": f"bz-a3-1:round-{number}",
                 "median_us": 10.0 - number,
             }))
-        return SimpleNamespace(status="complete", branch=f"experiment/{run_id}/{agent_id}",
+        return SimpleNamespace(status="complete", branch=branch,
                                session_id="thread", seed_commit="seed",
                                commits=("1", "2", "3", "4"))
 
@@ -163,7 +232,10 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
 
     def invoker(repo, **kwargs):
         created["invoker"] = (repo, kwargs)
-        return SimpleNamespace(scrub_auth=lambda: None)
+        return SimpleNamespace(
+            scrub_auth=lambda: None,
+            docker_image_id=config["runtime_image_digest"],
+        )
 
     def controller(command, repo, **kwargs):
         created["controller"] = (command, repo, kwargs)
@@ -172,6 +244,12 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
     launcher = production.ProductionCellLauncher(
         config, invoker_factory=invoker, controller_factory=controller,
         runner_factory=FakeRunner,
+        verifier_invoke=lambda *args, **kwargs: SimpleNamespace(
+            returncode=0, stdout=json.dumps({
+                "status": "valid", "branch": "experiment/production-e2e/gdn-project-guarded",
+                "seed_commit": "seed", "session_id": "thread",
+                "experiments": [{"commit": str(number)} for number in range(1, 5)],
+            }), stderr=""),
     )
     slot = {"target": "bz-a3-2", "device": 6}
     receipt = launcher.launch(cell, slot)
@@ -197,7 +275,9 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
     assert FakeRunner.calls[-1][-1] is False
 
     launcher.launch(cell, slot)
-    assert FakeRunner.calls[-1][-1] is True
+    # A ledger-loss restart reconstructs the already-complete verified branch;
+    # it does not ask the lifecycle to resume without a blocked checkpoint.
+    assert FakeRunner.calls[-1][-1] is False
 
 
 def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
@@ -208,6 +288,214 @@ def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
     Path(config["runtime_scripts"]["path"], "benchmark_backend.py").write_text("drift")
     with pytest.raises(production.ProductionError, match="runtime scripts hash"):
         production.ProductionCellLauncher(config)
+
+
+def test_launcher_rejects_direct_runtime_and_arbitrary_adapter(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["runtime_mode"] = "direct"
+    config["adapter_command"] = ["untrusted-adapter"]
+    with pytest.raises(production.ProductionError, match="isolated Docker"):
+        production.ProductionCellLauncher(config)
+
+
+@pytest.mark.parametrize("pin", ["source_revision", "controller_sha256", "baseline", "skill"])
+def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pin: str):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    if pin == "source_revision":
+        config["provenance"][pin] = "a" * 40
+    elif pin == "controller_sha256":
+        config["provenance"][pin] = "a" * 64
+    elif pin == "baseline":
+        config["provenance"]["baselines"]["matmul"] = "a" * 64
+    else:
+        config["provenance"]["skills"]["cannbot"] = "a" * 64
+    with pytest.raises(production.ProductionError, match="provenance"):
+        production.ProductionCellLauncher(config)
+
+
+def test_controller_uses_pinned_global_boundary_without_adapter_argv(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    created = {}
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda command, repo, **kwargs: created.setdefault("controller", command),
+        runner_factory=FakeRunner,
+            verifier_invoke=valid_verifier,
+    )
+    launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+    controller_config = json.loads((
+        Path(config["run_root"]) / cell["cell_id"] / "state" / "controller.json"
+    ).read_text())
+    client = json.loads(controller_config["backend_command"][-1])
+    assert "--adapter-json" not in client
+    assert client[client.index("--cpl-remote-sha256") + 1] == config["cpl_remote_sha256"]
+    placements = json.loads((
+        Path(config["run_root"]) / cell["cell_id"] / "state" / "placements.json"
+    ).read_text())
+    assert placements == {"0": {"target": "bz-a3-1", "device": 1}}
+
+
+def test_runner_crash_is_infrastructure_not_candidate_failure(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+
+    class CrashingRunner(FakeRunner):
+        def run(self, *args, **kwargs):
+            raise RuntimeError("codex transport vanished")
+
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(),
+        runner_factory=CrashingRunner,
+    )
+    with pytest.raises(runtime_campaign.InfrastructureFailure,
+                       match="codex transport vanished"):
+        launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+
+
+def test_existing_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    (repo / ".experiment").mkdir()
+    (repo / ".experiment" / "seed.json").write_text("{}")
+    with pytest.raises(runtime_campaign.InfrastructureFailure, match="blocked checkpoint"):
+        launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+
+
+def test_complete_branch_is_verified_and_reconstructed_with_full_receipts(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    verifier_calls = []
+
+    class EvidenceRunner(FakeRunner):
+        def run(self, *args, **kwargs):
+            result = super().run(*args, **kwargs)
+            for number in range(1, 5):
+                path = self.repo / "experiments" / f"{number:02d}" / "results.json"
+                receipt = json.loads(path.read_text())
+                receipt.update({
+                    "case_results": [{"case": 7, "median_us": 9.0}],
+                    "baseline_median_us": 12.0,
+                    "calibration": {"median_us": 1.0},
+                    "policy": {"admission_controls": [{"status": "pass"}],
+                               "infra_attempts": [{"status": "retry"}]},
+                })
+                path.write_text(json.dumps(receipt))
+            return result
+
+    def verifier(argv, **kwargs):
+        verifier_calls.append(argv)
+        return SimpleNamespace(returncode=0, stdout=json.dumps({
+            "status": "valid", "branch": "experiment/production-e2e/matmul-cannbot",
+            "seed_commit": "seed", "session_id": "thread",
+            "experiments": [{"commit": str(number)} for number in range(1, 5)],
+        }), stderr="")
+
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=EvidenceRunner,
+        verifier_invoke=verifier,
+    )
+    slot = {"target": "bz-a3-1", "device": 1}
+    first = launcher.launch(cell, slot)
+    assert first["rounds"][0]["case_results"][0]["case"] == 7
+    assert first["rounds"][0]["policy"]["infra_attempts"] == [{"status": "retry"}]
+    assert first["baseline_median_us"] == 12.0
+    second = launcher.launch(cell, slot)
+    assert second == first
+    assert len(verifier_calls) == 2
+
+
+def test_real_command_controller_preserves_genuine_candidate_failure(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    controller_script = Path(config["runtime_scripts"]["path"]) / "audited_bz_controller.py"
+    controller_script.write_text("""\
+import argparse, json
+p = argparse.ArgumentParser()
+p.add_argument('--candidate-sha256', required=True)
+p.add_argument('--manifest-sha256', required=True)
+p.add_argument('--experiment', required=True)
+a, _ = p.parse_known_args()
+h = f'remote:bz-a3-1:job:candidate-{a.experiment}'
+print(json.dumps({
+  'candidate_sha256': a.candidate_sha256,
+  'manifest_sha256': a.manifest_sha256,
+  'handle': h, 'status': 'candidate_error', 'device': 'bz-a3-1/device-1',
+  'reason': 'Triton compilation failed',
+  'policy': {
+    'schema': 'profiling-skill/controller-policy/v1',
+    'selected_device': 'bz-a3-1/device-1',
+    'admission_controls': [{'device': 'bz-a3-1/device-1', 'status': 'pass',
+      'healthy': True, 'idle': True, 'warmed': True}],
+    'submission_candidate_sha256': a.candidate_sha256,
+    'submitted_handles': [h], 'observed_handles': [h], 'infra_retries': 0,
+    'retry_budget': 3, 'quarantined_devices': [], 'quarantine_controls': {},
+    'confirmation_count': 0, 'post_control': 'not_run',
+    'variability_threshold': 0.25
+  }
+}))
+""")
+    closure_hash = production.digest_tree(Path(config["runtime_scripts"]["path"]))
+    config["runtime_scripts"]["sha256"] = closure_hash
+    config["provenance"]["controller_sha256"] = closure_hash
+
+    class ControllerRunner(FakeRunner):
+        def __init__(self, repo, prompt, task, invoker, controller, *, round_count):
+            super().__init__(repo, prompt, task, invoker, controller, round_count=round_count)
+            self.controller = controller
+
+        def run(self, run_id, agent_id, *, resume=False):
+            result = super().run(run_id, agent_id, resume=resume)
+            candidate_hash = sha(self.repo / "candidate.py")
+            manifest_hash = sha(self.repo / "candidate.manifest.json")
+            for number in range(1, 5):
+                receipt = self.controller(number, candidate_hash, manifest_hash)
+                path = self.repo / "experiments" / f"{number:02d}" / "results.json"
+                path.write_text(json.dumps(receipt))
+            return result
+
+    launcher = production.ProductionCellLauncher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=audited_runtime.CommandController,
+        runner_factory=ControllerRunner, verifier_invoke=valid_verifier,
+    )
+    receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 1})
+    assert receipt["status"] == "complete"
+    assert [item["status"] for item in receipt["rounds"]] == ["candidate_error"] * 4
+    assert receipt["rounds"][0]["reason"] == "Triton compilation failed"
 
 
 @pytest.mark.parametrize(("task", "development", "count"), [
@@ -228,19 +516,8 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     for task in production.DEVELOPMENT_CASES:
         tasks[task] = tmp_path / f"{task}.md"
         tasks[task].write_text(task)
-    provenance = {
-        "source_revision": revision, "controller_sha256": "a" * 64,
-        "runtime_image_digest": "sha256:" + "b" * 64,
-        "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
-        "baselines": {task: "c" * 64 for task in tasks},
-        "skills": {"cannbot": "d" * 64, "ascend-profiling": "e" * 64,
-                   "triton-guarded-kernel": "f" * 64},
-    }
-    manifest = campaign.build_manifest(
-        "fake-production", prompt, tasks, provenance, "fixed"
-    )
     skills = {}
-    for name in {skill for cell in manifest["cells"] for skill in cell["skills"]}:
+    for name in {skill for names in production.TREATMENT_SKILLS.values() for skill in names}:
         path = tmp_path / "skills" / name
         path.mkdir(parents=True)
         (path / "SKILL.md").write_text(name)
@@ -248,13 +525,34 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py"):
+                 "bz_a3_job_client.py", "validate_audited_experiment.py",
+                 "audited_verifier.py", "audited_contract.py",
+                 "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
     assets = tmp_path / "benchmarks"
     assets.mkdir()
-    (assets / "pinned.txt").write_text("assets")
-    cpl_remote = tmp_path / "cpl-remote"
-    cpl_remote.write_text("#!/bin/sh\n")
+    baselines = {}
+    for task in tasks:
+        path = assets / task / "baseline.json"
+        path.parent.mkdir()
+        path.write_text(json.dumps({"task": task}))
+        baselines[task] = {"path": str(path), "sha256": sha(path)}
+    provenance = {
+        "source_revision": revision,
+        "controller_sha256": production.digest_tree(scripts),
+        "runtime_image_digest": "sha256:" + "b" * 64,
+        "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
+        "baselines": {task: binding["sha256"] for task, binding in baselines.items()},
+        "skills": {
+            "cannbot": production.digest_skill_bundle(skills, production.CANNBOT_SKILLS),
+            "ascend-profiling": skills["ascend-profiling"]["sha256"],
+            "triton-guarded-kernel": skills["triton-guarded-kernel"]["sha256"],
+        },
+    }
+    manifest = campaign.build_manifest(
+        "fake-production", prompt, tasks, provenance, "fixed"
+    )
+    cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     config = {
         "schema": production.RUNTIME_SCHEMA, "run_id": manifest["run_id"],
         "run_root": str(tmp_path / "runs"),
@@ -266,17 +564,21 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
                             "sha256": production.digest_tree(scripts)},
         "benchmark_assets": {"path": str(assets),
                              "sha256": production.digest_tree(assets)},
-        "cpl_remote": str(cpl_remote), "cpl_remote_sha256": sha(cpl_remote),
+        "baseline_sources": baselines,
+        "cpl_remote_sha256": sha(cpl_remote),
         "prompt": manifest["prompt"], "tasks": manifest["tasks"],
-        "adapter_command": ["approved-adapter"], "remote_root": "/remote/campaign",
+        "remote_root": "/remote/campaign", "provenance": provenance,
         "auth_home": str(tmp_path / "auth"), "model": "gpt-5.6-sol",
-        "reasoning_effort": "low", "runtime_mode": "direct", "timeout": 10,
+        "reasoning_effort": "low", "runtime_mode": "docker",
+        "runtime_image_digest": provenance["runtime_image_digest"], "timeout": 10,
     }
     launcher = production.ProductionCellLauncher(
         config,
-        invoker_factory=lambda repo, **kwargs: SimpleNamespace(scrub_auth=lambda: None),
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=provenance["runtime_image_digest"]),
         controller_factory=lambda command, repo, **kwargs: object(),
         runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
     )
     pool = SimpleNamespace(admit=lambda: [
         {"target": "bz-a3-1", "device": 2, "healthy": True, "idle": True},

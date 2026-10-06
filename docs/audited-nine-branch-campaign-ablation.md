@@ -37,11 +37,28 @@ materialize its exact skill allowlist, bind the BZ controller/backend closure,
 and resume the audited runner. Tests use dependency factories solely to run the
 full nine-cell path locally without Codex credentials or remote hardware.
 
+The hardening follow-up deliberately keeps the following checks at the
+launcher boundary because removing any one of them changes experimental
+meaning rather than merely simplifying code:
+
+- Manifest provenance is compared with the actual source revision, controller
+  closure, benchmark baselines, and copied skill trees before any agent runs.
+- Docker is the only production agent runtime, and the BZ client can reach only
+  the hash-pinned global `cpl-remote`; caller-selected adapter argv was removed.
+- A branch is resumed only from a valid blocked checkpoint. A completed branch
+  whose ledger was lost is independently verified and reconstructed in place.
+- No lifecycle exception is relabeled as a kernel failure. Genuine candidate
+  failures remain controller receipts and retain their full compact evidence.
+- The independent offline verifier is a terminal success gate, not a reporting
+  convenience. This is intentionally separate from the lifecycle's own checks.
+
 ## Validation
 
 - Focused: `pytest -q tests/test_audited_campaign.py` — 9 passed.
+- Production hardening: `pytest -q tests/test_audited_campaign_production.py`
+  — 18 passed, including the real `CommandController` with a fake BZ boundary.
 - Broader: `PYTHONPATH=. pytest -q -k 'not test_real_bwrap_with_functional_fake_codex_runs_persistent_rounds'`
-  — 695 passed, 1 deselected.
+  — 713 passed, 1 deselected after production hardening.
 - The excluded existing test requires unprivileged Bubblewrap namespaces,
   which this local host disables before any campaign code runs.
 

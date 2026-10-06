@@ -37,6 +37,16 @@ TREATMENT_SKILLS = {
     ),
     "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
 }
+CANNBOT_SKILLS = tuple(sorted({
+    skill for treatment in ("cannbot", "project-cannbot")
+    for skill in TREATMENT_SKILLS[treatment]
+    if skill not in {"ascend-profiling", "triton-guarded-kernel"}
+}))
+RUNTIME_FILES = {
+    "audited_bz_controller.py", "audited_contract.py", "audited_lifecycle.py",
+    "audited_runtime.py", "audited_verifier.py", "benchmark_backend.py",
+    "bz_a3_job_client.py", "validate_audited_experiment.py",
+}
 
 
 class ProductionError(RuntimeError):
@@ -66,6 +76,21 @@ def digest_tree(root: Path) -> str:
             digest.update(relative.encode() + b"\0")
             digest.update(oct(stat.S_IMODE(mode)).encode() + b"\0")
             digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def digest_skill_bundle(bindings: dict, names: list[str] | tuple[str, ...]) -> str:
+    """Bind a composite manifest skill pin to each exact constituent tree."""
+    digest = hashlib.sha256()
+    for name in sorted(names):
+        binding = bindings.get(name)
+        if not isinstance(binding, dict):
+            raise ProductionError(f"skill bundle source is missing: {name}")
+        tree = Path(binding.get("path", ""))
+        actual = digest_tree(tree)
+        if binding.get("sha256") != actual:
+            raise ProductionError(f"skill {name} hash does not match pinned input")
+        digest.update(name.encode() + b"\0" + actual.encode() + b"\0")
     return digest.hexdigest()
 
 
@@ -156,7 +181,8 @@ class ProductionCellLauncher:
     """Create or resume one isolated four-round branch and its controller."""
 
     def __init__(self, config: dict, *, invoker_factory=None,
-                 controller_factory=None, runner_factory=None):
+                 controller_factory=None, runner_factory=None,
+                 verifier_invoke: Callable = subprocess.run):
         if config.get("schema", RUNTIME_SCHEMA) != RUNTIME_SCHEMA:
             raise ProductionError(f"runtime config requires schema {RUNTIME_SCHEMA}")
         self.config = config
@@ -164,6 +190,21 @@ class ProductionCellLauncher:
         self.scripts = Path(runtime.get("path", "")).resolve()
         if digest_tree(self.scripts) != runtime.get("sha256"):
             raise ProductionError("runtime scripts hash does not match pinned closure")
+        self.verifier_invoke = verifier_invoke
+        self.run_root = Path(config["run_root"]).resolve()
+        if "cpl_remote" in config:
+            raise ProductionError("runtime config cannot override global cpl-remote")
+        self.cpl_remote = str(
+            Path.home() / ".agents" / "skills" / "remote-access" / "scripts" / "cpl-remote"
+        )
+        if (not Path(self.cpl_remote).is_file()
+                or file_sha256(Path(self.cpl_remote)) != config.get("cpl_remote_sha256")):
+            raise ProductionError("global cpl-remote hash does not match pinned input")
+        if config.get("runtime_mode") != "docker":
+            raise ProductionError("production agents require an isolated Docker runtime")
+        if "adapter_command" in config or "remote_command" in config:
+            raise ProductionError("runtime config cannot supply an adapter or remote command")
+        self._validate_files()
         if invoker_factory is None or controller_factory is None or runner_factory is None:
             sys.path.insert(0, str(self.scripts))
             try:
@@ -177,18 +218,6 @@ class ProductionCellLauncher:
         self.invoker_factory = invoker_factory
         self.controller_factory = controller_factory
         self.runner_factory = runner_factory
-        self.run_root = Path(config["run_root"]).resolve()
-        self.cpl_remote = config.get("cpl_remote") or str(
-            Path.home() / ".agents" / "skills" / "remote-access" / "scripts" / "cpl-remote"
-        )
-        if (not Path(self.cpl_remote).is_file()
-                or file_sha256(Path(self.cpl_remote)) != config.get("cpl_remote_sha256")):
-            raise ProductionError("global cpl-remote hash does not match pinned input")
-        command = config.get("adapter_command")
-        if (not isinstance(command, list) or not command
-                or not all(isinstance(item, str) and item for item in command)):
-            raise ProductionError("adapter_command must be a nonempty argv array")
-        self._validate_files()
 
     def _validate_files(self) -> None:
         assets = self.config.get("benchmark_assets", {})
@@ -196,6 +225,9 @@ class ProductionCellLauncher:
         if (asset_path != self.scripts.parent / "benchmarks"
                 or digest_tree(asset_path) != assets.get("sha256")):
             raise ProductionError("benchmark assets hash/path does not match pinned closure")
+        missing = sorted(name for name in RUNTIME_FILES if not (self.scripts / name).is_file())
+        if missing:
+            raise ProductionError(f"runtime controller closure is incomplete: {', '.join(missing)}")
         for label, binding in [("prompt", self.config.get("prompt", {})),
                                *[(f"task {name}", value)
                                  for name, value in self.config.get("tasks", {}).items()]]:
@@ -206,6 +238,55 @@ class ProductionCellLauncher:
             path = Path(binding.get("path", ""))
             if digest_tree(path) != binding.get("sha256"):
                 raise ProductionError(f"skill {name} hash does not match pinned input")
+        self._validate_provenance()
+
+    def _validate_provenance(self) -> None:
+        provenance = self.config.get("provenance")
+        if not isinstance(provenance, dict):
+            raise ProductionError("runtime provenance is missing")
+        sources = self.config.get("source_repositories", {})
+        expected_tasks = set(DEVELOPMENT_CASES)
+        if (set(sources) != expected_tasks or set(self.config.get("tasks", {})) != expected_tasks):
+            raise ProductionError("source/task provenance must cover the complete campaign")
+        revisions = {binding.get("revision") for binding in sources.values()
+                     if isinstance(binding, dict)}
+        if revisions != {provenance.get("source_revision")}:
+            raise ProductionError("source revision provenance does not match runtime inputs")
+        runtime = self.config["runtime_scripts"]
+        if runtime.get("sha256") != provenance.get("controller_sha256"):
+            raise ProductionError("controller provenance does not match runtime closure")
+        if self.config.get("runtime_image_digest") != provenance.get("runtime_image_digest"):
+            raise ProductionError("runtime image provenance does not match Docker input")
+        if provenance.get("model") != {
+            "name": self.config.get("model"),
+            "reasoning_effort": self.config.get("reasoning_effort"),
+        }:
+            raise ProductionError("model provenance does not match runtime inputs")
+        baseline_sources = self.config.get("baseline_sources")
+        baseline_pins = provenance.get("baselines")
+        if (not isinstance(baseline_sources, dict) or not isinstance(baseline_pins, dict)
+                or set(baseline_sources) != expected_tasks
+                or set(baseline_pins) != expected_tasks):
+            raise ProductionError("baseline provenance does not match runtime inputs")
+        for task, binding in baseline_sources.items():
+            path = Path(binding.get("path", "")) if isinstance(binding, dict) else Path("")
+            actual = file_sha256(path) if path.is_file() else None
+            expected_path = (Path(self.config["benchmark_assets"]["path"]).resolve()
+                             / task / "baseline.json")
+            if (path.resolve() != expected_path or actual != binding.get("sha256")
+                    or actual != baseline_pins[task]):
+                raise ProductionError(f"baseline provenance does not match runtime input: {task}")
+        skill_pins = provenance.get("skills")
+        skill_sources = self.config.get("skill_sources", {})
+        if not isinstance(skill_pins, dict):
+            raise ProductionError("skill provenance does not match runtime inputs")
+        if skill_pins.get("cannbot") != digest_skill_bundle(skill_sources, CANNBOT_SKILLS):
+            raise ProductionError("cannbot skill provenance does not match runtime trees")
+        for name in ("ascend-profiling", "triton-guarded-kernel"):
+            binding = skill_sources.get(name)
+            if (not isinstance(binding, dict)
+                    or skill_pins.get(name) != binding.get("sha256")):
+                raise ProductionError(f"{name} skill provenance does not match runtime tree")
 
     def _prepare_repo(self, cell: dict) -> tuple[Path, bool]:
         root = self.run_root / cell["cell_id"]
@@ -273,14 +354,13 @@ class ProductionCellLauncher:
             placement_binding.write_text(json.dumps(placement, sort_keys=True) + "\n")
         placements = state / "placements.json"
         placements.write_text(json.dumps({
-            "0": {"profile": slot["target"], "device": slot["device"]}
+            "0": {"target": slot["target"], "device": slot["device"]}
         }, sort_keys=True) + "\n")
         job_client = [
             sys.executable, str(self.scripts / "bz_a3_job_client.py"),
             "--state-dir", str(state / "jobs"), "--placements-json", str(placements),
-            "--remote-json", json.dumps([self.cpl_remote]),
-            "--adapter-json", json.dumps(self.config["adapter_command"]),
             "--remote-root", self.config["remote_root"],
+            "--cpl-remote-sha256", self.config["cpl_remote_sha256"],
         ]
         backend = [
             sys.executable, str(self.scripts / "benchmark_backend.py"),
@@ -303,6 +383,76 @@ class ProductionCellLauncher:
         ]
         return self.controller_factory(command, repo, timeout=self.config.get("timeout", 900))
 
+    def _verify(self, repo: Path, cell: dict) -> dict:
+        command = [
+            sys.executable, str(self.scripts / "validate_audited_experiment.py"),
+            str(repo), "--base", self.config["provenance"]["source_revision"],
+        ]
+        try:
+            result = self.verifier_invoke(
+                command, text=True, capture_output=True,
+                timeout=self.config.get("timeout", 900), check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ProductionError(f"independent audited verifier could not run: {error}") from error
+        if result.returncode:
+            detail = (result.stderr or result.stdout).strip()
+            raise ProductionError(f"independent audited verifier rejected branch: {detail}")
+        try:
+            verified = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise ProductionError("independent audited verifier returned invalid JSON") from error
+        if (not isinstance(verified, dict) or verified.get("status") != "valid"
+                or len(verified.get("experiments", [])) != 4):
+            raise ProductionError("independent audited verifier returned incomplete evidence")
+        expected_branch = f"experiment/{self.config['run_id']}/{cell['cell_id']}"
+        if verified.get("branch") != expected_branch:
+            raise ProductionError("independent audited verifier returned the wrong branch")
+        return verified
+
+    def _receipt(self, repo: Path, verified: dict) -> dict:
+        rounds = []
+        for number in range(1, 5):
+            path = repo / "experiments" / f"{number:02d}" / "results.json"
+            try:
+                receipt = json.loads(path.read_text())
+            except (OSError, json.JSONDecodeError) as error:
+                raise ProductionError(f"round {number} compact receipt is unavailable") from error
+            if not isinstance(receipt, dict):
+                raise ProductionError(f"round {number} compact receipt is invalid")
+            rounds.append({"round": number, **receipt})
+        commits = tuple(item.get("commit") for item in verified["experiments"])
+        if any(not isinstance(commit, str) or not commit for commit in commits):
+            raise ProductionError("independent verifier omitted experiment commits")
+        terminal = rounds[-1]
+        result = {
+            "status": "complete", "durable_handle": terminal["handle"],
+            "rounds_completed": 4, "rounds": rounds,
+            "branch": verified.get("branch"), "session_id": verified.get("session_id"),
+            "seed_commit": verified.get("seed_commit"), "commits": list(commits),
+        }
+        for field in ("baseline_median_us", "baseline", "calibration"):
+            if field in terminal:
+                result[field] = terminal[field]
+        return result
+
+    def _resume_checkpoint(self, repo: Path, cell: dict) -> dict | None:
+        path = repo / ".experiment" / "blocked.json"
+        if not path.is_file():
+            return None
+        try:
+            state = json.loads(path.read_text())
+        except json.JSONDecodeError as error:
+            raise ProductionError("blocked checkpoint is invalid JSON") from error
+        expected_branch = f"experiment/{self.config['run_id']}/{cell['cell_id']}"
+        if (not isinstance(state, dict)
+                or state.get("schema") != "profiling-skill/audited-blocked/v1"
+                or state.get("stage") not in {"prepare", "controller", "measurement", "finalize"}
+                or state.get("experiment") not in {1, 2, 3, 4}
+                or state.get("branch") != expected_branch):
+            raise ProductionError("blocked checkpoint is invalid for this cell")
+        return state
+
     def launch(self, cell: dict, slot: dict) -> dict:
         if (cell.get("round_count"), cell.get("request_budget")) != (4, 24):
             raise ProductionError("production cells require four rounds and 24 requests")
@@ -313,8 +463,18 @@ class ProductionCellLauncher:
                 or prompt_contract.get("invariant_sha256") !=
                 self.config["prompt"].get("sha256")):
             raise ProductionError("cell prompt/task hashes do not match pinned runtime inputs")
-        repo, resume = self._prepare_repo(cell)
+        repo, existing = self._prepare_repo(cell)
         root = repo.parent
+        checkpoint = self._resume_checkpoint(repo, cell) if existing else None
+        if existing and checkpoint is None:
+            try:
+                return self._receipt(repo, self._verify(repo, cell))
+            except ProductionError as error:
+                from audited_campaign import InfrastructureFailure
+                raise InfrastructureFailure(
+                    f"existing branch has no valid blocked checkpoint and is not complete: {error}"
+                ) from error
+        resume = checkpoint is not None
         invoker = self.invoker_factory(
             repo, timeout=self.config.get("timeout", 900),
             auth_home=Path(self.config["auth_home"]),
@@ -341,42 +501,26 @@ class ProductionCellLauncher:
                 invoker, controller, round_count=4,
             )
             try:
-                result = runner.run(
+                runner.run(
                     self.config["run_id"], cell["cell_id"], resume=resume
                 )
             except Exception as error:
                 checkpoint = repo / ".experiment" / "blocked.json"
-                blocked = json.loads(checkpoint.read_text()) if checkpoint.is_file() else {}
+                try:
+                    blocked = json.loads(checkpoint.read_text()) if checkpoint.is_file() else {}
+                except (OSError, json.JSONDecodeError):
+                    blocked = {}
                 retained = blocked.get("receipt") if isinstance(blocked, dict) else None
                 handle = retained.get("handle") if isinstance(retained, dict) else None
-                if isinstance(retained, dict) and retained.get("status") == "infrastructure_error":
-                    from audited_campaign import InfrastructureFailure
-                    raise InfrastructureFailure(str(error), handle) from error
-                local = hashlib.sha256(
-                    f"{cell['cell_id']}:{blocked.get('resume_parent', 'uncommitted')}".encode()
-                ).hexdigest()
-                return {
-                    "status": "candidate_failed", "durable_handle": f"local:{local}",
-                    "rounds_completed": len(list((repo / "experiments").glob("[0-9][0-9]")))
-                    if (repo / "experiments").is_dir() else 0,
-                    "rounds": [], "failure": str(error),
-                    "branch": blocked.get("branch"),
-                }
+                from audited_campaign import InfrastructureFailure
+                raise InfrastructureFailure(str(error), handle) from error
         finally:
             invoker.scrub_auth()
-        rounds = []
-        for number in range(1, 5):
-            receipt = json.loads(
-                (repo / "experiments" / f"{number:02d}" / "results.json").read_text()
-            )
-            rounds.append({"round": number, "median_us": receipt.get("median_us"),
-                           "status": receipt["status"], "handle": receipt["handle"]})
-        return {
-            "status": "complete", "durable_handle": rounds[-1]["handle"],
-            "rounds_completed": len(result.commits), "rounds": rounds,
-            "branch": result.branch, "session_id": result.session_id,
-            "seed_commit": result.seed_commit, "commits": list(result.commits),
-        }
+        try:
+            return self._receipt(repo, self._verify(repo, cell))
+        except ProductionError as error:
+            from audited_campaign import InfrastructureFailure
+            raise InfrastructureFailure(str(error)) from error
 
     def observe(self, cell: dict, placement: dict, durable_handle: str) -> dict:
         # AuditedExperimentRunner reads its checkpoint and CommandController
@@ -404,6 +548,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")
     manifest = json.loads(args.manifest.read_text())
     config["run_id"] = manifest["run_id"]
+    if config.get("provenance") != manifest.get("provenance"):
+        parser.error("runtime provenance does not exactly match manifest provenance")
     model = manifest["provenance"]["model"]
     if (config.get("model"), config.get("reasoning_effort")) != (
             model["name"], model["reasoning_effort"]):
@@ -415,7 +561,6 @@ def main(argv: list[str] | None = None) -> int:
         manifest, args.ledger,
         CplRemoteResourcePool(
             args.admission, args.admission_sha256,
-            cpl_remote=config["cpl_remote"],
             cpl_remote_sha256=config["cpl_remote_sha256"],
         ),
         ProductionCellLauncher(config), resume=args.resume,

@@ -114,12 +114,20 @@ For production, create a hash-pinned runtime configuration with schema
 pinned source repository and commit for each task, exact per-skill source trees
 and hashes, the pinned runtime scripts closure containing
 `audited_bz_controller.py`, its sibling benchmark-assets tree and hash, the
-invariant prompt and task bindings, the approved adapter argv, remote staging
-root, Codex authentication home, model, reasoning effort, runtime mode,
-immutable runtime-image digest, and timeout. The production CLI rejects model
-or image drift from the campaign manifest. It also pins the global
-`remote-access` skill's `scripts/cpl-remote` path and SHA-256; no workspace
-transport or raw remote client is accepted. Launch with:
+exact `benchmarks/<task>/baseline.json` bindings, invariant prompt and task
+bindings, remote staging root, Codex authentication home, model, reasoning
+effort, immutable runtime-image digest, and timeout. `runtime_mode` must be
+`docker`; direct Codex execution is rejected. The configuration repeats the
+manifest provenance object exactly, and every pin is checked against the
+source revision, complete controller closure, baseline files, composite
+CANNBot skill bundle, project skill trees, model, and resolved Docker image.
+
+The BZ job client is part of that pinned controller closure. It accepts only
+the fixed global `remote-access/scripts/cpl-remote` boundary and its required
+SHA-256. Runtime configuration cannot provide an adapter command, remote
+command, or alternate `cpl-remote` path. Its placement file uses
+`{"logical-id":{"target":"bz-a3-1","device":N}}`; physical placement never
+enters the agent prompt. Launch with:
 
 ```bash
 python scripts/audited_campaign_production.py \
@@ -137,6 +145,18 @@ controller checkpoint, physical placement, and BZ job receipts. A retained
 handle is reobserved through `CommandController`; it is never replaced by a
 new dispatch. Runtime controller configuration uses logical device zero and
 stores the physical target/device only in the private placement evidence.
+Resume is permitted only from a lifecycle-validated blocked checkpoint. If a
+ledger is lost after a branch completed, the launcher independently runs
+`validate_audited_experiment.py` and reconstructs the terminal receipt instead
+of restarting the agent. Every new completion also passes that independent
+verifier before it can be recorded as successful.
+
+Cell receipts retain each complete compact controller receipt, including
+per-case measurements, admission and post-run controls, infrastructure
+attempts, baseline fields, and calibration fields. Codex, controller,
+verification, and local lifecycle failures are infrastructure failures.
+Compilation, runtime, and correctness failures are candidate evidence only
+when they arrive in a contract-valid `candidate_error` controller receipt.
 
 ## Acceptance
 

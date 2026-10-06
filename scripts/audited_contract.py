@@ -219,14 +219,45 @@ def _validate_handles(receipt: dict, policy: dict) -> None:
         and all(isinstance(value, str) and value for value in values)
         and len(set(values)) == len(values)
     )
-    if (
-        not valid_list(submitted)
-        or not valid_list(observed)
-        or receipt["handle"] not in submitted
-        or receipt["handle"] not in observed
-        or any(handle not in submitted for handle in observed)
-    ):
+    if (not valid_list(submitted) or not valid_list(observed)
+            or receipt["handle"] not in submitted or receipt["handle"] not in observed
+            or any(handle not in submitted for handle in observed)):
         raise AuditError("controller handle submission/observation proof is invalid")
+    history = policy.get("operation_history")
+    if history is None:
+        return
+    if (not isinstance(history, list) or not history
+            or type(policy.get("measurement_generation")) is not int
+            or policy["measurement_generation"] < 0):
+        raise AuditError("controller operation history is invalid")
+    expected_submitted = []
+    expected_observed = []
+    retry_count = 0
+    for record in history:
+        if (not isinstance(record, dict)
+                or set(record) != {"request_sha256", "mode", "status", "terminal",
+                                   "handle", "action", "attempt_id"}
+                or not _valid_hash(record["request_sha256"])
+                or record["mode"] not in {"submit", "retry_submit", "observe"}
+                or not isinstance(record["status"], str)
+                or type(record["terminal"]) is not bool
+                or not isinstance(record["action"], str)
+                or (record["attempt_id"] is not None
+                    and not isinstance(record["attempt_id"], str))
+                or (record["handle"] is not None
+                    and not isinstance(record["handle"], str))):
+            raise AuditError("controller operation history record is invalid")
+        retained = record["handle"]
+        if record["mode"] != "submit":
+            retry_count += 1
+        if (record["mode"] in {"submit", "retry_submit"} and retained
+                and retained not in expected_submitted):
+            expected_submitted.append(retained)
+        if record["terminal"] and retained and retained not in expected_observed:
+            expected_observed.append(retained)
+    if (submitted != expected_submitted or observed != expected_observed
+            or policy.get("infra_retries") != retry_count):
+        raise AuditError("controller operation history does not bind handle or retry proof")
 
 
 def validate_controller_receipt(receipt: object, candidate_hash: str,
@@ -273,14 +304,10 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
 
     _validate_handles(receipt, policy)
     retries, budget = policy["infra_retries"], policy["retry_budget"]
-    if (
-        type(retries) is not int
-        or retries < 0
-        or type(budget) is not int
-        or budget < 0
-        or retries > budget
-        or retries != len(policy["submitted_handles"]) - 1
-    ):
+    if (type(retries) is not int or retries < 0 or type(budget) is not int
+            or budget < 0 or retries > budget
+            or (policy.get("operation_history") is None
+                and retries != len(policy["submitted_handles"]) - 1)):
         raise AuditError("controller retry count is invalid")
 
     quarantined, controls = policy["quarantined_devices"], policy["quarantine_controls"]

@@ -122,6 +122,14 @@ The adapter rejects a different handle and replays the byte-identical backend
 request. The content-addressed BZ job client then observes its persisted job
 instead of dispatching another workload. A handleless interruption is retried
 with the same request and remains bounded by the infrastructure retry policy.
+The retry allowance is checked before another backend call; once exhausted, the
+controller remains checkpointed without dispatching or observing another job.
+
+Terminal policy evidence is derived from the durable operation ledger. Its
+`operation_history` binds each request digest, submit/retry/observe mode,
+terminal classification, attempt identity, and retained handle.
+`submitted_handles`, `observed_handles`, and `infra_retries` are recomputed from
+that history rather than synthesized from the final profile handle.
 
 Noisy timing receives exactly one confirmation capture. Persistent noise or a
 drifting post-control returns `measurement_pending`. A lifecycle remeasurement
@@ -137,6 +145,11 @@ operation ledger, is atomically persisted below `--state-dir`.
 `CommandController.remeasure` supplies this argument, binds the returned receipt
 to the exact pending handle, and applies the same size and redaction rules as a
 normal submission or observation.
+
+Every measurement-only remeasurement increments a persisted
+`measurement_generation`. Primary, confirmation, and post-control attempt IDs
+include that generation, forcing content-addressed backends to perform fresh
+captures while preserving the same candidate and manifest hashes.
 
 Primary and confirmation captures carry distinct host-owned attempt identities,
 so the content-addressed BZ client cannot accidentally reuse the primary report

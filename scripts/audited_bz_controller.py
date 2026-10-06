@@ -221,6 +221,8 @@ class AuditedBzController:
                     return self._infrastructure("controller state is corrupt")
             else:
                 state = self._new_state(experiment, candidate_hash, manifest_hash)
+            state.setdefault("infrastructure_retries", 0)
+            state.setdefault("measurement_generation", 0)
             if state.get("baseline_sha256") != self.baseline["sha256"]:
                 return self._infrastructure("controller baseline changed during the experiment")
             state["operations_consumed"] = budget["operations_consumed"]
@@ -239,6 +241,7 @@ class AuditedBzController:
                 state.pop("confirmation", None)
                 state.pop("post_control", None)
                 state.pop("post_control_drift_ratio", None)
+                state["measurement_generation"] += 1
                 state["confirmation_count"] = 0
                 state["stage"] = "profile"
                 _atomic_json(state_path, state)
@@ -276,6 +279,7 @@ class AuditedBzController:
             "baseline_sha256": self.baseline["sha256"],
             "stage": "admission", "operations_consumed": 0,
             "infrastructure_attempts": 0, "operations": [], "pending": None,
+            "infrastructure_retries": 0, "measurement_generation": 0,
             "admission_controls": [], "quarantined_devices": [],
             "quarantine_controls": {}, "confirmation_count": 0,
         }
@@ -284,15 +288,24 @@ class AuditedBzController:
                  budget: dict, budget_path: Path) -> dict | None:
         pending = state.get("pending")
         if isinstance(pending, dict):
+            if state["infrastructure_retries"] >= self.infrastructure_retry_budget:
+                return self._infrastructure(
+                    "infrastructure retry budget exhausted", handle=pending.get("handle"))
+            state["infrastructure_retries"] += 1
+            mode = "observe" if pending.get("handle") else "retry_submit"
             request = pending["request"]
         elif budget["operations_consumed"] >= self.request_budget:
             return self._infrastructure("24-operation experiment budget exhausted")
+        else:
+            mode = "submit"
         result = self.backend(request)
         if not isinstance(result, dict):
             result = {"status": "infrastructure_error", "failure_type": "protocol_error",
                       "diagnostics": "backend response is not an object", "handle": None}
         status = result.get("status")
-        record = {"request": request, "status": status,
+        terminal = status in ({"ok"} | CANDIDATE_FAILURES)
+        record = {"request": request, "request_sha256": _json_sha(request),
+                  "mode": mode, "status": status, "terminal": terminal,
                   "handle": result.get("handle"),
                   "failure_type": result.get("failure_type"),
                   "diagnostics": _bounded(result.get("diagnostics"))}
@@ -302,8 +315,6 @@ class AuditedBzController:
             state["pending"] = {"request": request, "handle": result.get("handle")}
             _atomic_json(state_path, state)
             reason = record["diagnostics"] or record["failure_type"] or "backend infrastructure error"
-            if state["infrastructure_attempts"] > self.infrastructure_retry_budget:
-                reason = f"infrastructure retry budget exhausted: {reason}"
             return self._infrastructure(reason, handle=result.get("handle"))
         state["pending"] = None
         budget["operations_consumed"] += 1
@@ -357,11 +368,14 @@ class AuditedBzController:
                 state["stage"] = "profile"
                 _atomic_json(state_path, state)
             elif stage in {"profile", "confirmation"}:
+                generation = state["measurement_generation"]
                 request = {**base, "action": "profile", "cases": self.development_cases,
                            "repeats": self.profile_repeats, "round": state["experiment"],
-                           "attempt_id": (f"experiment-{state['experiment']}-primary"
+                           "attempt_id": (f"experiment-{state['experiment']}-measurement-"
+                                          f"{generation}-primary"
                                           if stage == "profile" else
-                                          f"experiment-{state['experiment']}-confirmation")}
+                                          f"experiment-{state['experiment']}-measurement-"
+                                          f"{generation}-confirmation")}
                 result = self._request(state, state_path, request, budget, budget_path)
                 if result.get("status") == "infrastructure_error":
                     return result
@@ -392,9 +406,11 @@ class AuditedBzController:
                     state["stage"] = "post_control"
                 _atomic_json(state_path, state)
             elif stage == "post_control":
+                generation = state["measurement_generation"]
                 request = {**base, "action": "calibrate", "phase": "after",
                            "wave": state["experiment"],
-                           "attempt_id": f"experiment-{state['experiment']}-after"}
+                           "attempt_id": (f"experiment-{state['experiment']}-measurement-"
+                                          f"{generation}-after")}
                 result = self._request(state, state_path, request, budget, budget_path)
                 if result.get("status") == "infrastructure_error":
                     return result
@@ -462,12 +478,30 @@ class AuditedBzController:
         return [value] if isinstance(value, str) and value else []
 
     def _policy(self, state: dict, handle: str, post_control: str) -> dict:
+        history = [{key: record.get(key) for key in (
+            "request_sha256", "mode", "status", "terminal", "handle"
+        )} | {
+            "action": record["request"].get("action"),
+            "attempt_id": record["request"].get("attempt_id"),
+        } for record in state["operations"]]
+        submitted = []
+        observed = []
+        for record in history:
+            retained = record["handle"]
+            if (record["mode"] in {"submit", "retry_submit"}
+                    and isinstance(retained, str) and retained not in submitted):
+                submitted.append(retained)
+            if (record["terminal"] and isinstance(retained, str)
+                    and retained not in observed):
+                observed.append(retained)
         return {
             "schema": POLICY_SCHEMA, "selected_device": state["selected"]["id"],
             "admission_controls": state["admission_controls"],
             "submission_candidate_sha256": state["candidate_sha256"],
-            "submitted_handles": [handle], "observed_handles": [handle],
-            "infra_retries": 0, "retry_budget": self.infrastructure_retry_budget,
+            "submitted_handles": submitted, "observed_handles": observed,
+            "infra_retries": state["infrastructure_retries"],
+            "retry_budget": self.infrastructure_retry_budget,
+            "operation_history": history,
             "quarantined_devices": state["quarantined_devices"],
             "quarantine_controls": state["quarantine_controls"],
             "confirmation_count": state["confirmation_count"],
@@ -476,6 +510,7 @@ class AuditedBzController:
             "operations_consumed": state["operations_consumed"],
             "request_budget": self.request_budget,
             "infrastructure_attempts": state["infrastructure_attempts"],
+            "measurement_generation": state["measurement_generation"],
             "post_control_drift_ratio": state.get("post_control_drift_ratio"),
         }
 

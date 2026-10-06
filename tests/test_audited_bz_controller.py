@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -200,6 +201,42 @@ def test_infrastructure_handle_is_checkpointed_and_observed_without_budget_charg
     assert backend.requests[1] == backend.requests[2]
     assert resumed["policy"]["operations_consumed"] == 4
     assert resumed["policy"]["infrastructure_attempts"] == 1
+    assert resumed["policy"]["infra_retries"] == 1
+    assert resumed["policy"]["submitted_handles"] == [
+        "bz-a3-1:job-1", "bz-a3-1:retained", "bz-a3-1:job-4", "bz-a3-1:job-5",
+    ]
+    assert resumed["policy"]["observed_handles"] == resumed["policy"]["submitted_handles"]
+    assert [item["mode"] for item in resumed["policy"]["operation_history"]] == [
+        "submit", "submit", "observe", "submit", "submit",
+    ]
+    tampered = json.loads(json.dumps(resumed))
+    tampered["policy"]["infra_retries"] = 0
+    with pytest.raises(contract.AuditError, match="operation history"):
+        contract.validate_controller_receipt(tampered, candidate_hash, manifest_hash)
+
+
+def test_infrastructure_retry_budget_stops_before_another_dispatch(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+
+    class AlwaysInfrastructure:
+        def __init__(self):
+            self.requests = []
+
+        def __call__(self, request):
+            self.requests.append(json.loads(json.dumps(request)))
+            return {"status": "infrastructure_error", "handle": "bz-a3-1:retained",
+                    "failure_type": "observer_error", "diagnostics": "still running"}
+
+    backend = AlwaysInfrastructure()
+    adapter = make_controller(repo, backend, infrastructure_retry_budget=2)
+    receipt = adapter.run(1, candidate_hash, manifest_hash)
+    for _ in range(3):
+        receipt = adapter.run(1, candidate_hash, manifest_hash,
+                              observe_handle="bz-a3-1:retained")
+
+    assert receipt["status"] == "infrastructure_error"
+    assert "retry budget exhausted" in receipt["reason"]
+    assert len(backend.requests) == 3
 
 
 def test_noisy_profile_gets_exactly_one_confirmation_then_measurement_pending(tmp_path: Path):
@@ -247,8 +284,8 @@ def test_stable_confirmation_replaces_noisy_primary_as_accepted_evidence(tmp_pat
     assert receipt["policy"]["accepted_timing"] == "confirmation"
     assert receipt["policy"]["primary"]["handle"] == "bz-a3-1:primary"
     assert receipt["policy"]["confirmation"]["handle"] == "bz-a3-1:confirmation"
-    assert backend.requests[2]["attempt_id"] == "experiment-1-primary"
-    assert backend.requests[3]["attempt_id"] == "experiment-1-confirmation"
+    assert backend.requests[2]["attempt_id"] == "experiment-1-measurement-0-primary"
+    assert backend.requests[3]["attempt_id"] == "experiment-1-measurement-0-confirmation"
 
 
 def test_confirmation_kernel_identity_drift_is_infrastructure_error(tmp_path: Path):
@@ -294,6 +331,54 @@ def test_measurement_pending_can_remeasure_without_rechecking_candidate(tmp_path
         "profile", "calibrate",
     ]
     assert receipt["policy"]["operations_consumed"] == 7
+
+
+def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+
+    class CachingBackend:
+        def __init__(self):
+            self.cache = {}
+            self.requests = []
+
+        def __call__(self, request):
+            self.requests.append(json.loads(json.dumps(request)))
+            key = json.dumps(request, sort_keys=True, separators=(",", ":"))
+            if key in self.cache:
+                return json.loads(json.dumps(self.cache[key]))
+            handle = f"bz-a3-1:cache-{len(self.cache)}"
+            if request["action"] == "calibrate":
+                result = {"status": "ok", "handle": handle, "latency_us": 10.0,
+                          "samples_us": [9.0, 10.0, 11.0], "median_us": 10.0}
+            elif request["action"] == "check":
+                result = {"status": "ok", "handle": handle, "passed": True}
+            else:
+                noisy = "measurement-0" in request["attempt_id"]
+                samples = [1.0, 10.0, 100.0] if noisy else [5.0, 5.0, 5.0]
+                result = {"status": "ok", "handle": handle, "kernel_name": "kernel",
+                          "cases": [{"case": case, "samples_us": samples,
+                                     "median_us": statistics.median(samples)}
+                                    for case in request["cases"]]}
+            self.cache[key] = result
+            return json.loads(json.dumps(result))
+
+    backend = CachingBackend()
+    adapter = make_controller(repo, backend, variability_threshold=0.1)
+    pending = adapter.run(1, candidate_hash, manifest_hash)
+    receipt = adapter.run(1, candidate_hash, manifest_hash,
+                          remeasure_handle=pending["handle"])
+
+    assert pending["status"] == "measurement_pending"
+    assert receipt["status"] == "ok"
+    assert receipt["policy"]["measurement_generation"] == 1
+    assert receipt["samples_us"] == pytest.approx([5.0, 5.0, 5.0])
+    measurement_requests = [request for request in backend.requests
+                            if request["action"] in {"profile", "calibrate"}
+                            and "measurement-" in request.get("attempt_id", "")]
+    assert [request["attempt_id"] for request in measurement_requests[-2:]] == [
+        "experiment-1-measurement-1-primary",
+        "experiment-1-measurement-1-after",
+    ]
 
 
 def test_backend_operation_budget_is_shared_across_branch_rounds(tmp_path: Path):

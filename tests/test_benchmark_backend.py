@@ -128,6 +128,23 @@ def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):
     assert first["job"] != second["job"]
 
 
+def test_profile_attempt_identity_changes_managed_job(tmp_path: Path):
+    base = {"protocol_version": 1, "action": "profile", "benchmark": "matmul",
+            "device": 2, "cases": [7, 8, 9], "repeats": 3, "round": 1}
+    first_root, second_root = tmp_path / "first", tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = json.loads(run_backend(
+        first_root, {**base, "attempt_id": "experiment-1-primary"}, "matmul"
+    ).stdout)
+    second = json.loads(run_backend(
+        second_root, {**base, "attempt_id": "experiment-1-confirmation"}, "matmul"
+    ).stdout)
+    assert first["job"]["profile_attempt_id"] == "experiment-1-primary"
+    assert second["job"]["profile_attempt_id"] == "experiment-1-confirmation"
+    assert first["job"] != second["job"]
+
+
 def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(
     tmp_path: Path, monkeypatch,
 ):

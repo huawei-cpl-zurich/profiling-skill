@@ -107,6 +107,9 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         if (isinstance(raw.get("round"), bool) or not isinstance(raw.get("round"), int)
                 or raw["round"] < 1):
             return None, response("infrastructure_error", "profile round must be a positive integer")
+        if ("attempt_id" in raw and (not isinstance(raw["attempt_id"], str)
+                                     or not raw["attempt_id"].strip())):
+            return None, response("infrastructure_error", "profile attempt identity must be non-empty")
     elif action == "measure":
         case = raw.get("case")
         if isinstance(case, bool) or case not in spec["all_cases"]:
@@ -161,6 +164,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         job["phase"] = request["phase"]
     else:
         job.update(cases=request["cases"], repeats=request["repeats"], round=request["round"])
+        if "attempt_id" in request:
+            job["profile_attempt_id"] = request["attempt_id"]
         if kernel_name is None:
             raise ValueError("profile job requires a kernel selector")
         job["profiling"] = {

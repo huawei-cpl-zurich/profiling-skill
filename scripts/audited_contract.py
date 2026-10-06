@@ -338,13 +338,54 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
         policy["variability_threshold"], policy.get("variability_ratio"), "controller",
     )
     noisy = variability > policy["variability_threshold"]
-    if not noisy and (count or confirmation is not None):
-        raise AuditError("stable timing must not consume a confirmation")
-    if noisy and receipt.get("status") != "measurement_pending" and (
-        count != 1 or not isinstance(confirmation, dict)
-    ):
-        raise AuditError("noisy timing requires one confirmation or measurement_pending")
-    if count:
+    accepted = policy.get("accepted_timing")
+    primary = policy.get("primary")
+    if accepted is not None:
+        if accepted not in {"primary", "confirmation"} or not isinstance(primary, dict):
+            raise AuditError("accepted timing selection is invalid")
+        proofs = {"primary": primary, "confirmation": confirmation}
+        for name, proof in proofs.items():
+            if proof is None:
+                continue
+            if (not isinstance(proof, dict)
+                    or proof.get("candidate_sha256") != candidate_hash
+                    or not isinstance(proof.get("kernel_name"), str)
+                    or not proof["kernel_name"]
+                    or not isinstance(proof.get("handle"), str) or not proof["handle"]
+                    or not isinstance(proof.get("case_results"), list)
+                    or not isinstance(proof.get("compact_artifacts"), list)):
+                raise AuditError(f"{name} timing identity is invalid")
+            _timing_summary(
+                proof.get("samples_us"), proof.get("sample_count"), proof.get("median_us"),
+                policy["variability_threshold"], proof.get("variability_ratio"), name,
+            )
+        selected = proofs.get(accepted)
+        if (selected is None or receipt.get("handle") != selected["handle"]
+                or receipt.get("kernel_name") != selected["kernel_name"]
+                or receipt.get("samples_us") != selected["samples_us"]
+                or receipt.get("median_us") != selected["median_us"]
+                or receipt.get("case_results") != selected["case_results"]
+                or receipt.get("compact_artifacts") != selected["compact_artifacts"]):
+            raise AuditError("published timing does not match the accepted capture")
+        if accepted == "confirmation":
+            if (count != 1 or confirmation is None
+                    or primary["kernel_name"] != confirmation["kernel_name"]
+                    or [row.get("case") for row in primary["case_results"]]
+                    != [row.get("case") for row in confirmation["case_results"]]
+                    or primary["variability_ratio"] <= policy["variability_threshold"]):
+                raise AuditError("confirmation timing identity or trigger is invalid")
+        elif count or confirmation is not None:
+            raise AuditError("primary timing cannot carry a confirmation")
+        if noisy and receipt.get("status") != "measurement_pending":
+            raise AuditError("noisy accepted timing must be measurement_pending")
+    else:
+        if not noisy and (count or confirmation is not None):
+            raise AuditError("stable timing must not consume a confirmation")
+        if noisy and receipt.get("status") != "measurement_pending" and (
+            count != 1 or not isinstance(confirmation, dict)
+        ):
+            raise AuditError("noisy timing requires one confirmation or measurement_pending")
+    if count and accepted is None:
         if (
             not isinstance(confirmation, dict)
             or confirmation.get("candidate_sha256") != candidate_hash

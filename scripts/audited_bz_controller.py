@@ -358,7 +358,10 @@ class AuditedBzController:
                 _atomic_json(state_path, state)
             elif stage in {"profile", "confirmation"}:
                 request = {**base, "action": "profile", "cases": self.development_cases,
-                           "repeats": self.profile_repeats, "round": state["experiment"]}
+                           "repeats": self.profile_repeats, "round": state["experiment"],
+                           "attempt_id": (f"experiment-{state['experiment']}-primary"
+                                          if stage == "profile" else
+                                          f"experiment-{state['experiment']}-confirmation")}
                 result = self._request(state, state_path, request, budget, budget_path)
                 if result.get("status") == "infrastructure_error":
                     return result
@@ -370,6 +373,8 @@ class AuditedBzController:
                     return self._infrastructure(str(failure), handle=result.get("handle"))
                 timing["handle"] = result.get("handle")
                 timing["compact_artifacts"] = self._compact_artifacts(result)
+                if not isinstance(timing["handle"], str) or not timing["handle"]:
+                    return self._infrastructure("profile timing lacks a durable handle")
                 if stage == "profile":
                     state["profile"] = timing
                     if timing["variability_ratio"] > self.variability_threshold:
@@ -378,6 +383,11 @@ class AuditedBzController:
                     else:
                         state["stage"] = "post_control"
                 else:
+                    if timing["kernel_name"] != state["profile"]["kernel_name"]:
+                        return self._infrastructure(
+                            "confirmation identity does not match the primary kernel",
+                            handle=timing["handle"],
+                        )
                     state["confirmation"] = timing
                     state["stage"] = "post_control"
                 _atomic_json(state_path, state)
@@ -406,7 +416,9 @@ class AuditedBzController:
 
     def _timing(self, result: dict) -> dict:
         rows = result.get("cases")
-        if (not isinstance(rows, list) or len(rows) != len(self.development_cases)
+        kernel_name = result.get("kernel_name")
+        if (not isinstance(kernel_name, str) or not kernel_name
+                or not isinstance(rows, list) or len(rows) != len(self.development_cases)
                 or [row.get("case") if isinstance(row, dict) else None for row in rows]
                 != self.development_cases):
             raise ControllerError("profile response has invalid case rows")
@@ -426,7 +438,8 @@ class AuditedBzController:
         aggregate = [math.exp(sum(math.log(value) for value in repetition) / len(repetition))
                      for repetition in zip(*samples_by_case)]
         median = statistics.median(aggregate)
-        return {"case_results": normalized, "samples_us": aggregate, "median_us": median,
+        return {"kernel_name": kernel_name, "case_results": normalized,
+                "samples_us": aggregate, "median_us": median,
                 "variability_ratio": (max(aggregate) - min(aggregate)) / median}
 
     def _calibration(self, result: dict) -> dict:
@@ -484,25 +497,21 @@ class AuditedBzController:
         }
 
     def _success_receipt(self, state: dict) -> dict:
-        profile = state["profile"]
+        primary = state["profile"]
         confirmation = state.get("confirmation")
+        profile = confirmation or primary
+        accepted_timing = "confirmation" if confirmation else "primary"
         noisy = profile["variability_ratio"] > self.variability_threshold
-        confirmation_noisy = bool(
-            confirmation and confirmation["variability_ratio"] > self.variability_threshold)
         status = "measurement_pending" if (
-            state["post_control"] == "drift" or (noisy and confirmation_noisy)
+            state["post_control"] == "drift" or noisy
         ) else "ok"
         policy = self._policy(state, profile["handle"], state["post_control"])
         policy["sample_count"] = self.profile_repeats
         policy["variability_ratio"] = profile["variability_ratio"]
+        policy["accepted_timing"] = accepted_timing
+        policy["primary"] = self._timing_proof(state, primary)
         if confirmation:
-            policy["confirmation"] = {
-                "candidate_sha256": state["candidate_sha256"],
-                "samples_us": confirmation["samples_us"],
-                "sample_count": self.profile_repeats,
-                "median_us": confirmation["median_us"],
-                "variability_ratio": confirmation["variability_ratio"],
-            }
+            policy["confirmation"] = self._timing_proof(state, confirmation)
         baseline_median = math.exp(sum(
             math.log(row["median_us"]) for row in self.baseline["case_medians_us"]
         ) / len(self.baseline["case_medians_us"]))
@@ -516,6 +525,7 @@ class AuditedBzController:
             "candidate_sha256": state["candidate_sha256"],
             "manifest_sha256": state["manifest_sha256"],
             "handle": profile["handle"], "device": state["selected"]["id"],
+            "kernel_name": profile["kernel_name"],
             "samples_us": profile["samples_us"], "median_us": profile["median_us"],
             "baseline_median_us": baseline_median, "baseline": self.baseline,
             "calibration": {
@@ -529,6 +539,17 @@ class AuditedBzController:
             "speedup_vs_baseline": baseline_median / normalized_median,
             "case_results": profile["case_results"],
             "compact_artifacts": profile["compact_artifacts"], "policy": policy,
+        }
+
+    def _timing_proof(self, state: dict, timing: dict) -> dict:
+        return {
+            "candidate_sha256": state["candidate_sha256"],
+            "kernel_name": timing["kernel_name"], "handle": timing["handle"],
+            "samples_us": timing["samples_us"], "sample_count": self.profile_repeats,
+            "median_us": timing["median_us"],
+            "variability_ratio": timing["variability_ratio"],
+            "case_results": timing["case_results"],
+            "compact_artifacts": timing["compact_artifacts"],
         }
 
     @staticmethod

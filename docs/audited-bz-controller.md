@@ -137,3 +137,12 @@ operation ledger, is atomically persisted below `--state-dir`.
 `CommandController.remeasure` supplies this argument, binds the returned receipt
 to the exact pending handle, and applies the same size and redaction rules as a
 normal submission or observation.
+
+Primary and confirmation captures carry distinct host-owned attempt identities,
+so the content-addressed BZ client cannot accidentally reuse the primary report
+as its confirmation. When a noisy primary is followed by a stable confirmation,
+the confirmation becomes the published and normalized timing: its handle,
+kernel identity, case rows, samples, median, and compact artifact locators appear
+at the receipt top level. `policy.primary` and `policy.confirmation` retain both
+attributable histories, while `policy.accepted_timing` names the selected one.
+Kernel or case identity drift makes the confirmation an infrastructure error.

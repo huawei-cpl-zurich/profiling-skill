@@ -65,6 +65,7 @@ class FakeBackend:
             for index, case in enumerate(request["cases"])
         ]
         return {"status": "ok", "handle": handle, "cases": rows,
+                "kernel_name": "kernel",
                 "artifacts": {"remote_profile_evidence": "/remote/evidence.json"}}
 
 
@@ -216,13 +217,66 @@ def test_noisy_profile_gets_exactly_one_confirmation_then_measurement_pending(tm
     ]
 
 
+def test_stable_confirmation_replaces_noisy_primary_as_accepted_evidence(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    cases = [7, 8, 9]
+    noisy = {
+        "status": "ok", "handle": "bz-a3-1:primary", "kernel_name": "kernel",
+        "cases": [{"case": case, "samples_us": [1.0, 10.0, 100.0],
+                   "median_us": 10.0} for case in cases],
+        "artifacts": {"remote_profile_evidence": "/remote/primary.json"},
+    }
+    stable = {
+        "status": "ok", "handle": "bz-a3-1:confirmation", "kernel_name": "kernel",
+        "cases": [{"case": case, "samples_us": [5.0, 5.0, 5.0],
+                   "median_us": 5.0} for case in cases],
+        "artifacts": {"remote_profile_evidence": "/remote/confirmation.json"},
+    }
+    backend = FakeBackend([None, None, noisy, stable, None])
+
+    receipt = make_controller(repo, backend, variability_threshold=0.1).run(
+        1, candidate_hash, manifest_hash)
+
+    contract.validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+    assert receipt["status"] == "ok"
+    assert receipt["handle"] == "bz-a3-1:confirmation"
+    assert receipt["samples_us"] == pytest.approx([5.0, 5.0, 5.0])
+    assert receipt["median_us"] == pytest.approx(5.0)
+    assert receipt["case_results"] == stable["cases"]
+    assert receipt["compact_artifacts"] == ["/remote/confirmation.json"]
+    assert receipt["policy"]["accepted_timing"] == "confirmation"
+    assert receipt["policy"]["primary"]["handle"] == "bz-a3-1:primary"
+    assert receipt["policy"]["confirmation"]["handle"] == "bz-a3-1:confirmation"
+    assert backend.requests[2]["attempt_id"] == "experiment-1-primary"
+    assert backend.requests[3]["attempt_id"] == "experiment-1-confirmation"
+
+
+def test_confirmation_kernel_identity_drift_is_infrastructure_error(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    cases = [7, 8, 9]
+    noisy = {"status": "ok", "handle": "bz-a3-1:primary", "kernel_name": "kernel",
+             "cases": [{"case": case, "samples_us": [1.0, 10.0, 100.0],
+                        "median_us": 10.0} for case in cases]}
+    drifted = {"status": "ok", "handle": "bz-a3-1:confirmation",
+               "kernel_name": "different_kernel",
+               "cases": [{"case": case, "samples_us": [5.0, 5.0, 5.0],
+                          "median_us": 5.0} for case in cases]}
+    backend = FakeBackend([None, None, noisy, drifted])
+
+    receipt = make_controller(repo, backend, variability_threshold=0.1).run(
+        1, candidate_hash, manifest_hash)
+
+    assert receipt["status"] == "infrastructure_error"
+    assert "confirmation identity" in receipt["reason"]
+
+
 def test_measurement_pending_can_remeasure_without_rechecking_candidate(tmp_path: Path):
     repo, candidate_hash, manifest_hash = repository(tmp_path)
     backend = FakeBackend()
     adapter = make_controller(repo, backend, variability_threshold=0.01)
     pending = adapter.run(1, candidate_hash, manifest_hash)
     backend.overrides.extend([
-        {"status": "ok", "handle": "bz-a3-1:profile-stable", "cases": [
+        {"status": "ok", "handle": "bz-a3-1:profile-stable", "kernel_name": "kernel", "cases": [
             {"case": case, "samples_us": [10.0, 10.0, 10.0], "median_us": 10.0}
             for case in [7, 8, 9]
         ]},
@@ -267,7 +321,7 @@ if action == 'calibrate': result={'status':'ok','handle':handle,'latency_us':10.
 elif action == 'check': result={'status':'ok','handle':handle,'passed':True}
 else:
  rows=[{'case':c,'samples_us':[10.0,10.0,10.0],'median_us':10.0} for c in request['cases']]
- result={'status':'ok','handle':handle,'cases':rows}
+ result={'status':'ok','handle':handle,'kernel_name':'kernel','cases':rows}
 print(json.dumps(result))
 """
     )

@@ -33,6 +33,7 @@
 | Reused `CommandController._execute` for remeasurement | Preserves receipt bounds, redaction, timeout handling, and exact-handle checks without a parallel execution path | Runtime and lifecycle focused suites |
 | Bound frozen baseline and calibration inputs directly in compact receipts | Makes normalized timing and speedup reproducible without retaining profiler trees | Adapter, contract, and backend tests |
 | Sanctioned only `--state-dir` as mutable controller provenance | Allows production composition while binding the exact directory identity and keeping all other path arguments immutable | Runtime provenance tests |
+| Select stable confirmation evidence instead of publishing a noisy primary | Keeps reported, normalized, and artifact evidence aligned with the accepted capture while retaining both histories | Functional confirmation and identity-drift tests |
 
 ## Complexity Intentionally Kept
 
@@ -61,6 +62,8 @@ branch-wide accounting.
 | `python -m ruff check --select F` on changed controller, contract, backend, and tests | passed | No unused/import errors |
 | Focused adapter, contract, runtime, lifecycle, and backend suite | 124 passed | Baseline/calibration evidence and mutable state provenance |
 | Full applicable suite | 699 passed, 1 deselected | Known host-kernel Bubblewrap restriction excluded |
+| Confirmation-selection focused suite | 127 passed | Accepted capture, history, drift, and managed request identity |
+| Confirmation-selection full applicable suite | 702 passed, 1 deselected | Known host-kernel Bubblewrap restriction excluded |
 
 ## Residual Risks
 

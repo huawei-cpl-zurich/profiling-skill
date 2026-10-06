@@ -3,7 +3,8 @@
 - **Implementation branch:** `codex/audited-nine-branch-campaign`
 - **Comparison base:** `main`
 - **Status:** Complete
-- **Next action:** Re-review the corrected durable-state and report boundaries.
+- **Next action:** Integrate the configurable-round and BZ controller commits,
+  then run remote canaries.
 
 ## Required behavior
 
@@ -24,6 +25,17 @@ independent acceptance boundaries rather than speculative extension points.
   the actual bundle boundary instead of introducing a second skill registry.
 - Kept the feature in one PR because it has one review story: construct,
   schedule, resume, and summarize the same immutable nine-cell campaign.
+
+## Production-wiring follow-up
+
+Production wiring is kept in a distinct dependent commit/PR. Its resource-pool
+and cell-launcher boundaries are required rather than speculative: the global
+remote contract has no device-occupancy operation, so the pool consumes an
+explicit pinned placement-provider snapshot and fails closed without it. The
+launcher retains only the configuration needed to clone and isolate one cell,
+materialize its exact skill allowlist, bind the BZ controller/backend closure,
+and resume the audited runner. Tests use dependency factories solely to run the
+full nine-cell path locally without Codex credentials or remote hardware.
 
 ## Validation
 

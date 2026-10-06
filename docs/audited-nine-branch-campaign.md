@@ -54,14 +54,28 @@ or push their experiment branches.
 
 ## Dynamic execution and recovery
 
-The production resource provider calls `cpl-remote capabilities` and
-`cpl-remote preflight` for `bz-a3-1` and `bz-a3-2`, then returns every healthy,
-idle physical device. `run_campaign` launches one cell per unique admitted
-target/device and fills all available slots. It has no batch barrier: whenever
-any cell finishes, it refreshes admission and immediately fills that free slot
-in the recorded fair order. An infrastructure failure checkpoints only its
-cell; independent queued cells continue. The campaign pauses with failed cells
-pending only after otherwise runnable work is exhausted.
+The production resource provider calls only `cpl-remote capabilities` and
+`cpl-remote preflight` for `bz-a3-1` and `bz-a3-2`. The current global remote
+interface does not expose physical-device occupancy, so a placement provider
+must also supply a hash-pinned JSON snapshot. The runner fails closed if this
+input is absent or changed; it never guesses device IDs. Its schema is:
+
+```json
+{
+  "schema": "profiling-skill/bz-a3-admission/v1",
+  "slots": [
+    {"target": "bz-a3-1", "device": 0, "healthy": true, "idle": true}
+  ]
+}
+```
+
+Only slots whose targets also pass both global remote checks are returned.
+`run_campaign` launches one cell per unique admitted target/device and fills
+all available slots. It has no batch barrier: whenever any cell finishes, it
+refreshes admission and immediately fills that free slot in the recorded fair
+order. An infrastructure failure checkpoints only its cell; independent queued
+cells continue. The campaign pauses with failed cells pending only after
+otherwise runnable work is exhausted.
 
 Each launcher result must include a terminal status, durable handle, completed
 round count, four distinct experiment commits, and four ordered controller
@@ -94,6 +108,35 @@ python scripts/audited_campaign.py report \
   --ledger /absolute/campaign/ledger.json \
   --output /absolute/campaign/report.json
 ```
+
+For production, create a hash-pinned runtime configuration with schema
+`profiling-skill/audited-campaign-runtime/v1`. It declares the run root, a
+pinned source repository and commit for each task, exact per-skill source trees
+and hashes, the pinned runtime scripts closure containing
+`audited_bz_controller.py`, its sibling benchmark-assets tree and hash, the
+invariant prompt and task bindings, the approved adapter argv, remote staging
+root, Codex authentication home, model, reasoning effort, runtime mode,
+immutable runtime-image digest, and timeout. The production CLI rejects model
+or image drift from the campaign manifest. It also pins the global
+`remote-access` skill's `scripts/cpl-remote` path and SHA-256; no workspace
+transport or raw remote client is accepted. Launch with:
+
+```bash
+python scripts/audited_campaign_production.py \
+  --manifest /absolute/campaign/manifest.json \
+  --runtime-config /absolute/campaign/runtime.json \
+  --runtime-config-sha256 RUNTIME_CONFIG_SHA256 \
+  --admission /absolute/campaign/admission.json \
+  --admission-sha256 ADMISSION_SHA256 \
+  --ledger /absolute/campaign/ledger.json
+```
+
+Repeat the identical command with `--resume` after infrastructure recovery.
+Each cell retains its isolated clone, experiment branch, Codex state,
+controller checkpoint, physical placement, and BZ job receipts. A retained
+handle is reobserved through `CommandController`; it is never replaced by a
+new dispatch. Runtime controller configuration uses logical device zero and
+stores the physical target/device only in the private placement evidence.
 
 ## Acceptance
 

@@ -87,6 +87,20 @@ def _validate_provenance(provenance: dict) -> None:
         raise CampaignError("all task baselines must be pinned")
     for task in TASKS:
         _require_hex(baselines[task], 64, f"baselines.{task}")
+    starters = provenance.get("starters")
+    if not isinstance(starters, dict) or set(starters) != set(TASKS):
+        raise CampaignError("all task starters must be pinned")
+    for task in TASKS:
+        starter = starters[task]
+        if not isinstance(starter, dict) or set(starter) != {"candidate", "manifest"}:
+            raise CampaignError(f"starter.{task} must pin candidate and manifest")
+        for kind in ("candidate", "manifest"):
+            binding = starter[kind]
+            path = Path(binding.get("path", "")) if isinstance(binding, dict) else Path("")
+            if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
+                    or not path.is_absolute()):
+                raise CampaignError(f"starter.{task}.{kind} must pin an absolute path")
+            _require_hex(binding.get("sha256"), 64, f"starter.{task}.{kind}.sha256")
     skills = provenance.get("skills")
     # Composite upstream bundles may pin their internal skills with one digest.
     accepted = {"cannbot", "ascend-profiling", "triton-guarded-kernel"}

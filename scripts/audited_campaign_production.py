@@ -181,6 +181,16 @@ def _git(repo: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def _git_blob(repo: Path, revision: str, path: str) -> bytes:
+    result = subprocess.run(
+        ["git", "show", f"{revision}:{path}"], cwd=repo, capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise ProductionError(f"seed commit does not contain {path}")
+    return result.stdout
+
+
 class ProductionCellLauncher:
     """Create or resume one isolated four-round branch and its controller."""
 
@@ -324,6 +334,18 @@ class ProductionCellLauncher:
             if actual != binding.get("sha256") or actual != baseline_pins[task]:
                 raise ProductionError(f"baseline provenance does not match runtime input: {task}")
             self._baseline(task)
+        starter_sources = self.config.get("starter_sources")
+        starter_pins = provenance.get("starters")
+        if (not isinstance(starter_sources, dict) or not isinstance(starter_pins, dict)
+                or set(starter_sources) != expected_tasks
+                or set(starter_pins) != expected_tasks):
+            raise ProductionError("starter provenance does not match runtime inputs")
+        for task in expected_tasks:
+            if starter_sources[task] != starter_pins[task]:
+                raise ProductionError(
+                    f"starter provenance does not match runtime input: {task}"
+                )
+            self._starter(task)
         skill_pins = provenance.get("skills")
         skill_sources = self.config.get("skill_sources", {})
         if not isinstance(skill_pins, dict):
@@ -359,6 +381,53 @@ class ProductionCellLauncher:
             raise ProductionError(f"timing baseline contract is invalid: {task}")
         return document
 
+    def _starter(self, task: str) -> dict[str, bytes]:
+        binding = self.config["starter_sources"].get(task)
+        if not isinstance(binding, dict) or set(binding) != {"candidate", "manifest"}:
+            raise ProductionError(f"starter binding is invalid: {task}")
+        contents = {}
+        for kind in ("candidate", "manifest"):
+            item = binding.get(kind)
+            path = Path(item.get("path", "")) if isinstance(item, dict) else Path("")
+            if (not isinstance(item, dict) or set(item) != {"path", "sha256"}
+                    or not path.is_absolute() or not path.is_file() or path.is_symlink()):
+                raise ProductionError(f"starter {kind} hash/path does not match pin: {task}")
+            contents[kind] = path.read_bytes()
+            if hashlib.sha256(contents[kind]).hexdigest() != item.get("sha256"):
+                raise ProductionError(f"starter {kind} hash/path does not match pin: {task}")
+        try:
+            manifest = json.loads(contents["manifest"])
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ProductionError(f"starter manifest is invalid JSON: {task}") from error
+        if (not isinstance(manifest, dict)
+                or manifest.get("schema") != "profiling-skill/candidate-kernel/v1"
+                or not isinstance(manifest.get("kernel_name"), str)
+                or not manifest["kernel_name"].strip()
+                or manifest["kernel_name"] != manifest["kernel_name"].strip()):
+            raise ProductionError(f"starter manifest contract is invalid: {task}")
+        return contents
+
+    def _validate_materialized_starter(self, repo: Path, task: str,
+                                       starter: dict[str, bytes]) -> None:
+        seed = repo / ".experiment" / "seed.json"
+        if seed.is_file():
+            seed_commit = _git(repo, "log", "-1", "--format=%H", "--", ".experiment/seed.json")
+            if (not seed_commit
+                    or _git_blob(repo, seed_commit, "candidate.py") != starter["candidate"]
+                    or _git_blob(repo, seed_commit, "candidate.manifest.json") !=
+                    starter["manifest"]):
+                raise ProductionError(
+                    f"seed commit starter does not match pinned input: {task}"
+                )
+            return
+        for kind, filename in (("candidate", "candidate.py"),
+                               ("manifest", "candidate.manifest.json")):
+            path = repo / filename
+            if not path.is_file() or path.read_bytes() != starter[kind]:
+                raise ProductionError(
+                    f"unseeded materialized starter does not match pinned input: {task}"
+                )
+
     def _prepare_repo(self, cell: dict) -> tuple[Path, bool]:
         root = self.run_root / cell["cell_id"]
         staging = self.run_root / f".{cell['cell_id']}.initializing"
@@ -370,8 +439,11 @@ class ProductionCellLauncher:
         if (not isinstance(revision, str) or len(revision) != 40
                 or any(character not in "0123456789abcdef" for character in revision)):
             raise ProductionError("source repository revision must be a pinned commit")
+        starter = self._starter(cell["task"])
+        starter_binding = self.config["starter_sources"][cell["task"]]
         identity = {"cell_id": cell["cell_id"], "task": cell["task"],
-                    "treatment": cell["treatment"], "source_revision": revision}
+                    "treatment": cell["treatment"], "source_revision": revision,
+                    "starter": starter_binding}
         identity_path = root / "state" / "cell.json"
         expected = tuple(TREATMENT_SKILLS[cell["treatment"]])
         if tuple(cell["skills"]) != expected:
@@ -381,6 +453,7 @@ class ProductionCellLauncher:
                     or json.loads(identity_path.read_text()) != identity):
                 raise ProductionError("existing isolated repository has a different identity")
             self._validate_isolated_skills(repo, expected)
+            self._validate_materialized_starter(repo, cell["task"], starter)
             return repo, (repo / ".experiment" / "seed.json").is_file()
         if root.exists():
             raise ProductionError("existing isolated cell is incomplete")
@@ -411,6 +484,10 @@ class ProductionCellLauncher:
         _git(staging_repo, "checkout", "--quiet", "--detach", revision)
         if _git(staging_repo, "rev-parse", "HEAD") != revision:
             raise ProductionError("isolated repository revision does not match pin")
+        if _git(staging_repo, "status", "--porcelain"):
+            raise ProductionError("isolated source checkout is not clean")
+        (staging_repo / "candidate.py").write_bytes(starter["candidate"])
+        (staging_repo / "candidate.manifest.json").write_bytes(starter["manifest"])
         exclusions = staging_repo / ".git" / "info" / "exclude"
         with exclusions.open("a") as stream:
             stream.write("\n.agents/\nAGENTS.md\n")
@@ -426,8 +503,7 @@ class ProductionCellLauncher:
             "Do not inspect host or global skills.\n"
         )
         self._validate_isolated_skills(staging_repo, expected)
-        if _git(staging_repo, "status", "--porcelain"):
-            raise ProductionError("isolated experiment repository is not clean")
+        self._validate_materialized_starter(staging_repo, cell["task"], starter)
         _write_json_atomic(staging / "state" / "cell.json", identity)
         staging.rename(root)
         return repo, False

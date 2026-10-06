@@ -58,7 +58,7 @@ def test_cases_cover_dimension_tails_and_multiple_k_tiles():
     assert len({(case.m, case.n, case.k) for case in correctness}) == 7
 
 
-def test_campaign_assets_preserve_the_control_contract():
+def test_campaign_assets_preserve_cases_and_expose_unresolved_starter_selector():
     module = load_module()
     cases = [json.loads(line) for line in (MATMUL / "cases.jsonl").read_text().splitlines()]
     assert (MATMUL / "baseline.json").read_bytes() == (MATMUL / "cases.jsonl").read_bytes()
@@ -66,11 +66,16 @@ def test_campaign_assets_preserve_the_control_contract():
             for case in cases] == [
         (case.name, case.m, case.n, case.k, case.kind) for case in module.CASES
     ]
-    manifest = json.loads((MATMUL / "candidate.manifest.json").read_text())
-    assert manifest == {
-        "schema": "profiling-skill/candidate-kernel/v1",
-        "kernel_name": module.KERNEL_NAME,
-    }
+    spec = importlib.util.spec_from_file_location(
+        "benchmark_backend_for_starter", ROOT / "scripts" / "benchmark_backend.py"
+    )
+    backend = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(backend)
+    selector, error = backend.load_kernel_selector(MATMUL / "candidate.manifest.json")
+    assert error is None
+    assert selector == "REPLACE_WITH_EXACT_EXPORTED_KERNEL"
+    assert selector != module.KERNEL_NAME
 
 
 def test_campaign_baseline_resets_the_control_seed_for_nonzero_cases():

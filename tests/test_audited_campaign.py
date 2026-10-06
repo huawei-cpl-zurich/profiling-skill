@@ -36,6 +36,16 @@ def inputs(tmp_path: Path) -> tuple[Path, dict[str, Path], dict]:
         "runtime_image_digest": "sha256:" + "c" * 64,
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "baselines": {name: "d" * 64 for name in tasks},
+        "starters": {
+            name: {
+                "candidate": {"path": f"/frozen/{name}/candidate.py", "sha256": "2" * 64},
+                "manifest": {
+                    "path": f"/frozen/{name}/candidate.manifest.json",
+                    "sha256": "3" * 64,
+                },
+            }
+            for name in tasks
+        },
         "skills": {
             "cannbot": "e" * 64,
             "ascend-profiling": "f" * 64,
@@ -601,6 +611,22 @@ def test_manifest_rejects_unpinned_provenance_and_wrong_dimensions(tmp_path: Pat
     with pytest.raises(audited_campaign.CampaignError, match="exactly four rounds"):
         audited_campaign.build_manifest(
             "run", prompt, tasks, provenance, "seed", rounds=3, request_budget=24
+        )
+
+
+@pytest.mark.parametrize("mutation", ["missing-task", "relative-path", "bad-hash"])
+def test_manifest_rejects_unpinned_task_starters(tmp_path: Path, mutation: str):
+    prompt, tasks, provenance = inputs(tmp_path)
+    if mutation == "missing-task":
+        del provenance["starters"]["bsa"]
+    elif mutation == "relative-path":
+        provenance["starters"]["gdn"]["candidate"]["path"] = "candidate.py"
+    else:
+        provenance["starters"]["matmul"]["manifest"]["sha256"] = "mutable"
+
+    with pytest.raises(audited_campaign.CampaignError, match="starter"):
+        audited_campaign.build_manifest(
+            "run", prompt, tasks, provenance, "seed", rounds=4, request_budget=24
         )
 
 

@@ -319,8 +319,15 @@ class AuditedExperimentRunner:
         )
 
     def _initialize(self, run_id: str, agent_id: str) -> tuple[str, str, str]:
-        if _git(self.repo, "status", "--porcelain"):
-            raise AuditError("experiment repository must start clean")
+        changed = set(_git(self.repo, "diff", "--name-only", "HEAD").splitlines())
+        changed.update(_git(
+            self.repo, "ls-files", "--others", "--exclude-standard",
+        ).splitlines())
+        allowed = {"candidate.py", "candidate.manifest.json"}
+        if changed - allowed or any(not (self.repo / path).is_file() for path in allowed):
+            raise AuditError(
+                "experiment repository may contain only pinned starter materialization"
+            )
         branch = f"experiment/{run_id}/{agent_id}"
         _git(self.repo, "switch", "-c", branch)
         directory = self.repo / ".experiment"
@@ -337,7 +344,8 @@ class AuditedExperimentRunner:
         if self.round_count != 3:
             seed_document["round_count"] = self.round_count
         seed.write_text(json.dumps(seed_document, indent=2, sort_keys=True) + "\n")
-        _git(self.repo, "add", ".experiment/seed.json", "PROMPT.md", "TASK.md")
+        _git(self.repo, "add", ".experiment/seed.json", "PROMPT.md", "TASK.md",
+             "candidate.py", "candidate.manifest.json")
         _git(self.repo, "commit", "-m", f"experiment seed: {run_id}/{agent_id}")
         return branch, _git(self.repo, "rev-parse", "HEAD"), sha256_bytes(seed.read_bytes())
 

@@ -173,6 +173,42 @@ def test_host_declared_four_rounds_are_seeded_and_completed(tmp_path: Path):
     assert (repo / "experiments/04/evidence.json").is_file()
 
 
+def test_seed_accepts_and_commits_only_materialized_starter_changes(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    (repo / "candidate.py").write_text("TASK = 'gdn'\nVALUE = 0\n")
+    (repo / "candidate.manifest.json").write_text(
+        '{"candidate":"candidate.py","kernel_name":"gdn"}\n'
+    )
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=4,
+    )
+
+    _, seed_commit, _ = runner._initialize("starters", "gdn-agent")
+
+    assert subprocess.check_output(
+        ["git", "show", f"{seed_commit}:candidate.py"], cwd=repo, text=True
+    ) == "TASK = 'gdn'\nVALUE = 0\n"
+    assert not subprocess.check_output(
+        ["git", "status", "--porcelain"], cwd=repo, text=True
+    )
+
+
+def test_seed_rejects_materialized_starter_with_unrelated_changes(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    (repo / "candidate.py").write_text("VALUE = 2\n")
+    (repo / "unexpected.txt").write_text("not starter materialization\n")
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=4,
+    )
+
+    with pytest.raises(contract.AuditError, match="starter materialization"):
+        runner._initialize("starters", "agent")
+
+
 def test_resume_rejects_changed_host_round_count(tmp_path: Path):
     repo = tmp_path / "repo"
     init_repo(repo)

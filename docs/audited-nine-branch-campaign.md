@@ -18,6 +18,8 @@ shape is:
 {
   "source_revision": "<40 hex characters>",
   "controller_sha256": "<64 hex characters>",
+  "resource_admission_sha256": "<64 hex characters>",
+  "cpl_remote_sha256": "<64 hex characters>",
   "runtime_image_digest": "sha256:<64 hex characters>",
   "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
   "baselines": {"matmul": "<sha256>", "gdn": "<sha256>", "bsa": "<sha256>"},
@@ -54,22 +56,12 @@ or push their experiment branches.
 
 ## Dynamic execution and recovery
 
-The production resource provider calls only `cpl-remote capabilities` and
-`cpl-remote preflight` for `bz-a3-1` and `bz-a3-2`. The current global remote
-interface does not expose physical-device occupancy, so a placement provider
-must also supply a hash-pinned JSON snapshot. The runner fails closed if this
-input is absent or changed; it never guesses device IDs. Its schema is:
+Resource discovery is supplied by the prerequisite documented in
+`docs/audited-resource-admission.md`. Production imports that module rather
+than duplicating its placement parser or global-client probes. Both the exact
+module file and the global `cpl-remote` client are hash-pinned in runtime
+configuration and manifest provenance before any cell can launch.
 
-```json
-{
-  "schema": "profiling-skill/bz-a3-admission/v1",
-  "slots": [
-    {"target": "bz-a3-1", "device": 0, "healthy": true, "idle": true}
-  ]
-}
-```
-
-Only slots whose targets also pass both global remote checks are returned.
 `run_campaign` launches one cell per unique admitted target/device and fills
 all available slots. It has no batch barrier: whenever any cell finishes, it
 refreshes admission and immediately fills that free slot in the recorded fair
@@ -117,7 +109,9 @@ and hashes, the pinned runtime scripts closure containing
 exact frozen timing-baseline bindings, invariant prompt and task bindings,
 remote staging root, Codex authentication home, model, reasoning effort,
 immutable runtime-image digest, and the five timeout-budget fields described
-below. Each timing baseline uses schema
+below. It also binds the fixed sibling `audited_resource_admission.py` path and
+digest to `provenance.resource_admission_sha256`, and binds the authenticated
+global client digest to `provenance.cpl_remote_sha256`. Each timing baseline uses schema
 `profiling-skill/baseline-timing/v1`, names the benchmark, lists positive
 per-case medians in exact development-case order, records a positive control
 median, and includes the SHA-256 of the canonical JSON for those four fields.

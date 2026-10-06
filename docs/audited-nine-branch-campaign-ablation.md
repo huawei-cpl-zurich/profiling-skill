@@ -73,15 +73,14 @@ meaning rather than merely simplifying code:
   separate pins. Two explicit grace intervals preserve the nesting from the
   remote job through the backend process to the outer controller transaction.
 
-### Split assessment
+### Completed resource-admission split
 
-The stacked production diff is larger than the preferred review target. One
-safe independent vertical slice exists: move `CplRemoteResourcePool`, the
-admission schema/parser, global-client pin check, and the two admission tests
-into a prerequisite **resource-admission PR** based on #49. That slice has a
-complete public behavior—turn a hash-pinned placement snapshot plus live
-capability/preflight checks into eligible slots—and no dependency on cell
-bootstrap, lifecycle recovery, controller construction, or verification.
+The safe vertical slice identified during review is now the prerequisite
+`audited_resource_admission` module. It owns `CplRemoteResourcePool`, the exact
+admission schema/parser, global-client pin checks, documentation, and focused
+tests. Production imports and compatibility-re-exports the required names; it
+does not retain another parser, probe loop, or copy of those tests. The runtime
+and manifest bind both the prerequisite module digest and global-client digest.
 
 The remaining provenance checks are not a second safe mechanical split. They
 bind the same source revision, copied treatment trees, runtime closure,
@@ -90,9 +89,8 @@ revalidates. Extracting those checks without the launcher would create a
 validator whose result can become stale before bootstrap or resume. Likewise,
 atomic bootstrap, checkpoint recovery, controller receipts, and offline
 verification form one fail-closed transaction and should remain together.
-If maintainers want the size reduction before merge, extract only the resource
-admission slice as a new prerequisite commit/PR; do not split recovery or
-provenance by line count.
+The resource slice is therefore removed from this PR. Do not split the
+remaining recovery or provenance work mechanically by line count.
 
 ## Validation
 

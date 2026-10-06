@@ -14,9 +14,15 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+_SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPT_DIRECTORY))
+try:
+    from audited_resource_admission import (
+        TARGETS, CplRemoteResourcePool, file_sha256,
+    )
+finally:
+    sys.path.pop(0)
 
-TARGETS = ("bz-a3-1", "bz-a3-2")
-ADMISSION_SCHEMA = "profiling-skill/bz-a3-admission/v1"
 RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v1"
 DEVELOPMENT_CASES = {
     "matmul": [7, 8, 9],
@@ -52,14 +58,6 @@ RUNTIME_FILES = {
 
 class ProductionError(RuntimeError):
     pass
-
-
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def document_sha256(document: dict) -> str:
@@ -118,61 +116,6 @@ def _read_pinned(path: Path, expected: str, label: str) -> dict:
     if not isinstance(value, dict):
         raise ProductionError(f"{label} must be a JSON object")
     return value
-
-
-class CplRemoteResourcePool:
-    """Health-check approved targets and consume a pinned occupancy snapshot."""
-
-    def __init__(self, admission: Path, admission_sha256: str, *,
-                 cpl_remote: str | None = None, timeout: int = 120,
-                 cpl_remote_sha256: str | None = None,
-                 invoke: Callable = subprocess.run):
-        self.admission = admission.resolve()
-        self.admission_sha256 = admission_sha256
-        self.cpl_remote = cpl_remote or str(
-            Path.home() / ".agents" / "skills" / "remote-access" / "scripts" / "cpl-remote"
-        )
-        if (cpl_remote_sha256 is not None
-                and (not Path(self.cpl_remote).is_file()
-                     or file_sha256(Path(self.cpl_remote)) != cpl_remote_sha256)):
-            raise ProductionError("global cpl-remote hash does not match pinned input")
-        self.timeout = timeout
-        self.invoke = invoke
-
-    def admit(self) -> list[dict]:
-        document = _read_pinned(
-            self.admission, self.admission_sha256, "required placement-provider"
-        )
-        if document.get("schema") != ADMISSION_SCHEMA:
-            raise ProductionError(f"admission input requires schema {ADMISSION_SCHEMA}")
-        slots = document.get("slots")
-        if not isinstance(slots, list):
-            raise ProductionError("placement-provider slots must be an array")
-        available_targets = set()
-        for target in TARGETS:
-            for operation in ("capabilities", "preflight"):
-                result = self.invoke(
-                    [self.cpl_remote, operation, target], text=True,
-                    capture_output=True, timeout=self.timeout, check=False,
-                )
-                if result.returncode:
-                    break
-            else:
-                available_targets.add(target)
-        admitted, seen = [], set()
-        for slot in slots:
-            if (not isinstance(slot, dict) or set(slot) !=
-                    {"target", "device", "healthy", "idle"}):
-                raise ProductionError("placement-provider slot has an invalid shape")
-            identity = (slot["target"], slot["device"])
-            if (slot["target"] not in TARGETS or type(slot["device"]) is not int
-                    or slot["device"] < 0 or type(slot["healthy"]) is not bool
-                    or type(slot["idle"]) is not bool or identity in seen):
-                raise ProductionError("placement-provider slot identity is invalid")
-            seen.add(identity)
-            if slot["target"] in available_targets:
-                admitted.append(dict(slot))
-        return admitted
 
 
 def _copy_tree(source: Path, destination: Path) -> None:
@@ -306,6 +249,20 @@ class ProductionCellLauncher:
             "reasoning_effort": self.config.get("reasoning_effort"),
         }:
             raise ProductionError("model provenance does not match runtime inputs")
+        resource = self.config.get("resource_admission")
+        resource_path = (Path(resource.get("path", "")).resolve()
+                         if isinstance(resource, dict) else Path(""))
+        expected_resource = _SCRIPT_DIRECTORY / "audited_resource_admission.py"
+        actual_resource = (file_sha256(resource_path)
+                           if resource_path.is_file() else None)
+        if (resource_path != expected_resource
+                or actual_resource != resource.get("sha256")
+                or actual_resource != provenance.get("resource_admission_sha256")
+                or self.config.get("cpl_remote_sha256") !=
+                provenance.get("cpl_remote_sha256")):
+            raise ProductionError(
+                "resource admission provenance does not match runtime inputs"
+            )
         baseline_sources = self.config.get("baseline_sources")
         baseline_pins = provenance.get("baselines")
         if (not isinstance(baseline_sources, dict) or not isinstance(baseline_pins, dict)

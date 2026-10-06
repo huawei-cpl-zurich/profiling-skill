@@ -59,6 +59,7 @@ def isolated_global_remote(tmp_path: Path, monkeypatch):
     remote = home / ".agents/skills/remote-access/scripts/cpl-remote"
     remote.parent.mkdir(parents=True)
     remote.write_text("#!/bin/sh\n")
+    remote.chmod(0o755)
     monkeypatch.setattr(Path, "home", lambda: home)
 
 
@@ -78,42 +79,6 @@ def timing_baseline(task: str) -> dict:
     }
     document["sha256"] = production.document_sha256(document)
     return document
-
-
-def test_resource_pool_uses_only_capabilities_preflight_and_pinned_admission(tmp_path: Path):
-    admission = tmp_path / "admission.json"
-    admission.write_text(json.dumps({
-        "schema": production.ADMISSION_SCHEMA,
-        "slots": [
-            {"target": "bz-a3-1", "device": 7, "healthy": True, "idle": True},
-            {"target": "bz-a3-2", "device": 4, "healthy": True, "idle": False},
-        ],
-    }))
-    calls = []
-
-    def invoke(argv, **kwargs):
-        calls.append(argv)
-        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
-
-    pool = production.CplRemoteResourcePool(
-        admission, sha(admission), cpl_remote="cpl-remote", invoke=invoke
-    )
-    assert pool.admit() == [
-        {"target": "bz-a3-1", "device": 7, "healthy": True, "idle": True},
-        {"target": "bz-a3-2", "device": 4, "healthy": True, "idle": False},
-    ]
-    assert calls == [
-        ["cpl-remote", "capabilities", "bz-a3-1"],
-        ["cpl-remote", "preflight", "bz-a3-1"],
-        ["cpl-remote", "capabilities", "bz-a3-2"],
-        ["cpl-remote", "preflight", "bz-a3-2"],
-    ]
-
-
-def test_resource_pool_fails_closed_without_valid_placement_provider(tmp_path: Path):
-    missing = tmp_path / "missing.json"
-    with pytest.raises(production.ProductionError, match="placement-provider"):
-        production.CplRemoteResourcePool(missing, "0" * 64).admit()
 
 
 def git_repo(path: Path) -> tuple[Path, str]:
@@ -187,6 +152,9 @@ def runtime_fixture(tmp_path: Path, cell: dict):
                if "triton-guarded-kernel" in skills else {}),
         },
     }
+    resource_module = ROOT / "scripts" / "audited_resource_admission.py"
+    provenance["resource_admission_sha256"] = sha(resource_module)
+    provenance["cpl_remote_sha256"] = sha(cpl_remote)
     config = {
         "run_id": "production-e2e",
         "run_root": str(tmp_path / "runs"),
@@ -200,6 +168,9 @@ def runtime_fixture(tmp_path: Path, cell: dict):
                              "sha256": production.digest_tree(assets)},
         "baseline_sources": baselines,
         "cpl_remote_sha256": sha(cpl_remote),
+        "resource_admission": {
+            "path": str(resource_module), "sha256": sha(resource_module),
+        },
         "prompt": {"path": str(prompt), "sha256": sha(prompt)},
         "tasks": {name: {"path": str(task), "sha256": sha(task)}
                   for name in production.DEVELOPMENT_CASES},
@@ -458,6 +429,19 @@ def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pi
     else:
         config["provenance"]["skills"]["cannbot"] = "a" * 64
     with pytest.raises(production.ProductionError, match="provenance"):
+        production_launcher(config)
+
+
+@pytest.mark.parametrize("pin", ["resource", "client"])
+def test_launcher_binds_resource_module_and_client_to_manifest_provenance(
+        tmp_path: Path, pin: str):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    key = "resource_admission_sha256" if pin == "resource" else "cpl_remote_sha256"
+    config["provenance"][key] = "a" * 64
+    with pytest.raises(production.ProductionError, match="resource admission provenance"):
         production_launcher(config)
 
 
@@ -973,10 +957,13 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
             "triton-guarded-kernel": skills["triton-guarded-kernel"]["sha256"],
         },
     }
+    cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
+    resource_module = ROOT / "scripts" / "audited_resource_admission.py"
+    provenance["resource_admission_sha256"] = sha(resource_module)
+    provenance["cpl_remote_sha256"] = sha(cpl_remote)
     manifest = campaign.build_manifest(
         "fake-production", prompt, tasks, provenance, "fixed"
     )
-    cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     config = {
         "schema": production.RUNTIME_SCHEMA, "run_id": manifest["run_id"],
         "run_root": str(tmp_path / "runs"),
@@ -990,6 +977,9 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
                              "sha256": production.digest_tree(assets)},
         "baseline_sources": baselines,
         "cpl_remote_sha256": sha(cpl_remote),
+        "resource_admission": {
+            "path": str(resource_module), "sha256": sha(resource_module),
+        },
         "prompt": manifest["prompt"], "tasks": manifest["tasks"],
         "remote_root": "/remote/campaign", "provenance": provenance,
         "auth_home": str(tmp_path / "auth"), "model": "gpt-5.6-sol",

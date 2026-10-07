@@ -541,6 +541,13 @@ class ProductionCellLauncher:
         provenance = self.config.get("provenance")
         if not isinstance(provenance, dict):
             raise ProductionError("runtime provenance is missing")
+        manifest_sha256 = self.config.get("manifest_sha256")
+        if (manifest_sha256 is not None
+                and (not isinstance(manifest_sha256, str)
+                     or len(manifest_sha256) != 64
+                     or any(character not in "0123456789abcdef"
+                            for character in manifest_sha256))):
+            raise ProductionError("runtime manifest identity is invalid")
         sources = self.config.get("source_repositories", {})
         expected_tasks = set(DEVELOPMENT_CASES)
         if (set(sources) != expected_tasks or set(self.config.get("tasks", {})) != expected_tasks):
@@ -697,16 +704,66 @@ class ProductionCellLauncher:
             raise ProductionError("source repository revision must be a pinned commit")
         starter = self._starter(cell["task"])
         starter_binding = self.config["starter_sources"][cell["task"]]
-        identity = {"cell_id": cell["cell_id"], "task": cell["task"],
-                    "treatment": cell["treatment"], "source_revision": revision,
-                    "starter": starter_binding}
+        legacy_identity = {
+            "cell_id": cell["cell_id"], "task": cell["task"],
+            "treatment": cell["treatment"], "source_revision": revision,
+            "starter": starter_binding,
+        }
+        identity = {
+            "schema": "profiling-skill/cell-identity/v2", **legacy_identity,
+            "run_id": self.config["run_id"],
+            "branch": f"experiment/{self.config['run_id']}/{cell['cell_id']}",
+            "round_count": cell.get("round_count"),
+            "request_budget": cell.get("request_budget"),
+            "task_sha256": cell.get("task_sha256"),
+            "prompt_contract": cell.get("prompt_contract"),
+            "skills": cell.get("skills"),
+            "manifest_sha256": self.config.get("manifest_sha256"),
+        }
         identity_path = root / "state" / "cell.json"
         expected = tuple(TREATMENT_SKILLS[cell["treatment"]])
         if tuple(cell["skills"]) != expected:
             raise ProductionError("cell treatment allowlist does not match campaign policy")
         if repo.exists():
-            if (not identity_path.is_file()
-                    or json.loads(identity_path.read_text()) != identity):
+            try:
+                retained_identity = json.loads(identity_path.read_text())
+            except (OSError, json.JSONDecodeError) as error:
+                raise ProductionError(
+                    "existing isolated repository has an unreadable identity"
+                ) from error
+            if retained_identity == legacy_identity:
+                controller_path = root / "state" / "controller.json"
+                seed_commit = _git(
+                    repo, "log", "-1", "--format=%H", "--", ".experiment/seed.json"
+                )
+                if not seed_commit:
+                    raise ProductionError(
+                        "legacy cell identity lacks immutable campaign evidence"
+                    )
+                try:
+                    controller = json.loads(controller_path.read_text())
+                    seed = json.loads(_git_blob(
+                        repo, seed_commit, ".experiment/seed.json"
+                    ))
+                except (OSError, json.JSONDecodeError) as error:
+                    raise ProductionError(
+                        "legacy cell identity lacks immutable campaign evidence"
+                    ) from error
+                if (controller.get("benchmark") != cell["task"]
+                        or controller.get("round_count") != cell.get("round_count")
+                        or controller.get("request_budget") != cell.get("request_budget")
+                        or seed.get("run_id") != self.config["run_id"]
+                        or seed.get("agent_id") != cell["cell_id"]
+                        or seed.get("round_count") != cell.get("round_count")
+                        or seed.get("prompt_sha256") !=
+                        self.config["prompt"]["sha256"]
+                        or seed.get("task_sha256") !=
+                        self.config["tasks"][cell["task"]]["sha256"]):
+                    raise ProductionError(
+                        "legacy cell identity does not match immutable campaign evidence"
+                    )
+                _write_json_atomic(identity_path, identity)
+            elif retained_identity != identity:
                 raise ProductionError("existing isolated repository has a different identity")
             self._validate_isolated_skills(repo, expected)
             self._validate_materialized_starter(repo, cell["task"], starter)
@@ -1100,6 +1157,7 @@ def main(argv: list[str] | None = None) -> int:
     if manifest.get("schema_version") != 2:
         parser.error("production campaign requires starter-bound manifest schema_version 2")
     config["run_id"] = manifest["run_id"]
+    config["manifest_sha256"] = manifest["manifest_sha256"]
     if config.get("provenance") != manifest.get("provenance"):
         parser.error("runtime provenance does not exactly match manifest provenance")
     model = manifest["provenance"]["model"]

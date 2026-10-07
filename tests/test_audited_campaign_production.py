@@ -896,6 +896,84 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
     assert FakeRunner.calls[-1][-1] is False
 
 
+def test_completed_cell_rejects_same_run_manifest_budget_change(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["manifest_sha256"] = "1" * 64
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+    assert launcher.launch(cell, {"target": "bz-a3-1", "device": 0})["status"] == "complete"
+    calls = len(FakeRunner.calls)
+
+    regenerated = {**cell, "request_budget": 48}
+    config["manifest_sha256"] = "2" * 64
+    rejected = production_launcher(
+        config,
+        invoker_factory=lambda *args, **kwargs: pytest.fail("invoker must not start"),
+        controller_factory=lambda *args, **kwargs: pytest.fail("controller must not start"),
+        runner_factory=FakeRunner, verifier_invoke=valid_verifier,
+    )
+    with pytest.raises(production.ProductionError, match="different identity"):
+        rejected.launch(regenerated, {"target": "bz-a3-1", "device": 0})
+    assert len(FakeRunner.calls) == calls
+
+
+def test_same_manifest_identity_accepts_normal_existing_cell(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["manifest_sha256"] = "3" * 64
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, existing = launcher._prepare_repo(cell)
+    assert existing is False
+    resumed, existing = launcher._prepare_repo(cell)
+    assert resumed == repo and existing is False
+    identity = json.loads((repo.parent / "state/cell.json").read_text())
+    assert identity["schema"] == "profiling-skill/cell-identity/v2"
+    assert identity["request_budget"] == 48
+    assert identity["manifest_sha256"] == "3" * 64
+
+
+def test_legacy_identity_upgrades_only_with_matching_seed_and_controller(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    audited_lifecycle.AuditedExperimentRunner(
+        repo, Path(config["prompt"]["path"]), Path(config["tasks"]["matmul"]["path"]),
+        lambda *args: "", lambda *args: {}, round_count=4,
+    )._initialize(config["run_id"], cell["cell_id"])
+    launcher._controller(cell, {"target": "bz-a3-1", "device": 0}, repo.parent, repo)
+    identity_path = repo.parent / "state/cell.json"
+    identity = json.loads(identity_path.read_text())
+    legacy = {key: identity[key] for key in (
+        "cell_id", "task", "treatment", "source_revision", "starter",
+    )}
+    identity_path.write_text(json.dumps(legacy) + "\n")
+
+    resumed, existing = launcher._prepare_repo(cell)
+    assert resumed == repo and existing is True
+    assert json.loads(identity_path.read_text())["schema"] == (
+        "profiling-skill/cell-identity/v2"
+    )
+
+
 def test_repair_runtime_uses_48_operations_and_two_candidate_repairs(tmp_path: Path):
     cell = {"cell_id": "matmul-project-guarded", "task": "matmul",
             "treatment": "project-guarded", "round_count": 4, "request_budget": 48,

@@ -234,7 +234,14 @@ passes that independent verifier before it can be recorded as successful.
 Initial cell materialization uses a sibling initializing directory with an
 atomically written, exact cell-identity marker. Clone, checkout, skill copy,
 and identity creation finish there before one atomic rename publishes the
-cell. A restart may delete and recreate only a partial directory whose marker
+cell. The retained identity binds the full manifest hash when available plus
+the run, branch, round count, request budget, prompt/task digests, skill
+allowlist, source revision, and starter. Therefore a regenerated manifest
+cannot reinterpret a completed 24-operation repository as a 48-operation
+cell after ledger loss. A legacy identity is upgraded only when its committed
+seed and retained controller configuration independently prove the same run,
+prompt, task, rounds, and request budget. A restart may delete and recreate
+only a partial directory whose marker
 matches that exact cell identity; malformed, absent, or different markers fail
 closed and are preserved for inspection. Every fresh start and resume also
 requires the repository-local skill directory to contain exactly the declared

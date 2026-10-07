@@ -26,6 +26,25 @@ archival, checkpoint amendment,
 controller-state advancement, and ledger retry publication are a dependent
 transactional step and must consume this same validated plan contract.
 
+Apply the transaction with the exact attestation file digest and its distinct
+inner self-seal:
+
+```console
+python scripts/audited_runtime_migration_apply.py \
+  --plan migration.json \
+  --attestation preflight.json \
+  --attestation-file-sha256 "$(sha256sum preflight.json | cut -d' ' -f1)" \
+  --attestation-sha256 "$(python -c 'import json; print(json.load(open("preflight.json"))["attestation_sha256"])')" \
+  --transaction /absolute/path/to/selector-fallback-v4-transaction
+```
+
+`--attestation-file-sha256` authenticates the bytes of `preflight.json`;
+`--attestation-sha256` is the seal stored inside that JSON. Keep the transaction
+directory outside the campaign run root. If execution is interrupted, rerun
+the identical command with the same transaction directory. Never choose a new
+directory for a partial transaction: its journal and archive are the recovery
+authority.
+
 The plan schema is `profiling-skill/audited-runtime-migration-plan/v1`. Its
 top-level fields are `migration_id`, `run_root`, `ledger_sha256`,
 `old_runtime`, `new_runtime`, and `cells`. Runtime bindings contain

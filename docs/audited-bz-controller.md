@@ -159,3 +159,12 @@ kernel identity, case rows, samples, median, and compact artifact locators appea
 at the receipt top level. `policy.primary` and `policy.confirmation` retain both
 attributable histories, while `policy.accepted_timing` names the selected one.
 Kernel or case identity drift makes the confirmation an infrastructure error.
+For profiling evidence, kernel identity has two bound names: the manifest's
+declared selector and the actual resolved `msprof op` selector. Captures use
+the resolved name while the job and response identity continue to use the
+declared name. Exact-selector legacy evidence is accepted as declaring and
+resolving to the same name; partial or inconsistent dual-name evidence is
+rejected before receipting. A non-exact resolved name is valid only when it is
+the declared name with one terminal `_mix_aic` or `_mix_aiv` removed. Primary
+and confirmation captures must match on both names, and both are bound into
+the published receipt and its timing proofs.

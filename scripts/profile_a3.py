@@ -26,6 +26,10 @@ class InvalidCapture(RuntimeError):
     pass
 
 
+class SelectorMiss(InvalidCapture):
+    """A successful profiler capture with no row for the exact selector."""
+
+
 def text(value: str | bytes | None) -> str:
     if value is None:
         return ""
@@ -61,10 +65,12 @@ def summarize(
 ) -> dict:
     files = sorted(root.rglob("OpBasicInfo*.csv"))
     if not files:
-        raise InvalidCapture(f"no OpBasicInfo CSV under {root}")
+        error = SelectorMiss if kernel else InvalidCapture
+        raise error(f"no OpBasicInfo CSV under {root}")
 
     rows: list[dict] = []
     sources: list[dict] = []
+    selectable_sources = 0
     for path in files:
         with path.open(newline="", encoding="utf-8-sig") as stream:
             reader = csv.DictReader(stream)
@@ -73,6 +79,7 @@ def summarize(
             duration_field = field(fields, DURATION_FIELDS)
             if not name_field or not duration_field:
                 continue
+            selectable_sources += 1
             accepted = 0
             for raw in reader:
                 name = (raw.get(name_field) or "").strip()
@@ -99,6 +106,8 @@ def summarize(
             )
     if not rows:
         selection = f" matching {kernel!r}" if kernel else ""
+        if kernel and selectable_sources:
+            raise SelectorMiss(f"no numeric operator rows{selection}")
         raise InvalidCapture(f"no numeric operator rows{selection}")
 
     by_kernel: dict[str, list[float]] = {}
@@ -243,6 +252,12 @@ def main(argv: list[str] | None = None) -> int:
         evidence["application"] = args.application
         evidence["msprof_log_sha256"] = sha256(log)
     except InvalidCapture as exc:
+        if isinstance(exc, SelectorMiss):
+            reason = "selector_miss"
+        elif start_error is not None or returncode != 0 or SUCCESS_LINE not in transcript:
+            reason = "tool_failure"
+        else:
+            reason = "invalid_capture"
         evidence = {
             "schema_version": 1,
             "target_family": "Ascend-A2-A3",
@@ -250,12 +265,15 @@ def main(argv: list[str] | None = None) -> int:
             "status": "failure",
             "failure": {
                 "kind": "profiling",
+                "reason": reason,
                 "message": str(exc),
                 "msprof_returncode": returncode,
             },
             "application": args.application,
             "msprof_log": str(log),
         }
+        if args.kernel_name:
+            evidence["failure"]["kernel_selector"] = args.kernel_name
         evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
         print(json.dumps(evidence, sort_keys=True))
         return 1

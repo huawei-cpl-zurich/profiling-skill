@@ -157,6 +157,21 @@ kernel selector before profiling. Lifecycle validation rejects an invalid
 schema, blank selector, or unresolved sentinel and repairs it in the same agent
 session before any controller request.
 
+The selector stored in the manifest remains the immutable experiment identity.
+Profiling first requests that exact name. If a successful `msprof op` capture
+reports a machine-readable selector miss and the declared name ends in
+`_mix_aic` or `_mix_aiv`, the batch profiler strips that one terminal suffix
+and tries once more. A successful resolution is pinned for every later case
+and repeat. No other name rewriting is allowed. Compact evidence records both
+the declared and resolved selectors; legacy evidence without those fields is
+accepted only when its exact selector matches the declaration.
+
+A clean final selector miss is a counted `submission_error`. Profiler startup,
+timeout, exit, terminal-marker, report, or malformed-evidence failures remain
+infrastructure errors. Failure receipts retain the requested cases and every
+completed capture, so a selector mistake cannot be hidden by a missing
+success-only evidence field.
+
 If the host stops after the seed commit but before writing a blocked
 checkpoint, resume is allowed only while `HEAD` is exactly that seed commit.
 The worktree may be clean or may modify only `candidate.py` and

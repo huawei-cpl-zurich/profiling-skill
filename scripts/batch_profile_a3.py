@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import statistics
 import subprocess
 import sys
@@ -46,13 +47,18 @@ def bounded_log(parts: list[str]) -> str:
     return (marker + data[-(MAX_LOG_BYTES - len(marker)):]).decode(errors="replace")
 
 
-def failure(job: dict, status: str, diagnostics: str, captures: list[dict]) -> dict:
-    return {
+def failure(job: dict, status: str, diagnostics: str, captures: list[dict],
+            resolved_kernel_name: str | None = None) -> dict:
+    result = {
         "status": status,
         "diagnostics": diagnostics,
         **identity(job),
+        "declared_kernel_name": job["profiling"]["kernel_name"],
         "completed_captures": captures,
     }
+    if resolved_kernel_name is not None:
+        result["resolved_kernel_name"] = resolved_kernel_name
+    return result
 
 
 def emit_failure(output: Path, response_path: Path, result: dict,
@@ -62,10 +68,54 @@ def emit_failure(output: Path, response_path: Path, result: dict,
         "schema_version": 1,
         "status": "failure",
         "failure": {"kind": result["status"], "message": result["diagnostics"]},
+        "declared_kernel_name": result.get("declared_kernel_name"),
+        "resolved_kernel_name": result.get("resolved_kernel_name"),
         "captures": captures,
     })
     (output / "msprof.log").write_text(bounded_log(logs))
     return 1
+
+
+def fallback_selector(selector: str) -> str | None:
+    fallback = re.sub(r"_mix_ai[cv]$", "", selector)
+    return fallback if fallback != selector and fallback else None
+
+
+def read_capture(evidence_path: Path, run: subprocess.CompletedProcess[str],
+                 selector: str) -> tuple[str, float | str]:
+    """Return (success, latency), (selector_miss, message), or (error, message)."""
+    try:
+        evidence = json.loads(evidence_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return "error", f"msprof evidence is not valid JSON: {exc}"
+    if not isinstance(evidence, dict):
+        return "error", "msprof evidence is not an object"
+    if evidence.get("status") != "success":
+        failure = evidence.get("failure")
+        if not isinstance(failure, dict):
+            return "error", "msprof failure evidence is malformed"
+        message = str(failure.get("message", "msprof capture failed"))
+        clean_miss = (
+            failure.get("kind") == "profiling"
+            and failure.get("reason") == "selector_miss"
+            and failure.get("kernel_selector") == selector
+            and failure.get("msprof_returncode") == 0
+        )
+        return ("selector_miss" if clean_miss else "error"), message
+    if run.returncode:
+        return "error", f"profiler exited with status {run.returncode} despite success evidence"
+    try:
+        kernels = evidence["kernels"]
+        if len(kernels) != 1 or kernels[0].get("name") != selector:
+            raise ValueError("selected kernel identity mismatch")
+        latency = float(kernels[0]["duration_us"]["median"])
+        if not math.isfinite(latency) or latency <= 0:
+            raise ValueError("latency must be positive and finite")
+        if not isinstance(evidence.get("msprof_log_sha256"), str):
+            raise ValueError("msprof log digest is missing")
+    except (KeyError, TypeError, ValueError) as exc:
+        return "error", f"msprof success evidence is invalid: {exc}"
+    return "success", latency
 
 
 def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
@@ -80,11 +130,12 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
     logs: list[str] = []
     work = output / "work"
     work.mkdir(parents=True, exist_ok=True)
+    declared_kernel_name = kernel_name
+    resolved_kernel_name: str | None = None
     for case in job["cases"]:
         samples: list[float] = []
         for iteration in range(job["repeats"]):
             capture_id = f"case-{case}-repeat-{iteration}"
-            capture_dir = work / capture_id
             item_job = {
                 **job,
                 "case": case,
@@ -95,45 +146,59 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
             item_job_path = work / f"{capture_id}.json"
             item_response = work / f"{capture_id}-response.json"
             write_json(item_job_path, item_job)
-            command = [
-                sys.executable, str(profiler), "--output", str(capture_dir),
-                "--kernel-name", kernel_name, "--", sys.executable, str(runner),
-                "--job", str(item_job_path), "--output", str(item_response),
-            ]
-            run = subprocess.run(command, text=True, capture_output=True, check=False)
-            if (capture_dir / "msprof.log").is_file():
-                logs.append(f"[{capture_id}]\n" + (capture_dir / "msprof.log").read_text(errors="replace"))
-            try:
-                remote = json.loads(item_response.read_text())
-            except (OSError, json.JSONDecodeError) as exc:
-                result = failure(job, "infrastructure_error",
-                                 f"{capture_id} produced no valid runner response: {exc}", captures)
-                return emit_failure(output, response_path, result, captures, logs)
-            if remote.get("status") != "ok":
-                status = remote.get("status", "infrastructure_error")
-                if status not in {"compile_error", "runtime_error", "correctness_error"}:
-                    status = "infrastructure_error"
-                result = failure(job, status, str(remote.get("diagnostics", "")), captures)
-                return emit_failure(output, response_path, result, captures, logs)
-            evidence_path = capture_dir / "evidence.json"
-            try:
-                evidence = json.loads(evidence_path.read_text())
-                kernels = evidence["kernels"]
-                if (run.returncode or evidence.get("status") != "success" or len(kernels) != 1
-                        or kernels[0].get("name") != kernel_name):
-                    raise ValueError(evidence.get("failure", "invalid selected kernel evidence"))
-                latency = float(kernels[0]["duration_us"]["median"])
-                if not math.isfinite(latency) or latency <= 0:
-                    raise ValueError("latency must be positive and finite")
-            except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-                result = failure(job, "infrastructure_error",
-                                 f"{capture_id} msprof evidence is invalid: {exc}", captures)
+            selectors = [resolved_kernel_name or declared_kernel_name]
+            fallback = fallback_selector(declared_kernel_name) if resolved_kernel_name is None else None
+            if fallback:
+                selectors.append(fallback)
+            for selector_index, selector in enumerate(selectors):
+                suffix = "" if selector_index == 0 else "-selector-fallback"
+                capture_dir = work / f"{capture_id}{suffix}"
+                command = [
+                    sys.executable, str(profiler), "--output", str(capture_dir),
+                    "--kernel-name", selector, "--", sys.executable, str(runner),
+                    "--job", str(item_job_path), "--output", str(item_response),
+                ]
+                run = subprocess.run(command, text=True, capture_output=True, check=False)
+                if (capture_dir / "msprof.log").is_file():
+                    logs.append(f"[{capture_id} selector={selector}]\n" +
+                                (capture_dir / "msprof.log").read_text(errors="replace"))
+                try:
+                    remote = json.loads(item_response.read_text())
+                except (OSError, json.JSONDecodeError) as exc:
+                    result = failure(
+                        job, "infrastructure_error",
+                        f"{capture_id} produced no valid runner response: {exc}", captures,
+                        resolved_kernel_name)
+                    return emit_failure(output, response_path, result, captures, logs)
+                if remote.get("status") != "ok":
+                    status = remote.get("status", "infrastructure_error")
+                    if status not in {"compile_error", "runtime_error", "correctness_error"}:
+                        status = "infrastructure_error"
+                    result = failure(job, status, str(remote.get("diagnostics", "")), captures,
+                                     resolved_kernel_name)
+                    return emit_failure(output, response_path, result, captures, logs)
+                capture_status, detail = read_capture(capture_dir / "evidence.json", run, selector)
+                if capture_status == "success":
+                    latency = float(detail)
+                    resolved_kernel_name = selector
+                    evidence_path = capture_dir / "evidence.json"
+                    evidence = json.loads(evidence_path.read_text())
+                    break
+                if capture_status == "selector_miss" and selector_index + 1 < len(selectors):
+                    continue
+                status = ("submission_error" if capture_status == "selector_miss"
+                          else "infrastructure_error")
+                result = failure(
+                    job, status, f"{capture_id} msprof selector {selector!r}: {detail}",
+                    captures, resolved_kernel_name)
                 return emit_failure(output, response_path, result, captures, logs)
             captures.append({
                 "case": case,
                 "iteration": iteration,
                 "duration_us": latency,
-                "kernel_name": kernel_name,
+                "kernel_name": resolved_kernel_name,
+                "declared_kernel_name": declared_kernel_name,
+                "resolved_kernel_name": resolved_kernel_name,
                 "evidence_sha256": digest(evidence_path),
                 "msprof_log_sha256": evidence["msprof_log_sha256"],
             })
@@ -146,14 +211,18 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
         "status": "success",
         "profiler": "msprof-op",
         "timing_scope": "device-task",
-        "kernel_name": kernel_name,
+        "kernel_name": declared_kernel_name,
+        "declared_kernel_name": declared_kernel_name,
+        "resolved_kernel_name": resolved_kernel_name,
         "captures": captures,
         "cases": rows,
         "repeats": job["repeats"],
         "geomean_us": geomean,
     }
-    response = {"status": "ok", "diagnostics": "", **bound, "profile_cases": rows,
-                "geomean_us": geomean, "passed": True}
+    response = {"status": "ok", "diagnostics": "", **bound,
+                "declared_kernel_name": declared_kernel_name,
+                "resolved_kernel_name": resolved_kernel_name,
+                "profile_cases": rows, "geomean_us": geomean, "passed": True}
     write_json(output / "evidence.json", evidence)
     (output / "msprof.log").write_text(bounded_log(logs))
     write_json(response_path, response)

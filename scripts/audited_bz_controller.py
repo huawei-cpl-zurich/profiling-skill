@@ -68,6 +68,24 @@ def _positive(value: object) -> bool:
             and math.isfinite(value) and value > 0)
 
 
+def _valid_selector_mapping(declared: object, resolved: object) -> bool:
+    return (isinstance(declared, str) and bool(declared)
+            and isinstance(resolved, str) and bool(resolved)
+            and (resolved == declared
+                 or any(declared == resolved + suffix
+                        for suffix in ("_mix_aic", "_mix_aiv"))))
+
+
+def _selector_identity(value: dict) -> tuple[str, str]:
+    kernel = value.get("kernel_name")
+    explicit = ("declared_kernel_name" in value or "resolved_kernel_name" in value)
+    declared = value.get("declared_kernel_name") if explicit else kernel
+    resolved = value.get("resolved_kernel_name") if explicit else kernel
+    if kernel != declared or not _valid_selector_mapping(declared, resolved):
+        raise ControllerError("profile response selector identity is invalid")
+    return declared, resolved
+
+
 class SubprocessBackend:
     """Invoke the pinned JSON benchmark backend without interpreting remotes."""
 
@@ -397,7 +415,7 @@ class AuditedBzController:
                     else:
                         state["stage"] = "post_control"
                 else:
-                    if timing["kernel_name"] != state["profile"]["kernel_name"]:
+                    if _selector_identity(timing) != _selector_identity(state["profile"]):
                         return self._infrastructure(
                             "confirmation identity does not match the primary kernel",
                             handle=timing["handle"],
@@ -432,9 +450,8 @@ class AuditedBzController:
 
     def _timing(self, result: dict) -> dict:
         rows = result.get("cases")
-        kernel_name = result.get("kernel_name")
-        if (not isinstance(kernel_name, str) or not kernel_name
-                or not isinstance(rows, list) or len(rows) != len(self.development_cases)
+        declared, resolved = _selector_identity(result)
+        if (not isinstance(rows, list) or len(rows) != len(self.development_cases)
                 or [row.get("case") if isinstance(row, dict) else None for row in rows]
                 != self.development_cases):
             raise ControllerError("profile response has invalid case rows")
@@ -454,7 +471,8 @@ class AuditedBzController:
         aggregate = [math.exp(sum(math.log(value) for value in repetition) / len(repetition))
                      for repetition in zip(*samples_by_case)]
         median = statistics.median(aggregate)
-        return {"kernel_name": kernel_name, "case_results": normalized,
+        return {"kernel_name": declared, "declared_kernel_name": declared,
+                "resolved_kernel_name": resolved, "case_results": normalized,
                 "samples_us": aggregate, "median_us": median,
                 "variability_ratio": (max(aggregate) - min(aggregate)) / median}
 
@@ -535,6 +553,7 @@ class AuditedBzController:
         primary = state["profile"]
         confirmation = state.get("confirmation")
         profile = confirmation or primary
+        declared, resolved = _selector_identity(profile)
         accepted_timing = "confirmation" if confirmation else "primary"
         noisy = profile["variability_ratio"] > self.variability_threshold
         status = "measurement_pending" if (
@@ -560,7 +579,9 @@ class AuditedBzController:
             "candidate_sha256": state["candidate_sha256"],
             "manifest_sha256": state["manifest_sha256"],
             "handle": profile["handle"], "device": state["selected"]["id"],
-            "kernel_name": profile["kernel_name"],
+            "kernel_name": declared,
+            "declared_kernel_name": declared,
+            "resolved_kernel_name": resolved,
             "samples_us": profile["samples_us"], "median_us": profile["median_us"],
             "baseline_median_us": baseline_median, "baseline": self.baseline,
             "calibration": {
@@ -580,6 +601,10 @@ class AuditedBzController:
         return {
             "candidate_sha256": state["candidate_sha256"],
             "kernel_name": timing["kernel_name"], "handle": timing["handle"],
+            "declared_kernel_name": timing.get(
+                "declared_kernel_name", timing["kernel_name"]),
+            "resolved_kernel_name": timing.get(
+                "resolved_kernel_name", timing["kernel_name"]),
             "samples_us": timing["samples_us"], "sample_count": self.profile_repeats,
             "median_us": timing["median_us"],
             "variability_ratio": timing["variability_ratio"],

@@ -11,6 +11,8 @@ from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CLIENT = ROOT / "scripts/gz_a3_job_client.py"
@@ -163,7 +165,11 @@ elif action == "run-bundle":
  (out/"response.json").write_text(json.dumps(result))
  if job["action"]=="profile":
   (out/"profile").mkdir(exist_ok=True)
-  (out/"profile/evidence.json").write_text(json.dumps({"status":"success","cases":rows}))
+  captures=[{"case":row["case"],"iteration":iteration,"duration_us":sample,
+             "kernel_name":job["profiling"]["kernel_name"]}
+            for row in rows for iteration,sample in enumerate(row["samples_us"])]
+  (out/"profile/evidence.json").write_text(json.dumps({"status":"success",
+      "kernel_name":job["profiling"]["kernel_name"],"cases":rows,"captures":captures}))
   (out/"profile/msprof.log").write_text("Profiling finished\n")
  archive=Path(os.environ["FAKE_TAR"])
  with tarfile.open(archive,"w") as stream:
@@ -270,12 +276,87 @@ def test_profile_returns_bound_msprof_evidence_and_handle(tmp_path: Path):
     assert Path(result["artifacts"]["msprof_log"]).read_text() == "Profiling finished\n"
 
 
+def test_attach_profile_evidence_accepts_resolved_and_legacy_exact_selectors(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    legacy = {
+        "status": "success", "kernel_name": "gdn_kernel", "cases": rows,
+        "captures": [{"case": 40, "iteration": 0, "duration_us": 7.0,
+                      "kernel_name": "gdn_kernel"}],
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(legacy))
+    result = {"kernel_name": "gdn_kernel", "profile_cases": rows}
+    module.attach_profile_evidence(result, path)
+
+    resolved = json.loads(json.dumps(legacy))
+    resolved.update(kernel_name="gdn_kernel_mix_aiv",
+                    declared_kernel_name="gdn_kernel_mix_aiv",
+                    resolved_kernel_name="gdn_kernel")
+    resolved["captures"][0].update(declared_kernel_name="gdn_kernel_mix_aiv",
+                                    resolved_kernel_name="gdn_kernel")
+    path.write_text(json.dumps(resolved))
+    result = {"kernel_name": "gdn_kernel_mix_aiv",
+              "declared_kernel_name": "gdn_kernel_mix_aiv",
+              "resolved_kernel_name": "gdn_kernel", "profile_cases": rows}
+    module.attach_profile_evidence(result, path)
+
+
+def test_attach_profile_evidence_rejects_selector_identity_drift(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    evidence = {
+        "status": "success", "kernel_name": "gdn_kernel_mix_aiv",
+        "declared_kernel_name": "gdn_kernel_mix_aiv", "resolved_kernel_name": "gdn_kernel",
+        "cases": rows, "captures": [{"case": 40, "iteration": 0,
+                                      "duration_us": 7.0, "kernel_name": "other",
+                                      "declared_kernel_name": "gdn_kernel_mix_aiv",
+                                      "resolved_kernel_name": "other"}],
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(evidence))
+    with pytest.raises(module.ClientError, match="selector identity"):
+        module.attach_profile_evidence(
+            {"kernel_name": "gdn_kernel_mix_aiv", "profile_cases": rows}, path)
+
+
+def test_attach_profile_evidence_rejects_consistent_but_illegal_selector_mapping(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    evidence = {
+        "status": "success", "kernel_name": "gdn_kernel_mix_aiv",
+        "declared_kernel_name": "gdn_kernel_mix_aiv",
+        "resolved_kernel_name": "unrelated_kernel", "cases": rows,
+        "captures": [{"case": 40, "iteration": 0, "duration_us": 7.0,
+                      "kernel_name": "unrelated_kernel",
+                      "declared_kernel_name": "gdn_kernel_mix_aiv",
+                      "resolved_kernel_name": "unrelated_kernel"}],
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(evidence))
+    result = {"kernel_name": "gdn_kernel_mix_aiv",
+              "declared_kernel_name": "gdn_kernel_mix_aiv",
+              "resolved_kernel_name": "unrelated_kernel", "profile_cases": rows}
+
+    with pytest.raises(module.ClientError, match="selector identity"):
+        module.attach_profile_evidence(result, path)
+
+
 def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
     process, result = run(tmp_path, "compile_error")
     assert process.returncode == 2
     assert result["status"] == "compile_error"
     assert "NameError" in result["diagnostics"]
     assert result["handle"] == "gz-a3:command-1"
+
+
+def test_selector_submission_error_is_counted_and_keeps_profile_identity(tmp_path: Path):
+    process, result = run(tmp_path, "submission_error")
+
+    assert process.returncode == 2
+    assert result["status"] == "submission_error"
+    assert result["cases"] == [40]
+    assert result["kernel_name"] == "candidate_kernel"
 
 
 def test_batch_compile_failure_is_packaged_and_returned_by_managed_client(tmp_path: Path):

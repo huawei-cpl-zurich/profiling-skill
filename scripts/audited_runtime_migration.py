@@ -27,11 +27,9 @@ _FAILURE = re.compile(r"case-(?:40|47)-repeat-0 msprof evidence is invalid: 'ker
 class MigrationError(RuntimeError):
     pass
 
-
 def document_sha256(document: dict) -> str:
-    return hashlib.sha256(json.dumps(
-        document, sort_keys=True, separators=(",", ":"),
-    ).encode()).hexdigest()
+    encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def file_sha256(path: Path) -> str:
@@ -74,18 +72,26 @@ def _atomic_json(path: Path, value: dict) -> None:
 
 
 def _git(repo: Path, *arguments: str) -> str:
-    result = subprocess.run(
-        ["git", *arguments], cwd=repo, text=True, capture_output=True, check=False,
-    )
+    result = subprocess.run(["git", *arguments], cwd=repo, text=True,
+                            capture_output=True, check=False)
     if result.returncode:
         raise MigrationError(f"git {' '.join(arguments)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
 
 
+def _git_blob(repo: Path, revision: str, path: str) -> bytes:
+    result = subprocess.run(["git", "show", f"{revision}:{path}"], cwd=repo,
+                            capture_output=True, check=False)
+    if result.returncode:
+        raise MigrationError(f"checkpoint commit does not contain {path}")
+    return result.stdout
+
+
 def _identity(value: object, label: str) -> dict:
     if not isinstance(value, dict) or not isinstance(value.get("identity_sha256"), str):
         raise MigrationError(f"{label} controller identity is invalid")
-    unsealed = {key: item for key, item in value.items() if key != "identity_sha256"}
+    unsealed = {key: item for key, item in value.items()
+                if key != "identity_sha256"}
     if document_sha256(unsealed) != value["identity_sha256"]:
         raise MigrationError(f"{label} controller identity hash is invalid")
     return value
@@ -100,7 +106,8 @@ def _runtime(binding: object, label: str) -> tuple[dict, Path]:
         raise MigrationError(f"{label} runtime config hash does not match")
     config = _json(path, f"{label} runtime config")
     runtime = config.get("runtime_scripts")
-    tree = Path(runtime.get("path", "")).resolve() if isinstance(runtime, dict) else Path("")
+    tree = (Path(runtime.get("path", "")).resolve()
+            if isinstance(runtime, dict) else Path(""))
     closure = digest_tree(tree)
     if (runtime.get("sha256") != closure
             or binding.get("closure_sha256") != closure):
@@ -123,10 +130,10 @@ def _validate_controller_identity(identity: dict, runtime: Path, root: Path,
     state = (root / cell_id / "state/controller").resolve()
     argv, files, mutable = (identity.get(name) for name in
                             ("argv", "file_arguments", "mutable_directories"))
-    indexed = {item.get("argument_index"): item for item in files
-               if isinstance(item, dict)} if isinstance(files, list) else {}
-    directories = {item.get("argument_index"): item for item in mutable
-                   if isinstance(item, dict)} if isinstance(mutable, list) else {}
+    indexed = ({item.get("argument_index"): item for item in files
+                if isinstance(item, dict)} if isinstance(files, list) else {})
+    directories = ({item.get("argument_index"): item for item in mutable
+                    if isinstance(item, dict)} if isinstance(mutable, list) else {})
     if (not isinstance(argv, list) or len(argv) != 6
             or not isinstance(argv[0], str) or not argv[0]
             or argv[1:] != [str(script), "--config", str(config), "--state-dir", str(state)]
@@ -153,9 +160,9 @@ def _load_plan(path: Path) -> tuple[dict, Path, Path, Path]:
     if not root.is_dir():
         raise MigrationError("run root is unavailable")
     cells = plan.get("cells")
-    if (not isinstance(cells, list)
-            or {item.get("cell_id"): item.get("experiment")
-                for item in cells if isinstance(item, dict)} != ALLOWED_CELLS
+    actual = ({item.get("cell_id"): item.get("experiment") for item in cells
+               if isinstance(item, dict)} if isinstance(cells, list) else {})
+    if (not isinstance(cells, list) or actual != ALLOWED_CELLS
             or len(cells) != len(ALLOWED_CELLS)):
         raise MigrationError("migration cell allowlist must exactly match the approved cells")
     _, old_runtime = _runtime(plan.get("old_runtime"), "old")
@@ -165,6 +172,50 @@ def _load_plan(path: Path) -> tuple[dict, Path, Path, Path]:
             or old.get("closure_sha256") == new.get("closure_sha256")):
         raise MigrationError("old and new runtime config/closure require distinct digests")
     return plan, root, old_runtime, new_runtime
+
+
+def _validate_resume_topology(repo: Path, ledger: dict, cell: dict,
+                              blocked: dict) -> None:
+    cell_id, experiment = cell["cell_id"], cell["experiment"]
+    expected_branch = f"experiment/{ledger.get('run_id')}/{cell_id}"
+    required = ("reason", "seed_commit", "seed_hash", "resume_parent", "prior_candidate_sha256", "session_id")
+    if (blocked.get("schema") != "profiling-skill/audited-blocked/v2"
+            or blocked.get("round_count") != 4
+            or blocked.get("experiment") != experiment
+            or blocked.get("stage") != "controller"
+            or blocked.get("branch") != expected_branch
+            or blocked.get("pre_session") is not False
+            or not isinstance(blocked.get("commands"), list)
+            or any(not isinstance(blocked.get(name), str) or not blocked[name]
+                   for name in required)
+            or type(blocked.get("controller_submissions")) is not int
+            or blocked["controller_submissions"] < 0
+            or type(blocked.get("measurement_attempts")) is not int
+            or blocked["measurement_attempts"] < 0
+            or _git(repo, "branch", "--show-current") != expected_branch
+            or _git(repo, "rev-parse", "HEAD") != cell["checkpoint_commit"]
+            or _git(repo, "rev-parse", "HEAD^") != blocked["resume_parent"]):
+        raise MigrationError(f"{cell_id} checkpoint resume topology does not match")
+    revision_range = f"{blocked['seed_commit']}..HEAD^"
+    completed = _git(repo, "rev-list", "--first-parent", "--reverse",
+                     revision_range).splitlines()
+    all_commits = _git(repo, "rev-list", revision_range).splitlines()
+    try:
+        seed_bytes = _git_blob(repo, blocked["seed_commit"], ".experiment/seed.json")
+        seed = json.loads(seed_bytes)
+    except json.JSONDecodeError as error:
+        raise MigrationError(f"{cell_id} experiment seed is invalid") from error
+    if (len(completed) != experiment - 1 or len(all_commits) != len(completed)
+            or hashlib.sha256(seed_bytes).hexdigest() != blocked["seed_hash"]
+            or hashlib.sha256(_git_blob(repo, "HEAD^", "candidate.py")).hexdigest() != blocked["prior_candidate_sha256"]
+            or seed.get("schema") != "profiling-skill/audited-seed/v2"
+            or seed.get("round_count") != 4 or seed.get("run_id") != ledger.get("run_id")
+            or seed.get("agent_id") != cell_id
+            or hashlib.sha256((repo / "PROMPT.md").read_bytes()).hexdigest()
+            != seed.get("prompt_sha256")
+            or hashlib.sha256((repo / "TASK.md").read_bytes()).hexdigest()
+            != seed.get("task_sha256")):
+        raise MigrationError(f"{cell_id} checkpoint resume topology does not match")
 
 
 def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
@@ -177,9 +228,9 @@ def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
         if not path.is_file() or cell.get(name) != file_sha256(path):
             raise MigrationError(f"{cell_id} {name.replace('_', ' ')} does not match")
     state_path = _state_path(root, cell)
-    blocked, state = _json(blocked_path, f"{cell_id} blocked checkpoint"), _json(
-        state_path, f"{cell_id} controller state",
-    )
+    blocked = _json(blocked_path, f"{cell_id} blocked checkpoint")
+    state = _json(state_path, f"{cell_id} controller state")
+    _validate_resume_topology(repo, ledger, cell, blocked)
     checks = {
         "blocked_sha256": file_sha256(blocked_path),
         "controller_state_sha256": file_sha256(state_path),
@@ -220,6 +271,8 @@ def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
             or not isinstance(receipt, dict) or receipt.get("status") != "infrastructure_error"
             or receipt.get("terminal") is not False
             or receipt.get("handle") != cell.get("durable_handle")
+            or (receipt.get("candidate_sha256"), receipt.get("manifest_sha256"))
+            != (cell["candidate_sha256"], cell["manifest_sha256"])
             or not isinstance(pending, dict)
             or pending.get("handle") != cell.get("durable_handle")
             or receipt.get("reason") != reason
@@ -252,17 +305,18 @@ def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
     old_identity = seed.get("reproducibility", {}).get("controller")
     if old_identity != cell.get("old_controller_identity"):
         raise MigrationError(f"{cell_id} old controller identity does not match seed")
-    _validate_controller_identity(
-        cell["old_controller_identity"], old_runtime, root, cell_id, "old",
-    )
-    _validate_controller_identity(
-        cell["new_controller_identity"], new_runtime, root, cell_id, "new",
-    )
+    _validate_controller_identity(cell["old_controller_identity"], old_runtime,
+                                  root, cell_id, "old")
+    _validate_controller_identity(cell["new_controller_identity"], new_runtime,
+                                  root, cell_id, "new")
     return {key: cell[key] for key in (
         "cell_id", "experiment", "checkpoint_commit", "candidate_sha256",
         "manifest_sha256", "blocked_sha256", "controller_state_sha256",
         "ledger_attempt_sha256", "durable_handle", "request_sha256",
         "failure_reason", "old_controller_identity", "new_controller_identity",
+    )} | {key: blocked[key] for key in (
+        "branch", "session_id", "seed_commit", "seed_hash", "resume_parent",
+        "prior_candidate_sha256",
     )}
 
 

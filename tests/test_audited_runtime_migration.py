@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).parents[1]
 SPEC = importlib.util.spec_from_file_location(
     "audited_runtime_migration", ROOT / "scripts" / "audited_runtime_migration.py"
@@ -20,31 +19,20 @@ assert SPEC.loader
 sys.modules[SPEC.name] = migration
 SPEC.loader.exec_module(migration)
 
-
 def sha_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
 def sha(path: Path) -> str:
     return sha_bytes(path.read_bytes())
-
-
 def write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
-
-
 def git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args], cwd=repo, text=True, capture_output=True, check=True,
-    ).stdout.strip()
-
-
+    return subprocess.run(["git", *args], cwd=repo, text=True,
+                          capture_output=True, check=True).stdout.strip()
 def controller_identity(script: Path, config: Path, state: Path) -> dict:
     value = {
         "adapter": "CommandController",
-        "argv": [sys.executable, str(script), "--config", str(config),
-                 "--state-dir", str(state)],
+        "argv": [sys.executable, str(script), "--config", str(config), "--state-dir", str(state)],
         "file_arguments": [
             {"argument_index": 1, "path": str(script), "sha256": sha(script)},
             {"argument_index": 3, "path": str(config), "sha256": sha(config)},
@@ -53,24 +41,17 @@ def controller_identity(script: Path, config: Path, state: Path) -> dict:
     }
     value["identity_sha256"] = migration.document_sha256(value)
     return value
-
-
 def make_runtime(tmp_path: Path, name: str) -> tuple[Path, dict]:
     runtime = tmp_path / name / "runtime"
     runtime.mkdir(parents=True)
     (runtime / "audited_bz_controller.py").write_text(f"# {name}\n")
     (runtime / "batch_profile_a3.py").write_text(f"SELECTOR = {name!r}\n")
-    document = {
-        "schema": "profiling-skill/audited-campaign-runtime/v2",
-        "runtime_scripts": {
-            "path": str(runtime), "sha256": migration.digest_tree(runtime),
-        },
-    }
+    document = {"schema": "profiling-skill/audited-campaign-runtime/v2",
+                "runtime_scripts": {"path": str(runtime),
+                                    "sha256": migration.digest_tree(runtime)}}
     config = tmp_path / name / "runtime.json"
     write_json(config, document)
     return config, document
-
-
 def make_repo(root: Path, cell: str, experiment: int, old_runtime: Path,
               reason: str, candidate_hash: str, manifest_hash: str,
               handle: str) -> tuple[dict, dict, str]:
@@ -79,6 +60,7 @@ def make_repo(root: Path, cell: str, experiment: int, old_runtime: Path,
     git(repo, "init", "-q")
     git(repo, "config", "user.name", "Test")
     git(repo, "config", "user.email", "test@example.invalid")
+    git(repo, "switch", "-qc", f"experiment/run/{cell}")
     candidate = b"candidate\n" + candidate_hash.encode() + b"\n"
     manifest = b'{"kernel_name":"kernel_mix_aiv"}\n'
     (repo / "candidate.py").write_bytes(candidate)
@@ -88,11 +70,18 @@ def make_repo(root: Path, cell: str, experiment: int, old_runtime: Path,
     write_json(old_controller_config, {"runtime": "old", "cell": cell})
     controller_dir = root / cell / "state" / "controller"
     controller_dir.mkdir(parents=True)
-    old_identity = controller_identity(
-        old_runtime / "audited_bz_controller.py", old_controller_config, controller_dir,
-    )
+    old_identity = controller_identity(old_runtime / "audited_bz_controller.py",
+                                       old_controller_config, controller_dir)
     agent = {"adapter": "agent", "identity_sha256": "a" * 64}
-    seed = {"reproducibility": {"agent": agent, "controller": old_identity}}
+    (repo / "PROMPT.md").write_text("prompt\n")
+    (repo / "TASK.md").write_text("task\n")
+    seed = {
+        "schema": "profiling-skill/audited-seed/v2", "round_count": 4,
+        "run_id": "run", "agent_id": cell,
+        "prompt_sha256": sha(repo / "PROMPT.md"),
+        "task_sha256": sha(repo / "TASK.md"),
+        "reproducibility": {"agent": agent, "controller": old_identity},
+    }
     write_json(repo / ".experiment" / "seed.json", seed)
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "seed")
@@ -131,29 +120,30 @@ def make_repo(root: Path, cell: str, experiment: int, old_runtime: Path,
         "schema": "profiling-skill/audited-blocked/v2", "round_count": 4,
         "experiment": experiment, "stage": "controller", "reason": reason,
         "branch": f"experiment/run/{cell}", "session_id": f"session-{cell}",
-        "seed_commit": seed_commit, "resume_parent": parent,
+        "pre_session": False, "commands": [], "seed_commit": seed_commit,
+        "seed_hash": sha(repo / ".experiment/seed.json"),
+        "resume_parent": parent,
+        "prior_candidate_sha256": sha_bytes(subprocess.run(
+            ["git", "show", f"{parent}:candidate.py"], cwd=repo,
+            capture_output=True, check=True).stdout),
         "candidate_sha256": candidate_hash, "manifest_sha256": manifest_hash,
         "controller_submissions": 2, "measurement_attempts": 0,
         "receipt": {"status": "infrastructure_error", "terminal": False,
-                    "reason": reason, "handle": handle},
+                    "reason": reason, "handle": handle,
+                    "candidate_sha256": candidate_hash, "manifest_sha256": manifest_hash},
     }
     write_json(repo / ".experiment" / "blocked.json", blocked)
     git(repo, "add", ".experiment/blocked.json")
     git(repo, "commit", "-qm", f"checkpoint blocked experiment {experiment}")
     return blocked, state, git(repo, "rev-parse", "HEAD")
-
-
 @pytest.fixture
 def campaign(tmp_path: Path) -> dict:
     root = tmp_path / "production-v3"
     root.mkdir()
     old_config, old = make_runtime(tmp_path, "old")
     new_config, new = make_runtime(tmp_path, "new")
-    specs = {
-        "bsa-project-guarded": (3, 47),
-        "gdn-cannbot": (1, 40),
-        "bsa-project-cannbot": (1, 47),
-    }
+    specs = {"bsa-project-guarded": (3, 47), "gdn-cannbot": (1, 40),
+             "bsa-project-cannbot": (1, 47)}
     plan_cells = []
     ledger_cells = {}
     for index, (cell, (experiment, case)) in enumerate(specs.items(), 1):
@@ -166,11 +156,9 @@ def campaign(tmp_path: Path) -> dict:
         write_json(new_controller_config, {"runtime": "new", "cell": cell})
         new_identity = controller_identity(
             Path(new["runtime_scripts"]["path"]) / "audited_bz_controller.py",
-            new_controller_config, root / cell / "state" / "controller",
-        )
-        state_key = sha_bytes(
-            f"{experiment}:{blocked['candidate_sha256']}:{blocked['manifest_sha256']}".encode()
-        )
+            new_controller_config, root / cell / "state" / "controller")
+        state_key = sha_bytes(f"{experiment}:{blocked['candidate_sha256']}:"
+                              f"{blocked['manifest_sha256']}".encode())
         state_path = root / cell / "state" / "controller" / state_key / "state.json"
         plan_cells.append({
             "cell_id": cell, "experiment": experiment,
@@ -181,8 +169,8 @@ def campaign(tmp_path: Path) -> dict:
             "durable_handle": blocked["receipt"]["handle"],
             "request_sha256": state["operations"][-1]["request_sha256"],
             "failure_reason": reason,
-            "old_controller_identity": json.loads(
-                (root / cell / "repo/.experiment/seed.json").read_text()
+            "old_controller_identity": json.loads((
+                root / cell / "repo/.experiment/seed.json").read_text()
             )["reproducibility"]["controller"],
             "new_controller_identity": new_identity,
         })
@@ -202,11 +190,9 @@ def campaign(tmp_path: Path) -> dict:
     plan = {
         "schema": migration.PLAN_SCHEMA, "migration_id": "selector-fallback-v4",
         "run_root": str(root), "ledger_sha256": sha(root / "ledger.json"),
-        "old_runtime": {"config_path": str(old_config),
-                        "config_sha256": sha(old_config),
+        "old_runtime": {"config_path": str(old_config), "config_sha256": sha(old_config),
                         "closure_sha256": old["runtime_scripts"]["sha256"]},
-        "new_runtime": {"config_path": str(new_config),
-                        "config_sha256": sha(new_config),
+        "new_runtime": {"config_path": str(new_config), "config_sha256": sha(new_config),
                         "closure_sha256": new["runtime_scripts"]["sha256"]},
         "cells": plan_cells,
     }
@@ -215,15 +201,12 @@ def campaign(tmp_path: Path) -> dict:
     return {"root": root, "plan": plan_path, "document": plan,
             "immutable_sha": migration.digest_tree(immutable)}
 
-
 def test_check_is_read_only_and_preserves_non_targets(campaign):
     attestation = campaign["plan"].with_name("attestation.json")
     checked = migration.run(campaign["plan"], attestation)
     assert checked["status"] == "ready"
     assert checked["attestation_sha256"] == sha(attestation)
     assert migration.digest_tree(campaign["root"] / "matmul-project-cannbot") == campaign["immutable_sha"]
-
-
 
 @pytest.mark.parametrize("field", [
     "blocked_sha256", "controller_state_sha256", "candidate_sha256",
@@ -237,20 +220,22 @@ def test_check_rejects_each_fingerprint_mismatch(campaign, field):
     with pytest.raises(migration.MigrationError, match=field.replace("_", " ") + "|fingerprint"):
         migration.run(bad, bad.with_suffix(".attestation"))
 
-
-def test_exact_allowlist_and_runtime_hashes_fail_closed(campaign):
+@pytest.mark.parametrize(("name", "mutation", "message"), [
+    ("allowlist", lambda plan: plan["cells"].pop(), "allowlist"),
+    ("closure", lambda plan: plan["new_runtime"].update(
+        {"closure_sha256": "0" * 64}), "runtime closure"),
+    ("noop", lambda plan: plan.update(
+        {"new_runtime": copy.deepcopy(plan["old_runtime"])}), "distinct digests"),
+    ("ledger", lambda plan: plan["cells"][0].update(
+        {"ledger_attempt_sha256": "0" * 64}), "ledger attempt"),
+])
+def test_plan_safety_boundaries_fail_closed(campaign, name, mutation, message):
     plan = copy.deepcopy(campaign["document"])
-    plan["cells"].pop()
-    bad = campaign["plan"].with_name("bad-allowlist.json")
+    mutation(plan)
+    bad = campaign["plan"].with_name(f"bad-{name}.json")
     write_json(bad, plan)
-    with pytest.raises(migration.MigrationError, match="allowlist"):
+    with pytest.raises(migration.MigrationError, match=message):
         migration.run(bad, bad.with_suffix(".attestation"))
-    plan = copy.deepcopy(campaign["document"])
-    plan["new_runtime"]["closure_sha256"] = "0" * 64
-    write_json(bad, plan)
-    with pytest.raises(migration.MigrationError, match="runtime closure"):
-        migration.run(bad, bad.with_suffix(".attestation"))
-
 
 @pytest.mark.parametrize("mutation", [
     lambda plan: plan.update({"run_root": []}),
@@ -266,7 +251,6 @@ def test_malformed_plans_are_classified_without_tracebacks(campaign, mutation):
     with pytest.raises(migration.MigrationError):
         migration.run(bad, bad.with_suffix(".attestation"))
 
-
 def test_controller_state_and_ledger_semantics_are_validated(campaign):
     cell = campaign["document"]["cells"][0]
     root = campaign["root"]
@@ -280,21 +264,6 @@ def test_controller_state_and_ledger_semantics_are_validated(campaign):
     with pytest.raises(migration.MigrationError, match="controller state semantics"):
         migration.run(campaign["plan"], campaign["plan"].with_suffix(".attestation"))
 
-
-def test_noop_runtime_digest_and_ledger_attempt_are_rejected(campaign):
-    plan = copy.deepcopy(campaign["document"])
-    plan["new_runtime"] = copy.deepcopy(plan["old_runtime"])
-    bad = campaign["plan"].with_name("noop.json")
-    write_json(bad, plan)
-    with pytest.raises(migration.MigrationError, match="distinct digests"):
-        migration.run(bad, bad.with_suffix(".attestation"))
-    plan = copy.deepcopy(campaign["document"])
-    plan["cells"][0]["ledger_attempt_sha256"] = "0" * 64
-    write_json(bad, plan)
-    with pytest.raises(migration.MigrationError, match="ledger attempt"):
-        migration.run(bad, bad.with_suffix(".attestation"))
-
-
 def test_controller_identity_binds_cell_config_and_state_paths(campaign):
     plan = copy.deepcopy(campaign["document"])
     identity = plan["cells"][0]["new_controller_identity"]
@@ -306,3 +275,28 @@ def test_controller_identity_binds_cell_config_and_state_paths(campaign):
     write_json(bad, plan)
     with pytest.raises(migration.MigrationError, match="controller identity"):
         migration.run(bad, bad.with_suffix(".attestation"))
+
+@pytest.mark.parametrize("defect", ["branch", "parent", "extra-commit"])
+def test_checkpoint_topology_must_be_resumable(campaign, defect):
+    cell = campaign["document"]["cells"][0]
+    repo = campaign["root"] / cell["cell_id"] / "repo"
+    path = repo / ".experiment/blocked.json"
+    if defect == "extra-commit":
+        git(repo, "reset", "--mixed", "HEAD^")
+        (repo / "unexpected-round").write_text("extra\n")
+        git(repo, "add", "unexpected-round")
+        git(repo, "commit", "-qm", "unexpected round")
+    blocked = json.loads(path.read_text())
+    blocked["branch" if defect == "branch" else "resume_parent"] = (
+        "experiment/run/wrong" if defect == "branch" else
+        git(repo, "rev-parse", "HEAD" if defect == "extra-commit" else "HEAD~2")
+    )
+    write_json(path, blocked)
+    git(repo, "add", ".experiment/blocked.json")
+    git(repo, "commit", "-qm" if defect == "extra-commit" else "--amend",
+        "checkpoint blocked experiment 3" if defect == "extra-commit" else "--no-edit")
+    cell["blocked_sha256"] = sha(path)
+    cell["checkpoint_commit"] = git(repo, "rev-parse", "HEAD")
+    write_json(campaign["plan"], campaign["document"])
+    with pytest.raises(migration.MigrationError, match="resume topology"):
+        migration.run(campaign["plan"], campaign["plan"].with_suffix(".attestation"))

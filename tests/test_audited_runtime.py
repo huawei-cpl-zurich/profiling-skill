@@ -274,6 +274,147 @@ def test_codex_failure_preserves_safe_bounded_session_event(tmp_path: Path, monk
     assert secret not in json.dumps(failure.diagnostics)
 
 
+def failed_turn(thread: str, code: str = "server_overloaded", *, progress=None) -> str:
+    events = [
+        {"type": "thread.started", "thread_id": thread},
+        {"type": "turn.started"},
+    ]
+    if progress is not None:
+        events.append(progress)
+    events.append({
+        "type": "turn.failed",
+        "error": {"message": "sensitive service detail", "codex_error_info": code},
+    })
+    return "".join(json.dumps(event) + "\n" for event in events)
+
+
+def direct_invoker(tmp_path: Path, monkeypatch, outcomes, **kwargs):
+    repo, auth, state, _ = fixture_paths(tmp_path)
+    calls = []
+    outcomes = iter(outcomes)
+
+    def fake_run(command, **run_kwargs):
+        if command[-1:] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, "codex-cli test\n", "")
+        calls.append((command, run_kwargs))
+        return next(outcomes)
+
+    monkeypatch.setattr(runtime.subprocess, "run", fake_run)
+    sleeps = []
+    monkeypatch.setattr(runtime.time, "sleep", sleeps.append)
+    invoker = runtime.CodexInvoker(
+        repo, auth_home=auth, state_dir=state, runtime_mode="direct", **kwargs,
+    )
+    return invoker, calls, sleeps
+
+
+def test_transient_failure_retries_existing_session_with_identical_turn(
+        tmp_path: Path, monkeypatch):
+    overload = failed_turn("thread-existing")
+    invoker, calls, sleeps = direct_invoker(tmp_path, monkeypatch, [
+        subprocess.CompletedProcess([], 1, overload, "private stderr"),
+        subprocess.CompletedProcess([], 0, stream("thread-existing"), ""),
+    ], transient_retry_limit=2, transient_retry_backoff_seconds=0.25)
+
+    assert invoker(2, "thread-existing", "finalize exactly this receipt") == stream(
+        "thread-existing"
+    )
+    assert len(calls) == 2
+    assert calls[0][0] == calls[1][0]
+    assert calls[0][1]["input"] == calls[1][1]["input"]
+    assert sleeps == [0.25]
+
+
+def test_initial_transient_failure_recovers_thread_before_retry(
+        tmp_path: Path, monkeypatch):
+    invoker, calls, sleeps = direct_invoker(tmp_path, monkeypatch, [
+        subprocess.CompletedProcess([], 1, failed_turn("thread-new"), ""),
+        subprocess.CompletedProcess([], 0, stream("thread-new"), ""),
+    ], transient_retry_limit=1, transient_retry_backoff_seconds=0)
+
+    invoker(1, None, None)
+
+    assert calls[0][0][1:3] == ["exec", "--json"]
+    assert calls[1][0][1:4] == ["exec", "resume", "--json"]
+    assert "thread-new" in calls[1][0]
+    assert calls[0][1]["input"] == calls[1][1]["input"]
+    assert sleeps == [0]
+
+
+def test_transient_retry_exhaustion_retains_recovered_checkpoint_session(
+        tmp_path: Path, monkeypatch):
+    invoker, calls, sleeps = direct_invoker(tmp_path, monkeypatch, [
+        subprocess.CompletedProcess([], 1, failed_turn("thread-recover"), ""),
+        subprocess.CompletedProcess([], 1, failed_turn("thread-recover"), ""),
+    ], transient_retry_limit=1, transient_retry_backoff_seconds=2)
+
+    with pytest.raises(runtime.CodexTurnError) as raised:
+        invoker(1, None, None)
+
+    failure = raised.value
+    assert contract.extract_thread_id(failure.structured_stdout, None) == "thread-recover"
+    assert failure.diagnostics["terminal_error"] == "server_overloaded"
+    assert failure.diagnostics["transient_retries"] == 1
+    assert len(calls) == 2 and sleeps == [2]
+
+
+@pytest.mark.parametrize("failure", [
+    failed_turn("thread-progress", progress={
+        "type": "item.completed", "item": {
+            "type": "command_execution", "command": "touch candidate.py",
+            "exit_code": 0, "aggregated_output": "",
+        },
+    }),
+    failed_turn("thread-unknown", code="internal_server_error"),
+])
+def test_progress_or_unknown_terminal_failure_is_not_retried(
+        tmp_path: Path, monkeypatch, failure: str):
+    invoker, calls, sleeps = direct_invoker(tmp_path, monkeypatch, [
+        subprocess.CompletedProcess([], 1, failure, ""),
+    ], transient_retry_limit=2, transient_retry_backoff_seconds=1)
+
+    with pytest.raises(runtime.CodexTurnError):
+        invoker(1, None, None)
+
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_transient_failure_diagnostics_never_retain_raw_sensitive_text(
+        tmp_path: Path, monkeypatch):
+    secret = "SECRET_CAPACITY_INCIDENT_123"
+    failure = failed_turn("thread-secret").replace(
+        "sensitive service detail", secret,
+    )
+    invoker, _, _ = direct_invoker(tmp_path, monkeypatch, [
+        subprocess.CompletedProcess([], 1, failure, secret),
+    ], transient_retry_limit=0)
+
+    with pytest.raises(runtime.CodexTurnError) as raised:
+        invoker(1, None, None)
+
+    retained = str(raised.value) + raised.value.structured_stdout + json.dumps(
+        raised.value.diagnostics
+    )
+    assert secret not in retained
+    assert raised.value.diagnostics["terminal_error"] == "server_overloaded"
+
+
+def test_transient_retry_policy_is_reproducibility_identity(
+        tmp_path: Path, monkeypatch):
+    invoker, _, _ = direct_invoker(
+        tmp_path, monkeypatch, [], transient_retry_limit=3,
+        transient_retry_backoff_seconds=0.5,
+    )
+
+    metadata = invoker.reproducibility_metadata()
+
+    assert metadata["transient_retry"] == {
+        "terminal_errors": ["server_overloaded"],
+        "retry_limit": 3,
+        "backoff_seconds": 0.5,
+    }
+
+
 def test_controller_executes_compact_json_and_records_sanitized_identity(tmp_path: Path):
     controller = executable(
         tmp_path / "controller",

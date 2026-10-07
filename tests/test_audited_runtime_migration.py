@@ -562,8 +562,8 @@ def applied_production_launcher(campaign, tmp_path: Path, monkeypatch):
         "tasks": {"bsa": {"path": str(repo / "TASK.md"),
                             "sha256": sha(repo / "TASK.md")}},
     }
-    remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
-    config["cpl_remote_closure_sha256"] = production.cpl_remote_closure_sha256(remote)
+    remote_closure_sha256 = "f" * 64
+    config["cpl_remote_closure_sha256"] = remote_closure_sha256
     config_path = tmp_path / "active-runtime-v4.json"
     write_json(config_path, config)
     campaign["document"]["new_runtime"].update({
@@ -576,6 +576,10 @@ def applied_production_launcher(campaign, tmp_path: Path, monkeypatch):
         campaign["plan"], attestation_path, trusted, transaction,
     )
     seed = json.loads((repo / ".experiment/seed.json").read_text())
+    monkeypatch.setattr(
+        production, "cpl_remote_closure_sha256",
+        lambda path: remote_closure_sha256,
+    )
     monkeypatch.setattr(production.ProductionCellLauncher, "_validate_files", lambda self: None)
     launcher = production.ProductionCellLauncher(
         config, infrastructure_failure_type=RetryableLaunchFailure,

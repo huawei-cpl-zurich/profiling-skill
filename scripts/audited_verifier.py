@@ -14,6 +14,7 @@ from audited_contract import (
     MAX_EXCERPT,
     MAX_REPORT_FIELD,
     REPORT_FIELDS,
+    redact_text,
     sha256_bytes,
     sha256_json,
     validate_controller_receipt,
@@ -33,6 +34,12 @@ EVIDENCE_FIELDS = {
     "controller_receipt_sha256", "manifest_sha256", "prompt_sha256",
     "task_sha256", "reproducibility", "controller",
 }
+ATTEMPT_FIELDS = {
+    "schema", "experiment", "attempt", "prior_attempt_sha256", "attempt_sha256",
+    "status", "candidate_sha256", "manifest_sha256", "controller_receipt_sha256",
+    "commands_sha256", "reasoning_sha256",
+}
+MAX_REASONING_OUTPUT = 8192
 RETRY_FIELDS = {
     "schema", "terminal_error", "action", "attempt", "stdout_sha256",
     "stdout_bytes", "stderr_sha256", "stderr_bytes", "experiment", "stage",
@@ -167,7 +174,7 @@ def _parse_report(data: bytes, number: int) -> dict[str, str]:
     return values
 
 
-def _validate_commands(data: bytes, number: int) -> None:
+def _validate_commands(data: bytes, number: int) -> list[dict]:
     try:
         lines = data.decode().splitlines()
         commands = [json.loads(line) for line in lines]
@@ -185,6 +192,98 @@ def _validate_commands(data: bytes, number: int) -> None:
                 or len(command["output_excerpt"]) > MAX_EXCERPT
                 or type(command["output_truncated"]) is not bool):
             raise AuditError(f"experiment {number} command evidence is invalid")
+    return commands
+
+
+def _reasoning_is_sanitized(text: str) -> bool:
+    for line in text.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            if redact_text(line) != line:
+                return False
+            continue
+        item = event.get("item") if isinstance(event, dict) else None
+        if isinstance(item, dict) and any(
+            isinstance(item.get(field), str)
+            and redact_text(item[field]) != item[field]
+            for field in ("text", "command", "aggregated_output")
+        ):
+            return False
+    return True
+
+
+def _validate_candidate_attempts(repo: Path, commit: str, root: str,
+                                 evidence: dict, results: dict,
+                                 number: int) -> set[str]:
+    attempts = evidence.get("candidate_attempts")
+    if (not isinstance(attempts, list) or not 1 <= len(attempts) <= 3
+            or evidence.get("final_attempt") != len(attempts)):
+        raise AuditError(f"experiment {number} candidate attempt history is invalid")
+    artifacts: set[str] = set()
+    previous_identity = None
+    previous_attempt = None
+    for index, attempt in enumerate(attempts, 1):
+        prefix = f"attempts/{index:02d}"
+        artifacts |= {
+            f"{prefix}/candidate.py", f"{prefix}/candidate.manifest.json",
+            f"{prefix}/controller.json", f"{prefix}/commands.jsonl",
+            f"{prefix}/reasoning.txt",
+        }
+        if (not isinstance(attempt, dict) or set(attempt) != ATTEMPT_FIELDS
+                or attempt.get("schema") != "profiling-skill/candidate-attempt/v1"
+                or attempt.get("experiment") != number
+                or attempt.get("attempt") != index
+                or attempt.get("prior_attempt_sha256") != previous_attempt
+                or not _hash(attempt.get("attempt_sha256"))
+                or attempt.get("status") not in {"ok", "candidate_error"}
+                or any(not _hash(attempt.get(field)) for field in (
+                    "candidate_sha256", "manifest_sha256",
+                    "controller_receipt_sha256", "commands_sha256",
+                    "reasoning_sha256",
+                ))):
+            raise AuditError(f"experiment {number} candidate attempt {index} is invalid")
+        candidate = _blob(repo, commit, f"{root}/{prefix}/candidate.py")
+        manifest = _blob(repo, commit, f"{root}/{prefix}/candidate.manifest.json")
+        receipt = _json_blob(repo, commit, f"{root}/{prefix}/controller.json")
+        commands = _validate_commands(
+            _blob(repo, commit, f"{root}/{prefix}/commands.jsonl"), number
+        )
+        reasoning = _blob(repo, commit, f"{root}/{prefix}/reasoning.txt")
+        public = {key: value for key, value in attempt.items()
+                  if key != "attempt_sha256"}
+        try:
+            reasoning_text = reasoning.decode()
+        except UnicodeDecodeError as failure:
+            raise AuditError(
+                f"experiment {number} candidate attempt {index} reasoning is invalid"
+            ) from failure
+        if (sha256_bytes(candidate) != attempt["candidate_sha256"]
+                or sha256_bytes(manifest) != attempt["manifest_sha256"]
+                or sha256_json(receipt) != attempt["controller_receipt_sha256"]
+                or sha256_json(commands) != attempt["commands_sha256"]
+                or sha256_bytes(reasoning) != attempt["reasoning_sha256"]
+                or len(reasoning) > MAX_REASONING_OUTPUT
+                or not _reasoning_is_sanitized(reasoning_text)
+                or sha256_json(public) != attempt["attempt_sha256"]
+                or receipt.get("status") != attempt["status"]):
+            raise AuditError(f"experiment {number} candidate attempt {index} hash is invalid")
+        validate_controller_receipt(
+            receipt, attempt["candidate_sha256"], attempt["manifest_sha256"]
+        )
+        identity = (attempt["candidate_sha256"], attempt["manifest_sha256"])
+        if identity == previous_identity:
+            raise AuditError(f"experiment {number} candidate repair did not change inputs")
+        previous_identity = identity
+        previous_attempt = attempt["attempt_sha256"]
+        if index < len(attempts) and attempt["status"] != "candidate_error":
+            raise AuditError(f"experiment {number} candidate attempt ordering is invalid")
+    last = attempts[-1]
+    if (last["candidate_sha256"] != evidence["tested_candidate_sha256"]
+            or last["manifest_sha256"] != evidence["manifest_sha256"]
+            or last["controller_receipt_sha256"] != sha256_json(results)):
+        raise AuditError(f"experiment {number} final candidate attempt is not bound")
+    return artifacts
 
 
 def _immutable(repo: Path, commits: list[str], path: str, expected: bytes) -> None:
@@ -349,8 +448,15 @@ def validate_branch(repo: Path, base: str = "main", *,
         validate_sources(sources["sources"], sources["no_sources_reason"],
                          f"experiment {number}")
         fields = frozenset(evidence)
-        if (fields not in {frozenset(EVIDENCE_FIELDS),
-                           frozenset(EVIDENCE_FIELDS | {"agent_retries"})}
+        legacy_fields = {frozenset(EVIDENCE_FIELDS),
+                         frozenset(EVIDENCE_FIELDS | {"agent_retries"})}
+        attempt_fields = {
+            frozenset(EVIDENCE_FIELDS | {"candidate_attempts", "final_attempt"}),
+            frozenset(EVIDENCE_FIELDS | {
+                "agent_retries", "candidate_attempts", "final_attempt",
+            }),
+        }
+        if (fields not in legacy_fields | attempt_fields
                 or evidence.get("schema") != EVIDENCE_SCHEMA
                 or any(not _hash(evidence.get(field)) for field in (
                     "candidate_sha256", "tested_candidate_sha256",
@@ -383,6 +489,14 @@ def validate_branch(repo: Path, base: str = "main", *,
         if sha256_bytes(committed) != evidence["committed_candidate_sha256"]:
             raise AuditError(f"experiment {number} committed candidate hash is invalid")
         expected_artifacts = set(STANDARD_ARTIFACTS)
+        if "candidate_attempts" in evidence:
+            expected_artifacts |= _validate_candidate_attempts(
+                repo, commit, root, evidence, results, number,
+            )
+            if results["status"] == "candidate_error" and decision != "revert":
+                raise AuditError(
+                    f"experiment {number} exhausted candidate repairs must revert"
+                )
         if decision == "revert":
             expected_artifacts |= REVERT_ARTIFACTS
             archived = _blob(repo, commit, f"{root}/tested_candidate.py")
@@ -402,7 +516,9 @@ def validate_branch(repo: Path, base: str = "main", *,
         else:
             raise AuditError(f"experiment {number} decision is invalid")
         # `git ls-tree <commit> <dir>` prints the directory itself; inspect its tree.
-        names = set(_git(repo, "ls-tree", "--name-only", f"{commit}:{root}").splitlines())
+        names = set(_git(
+            repo, "ls-tree", "-r", "--name-only", f"{commit}:{root}"
+        ).splitlines())
         if names != expected_artifacts:
             raise AuditError(f"experiment {number} artifact set is invalid")
         _validate_commit_paths(repo, prior, commit, root, expected_artifacts)

@@ -299,6 +299,41 @@ a hand-authored summary are insufficient. The accepted gate receipt is retained
 below the new run root. Missing, changed, malformed, or failed artifacts cannot
 dispatch a cell.
 
+Produce those results with the dedicated canary runner before invoking the
+campaign launcher:
+
+```bash
+python scripts/audited_repair_canaries.py \
+  --runtime-config /absolute/frozen-runtime.json \
+  --runtime-config-sha256 RUNTIME_CONFIG_SHA256 \
+  --definition /absolute/audited-repair-canaries.json \
+  --definition-sha256 CANARY_DEFINITION_SHA256 \
+  --admission /absolute/fresh-admission.json \
+  --admission-sha256 ADMISSION_SHA256 \
+  --run-root /absolute/repair-canary-run
+```
+
+The runner dispatches only the three declared matmul cells. It reuses the
+production cell launcher, isolated treatment allowlists, dynamic BZ-A3
+admission, real controller, and independent verifier, but never calls the
+nine-cell campaign scheduler. Each repair canary transforms exactly one
+completed real controller transaction into a declared compile diagnostic; the
+agent must change the candidate in the same numbered round and the repaired
+attempt obtains its own real `msprof op` evidence. The resume canary transforms
+one completed transaction into an observer interruption, commits the lifecycle
+checkpoint, and re-observes that exact durable handle and agent session.
+
+Per-cell injection markers and lifecycle checkpoints make the operation
+idempotent. A process restart after either marker is written replays the same
+candidate failure or reconstructs the resume receipt from `blocked.json`; it
+does not submit a replacement handle. Ordinary infrastructure errors remain
+infrastructure failures and do not become candidate repairs. Large profiler
+trees remain remote. The runner retains only compact receipts, independent
+verifier reports, the resume proof, and their hashes beneath the canary run
+root. It writes `canary-results.json` only after the production gate accepts a
+temporary complete document. Repeating the command authenticates and returns
+that retained result without dispatching another job.
+
 The version-two final report contains one row per branch with status, attempt
 count, unchanged raw round receipts, per-case evidence, controls and policy,
 calibration-normalized timing, best raw and normalized medians, frozen baseline

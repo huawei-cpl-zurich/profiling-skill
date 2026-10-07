@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import importlib.util
 import json
 import subprocess
@@ -19,6 +20,22 @@ audited_campaign = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
 sys.modules[SPEC.name] = audited_campaign
 SPEC.loader.exec_module(audited_campaign)
+
+
+def test_run_campaign_holds_exclusive_ledger_lock(tmp_path: Path, monkeypatch):
+    ledger = tmp_path / "ledger.json"
+
+    def assert_locked(*args, **kwargs):
+        del args, kwargs
+        lock_path = ledger.with_name(f".{ledger.name}.lock")
+        with lock_path.open("a+b") as stream:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return {"status": "locked"}
+
+    monkeypatch.setattr(audited_campaign, "_run_campaign_locked", assert_locked)
+
+    assert audited_campaign.run_campaign({}, ledger, None, None) == {"status": "locked"}
 
 
 def inputs(tmp_path: Path) -> tuple[Path, dict[str, Path], dict]:

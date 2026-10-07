@@ -371,6 +371,8 @@ def test_validates_complete_unmerged_branch_and_revert(tmp_path: Path):
 
     assert result["status"] == "valid"
     assert result["branch"] == "experiment/validation/agent-a"
+    assert result["run_id"] == "validation"
+    assert result["agent_id"] == "agent-a"
     assert result["session_id"] == "one-session"
     assert [item["decision"] for item in result["experiments"]] == [
         "retain", "revert", "retain",

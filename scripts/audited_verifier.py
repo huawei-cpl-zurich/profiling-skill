@@ -416,7 +416,9 @@ def validate_branch(repo: Path, base: str = "main", *,
         prior, prior_candidate, prior_manifest = commit, sha256_bytes(committed), committed_manifest
     if len(sessions) != 1:
         raise AuditError("experiments did not retain one persistent session")
-    return {"status": "valid", "branch": branch, "seed_commit": seed_commit,
+    return {"status": "valid", "branch": branch, "run_id": seed["run_id"],
+            "agent_id": seed["agent_id"],
+            "seed_commit": seed_commit,
             "round_count": round_count,
             "session_id": sessions.pop(), "experiments": summaries,
             "controller_migrations": migrations}

@@ -123,3 +123,46 @@ The new controller identity must be captured after materializing the frozen
 new runtime and the cell's new controller configuration. A dependent lifecycle
 consumer must revalidate this sealed artifact before accepting controller
 identity drift; this producer does not weaken the existing resume policy.
+
+## Reconciling a completed branch rejected by the old verifier
+
+If the frozen launcher completed all four experiments but recorded only the
+old verifier's controller-provenance failure, do not rerun the cell. Prepare a
+`profiling-skill/audited-terminal-reconciliation-plan/v1` document that pins
+the absolute ledger and repository paths, ledger digest, cell and branch,
+base revision, exact latest failure reason and attempt digest, and the ordered
+`migration_proofs` trust objects used above. Then seal a read-only preflight:
+
+```console
+python scripts/audited_terminal_reconciliation.py preflight \
+  --plan /absolute/path/reconcile.json \
+  --attestation /absolute/path/reconcile-attestation.json
+```
+
+Inspect and retain that attestation before applying it. Application requires
+the outer attestation file digest and an external, durable journal directory:
+
+```console
+python scripts/audited_terminal_reconciliation.py apply \
+  --plan /absolute/path/reconcile.json \
+  --attestation /absolute/path/reconcile-attestation.json \
+  --attestation-file-sha256 ATTESTATION_FILE_SHA256 \
+  --journal-dir /absolute/path/reconciliation-journal
+```
+
+Preflight independently verifies the clean, complete branch with every sealed
+migration proof and reconstructs the same terminal receipt as the production
+launcher. Apply archives the exact failed attempt and target cell, journals
+each durable boundary, and replaces only that latest attempt and its cell
+status. The campaign status changes to `complete` only when every cell is
+terminal. Hashes for every non-target cell, the before and after ledgers, the
+receipt, and the archive are sealed in the attestation. Repeating `apply` is
+idempotent, including after interruption immediately before or after the
+atomic ledger replacement. Any branch, proof, receipt, ledger, archive, or
+journal drift fails closed.
+
+The campaign scheduler and reconciler use the same adjacent ledger lock. Stop
+legacy schedulers that predate this protocol before preflight; a current
+scheduler holds the lock for its complete read/modify/write lifetime, so apply
+cannot race an active campaign. Apply also performs a final compare-and-swap
+digest check under that lock to preserve updates from non-cooperating writers.

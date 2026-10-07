@@ -115,56 +115,90 @@ def _tree_sha256(root: Path) -> str:
 
 def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
                                 current: dict, agent_id: str,
-                                trusted: dict | None) -> dict:
+                                trusted: dict | list[dict] | None) -> dict:
     try:
         citation = state["runtime_migration"]
-        path_text = citation["attestation_path"]
-        path = Path(path_text)
-        if (not isinstance(citation, dict) or citation.get("schema") != MIGRATION_CITATION_SCHEMA
-                or not isinstance(path_text, str) or not path.is_absolute()
-                or path.resolve().is_relative_to(repo) or not path.is_file()):
+        if not isinstance(citation, dict) or citation.get("schema") != MIGRATION_CITATION_SCHEMA:
             raise AuditError("runtime migration citation is invalid")
-        raw = path.read_bytes()
-        attestation = json.loads(raw)
-        seal = attestation.get("attestation_sha256")
-        unsealed = {key: value for key, value in attestation.items()
-                    if key != "attestation_sha256"}
-        cells = [cell for cell in attestation.get("cells", []) if isinstance(cell, dict)
-                 and cell.get("cell_id") == agent_id]
-        if (attestation.get("schema") != MIGRATION_ATTESTATION_SCHEMA
-                or not isinstance(trusted, dict)
-                or trusted.get("schema") != MIGRATION_TRUST_SCHEMA
-                or trusted.get("attestation_path") != path_text
-                or trusted.get("attestation_file_sha256") != sha256_bytes(raw)
-                or trusted.get("attestation_sha256") != seal
-                or citation.get("attestation_file_sha256") != sha256_bytes(raw)
-                or citation.get("attestation_sha256") != seal
-                or citation.get("plan_sha256") != attestation.get("plan_sha256")
-                or not isinstance(seal, str) or sha256_json(unsealed) != seal
-                or len(cells) != 1):
+        proofs = [trusted] if isinstance(trusted, dict) else trusted
+        if not isinstance(proofs, list) or not proofs:
             raise AuditError("runtime migration attestation is invalid")
-        cell = cells[0]
+        expected_controller = seed.get("reproducibility", {}).get("controller")
+        previous_boundary = 0
+        latest = None
+        for proof in proofs:
+            path_text = proof.get("attestation_path") if isinstance(proof, dict) else None
+            path = Path(path_text) if isinstance(path_text, str) else Path("")
+            if (not isinstance(proof, dict) or proof.get("schema") != MIGRATION_TRUST_SCHEMA
+                    or not path.is_absolute() or path.resolve().is_relative_to(repo)
+                    or not path.is_file()):
+                raise AuditError("runtime migration attestation is invalid")
+            raw = path.read_bytes()
+            attestation = json.loads(raw)
+            seal = attestation.get("attestation_sha256")
+            unsealed = {key: value for key, value in attestation.items()
+                        if key != "attestation_sha256"}
+            cells = [item for item in attestation.get("cells", [])
+                     if isinstance(item, dict) and item.get("cell_id") == agent_id]
+            if (attestation.get("schema") != MIGRATION_ATTESTATION_SCHEMA
+                    or proof.get("attestation_file_sha256") != sha256_bytes(raw)
+                    or proof.get("attestation_sha256") != seal
+                    or not isinstance(seal, str) or sha256_json(unsealed) != seal
+                    or len(cells) != 1):
+                raise AuditError("runtime migration attestation is invalid")
+            cell = cells[0]
+            boundary = cell.get("experiment")
+            if (type(boundary) is not int or boundary <= previous_boundary
+                    or boundary > state.get("experiment", 0)
+                    or cell.get("branch") != state.get("branch")
+                    or cell.get("seed_commit") != state.get("seed_commit")
+                    or cell.get("old_controller_identity") != expected_controller):
+                raise AuditError("runtime migration cell or controller identity is invalid")
+            expected_controller = cell.get("new_controller_identity")
+            latest = (proof, attestation, cell)
+            previous_boundary = boundary
+            for label in ("old", "new"):
+                binding = attestation["runtimes"][label]
+                config_path = Path(binding["config_path"])
+                runtime_path = Path(binding["runtime_path"])
+                config_raw = config_path.read_bytes()
+                config = json.loads(config_raw)
+                runtime = config["runtime_scripts"]
+                if (not config_path.is_absolute() or not runtime_path.is_absolute()
+                        or sha256_bytes(config_raw) != binding.get("config_sha256")
+                        or Path(runtime["path"]).resolve() != runtime_path.resolve()
+                        or _tree_sha256(runtime_path) != binding.get("closure_sha256")
+                        or runtime.get("sha256") != binding.get("closure_sha256")):
+                    raise AuditError("runtime migration runtime artifacts changed")
+        proof, attestation, cell = latest
         checkpoint = citation.get("checkpoint_commit")
         original_raw = citation.get("original_blocked_json")
         original = json.loads(original_raw)
         current_without_citation = {key: value for key, value in state.items()
                                     if key != "runtime_migration"}
-        if (citation.get("cell_id") != agent_id
+        if (citation.get("attestation_path") != proof.get("attestation_path")
+                or citation.get("attestation_file_sha256")
+                != proof.get("attestation_file_sha256")
+                or citation.get("attestation_sha256") != proof.get("attestation_sha256")
+                or citation.get("plan_sha256") != attestation.get("plan_sha256")
+                or citation.get("cell_id") != agent_id
                 or citation.get("experiment") != cell.get("experiment")
                 or checkpoint != cell.get("checkpoint_commit")
                 or sha256_bytes(original_raw.encode()) != cell.get("blocked_sha256")
                 or citation.get("old_controller_identity") != cell.get("old_controller_identity")
                 or citation.get("new_controller_identity") != cell.get("new_controller_identity")
-                or seed.get("reproducibility", {}).get("controller")
-                != cell.get("old_controller_identity")
-                or current["controller"] != cell.get("new_controller_identity")):
+                or current["controller"] != expected_controller):
             raise AuditError("runtime migration cell or controller identity is invalid")
         continuation = citation.get("continuation")
         if continuation is None:
-            migrated = {**original, "reason": MIGRATION_RETRY_REASON, "receipt": {},
+            original_without_citation = {
+                key: value for key, value in original.items() if key != "runtime_migration"
+            }
+            migrated = {**original_without_citation,
+                        "reason": MIGRATION_RETRY_REASON, "receipt": {},
                         "controller_submissions": 0, "measurement_attempts": 0}
             if (state.get("experiment") != cell.get("experiment")
-                    or current_without_citation not in (original, migrated)):
+                    or current_without_citation not in (original_without_citation, migrated)):
                 raise AuditError("runtime migration initial checkpoint is invalid")
         else:
             state_sha = sha256_json(current_without_citation)
@@ -180,19 +214,6 @@ def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
             }
             if continuation != expected or state.get("experiment", 0) < cell["experiment"]:
                 raise AuditError("runtime migration continuation is invalid")
-        for label in ("old", "new"):
-            binding = attestation["runtimes"][label]
-            config_path = Path(binding["config_path"])
-            runtime_path = Path(binding["runtime_path"])
-            config_raw = config_path.read_bytes()
-            config = json.loads(config_raw)
-            runtime = config["runtime_scripts"]
-            if (not config_path.is_absolute() or not runtime_path.is_absolute()
-                    or sha256_bytes(config_raw) != binding.get("config_sha256")
-                    or Path(runtime["path"]).resolve() != runtime_path.resolve()
-                    or _tree_sha256(runtime_path) != binding.get("closure_sha256")
-                    or runtime.get("sha256") != binding.get("closure_sha256")):
-                raise AuditError("runtime migration runtime artifacts changed")
         return json.loads(json.dumps(citation))
     except AuditError:
         raise
@@ -217,7 +238,8 @@ class AuditedExperimentRunner:
                  invoke: Callable[[int, str | None, str | None], str],
                  controller: Callable[[int, str, str], dict], *, max_repairs: int = 2,
                  max_controller_resubmits: int = 2, max_remeasurements: int = 1,
-                 round_count: int = 3, trusted_runtime_migration: dict | None = None):
+                 round_count: int = 3,
+                 trusted_runtime_migration: dict | list[dict] | None = None):
         if type(round_count) is not int or round_count < 1:
             raise AuditError("round count must be a positive integer")
         self.repo = repo.resolve()

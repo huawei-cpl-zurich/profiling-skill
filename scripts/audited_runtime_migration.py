@@ -218,8 +218,80 @@ def _validate_resume_topology(repo: Path, ledger: dict, cell: dict,
         raise MigrationError(f"{cell_id} checkpoint resume topology does not match")
 
 
+def _authenticated_controller(repo: Path, blocked: dict, seed: dict, cell_id: str,
+                              proofs: object) -> dict:
+    """Derive the live controller only through an ordered, sealed proof chain."""
+    expected = seed.get("reproducibility", {}).get("controller")
+    if not isinstance(proofs, list):
+        raise MigrationError("prior migration proof history is invalid")
+    latest = None
+    previous_boundary = 0
+    for proof in proofs:
+        try:
+            if (not isinstance(proof, dict)
+                    or set(proof) != {"schema", "attestation_path",
+                                      "attestation_file_sha256", "attestation_sha256"}
+                    or proof.get("schema") != "profiling-skill/audited-runtime-migration-trust/v1"):
+                raise MigrationError("prior migration trust binding is invalid")
+            path_text = proof["attestation_path"]
+            path = Path(path_text)
+            if (not isinstance(path_text, str) or not path.is_absolute()
+                    or path.resolve().is_relative_to(repo) or not path.is_file()):
+                raise MigrationError("prior migration attestation path is invalid")
+            raw = path.read_bytes()
+            attestation = json.loads(raw)
+            seal = attestation["attestation_sha256"]
+            unsealed = {key: value for key, value in attestation.items()
+                        if key != "attestation_sha256"}
+            cells = [item for item in attestation.get("cells", [])
+                     if isinstance(item, dict) and item.get("cell_id") == cell_id]
+            if (attestation.get("schema") != ATTESTATION_SCHEMA
+                    or proof["attestation_file_sha256"] != hashlib.sha256(raw).hexdigest()
+                    or proof["attestation_sha256"] != seal
+                    or document_sha256(unsealed) != seal or len(cells) != 1):
+                raise MigrationError("prior migration attestation is invalid")
+            latest = (proof, attestation, cells[0])
+            boundary = cells[0].get("experiment")
+            if (type(boundary) is not int or boundary < previous_boundary
+                    or boundary > blocked.get("experiment", 0)
+                    or cells[0].get("branch") != blocked.get("branch")
+                    or cells[0].get("seed_commit") != blocked.get("seed_commit")
+                    or cells[0].get("old_controller_identity") != expected):
+                raise MigrationError("prior migration controller chain is invalid")
+            expected = cells[0].get("new_controller_identity")
+            _identity(expected, "prior migration new")
+            previous_boundary = boundary
+        except MigrationError:
+            raise
+        except (KeyError, OSError, TypeError, ValueError,
+                json.JSONDecodeError) as error:
+            raise MigrationError("prior migration proof is malformed") from error
+    citation = blocked.get("runtime_migration")
+    if latest is None:
+        if citation is not None:
+            raise MigrationError("checkpoint migration citation lacks proof history")
+        return expected
+    proof, attestation, cell = latest
+    if (not isinstance(citation, dict)
+            or citation.get("schema") != "profiling-skill/audited-runtime-migration-citation/v1"
+            or citation.get("attestation_path") != proof["attestation_path"]
+            or citation.get("attestation_file_sha256") != proof["attestation_file_sha256"]
+            or citation.get("attestation_sha256") != proof["attestation_sha256"]
+            or citation.get("plan_sha256") != attestation.get("plan_sha256")
+            or citation.get("cell_id") != cell_id
+            or citation.get("experiment") != cell.get("experiment")
+            or citation.get("checkpoint_commit") != cell.get("checkpoint_commit")
+            or citation.get("old_controller_identity") != cell.get("old_controller_identity")
+            or citation.get("new_controller_identity") != expected
+            or not isinstance(citation.get("original_blocked_json"), str)
+            or hashlib.sha256(citation["original_blocked_json"].encode()).hexdigest()
+            != cell.get("blocked_sha256")):
+        raise MigrationError("checkpoint migration citation is invalid")
+    return expected
+
+
 def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
-                   new_runtime: Path) -> dict:
+                   new_runtime: Path, prior_migrations: object) -> dict:
     cell_id, experiment = cell["cell_id"], cell["experiment"]
     repo = root / cell_id / "repo"
     blocked_path = repo / ".experiment" / "blocked.json"
@@ -302,7 +374,9 @@ def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
             or document_sha256(latest) != cell.get("ledger_attempt_sha256")):
         raise MigrationError(f"{cell_id} ledger attempt does not match checkpoint")
     seed = _json(repo / ".experiment" / "seed.json", f"{cell_id} seed")
-    old_identity = seed.get("reproducibility", {}).get("controller")
+    old_identity = _authenticated_controller(
+        repo, blocked, seed, cell_id, prior_migrations,
+    )
     if old_identity != cell.get("old_controller_identity"):
         raise MigrationError(f"{cell_id} old controller identity does not match seed")
     _validate_controller_identity(cell["old_controller_identity"], old_runtime,
@@ -329,7 +403,8 @@ def _run(plan_path: Path, attestation_path: Path) -> dict:
     if file_sha256(ledger_path) != plan.get("ledger_sha256"):
         raise MigrationError("ledger sha256 does not match")
     ledger = _json(ledger_path, "campaign ledger")
-    cells = [_validate_cell(root, ledger, cell, old_runtime, new_runtime)
+    cells = [_validate_cell(root, ledger, cell, old_runtime, new_runtime,
+                            plan.get("prior_migrations", []))
              for cell in plan["cells"]]
     runtime_bindings = {}
     for label, tree in (("old", old_runtime), ("new", new_runtime)):

@@ -271,8 +271,8 @@ def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
             or not isinstance(receipt, dict) or receipt.get("status") != "infrastructure_error"
             or receipt.get("terminal") is not False
             or receipt.get("handle") != cell.get("durable_handle")
-            or (receipt.get("candidate_sha256"), receipt.get("manifest_sha256"))
-            != (cell["candidate_sha256"], cell["manifest_sha256"])
+            or any(name in receipt and receipt[name] != cell[name]
+                   for name in ("candidate_sha256", "manifest_sha256"))
             or not isinstance(pending, dict)
             or pending.get("handle") != cell.get("durable_handle")
             or receipt.get("reason") != reason

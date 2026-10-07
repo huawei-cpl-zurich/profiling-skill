@@ -220,6 +220,66 @@ def test_check_is_read_only_and_preserves_non_targets(campaign):
     assert checked["attestation_sha256"] == sha(attestation)
     assert migration.digest_tree(campaign["root"] / "matmul-project-cannbot") == campaign["immutable_sha"]
 
+
+def test_check_accepts_production_receipt_without_redundant_artifact_hashes(campaign):
+    cell = campaign["document"]["cells"][0]
+    blocked_path = campaign["root"] / cell["cell_id"] / "repo/.experiment/blocked.json"
+    blocked = json.loads(blocked_path.read_text())
+    blocked["receipt"].pop("candidate_sha256")
+    blocked["receipt"].pop("manifest_sha256")
+    write_json(blocked_path, blocked)
+    git(campaign["root"] / cell["cell_id"] / "repo", "add", ".experiment/blocked.json")
+    git(campaign["root"] / cell["cell_id"] / "repo", "commit", "--amend", "--no-edit", "-q")
+    cell["checkpoint_commit"] = git(
+        campaign["root"] / cell["cell_id"] / "repo", "rev-parse", "HEAD")
+    cell["blocked_sha256"] = sha(blocked_path)
+    write_json(campaign["plan"], campaign["document"])
+
+    checked = migration.run(campaign["plan"], campaign["plan"].with_name("attestation.json"))
+
+    assert checked["status"] == "ready"
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("candidate_sha256", "0" * 64),
+    ("manifest_sha256", "0" * 64),
+    ("candidate_sha256", None),
+    ("manifest_sha256", None),
+])
+def test_check_rejects_present_conflicting_optional_receipt_hash(campaign, field, value):
+    cell = campaign["document"]["cells"][0]
+    blocked_path = campaign["root"] / cell["cell_id"] / "repo/.experiment/blocked.json"
+    blocked = json.loads(blocked_path.read_text())
+    blocked["receipt"][field] = value
+    write_json(blocked_path, blocked)
+    git(campaign["root"] / cell["cell_id"] / "repo", "add", ".experiment/blocked.json")
+    git(campaign["root"] / cell["cell_id"] / "repo", "commit", "--amend", "--no-edit", "-q")
+    cell["checkpoint_commit"] = git(
+        campaign["root"] / cell["cell_id"] / "repo", "rev-parse", "HEAD")
+    cell["blocked_sha256"] = sha(blocked_path)
+    write_json(campaign["plan"], campaign["document"])
+
+    with pytest.raises(migration.MigrationError, match="selector failure fingerprint"):
+        migration.run(campaign["plan"], campaign["plan"].with_name("attestation.json"))
+
+
+@pytest.mark.parametrize("missing", ["candidate_sha256", "manifest_sha256"])
+def test_check_accepts_each_receipt_hash_independently_optional(campaign, missing):
+    cell = campaign["document"]["cells"][0]
+    blocked_path = campaign["root"] / cell["cell_id"] / "repo/.experiment/blocked.json"
+    blocked = json.loads(blocked_path.read_text())
+    blocked["receipt"].pop(missing)
+    write_json(blocked_path, blocked)
+    git(campaign["root"] / cell["cell_id"] / "repo", "add", ".experiment/blocked.json")
+    git(campaign["root"] / cell["cell_id"] / "repo", "commit", "--amend", "--no-edit", "-q")
+    cell["checkpoint_commit"] = git(
+        campaign["root"] / cell["cell_id"] / "repo", "rev-parse", "HEAD")
+    cell["blocked_sha256"] = sha(blocked_path)
+    write_json(campaign["plan"], campaign["document"])
+
+    assert migration.run(
+        campaign["plan"], campaign["plan"].with_name("attestation.json"))["status"] == "ready"
+
 @pytest.mark.parametrize("field", [
     "blocked_sha256", "controller_state_sha256", "candidate_sha256",
     "manifest_sha256", "durable_handle", "request_sha256", "failure_reason",

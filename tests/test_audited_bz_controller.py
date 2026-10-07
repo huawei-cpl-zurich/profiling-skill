@@ -448,7 +448,7 @@ def test_backend_operation_budget_is_shared_across_branch_rounds(tmp_path: Path)
 
     assert first["status"] == "ok"
     assert second["status"] == "infrastructure_error"
-    assert "budget exhausted" in second["reason"]
+    assert second["reason"] == "7-operation experiment budget exhausted"
     assert len(backend.requests) == 7
 
 

@@ -15,7 +15,7 @@ The immutable configuration is JSON with schema
   "schema": "profiling-skill/audited-bz-controller-config/v1",
   "benchmark": "matmul",
   "round_count": 4,
-  "request_budget": 24,
+  "request_budget": 48,
   "profile_repeats": 3,
   "variability_threshold": 0.25,
   "control_drift_threshold": 0.2,
@@ -108,8 +108,9 @@ Compilation, runtime, submission, and correctness failures produce a terminal
 `candidate_error`. Transport, observer, device, staging, malformed evidence,
 and control failures produce nonterminal `infrastructure_error` receipts.
 Successful and candidate-terminal backend operations consume the branch-wide
-24-operation budget. Infrastructure attempts are recorded separately and do
-not consume it.
+48-operation budget in repair-aware campaigns. Legacy frozen manifests retain
+their 24-operation budget. Infrastructure attempts are recorded separately
+and do not consume it.
 
 If an infrastructure receipt contains a handle, repeat the invocation with
 the same frozen hashes and:

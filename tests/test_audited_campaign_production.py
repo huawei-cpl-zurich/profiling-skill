@@ -231,6 +231,197 @@ def test_production_runtime_uses_starter_bound_v2_schema(tmp_path: Path):
         production_launcher(config)
 
 
+def canary_gate_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, Path, str]:
+    definition = {
+        "schema": "profiling-skill/audited-repair-canaries/v1",
+        "benchmark": "matmul", "request_budget": 48,
+        "max_candidate_repairs_per_round": 2,
+        "placement": "dynamic-bz-a3-admission",
+        "canaries": [
+            {"id": "matmul-cannbot-repair", "treatment": "cannbot",
+             "required_evidence": ["candidate-repair", "offline-verifier",
+                                   "msprof-op-timing"]},
+            {"id": "matmul-project-cannbot-resume", "treatment": "project-cannbot",
+             "required_evidence": ["checkpoint-resume", "same-session",
+                                   "offline-verifier", "msprof-op-timing"]},
+            {"id": "matmul-project-guarded-repair", "treatment": "project-guarded",
+             "required_evidence": ["candidate-repair", "offline-verifier",
+                                   "msprof-op-timing"]},
+        ],
+        "gate": {"all_canaries_terminal_ok": True,
+                 "all_branches_offline_valid": True,
+                 "all_final_timings_positive": True,
+                 "minimum_repaired_canaries": 2,
+                 "resume_canary_required": True},
+    }
+    definition_path = tmp_path / "canaries.json"
+    definition_path.write_text(json.dumps(definition, sort_keys=True) + "\n")
+    definition_sha = sha(definition_path)
+    records = []
+    for index, item in enumerate(definition["canaries"]):
+        branch = f"experiment/canary/{item['id']}"
+        commits = [f"{index + 1:x}" * 40, f"{index + 4:x}" * 40,
+                   f"{index + 7:x}" * 40, f"{index + 10:x}" * 40]
+        verifier = {
+            "status": "valid", "branch": branch, "session_id": f"thread-{index}",
+            "experiments": [{"commit": commit} for commit in commits],
+        }
+        verifier_path = tmp_path / f"{item['id']}-verifier.json"
+        verifier_path.write_text(json.dumps(verifier, sort_keys=True) + "\n")
+        histories = [["candidate_error", "ok"] if index != 1 or number == 2 else ["ok"]
+                     for number in range(1, 5)]
+        receipt = {
+            "status": "complete", "branch": branch, "commits": commits,
+            "rounds_completed": 4, "durable_handle": f"bz-a3-1:{item['id']}:round-4",
+            "attempt_history": [
+                {"round": number, "statuses": statuses}
+                for number, statuses in enumerate(histories, 1)
+            ],
+            "rounds": [
+                {"round": number, "status": "ok",
+                 "handle": f"bz-a3-1:{item['id']}:round-{number}",
+                 "median_us": 10.0 + number,
+                 "compact_artifacts": [f"/remote/{item['id']}/{number}.json"]}
+                for number in range(1, 5)
+            ],
+        }
+        receipt_path = tmp_path / f"{item['id']}-receipt.json"
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+        resume_binding = None
+        if index == 1:
+            resume = {
+                "schema": "profiling-skill/audited-repair-canary-resume/v1",
+                "canary_id": item["id"], "checkpoint_sha256": "d" * 64,
+                "session_id_before": verifier["session_id"],
+                "session_id_after": verifier["session_id"],
+                "durable_handle_before": receipt["rounds"][1]["handle"],
+                "durable_handle_after": receipt["rounds"][1]["handle"],
+            }
+            resume_path = tmp_path / f"{item['id']}-resume.json"
+            resume_path.write_text(json.dumps(resume, sort_keys=True) + "\n")
+            resume_binding = {"path": str(resume_path), "sha256": sha(resume_path)}
+        records.append({
+            "id": item["id"], "treatment": item["treatment"],
+            "experiment_commit": commits[-1],
+            "verifier_report": {"path": str(verifier_path),
+                                "sha256": sha(verifier_path)},
+            "cell_receipt": {"path": str(receipt_path), "sha256": sha(receipt_path)},
+            "resume_receipt": resume_binding,
+        })
+    results = {
+        "schema": "profiling-skill/audited-repair-canary-results/v1",
+        "definition_sha256": definition_sha,
+        "source_revision": config["provenance"]["source_revision"],
+        "runtime_closure_sha256": config["runtime_scripts"]["sha256"],
+        "results": records,
+    }
+    results_path = tmp_path / "canary-results.json"
+    results_path.write_text(json.dumps(results, sort_keys=True) + "\n")
+    return definition_path, definition_sha, results_path, sha(results_path)
+
+
+def test_repair_campaign_requires_pinned_successful_canary_gate(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition, definition_sha, results, results_sha = canary_gate_fixture(
+        tmp_path, config
+    )
+    config["canary_definition"] = {
+        "path": str(definition), "sha256": definition_sha,
+    }
+    assert production.validate_canary_gate(config, results, results_sha)["status"] == "passed"
+
+    with pytest.raises(production.ProductionError, match="required"):
+        production.validate_canary_gate(config, None, None)
+    with pytest.raises(production.ProductionError, match="hash"):
+        production.validate_canary_gate(config, results, "0" * 64)
+    definition.write_text("{}\n")
+    with pytest.raises(production.ProductionError, match="definition hash"):
+        production.validate_canary_gate(config, results, results_sha)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "malformed", "failed", "artifact-drift"])
+def test_repair_campaign_rejects_unsatisfied_canary_gate(
+        tmp_path: Path, mutation: str):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition, definition_sha, results, _ = canary_gate_fixture(tmp_path, config)
+    config["canary_definition"] = {
+        "path": str(definition), "sha256": definition_sha,
+    }
+    document = json.loads(results.read_text())
+    if mutation == "missing":
+        document["results"].pop()
+    elif mutation == "malformed":
+        document["results"][0]["experiment_commit"] = "not-a-commit"
+    elif mutation == "failed":
+        verifier = Path(document["results"][0]["verifier_report"]["path"])
+        rejected = json.loads(verifier.read_text())
+        rejected["status"] = "rejected"
+        verifier.write_text(json.dumps(rejected, sort_keys=True) + "\n")
+        document["results"][0]["verifier_report"]["sha256"] = sha(verifier)
+    else:
+        receipt = Path(document["results"][0]["cell_receipt"]["path"])
+        receipt.write_text("{}\n")
+    results.write_text(json.dumps(document, sort_keys=True) + "\n")
+    with pytest.raises(production.ProductionError, match="canary"):
+        production.validate_canary_gate(config, results, sha(results))
+
+
+def test_production_entrypoint_gates_dispatch_on_pinned_canary_results(
+        tmp_path: Path, monkeypatch):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition, definition_sha, results, results_sha = canary_gate_fixture(
+        tmp_path, config
+    )
+    config["canary_definition"] = {
+        "path": str(definition), "sha256": definition_sha,
+    }
+    manifest = campaign.build_manifest(
+        config["run_id"], Path(config["prompt"]["path"]),
+        {name: Path(binding["path"]) for name, binding in config["tasks"].items()},
+        config["provenance"], "gate-test", request_budget=48,
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    config_path = tmp_path / "runtime.json"
+    config_path.write_text(json.dumps(config))
+    admission = tmp_path / "admission.json"
+    admission.write_text("{}")
+    dispatched = []
+    monkeypatch.setattr(production, "CplRemoteResourcePool", lambda *args, **kwargs: object())
+    monkeypatch.setattr(production, "ProductionCellLauncher", lambda *args, **kwargs: object())
+    monkeypatch.setattr(sys.modules["audited_campaign"], "run_campaign",
+                        lambda *args, **kwargs: (
+        dispatched.append(args) or {"status": "complete"}
+    ))
+    arguments = [
+        "--manifest", str(manifest_path), "--runtime-config", str(config_path),
+        "--runtime-config-sha256", sha(config_path), "--admission", str(admission),
+        "--admission-sha256", sha(admission), "--ledger", str(tmp_path / "ledger.json"),
+    ]
+    with pytest.raises(production.ProductionError, match="required"):
+        production.main(arguments)
+    assert dispatched == []
+
+    assert production.main(arguments + [
+        "--canary-results", str(results),
+        "--canary-results-sha256", results_sha,
+    ]) == 0
+    assert len(dispatched) == 1
+    retained = json.loads((
+        Path(config["run_root"]) / "state/canary-gate.json"
+    ).read_text())
+    assert retained["results_sha256"] == results_sha
+
+
 def test_migration_trust_cli_requires_resume(capsys):
     with pytest.raises(SystemExit) as failure:
         production.main([
@@ -383,8 +574,10 @@ def test_starter_manifest_contract_is_validated_before_materialization(tmp_path:
 class FakeRunner:
     calls = []
 
-    def __init__(self, repo, prompt, task, invoker, controller, *, round_count):
+    def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
+                 max_candidate_repairs):
         assert round_count == 4
+        assert max_candidate_repairs == 2
         self.repo = repo
 
     def run(self, run_id, agent_id, *, resume=False):
@@ -462,8 +655,12 @@ def migration_trust_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, di
 class TrustRecordingRunner(FakeRunner):
     trusted = None
 
-    def __init__(self, *args, round_count, trusted_runtime_migration):
-        super().__init__(*args, round_count=round_count)
+    def __init__(self, *args, round_count, max_candidate_repairs,
+                 trusted_runtime_migration):
+        super().__init__(
+            *args, round_count=round_count,
+            max_candidate_repairs=max_candidate_repairs,
+        )
         type(self).trusted = trusted_runtime_migration
 
 
@@ -693,11 +890,120 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
     assert created["invoker"][1]["timeout"] == 20
     assert created["verifier"][1]["timeout"] == 20
     assert FakeRunner.calls[-1][-1] is False
-
     launcher.launch(cell, slot)
     # A ledger-loss restart reconstructs the already-complete verified branch;
     # it does not ask the lifecycle to resume without a blocked checkpoint.
     assert FakeRunner.calls[-1][-1] is False
+
+
+def test_completed_cell_rejects_same_run_manifest_budget_change(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["manifest_sha256"] = "1" * 64
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+    assert launcher.launch(cell, {"target": "bz-a3-1", "device": 0})["status"] == "complete"
+    calls = len(FakeRunner.calls)
+
+    regenerated = {**cell, "request_budget": 48}
+    config["manifest_sha256"] = "2" * 64
+    rejected = production_launcher(
+        config,
+        invoker_factory=lambda *args, **kwargs: pytest.fail("invoker must not start"),
+        controller_factory=lambda *args, **kwargs: pytest.fail("controller must not start"),
+        runner_factory=FakeRunner, verifier_invoke=valid_verifier,
+    )
+    with pytest.raises(production.ProductionError, match="different identity"):
+        rejected.launch(regenerated, {"target": "bz-a3-1", "device": 0})
+    assert len(FakeRunner.calls) == calls
+
+
+def test_same_manifest_identity_accepts_normal_existing_cell(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["manifest_sha256"] = "3" * 64
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, existing = launcher._prepare_repo(cell)
+    assert existing is False
+    resumed, existing = launcher._prepare_repo(cell)
+    assert resumed == repo and existing is False
+    identity = json.loads((repo.parent / "state/cell.json").read_text())
+    assert identity["schema"] == "profiling-skill/cell-identity/v2"
+    assert identity["request_budget"] == 48
+    assert identity["manifest_sha256"] == "3" * 64
+
+
+def test_legacy_identity_upgrades_only_with_matching_seed_and_controller(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    audited_lifecycle.AuditedExperimentRunner(
+        repo, Path(config["prompt"]["path"]), Path(config["tasks"]["matmul"]["path"]),
+        lambda *args: "", lambda *args: {}, round_count=4,
+    )._initialize(config["run_id"], cell["cell_id"])
+    launcher._controller(cell, {"target": "bz-a3-1", "device": 0}, repo.parent, repo)
+    identity_path = repo.parent / "state/cell.json"
+    identity = json.loads(identity_path.read_text())
+    legacy = {key: identity[key] for key in (
+        "cell_id", "task", "treatment", "source_revision", "starter",
+    )}
+    identity_path.write_text(json.dumps(legacy) + "\n")
+
+    resumed, existing = launcher._prepare_repo(cell)
+    assert resumed == repo and existing is True
+    assert json.loads(identity_path.read_text())["schema"] == (
+        "profiling-skill/cell-identity/v2"
+    )
+
+
+def test_repair_runtime_uses_48_operations_and_two_candidate_repairs(tmp_path: Path):
+    cell = {"cell_id": "matmul-project-guarded", "task": "matmul",
+            "treatment": "project-guarded", "round_count": 4, "request_budget": 48,
+            "skills": ["ascend-profiling", "triton-guarded-kernel"]}
+    config = runtime_fixture(tmp_path, cell)
+    config["max_candidate_repairs_per_round"] = 2
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(),
+        runner_factory=FakeRunner, verifier_invoke=valid_verifier,
+    )
+    launcher.launch(cell, {"target": "bz-a3-1", "device": 2})
+    controller_config = json.loads((
+        Path(config["run_root"]) / cell["cell_id"] / "state/controller.json"
+    ).read_text())
+    assert controller_config["request_budget"] == 48
+
+
+@pytest.mark.parametrize("value", [-1, 0, 1, 3, True])
+def test_production_rejects_nonstandard_candidate_repair_limit(
+        tmp_path: Path, value):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["max_candidate_repairs_per_round"] = value
+    with pytest.raises(production.ProductionError, match="exactly two"):
+        production_launcher(config)
 
 
 def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
@@ -1190,8 +1496,12 @@ print(json.dumps({
     config["provenance"]["controller_sha256"] = closure_hash
 
     class ControllerRunner(FakeRunner):
-        def __init__(self, repo, prompt, task, invoker, controller, *, round_count):
-            super().__init__(repo, prompt, task, invoker, controller, round_count=round_count)
+        def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
+                     max_candidate_repairs):
+            super().__init__(
+                repo, prompt, task, invoker, controller, round_count=round_count,
+                max_candidate_repairs=max_candidate_repairs,
+            )
             self.controller = controller
 
         def run(self, run_id, agent_id, *, resume=False):

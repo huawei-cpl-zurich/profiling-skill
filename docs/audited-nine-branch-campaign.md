@@ -3,8 +3,10 @@
 This campaign crosses three benchmark tasks (`matmul`, `gdn`, and `bsa`) with
 three isolated skill treatments (`cannbot`, `project-cannbot`, and
 `project-guarded`). Each of the nine unmerged branches performs four audited
-experiments with a 24-request budget. The seed plus four experiment commits
-therefore produces five commits per branch and 45 commits in the complete run.
+experiments with a 48-operation controller budget and up to two in-round
+candidate repairs. Frozen legacy campaigns retain their 24-operation budget.
+The seed plus four experiment commits therefore produces five commits per
+branch and 45 commits in the complete run, regardless of repair count.
 
 ## Frozen manifest
 
@@ -77,10 +79,12 @@ receipts. This contract applies equally to `complete` and `candidate_failed`.
 A candidate-failed result must contain at least one fully classified
 `candidate_error` round; partial or contradictory evidence remains
 infrastructure-pending rather than terminalizing. Candidate compilation,
-runtime, correctness, or budget failure is not retried. Infrastructure failure
-before submission leaves the cell pending for a later resume. If a durable
-handle exists, resume calls `observe` for that exact handle and cannot dispatch
-a replacement.
+runtime, correctness, or profiling-selector failure may trigger up to two
+agent repairs inside the same numbered round. Only the final attempt determines
+the round status, while every attempted candidate remains retained.
+Infrastructure failure before submission leaves the cell pending for a later
+resume. If a durable handle exists, resume calls `observe` for that exact
+handle and cannot dispatch a replacement.
 
 The ledger is atomically updated before dispatch and after every result. Repeat
 the same operation with `resume=True` after infrastructure recovery; completed
@@ -202,6 +206,8 @@ python scripts/audited_campaign_production.py \
   --runtime-config-sha256 RUNTIME_CONFIG_SHA256 \
   --admission /absolute/campaign/admission.json \
   --admission-sha256 ADMISSION_SHA256 \
+  --canary-results /absolute/campaign/canary-results.json \
+  --canary-results-sha256 CANARY_RESULTS_SHA256 \
   --ledger /absolute/campaign/ledger.json
 ```
 
@@ -228,7 +234,14 @@ passes that independent verifier before it can be recorded as successful.
 Initial cell materialization uses a sibling initializing directory with an
 atomically written, exact cell-identity marker. Clone, checkout, skill copy,
 and identity creation finish there before one atomic rename publishes the
-cell. A restart may delete and recreate only a partial directory whose marker
+cell. The retained identity binds the full manifest hash when available plus
+the run, branch, round count, request budget, prompt/task digests, skill
+allowlist, source revision, and starter. Therefore a regenerated manifest
+cannot reinterpret a completed 24-operation repository as a 48-operation
+cell after ledger loss. A legacy identity is upgraded only when its committed
+seed and retained controller configuration independently prove the same run,
+prompt, task, rounds, and request budget. A restart may delete and recreate
+only a partial directory whose marker
 matches that exact cell identity; malformed, absent, or different markers fail
 closed and are preserved for inspection. Every fresh start and resume also
 requires the repository-local skill directory to contain exactly the declared
@@ -251,18 +264,40 @@ attempts, baseline fields, and calibration fields. Codex, controller,
 verification, and local lifecycle failures are infrastructure failures.
 Compilation, runtime, and correctness failures are candidate evidence only
 when they arrive in a contract-valid `candidate_error` controller receipt.
-Any independently verified branch containing such a receipt is terminal
-`candidate_failed`, never `complete`, while all round and verifier evidence is
-retained for offline analysis.
+The agent may repair a failed candidate twice inside the same numbered round.
+Each attempted candidate remains hash-bound in that round's evidence, but only
+the final attempt determines the round status. A round is terminal
+`candidate_error` only after all three attempts fail.
 
-## Acceptance
+## Repair-aware acceptance and rollout
 
-Before the measured run, validate manifest generation and a fake-controller
-end-to-end run locally. On BZ-A3, validate a known-good matmul candidate, an
-intentional compilation failure, observer reconnection to the same durable
-handle, and measurement-only resume. Then run one matmul canary per treatment.
-Do not start the nine branches while an infrastructure fault remains
-unclassified.
+New manifests default to 48 controller operations per cell; frozen legacy
+manifests with 24 operations remain valid. Production runtime configuration
+sets `max_candidate_repairs_per_round` to `2` (omission means the same value
+for legacy configuration compatibility). Run one matmul canary for each of the
+three treatments before the measured campaign. Together they must demonstrate
+an in-round compile/smoke repair, exact checkpoint/session resume, independent
+offline verification, and a positive `msprof op` timing. Dynamic admission
+chooses the physical BZ-A3 devices; canary definitions never encode devices.
+
+Freeze runtime scripts and benchmark assets from the reviewed merge commit,
+pin the unchanged prompt, tasks, starters, baselines, treatment skills, model,
+image, and source revision, then generate a new run ID and 48-operation
+manifest. Validate all hashes with `ProductionCellLauncher` before producing
+an admission receipt. Do not copy a prior ledger or cell worktree into the new
+run root, and do not launch the nine cells until all three canaries pass.
+Pin `experiments/audited-repair-canaries.json` in runtime configuration as
+`canary_definition`, then supply the hash-pinned compact canary results to the
+production command. The entrypoint checks all three treatment identities,
+required evidence, at least two repaired canaries, and the declared
+checkpoint-resume canary before it calls `run_campaign`. Each result pins its
+experiment commit, independent verifier JSON, terminal cell receipt, and—when
+declared—resume receipt by absolute path and SHA-256. The gate derives branch
+validity, repair history, final `msprof op` timing, compact artifacts, durable
+handles, and same-session resume from those retained files; evidence labels in
+a hand-authored summary are insufficient. The accepted gate receipt is retained
+below the new run root. Missing, changed, malformed, or failed artifacts cannot
+dispatch a cell.
 
 The version-two final report contains one row per branch with status, attempt
 count, unchanged raw round receipts, per-case evidence, controls and policy,
@@ -276,3 +311,8 @@ Best-round and cross-device/cross-run comparison fields use normalized timing
 when present; raw timing remains available for device-local diagnosis. The
 report also aggregates every candidate-error round, including earlier rounds,
 with its round number, failure type, and reason.
+
+Repair-aware reports additionally expose raw successful attempts over all
+candidate attempts, successful and repaired round counts, total repairs,
+ordered failure transitions, and the final round timing. Legacy branches are
+reported as one candidate attempt per round.

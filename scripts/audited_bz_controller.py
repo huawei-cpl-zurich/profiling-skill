@@ -313,7 +313,9 @@ class AuditedBzController:
             mode = "observe" if pending.get("handle") else "retry_submit"
             request = pending["request"]
         elif budget["operations_consumed"] >= self.request_budget:
-            return self._infrastructure("24-operation experiment budget exhausted")
+            return self._infrastructure(
+                f"{self.request_budget}-operation experiment budget exhausted"
+            )
         else:
             mode = "submit"
         result = self.backend(request)

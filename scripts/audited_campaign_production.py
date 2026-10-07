@@ -25,6 +25,7 @@ finally:
     sys.path.pop(0)
 
 RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v2"
+SUPPORTED_REQUEST_BUDGETS = {24, 48}
 MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
 DEVELOPMENT_CASES = {
@@ -134,6 +135,182 @@ def _write_json_atomic(path: Path, document: dict) -> None:
     temporary.replace(path)
 
 
+def validate_canary_gate(config: dict, results_path: Path | None,
+                         results_sha256: str | None) -> dict:
+    """Authenticate the three declared canaries before a repair-aware campaign."""
+    if results_path is None or results_sha256 is None:
+        raise ProductionError("pinned canary results are required")
+    binding = config.get("canary_definition")
+    if (not isinstance(binding, dict)
+            or set(binding) != {"path", "sha256"}
+            or not isinstance(binding.get("path"), str)
+            or not isinstance(binding.get("sha256"), str)):
+        raise ProductionError("pinned canary definition is required")
+    definition = _read_pinned(
+        Path(binding["path"]), binding["sha256"], "canary definition"
+    )
+    expected_gate = {
+        "all_canaries_terminal_ok": True,
+        "all_branches_offline_valid": True,
+        "all_final_timings_positive": True,
+        "minimum_repaired_canaries": 2,
+        "resume_canary_required": True,
+    }
+    declarations = definition.get("canaries")
+    if (definition.get("schema") != "profiling-skill/audited-repair-canaries/v1"
+            or definition.get("benchmark") != "matmul"
+            or definition.get("request_budget") != 48
+            or definition.get("max_candidate_repairs_per_round") != 2
+            or definition.get("placement") != "dynamic-bz-a3-admission"
+            or definition.get("gate") != expected_gate
+            or not isinstance(declarations, list) or len(declarations) != 3):
+        raise ProductionError("canary definition does not match the production gate")
+    declared = {}
+    for item in declarations:
+        if (not isinstance(item, dict)
+                or set(item) != {"id", "treatment", "required_evidence"}
+                or not isinstance(item.get("id"), str) or not item["id"]
+                or item.get("treatment") not in TREATMENT_SKILLS
+                or not isinstance(item.get("required_evidence"), list)
+                or not item["required_evidence"]
+                or any(not isinstance(value, str) or not value
+                       for value in item["required_evidence"])
+                or item["id"] in declared):
+            raise ProductionError("canary declaration is malformed")
+        declared[item["id"]] = item
+    if {item["treatment"] for item in declarations} != set(TREATMENT_SKILLS):
+        raise ProductionError("canary declarations must cover all three treatments")
+
+    results = _read_pinned(Path(results_path), results_sha256, "canary results")
+    records = results.get("results")
+    if (results.get("schema") != "profiling-skill/audited-repair-canary-results/v1"
+            or results.get("definition_sha256") != binding["sha256"]
+            or results.get("source_revision") != config.get("provenance", {}).get(
+                "source_revision")
+            or results.get("runtime_closure_sha256") != config.get(
+                "runtime_scripts", {}).get("sha256")
+            or not isinstance(records, list) or len(records) != 3):
+        raise ProductionError("canary results do not match pinned production inputs")
+    def artifact(binding: object, label: str) -> dict:
+        if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
+                or not isinstance(binding.get("path"), str)
+                or not Path(binding["path"]).is_absolute()
+                or not isinstance(binding.get("sha256"), str)):
+            raise ProductionError(f"canary {label} binding is malformed")
+        return _read_pinned(Path(binding["path"]), binding["sha256"], label)
+
+    seen = set()
+    repaired = 0
+    resumed = set()
+    for result in records:
+        if (not isinstance(result, dict) or set(result) != {
+                "id", "treatment", "experiment_commit", "verifier_report",
+                "cell_receipt", "resume_receipt",
+        }):
+            raise ProductionError("canary result is malformed")
+        declaration = declared.get(result.get("id"))
+        commit = result.get("experiment_commit")
+        if (declaration is None or result["id"] in seen
+                or result.get("treatment") != declaration["treatment"]
+                or not isinstance(commit, str) or len(commit) != 40
+                or any(character not in "0123456789abcdef" for character in commit)):
+            raise ProductionError("canary result does not match its declaration")
+        verifier = artifact(result.get("verifier_report"), "canary verifier report")
+        receipt = artifact(result.get("cell_receipt"), "canary cell receipt")
+        experiments = verifier.get("experiments")
+        verifier_commits = ([item.get("commit") for item in experiments]
+                            if isinstance(experiments, list)
+                            and all(isinstance(item, dict) for item in experiments) else [])
+        branch = receipt.get("branch")
+        rounds = receipt.get("rounds")
+        history = receipt.get("attempt_history")
+        if (verifier.get("status") != "valid"
+                or not isinstance(branch, str) or not branch
+                or verifier.get("branch") != branch
+                or not verifier_commits or verifier_commits[-1] != commit
+                or receipt.get("status") != "complete"
+                or receipt.get("commits") != verifier_commits
+                or receipt.get("rounds_completed") != 4
+                or not isinstance(receipt.get("durable_handle"), str)
+                or not receipt["durable_handle"]
+                or not isinstance(rounds, list) or len(rounds) != 4
+                or not isinstance(history, list) or len(history) != 4):
+            raise ProductionError("canary retained branch evidence is invalid")
+        final = rounds[-1]
+        if (not isinstance(final, dict) or final.get("round") != 4
+                or final.get("status") != "ok"
+                or final.get("handle") != receipt["durable_handle"]
+                or not _positive_number(final.get("median_us"))
+                or not isinstance(final.get("compact_artifacts"), list)
+                or not final["compact_artifacts"]
+                or any(not isinstance(value, str) or not value
+                       for value in final["compact_artifacts"])
+                or [item.get("round") if isinstance(item, dict) else None
+                    for item in history] != [1, 2, 3, 4]
+                or any(not isinstance(item.get("statuses"), list)
+                       or not item["statuses"]
+                       or item["statuses"][-1] != "ok"
+                       or any(not isinstance(value, str) or not value
+                              for value in item["statuses"])
+                       for item in history)):
+            raise ProductionError("canary retained timing evidence is invalid")
+        repairs = sum(len(item["statuses"]) - 1 for item in history)
+        required = set(declaration["required_evidence"])
+        if "candidate-repair" in required and repairs == 0:
+            raise ProductionError("canary retained repair evidence is missing")
+        resume_binding = result.get("resume_receipt")
+        if {"checkpoint-resume", "same-session"} & required:
+            resume = artifact(resume_binding, "canary resume receipt")
+            session = verifier.get("session_id")
+            handles = {item.get("handle") for item in rounds if isinstance(item, dict)}
+            checkpoint = resume.get("checkpoint_sha256")
+            if (resume.get("schema") !=
+                    "profiling-skill/audited-repair-canary-resume/v1"
+                    or resume.get("canary_id") != result["id"]
+                    or not isinstance(checkpoint, str) or len(checkpoint) != 64
+                    or any(character not in "0123456789abcdef"
+                           for character in checkpoint)
+                    or not isinstance(session, str) or not session
+                    or resume.get("session_id_before") != session
+                    or resume.get("session_id_after") != session
+                    or resume.get("durable_handle_before") not in handles
+                    or resume.get("durable_handle_after") !=
+                    resume.get("durable_handle_before")):
+                raise ProductionError("canary retained resume evidence is invalid")
+            resumed.add(result["id"])
+        elif resume_binding is not None:
+            raise ProductionError("undeclared canary resume evidence is not allowed")
+        seen.add(result["id"])
+        repaired += int(repairs > 0)
+    resume_ids = {item["id"] for item in declarations
+                  if "checkpoint-resume" in item["required_evidence"]}
+    if (seen != set(declared)
+            or repaired < expected_gate["minimum_repaired_canaries"]
+            or not resume_ids or not resume_ids.issubset(resumed)):
+        raise ProductionError("canary results do not satisfy the aggregate gate")
+    return {
+        "schema": "profiling-skill/audited-repair-canary-gate/v1",
+        "status": "passed", "definition_sha256": binding["sha256"],
+        "results_sha256": results_sha256,
+        "source_revision": results["source_revision"],
+        "runtime_closure_sha256": results["runtime_closure_sha256"],
+        "canary_ids": sorted(seen), "repaired_canaries": repaired,
+        "resumed_canaries": sorted(resumed),
+    }
+
+
+def _retain_canary_gate(config: dict, receipt: dict) -> None:
+    path = Path(config["run_root"]) / "state" / "canary-gate.json"
+    if path.is_file():
+        try:
+            if json.loads(path.read_text()) != receipt:
+                raise ProductionError("retained canary gate does not match pinned results")
+        except json.JSONDecodeError as error:
+            raise ProductionError("retained canary gate is invalid JSON") from error
+        return
+    _write_json_atomic(path, receipt)
+
+
 class DurableAdmissionPool:
     """Record every accepted admission refresh before exposing its slots."""
 
@@ -237,6 +414,11 @@ class ProductionCellLauncher:
         if "adapter_command" in config or "remote_command" in config:
             raise ProductionError("runtime config cannot supply an adapter or remote command")
         self._validate_timeouts()
+        self.max_candidate_repairs = config.get("max_candidate_repairs_per_round", 2)
+        if self.max_candidate_repairs != 2 or type(self.max_candidate_repairs) is not int:
+            raise ProductionError(
+                "production max_candidate_repairs_per_round must be exactly two"
+            )
         self._validate_files()
         if invoker_factory is None or controller_factory is None or runner_factory is None:
             sys.path.insert(0, str(self.scripts))
@@ -359,6 +541,13 @@ class ProductionCellLauncher:
         provenance = self.config.get("provenance")
         if not isinstance(provenance, dict):
             raise ProductionError("runtime provenance is missing")
+        manifest_sha256 = self.config.get("manifest_sha256")
+        if (manifest_sha256 is not None
+                and (not isinstance(manifest_sha256, str)
+                     or len(manifest_sha256) != 64
+                     or any(character not in "0123456789abcdef"
+                            for character in manifest_sha256))):
+            raise ProductionError("runtime manifest identity is invalid")
         sources = self.config.get("source_repositories", {})
         expected_tasks = set(DEVELOPMENT_CASES)
         if (set(sources) != expected_tasks or set(self.config.get("tasks", {})) != expected_tasks):
@@ -515,16 +704,66 @@ class ProductionCellLauncher:
             raise ProductionError("source repository revision must be a pinned commit")
         starter = self._starter(cell["task"])
         starter_binding = self.config["starter_sources"][cell["task"]]
-        identity = {"cell_id": cell["cell_id"], "task": cell["task"],
-                    "treatment": cell["treatment"], "source_revision": revision,
-                    "starter": starter_binding}
+        legacy_identity = {
+            "cell_id": cell["cell_id"], "task": cell["task"],
+            "treatment": cell["treatment"], "source_revision": revision,
+            "starter": starter_binding,
+        }
+        identity = {
+            "schema": "profiling-skill/cell-identity/v2", **legacy_identity,
+            "run_id": self.config["run_id"],
+            "branch": f"experiment/{self.config['run_id']}/{cell['cell_id']}",
+            "round_count": cell.get("round_count"),
+            "request_budget": cell.get("request_budget"),
+            "task_sha256": cell.get("task_sha256"),
+            "prompt_contract": cell.get("prompt_contract"),
+            "skills": cell.get("skills"),
+            "manifest_sha256": self.config.get("manifest_sha256"),
+        }
         identity_path = root / "state" / "cell.json"
         expected = tuple(TREATMENT_SKILLS[cell["treatment"]])
         if tuple(cell["skills"]) != expected:
             raise ProductionError("cell treatment allowlist does not match campaign policy")
         if repo.exists():
-            if (not identity_path.is_file()
-                    or json.loads(identity_path.read_text()) != identity):
+            try:
+                retained_identity = json.loads(identity_path.read_text())
+            except (OSError, json.JSONDecodeError) as error:
+                raise ProductionError(
+                    "existing isolated repository has an unreadable identity"
+                ) from error
+            if retained_identity == legacy_identity:
+                controller_path = root / "state" / "controller.json"
+                seed_commit = _git(
+                    repo, "log", "-1", "--format=%H", "--", ".experiment/seed.json"
+                )
+                if not seed_commit:
+                    raise ProductionError(
+                        "legacy cell identity lacks immutable campaign evidence"
+                    )
+                try:
+                    controller = json.loads(controller_path.read_text())
+                    seed = json.loads(_git_blob(
+                        repo, seed_commit, ".experiment/seed.json"
+                    ))
+                except (OSError, json.JSONDecodeError) as error:
+                    raise ProductionError(
+                        "legacy cell identity lacks immutable campaign evidence"
+                    ) from error
+                if (controller.get("benchmark") != cell["task"]
+                        or controller.get("round_count") != cell.get("round_count")
+                        or controller.get("request_budget") != cell.get("request_budget")
+                        or seed.get("run_id") != self.config["run_id"]
+                        or seed.get("agent_id") != cell["cell_id"]
+                        or seed.get("round_count") != cell.get("round_count")
+                        or seed.get("prompt_sha256") !=
+                        self.config["prompt"]["sha256"]
+                        or seed.get("task_sha256") !=
+                        self.config["tasks"][cell["task"]]["sha256"]):
+                    raise ProductionError(
+                        "legacy cell identity does not match immutable campaign evidence"
+                    )
+                _write_json_atomic(identity_path, identity)
+            elif retained_identity != identity:
                 raise ProductionError("existing isolated repository has a different identity")
             self._validate_isolated_skills(repo, expected)
             self._validate_materialized_starter(repo, cell["task"], starter)
@@ -627,7 +866,8 @@ class ProductionCellLauncher:
         ]
         document = {
             "schema": "profiling-skill/audited-bz-controller-config/v1",
-            "benchmark": cell["task"], "round_count": 4, "request_budget": 24,
+            "benchmark": cell["task"], "round_count": 4,
+            "request_budget": cell["request_budget"],
             "profile_repeats": 3, "variability_threshold": 0.25,
             "control_drift_threshold": 0.2, "infrastructure_retry_budget": 3,
             "timeout_seconds": (
@@ -689,6 +929,7 @@ class ProductionCellLauncher:
 
     def _receipt(self, repo: Path, verified: dict) -> dict:
         rounds = []
+        attempt_history = []
         for number in range(1, 5):
             path = repo / "experiments" / f"{number:02d}" / "results.json"
             try:
@@ -697,7 +938,32 @@ class ProductionCellLauncher:
                 raise ProductionError(f"round {number} compact receipt is unavailable") from error
             if not isinstance(receipt, dict):
                 raise ProductionError(f"round {number} compact receipt is invalid")
+            evidence_path = path.with_name("evidence.json")
+            attempt_statuses = None
+            if evidence_path.is_file():
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                    attempts = evidence.get("candidate_attempts")
+                    if isinstance(attempts, list) and attempts:
+                        attempt_statuses = []
+                        for attempt in attempts:
+                            attempt_number = attempt.get("attempt")
+                            attempt_receipt = json.loads((
+                                path.parent / "attempts" / f"{attempt_number:02d}"
+                                / "controller.json"
+                            ).read_text())
+                            attempt_statuses.append(
+                                attempt_receipt.get("failure_type", attempt_receipt["status"])
+                            )
+                except (OSError, KeyError, TypeError, ValueError,
+                        json.JSONDecodeError) as error:
+                    raise ProductionError(
+                        f"round {number} candidate attempt summary is invalid"
+                    ) from error
+            if attempt_statuses is None:
+                attempt_statuses = [receipt.get("failure_type", receipt.get("status"))]
             rounds.append({"round": number, **receipt})
+            attempt_history.append({"round": number, "statuses": attempt_statuses})
         commits = tuple(item.get("commit") for item in verified["experiments"])
         if any(not isinstance(commit, str) or not commit for commit in commits):
             raise ProductionError("independent verifier omitted experiment commits")
@@ -711,6 +977,7 @@ class ProductionCellLauncher:
         result = {
             "status": terminal_status, "durable_handle": terminal["handle"],
             "rounds_completed": 4, "rounds": rounds,
+            "attempt_history": attempt_history,
             "branch": verified.get("branch"), "session_id": verified.get("session_id"),
             "seed_commit": verified.get("seed_commit"), "commits": list(commits),
         }
@@ -750,8 +1017,11 @@ class ProductionCellLauncher:
         return True
 
     def launch(self, cell: dict, slot: dict) -> dict:
-        if (cell.get("round_count"), cell.get("request_budget")) != (4, 24):
-            raise ProductionError("production cells require four rounds and 24 requests")
+        if (cell.get("round_count") != 4
+                or cell.get("request_budget") not in SUPPORTED_REQUEST_BUDGETS):
+            raise ProductionError(
+                "production cells require four rounds and a 24 or 48-operation budget"
+            )
         task_binding = self.config["tasks"].get(cell.get("task"), {})
         prompt_contract = cell.get("prompt_contract", {})
         if (cell.get("task_sha256") != task_binding.get("sha256")
@@ -791,7 +1061,10 @@ class ProductionCellLauncher:
             raise ProductionError("Codex runtime image does not match pinned digest")
         try:
             controller = self._controller(cell, slot, root, repo)
-            runner_options = {"round_count": 4}
+            runner_options = {
+                "round_count": 4,
+                "max_candidate_repairs": self.max_candidate_repairs,
+            }
             if self.trusted_runtime_migration is not None:
                 runner_options["trusted_runtime_migration"] = self.trusted_runtime_migration
             runner = self.runner_factory(
@@ -840,6 +1113,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--admission", type=Path, required=True)
     parser.add_argument("--admission-sha256", required=True)
     parser.add_argument("--ledger", type=Path, required=True)
+    parser.add_argument("--canary-results", type=Path)
+    parser.add_argument("--canary-results-sha256")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--migration-attestation", type=Path)
     parser.add_argument("--migration-attestation-file-sha256")
@@ -882,6 +1157,7 @@ def main(argv: list[str] | None = None) -> int:
     if manifest.get("schema_version") != 2:
         parser.error("production campaign requires starter-bound manifest schema_version 2")
     config["run_id"] = manifest["run_id"]
+    config["manifest_sha256"] = manifest["manifest_sha256"]
     if config.get("provenance") != manifest.get("provenance"):
         parser.error("runtime provenance does not exactly match manifest provenance")
     model = manifest["provenance"]["model"]
@@ -890,6 +1166,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("runtime model does not match manifest provenance")
     if config.get("runtime_image_digest") != manifest["provenance"]["runtime_image_digest"]:
         parser.error("runtime image does not match manifest provenance")
+    if manifest.get("request_budget") == 48:
+        gate = validate_canary_gate(
+            config, args.canary_results, args.canary_results_sha256,
+        )
+        _retain_canary_gate(config, gate)
     from audited_campaign import InfrastructureFailure, run_campaign
     ledger = run_campaign(
         manifest, args.ledger,

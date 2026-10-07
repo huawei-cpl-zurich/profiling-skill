@@ -212,6 +212,7 @@ class CanaryRunner:
         if not isinstance(self.definition, dict):
             raise CanaryError("canary definition must be a JSON object")
         self._validate_definition()
+        self.runtime_config_sha256 = production.document_sha256(config)
         self.config = copy.deepcopy(config)
         self.config["run_id"] = f"repair-canaries-{definition_sha256[:12]}"
         self.config["run_root"] = str(self.run_root / "cells")
@@ -272,7 +273,9 @@ class CanaryRunner:
                 return json.loads(retained.read_text())
             except json.JSONDecodeError as error:
                 raise CanaryError("retained canary placement is invalid") from error
-        slots = self.pool.admit()
+        slots = [slot for slot in self.pool.admit()
+                 if isinstance(slot, dict)
+                 and slot.get("healthy") is True and slot.get("idle") is True]
         if not slots:
             raise CanaryError("no healthy idle BZ-A3 device was admitted")
         return sorted(slots, key=lambda item: (item["target"], item["device"]))[0]
@@ -476,22 +479,39 @@ class CanaryRunner:
         if output != self.run_root / "canary-results.json":
             raise CanaryError("canary results must be retained under the canary run root")
         if output.is_file():
-            production.validate_canary_gate(self.config, output, _sha(output))
+            production.validate_canary_gate(
+                self.config, output, _sha(output), self.runtime_config_sha256,
+            )
             result = json.loads(output.read_text())
             state_path = self.run_root / "state" / "run.json"
-            if state_path.is_file():
+            try:
                 state = json.loads(state_path.read_text())
-                if not isinstance(state, dict):
-                    raise CanaryError("retained canary run state is invalid")
-                if state.get("status") == "running":
-                    state["status"] = "complete"
-                    _atomic_json(state_path, state)
+            except (OSError, json.JSONDecodeError) as error:
+                raise CanaryError("retained canary run state is unavailable") from error
+            expected_state = {
+                "schema", "status", "definition_sha256", "source_revision",
+                "runtime_closure_sha256", "runtime_config_sha256",
+                "production_campaign_launched",
+            }
+            if (not isinstance(state, dict) or set(state) != expected_state
+                    or state.get("schema") !=
+                    "profiling-skill/audited-repair-canary-run/v1"
+                    or state.get("status") not in {"running", "complete"}
+                    or state.get("definition_sha256") != self.definition_sha256
+                    or state.get("runtime_config_sha256") !=
+                    self.runtime_config_sha256
+                    or state.get("production_campaign_launched") is not False):
+                raise CanaryError("retained canary run state is invalid")
+            if state["status"] == "running":
+                state["status"] = "complete"
+                _atomic_json(state_path, state)
             return result
         state = {
             "schema": "profiling-skill/audited-repair-canary-run/v1",
             "status": "running", "definition_sha256": self.definition_sha256,
             "source_revision": self.config["provenance"]["source_revision"],
             "runtime_closure_sha256": self.config["runtime_scripts"]["sha256"],
+            "runtime_config_sha256": self.runtime_config_sha256,
             "production_campaign_launched": False,
         }
         _retain(self.run_root / "state" / "run.json", state)
@@ -500,11 +520,14 @@ class CanaryRunner:
             "schema": RESULTS_SCHEMA, "definition_sha256": self.definition_sha256,
             "source_revision": state["source_revision"],
             "runtime_closure_sha256": state["runtime_closure_sha256"],
+            "runtime_config_sha256": state["runtime_config_sha256"],
             "results": records,
         }
         pending = output.with_name(f".{output.name}.pending")
         _atomic_json(pending, results)
-        production.validate_canary_gate(self.config, pending, _sha(pending))
+        production.validate_canary_gate(
+            self.config, pending, _sha(pending), self.runtime_config_sha256,
+        )
         pending.replace(output)
         state["status"] = "complete"
         running = self.run_root / "state" / "run.json"

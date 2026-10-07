@@ -136,7 +136,8 @@ def _write_json_atomic(path: Path, document: dict) -> None:
 
 
 def validate_canary_gate(config: dict, results_path: Path | None,
-                         results_sha256: str | None) -> dict:
+                         results_sha256: str | None,
+                         runtime_config_sha256: str | None = None) -> dict:
     """Authenticate the three declared canaries before a repair-aware campaign."""
     if results_path is None or results_sha256 is None:
         raise ProductionError("pinned canary results are required")
@@ -181,6 +182,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
     if {item["treatment"] for item in declarations} != set(TREATMENT_SKILLS):
         raise ProductionError("canary declarations must cover all three treatments")
 
+    expected_runtime = runtime_config_sha256 or document_sha256(config)
     results = _read_pinned(Path(results_path), results_sha256, "canary results")
     records = results.get("results")
     if (results.get("schema") != "profiling-skill/audited-repair-canary-results/v1"
@@ -189,6 +191,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
                 "source_revision")
             or results.get("runtime_closure_sha256") != config.get(
                 "runtime_scripts", {}).get("sha256")
+            or results.get("runtime_config_sha256") != expected_runtime
             or not isinstance(records, list) or len(records) != 3):
         raise ProductionError("canary results do not match pinned production inputs")
     def artifact(binding: object, label: str) -> dict:
@@ -351,6 +354,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
         "results_sha256": results_sha256,
         "source_revision": results["source_revision"],
         "runtime_closure_sha256": results["runtime_closure_sha256"],
+        "runtime_config_sha256": results["runtime_config_sha256"],
         "canary_ids": sorted(seen), "repaired_canaries": repaired,
         "resumed_canaries": sorted(resumed),
     }
@@ -1236,6 +1240,7 @@ def main(argv: list[str] | None = None) -> int:
             "attestation_sha256": args.migration_attestation_sha256,
         }]
     config = _read_pinned(args.runtime_config, args.runtime_config_sha256, "runtime config")
+    immutable_runtime_config_sha256 = document_sha256(config)
     if config.get("schema") != RUNTIME_SCHEMA:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")
     manifest = json.loads(args.manifest.read_text())
@@ -1254,6 +1259,7 @@ def main(argv: list[str] | None = None) -> int:
     if manifest.get("request_budget") == 48:
         gate = validate_canary_gate(
             config, args.canary_results, args.canary_results_sha256,
+            immutable_runtime_config_sha256,
         )
         _retain_canary_gate(config, gate)
     from audited_campaign import InfrastructureFailure, run_campaign

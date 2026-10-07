@@ -257,6 +257,9 @@ def canary_gate_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, Path, 
     definition_path = tmp_path / "canaries.json"
     definition_path.write_text(json.dumps(definition, sort_keys=True) + "\n")
     definition_sha = sha(definition_path)
+    config["canary_definition"] = {
+        "path": str(definition_path), "sha256": definition_sha,
+    }
     records = []
     for index, item in enumerate(definition["canaries"]):
         branch = f"experiment/canary/{item['id']}"
@@ -344,6 +347,7 @@ def canary_gate_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, Path, 
         "definition_sha256": definition_sha,
         "source_revision": config["provenance"]["source_revision"],
         "runtime_closure_sha256": config["runtime_scripts"]["sha256"],
+        "runtime_config_sha256": production.document_sha256(config),
         "results": records,
     }
     results_path = tmp_path / "canary-results.json"

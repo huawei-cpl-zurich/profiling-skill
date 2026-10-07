@@ -297,7 +297,10 @@ validity, repair history, final `msprof op` timing, compact artifacts, durable
 handles, and same-session resume from those retained files; evidence labels in
 a hand-authored summary are insufficient. The accepted gate receipt is retained
 below the new run root. Missing, changed, malformed, or failed artifacts cannot
-dispatch a cell.
+dispatch a cell. Results and runner state also pin a canonical digest of the
+complete immutable runtime configuration before the runner or campaign entrypoint
+adds run-specific fields. Changing a prompt, task, model, image, starter,
+baseline, or any other runtime input invalidates cached canaries.
 
 Produce those results with the dedicated canary runner before invoking the
 campaign launcher:
@@ -327,6 +330,10 @@ path for that exact handle and agent session. Acceptance requires the terminal
 `mode: observe` operation for that handle in the controller operation history;
 a cached terminal submit receipt or synthetic infrastructure result is not
 resume evidence.
+
+Fresh placement considers only admission slots explicitly reported healthy and
+idle, then chooses deterministically. A retained placement is replayed exactly
+on resume rather than being silently replaced by a newly admitted device.
 
 Per-cell injection markers and lifecycle checkpoints make the operation
 idempotent. A process restart after either marker is written replays the exact

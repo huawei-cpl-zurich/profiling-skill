@@ -44,7 +44,8 @@ class FakePool:
 
     def admit(self):
         self.calls += 1
-        return [{"target": "bz-a3-1", "device": 6, "id": "bz-a3-1/device-6"}]
+        return [{"target": "bz-a3-1", "device": 6, "id": "bz-a3-1/device-6",
+                 "healthy": True, "idle": True}]
 
 
 class FakeLauncher:
@@ -141,6 +142,10 @@ def inputs(tmp_path: Path):
         "runtime_scripts": {"sha256": "b" * 64},
         "prompt": {"sha256": "c" * 64},
         "tasks": {"matmul": {"sha256": "d" * 64}},
+        "model": "gpt-test", "runtime_image_digest": "sha256:" + "e" * 64,
+        "starter_sources": {"matmul": {"sha256": "f" * 64}},
+        "baseline_sources": {"matmul": {"sha256": "1" * 64}},
+        "canary_definition": {"path": str(definition), "sha256": sha(definition)},
     }
     output = tmp_path / "canary-run" / "canary-results.json"
     return definition, config, output
@@ -189,7 +194,6 @@ def test_runner_emits_gate_accepted_artifacts_and_exact_resume(tmp_path: Path):
 
     assert result["schema"] == "profiling-skill/audited-repair-canary-results/v1"
     assert len(result["results"]) == 3
-    config["canary_definition"] = {"path": str(definition), "sha256": sha(definition)}
     assert production.validate_canary_gate(config, output, sha(output))["status"] == "passed"
     assert sum(action == "observe" for _, action in FakeLauncher.calls) == 1
     assert not Path(config["run_root"]).exists()
@@ -211,6 +215,98 @@ def test_completed_results_are_idempotently_verified_without_launch(tmp_path: Pa
 
     assert first == second
     assert FakeLauncher.calls == calls
+
+
+def test_cached_results_reject_run_state_runtime_binding_drift(tmp_path: Path):
+    definition, config, output = inputs(tmp_path)
+    run_root = tmp_path / "canary-run"
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), run_root, FakePool(),
+        launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+    )
+    runner.run(output)
+    state_path = run_root / "state/run.json"
+    state = json.loads(state_path.read_text())
+    state["runtime_config_sha256"] = "0" * 64
+    state_path.write_text(json.dumps(state, sort_keys=True) + "\n")
+
+    with pytest.raises(canaries.CanaryError, match="run state is invalid"):
+        runner.run(output)
+
+
+@pytest.mark.parametrize("binding", [
+    "prompt", "task", "model", "image", "starter", "baseline",
+])
+def test_cached_results_reject_complete_runtime_config_drift(
+        tmp_path: Path, binding: str):
+    definition, config, output = inputs(tmp_path)
+    run_root = tmp_path / "canary-run"
+    def runner(value):
+        return canaries.CanaryRunner(
+            value, definition, sha(definition), run_root, FakePool(),
+            launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+        )
+
+    runner(config).run(output)
+    drifted = json.loads(json.dumps(config))
+    if binding == "prompt":
+        drifted["prompt"]["sha256"] = "2" * 64
+    elif binding == "task":
+        drifted["tasks"]["matmul"]["sha256"] = "2" * 64
+    elif binding == "model":
+        drifted["model"] = "gpt-other"
+    elif binding == "image":
+        drifted["runtime_image_digest"] = "sha256:" + "2" * 64
+    elif binding == "starter":
+        drifted["starter_sources"]["matmul"]["sha256"] = "2" * 64
+    else:
+        drifted["baseline_sources"]["matmul"]["sha256"] = "2" * 64
+
+    with pytest.raises(canaries.production.ProductionError,
+                       match="pinned production inputs"):
+        runner(drifted).run(output)
+
+
+def test_initial_slot_filters_busy_and_unhealthy_but_retained_slot_is_exact(tmp_path: Path):
+    definition, config, _output = inputs(tmp_path)
+
+    class MixedPool:
+        def admit(self):
+            return [
+                {"target": "bz-a3-1", "device": 0, "healthy": False, "idle": True},
+                {"target": "bz-a3-1", "device": 1, "healthy": True, "idle": False},
+                {"target": "bz-a3-2", "device": 3, "healthy": True, "idle": True},
+            ]
+
+    run_root = tmp_path / "canary-run"
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), run_root, MixedPool(),
+        launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+    )
+    cell = runner._cell(runner.definition["canaries"][0])
+    assert runner._slot(cell) == {
+        "target": "bz-a3-2", "device": 3, "healthy": True, "idle": True,
+    }
+
+    retained = run_root / "cells" / cell["cell_id"] / "state/placement.json"
+    retained.parent.mkdir(parents=True)
+    exact = {"target": "bz-a3-1", "device": 7, "healthy": True, "idle": True}
+    retained.write_text(json.dumps(exact) + "\n")
+    assert runner._slot(cell) == exact
+
+
+def test_initial_slot_fails_when_no_healthy_idle_device(tmp_path: Path):
+    definition, config, _output = inputs(tmp_path)
+    pool = type("UnavailablePool", (), {"admit": lambda self: [
+        {"target": "bz-a3-1", "device": 0, "healthy": False, "idle": True},
+        {"target": "bz-a3-2", "device": 0, "healthy": True, "idle": False},
+    ]})()
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), tmp_path / "canary-run", pool,
+        launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+    )
+    with pytest.raises(canaries.CanaryError, match="no healthy idle"):
+        runner._slot(runner._cell(runner.definition["canaries"][0]))
 
 
 def test_unclassified_infrastructure_failure_is_not_a_resume(tmp_path: Path):

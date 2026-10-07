@@ -366,20 +366,29 @@ def test_report_separates_raw_attempt_and_repaired_round_success(tmp_path: Path)
             "status": "complete", "attempts": [{"status": "complete", "receipt": {
                 "status": "complete", "durable_handle": f"local:{cell_id}",
                 "rounds_completed": 4, "commits": ["1", "2", "3", "4"],
+                "attempt_history": [
+                    {"round": 1, "statuses": ["compile_error", "ok"]},
+                    {"round": 2, "statuses": ["ok"]},
+                    {"round": 3,
+                     "statuses": ["runtime_error", "correctness_error", "ok"]},
+                    {"round": 4, "statuses": ["ok"]},
+                ],
                 "rounds": [
-                    {"round": 1, "status": "ok", "handle": "h1", "median_us": 9.0,
-                     "attempt_statuses": ["compile_error", "ok"]},
-                    {"round": 2, "status": "ok", "handle": "h2", "median_us": 8.0,
-                     "attempt_statuses": ["ok"]},
-                    {"round": 3, "status": "ok", "handle": "h3", "median_us": 7.0,
-                     "attempt_statuses": ["runtime_error", "correctness_error", "ok"]},
-                    {"round": 4, "status": "ok", "handle": "h4", "median_us": 6.0,
-                     "attempt_statuses": ["ok"]},
+                    {"round": 1, "status": "ok", "handle": "h1", "median_us": 9.0},
+                    {"round": 2, "status": "ok", "handle": "h2", "median_us": 8.0},
+                    {"round": 3, "status": "ok", "handle": "h3", "median_us": 7.0},
+                    {"round": 4, "status": "ok", "handle": "h4", "median_us": 6.0},
                 ],
             }}],
         }
     report = audited_campaign.build_report(document, ledger)
     row = report["cells"][0]
+    assert row["raw_evolution"] == ledger["cells"][document["order"][0]][
+        "attempts"
+    ][0]["receipt"]["rounds"]
+    assert row["attempt_history"][0] == {
+        "round": 1, "statuses": ["compile_error", "ok"]
+    }
     assert row["attempt_summary"] == {
         "attempts": 7, "successful_attempts": 4, "raw_attempt_success_rate": 4 / 7,
         "successful_rounds": 4, "repair_attempted_rounds": 2,
@@ -395,6 +404,24 @@ def test_report_separates_raw_attempt_and_repaired_round_success(tmp_path: Path)
     }
     assert report["attempt_summary"]["attempts"] == 63
     assert report["attempt_summary"]["repaired_rounds"] == 18
+
+
+def test_legacy_report_keeps_raw_receipts_and_synthesizes_attempt_history(tmp_path: Path):
+    document = manifest(tmp_path)
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json",
+        StaticPool([{"target": "bz-a3-1", "device": 0,
+                    "healthy": True, "idle": True}]),
+        RecordingLauncher(),
+    )
+    terminal = ledger["cells"][document["order"][0]]["attempts"][0]["receipt"]
+    original = json.loads(json.dumps(terminal["rounds"]))
+    row = audited_campaign.build_report(document, ledger)["cells"][0]
+    assert row["raw_evolution"] == original
+    assert all("attempt_statuses" not in item for item in row["raw_evolution"])
+    assert row["attempt_history"] == [
+        {"round": number, "statuses": ["ok"]} for number in range(1, 5)
+    ]
 
 
 def test_report_retains_discarded_infrastructure_attempts(tmp_path: Path):

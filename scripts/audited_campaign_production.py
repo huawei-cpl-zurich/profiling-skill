@@ -135,6 +135,182 @@ def _write_json_atomic(path: Path, document: dict) -> None:
     temporary.replace(path)
 
 
+def validate_canary_gate(config: dict, results_path: Path | None,
+                         results_sha256: str | None) -> dict:
+    """Authenticate the three declared canaries before a repair-aware campaign."""
+    if results_path is None or results_sha256 is None:
+        raise ProductionError("pinned canary results are required")
+    binding = config.get("canary_definition")
+    if (not isinstance(binding, dict)
+            or set(binding) != {"path", "sha256"}
+            or not isinstance(binding.get("path"), str)
+            or not isinstance(binding.get("sha256"), str)):
+        raise ProductionError("pinned canary definition is required")
+    definition = _read_pinned(
+        Path(binding["path"]), binding["sha256"], "canary definition"
+    )
+    expected_gate = {
+        "all_canaries_terminal_ok": True,
+        "all_branches_offline_valid": True,
+        "all_final_timings_positive": True,
+        "minimum_repaired_canaries": 2,
+        "resume_canary_required": True,
+    }
+    declarations = definition.get("canaries")
+    if (definition.get("schema") != "profiling-skill/audited-repair-canaries/v1"
+            or definition.get("benchmark") != "matmul"
+            or definition.get("request_budget") != 48
+            or definition.get("max_candidate_repairs_per_round") != 2
+            or definition.get("placement") != "dynamic-bz-a3-admission"
+            or definition.get("gate") != expected_gate
+            or not isinstance(declarations, list) or len(declarations) != 3):
+        raise ProductionError("canary definition does not match the production gate")
+    declared = {}
+    for item in declarations:
+        if (not isinstance(item, dict)
+                or set(item) != {"id", "treatment", "required_evidence"}
+                or not isinstance(item.get("id"), str) or not item["id"]
+                or item.get("treatment") not in TREATMENT_SKILLS
+                or not isinstance(item.get("required_evidence"), list)
+                or not item["required_evidence"]
+                or any(not isinstance(value, str) or not value
+                       for value in item["required_evidence"])
+                or item["id"] in declared):
+            raise ProductionError("canary declaration is malformed")
+        declared[item["id"]] = item
+    if {item["treatment"] for item in declarations} != set(TREATMENT_SKILLS):
+        raise ProductionError("canary declarations must cover all three treatments")
+
+    results = _read_pinned(Path(results_path), results_sha256, "canary results")
+    records = results.get("results")
+    if (results.get("schema") != "profiling-skill/audited-repair-canary-results/v1"
+            or results.get("definition_sha256") != binding["sha256"]
+            or results.get("source_revision") != config.get("provenance", {}).get(
+                "source_revision")
+            or results.get("runtime_closure_sha256") != config.get(
+                "runtime_scripts", {}).get("sha256")
+            or not isinstance(records, list) or len(records) != 3):
+        raise ProductionError("canary results do not match pinned production inputs")
+    def artifact(binding: object, label: str) -> dict:
+        if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
+                or not isinstance(binding.get("path"), str)
+                or not Path(binding["path"]).is_absolute()
+                or not isinstance(binding.get("sha256"), str)):
+            raise ProductionError(f"canary {label} binding is malformed")
+        return _read_pinned(Path(binding["path"]), binding["sha256"], label)
+
+    seen = set()
+    repaired = 0
+    resumed = set()
+    for result in records:
+        if (not isinstance(result, dict) or set(result) != {
+                "id", "treatment", "experiment_commit", "verifier_report",
+                "cell_receipt", "resume_receipt",
+        }):
+            raise ProductionError("canary result is malformed")
+        declaration = declared.get(result.get("id"))
+        commit = result.get("experiment_commit")
+        if (declaration is None or result["id"] in seen
+                or result.get("treatment") != declaration["treatment"]
+                or not isinstance(commit, str) or len(commit) != 40
+                or any(character not in "0123456789abcdef" for character in commit)):
+            raise ProductionError("canary result does not match its declaration")
+        verifier = artifact(result.get("verifier_report"), "canary verifier report")
+        receipt = artifact(result.get("cell_receipt"), "canary cell receipt")
+        experiments = verifier.get("experiments")
+        verifier_commits = ([item.get("commit") for item in experiments]
+                            if isinstance(experiments, list)
+                            and all(isinstance(item, dict) for item in experiments) else [])
+        branch = receipt.get("branch")
+        rounds = receipt.get("rounds")
+        history = receipt.get("attempt_history")
+        if (verifier.get("status") != "valid"
+                or not isinstance(branch, str) or not branch
+                or verifier.get("branch") != branch
+                or not verifier_commits or verifier_commits[-1] != commit
+                or receipt.get("status") != "complete"
+                or receipt.get("commits") != verifier_commits
+                or receipt.get("rounds_completed") != 4
+                or not isinstance(receipt.get("durable_handle"), str)
+                or not receipt["durable_handle"]
+                or not isinstance(rounds, list) or len(rounds) != 4
+                or not isinstance(history, list) or len(history) != 4):
+            raise ProductionError("canary retained branch evidence is invalid")
+        final = rounds[-1]
+        if (not isinstance(final, dict) or final.get("round") != 4
+                or final.get("status") != "ok"
+                or final.get("handle") != receipt["durable_handle"]
+                or not _positive_number(final.get("median_us"))
+                or not isinstance(final.get("compact_artifacts"), list)
+                or not final["compact_artifacts"]
+                or any(not isinstance(value, str) or not value
+                       for value in final["compact_artifacts"])
+                or [item.get("round") if isinstance(item, dict) else None
+                    for item in history] != [1, 2, 3, 4]
+                or any(not isinstance(item.get("statuses"), list)
+                       or not item["statuses"]
+                       or item["statuses"][-1] != "ok"
+                       or any(not isinstance(value, str) or not value
+                              for value in item["statuses"])
+                       for item in history)):
+            raise ProductionError("canary retained timing evidence is invalid")
+        repairs = sum(len(item["statuses"]) - 1 for item in history)
+        required = set(declaration["required_evidence"])
+        if "candidate-repair" in required and repairs == 0:
+            raise ProductionError("canary retained repair evidence is missing")
+        resume_binding = result.get("resume_receipt")
+        if {"checkpoint-resume", "same-session"} & required:
+            resume = artifact(resume_binding, "canary resume receipt")
+            session = verifier.get("session_id")
+            handles = {item.get("handle") for item in rounds if isinstance(item, dict)}
+            checkpoint = resume.get("checkpoint_sha256")
+            if (resume.get("schema") !=
+                    "profiling-skill/audited-repair-canary-resume/v1"
+                    or resume.get("canary_id") != result["id"]
+                    or not isinstance(checkpoint, str) or len(checkpoint) != 64
+                    or any(character not in "0123456789abcdef"
+                           for character in checkpoint)
+                    or not isinstance(session, str) or not session
+                    or resume.get("session_id_before") != session
+                    or resume.get("session_id_after") != session
+                    or resume.get("durable_handle_before") not in handles
+                    or resume.get("durable_handle_after") !=
+                    resume.get("durable_handle_before")):
+                raise ProductionError("canary retained resume evidence is invalid")
+            resumed.add(result["id"])
+        elif resume_binding is not None:
+            raise ProductionError("undeclared canary resume evidence is not allowed")
+        seen.add(result["id"])
+        repaired += int(repairs > 0)
+    resume_ids = {item["id"] for item in declarations
+                  if "checkpoint-resume" in item["required_evidence"]}
+    if (seen != set(declared)
+            or repaired < expected_gate["minimum_repaired_canaries"]
+            or not resume_ids or not resume_ids.issubset(resumed)):
+        raise ProductionError("canary results do not satisfy the aggregate gate")
+    return {
+        "schema": "profiling-skill/audited-repair-canary-gate/v1",
+        "status": "passed", "definition_sha256": binding["sha256"],
+        "results_sha256": results_sha256,
+        "source_revision": results["source_revision"],
+        "runtime_closure_sha256": results["runtime_closure_sha256"],
+        "canary_ids": sorted(seen), "repaired_canaries": repaired,
+        "resumed_canaries": sorted(resumed),
+    }
+
+
+def _retain_canary_gate(config: dict, receipt: dict) -> None:
+    path = Path(config["run_root"]) / "state" / "canary-gate.json"
+    if path.is_file():
+        try:
+            if json.loads(path.read_text()) != receipt:
+                raise ProductionError("retained canary gate does not match pinned results")
+        except json.JSONDecodeError as error:
+            raise ProductionError("retained canary gate is invalid JSON") from error
+        return
+    _write_json_atomic(path, receipt)
+
+
 class DurableAdmissionPool:
     """Record every accepted admission refresh before exposing its slots."""
 
@@ -696,6 +872,7 @@ class ProductionCellLauncher:
 
     def _receipt(self, repo: Path, verified: dict) -> dict:
         rounds = []
+        attempt_history = []
         for number in range(1, 5):
             path = repo / "experiments" / f"{number:02d}" / "results.json"
             try:
@@ -728,8 +905,8 @@ class ProductionCellLauncher:
                     ) from error
             if attempt_statuses is None:
                 attempt_statuses = [receipt.get("failure_type", receipt.get("status"))]
-            rounds.append({"round": number, **receipt,
-                           "attempt_statuses": attempt_statuses})
+            rounds.append({"round": number, **receipt})
+            attempt_history.append({"round": number, "statuses": attempt_statuses})
         commits = tuple(item.get("commit") for item in verified["experiments"])
         if any(not isinstance(commit, str) or not commit for commit in commits):
             raise ProductionError("independent verifier omitted experiment commits")
@@ -743,6 +920,7 @@ class ProductionCellLauncher:
         result = {
             "status": terminal_status, "durable_handle": terminal["handle"],
             "rounds_completed": 4, "rounds": rounds,
+            "attempt_history": attempt_history,
             "branch": verified.get("branch"), "session_id": verified.get("session_id"),
             "seed_commit": verified.get("seed_commit"), "commits": list(commits),
         }
@@ -878,6 +1056,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--admission", type=Path, required=True)
     parser.add_argument("--admission-sha256", required=True)
     parser.add_argument("--ledger", type=Path, required=True)
+    parser.add_argument("--canary-results", type=Path)
+    parser.add_argument("--canary-results-sha256")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--migration-attestation", type=Path)
     parser.add_argument("--migration-attestation-file-sha256")
@@ -928,6 +1108,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("runtime model does not match manifest provenance")
     if config.get("runtime_image_digest") != manifest["provenance"]["runtime_image_digest"]:
         parser.error("runtime image does not match manifest provenance")
+    if manifest.get("request_budget") == 48:
+        gate = validate_canary_gate(
+            config, args.canary_results, args.canary_results_sha256,
+        )
+        _retain_canary_gate(config, gate)
     from audited_campaign import InfrastructureFailure, run_campaign
     ledger = run_campaign(
         manifest, args.ledger,

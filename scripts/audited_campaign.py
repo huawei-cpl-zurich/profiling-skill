@@ -333,6 +333,26 @@ def _validate_receipt(cell: dict, receipt: dict) -> None:
         raise InfrastructureFailure("candidate_failed lacks a candidate_error round")
     if status == "complete" and failures:
         raise InfrastructureFailure("complete receipt contains a candidate_error round")
+    history = receipt.get("attempt_history")
+    if history is not None:
+        if (not isinstance(history, list) or len(history) != count
+                or [item.get("round") if isinstance(item, dict) else None
+                    for item in history] != expected_rounds
+                or any(not isinstance(item, dict)
+                       or set(item) != {"round", "statuses"}
+                       or not isinstance(item["statuses"], list)
+                       or not 1 <= len(item["statuses"]) <= 3
+                       or any(not isinstance(value, str) or not value
+                              for value in item["statuses"])
+                       for item in history)):
+            raise InfrastructureFailure("terminal receipt has malformed attempt history")
+        for item, round_receipt in zip(history, rounds):
+            expected = (round_receipt.get("failure_type", "candidate_error")
+                        if round_receipt["status"] == "candidate_error" else "ok")
+            if item["statuses"][-1] != expected:
+                raise InfrastructureFailure(
+                    "terminal receipt attempt history contradicts round status"
+                )
 
 
 def _run_campaign_locked(
@@ -519,6 +539,17 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         terminal = next((attempt.get("receipt") for attempt in reversed(state["attempts"])
                          if attempt.get("receipt")), {})
         evolution = terminal.get("rounds", [])
+        retained_history = terminal.get("attempt_history")
+        history_by_round = {
+            item["round"]: item["statuses"] for item in retained_history
+        } if isinstance(retained_history, list) else {}
+        attempt_history = [
+            {"round": item.get("round"), "statuses": history_by_round.get(
+                item.get("round"),
+                [item.get("failure_type", item.get("status"))],
+            )}
+            for item in evolution
+        ]
         candidate_errors = [
             {"round": item.get("round"), "failure_type": item.get("failure_type"),
              "reason": item.get("reason")}
@@ -571,10 +602,8 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         repair_attempted_rounds = 0
         repaired_rounds = 0
         transitions = []
-        for item in evolution:
-            statuses = item.get("attempt_statuses")
-            if not isinstance(statuses, list) or not statuses:
-                statuses = [item.get("failure_type", item.get("status"))]
+        for item, history_item in zip(evolution, attempt_history):
+            statuses = history_item["statuses"]
             attempts += len(statuses)
             successful_attempts += sum(status == "ok" for status in statuses)
             repair_attempted_rounds += int(len(statuses) > 1)
@@ -618,6 +647,7 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "treatment": cell["treatment"], "branch": cell["branch"],
             "status": status, "attempt_count": len(state["attempts"]),
             "raw_evolution": evolution,
+            "attempt_history": attempt_history,
             "normalized_evolution": [
                 {"round": item["round"],
                  "normalized_samples_us": item.get("normalized_samples_us"),

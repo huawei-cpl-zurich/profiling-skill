@@ -3,8 +3,10 @@
 This campaign crosses three benchmark tasks (`matmul`, `gdn`, and `bsa`) with
 three isolated skill treatments (`cannbot`, `project-cannbot`, and
 `project-guarded`). Each of the nine unmerged branches performs four audited
-experiments with a 24-request budget. The seed plus four experiment commits
-therefore produces five commits per branch and 45 commits in the complete run.
+experiments with a 48-operation controller budget and up to two in-round
+candidate repairs. Frozen legacy campaigns retain their 24-operation budget.
+The seed plus four experiment commits therefore produces five commits per
+branch and 45 commits in the complete run, regardless of repair count.
 
 ## Frozen manifest
 
@@ -77,10 +79,12 @@ receipts. This contract applies equally to `complete` and `candidate_failed`.
 A candidate-failed result must contain at least one fully classified
 `candidate_error` round; partial or contradictory evidence remains
 infrastructure-pending rather than terminalizing. Candidate compilation,
-runtime, correctness, or budget failure is not retried. Infrastructure failure
-before submission leaves the cell pending for a later resume. If a durable
-handle exists, resume calls `observe` for that exact handle and cannot dispatch
-a replacement.
+runtime, correctness, or profiling-selector failure may trigger up to two
+agent repairs inside the same numbered round. Only the final attempt determines
+the round status, while every attempted candidate remains retained.
+Infrastructure failure before submission leaves the cell pending for a later
+resume. If a durable handle exists, resume calls `observe` for that exact
+handle and cannot dispatch a replacement.
 
 The ledger is atomically updated before dispatch and after every result. Repeat
 the same operation with `resume=True` after infrastructure recovery; completed
@@ -202,6 +206,8 @@ python scripts/audited_campaign_production.py \
   --runtime-config-sha256 RUNTIME_CONFIG_SHA256 \
   --admission /absolute/campaign/admission.json \
   --admission-sha256 ADMISSION_SHA256 \
+  --canary-results /absolute/campaign/canary-results.json \
+  --canary-results-sha256 CANARY_RESULTS_SHA256 \
   --ledger /absolute/campaign/ledger.json
 ```
 
@@ -273,6 +279,18 @@ image, and source revision, then generate a new run ID and 48-operation
 manifest. Validate all hashes with `ProductionCellLauncher` before producing
 an admission receipt. Do not copy a prior ledger or cell worktree into the new
 run root, and do not launch the nine cells until all three canaries pass.
+Pin `experiments/audited-repair-canaries.json` in runtime configuration as
+`canary_definition`, then supply the hash-pinned compact canary results to the
+production command. The entrypoint checks all three treatment identities,
+required evidence, at least two repaired canaries, and the declared
+checkpoint-resume canary before it calls `run_campaign`. Each result pins its
+experiment commit, independent verifier JSON, terminal cell receipt, and—when
+declared—resume receipt by absolute path and SHA-256. The gate derives branch
+validity, repair history, final `msprof op` timing, compact artifacts, durable
+handles, and same-session resume from those retained files; evidence labels in
+a hand-authored summary are insufficient. The accepted gate receipt is retained
+below the new run root. Missing, changed, malformed, or failed artifacts cannot
+dispatch a cell.
 
 The version-two final report contains one row per branch with status, attempt
 count, unchanged raw round receipts, per-case evidence, controls and policy,

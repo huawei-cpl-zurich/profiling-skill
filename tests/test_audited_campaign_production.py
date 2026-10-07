@@ -231,6 +231,24 @@ def test_production_runtime_uses_starter_bound_v2_schema(tmp_path: Path):
         production_launcher(config)
 
 
+def test_migration_trust_cli_requires_resume(capsys):
+    with pytest.raises(SystemExit) as failure:
+        production.main([
+            "--manifest", "manifest.json",
+            "--runtime-config", "runtime.json",
+            "--runtime-config-sha256", "a" * 64,
+            "--admission", "admission.json",
+            "--admission-sha256", "b" * 64,
+            "--ledger", "ledger.json",
+            "--migration-attestation", "attestation.json",
+            "--migration-attestation-file-sha256", "c" * 64,
+            "--migration-attestation-sha256", "d" * 64,
+        ])
+
+    assert failure.value.code == 2
+    assert "runtime migration trust requires --resume" in capsys.readouterr().err
+
+
 def test_three_task_starters_share_revision_and_materialize_distinct_pairs(tmp_path: Path):
     cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
             "round_count": 4, "request_budget": 24,

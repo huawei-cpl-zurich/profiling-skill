@@ -63,7 +63,8 @@ python scripts/audited_campaign_production.py \
   --migration-attestation-sha256 "$(python -c 'import json; print(json.load(open("preflight.json"))["attestation_sha256"])')"
 ```
 
-All three migration arguments are required together. The launcher verifies
+All three migration arguments are required together and are accepted only with
+`--resume`; they cannot authorize a fresh campaign. The launcher verifies
 the outer file digest and inner seal, proves the attested old closure matches
 the unchanged manifest provenance, and proves the attested new closure and
 config match the active pinned runtime before it constructs an agent or

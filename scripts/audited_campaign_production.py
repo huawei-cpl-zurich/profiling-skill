@@ -202,7 +202,8 @@ class ProductionCellLauncher:
                  verifier_invoke: Callable = subprocess.run,
                  trusted_runtime_migration: dict | None = None,
                  runtime_config_path: Path | None = None,
-                 runtime_config_sha256: str | None = None):
+                 runtime_config_sha256: str | None = None,
+                 audit_error_type: type[Exception] | None = None):
         if config.get("schema") != RUNTIME_SCHEMA:
             raise ProductionError(f"runtime config requires schema {RUNTIME_SCHEMA}")
         self.config = config
@@ -240,6 +241,7 @@ class ProductionCellLauncher:
         if invoker_factory is None or controller_factory is None or runner_factory is None:
             sys.path.insert(0, str(self.scripts))
             try:
+                from audited_contract import AuditError
                 from audited_lifecycle import AuditedExperimentRunner
                 from audited_runtime import CodexInvoker, CommandController
             finally:
@@ -247,9 +249,15 @@ class ProductionCellLauncher:
             invoker_factory = invoker_factory or CodexInvoker
             controller_factory = controller_factory or CommandController
             runner_factory = runner_factory or AuditedExperimentRunner
+            audit_error_type = audit_error_type or AuditError
+        if (audit_error_type is not None
+                and (not isinstance(audit_error_type, type)
+                     or not issubclass(audit_error_type, Exception))):
+            raise ProductionError("audit failure type must be an exception class")
         self.invoker_factory = invoker_factory
         self.controller_factory = controller_factory
         self.runner_factory = runner_factory
+        self.audit_error_types = ((audit_error_type,) if audit_error_type is not None else ())
 
     def _validate_migration_trust(self, config_path: Path | None,
                                   config_sha256: str | None) -> dict | None:
@@ -778,6 +786,8 @@ class ProductionCellLauncher:
                 runner.run(
                     self.config["run_id"], cell["cell_id"], resume=resume
                 )
+            except self.audit_error_types as error:
+                raise ProductionError(str(error)) from error
             except Exception as error:
                 checkpoint = repo / ".experiment" / "blocked.json"
                 try:
@@ -825,6 +835,8 @@ def main(argv: list[str] | None = None) -> int:
     if any(value is not None for value in migration_arguments) \
             and not all(value is not None for value in migration_arguments):
         parser.error("runtime migration trust arguments must be supplied together")
+    if args.migration_attestation is not None and not args.resume:
+        parser.error("runtime migration trust requires --resume")
     config = _read_pinned(args.runtime_config, args.runtime_config_sha256, "runtime config")
     if config.get("schema") != RUNTIME_SCHEMA:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")

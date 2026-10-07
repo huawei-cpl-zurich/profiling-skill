@@ -136,7 +136,8 @@ def _write_json_atomic(path: Path, document: dict) -> None:
 
 
 def validate_canary_gate(config: dict, results_path: Path | None,
-                         results_sha256: str | None) -> dict:
+                         results_sha256: str | None,
+                         runtime_config_sha256: str | None = None) -> dict:
     """Authenticate the three declared canaries before a repair-aware campaign."""
     if results_path is None or results_sha256 is None:
         raise ProductionError("pinned canary results are required")
@@ -181,6 +182,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
     if {item["treatment"] for item in declarations} != set(TREATMENT_SKILLS):
         raise ProductionError("canary declarations must cover all three treatments")
 
+    expected_runtime = runtime_config_sha256 or document_sha256(config)
     results = _read_pinned(Path(results_path), results_sha256, "canary results")
     records = results.get("results")
     if (results.get("schema") != "profiling-skill/audited-repair-canary-results/v1"
@@ -189,6 +191,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
                 "source_revision")
             or results.get("runtime_closure_sha256") != config.get(
                 "runtime_scripts", {}).get("sha256")
+            or results.get("runtime_config_sha256") != expected_runtime
             or not isinstance(records, list) or len(records) != 3):
         raise ProductionError("canary results do not match pinned production inputs")
     def artifact(binding: object, label: str) -> dict:
@@ -262,9 +265,14 @@ def validate_canary_gate(config: dict, results_path: Path | None,
         if {"checkpoint-resume", "same-session"} & required:
             resume = artifact(resume_binding, "canary resume receipt")
             session = verifier.get("session_id")
-            handles = {item.get("handle") for item in rounds if isinstance(item, dict)}
             checkpoint = resume.get("checkpoint_sha256")
-            if (resume.get("schema") !=
+            expected_resume = {
+                "schema", "canary_id", "checkpoint", "marker", "checkpoint_sha256",
+                "experiment", "candidate_sha256", "manifest_sha256",
+                "session_id_before", "session_id_after", "durable_handle_before",
+                "durable_handle_after", "observe_round", "observe_operation",
+            }
+            if (set(resume) != expected_resume or resume.get("schema") !=
                     "profiling-skill/audited-repair-canary-resume/v1"
                     or resume.get("canary_id") != result["id"]
                     or not isinstance(checkpoint, str) or len(checkpoint) != 64
@@ -273,10 +281,62 @@ def validate_canary_gate(config: dict, results_path: Path | None,
                     or not isinstance(session, str) or not session
                     or resume.get("session_id_before") != session
                     or resume.get("session_id_after") != session
-                    or resume.get("durable_handle_before") not in handles
                     or resume.get("durable_handle_after") !=
                     resume.get("durable_handle_before")):
                 raise ProductionError("canary retained resume evidence is invalid")
+            original = artifact(resume.get("checkpoint"), "canary original checkpoint")
+            marker = artifact(resume.get("marker"), "canary observer marker")
+            operation = resume.get("observe_operation")
+            observe_round = resume.get("observe_round")
+            round_receipt = next((
+                item for item in rounds
+                if isinstance(item, dict) and item.get("round") == observe_round
+            ), None)
+            history = (round_receipt.get("policy", {}).get("operation_history", [])
+                       if isinstance(round_receipt, dict) else [])
+            marker_keys = {
+                "schema", "job_request_sha256", "controller_request_sha256",
+                "handle", "target", "device", "job_identity",
+                "candidate_sha256", "manifest_sha256",
+            }
+            if (resume["checkpoint"].get("sha256") != checkpoint
+                    or original.get("schema") !=
+                    "profiling-skill/audited-blocked/v2"
+                    or original.get("stage") != "controller"
+                    or original.get("experiment") != resume.get("experiment")
+                    or original.get("session_id") != session
+                    or original.get("candidate_sha256") !=
+                    resume.get("candidate_sha256")
+                    or original.get("manifest_sha256") !=
+                    resume.get("manifest_sha256")
+                    or (original.get("receipt") or {}).get("handle") !=
+                    resume.get("durable_handle_before")
+                    or marker.get("schema") !=
+                    "profiling-skill/canary-observer-interrupt/v1"
+                    or set(marker) != marker_keys
+                    or any(not isinstance(marker.get(key), str)
+                           or len(marker[key]) != 64
+                           or any(character not in "0123456789abcdef"
+                                  for character in marker[key])
+                           for key in ("job_request_sha256",
+                                       "controller_request_sha256"))
+                    or not isinstance(marker.get("target"), str)
+                    or not isinstance(marker.get("device"), int)
+                    or not isinstance(marker.get("job_identity"), dict)
+                    or marker.get("handle") != resume.get("durable_handle_before")
+                    or marker.get("candidate_sha256") !=
+                    resume.get("candidate_sha256")
+                    or marker.get("manifest_sha256") !=
+                    resume.get("manifest_sha256")
+                    or not isinstance(operation, dict)
+                    or operation not in history
+                    or operation.get("mode") != "observe"
+                    or operation.get("terminal") is not True
+                    or operation.get("status") != "ok"
+                    or operation.get("handle") != marker.get("handle")
+                    or operation.get("request_sha256") !=
+                    marker.get("controller_request_sha256")):
+                raise ProductionError("canary retained resume operation is invalid")
             resumed.add(result["id"])
         elif resume_binding is not None:
             raise ProductionError("undeclared canary resume evidence is not allowed")
@@ -294,6 +354,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
         "results_sha256": results_sha256,
         "source_revision": results["source_revision"],
         "runtime_closure_sha256": results["runtime_closure_sha256"],
+        "runtime_config_sha256": results["runtime_config_sha256"],
         "canary_ids": sorted(seen), "repaired_canaries": repaired,
         "resumed_canaries": sorted(resumed),
     }
@@ -860,6 +921,27 @@ class ProductionCellLauncher:
             "--cpl-remote-sha256", file_sha256(Path(self.cpl_remote)),
             "--timeout", str(self.config["backend_job_timeout"]),
         ]
+        fault = cell.get("canary_fault")
+        if fault is not None:
+            binding = self.config.get("canary_definition")
+            definition = (_read_pinned(
+                Path(binding.get("path", "")), binding.get("sha256", ""),
+                "canary definition",
+            ) if isinstance(binding, dict) else {})
+            declared = next((
+                item for item in definition.get("canaries", [])
+                if isinstance(item, dict) and item.get("id") == cell.get("cell_id")
+            ), None)
+            if (fault != "interrupt-after-dispatch-once"
+                    or cell.get("task") != "matmul"
+                    or not isinstance(declared, dict)
+                    or declared.get("treatment") != cell.get("treatment")
+                    or "checkpoint-resume" not in declared.get("required_evidence", [])):
+                raise ProductionError("canary observer fault is not declared")
+            job_client.extend([
+                "--canary-interrupt-after-dispatch-once",
+                str((state / "canary-observer-interrupt.json").resolve()),
+            ])
         backend = [
             sys.executable, str(self.scripts / "benchmark_backend.py"),
             "--benchmark", cell["task"], "--job-client-json", json.dumps(job_client),
@@ -926,6 +1008,13 @@ class ProductionCellLauncher:
         if verified.get("branch") != expected_branch:
             raise ProductionError("independent audited verifier returned the wrong branch")
         return verified
+
+    def verify(self, cell: dict) -> dict:
+        """Independently verify one retained cell through the pinned verifier."""
+        repo = self.run_root / cell["cell_id"] / "repo"
+        if not repo.is_dir():
+            raise ProductionError("retained cell repository is unavailable")
+        return self._verify(repo, cell)
 
     def _receipt(self, repo: Path, verified: dict) -> dict:
         rounds = []
@@ -1035,7 +1124,7 @@ class ProductionCellLauncher:
         seed_only = existing and checkpoint is None and self._is_seed_only_resume(repo, cell)
         if existing and checkpoint is None and not seed_only:
             try:
-                return self._receipt(repo, self._verify(repo, cell))
+                return self._receipt(repo, self.verify(cell))
             except ProductionError as error:
                 raise self.infrastructure_failure_type(
                     f"existing branch has no valid blocked checkpoint and is not complete: {error}"
@@ -1090,7 +1179,7 @@ class ProductionCellLauncher:
         finally:
             invoker.scrub_auth()
         try:
-            return self._receipt(repo, self._verify(repo, cell))
+            return self._receipt(repo, self.verify(cell))
         except ProductionError as error:
             raise self.infrastructure_failure_type(str(error)) from error
 
@@ -1151,6 +1240,7 @@ def main(argv: list[str] | None = None) -> int:
             "attestation_sha256": args.migration_attestation_sha256,
         }]
     config = _read_pinned(args.runtime_config, args.runtime_config_sha256, "runtime config")
+    immutable_runtime_config_sha256 = document_sha256(config)
     if config.get("schema") != RUNTIME_SCHEMA:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")
     manifest = json.loads(args.manifest.read_text())
@@ -1169,6 +1259,7 @@ def main(argv: list[str] | None = None) -> int:
     if manifest.get("request_budget") == 48:
         gate = validate_canary_gate(
             config, args.canary_results, args.canary_results_sha256,
+            immutable_runtime_config_sha256,
         )
         _retain_canary_gate(config, gate)
     from audited_campaign import InfrastructureFailure, run_campaign

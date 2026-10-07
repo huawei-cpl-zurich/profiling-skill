@@ -118,7 +118,7 @@ def profile_job(tmp_path: Path):
     }
 
 
-def client(tmp_path: Path, transport, placements=None):
+def client(tmp_path: Path, transport, placements=None, interrupt_marker=None):
     module = transport.module if transport is not None else load()
     placements = placements or {"0": {"target": "bz-a3-2", "device": 3}}
     return module, module.BzA3JobClient(
@@ -127,6 +127,7 @@ def client(tmp_path: Path, transport, placements=None):
         profiler=ROOT / "scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/srv/profiling-skill-production",
+        interrupt_after_dispatch=interrupt_marker,
     )
 
 
@@ -527,6 +528,42 @@ def test_crash_after_dispatch_persistence_resumes_exact_handle_without_redispatc
     assert resumed.uploads == [] and resumed.executions == []
     assert resumed.observations[0][:2] == (
         "bz-a3-2", "remote:bz-a3-2:job:job-1")
+
+
+def test_canary_interrupts_pending_dispatch_until_explicit_observe(tmp_path: Path):
+    module = load()
+    marker = tmp_path / "canary/observer-interrupt.json"
+    first_transport = FakeTransport(module)
+    _module, first = client(tmp_path, first_transport, interrupt_marker=marker)
+
+    job = profile_job(tmp_path)
+    Path(job["candidate"]).with_name("candidate.manifest.json").write_text("{}\n")
+    interrupted = first.run(job, operation_mode="submit",
+                            controller_request_sha256="9" * 64)
+    replayed = first.run(job, operation_mode="submit",
+                         controller_request_sha256="9" * 64)
+
+    assert interrupted["status"] == replayed["status"] == "infrastructure_error"
+    assert interrupted["handle"] == replayed["handle"] == (
+        "remote:bz-a3-2:job:job-1"
+    )
+    assert first_transport.observations == []
+    retained = json.loads(marker.read_text())
+    assert retained["schema"] == "profiling-skill/canary-observer-interrupt/v1"
+    assert retained["handle"] == interrupted["handle"]
+    assert retained["controller_request_sha256"] == "9" * 64
+    assert len(retained["job_request_sha256"]) == 64
+
+    resumed_transport = FakeTransport(module)
+    _module, resumed = client(tmp_path, resumed_transport, interrupt_marker=marker)
+    result = resumed.run(job, operation_mode="observe",
+                         controller_request_sha256="9" * 64)
+
+    assert result["status"] == "ok"
+    assert resumed_transport.uploads == [] and resumed_transport.executions == []
+    assert resumed_transport.observations[0][:2] == (
+        "bz-a3-2", "remote:bz-a3-2:job:job-1"
+    )
 
 
 def test_client_digest_provenance_prevents_completed_cache_reuse(tmp_path: Path):

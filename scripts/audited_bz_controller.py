@@ -93,10 +93,21 @@ class SubprocessBackend:
         self.command, self.cwd, self.timeout = command, cwd, timeout
 
     def __call__(self, request: dict) -> dict:
+        return self._invoke(request, observe=False)
+
+    def observe(self, request: dict) -> dict:
+        return self._invoke(request, observe=True)
+
+    def _invoke(self, request: dict, *, observe: bool) -> dict:
+        environment = dict(os.environ)
+        environment.pop("PROFILING_SKILL_CONTROLLER_MODE", None)
+        environment["PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"] = _json_sha(request)
+        if observe:
+            environment["PROFILING_SKILL_CONTROLLER_MODE"] = "observe"
         try:
             run = subprocess.run(
                 self.command, cwd=self.cwd, input=json.dumps(request), text=True,
-                capture_output=True, timeout=self.timeout, check=False,
+                capture_output=True, timeout=self.timeout, check=False, env=environment,
             )
         except subprocess.TimeoutExpired as failure:
             output = (failure.stdout or "") + (failure.stderr or "")
@@ -318,7 +329,9 @@ class AuditedBzController:
             )
         else:
             mode = "submit"
-        result = self.backend(request)
+        observe = getattr(self.backend, "observe", None)
+        result = observe(request) if mode == "observe" and callable(observe) \
+            else self.backend(request)
         if not isinstance(result, dict):
             result = {"status": "infrastructure_error", "failure_type": "protocol_error",
                       "diagnostics": "backend response is not an object", "handle": None}

@@ -648,6 +648,15 @@ class ProductionCellLauncher:
             sys.executable, str(self.scripts / "validate_audited_experiment.py"),
             str(repo), "--base", self.config["provenance"]["source_revision"],
         ]
+        if (self._migration_attestation is not None
+                and any(isinstance(item, dict)
+                        and item.get("cell_id") == cell["cell_id"]
+                        for item in self._migration_attestation.get("cells", []))):
+            trust = self.trusted_runtime_migration
+            command.extend([
+                "--migration-proof", trust["attestation_path"],
+                trust["attestation_file_sha256"], trust["attestation_sha256"],
+            ])
         try:
             result = self.verifier_invoke(
                 command, text=True, capture_output=True,

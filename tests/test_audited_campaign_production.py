@@ -474,6 +474,22 @@ def test_launcher_authenticates_and_forwards_external_migration_trust(tmp_path: 
             "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
     config = runtime_fixture(tmp_path, cell)
     config_path, config_sha256, trusted = migration_trust_fixture(tmp_path, config)
+    attestation_path = Path(trusted["attestation_path"])
+    attestation = json.loads(attestation_path.read_text())
+    attestation["cells"] = [{"cell_id": cell["cell_id"]}]
+    attestation["attestation_sha256"] = production.document_sha256({
+        key: value for key, value in attestation.items()
+        if key != "attestation_sha256"
+    })
+    attestation_path.write_text(json.dumps(attestation, sort_keys=True) + "\n")
+    trusted["attestation_file_sha256"] = sha(attestation_path)
+    trusted["attestation_sha256"] = attestation["attestation_sha256"]
+    verifier_commands = []
+
+    def recording_verifier(*args, **kwargs):
+        verifier_commands.append(args[0])
+        return valid_verifier(*args, **kwargs)
+
     TrustRecordingRunner.calls.clear()
     launcher = production_launcher(
         config, trusted_runtime_migration=trusted,
@@ -481,13 +497,18 @@ def test_launcher_authenticates_and_forwards_external_migration_trust(tmp_path: 
         invoker_factory=lambda repo, **kwargs: SimpleNamespace(
             scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
         controller_factory=lambda *args, **kwargs: object(),
-        runner_factory=TrustRecordingRunner, verifier_invoke=valid_verifier,
+        runner_factory=TrustRecordingRunner, verifier_invoke=recording_verifier,
     )
 
     receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 0})
 
     assert receipt["status"] == "complete"
     assert TrustRecordingRunner.trusted == trusted
+    proof_index = verifier_commands[-1].index("--migration-proof")
+    assert verifier_commands[-1][proof_index + 1:] == [
+        trusted["attestation_path"], trusted["attestation_file_sha256"],
+        trusted["attestation_sha256"],
+    ]
 
 
 @pytest.mark.parametrize("defect", [

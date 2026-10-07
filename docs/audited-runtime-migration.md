@@ -71,6 +71,23 @@ config match the active pinned runtime before it constructs an agent or
 controller. Ordinary campaigns omit all three arguments and retain their
 existing provenance checks.
 
+The independent verifier receives the same trust tuple for a completed
+migrated branch. Repeat `--migration-proof` in transition order when a branch
+crossed more than one authenticated runtime boundary:
+
+```console
+python scripts/validate_audited_experiment.py /path/to/branch \
+  --base BASE_REVISION \
+  --migration-proof /absolute/path/to/preflight.json \
+    ATTESTATION_FILE_SHA256 ATTESTATION_SHA256
+```
+
+Each proof must bind the branch's exact cell, seed commit, transition round,
+resume parent, and old/new controller identities. Without a matching proof,
+every experiment must retain the exact controller identity recorded in the
+seed. The production launcher supplies a cell's authenticated proof
+automatically after a migrated run completes.
+
 The plan schema is `profiling-skill/audited-runtime-migration-plan/v1`. Its
 top-level fields are `migration_id`, `run_root`, `ledger_sha256`,
 `old_runtime`, `new_runtime`, and `cells`. Runtime bindings contain

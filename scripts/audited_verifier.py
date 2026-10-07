@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from typing import Sequence
 
 from audited_contract import (
     AuditError,
@@ -40,6 +41,11 @@ COMMAND_FIELDS = {
     "command", "exit_code", "output_sha256", "output_excerpt", "output_truncated",
 }
 _HASH = re.compile(r"[0-9a-f]{64}")
+MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
+MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
+MIGRATION_TRUST_FIELDS = {
+    "schema", "attestation_path", "attestation_file_sha256", "attestation_sha256",
+}
 
 
 def _run(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -197,7 +203,79 @@ def _validate_commit_paths(repo: Path, parent: str, commit: str, root: str,
         raise AuditError("experiment commit changed files outside its retained evidence")
 
 
-def validate_branch(repo: Path, base: str = "main") -> dict:
+def _migration_chain(repo: Path, proofs: Sequence[dict], *, branch: str,
+                     agent_id: str, seed_commit: str, seed_provenance: dict,
+                     experiment_commits: list[str], round_count: int) -> tuple[list[dict], list[dict]]:
+    """Authenticate ordered controller transitions and derive per-round provenance."""
+    expected = json.loads(json.dumps(seed_provenance))
+    per_round = [json.loads(json.dumps(expected)) for _ in range(round_count)]
+    summaries: list[dict] = []
+    previous_boundary = 0
+    for proof in proofs:
+        try:
+            if (not isinstance(proof, dict) or set(proof) != MIGRATION_TRUST_FIELDS
+                    or proof.get("schema") != MIGRATION_TRUST_SCHEMA
+                    or not _hash(proof.get("attestation_file_sha256"))
+                    or not _hash(proof.get("attestation_sha256"))):
+                raise AuditError("migration proof trust binding is invalid")
+            path_text = proof.get("attestation_path")
+            path = Path(path_text)
+            if (not isinstance(path_text, str) or not path.is_absolute()
+                    or path.resolve().is_relative_to(repo) or not path.is_file()):
+                raise AuditError("migration proof attestation path is invalid")
+            raw = path.read_bytes()
+            attestation = json.loads(raw)
+            if not isinstance(attestation, dict):
+                raise AuditError("migration proof attestation must be an object")
+            seal = attestation.get("attestation_sha256")
+            unsealed = {key: value for key, value in attestation.items()
+                        if key != "attestation_sha256"}
+            cells = [cell for cell in attestation.get("cells", [])
+                     if isinstance(cell, dict) and cell.get("cell_id") == agent_id]
+            if (attestation.get("schema") != MIGRATION_ATTESTATION_SCHEMA
+                    or not isinstance(attestation.get("migration_id"), str)
+                    or not attestation["migration_id"]
+                    or not _hash(attestation.get("plan_sha256"))
+                    or sha256_bytes(raw) != proof["attestation_file_sha256"]
+                    or seal != proof["attestation_sha256"] or not _hash(seal)
+                    or sha256_json(unsealed) != seal or len(cells) != 1):
+                raise AuditError("migration proof attestation is invalid")
+            cell = cells[0]
+            boundary = cell.get("experiment")
+            expected_parent = (seed_commit if boundary == 1
+                               else experiment_commits[boundary - 2]
+                               if type(boundary) is int and 1 < boundary <= round_count
+                               else None)
+            old_identity, new_identity = (
+                cell.get("old_controller_identity"), cell.get("new_controller_identity")
+            )
+            _validate_provenance({"agent": expected["agent"], "controller": new_identity})
+            if (type(boundary) is not int or not 1 <= boundary <= round_count
+                    or boundary <= previous_boundary
+                    or cell.get("branch") != branch
+                    or cell.get("seed_commit") != seed_commit
+                    or cell.get("resume_parent") != expected_parent
+                    or old_identity != expected["controller"]
+                    or new_identity == old_identity):
+                raise AuditError("migration proof cell or transition boundary is invalid")
+            expected = {"agent": expected["agent"], "controller": new_identity}
+            for index in range(boundary - 1, round_count):
+                per_round[index] = json.loads(json.dumps(expected))
+            summaries.append({
+                "migration_id": attestation.get("migration_id"),
+                "experiment": boundary, "attestation_sha256": seal,
+            })
+            previous_boundary = boundary
+        except AuditError:
+            raise
+        except (AttributeError, IndexError, KeyError, OSError, TypeError, ValueError,
+                json.JSONDecodeError) as failure:
+            raise AuditError("migration proof is malformed") from failure
+    return per_round, summaries
+
+
+def validate_branch(repo: Path, base: str = "main", *,
+                    migration_proofs: Sequence[dict] = ()) -> dict:
     """Validate retained evidence without importing or invoking the experiment runner."""
     repo = repo.resolve()
     if _git(repo, "status", "--porcelain"):
@@ -234,6 +312,12 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
             f"audited branch must contain exactly one seed and {round_count} linear commits"
         )
     provenance = _validate_provenance(seed["reproducibility"])
+    round_provenance, migrations = _migration_chain(
+        repo, migration_proofs, branch=branch, seed_commit=seed_commit,
+        agent_id=seed["agent_id"], seed_provenance=provenance,
+        experiment_commits=experiment_commits,
+        round_count=round_count,
+    )
     prompt, task = _blob(repo, seed_commit, "PROMPT.md"), _blob(repo, seed_commit, "TASK.md")
     seed_bytes = _blob(repo, seed_commit, ".experiment/seed.json")
     if (sha256_bytes(prompt) != seed["prompt_sha256"]
@@ -281,7 +365,7 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
         if (evidence["candidate_sha256"] != evidence["tested_candidate_sha256"]
                 or evidence["prompt_sha256"] != seed["prompt_sha256"]
                 or evidence["task_sha256"] != seed["task_sha256"]
-                or evidence["reproducibility"] != provenance):
+                or evidence["reproducibility"] != round_provenance[number - 1]):
             raise AuditError(f"experiment {number} evidence provenance diverges")
         tested = evidence["tested_candidate_sha256"]
         if tested == prior_candidate:
@@ -334,4 +418,5 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
         raise AuditError("experiments did not retain one persistent session")
     return {"status": "valid", "branch": branch, "seed_commit": seed_commit,
             "round_count": round_count,
-            "session_id": sessions.pop(), "experiments": summaries}
+            "session_id": sessions.pop(), "experiments": summaries,
+            "controller_migrations": migrations}

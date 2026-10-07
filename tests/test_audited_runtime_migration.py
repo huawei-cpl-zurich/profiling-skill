@@ -21,6 +21,14 @@ migration = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
 sys.modules[SPEC.name] = migration
 SPEC.loader.exec_module(migration)
+APPLY_SPEC = importlib.util.spec_from_file_location(
+    "audited_runtime_migration_apply",
+    ROOT / "scripts" / "audited_runtime_migration_apply.py",
+)
+migration_apply = importlib.util.module_from_spec(APPLY_SPEC)
+assert APPLY_SPEC.loader
+sys.modules[APPLY_SPEC.name] = migration_apply
+APPLY_SPEC.loader.exec_module(migration_apply)
 
 def sha_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -434,3 +442,99 @@ def test_lifecycle_rejects_untrusted_runtime_migrations(campaign, defect):
         git(repo, "commit", "--amend", "--no-edit")
     with pytest.raises(lifecycle.AuditError, match="runtime migration|agent identity"):
         runner._resume("run", cell["cell_id"])
+
+
+def apply_inputs(campaign):
+    attestation_path = campaign["plan"].with_name("apply-attestation.json")
+    checked = migration.run(campaign["plan"], attestation_path)
+    attestation = json.loads(attestation_path.read_text())
+    trusted = {
+        "schema": migration_apply.TRUST_SCHEMA,
+        "attestation_path": str(attestation_path),
+        "attestation_file_sha256": checked["attestation_sha256"],
+        "attestation_sha256": attestation["attestation_sha256"],
+    }
+    return attestation_path, trusted, campaign["plan"].with_name("transaction")
+
+
+def test_apply_archives_and_repairs_only_attested_cells(campaign):
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    root = campaign["root"]
+    immutable_before = migration.digest_tree(root / "matmul-project-cannbot")
+    cells_before = {}
+    for cell in campaign["document"]["cells"]:
+        repo = root / cell["cell_id"] / "repo"
+        cells_before[cell["cell_id"]] = {
+            "parent": git(repo, "rev-parse", "HEAD^"),
+            "candidate": sha(repo / "candidate.py"),
+            "manifest": sha(repo / "candidate.manifest.json"),
+        }
+
+    result = migration_apply.apply(campaign["plan"], attestation_path,
+                                   trusted, transaction)
+    repeated = migration_apply.apply(campaign["plan"], attestation_path,
+                                     trusted, transaction)
+
+    assert result["status"] == repeated["status"] == "complete"
+    assert migration.digest_tree(root / "matmul-project-cannbot") == immutable_before
+    journal = json.loads((transaction / "journal.json").read_text())
+    assert journal["status"] == "complete" and len(journal["completed"]) == 8
+    assert len(journal["events"]) == 16
+    archive = transaction / "archive"
+    manifest = json.loads((archive / "manifest.json").read_text())
+    assert all(sha(archive / path) == digest for path, digest in manifest["files"].items())
+    ledger = json.loads((root / "ledger.json").read_text())
+    for cell in campaign["document"]["cells"]:
+        cell_id = cell["cell_id"]
+        repo = root / cell_id / "repo"
+        blocked = json.loads((repo / ".experiment/blocked.json").read_text())
+        state_path = migration._state_path(root, cell)
+        state = json.loads(state_path.read_text())
+        original = json.loads((archive / cell_id / "controller-state.json").read_text())
+        assert state["pending"] is None and state["measurement_generation"] == 2
+        assert state["operations"] == original["operations"][:-1]
+        assert state["excluded_harness_evidence"][-1]["operation"] == original["operations"][-1]
+        assert blocked["receipt"] == {} and blocked["controller_submissions"] == 0
+        assert blocked["runtime_migration"]["original_blocked_json"] == (
+            archive / cell_id / "blocked.json").read_text()
+        assert git(repo, "rev-parse", "HEAD^") == cells_before[cell_id]["parent"]
+        assert sha(repo / "candidate.py") == cells_before[cell_id]["candidate"]
+        assert sha(repo / "candidate.manifest.json") == cells_before[cell_id]["manifest"]
+        latest = ledger["cells"][cell_id]["attempts"][-1]
+        assert latest["retryable"] is True and "durable_handle" not in latest
+    first = campaign["document"]["cells"][0]
+    repo = root / first["cell_id"] / "repo"
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, repo / "PROMPT.md", repo / "TASK.md",
+        Component(seed["reproducibility"]["agent"]),
+        Component(first["new_controller_identity"]), round_count=4,
+        trusted_runtime_migration=result["trusted_runtime_migration"],
+    )
+    resumed = runner._resume("run", first["cell_id"])
+    assert resumed["receipt"] == {} and resumed["controller_submissions"] == 0
+
+
+@pytest.mark.parametrize("phase", [
+    "archive", "controller:bsa-project-guarded", "checkpoint:gdn-cannbot", "ledger",
+])
+def test_apply_recovers_interrupted_phases(campaign, phase):
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    with pytest.raises(migration_apply.ApplyError, match="injected interruption"):
+        migration_apply.apply(campaign["plan"], attestation_path, trusted,
+                              transaction, interrupt_after=phase)
+
+    result = migration_apply.apply(campaign["plan"], attestation_path,
+                                   trusted, transaction)
+
+    assert result["status"] == "complete"
+    assert json.loads((transaction / "journal.json").read_text())["status"] == "complete"
+
+
+def test_apply_rejects_post_attestation_drift(campaign):
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    cell = campaign["document"]["cells"][0]
+    (campaign["root"] / cell["cell_id"] / "repo/candidate.py").write_text("drift\n")
+
+    with pytest.raises(migration.MigrationError):
+        migration_apply.apply(campaign["plan"], attestation_path, trusted, transaction)

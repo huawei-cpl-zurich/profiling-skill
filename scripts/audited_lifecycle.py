@@ -31,6 +31,7 @@ STARTER_SELECTOR = "REPLACE_WITH_EXACT_EXPORTED_KERNEL"
 MIGRATION_CITATION_SCHEMA = "profiling-skill/audited-runtime-migration-citation/v1"
 MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
+MIGRATION_RETRY_REASON = "audited selector-runtime migration prepared a fresh profile attempt"
 
 
 def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
@@ -128,8 +129,10 @@ def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
             raise AuditError("runtime migration cell or controller identity is invalid")
         continuation = citation.get("continuation")
         if continuation is None:
-            if state.get("experiment") != cell.get("experiment") \
-                    or current_without_citation != original:
+            migrated = {**original, "reason": MIGRATION_RETRY_REASON, "receipt": {},
+                        "controller_submissions": 0, "measurement_attempts": 0}
+            if (state.get("experiment") != cell.get("experiment")
+                    or current_without_citation not in (original, migrated)):
                 raise AuditError("runtime migration initial checkpoint is invalid")
         else:
             state_sha = sha256_json(current_without_citation)

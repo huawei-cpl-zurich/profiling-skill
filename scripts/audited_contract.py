@@ -111,6 +111,21 @@ def _is_number(value: object) -> bool:
     )
 
 
+def _selector_identity(value: dict, context: str) -> tuple[str, str]:
+    kernel = value.get("kernel_name")
+    explicit = ("declared_kernel_name" in value or "resolved_kernel_name" in value)
+    declared = value.get("declared_kernel_name") if explicit else kernel
+    resolved = value.get("resolved_kernel_name") if explicit else kernel
+    valid = (isinstance(kernel, str) and bool(kernel) and kernel == declared
+             and isinstance(resolved, str) and bool(resolved)
+             and (resolved == declared
+                  or any(declared == resolved + suffix
+                         for suffix in ("_mix_aic", "_mix_aiv"))))
+    if not valid:
+        raise AuditError(f"{context} timing selector identity is invalid")
+    return declared, resolved
+
+
 def _timing_summary(samples: object, sample_count: object, median: object,
                     threshold: object, variability: object, context: str) -> float:
     if (
@@ -371,6 +386,7 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
         if accepted not in {"primary", "confirmation"} or not isinstance(primary, dict):
             raise AuditError("accepted timing selection is invalid")
         proofs = {"primary": primary, "confirmation": confirmation}
+        selector_identities = {}
         for name, proof in proofs.items():
             if proof is None:
                 continue
@@ -382,13 +398,16 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
                     or not isinstance(proof.get("case_results"), list)
                     or not isinstance(proof.get("compact_artifacts"), list)):
                 raise AuditError(f"{name} timing identity is invalid")
+            selector_identities[name] = _selector_identity(proof, name)
             _timing_summary(
                 proof.get("samples_us"), proof.get("sample_count"), proof.get("median_us"),
                 policy["variability_threshold"], proof.get("variability_ratio"), name,
             )
         selected = proofs.get(accepted)
+        published_identity = _selector_identity(receipt, "published")
         if (selected is None or receipt.get("handle") != selected["handle"]
                 or receipt.get("kernel_name") != selected["kernel_name"]
+                or published_identity != selector_identities[accepted]
                 or receipt.get("samples_us") != selected["samples_us"]
                 or receipt.get("median_us") != selected["median_us"]
                 or receipt.get("case_results") != selected["case_results"]
@@ -396,7 +415,7 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
             raise AuditError("published timing does not match the accepted capture")
         if accepted == "confirmation":
             if (count != 1 or confirmation is None
-                    or primary["kernel_name"] != confirmation["kernel_name"]
+                    or selector_identities["primary"] != selector_identities["confirmation"]
                     or [row.get("case") for row in primary["case_results"]]
                     != [row.get("case") for row in confirmation["case_results"]]
                     or primary["variability_ratio"] <= policy["variability_threshold"]):

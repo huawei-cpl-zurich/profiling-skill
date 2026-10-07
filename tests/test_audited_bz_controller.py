@@ -113,6 +113,10 @@ def test_success_runs_controls_full_final_check_and_three_profile_repetitions(tm
     assert backend.requests[1]["cases"] == list(range(10))
     assert backend.requests[2]["repeats"] == 3
     assert receipt["case_results"][0]["case"] == 7
+    assert receipt["declared_kernel_name"] == "kernel"
+    assert receipt["resolved_kernel_name"] == "kernel"
+    assert receipt["policy"]["primary"]["declared_kernel_name"] == "kernel"
+    assert receipt["policy"]["primary"]["resolved_kernel_name"] == "kernel"
     expected = [
         math.exp(sum(math.log(value) for value in sample) / 3)
         for sample in zip([10.0, 20.0, 40.0], [11.0, 21.0, 41.0], [12.0, 22.0, 42.0])
@@ -258,13 +262,15 @@ def test_stable_confirmation_replaces_noisy_primary_as_accepted_evidence(tmp_pat
     repo, candidate_hash, manifest_hash = repository(tmp_path)
     cases = [7, 8, 9]
     noisy = {
-        "status": "ok", "handle": "bz-a3-1:primary", "kernel_name": "kernel",
+        "status": "ok", "handle": "bz-a3-1:primary", "kernel_name": "kernel_mix_aiv",
+        "declared_kernel_name": "kernel_mix_aiv", "resolved_kernel_name": "kernel",
         "cases": [{"case": case, "samples_us": [1.0, 10.0, 100.0],
                    "median_us": 10.0} for case in cases],
         "artifacts": {"remote_profile_evidence": "/remote/primary.json"},
     }
     stable = {
-        "status": "ok", "handle": "bz-a3-1:confirmation", "kernel_name": "kernel",
+        "status": "ok", "handle": "bz-a3-1:confirmation", "kernel_name": "kernel_mix_aiv",
+        "declared_kernel_name": "kernel_mix_aiv", "resolved_kernel_name": "kernel",
         "cases": [{"case": case, "samples_us": [5.0, 5.0, 5.0],
                    "median_us": 5.0} for case in cases],
         "artifacts": {"remote_profile_evidence": "/remote/confirmation.json"},
@@ -281,6 +287,9 @@ def test_stable_confirmation_replaces_noisy_primary_as_accepted_evidence(tmp_pat
     assert receipt["median_us"] == pytest.approx(5.0)
     assert receipt["case_results"] == stable["cases"]
     assert receipt["compact_artifacts"] == ["/remote/confirmation.json"]
+    assert receipt["kernel_name"] == "kernel_mix_aiv"
+    assert receipt["declared_kernel_name"] == "kernel_mix_aiv"
+    assert receipt["resolved_kernel_name"] == "kernel"
     assert receipt["policy"]["accepted_timing"] == "confirmation"
     assert receipt["policy"]["primary"]["handle"] == "bz-a3-1:primary"
     assert receipt["policy"]["confirmation"]["handle"] == "bz-a3-1:confirmation"
@@ -305,6 +314,55 @@ def test_confirmation_kernel_identity_drift_is_infrastructure_error(tmp_path: Pa
 
     assert receipt["status"] == "infrastructure_error"
     assert "confirmation identity" in receipt["reason"]
+
+
+def test_confirmation_resolved_selector_drift_is_infrastructure_error(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    cases = [7, 8, 9]
+    rows = [{"case": case, "samples_us": [1.0, 10.0, 100.0],
+             "median_us": 10.0} for case in cases]
+    noisy = {"status": "ok", "handle": "bz-a3-1:primary",
+             "kernel_name": "kernel_mix_aiv", "declared_kernel_name": "kernel_mix_aiv",
+             "resolved_kernel_name": "kernel", "cases": rows}
+    drifted = {"status": "ok", "handle": "bz-a3-1:confirmation",
+               "kernel_name": "kernel_mix_aiv", "declared_kernel_name": "kernel_mix_aiv",
+               "resolved_kernel_name": "kernel_mix_aiv",
+               "cases": [{"case": case, "samples_us": [5.0, 5.0, 5.0],
+                          "median_us": 5.0} for case in cases]}
+    backend = FakeBackend([None, None, noisy, drifted])
+
+    receipt = make_controller(repo, backend, variability_threshold=0.1).run(
+        1, candidate_hash, manifest_hash)
+
+    assert receipt["status"] == "infrastructure_error"
+    assert "confirmation identity" in receipt["reason"]
+
+
+def test_receipt_contract_rejects_published_resolved_selector_drift(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    receipt = make_controller(repo, FakeBackend()).run(1, candidate_hash, manifest_hash)
+
+    tampered = json.loads(json.dumps(receipt))
+    tampered["resolved_kernel_name"] = "different"
+    with pytest.raises(contract.AuditError, match="published timing"):
+        contract.validate_controller_receipt(tampered, candidate_hash, manifest_hash)
+
+    tampered = json.loads(json.dumps(receipt))
+    tampered["policy"]["primary"]["resolved_kernel_name"] = "different"
+    with pytest.raises(contract.AuditError, match="selector identity"):
+        contract.validate_controller_receipt(tampered, candidate_hash, manifest_hash)
+
+
+def test_receipt_contract_accepts_legacy_exact_selector_timing(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    receipt = make_controller(repo, FakeBackend()).run(1, candidate_hash, manifest_hash)
+    legacy = json.loads(json.dumps(receipt))
+    legacy.pop("declared_kernel_name")
+    legacy.pop("resolved_kernel_name")
+    legacy["policy"]["primary"].pop("declared_kernel_name")
+    legacy["policy"]["primary"].pop("resolved_kernel_name")
+
+    contract.validate_controller_receipt(legacy, candidate_hash, manifest_hash)
 
 
 def test_measurement_pending_can_remeasure_without_rechecking_candidate(tmp_path: Path):

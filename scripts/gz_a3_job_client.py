@@ -23,6 +23,14 @@ class ClientError(RuntimeError):
     pass
 
 
+def _valid_selector_mapping(declared: object, resolved: object) -> bool:
+    return (isinstance(declared, str) and bool(declared)
+            and isinstance(resolved, str) and bool(resolved)
+            and (resolved == declared
+                 or any(declared == resolved + suffix
+                        for suffix in ("_mix_aic", "_mix_aiv"))))
+
+
 def atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -123,7 +131,7 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
     if (not isinstance(declared, str) or not declared
             or evidence.get("kernel_name") != declared
             or evidence_declared != declared
-            or not isinstance(resolved, str) or not resolved
+            or not _valid_selector_mapping(declared, resolved)
             or result.get("declared_kernel_name", declared) != declared
             or result.get("resolved_kernel_name", resolved) != resolved
             or not isinstance(captures, list)

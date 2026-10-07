@@ -318,6 +318,14 @@ def _positive_number(value: object) -> bool:
             and math.isfinite(value) and value > 0)
 
 
+def _valid_selector_mapping(declared: object, resolved: object) -> bool:
+    return (isinstance(declared, str) and bool(declared)
+            and isinstance(resolved, str) and bool(resolved)
+            and (resolved == declared
+                 or any(declared == resolved + suffix
+                        for suffix in ("_mix_aic", "_mix_aiv"))))
+
+
 def _validate_profile_evidence(result: dict, job: dict) -> None:
     evidence = result.get("profile")
     rows = result.get("profile_cases")
@@ -332,7 +340,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
             or evidence.get("profiler") != "msprof-op"
             or evidence.get("kernel_name") != declared
             or evidence_declared != declared
-            or not isinstance(resolved, str) or not resolved
+            or not _valid_selector_mapping(declared, resolved)
             or result.get("declared_kernel_name", declared) != declared
             or result.get("resolved_kernel_name", resolved) != resolved
             or evidence.get("repeats") != repeats

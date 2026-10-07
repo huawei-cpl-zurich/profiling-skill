@@ -199,7 +199,28 @@ def test_profile_validator_rejects_declared_resolved_selector_drift(tmp_path: Pa
     result = json.loads(line.stdout.removeprefix("BZ_PRODUCTION_RESULT="))
     result["profile"]["declared_kernel_name"] = "gdn_kernel"
     result["profile"]["resolved_kernel_name"] = "other_kernel"
-    with pytest.raises(module.JobError, match="captures are invalid"):
+    with pytest.raises(module.JobError, match="identity mismatch"):
+        module._validate_profile_evidence(result, job)
+
+
+def test_profile_validator_rejects_consistent_but_illegal_selector_mapping(tmp_path: Path):
+    module = load()
+    job = profile_job(tmp_path)
+    job["profiling"]["kernel_name"] = "gdn_kernel_mix_aiv"
+    line, _handle = FakeTransport(module).completed("bz-a3-2")
+    result = json.loads(line.stdout.removeprefix("BZ_PRODUCTION_RESULT="))
+    result.update(kernel_name="gdn_kernel_mix_aiv",
+                  declared_kernel_name="gdn_kernel_mix_aiv",
+                  resolved_kernel_name="unrelated_kernel")
+    result["profile"].update(kernel_name="gdn_kernel_mix_aiv",
+                             declared_kernel_name="gdn_kernel_mix_aiv",
+                             resolved_kernel_name="unrelated_kernel")
+    for capture in result["profile"]["captures"]:
+        capture.update(kernel_name="unrelated_kernel",
+                       declared_kernel_name="gdn_kernel_mix_aiv",
+                       resolved_kernel_name="unrelated_kernel")
+
+    with pytest.raises(module.JobError, match="identity mismatch"):
         module._validate_profile_evidence(result, job)
 
 

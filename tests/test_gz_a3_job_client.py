@@ -320,6 +320,28 @@ def test_attach_profile_evidence_rejects_selector_identity_drift(tmp_path: Path)
             {"kernel_name": "gdn_kernel_mix_aiv", "profile_cases": rows}, path)
 
 
+def test_attach_profile_evidence_rejects_consistent_but_illegal_selector_mapping(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    evidence = {
+        "status": "success", "kernel_name": "gdn_kernel_mix_aiv",
+        "declared_kernel_name": "gdn_kernel_mix_aiv",
+        "resolved_kernel_name": "unrelated_kernel", "cases": rows,
+        "captures": [{"case": 40, "iteration": 0, "duration_us": 7.0,
+                      "kernel_name": "unrelated_kernel",
+                      "declared_kernel_name": "gdn_kernel_mix_aiv",
+                      "resolved_kernel_name": "unrelated_kernel"}],
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(evidence))
+    result = {"kernel_name": "gdn_kernel_mix_aiv",
+              "declared_kernel_name": "gdn_kernel_mix_aiv",
+              "resolved_kernel_name": "unrelated_kernel", "profile_cases": rows}
+
+    with pytest.raises(module.ClientError, match="selector identity"):
+        module.attach_profile_evidence(result, path)
+
+
 def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
     process, result = run(tmp_path, "compile_error")
     assert process.returncode == 2

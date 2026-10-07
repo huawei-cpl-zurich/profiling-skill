@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shlex
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -17,6 +19,9 @@ from audited_contract import AuditError, MAX_EXCERPT, sanitize_argv, sha256_byte
 
 MAX_RECEIPT_BYTES = 65_536
 MAX_CODEX_FAILURE_BYTES = 65_536
+MAX_TRANSIENT_RETRIES = 5
+CAPACITY_ERROR_MESSAGE = "Selected model is at capacity. Please try a different model."
+CODEX_RETRY_SCHEMA = "profiling-skill/codex-transient-retry/v1"
 _AGENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 _INTERPRETER = re.compile(r"(?:python|pypy)(?:\d+(?:\.\d+)*)?|bash|sh|node|env")
 _PATH_SUFFIXES = {".py", ".sh", ".json", ".toml", ".yaml", ".yml"}
@@ -107,6 +112,66 @@ def _thread_event_stream(value: str | bytes | None) -> str:
     return "\n".join(retained) + ("\n" if retained else "")
 
 
+def _terminal_error_message(event: dict) -> str | None:
+    error = event.get("error")
+    container = error if isinstance(error, dict) else event
+    message = container.get("message")
+    return message if isinstance(message, str) else None
+
+
+def _retryable_terminal_failure(value: str | bytes | None,
+                                expected_thread: str | None
+                                ) -> tuple[str, str] | None:
+    """Classify an explicit terminal service failure with proven zero progress."""
+    data = _stream_bytes(value)
+    if not data or len(data) > MAX_CODEX_FAILURE_BYTES:
+        return None
+    threads = set()
+    messages = set()
+    terminal = False
+    for line in data.decode(errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(event, dict):
+            return None
+        event_type = event.get("type")
+        if event_type == "thread.started":
+            thread = event.get("thread_id")
+            if not isinstance(thread, str) or not thread or len(thread) > MAX_EXCERPT:
+                return None
+            threads.add(thread)
+        elif event_type == "turn.started":
+            continue
+        elif event_type in {"turn.failed", "error"}:
+            terminal = True
+            message = _terminal_error_message(event)
+            if message is not None:
+                messages.add(message)
+        else:
+            # Item, tool, command, file-change, assistant, completed-turn, and
+            # unknown events all prove or may conceal progress.
+            return None
+    if len(threads) > 1 or messages != {CAPACITY_ERROR_MESSAGE} or not terminal:
+        return None
+    thread = next(iter(threads), expected_thread)
+    if thread is None or (expected_thread is not None and thread != expected_thread):
+        return None
+    return "server_overloaded", thread
+
+
+def _retry_evidence(stdout: str | bytes | None, stderr: str | bytes | None,
+                    attempt: int, action: str) -> dict:
+    stdout_bytes, stderr_bytes = _stream_bytes(stdout), _stream_bytes(stderr)
+    return {
+        "schema": CODEX_RETRY_SCHEMA, "terminal_error": "server_overloaded",
+        "action": action, "attempt": attempt,
+        "stdout_sha256": sha256_bytes(stdout_bytes), "stdout_bytes": len(stdout_bytes),
+        "stderr_sha256": sha256_bytes(stderr_bytes), "stderr_bytes": len(stderr_bytes),
+    }
+
+
 class CodexTurnError(AuditError):
     """Failed Codex turn with safe session evidence for same-thread recovery.
 
@@ -117,13 +182,22 @@ class CodexTurnError(AuditError):
 
     def __init__(self, message: str, *, stdout: str | bytes | None,
                  stderr: str | bytes | None, timed_out: bool,
-                 exit_code: int | None):
+                 exit_code: int | None, thread_id: str | None = None,
+                 terminal_error: str | None = None,
+                 transient_retries: int = 0,
+                 retry_evidence: Sequence[dict] = ()):
         super().__init__(message)
         stdout_bytes, stderr_bytes = _stream_bytes(stdout), _stream_bytes(stderr)
         self.structured_stdout = _thread_event_stream(stdout)
+        if thread_id and not self.structured_stdout:
+            self.structured_stdout = json.dumps(
+                {"thread_id": thread_id, "type": "thread.started"},
+                sort_keys=True, separators=(",", ":"),
+            ) + "\n"
         self.stdout = self.structured_stdout
         self.timed_out = timed_out
         self.exit_code = exit_code
+        self.retry_evidence = tuple(retry_evidence)
         self.diagnostics = {
             "stdout_sha256": sha256_bytes(stdout_bytes),
             "stdout_bytes": len(stdout_bytes),
@@ -131,6 +205,8 @@ class CodexTurnError(AuditError):
             "stderr_sha256": sha256_bytes(stderr_bytes),
             "stderr_bytes": len(stderr_bytes),
             "stderr_truncated": len(stderr_bytes) > MAX_CODEX_FAILURE_BYTES,
+            "terminal_error": terminal_error,
+            "transient_retries": transient_retries,
         }
 
 
@@ -156,6 +232,8 @@ class CodexInvoker:
         model: str = "gpt-5.6-sol",
         reasoning_effort: str = "low",
         agent_id: str = "agent",
+        transient_retry_limit: int = 2,
+        transient_retry_backoff_seconds: float = 1.0,
     ):
         self.repo = repo.resolve()
         self.timeout = timeout
@@ -164,6 +242,19 @@ class CodexInvoker:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.codex = codex
+        if (type(transient_retry_limit) is not int or transient_retry_limit < 0
+                or transient_retry_limit > MAX_TRANSIENT_RETRIES):
+            raise AuditError(
+                f"transient_retry_limit must be between 0 and {MAX_TRANSIENT_RETRIES}"
+            )
+        if (not isinstance(transient_retry_backoff_seconds, (int, float))
+                or isinstance(transient_retry_backoff_seconds, bool)
+                or not math.isfinite(transient_retry_backoff_seconds)
+                or transient_retry_backoff_seconds < 0):
+            raise AuditError("transient_retry_backoff_seconds must be finite and nonnegative")
+        self.transient_retry_limit = transient_retry_limit
+        self.transient_retry_backoff_seconds = float(transient_retry_backoff_seconds)
+        self.last_retry_evidence: tuple[dict, ...] = ()
         if not _AGENT_ID.fullmatch(agent_id):
             raise AuditError("agent_id must contain only letters, numbers, dot, dash, or underscore")
         self.agent_id = agent_id
@@ -294,57 +385,91 @@ class CodexInvoker:
         self.auth_path.unlink(missing_ok=True)
 
     def __call__(self, number: int, session_id: str | None, repair: str | None) -> str:
-        if session_id:
-            arguments = [
-                "exec", "resume", "--json", "--ignore-user-config", "-m", self.model,
-                "-c", f'model_reasoning_effort="{self.reasoning_effort}"', session_id, "-",
-            ]
-            if self.runtime_mode == "docker":
-                arguments[4:4] = ["--dangerously-bypass-approvals-and-sandbox"]
-        else:
-            arguments = [
-                "exec", "--json", "--ignore-user-config", "-m", self.model,
-                "-c", f'model_reasoning_effort="{self.reasoning_effort}"',
-            ]
-            if self.runtime_mode == "docker":
-                arguments += ["--dangerously-bypass-approvals-and-sandbox", "-C", "/workspace", "-"]
+        active_session = session_id
+
+        def invocation(active: str | None) -> tuple[list[str], dict | None]:
+            if active:
+                arguments = [
+                    "exec", "resume", "--json", "--ignore-user-config", "-m", self.model,
+                    "-c", f'model_reasoning_effort="{self.reasoning_effort}"', active, "-",
+                ]
+                if self.runtime_mode == "docker":
+                    arguments[4:4] = ["--dangerously-bypass-approvals-and-sandbox"]
             else:
-                arguments += ["--sandbox", "workspace-write", "-C", str(self.repo), "-"]
-        command = [self.codex, *arguments] if self.runtime_mode == "direct" else self.docker_command(arguments)
+                arguments = [
+                    "exec", "--json", "--ignore-user-config", "-m", self.model,
+                    "-c", f'model_reasoning_effort="{self.reasoning_effort}"',
+                ]
+                if self.runtime_mode == "docker":
+                    arguments += [
+                        "--dangerously-bypass-approvals-and-sandbox", "-C", "/workspace", "-",
+                    ]
+                else:
+                    arguments += ["--sandbox", "workspace-write", "-C", str(self.repo), "-"]
+            command = ([self.codex, *arguments] if self.runtime_mode == "direct"
+                       else self.docker_command(arguments))
+            environment = None
+            if self.runtime_mode == "direct":
+                environment = {
+                    **os.environ,
+                    "CODEX_HOME": str(self.state_dir),
+                    "HOME": str(self.private_home),
+                    "XDG_RUNTIME_DIR": str(self.runtime_dir),
+                    "TMPDIR": str(self.temp_dir),
+                }
+            return command, environment
+
         instruction = repair or (
             f"Read PROMPT.md and TASK.md. Prepare only experiment {number}: make one material "
             "candidate change, run local checks, summarize readiness, and stop for host profiling."
         )
-        environment = None
-        if self.runtime_mode == "direct":
-            environment = {
-                **os.environ,
-                "CODEX_HOME": str(self.state_dir),
-                "HOME": str(self.private_home),
-                "XDG_RUNTIME_DIR": str(self.runtime_dir),
-                "TMPDIR": str(self.temp_dir),
-            }
-        try:
-            result = subprocess.run(
-                command, cwd=self.repo, input=instruction + "\n", text=True,
-                capture_output=True, check=False, timeout=self.timeout, env=environment,
-            )
-        except subprocess.TimeoutExpired as failure:
-            raise CodexTurnError(
-                f"Codex turn timed out after {self.timeout} seconds",
-                stdout=failure.stdout, stderr=failure.stderr, timed_out=True,
-                exit_code=None,
-            ) from failure
-        except OSError as failure:
-            raise AuditError(f"Codex runtime could not start: {failure}") from failure
-        if result.returncode:
+        retries = 0
+        retained_retries = []
+        self.last_retry_evidence = ()
+        while True:
+            command, environment = invocation(active_session)
+            try:
+                result = subprocess.run(
+                    command, cwd=self.repo, input=instruction + "\n", text=True,
+                    capture_output=True, check=False, timeout=self.timeout, env=environment,
+                )
+            except subprocess.TimeoutExpired as failure:
+                raise CodexTurnError(
+                    f"Codex turn timed out after {self.timeout} seconds",
+                    stdout=failure.stdout, stderr=failure.stderr, timed_out=True,
+                    exit_code=None, thread_id=active_session,
+                    transient_retries=retries, retry_evidence=retained_retries,
+                ) from failure
+            except OSError as failure:
+                raise AuditError(f"Codex runtime could not start: {failure}") from failure
+            if not result.returncode:
+                return result.stdout
+            transient = _retryable_terminal_failure(result.stdout, active_session)
+            if transient is not None:
+                terminal_error, active_session = transient
+                if retries < self.transient_retry_limit:
+                    retained_retries.append(_retry_evidence(
+                        result.stdout, result.stderr, retries + 1, "retry",
+                    ))
+                    self.last_retry_evidence = tuple(retained_retries)
+                    delay = self.transient_retry_backoff_seconds * (2 ** retries)
+                    retries += 1
+                    time.sleep(delay)
+                    continue
+                retained_retries.append(_retry_evidence(
+                    result.stdout, result.stderr, retries + 1, "exhausted",
+                ))
+                self.last_retry_evidence = tuple(retained_retries)
+            else:
+                terminal_error = None
             label = "Docker Codex" if self.runtime_mode == "docker" else "Codex"
             raise CodexTurnError(
                 f"{label} turn failed with exit {result.returncode}",
                 stdout=result.stdout, stderr=result.stderr, timed_out=False,
-                exit_code=result.returncode,
+                exit_code=result.returncode, thread_id=active_session,
+                terminal_error=terminal_error, transient_retries=retries,
+                retry_evidence=retained_retries,
             )
-        return result.stdout
 
     def docker_command(self, codex_arguments: Sequence[str]) -> list[str]:
         """Build a Docker argv suitable for direct execution (no shell involved)."""

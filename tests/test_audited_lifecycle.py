@@ -12,6 +12,7 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import audited_contract as contract  # noqa: E402
 import audited_lifecycle as lifecycle  # noqa: E402
+import audited_verifier as verifier  # noqa: E402
 
 
 def sha(data: str | bytes) -> str:
@@ -88,6 +89,16 @@ def events(thread: str, document: dict, *, command: bool = True) -> str:
         "type": "agent_message", "text": json.dumps(document),
     }})
     return "\n".join(json.dumps(item) for item in stream) + "\n"
+
+
+def retry_evidence(action: str, attempt: int) -> dict:
+    return {
+        "schema": "profiling-skill/codex-transient-retry/v1",
+        "terminal_error": "server_overloaded", "action": action,
+        "attempt": attempt, "stdout_sha256": sha(f"stdout-{attempt}"),
+        "stdout_bytes": attempt, "stderr_sha256": sha(f"stderr-{attempt}"),
+        "stderr_bytes": attempt + 1,
+    }
 
 
 def invalid_command_events(thread: str, document: dict) -> str:
@@ -663,6 +674,71 @@ def test_invocation_timeout_checkpoints_and_resumes_finalization_session(tmp_pat
     assert subprocess.check_output(
         ["git", "rev-list", "--count", "main..HEAD"], cwd=repo, text=True
     ).strip() == "4"
+
+
+def test_successful_transient_retry_is_committed_as_distinct_audit_evidence(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    class Invoker:
+        last_retry_evidence = ()
+
+        def __call__(self, number, session, instruction):
+            self.last_retry_evidence = ()
+            if instruction is None:
+                (repo / "candidate.py").write_text("VALUE = 1\n")
+                self.last_retry_evidence = (retry_evidence("retry", 1),)
+                return events("thread-retry", {"prepared": True})
+            candidate = sha((repo / "candidate.py").read_bytes())
+            manifest = sha((repo / "candidate.manifest.json").read_bytes())
+            return events(
+                "thread-retry", report(number, candidate, manifest), command=False,
+            )
+
+    lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, Invoker(),
+        lambda number, candidate, manifest: receipt(candidate, manifest, number),
+        round_count=1,
+    ).run("retry-success", "agent")
+
+    retained = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert retained["agent_retries"] == [{
+        **retry_evidence("retry", 1), "experiment": 1, "stage": "prepare",
+    }]
+    assert "server_overloaded" not in (repo / "experiments/01/commands.jsonl").read_text()
+    assert verifier.validate_branch(repo)["status"] == "valid"
+
+
+def test_exhausted_transient_retry_is_retained_in_lifecycle_checkpoint(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    class Exhausted(RuntimeError):
+        structured_stdout = json.dumps({
+            "type": "thread.started", "thread_id": "thread-exhausted",
+        }) + "\n"
+        retry_evidence = (
+            retry_evidence("retry", 1), retry_evidence("exhausted", 2),
+        )
+
+    def invoke(number, session, instruction):
+        raise Exhausted("safe classified failure")
+
+    with pytest.raises(contract.AuditError, match="checkpointed session"):
+        lifecycle.AuditedExperimentRunner(
+            repo, prompt, task, invoke,
+            lambda number, candidate, manifest: receipt(candidate, manifest, number),
+            round_count=1,
+        ).run("retry-exhausted", "agent")
+
+    retained = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert [entry["action"] for entry in retained["agent_retries"]] == [
+        "retry", "exhausted",
+    ]
+    assert all(entry["stage"] == "prepare" for entry in retained["agent_retries"])
+    assert "safe classified failure" not in json.dumps(retained["agent_retries"])
 
 
 def test_failure_before_thread_resumes_initial_turn_on_same_seed_branch(tmp_path: Path):

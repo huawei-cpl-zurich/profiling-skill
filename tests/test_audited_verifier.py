@@ -195,6 +195,35 @@ def test_validates_complete_unmerged_branch_and_revert(tmp_path: Path):
     ]
 
 
+def test_rejects_retry_evidence_with_raw_service_message(tmp_path: Path):
+    repo = build_branch(tmp_path)
+
+    def inject(document: dict) -> None:
+        document["agent_retries"] = [{
+            "schema": "profiling-skill/codex-transient-retry/v1",
+            "terminal_error": "server_overloaded", "action": "retry",
+            "attempt": 1, "stdout_sha256": "1" * 64, "stdout_bytes": 1,
+            "stderr_sha256": "2" * 64, "stderr_bytes": 2,
+            "experiment": 3, "stage": "prepare",
+            "raw_message": "must not be retained",
+        }]
+
+    amend(repo, "experiments/03/evidence.json", lambda path: rewrite_json(path, inject))
+
+    with pytest.raises(contract.AuditError, match="agent retry evidence"):
+        verifier.validate_branch(repo)
+
+
+def test_accepts_legacy_evidence_without_retry_field(tmp_path: Path):
+    repo = build_branch(tmp_path)
+    amend(
+        repo, "experiments/03/evidence.json",
+        lambda path: rewrite_json(path, lambda document: document.pop("agent_retries")),
+    )
+
+    assert verifier.validate_branch(repo)["status"] == "valid"
+
+
 def test_validates_v2_seed_with_four_rounds(tmp_path: Path):
     repo = build_branch(tmp_path, round_count=4)
 

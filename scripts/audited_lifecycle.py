@@ -92,7 +92,9 @@ def _validate_durable_observation_checkpoint(
                      or receipt["candidate_sha256"] != candidate_hash
                      or receipt["manifest_sha256"] != manifest_hash):
         raise AuditError("blocked checkpoint receipt is invalid")
-    if "experiment" in receipt and receipt["experiment"] != experiment:
+    if "experiment" in receipt and (
+            type(receipt["experiment"]) is not int
+            or receipt["experiment"] != experiment):
         raise AuditError("blocked checkpoint receipt is invalid")
     return receipt
 

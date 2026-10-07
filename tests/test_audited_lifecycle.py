@@ -724,6 +724,9 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
     ("status", "ok"),
     ("candidate_sha256", "0" * 64),
     ("manifest_sha256", "1" * 64),
+    ("experiment", True),
+    ("experiment", 1.0),
+    ("experiment", 2),
 ])
 def test_repaired_candidate_resume_rejects_tampered_observation_receipt(
         tmp_path: Path, field: str, value: object):

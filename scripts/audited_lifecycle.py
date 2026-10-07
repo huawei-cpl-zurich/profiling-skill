@@ -20,12 +20,14 @@ from audited_contract import (
     extract_thread_id,
     parse_agent_events,
     parse_command_events,
+    redact_text,
     sha256_bytes,
     sha256_json,
     validate_controller_receipt,
 )
 
 MAX_PARTIAL_OUTPUT = 65536
+MAX_REASONING_OUTPUT = 8192
 MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 STARTER_SELECTOR = "REPLACE_WITH_EXACT_EXPORTED_KERNEL"
 MIGRATION_CITATION_SCHEMA = "profiling-skill/audited-runtime-migration-citation/v1"
@@ -111,6 +113,25 @@ def _tree_sha256(root: Path) -> str:
             digest.update(oct(stat.S_IMODE(mode)).encode() + b"\0")
             digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+def _sanitized_agent_output(output: str) -> str:
+    """Retain bounded useful agent output without credential-bearing text."""
+    retained = []
+    for line in output.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            retained.append(redact_text(line))
+            continue
+        item = event.get("item") if isinstance(event, dict) else None
+        if isinstance(item, dict):
+            for field in ("text", "command", "aggregated_output"):
+                if isinstance(item.get(field), str):
+                    item[field] = redact_text(item[field])
+        retained.append(json.dumps(event, sort_keys=True))
+    encoded = ("\n".join(retained) + ("\n" if retained else "")).encode()
+    return encoded[:MAX_REASONING_OUTPUT].decode(errors="ignore")
 
 
 def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
@@ -243,8 +264,9 @@ class AuditedExperimentRunner:
                  trusted_runtime_migration: dict | list[dict] | None = None):
         if type(round_count) is not int or round_count < 1:
             raise AuditError("round count must be a positive integer")
-        if type(max_candidate_repairs) is not int or max_candidate_repairs < 0:
-            raise AuditError("candidate repair count must be a nonnegative integer")
+        if (type(max_candidate_repairs) is not int
+                or not 0 <= max_candidate_repairs <= 2):
+            raise AuditError("candidate repair count must be an integer from zero to two")
         self.repo = repo.resolve()
         self.prompt_bytes = prompt.resolve().read_bytes()
         self.task_bytes = task.resolve().read_bytes()
@@ -261,7 +283,7 @@ class AuditedExperimentRunner:
         self.runtime_migration: dict | None = None
         self.agent_retry_evidence: tuple[dict, ...] = ()
         self.candidate_attempts: list[dict] = []
-        self.reasoning_sha256 = sha256_bytes(b"")
+        self.reasoning_output = ""
         self.reproducibility = {
             "agent": _identity(invoke), "controller": _identity(controller),
         }
@@ -295,10 +317,8 @@ class AuditedExperimentRunner:
             stage = continuing.get("stage") if continuing else "prepare"
             self.candidate_attempts = list(
                 continuing.get("candidate_attempts", ())) if continuing else []
-            self.reasoning_sha256 = (
-                continuing.get("reasoning_sha256", sha256_bytes(b""))
-                if continuing else sha256_bytes(b"")
-            )
+            self.reasoning_output = continuing.get("reasoning_output", "") \
+                if continuing else ""
 
             if not continuing:
                 session, commands = self._preparation_turn(
@@ -320,19 +340,44 @@ class AuditedExperimentRunner:
                     commands, branch, seed_commit, seed_hash, prior_hash,
                 )
 
+            recorded_terminal = bool(
+                continuing and stage == "finalize" and self.candidate_attempts
+            )
+            if recorded_terminal:
+                final = self.candidate_attempts[-1]
+                candidate_hash = final["candidate_sha256"]
+                manifest_hash = final["manifest_sha256"]
+                manifest = self.repo / "candidate.manifest.json"
+                receipt = continuing["receipt"]
             command_offset = sum(len(item["commands"]) for item in self.candidate_attempts)
-            while True:
+            while not recorded_terminal:
                 candidate_hash, manifest, commands, session = self._repair_candidate(
                     number, session, prior_hash, commands, branch, seed_commit, seed_hash,
                 )
                 manifest_hash = sha256_bytes(manifest.read_bytes())
+                if self.candidate_attempts:
+                    previous = self.candidate_attempts[-1]
+                    if (previous["status"] == "candidate_error"
+                            and (candidate_hash, manifest_hash) == (
+                                previous["candidate_sha256"],
+                                previous["manifest_sha256"],
+                            )):
+                        self._checkpoint(
+                            number, session,
+                            "candidate repair did not change candidate or manifest",
+                            "prepare", branch, seed_commit, seed_hash, prior_hash,
+                            commands,
+                        )
+                        raise AuditError(
+                            "candidate repair did not change candidate or manifest"
+                        )
                 receipt = self._controller_turn(
                     number, session, candidate_hash, manifest_hash, continuing, stage,
                     branch, seed_commit, seed_hash, prior_hash, commands,
                 )
                 self._record_candidate_attempt(
                     candidate_hash, manifest_hash, receipt,
-                    commands[command_offset:], self.reasoning_sha256,
+                    number, commands[command_offset:], self.reasoning_output,
                 )
                 command_offset = len(commands)
                 continuing = None
@@ -583,7 +628,7 @@ class AuditedExperimentRunner:
                 number, session, turn_instruction, commands, "prepare", branch,
                 seed_commit, seed_hash, prior_hash,
             )
-            self.reasoning_sha256 = sha256_bytes(output.encode())
+            self.reasoning_output = _sanitized_agent_output(output)
             session = extract_thread_id(output, session)
             try:
                 _, new_commands = parse_command_events(output, session)
@@ -598,22 +643,31 @@ class AuditedExperimentRunner:
         raise AuditError(failure)
 
     def _record_candidate_attempt(self, candidate_hash: str, manifest_hash: str,
-                                  receipt: dict, commands: tuple[dict, ...],
-                                  reasoning_sha256: str) -> None:
+                                  receipt: dict, experiment: int,
+                                  commands: tuple[dict, ...], reasoning: str) -> None:
         candidate = (self.repo / "candidate.py").read_bytes()
         manifest = (self.repo / "candidate.manifest.json").read_bytes()
-        self.candidate_attempts.append({
+        public = {
             "schema": "profiling-skill/candidate-attempt/v1",
+            "experiment": experiment,
             "attempt": len(self.candidate_attempts) + 1,
+            "prior_attempt_sha256": (
+                self.candidate_attempts[-1]["attempt_sha256"]
+                if self.candidate_attempts else None
+            ),
             "status": receipt["status"],
             "candidate_sha256": candidate_hash,
             "manifest_sha256": manifest_hash,
             "controller_receipt_sha256": sha256_json(receipt),
             "commands_sha256": sha256_json(list(commands)),
-            "reasoning_sha256": reasoning_sha256,
+            "reasoning_sha256": sha256_bytes(reasoning.encode()),
+        }
+        public["attempt_sha256"] = sha256_json(public)
+        self.candidate_attempts.append({
+            **public,
             "candidate": candidate.decode("utf-8"),
             "manifest": manifest.decode("utf-8"),
-            "receipt": receipt, "commands": list(commands),
+            "receipt": receipt, "commands": list(commands), "reasoning": reasoning,
         })
 
     def _repair_candidate(self, number: int, session: str, prior_hash: str,
@@ -726,6 +780,9 @@ class AuditedExperimentRunner:
                 }
                 if any(parsed.report.get(key) != value for key, value in expected.items()):
                     raise AuditError("final report does not cite the frozen receipt and candidate")
+                if (receipt["status"] == "candidate_error"
+                        and parsed.report["decision"] != "revert"):
+                    raise AuditError("exhausted candidate_error must be reverted")
                 if not commands:
                     raise AuditError("completed experiment contains no command evidence")
                 return ParsedEvents(parsed.thread_id, parsed.report, commands), session
@@ -830,7 +887,7 @@ class AuditedExperimentRunner:
             "agent_retries": list(self.agent_retry_evidence),
             "candidate_attempts": [
                 {key: value for key, value in attempt.items()
-                 if key not in {"candidate", "manifest", "receipt", "commands"}}
+                 if key not in {"candidate", "manifest", "receipt", "commands", "reasoning"}}
                 for attempt in self.candidate_attempts
             ],
             "final_attempt": len(self.candidate_attempts),
@@ -861,7 +918,7 @@ class AuditedExperimentRunner:
                 json.dumps(command, sort_keys=True) + "\n"
                 for command in attempt["commands"]
             ))
-            (target / "reasoning.sha256").write_text(attempt["reasoning_sha256"] + "\n")
+            (target / "reasoning.txt").write_text(attempt["reasoning"])
 
     def _checkpoint(self, number: int, session: str | None, reason: str, stage: str,
                     branch: str, seed_commit: str, seed_hash: str, prior_hash: str,
@@ -885,7 +942,7 @@ class AuditedExperimentRunner:
             "prior_candidate_sha256": prior_hash, "commands": commands,
             "agent_retries": list(self.agent_retry_evidence),
             "candidate_attempts": self.candidate_attempts,
-            "reasoning_sha256": self.reasoning_sha256,
+            "reasoning_output": self.reasoning_output,
             "receipt": receipt,
             "candidate_sha256": sha256_bytes(candidate.read_bytes()) if candidate.is_file() else None,
             "manifest_sha256": sha256_bytes(manifest.read_bytes()) if manifest.is_file() else None,
@@ -973,10 +1030,14 @@ class AuditedExperimentRunner:
                for record in agent_retries):
             raise AuditError("agent retry evidence belongs to a different experiment")
         attempts = state.get("candidate_attempts", [])
+        reasoning_output = state.get("reasoning_output", "")
         if (not isinstance(attempts, list)
                 or len(attempts) > self.max_candidate_repairs + 1
-                or not valid_hash(state.get("reasoning_sha256", sha256_bytes(b"")))):
+                or not isinstance(reasoning_output, str)
+                or len(reasoning_output.encode()) > MAX_REASONING_OUTPUT
+                or _sanitized_agent_output(reasoning_output) != reasoning_output):
             raise AuditError("blocked checkpoint candidate attempt history is invalid")
+        previous_attempt = None
         for index, attempt in enumerate(attempts, 1):
             try:
                 candidate = attempt["candidate"].encode()
@@ -985,13 +1046,16 @@ class AuditedExperimentRunner:
                 receipt = attempt["receipt"]
                 valid = (
                     set(attempt) == {
-                        "schema", "attempt", "status", "candidate_sha256",
+                        "schema", "experiment", "attempt", "prior_attempt_sha256",
+                        "attempt_sha256", "status", "candidate_sha256",
                         "manifest_sha256", "controller_receipt_sha256",
                         "commands_sha256", "reasoning_sha256", "candidate",
-                        "manifest", "receipt", "commands",
+                        "manifest", "receipt", "commands", "reasoning",
                     }
                     and attempt["schema"] == "profiling-skill/candidate-attempt/v1"
+                    and attempt["experiment"] == state["experiment"]
                     and attempt["attempt"] == index
+                    and attempt["prior_attempt_sha256"] == previous_attempt
                     and (
                         attempt["status"] == "candidate_error"
                         or (state["stage"] == "finalize" and index == len(attempts)
@@ -1001,9 +1065,20 @@ class AuditedExperimentRunner:
                     and sha256_bytes(manifest) == attempt["manifest_sha256"]
                     and sha256_json(receipt) == attempt["controller_receipt_sha256"]
                     and sha256_json(commands) == attempt["commands_sha256"]
-                    and valid_hash(attempt["reasoning_sha256"])
+                    and sha256_bytes(attempt["reasoning"].encode())
+                    == attempt["reasoning_sha256"]
+                    and isinstance(attempt["reasoning"], str)
+                    and len(attempt["reasoning"].encode()) <= MAX_REASONING_OUTPUT
+                    and _sanitized_agent_output(attempt["reasoning"])
+                    == attempt["reasoning"]
                     and isinstance(commands, list)
                 )
+                public = {key: value for key, value in attempt.items() if key not in {
+                    "attempt_sha256", "candidate", "manifest", "receipt", "commands",
+                    "reasoning",
+                }}
+                valid = (valid and valid_hash(attempt["attempt_sha256"])
+                         and sha256_json(public) == attempt["attempt_sha256"])
                 validate_controller_receipt(
                     receipt, attempt["candidate_sha256"], attempt["manifest_sha256"]
                 )
@@ -1011,6 +1086,7 @@ class AuditedExperimentRunner:
                 valid = False
             if not valid:
                 raise AuditError("blocked checkpoint candidate attempt history is invalid")
+            previous_attempt = attempt["attempt_sha256"]
         if state.get("branch") != expected_branch or _git(
             self.repo, "branch", "--show-current"
         ) != expected_branch:
@@ -1067,6 +1143,13 @@ class AuditedExperimentRunner:
             or state["receipt"].get("manifest_sha256") != state["manifest_sha256"]
         ):
             raise AuditError("blocked checkpoint receipt is invalid")
+        if state["stage"] == "finalize" and attempts:
+            final = attempts[-1]
+            if (final["candidate_sha256"] != state["candidate_sha256"]
+                    or final["manifest_sha256"] != state["manifest_sha256"]
+                    or final["controller_receipt_sha256"]
+                    != sha256_json(state["receipt"])):
+                raise AuditError("blocked checkpoint terminal attempt is invalid")
         _git(self.repo, "reset", "--mixed", "HEAD^")
         path.unlink()
         return state

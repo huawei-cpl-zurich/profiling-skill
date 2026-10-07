@@ -485,7 +485,7 @@ def test_candidate_errors_are_repaired_inside_one_experiment(
         root = repo / f"experiments/01/attempts/{attempt:02d}"
         assert {path.name for path in root.iterdir()} == {
             "candidate.py", "candidate.manifest.json", "controller.json",
-            "commands.jsonl", "reasoning.sha256",
+            "commands.jsonl", "reasoning.txt",
         }
 
 
@@ -546,6 +546,30 @@ def test_unchanged_candidate_repair_is_rejected(tmp_path: Path):
         ).run("unchanged", "agent")
 
 
+@pytest.mark.parametrize("value", [-1, 3, True])
+def test_candidate_repair_public_limit_is_zero_to_two(tmp_path: Path, value):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    with pytest.raises(contract.AuditError, match="candidate repair count"):
+        lifecycle.AuditedExperimentRunner(
+            repo, prompt, task, lambda *args: "", lambda *args: {},
+            max_candidate_repairs=value,
+        )
+
+
+@pytest.mark.parametrize("value", [0, 1, 2])
+def test_candidate_repair_public_limit_accepts_bounded_values(tmp_path: Path, value: int):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {},
+        max_candidate_repairs=value,
+    )
+    assert runner.max_candidate_repairs == value
+
+
 def test_interrupted_candidate_repair_resumes_exact_attempt_and_session(tmp_path: Path):
     repo = tmp_path / "repo"
     init_repo(repo)
@@ -594,6 +618,37 @@ def test_interrupted_candidate_repair_resumes_exact_attempt_and_session(tmp_path
     assert result.session_id == "thread-resume"
     assert len(controller_calls) == 2
     assert evidence["final_attempt"] == 2
+
+
+def test_resumed_repair_must_differ_from_last_failed_attempt(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    interrupted = True
+
+    class TurnError(RuntimeError):
+        structured_stdout = events("thread-same", {"interrupted": True})
+
+    def invoke(number, session, instruction):
+        nonlocal interrupted
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-same", {"prepared": True})
+        if instruction.startswith("Repair candidate attempt") and interrupted:
+            interrupted = False
+            raise TurnError("transport ended")
+        return events("thread-same", {"prepared": True})
+
+    def controller(number, candidate, manifest):
+        return candidate_error_receipt(candidate, manifest, number)
+
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    )
+    with pytest.raises(contract.AuditError, match="checkpointed session"):
+        runner.run("same-resume", "agent")
+    with pytest.raises(contract.AuditError, match="repair did not change"):
+        runner.run("same-resume", "agent", resume=True)
 
 
 def test_infrastructure_checkpoint_does_not_consume_candidate_repair(tmp_path: Path):
@@ -899,9 +954,49 @@ def test_invocation_timeout_checkpoints_and_resumes_finalization_session(tmp_pat
 
     assert result.branch == branch and result.session_id == "thread-timeout"
     assert controller.submissions == 3 and controller.observations == 0
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert evidence["final_attempt"] == 1
+    assert verifier.validate_branch(repo)["status"] == "valid"
     assert subprocess.check_output(
         ["git", "rev-list", "--count", "main..HEAD"], cwd=repo, text=True
     ).strip() == "4"
+
+
+def test_exhausted_candidate_error_repairs_retain_report_to_revert(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    finalizations = 0
+
+    def invoke(number, session, instruction):
+        nonlocal finalizations
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-revert", {"prepared": True})
+        if instruction.startswith("Finalize") or instruction.startswith("Repair only"):
+            finalizations += 1
+            candidate = sha((repo / "candidate.py").read_bytes())
+            manifest = sha((repo / "candidate.manifest.json").read_bytes())
+            failed = candidate_error_receipt(candidate, manifest, number)
+            document = report(
+                number, candidate, manifest, "retain" if finalizations == 1 else "revert"
+            )
+            document["controller_receipt_sha256"] = contract.sha256_json(failed)
+            return events("thread-revert", document, command=False)
+        value = int((repo / "candidate.py").read_text().split()[-1]) + 1
+        (repo / "candidate.py").write_text(f"VALUE = {value}\n")
+        return events("thread-revert", {"repaired": True})
+
+    lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke,
+        lambda number, candidate, manifest: candidate_error_receipt(
+            candidate, manifest, number
+        ), round_count=1,
+    ).run("forced-revert", "agent")
+
+    assert finalizations == 2
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert evidence["decision"] == "revert"
 
 
 def test_successful_transient_retry_is_committed_as_distinct_audit_evidence(tmp_path: Path):
@@ -935,6 +1030,35 @@ def test_successful_transient_retry_is_committed_as_distinct_audit_evidence(tmp_
         **retry_evidence("retry", 1), "experiment": 1, "stage": "prepare",
     }]
     assert "server_overloaded" not in (repo / "experiments/01/commands.jsonl").read_text()
+    assert verifier.validate_branch(repo)["status"] == "valid"
+
+
+def test_attempt_retains_bounded_sanitized_reasoning_content(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-reasoning", {
+                "prepared": True, "api_key": "must-not-survive", "detail": "x" * 9000,
+            })
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        return events("thread-reasoning", report(number, candidate, manifest), command=False)
+
+    lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke,
+        lambda number, candidate, manifest: receipt(candidate, manifest, number),
+        round_count=1,
+    ).run("reasoning", "agent")
+
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    retained = (repo / "experiments/01/attempts/01/reasoning.txt").read_bytes()
+    assert b"must-not-survive" not in retained and b"<redacted>" in retained
+    assert len(retained) <= lifecycle.MAX_REASONING_OUTPUT
+    assert sha(retained) == evidence["candidate_attempts"][0]["reasoning_sha256"]
     assert verifier.validate_branch(repo)["status"] == "valid"
 
 

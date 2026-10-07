@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -423,22 +424,39 @@ def test_accepts_legacy_evidence_without_retry_field(tmp_path: Path):
     assert verifier.validate_branch(repo)["status"] == "valid"
 
 
-def test_validates_ordered_candidate_repair_attempts_and_rejects_tampering(
+def test_rejects_actual_candidate_attempt_reordering(
     tmp_path: Path,
 ):
     repo = build_branch(tmp_path, candidate_failures=2)
 
-    result = verifier.validate_branch(repo)
-    assert result["status"] == "valid"
+    assert verifier.validate_branch(repo)["status"] == "valid"
     evidence_path = repo / "experiments/03/evidence.json"
-    rewrite_json(
-        evidence_path,
-        lambda document: document["candidate_attempts"][0].update(status="ok"),
-    )
-    git(repo, "add", "experiments/03/evidence.json")
+    rewrite_json(evidence_path, lambda document: document["candidate_attempts"].reverse())
+    attempts = repo / "experiments/03/attempts"
+    (attempts / "01").rename(attempts / "tmp")
+    (attempts / "02").rename(attempts / "01")
+    (attempts / "tmp").rename(attempts / "02")
+    git(repo, "add", "-A", "experiments/03")
     git(repo, "commit", "--amend", "--no-edit")
 
-    with pytest.raises(contract.AuditError, match="attempt.*hash|ordering"):
+    with pytest.raises(contract.AuditError, match="candidate attempt"):
+        verifier.validate_branch(repo)
+
+
+def test_rejects_cross_round_candidate_attempt_substitution(tmp_path: Path):
+    repo = build_branch(tmp_path, candidate_failures=1)
+    first = json.loads((repo / "experiments/01/evidence.json").read_text())
+    second_path = repo / "experiments/03/evidence.json"
+    second = json.loads(second_path.read_text())
+    second["candidate_attempts"][0] = first["candidate_attempts"][0]
+    second_path.write_text(json.dumps(second, indent=2, sort_keys=True) + "\n")
+    target = repo / "experiments/03/attempts/01"
+    shutil.rmtree(target)
+    shutil.copytree(repo / "experiments/01/attempts/01", target)
+    git(repo, "add", "-A", "experiments/03")
+    git(repo, "commit", "--amend", "--no-edit")
+
+    with pytest.raises(contract.AuditError, match="candidate attempt"):
         verifier.validate_branch(repo)
 
 

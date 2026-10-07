@@ -531,6 +531,35 @@ def test_apply_recovers_interrupted_phases(campaign, phase):
     assert json.loads((transaction / "journal.json").read_text())["status"] == "complete"
 
 
+@pytest.mark.parametrize("point", ["write", "add", "commit"])
+def test_apply_recovers_inside_checkpoint_amend(campaign, point):
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    phase = f"checkpoint:bsa-project-guarded:{point}"
+    with pytest.raises(migration_apply.ApplyError, match="injected interruption"):
+        migration_apply.apply(campaign["plan"], attestation_path, trusted,
+                              transaction, interrupt_after=phase)
+
+    result = migration_apply.apply(campaign["plan"], attestation_path,
+                                   trusted, transaction)
+
+    assert result["status"] == "complete"
+
+
+def test_apply_rejects_clean_candidate_drift_after_amend(campaign):
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    phase = "checkpoint:bsa-project-guarded:commit"
+    with pytest.raises(migration_apply.ApplyError, match="injected interruption"):
+        migration_apply.apply(campaign["plan"], attestation_path, trusted,
+                              transaction, interrupt_after=phase)
+    repo = campaign["root"] / "bsa-project-guarded/repo"
+    (repo / "candidate.py").write_text("clean committed drift\n")
+    git(repo, "add", "candidate.py")
+    git(repo, "commit", "--amend", "--no-edit")
+
+    with pytest.raises(migration_apply.ApplyError, match="amended checkpoint drifted"):
+        migration_apply.apply(campaign["plan"], attestation_path, trusted, transaction)
+
+
 def test_apply_rejects_post_attestation_drift(campaign):
     attestation_path, trusted, transaction = apply_inputs(campaign)
     cell = campaign["document"]["cells"][0]
@@ -538,3 +567,29 @@ def test_apply_rejects_post_attestation_drift(campaign):
 
     with pytest.raises(migration.MigrationError):
         migration_apply.apply(campaign["plan"], attestation_path, trusted, transaction)
+
+
+@pytest.mark.parametrize("mode", ["missing", "unreadable", "malformed", "nonobject"])
+def test_apply_normalizes_unreadable_attestations(campaign, mode):
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    attestation_path.unlink()
+    if mode == "unreadable":
+        attestation_path.mkdir()
+    elif mode != "missing":
+        attestation_path.write_text("{bad" if mode == "malformed" else "[]")
+
+    with pytest.raises(migration_apply.ApplyError, match="attestation"):
+        migration_apply.apply(campaign["plan"], attestation_path, trusted, transaction)
+
+
+def test_apply_cli_reports_missing_attestation_without_traceback(campaign):
+    missing = campaign["plan"].with_name("missing-attestation.json")
+    result = subprocess.run([
+        sys.executable, str(ROOT / "scripts/audited_runtime_migration_apply.py"),
+        "--plan", str(campaign["plan"]), "--attestation", str(missing),
+        "--attestation-file-sha256", "0" * 64,
+        "--attestation-sha256", "0" * 64,
+        "--transaction", str(campaign["plan"].with_name("cli-transaction")),
+    ], text=True, capture_output=True, check=False)
+    assert result.returncode == 2
+    assert "migration apply rejected" in result.stderr and "Traceback" not in result.stderr

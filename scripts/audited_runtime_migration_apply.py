@@ -52,8 +52,13 @@ def _git(repo: Path, *arguments: str) -> str:
 
 
 def _trust(attestation_path: Path, trusted: dict) -> tuple[dict, bytes]:
-    raw = attestation_path.resolve().read_bytes()
-    attestation = json.loads(raw)
+    try:
+        raw = attestation_path.resolve().read_bytes()
+        attestation = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as error:
+        raise ApplyError("trusted attestation is missing or unreadable") from error
+    if not isinstance(attestation, dict):
+        raise ApplyError("trusted attestation must be a JSON object")
     seal = attestation.get("attestation_sha256")
     unsealed = {key: value for key, value in attestation.items()
                 if key != "attestation_sha256"}
@@ -261,21 +266,44 @@ def apply(plan_path: Path, attestation_path: Path, trusted: dict,
                   new=updated_blocked, metadata=archive_manifest["commits"][cell_id],
                   name=cell_id) -> None:
             current = _json(path)
+            checkpoint_phase = f"checkpoint:{name}"
+            original_head = _git(repo, "rev-parse", "HEAD") == metadata["commit"]
+            unstaged = set(_git(repo, "diff", "--name-only").splitlines())
+            staged = set(_git(repo, "diff", "--cached", "--name-only").splitlines())
+            blocked_only = {".experiment/blocked.json"}
             if current == new:
-                if (_git(repo, "rev-parse", "HEAD^") != metadata["parent"]
-                        or _git(repo, "status", "--porcelain")):
-                    raise ApplyError(f"{name} amended checkpoint drifted")
-                return
-            if current != old or _git(repo, "rev-parse", "HEAD") != metadata["commit"] \
-                    or _git(repo, "status", "--porcelain"):
+                if original_head and (unstaged, staged) == (blocked_only, set()):
+                    pass
+                elif original_head and (unstaged, staged) == (set(), blocked_only):
+                    pass
+                elif not original_head and not unstaged and not staged:
+                    if (_git(repo, "rev-parse", "HEAD^") != metadata["parent"]
+                            or preflight.file_sha256(repo / "candidate.py")
+                            != metadata["candidate_sha256"]
+                            or preflight.file_sha256(repo / "candidate.manifest.json")
+                            != metadata["manifest_sha256"]):
+                        raise ApplyError(f"{name} amended checkpoint drifted")
+                    return
+                else:
+                    raise ApplyError(f"{name} partial checkpoint amendment drifted")
+            elif (current == old and original_head and not unstaged and not staged):
+                _atomic_json(path, new)
+                if interrupt_after == f"{checkpoint_phase}:write":
+                    raise ApplyError(f"injected interruption after {checkpoint_phase}:write")
+            else:
                 raise ApplyError(f"{name} checkpoint drifted from the archive")
-            _atomic_json(path, new)
-            _git(repo, "add", ".experiment/blocked.json")
+            if not staged:
+                _git(repo, "add", ".experiment/blocked.json")
+                if interrupt_after == f"{checkpoint_phase}:add":
+                    raise ApplyError(f"injected interruption after {checkpoint_phase}:add")
             _git(repo, "commit", "--amend", "--no-edit", "--no-verify")
+            if interrupt_after == f"{checkpoint_phase}:commit":
+                raise ApplyError(f"injected interruption after {checkpoint_phase}:commit")
             if (_git(repo, "rev-parse", "HEAD^") != metadata["parent"]
                     or preflight.file_sha256(repo / "candidate.py") != metadata["candidate_sha256"]
                     or preflight.file_sha256(repo / "candidate.manifest.json")
-                    != metadata["manifest_sha256"]):
+                    != metadata["manifest_sha256"]
+                    or _git(repo, "status", "--porcelain")):
                 raise ApplyError(f"{name} checkpoint amendment changed immutable history")
 
         _step(journal_path, journal, f"checkpoint:{cell_id}", amend, interrupt_after)

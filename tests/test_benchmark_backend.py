@@ -50,7 +50,7 @@ if mode == "echo":
                       "profile_cases": [{"case": case, "samples_us": [12.5] * job.get("repeats", 1),
                                          "median_us": 12.5} for case in job.get("cases", [])],
                       "handle": "gz-a3:job-1", **identity}))
-elif mode in {"compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
+elif mode in {"submission_error", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
     print(json.dumps({"status": mode, "diagnostics": mode + " details",
                       "handle": "gz-a3:job-2", **identity}))
 elif mode in {"wrong_identity", "wrong_check", "wrong_round"}:
@@ -296,6 +296,15 @@ def test_environment_failure_is_separate(tmp_path: Path):
     result = json.loads(run_backend(tmp_path, request(), mode="infrastructure_error").stdout)
     assert result["status"] == "infrastructure_error"
     assert result["handle"] == "gz-a3:job-2"
+
+
+def test_profile_failure_preserves_requested_cases_instead_of_missing_measurements(tmp_path: Path):
+    requested = request()
+    result = json.loads(run_backend(tmp_path, requested, mode="submission_error").stdout)
+
+    assert result["status"] == "submission_error"
+    assert result["cases"] == requested["cases"]
+    assert "profile_cases" not in result
 
 
 def test_job_result_identity_mismatch_preserves_evidence(tmp_path: Path):

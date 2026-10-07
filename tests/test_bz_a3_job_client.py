@@ -158,6 +158,51 @@ def test_profile_stages_supplement_and_returns_compact_remote_evidence(tmp_path:
     assert "--kernel-name gdn_kernel" in script
 
 
+def test_profile_selector_submission_error_is_preserved(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module, status="submission_error")
+    _module, subject = client(tmp_path, transport)
+
+    result = subject.run(profile_job(tmp_path))
+
+    assert result["status"] == "submission_error"
+    assert result["failure_type"] == "submission_error"
+    assert result["cases"] == [40, 49]
+    assert result["kernel_name"] == "gdn_kernel"
+
+
+def test_profile_validator_accepts_resolved_selector_and_legacy_exact_evidence(tmp_path: Path):
+    module = load()
+    job = profile_job(tmp_path)
+    line, _handle = FakeTransport(module).completed("bz-a3-2")
+    legacy = json.loads(line.stdout.removeprefix("BZ_PRODUCTION_RESULT="))
+    module._validate_profile_evidence(legacy, job)
+
+    job["profiling"]["kernel_name"] = "gdn_kernel_mix_aiv"
+    resolved = json.loads(json.dumps(legacy))
+    resolved.update(kernel_name="gdn_kernel_mix_aiv",
+                    declared_kernel_name="gdn_kernel_mix_aiv",
+                    resolved_kernel_name="gdn_kernel")
+    resolved["profile"].update(kernel_name="gdn_kernel_mix_aiv",
+                               declared_kernel_name="gdn_kernel_mix_aiv",
+                               resolved_kernel_name="gdn_kernel")
+    for capture in resolved["profile"]["captures"]:
+        capture.update(declared_kernel_name="gdn_kernel_mix_aiv",
+                       resolved_kernel_name="gdn_kernel")
+    module._validate_profile_evidence(resolved, job)
+
+
+def test_profile_validator_rejects_declared_resolved_selector_drift(tmp_path: Path):
+    module = load()
+    job = profile_job(tmp_path)
+    line, _handle = FakeTransport(module).completed("bz-a3-2")
+    result = json.loads(line.stdout.removeprefix("BZ_PRODUCTION_RESULT="))
+    result["profile"]["declared_kernel_name"] = "gdn_kernel"
+    result["profile"]["resolved_kernel_name"] = "other_kernel"
+    with pytest.raises(module.JobError, match="captures are invalid"):
+        module._validate_profile_evidence(result, job)
+
+
 def test_completed_receipt_is_idempotent_and_receipt_drift_is_rejected(tmp_path: Path):
     module = load()
     transport = FakeTransport(module)

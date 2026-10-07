@@ -25,7 +25,7 @@ from typing import Callable
 
 TARGETS = {"bz-a3-1", "bz-a3-2"}
 GLOBAL_CPL_REMOTE = Path(".agents/skills/remote-access/scripts/cpl-remote")
-RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error",
+RESULTS = {"ok", "submission_error", "compile_error", "runtime_error", "correctness_error",
            "infrastructure_error"}
 
 
@@ -321,11 +321,20 @@ def _positive_number(value: object) -> bool:
 def _validate_profile_evidence(result: dict, job: dict) -> None:
     evidence = result.get("profile")
     rows = result.get("profile_cases")
-    kernel = job["profiling"]["kernel_name"]
+    declared = job["profiling"]["kernel_name"]
     repeats = job["repeats"]
+    explicit_names = (isinstance(evidence, dict)
+                      and ("declared_kernel_name" in evidence
+                           or "resolved_kernel_name" in evidence))
+    evidence_declared = evidence.get("declared_kernel_name") if explicit_names else declared
+    resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
     if (not isinstance(evidence, dict) or evidence.get("status") != "success"
             or evidence.get("profiler") != "msprof-op"
-            or evidence.get("kernel_name") != kernel
+            or evidence.get("kernel_name") != declared
+            or evidence_declared != declared
+            or not isinstance(resolved, str) or not resolved
+            or result.get("declared_kernel_name", declared) != declared
+            or result.get("resolved_kernel_name", resolved) != resolved
             or evidence.get("repeats") != repeats
             or not isinstance(rows, list) or evidence.get("cases") != rows
             or len(rows) != len(job["cases"])
@@ -349,7 +358,10 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     if (not isinstance(captures, list) or len(captures) != len(expected)
             or any(not isinstance(capture, dict)
                    or (capture.get("case"), capture.get("iteration")) != identity[:2]
-                   or capture.get("kernel_name") != kernel
+                   or capture.get("kernel_name") != resolved
+                   or (explicit_names and
+                       (capture.get("declared_kernel_name") != declared
+                        or capture.get("resolved_kernel_name") != resolved))
                    or not _positive_number(capture.get("duration_us"))
                    or not math.isclose(capture["duration_us"], identity[2],
                                        rel_tol=1e-12, abs_tol=1e-12)

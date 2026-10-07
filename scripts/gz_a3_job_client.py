@@ -15,7 +15,8 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 
-VALID = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
+VALID = {"ok", "submission_error", "compile_error", "runtime_error",
+         "correctness_error", "infrastructure_error"}
 
 
 class ClientError(RuntimeError):
@@ -113,6 +114,26 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
     evidence = json.loads(evidence_path.read_text())
     if evidence.get("status") != "success":
         raise ClientError(f"msprof op did not produce valid evidence: {evidence}")
+    declared = result.get("kernel_name")
+    explicit_names = ("declared_kernel_name" in evidence
+                      or "resolved_kernel_name" in evidence)
+    evidence_declared = evidence.get("declared_kernel_name") if explicit_names else declared
+    resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
+    captures = evidence.get("captures")
+    if (not isinstance(declared, str) or not declared
+            or evidence.get("kernel_name") != declared
+            or evidence_declared != declared
+            or not isinstance(resolved, str) or not resolved
+            or result.get("declared_kernel_name", declared) != declared
+            or result.get("resolved_kernel_name", resolved) != resolved
+            or not isinstance(captures, list)
+            or any(not isinstance(capture, dict)
+                   or capture.get("kernel_name") != resolved
+                   or (explicit_names and
+                       (capture.get("declared_kernel_name") != declared
+                        or capture.get("resolved_kernel_name") != resolved))
+                   for capture in captures)):
+        raise ClientError("remote response does not match compact profiling selector identity")
     # ``cases`` is the immutable input identity on the internal wire;
     # ``profile_cases`` contains the rows exposed as ``cases`` by experimentctl.
     if result.get("profile_cases") != evidence.get("cases"):

@@ -234,7 +234,7 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
             handle=result.get("handle"),
             evidence=result,
         )
-    if job["action"] == "profile":
+    if job["action"] == "profile" and status == "ok":
         result["cases"] = result.pop("profile_cases", None)
     return result
 

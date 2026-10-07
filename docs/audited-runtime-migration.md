@@ -160,3 +160,9 @@ receipt, and the archive are sealed in the attestation. Repeating `apply` is
 idempotent, including after interruption immediately before or after the
 atomic ledger replacement. Any branch, proof, receipt, ledger, archive, or
 journal drift fails closed.
+
+The campaign scheduler and reconciler use the same adjacent ledger lock. Stop
+legacy schedulers that predate this protocol before preflight; a current
+scheduler holds the lock for its complete read/modify/write lifetime, so apply
+cannot race an active campaign. Apply also performs a final compare-and-swap
+digest check under that lock to preserve updates from non-cooperating writers.

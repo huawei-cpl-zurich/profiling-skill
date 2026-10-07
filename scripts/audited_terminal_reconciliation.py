@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import copy
+import fcntl
 import hashlib
 import json
 import os
@@ -70,6 +72,39 @@ def _atomic_json(path: Path, value: object) -> None:
         temporary.unlink(missing_ok=True)
 
 
+@contextlib.contextmanager
+def _ledger_lock(path: Path):
+    lock_path = path.with_name(f".{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def _before_ledger_commit(path: Path) -> None:
+    """Test seam for a non-cooperating writer at the final CAS boundary."""
+
+
+def _atomic_json_cas(path: Path, value: object, expected_sha256: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(_json_bytes(value))
+            stream.flush()
+            os.fsync(stream.fileno())
+        _before_ledger_commit(path)
+        if not path.is_file() or _file_sha(path) != expected_sha256:
+            raise ReconciliationError("campaign ledger changed before commit")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _read_object(path: Path, label: str) -> dict:
     try:
         value = json.loads(path.read_text())
@@ -113,8 +148,11 @@ def _verified_receipt(plan: dict) -> tuple[dict, dict]:
         )
     except AuditError as error:
         raise ReconciliationError(f"completed branch verification failed: {error}") from error
-    if verified.get("branch") != plan["branch"]:
+    seed_branch = f"experiment/{verified.get('run_id')}/{verified.get('agent_id')}"
+    if verified.get("branch") != plan["branch"] or verified.get("branch") != seed_branch:
         raise ReconciliationError("verified branch does not match the plan")
+    if verified.get("agent_id") != plan["cell_id"]:
+        raise ReconciliationError("verified seed agent does not match the ledger cell identity")
     if verified.get("round_count") != 4:
         raise ReconciliationError("reconciliation requires a completed four-round branch")
     rounds = []
@@ -153,6 +191,11 @@ def _old_ledger(plan: dict) -> tuple[dict, dict, dict]:
     if not path.is_file() or _file_sha(path) != plan["ledger_sha256"]:
         raise ReconciliationError("campaign ledger drifted from the plan")
     ledger = _read_object(path, "campaign ledger")
+    run_id = ledger.get("run_id")
+    expected_branch = f"experiment/{run_id}/{plan['cell_id']}"
+    if (not isinstance(run_id, str) or not run_id or "/" in run_id
+            or plan["branch"] != expected_branch):
+        raise ReconciliationError("repository branch and ledger identity do not match")
     cells = ledger.get("cells")
     cell = cells.get(plan["cell_id"]) if isinstance(cells, dict) else None
     attempts = cell.get("attempts") if isinstance(cell, dict) else None
@@ -166,6 +209,44 @@ def _old_ledger(plan: dict) -> tuple[dict, dict, dict]:
     if not _OLD_VERIFIER_FAILURE.fullmatch(plan["failure_reason"]):
         raise ReconciliationError("target is not the old migration-verifier failure")
     return ledger, cell, attempt
+
+
+def _is_within(path: Path, directory: Path) -> bool:
+    return path == directory or directory in path.parents
+
+
+def _input_paths(plan_path: Path, plan: dict) -> set[Path]:
+    ledger = Path(plan["ledger_path"]).resolve()
+    ledger_lock = ledger.with_name(f".{ledger.name}.lock")
+    return {plan_path, ledger, ledger_lock, *(
+        Path(proof["attestation_path"]).resolve()
+        for proof in plan["migration_proofs"]
+    )}
+
+
+def _validate_attestation_output(plan_path: Path, plan: dict, output: Path) -> None:
+    repo = Path(plan["repo_path"]).resolve()
+    if _is_within(output, repo):
+        raise ReconciliationError("attestation output must be external to the audited repo")
+    if output in _input_paths(plan_path, plan) or output == repo:
+        raise ReconciliationError("attestation output collides with a transaction input")
+    if output.exists() and not output.is_file():
+        raise ReconciliationError("attestation output must be a regular file path")
+
+
+def _validate_journal_output(plan_path: Path, plan: dict, attestation: Path,
+                             journal: Path) -> None:
+    repo = Path(plan["repo_path"]).resolve()
+    inputs = _input_paths(plan_path, plan) | {attestation}
+    if _is_within(journal, repo):
+        raise ReconciliationError("journal directory must be external to the audited repo")
+    if any(path == journal or _is_within(path, journal) for path in inputs):
+        raise ReconciliationError("journal directory collides with transaction inputs")
+    if journal.exists():
+        if not journal.is_dir():
+            raise ReconciliationError("journal output must be a dedicated directory")
+        if {path.name for path in journal.iterdir()} - {"archive.json", "journal.json"}:
+            raise ReconciliationError("journal directory is not dedicated to this transaction")
 
 
 def _replacement(ledger: dict, plan: dict, receipt: dict) -> dict:
@@ -187,6 +268,7 @@ def _replacement(ledger: dict, plan: dict, receipt: dict) -> dict:
 def preflight(plan_path: Path, attestation_path: Path) -> dict:
     plan_path, attestation_path = Path(plan_path).resolve(), Path(attestation_path).resolve()
     plan = _load_plan(plan_path)
+    _validate_attestation_output(plan_path, plan, attestation_path)
     ledger, cell, attempt = _old_ledger(plan)
     verified, receipt = _verified_receipt(plan)
     replacement = _replacement(ledger, plan, receipt)
@@ -234,6 +316,8 @@ def apply(plan_path: Path, attestation_path: Path, attestation_file_sha256: str,
     plan_path, attestation_path = Path(plan_path).resolve(), Path(attestation_path).resolve()
     journal_dir = Path(journal_dir).resolve()
     plan = _load_plan(plan_path)
+    _validate_attestation_output(plan_path, plan, attestation_path)
+    _validate_journal_output(plan_path, plan, attestation_path, journal_dir)
     attestation = _load_attestation(attestation_path, attestation_file_sha256, plan_path)
     _, receipt = _verified_receipt(plan)
     if (_document_sha(receipt) != attestation.get("receipt_sha256")
@@ -241,7 +325,6 @@ def apply(plan_path: Path, attestation_path: Path, attestation_file_sha256: str,
         raise ReconciliationError("terminal receipt drifted from the attestation")
 
     ledger_path = Path(plan["ledger_path"])
-    current_sha = _file_sha(ledger_path) if ledger_path.is_file() else ""
     before_sha, after_sha = (attestation["ledger_before_sha256"],
                              attestation["ledger_after_sha256"])
     journal_path, archive_path = journal_dir / "journal.json", journal_dir / "archive.json"
@@ -255,45 +338,48 @@ def apply(plan_path: Path, attestation_path: Path, attestation_file_sha256: str,
             or journal.get("phase") not in {"archived", "applied"}
             or any(journal.get(key) != value for key, value in identity.items())):
         raise ReconciliationError("transaction journal drifted from its inputs")
-    if current_sha == after_sha:
-        if journal is None or not archive_path.is_file() \
-                or _file_sha(archive_path) != attestation["archive_sha256"]:
-            raise ReconciliationError("applied ledger lacks its authenticated archive")
+    with _ledger_lock(ledger_path):
+        current_sha = _file_sha(ledger_path) if ledger_path.is_file() else ""
+        if current_sha == after_sha:
+            if journal is None or not archive_path.is_file() \
+                    or _file_sha(archive_path) != attestation["archive_sha256"]:
+                raise ReconciliationError("applied ledger lacks its authenticated archive")
+            _atomic_json(journal_path, {**identity, "phase": "applied"})
+            status = "already_applied" if journal.get("phase") == "applied" else "applied"
+            return {"status": status, "ledger_sha256": after_sha,
+                    "archive_sha256": attestation["archive_sha256"]}
+        if current_sha != before_sha:
+            raise ReconciliationError("campaign ledger drifted from the attested transaction")
+        if journal is not None and journal["phase"] == "applied":
+            raise ReconciliationError("applied transaction ledger was rolled back")
+
+        ledger, cell, attempt = _old_ledger(plan)
+        if ({name: _document_sha(value) for name, value in ledger["cells"].items()
+             if name != plan["cell_id"]} != attestation["non_target_cells_sha256"]
+                or _document_sha(cell) != attestation["target_before_sha256"]):
+            raise ReconciliationError("ledger cells drifted from the attestation")
+        archive = {"schema": ARCHIVE_SCHEMA, "plan_sha256": _file_sha(plan_path),
+                   "ledger_sha256": before_sha, "cell_id": plan["cell_id"],
+                   "target_cell": cell, "failure_attempt": attempt}
+        if archive_path.exists() and _file_sha(archive_path) != attestation["archive_sha256"]:
+            raise ReconciliationError("transaction archive drifted")
+        if not archive_path.exists():
+            _atomic_json(archive_path, archive)
+        _atomic_json(journal_path, {**identity, "phase": "archived"})
+        if interrupt_after == "archive":
+            raise InterruptedForTest("interrupted after archive")
+
+        replacement = _replacement(ledger, plan, receipt)
+        if (hashlib.sha256(_json_bytes(replacement)).hexdigest() != after_sha
+                or _document_sha(replacement["cells"][plan["cell_id"]]) !=
+                attestation["target_after_sha256"]):
+            raise ReconciliationError("replacement ledger does not match the attestation")
+        _atomic_json_cas(ledger_path, replacement, before_sha)
+        if interrupt_after == "ledger":
+            raise InterruptedForTest("interrupted after ledger")
         _atomic_json(journal_path, {**identity, "phase": "applied"})
-        return {"status": "already_applied" if journal.get("phase") == "applied" else "applied",
-                "ledger_sha256": after_sha, "archive_sha256": attestation["archive_sha256"]}
-    if current_sha != before_sha:
-        raise ReconciliationError("campaign ledger drifted from the attested transaction")
-    if journal is not None and journal["phase"] == "applied":
-        raise ReconciliationError("applied transaction ledger was rolled back")
-
-    ledger, cell, attempt = _old_ledger(plan)
-    if ({name: _document_sha(value) for name, value in ledger["cells"].items()
-         if name != plan["cell_id"]} != attestation["non_target_cells_sha256"]
-            or _document_sha(cell) != attestation["target_before_sha256"]):
-        raise ReconciliationError("ledger cells drifted from the attestation")
-    archive = {"schema": ARCHIVE_SCHEMA, "plan_sha256": _file_sha(plan_path),
-               "ledger_sha256": before_sha, "cell_id": plan["cell_id"],
-               "target_cell": cell, "failure_attempt": attempt}
-    if archive_path.exists() and _file_sha(archive_path) != attestation["archive_sha256"]:
-        raise ReconciliationError("transaction archive drifted")
-    if not archive_path.exists():
-        _atomic_json(archive_path, archive)
-    _atomic_json(journal_path, {**identity, "phase": "archived"})
-    if interrupt_after == "archive":
-        raise InterruptedForTest("interrupted after archive")
-
-    replacement = _replacement(ledger, plan, receipt)
-    if (hashlib.sha256(_json_bytes(replacement)).hexdigest() != after_sha
-            or _document_sha(replacement["cells"][plan["cell_id"]]) !=
-            attestation["target_after_sha256"]):
-        raise ReconciliationError("replacement ledger does not match the attestation")
-    _atomic_json(ledger_path, replacement)
-    if interrupt_after == "ledger":
-        raise InterruptedForTest("interrupted after ledger")
-    _atomic_json(journal_path, {**identity, "phase": "applied"})
-    return {"status": "applied", "ledger_sha256": after_sha,
-            "archive_sha256": attestation["archive_sha256"]}
+        return {"status": "applied", "ledger_sha256": after_sha,
+                "archive_sha256": attestation["archive_sha256"]}
 
 
 def main() -> int:

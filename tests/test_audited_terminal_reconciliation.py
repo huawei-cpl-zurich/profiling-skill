@@ -77,6 +77,12 @@ def attest(tx: dict) -> tuple[dict, str]:
     return result, file_sha(tx["attestation"])
 
 
+def repin(tx: dict, ledger: dict) -> None:
+    tx["ledger_path"].write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+    tx["plan"]["ledger_sha256"] = file_sha(tx["ledger_path"])
+    tx["plan_path"].write_text(json.dumps(tx["plan"], indent=2, sort_keys=True) + "\n")
+
+
 def test_preflight_and_apply_archive_only_target_failure(transaction):
     tx = transaction
     before_other = copy.deepcopy(tx["ledger"]["cells"]["other"])
@@ -123,6 +129,30 @@ def test_preflight_rejects_untrusted_inputs(transaction, fault):
         Path(tx["proof"]["attestation_path"]).write_text("{}\n")
 
     with pytest.raises(reconciliation.ReconciliationError):
+        reconciliation.preflight(tx["plan_path"], tx["attestation"])
+
+
+@pytest.mark.parametrize("fault", ["run", "cell", "repo"])
+def test_preflight_joins_repo_to_ledger_identity(transaction, fault):
+    tx = transaction
+    if fault == "run":
+        ledger = copy.deepcopy(tx["ledger"])
+        ledger["run_id"] = "another-run"
+        repin(tx, ledger)
+    elif fault == "cell":
+        ledger = copy.deepcopy(tx["ledger"])
+        ledger["cells"]["other-agent"] = ledger["cells"].pop("agent-a")
+        ledger["order"] = ["other-agent" if item == "agent-a" else item
+                           for item in ledger["order"]]
+        tx["plan"]["cell_id"] = "other-agent"
+        repin(tx, ledger)
+    else:
+        other_repo, _, _ = migrated_branch(tx["plan_path"].parent / "swapped", 3)
+        git(other_repo, "branch", "-m", "experiment/another-run/agent-a")
+        tx["plan"]["repo_path"] = str(other_repo.resolve())
+        tx["plan_path"].write_text(json.dumps(tx["plan"], indent=2, sort_keys=True) + "\n")
+
+    with pytest.raises(reconciliation.ReconciliationError, match="identity|branch"):
         reconciliation.preflight(tx["plan_path"], tx["attestation"])
 
 
@@ -188,3 +218,53 @@ def test_reentry_rejects_journal_drift(transaction):
     with pytest.raises(reconciliation.ReconciliationError, match="journal drift"):
         reconciliation.apply(tx["plan_path"], tx["attestation"], attestation_file_sha,
                              tx["journal"])
+
+
+def test_apply_cas_preserves_concurrent_ledger_update(transaction, monkeypatch):
+    tx = transaction
+    _, attestation_file_sha = attest(tx)
+
+    def mutate(path):
+        ledger = json.loads(path.read_text())
+        ledger["cells"]["other"]["concurrent"] = "preserve-me"
+        path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+
+    monkeypatch.setattr(reconciliation, "_before_ledger_commit", mutate)
+    with pytest.raises(reconciliation.ReconciliationError, match="changed before commit"):
+        reconciliation.apply(tx["plan_path"], tx["attestation"], attestation_file_sha,
+                             tx["journal"])
+
+    ledger = json.loads(tx["ledger_path"].read_text())
+    assert ledger["cells"]["other"]["concurrent"] == "preserve-me"
+    assert ledger["cells"]["agent-a"]["status"] == "infrastructure_pending"
+
+
+@pytest.mark.parametrize("output", ["repo", "plan", "ledger", "ledger-lock", "proof"])
+def test_preflight_rejects_output_inside_repo_or_colliding_with_inputs(transaction, output):
+    tx = transaction
+    paths = {
+        "repo": tx["repo"] / "attestation.json",
+        "plan": tx["plan_path"],
+        "ledger": tx["ledger_path"],
+        "ledger-lock": tx["ledger_path"].with_name(f".{tx['ledger_path'].name}.lock"),
+        "proof": Path(tx["proof"]["attestation_path"]),
+    }
+    with pytest.raises(reconciliation.ReconciliationError, match="output|collid"):
+        reconciliation.preflight(tx["plan_path"], paths[output])
+
+
+@pytest.mark.parametrize("journal_kind", ["inside-repo", "not-dedicated", "input-parent"])
+def test_apply_requires_external_dedicated_journal(transaction, journal_kind):
+    tx = transaction
+    _, attestation_file_sha = attest(tx)
+    if journal_kind == "inside-repo":
+        journal = tx["repo"] / "journal"
+    elif journal_kind == "input-parent":
+        journal = tx["plan_path"].parent
+    else:
+        journal = tx["journal"]
+        journal.mkdir()
+        (journal / "unrelated.txt").write_text("do not overwrite\n")
+    with pytest.raises(reconciliation.ReconciliationError, match="journal|external|dedicated"):
+        reconciliation.apply(tx["plan_path"], tx["attestation"], attestation_file_sha,
+                             journal)

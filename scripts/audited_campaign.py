@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import hashlib
 import json
 import math
@@ -232,6 +234,19 @@ def _atomic_json(path: Path, document: dict) -> None:
         temporary.unlink(missing_ok=True)
 
 
+@contextlib.contextmanager
+def _ledger_lock(path: Path):
+    """Exclude reconciliation for the full ledger read/modify/write lifetime."""
+    lock_path = path.with_name(f".{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
 def _new_ledger(manifest: dict) -> dict:
     return {
         "schema_version": 1,
@@ -312,7 +327,7 @@ def _validate_receipt(cell: dict, receipt: dict) -> None:
         raise InfrastructureFailure("complete receipt contains a candidate_error round")
 
 
-def run_campaign(
+def _run_campaign_locked(
     manifest: dict,
     ledger_path: Path,
     pool: ResourcePool,
@@ -462,6 +477,20 @@ def run_campaign(
     ledger["status"] = "complete"
     _atomic_json(ledger_path, ledger)
     return ledger
+
+
+def run_campaign(
+    manifest: dict,
+    ledger_path: Path,
+    pool: ResourcePool,
+    launcher: CellLauncher,
+    *,
+    resume: bool = False,
+) -> dict:
+    with _ledger_lock(ledger_path):
+        return _run_campaign_locked(
+            manifest, ledger_path, pool, launcher, resume=resume,
+        )
 
 
 def build_report(manifest: dict, ledger: dict) -> dict:

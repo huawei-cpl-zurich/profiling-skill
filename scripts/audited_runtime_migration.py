@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import stat
 import subprocess
@@ -14,6 +15,7 @@ from pathlib import Path
 
 PLAN_SCHEMA = "profiling-skill/audited-runtime-migration-plan/v1"
 RECORD_SCHEMA = "profiling-skill/audited-runtime-migration/v1"
+ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 ALLOWED_CELLS = {
     "bsa-project-guarded": 3,
     "gdn-cannbot": 1,
@@ -64,6 +66,13 @@ def _json(path: Path, label: str) -> dict:
     return value
 
 
+def _atomic_json(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    os.replace(temporary, path)
+
+
 def _git(repo: Path, *arguments: str) -> str:
     result = subprocess.run(
         ["git", *arguments], cwd=repo, text=True, capture_output=True, check=False,
@@ -106,14 +115,29 @@ def _state_path(root: Path, cell: dict) -> Path:
     return root / cell["cell_id"] / "state" / "controller" / key / "state.json"
 
 
-def _validate_controller_identity(identity: dict, runtime: Path, label: str) -> None:
+def _validate_controller_identity(identity: dict, runtime: Path, root: Path,
+                                  cell_id: str, label: str) -> None:
     identity = _identity(identity, label)
-    scripts = [item for item in identity.get("file_arguments", [])
-               if isinstance(item, dict)
-               and Path(item.get("path", "")).name == "audited_bz_controller.py"]
-    expected = (runtime / "audited_bz_controller.py").resolve()
-    if (len(scripts) != 1 or Path(scripts[0].get("path", "")).resolve() != expected
-            or scripts[0].get("sha256") != file_sha256(expected)):
+    script = (runtime / "audited_bz_controller.py").resolve()
+    config = (root / cell_id / "state/controller.json").resolve()
+    state = (root / cell_id / "state/controller").resolve()
+    argv, files, mutable = (identity.get(name) for name in
+                            ("argv", "file_arguments", "mutable_directories"))
+    indexed = {item.get("argument_index"): item for item in files
+               if isinstance(item, dict)} if isinstance(files, list) else {}
+    directories = {item.get("argument_index"): item for item in mutable
+                   if isinstance(item, dict)} if isinstance(mutable, list) else {}
+    if (not isinstance(argv, list) or len(argv) != 6
+            or not isinstance(argv[0], str) or not argv[0]
+            or argv[1:] != [str(script), "--config", str(config), "--state-dir", str(state)]
+            or len(files) != 2 or len(mutable) != 1
+            or set(indexed) != {1, 3} or set(directories) != {5}
+            or Path(indexed[1].get("path", "")).resolve() != script
+            or indexed[1].get("sha256") != file_sha256(script)
+            or Path(indexed[3].get("path", "")).resolve() != config
+            or not re.fullmatch(r"[0-9a-f]{64}", str(indexed[3].get("sha256", "")))
+            or Path(directories[5].get("path", "")).resolve() != state
+            or (label == "new" and indexed[3]["sha256"] != file_sha256(config))):
         raise MigrationError(f"{label} controller identity does not match runtime")
 
 
@@ -136,13 +160,15 @@ def _load_plan(path: Path) -> tuple[dict, Path, Path, Path]:
         raise MigrationError("migration cell allowlist must exactly match the approved cells")
     _, old_runtime = _runtime(plan.get("old_runtime"), "old")
     _, new_runtime = _runtime(plan.get("new_runtime"), "new")
-    if old_runtime == new_runtime:
-        raise MigrationError("old and new runtime closures must be distinct")
+    old, new = plan["old_runtime"], plan["new_runtime"]
+    if (old.get("config_sha256") == new.get("config_sha256")
+            or old.get("closure_sha256") == new.get("closure_sha256")):
+        raise MigrationError("old and new runtime config/closure require distinct digests")
     return plan, root, old_runtime, new_runtime
 
 
-def _validate_cell(root: Path, cell: dict, old_runtime: Path,
-                   new_runtime: Path) -> None:
+def _validate_cell(root: Path, ledger: dict, cell: dict, old_runtime: Path,
+                   new_runtime: Path) -> dict:
     cell_id, experiment = cell["cell_id"], cell["experiment"]
     repo = root / cell_id / "repo"
     blocked_path = repo / ".experiment" / "blocked.json"
@@ -171,6 +197,24 @@ def _validate_cell(root: Path, cell: dict, old_runtime: Path,
         raise MigrationError(f"{cell_id} checkpoint fingerprint does not match")
     reason, receipt = blocked.get("reason"), blocked.get("receipt")
     pending, operations = state.get("pending"), state.get("operations")
+    expected_cases = ([40, 49, 47, 46, 45] if cell_id == "gdn-cannbot"
+                      else [47, 46, 49, 44, 43])
+    request = pending.get("request") if isinstance(pending, dict) else None
+    generation = state.get("measurement_generation")
+    expected_attempt = f"experiment-{experiment}-measurement-{generation}-primary"
+    if (state.get("schema") != "profiling-skill/audited-bz-controller-state/v1"
+            or state.get("experiment") != experiment
+            or state.get("candidate_sha256") != cell["candidate_sha256"]
+            or state.get("manifest_sha256") != cell["manifest_sha256"]
+            or state.get("stage") != "profile" or type(generation) is not int
+            or generation < 0 or not isinstance(request, dict)
+            or request.get("protocol_version") != 1
+            or request.get("benchmark") != ("gdn" if cell_id == "gdn-cannbot" else "bsa")
+            or request.get("action") != "profile" or request.get("round") != experiment
+            or request.get("cases") != expected_cases or request.get("repeats") != 3
+            or request.get("attempt_id") != expected_attempt
+            or type(request.get("device")) is not int or request["device"] < 0):
+        raise MigrationError(f"{cell_id} controller state semantics do not match")
     if (reason != cell.get("failure_reason") or not isinstance(reason, str)
             or _FAILURE.fullmatch(reason) is None
             or not isinstance(receipt, dict) or receipt.get("status") != "infrastructure_error"
@@ -178,9 +222,8 @@ def _validate_cell(root: Path, cell: dict, old_runtime: Path,
             or receipt.get("handle") != cell.get("durable_handle")
             or not isinstance(pending, dict)
             or pending.get("handle") != cell.get("durable_handle")
-            or not isinstance(pending.get("request"), dict)
-            or pending["request"].get("action") != "profile"
-            or document_sha256(pending["request"]) != cell.get("request_sha256")
+            or receipt.get("reason") != reason
+            or document_sha256(request) != cell.get("request_sha256")
             or not isinstance(operations, list) or not operations):
         raise MigrationError(f"{cell_id} selector failure fingerprint does not match")
     operation = operations[-1]
@@ -188,32 +231,89 @@ def _validate_cell(root: Path, cell: dict, old_runtime: Path,
             or operation.get("request_sha256") != cell.get("request_sha256")
             or operation.get("failure_type") != "profile_tool_error"
             or operation.get("diagnostics") != reason
-            or operation.get("handle") != cell.get("durable_handle")):
+            or operation.get("handle") != cell.get("durable_handle")
+            or operation.get("request") != request
+            or operation.get("status") != "infrastructure_error"
+            or operation.get("terminal") is not False
+            or operation.get("mode") not in {"submit", "retry_submit", "observe"}):
         raise MigrationError(f"{cell_id} request sha256 fingerprint does not match")
+    ledger_state = ledger.get("cells", {}).get(cell_id)
+    attempts = ledger_state.get("attempts") if isinstance(ledger_state, dict) else None
+    latest = attempts[-1] if isinstance(attempts, list) and attempts else None
+    if (not isinstance(ledger_state, dict)
+            or ledger_state.get("status") != "infrastructure_pending"
+            or not isinstance(latest, dict)
+            or latest.get("status") != "infrastructure_error"
+            or latest.get("durable_handle") != cell["durable_handle"]
+            or not isinstance(latest.get("error"), str) or not latest["error"]
+            or document_sha256(latest) != cell.get("ledger_attempt_sha256")):
+        raise MigrationError(f"{cell_id} ledger attempt does not match checkpoint")
     seed = _json(repo / ".experiment" / "seed.json", f"{cell_id} seed")
     old_identity = seed.get("reproducibility", {}).get("controller")
     if old_identity != cell.get("old_controller_identity"):
         raise MigrationError(f"{cell_id} old controller identity does not match seed")
-    _validate_controller_identity(cell["old_controller_identity"], old_runtime, "old")
-    _validate_controller_identity(cell["new_controller_identity"], new_runtime, "new")
-def run(plan_path: Path) -> dict:
+    _validate_controller_identity(
+        cell["old_controller_identity"], old_runtime, root, cell_id, "old",
+    )
+    _validate_controller_identity(
+        cell["new_controller_identity"], new_runtime, root, cell_id, "new",
+    )
+    return {key: cell[key] for key in (
+        "cell_id", "experiment", "checkpoint_commit", "candidate_sha256",
+        "manifest_sha256", "blocked_sha256", "controller_state_sha256",
+        "ledger_attempt_sha256", "durable_handle", "request_sha256",
+        "failure_reason", "old_controller_identity", "new_controller_identity",
+    )}
+
+
+def _run(plan_path: Path, attestation_path: Path) -> dict:
     plan_path = plan_path.resolve()
     plan, root, old_runtime, new_runtime = _load_plan(plan_path)
+    if attestation_path.resolve().is_relative_to(root):
+        raise MigrationError("attestation output must be outside the campaign run root")
     ledger_path = root / "ledger.json"
     if file_sha256(ledger_path) != plan.get("ledger_sha256"):
         raise MigrationError("ledger sha256 does not match")
-    for cell in plan["cells"]:
-        _validate_cell(root, cell, old_runtime, new_runtime)
-    return {"status": "ready", "cells": sorted(ALLOWED_CELLS)}
+    ledger = _json(ledger_path, "campaign ledger")
+    cells = [_validate_cell(root, ledger, cell, old_runtime, new_runtime)
+             for cell in plan["cells"]]
+    runtime_bindings = {}
+    for label, tree in (("old", old_runtime), ("new", new_runtime)):
+        binding = plan[f"{label}_runtime"]
+        runtime_bindings[label] = {
+            **binding, "config_path": str(Path(binding["config_path"]).resolve()),
+            "runtime_path": str(tree.resolve()),
+        }
+    attestation = {
+        "schema": ATTESTATION_SCHEMA, "migration_id": plan["migration_id"],
+        "plan_sha256": file_sha256(plan_path),
+        "ledger_sha256": plan["ledger_sha256"], "runtimes": runtime_bindings,
+        "cells": cells,
+    }
+    attestation["attestation_sha256"] = document_sha256(attestation)
+    _atomic_json(attestation_path.resolve(), attestation)
+    return {"status": "ready", "cells": sorted(ALLOWED_CELLS),
+            "attestation": str(attestation_path.resolve()),
+            "attestation_sha256": file_sha256(attestation_path.resolve())}
+
+
+def run(plan_path: Path, attestation_path: Path) -> dict:
+    try:
+        return _run(plan_path, attestation_path)
+    except MigrationError:
+        raise
+    except (AttributeError, KeyError, TypeError, ValueError, OSError) as error:
+        raise MigrationError(f"migration input is malformed: {error}") from error
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
+    parser.add_argument("--attestation", type=Path, required=True)
     parser.add_argument("--check", action="store_true", required=True)
     args = parser.parse_args(argv)
     try:
-        result = run(args.plan)
+        result = run(args.plan, args.attestation)
     except MigrationError as error:
         parser.exit(2, f"migration rejected: {error}\n")
     print(json.dumps(result, sort_keys=True))

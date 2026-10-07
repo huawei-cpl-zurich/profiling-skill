@@ -104,7 +104,9 @@ def make_repo(root: Path, cell: str, experiment: int, old_runtime: Path,
     parent = git(repo, "rev-parse", "HEAD")
     request = {
         "protocol_version": 1, "benchmark": "gdn" if cell.startswith("gdn") else "bsa",
-        "device": 0, "action": "profile", "cases": [40 if cell.startswith("gdn") else 47],
+        "device": 0, "action": "profile",
+        "cases": ([40, 49, 47, 46, 45] if cell.startswith("gdn")
+                  else [47, 46, 49, 44, 43]),
         "repeats": 3, "round": experiment,
         "attempt_id": f"experiment-{experiment}-measurement-1-primary",
     }
@@ -160,7 +162,7 @@ def campaign(tmp_path: Path) -> dict:
             root, cell, experiment, Path(old["runtime_scripts"]["path"]), reason,
             str(index) * 64, str(index + 3) * 64, f"remote:bz-a3-1:job:{index}",
         )
-        new_controller_config = root / cell / "state" / "controller-v4.json"
+        new_controller_config = root / cell / "state" / "controller.json"
         write_json(new_controller_config, {"runtime": "new", "cell": cell})
         new_identity = controller_identity(
             Path(new["runtime_scripts"]["path"]) / "audited_bz_controller.py",
@@ -184,10 +186,12 @@ def campaign(tmp_path: Path) -> dict:
             )["reproducibility"]["controller"],
             "new_controller_identity": new_identity,
         })
-        ledger_cells[cell] = {"status": "infrastructure_pending", "attempts": [{
+        latest_attempt = {
             "target": "bz-a3-1", "device": index, "status": "infrastructure_error",
             "durable_handle": blocked["receipt"]["handle"], "error": reason,
-        }]}
+        }
+        plan_cells[-1]["ledger_attempt_sha256"] = migration.document_sha256(latest_attempt)
+        ledger_cells[cell] = {"status": "infrastructure_pending", "attempts": [latest_attempt]}
     immutable = root / "matmul-project-cannbot"
     immutable.mkdir()
     (immutable / "result.json").write_text('{"status":"complete"}\n')
@@ -213,9 +217,12 @@ def campaign(tmp_path: Path) -> dict:
 
 
 def test_check_is_read_only_and_preserves_non_targets(campaign):
-    checked = migration.run(campaign["plan"])
+    attestation = campaign["plan"].with_name("attestation.json")
+    checked = migration.run(campaign["plan"], attestation)
     assert checked["status"] == "ready"
+    assert checked["attestation_sha256"] == sha(attestation)
     assert migration.digest_tree(campaign["root"] / "matmul-project-cannbot") == campaign["immutable_sha"]
+
 
 
 @pytest.mark.parametrize("field", [
@@ -228,7 +235,7 @@ def test_check_rejects_each_fingerprint_mismatch(campaign, field):
     bad = campaign["plan"].with_name(f"bad-{field}.json")
     write_json(bad, plan)
     with pytest.raises(migration.MigrationError, match=field.replace("_", " ") + "|fingerprint"):
-        migration.run(bad)
+        migration.run(bad, bad.with_suffix(".attestation"))
 
 
 def test_exact_allowlist_and_runtime_hashes_fail_closed(campaign):
@@ -237,9 +244,65 @@ def test_exact_allowlist_and_runtime_hashes_fail_closed(campaign):
     bad = campaign["plan"].with_name("bad-allowlist.json")
     write_json(bad, plan)
     with pytest.raises(migration.MigrationError, match="allowlist"):
-        migration.run(bad)
+        migration.run(bad, bad.with_suffix(".attestation"))
     plan = copy.deepcopy(campaign["document"])
     plan["new_runtime"]["closure_sha256"] = "0" * 64
     write_json(bad, plan)
     with pytest.raises(migration.MigrationError, match="runtime closure"):
-        migration.run(bad)
+        migration.run(bad, bad.with_suffix(".attestation"))
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda plan: plan.update({"run_root": []}),
+    lambda plan: plan.update({"old_runtime": "bad"}),
+    lambda plan: plan["cells"][0].pop("candidate_sha256"),
+    lambda plan: plan["cells"].insert(0, None),
+])
+def test_malformed_plans_are_classified_without_tracebacks(campaign, mutation):
+    plan = copy.deepcopy(campaign["document"])
+    mutation(plan)
+    bad = campaign["plan"].with_name("malformed.json")
+    write_json(bad, plan)
+    with pytest.raises(migration.MigrationError):
+        migration.run(bad, bad.with_suffix(".attestation"))
+
+
+def test_controller_state_and_ledger_semantics_are_validated(campaign):
+    cell = campaign["document"]["cells"][0]
+    root = campaign["root"]
+    key = sha_bytes(f"{cell['experiment']}:{cell['candidate_sha256']}:{cell['manifest_sha256']}".encode())
+    state_path = root / cell["cell_id"] / "state/controller" / key / "state.json"
+    state = json.loads(state_path.read_text())
+    state["stage"] = "check"
+    write_json(state_path, state)
+    cell["controller_state_sha256"] = sha(state_path)
+    write_json(campaign["plan"], campaign["document"])
+    with pytest.raises(migration.MigrationError, match="controller state semantics"):
+        migration.run(campaign["plan"], campaign["plan"].with_suffix(".attestation"))
+
+
+def test_noop_runtime_digest_and_ledger_attempt_are_rejected(campaign):
+    plan = copy.deepcopy(campaign["document"])
+    plan["new_runtime"] = copy.deepcopy(plan["old_runtime"])
+    bad = campaign["plan"].with_name("noop.json")
+    write_json(bad, plan)
+    with pytest.raises(migration.MigrationError, match="distinct digests"):
+        migration.run(bad, bad.with_suffix(".attestation"))
+    plan = copy.deepcopy(campaign["document"])
+    plan["cells"][0]["ledger_attempt_sha256"] = "0" * 64
+    write_json(bad, plan)
+    with pytest.raises(migration.MigrationError, match="ledger attempt"):
+        migration.run(bad, bad.with_suffix(".attestation"))
+
+
+def test_controller_identity_binds_cell_config_and_state_paths(campaign):
+    plan = copy.deepcopy(campaign["document"])
+    identity = plan["cells"][0]["new_controller_identity"]
+    identity["argv"][3] += ".other"
+    identity["identity_sha256"] = migration.document_sha256({
+        key: value for key, value in identity.items() if key != "identity_sha256"
+    })
+    bad = campaign["plan"].with_name("bad-controller-path.json")
+    write_json(bad, plan)
+    with pytest.raises(migration.MigrationError, match="controller identity"):
+        migration.run(bad, bad.with_suffix(".attestation"))

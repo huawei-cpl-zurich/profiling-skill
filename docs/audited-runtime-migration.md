@@ -15,10 +15,14 @@ manifest, controller-state document, durable handle, failed request, and exact
 failure text. Check mode performs every validation without writing:
 
 ```console
-python scripts/audited_runtime_migration.py --plan migration.json --check
+python scripts/audited_runtime_migration.py \
+  --plan migration.json --attestation preflight.json --check
 ```
 
-The preflight never mutates the campaign. Archival, checkpoint amendment,
+The preflight never mutates the campaign. It writes a sealed attestation that
+binds the plan, exact cell state, controller identities, and independently
+revalidated runtime configuration and closure digests. Lifecycle consumption,
+archival, checkpoint amendment,
 controller-state advancement, and ledger retry publication are a dependent
 transactional step and must consume this same validated plan contract.
 
@@ -30,11 +34,11 @@ top-level fields are `migration_id`, `run_root`, `ledger_sha256`,
 - `cell_id`, `experiment`, and `checkpoint_commit`
 - `blocked_sha256` and `controller_state_sha256`
 - `candidate_sha256` and `manifest_sha256`
-- `durable_handle`, `request_sha256`, and `failure_reason`
+- `durable_handle`, `request_sha256`, `ledger_attempt_sha256`, and
+  `failure_reason`
 - complete `old_controller_identity` and `new_controller_identity` documents
 
 The new controller identity must be captured after materializing the frozen
-new runtime and the cell's new controller configuration. On resume, lifecycle
-validation keeps the agent identity exact and accepts controller drift only
-when the amended checkpoint binds the seed controller and current controller
-to those exact old/new identities and runtime hashes.
+new runtime and the cell's new controller configuration. A dependent lifecycle
+consumer must revalidate this sealed artifact before accepting controller
+identity drift; this producer does not weaken the existing resume policy.

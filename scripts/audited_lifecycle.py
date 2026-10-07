@@ -57,6 +57,36 @@ def _identity(component: object) -> dict:
     return {"adapter": name, "identity_sha256": sha256_bytes(name.encode())}
 
 
+def _reproducibility_matches(seed: dict, current: dict, checkpoint: dict) -> bool:
+    """Allow controller drift only through an exact audited migration binding."""
+    if seed == current:
+        return True
+    migration = checkpoint.get("runtime_migration")
+    old = migration.get("old") if isinstance(migration, dict) else None
+    new = migration.get("new") if isinstance(migration, dict) else None
+    hashes = tuple(
+        binding.get(name) if isinstance(binding, dict) else None
+        for binding in (old, new)
+        for name in ("runtime_config_sha256", "runtime_closure_sha256")
+    )
+    valid_hashes = all(
+        isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+        for value in hashes
+    )
+    return bool(
+        isinstance(migration, dict)
+        and migration.get("schema") == "profiling-skill/audited-runtime-migration/v1"
+        and isinstance(migration.get("migration_id"), str)
+        and migration["migration_id"]
+        and valid_hashes and old != new
+        and seed.get("agent") == current.get("agent")
+        and migration.get("agent_identity_sha256")
+        == seed.get("agent", {}).get("identity_sha256")
+        and isinstance(old, dict) and old.get("controller") == seed.get("controller")
+        and isinstance(new, dict) and new.get("controller") == current.get("controller")
+    )
+
+
 @dataclass(frozen=True)
 class RunResult:
     status: str
@@ -709,7 +739,9 @@ class AuditedExperimentRunner:
         current_reproducibility = {
             "agent": _identity(self.invoke), "controller": _identity(self.controller),
         }
-        if seed.get("reproducibility") != current_reproducibility:
+        if not _reproducibility_matches(
+            seed.get("reproducibility", {}), current_reproducibility, state,
+        ):
             raise AuditError("current reproducibility metadata differs from experiment seed")
         if state["stage"] in {"controller", "measurement", "finalize"} and (
             sha256_bytes((self.repo / "candidate.py").read_bytes()) != state["candidate_sha256"]

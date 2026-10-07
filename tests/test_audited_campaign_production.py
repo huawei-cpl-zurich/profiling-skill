@@ -409,6 +409,124 @@ class FakeRunner:
                                commits=("1", "2", "3", "4"))
 
 
+def migration_trust_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, dict]:
+    """Create the external trust inputs produced by the migration apply command."""
+    old_closure = "a" * 64
+    config["provenance"]["controller_sha256"] = old_closure
+    config_path = tmp_path / "runtime-v4.json"
+    config_path.write_text(json.dumps(config, sort_keys=True) + "\n")
+    config_sha256 = sha(config_path)
+    attestation = {
+        "schema": "profiling-skill/audited-runtime-preflight/v1",
+        "plan_sha256": "b" * 64,
+        "runtimes": {
+            "old": {"closure_sha256": old_closure},
+            "new": {
+                "config_path": str(config_path.resolve()),
+                "config_sha256": config_sha256,
+                "closure_sha256": config["runtime_scripts"]["sha256"],
+            },
+        },
+        "cells": [],
+    }
+    attestation["attestation_sha256"] = production.document_sha256(attestation)
+    attestation_path = tmp_path / "migration-attestation.json"
+    attestation_path.write_text(json.dumps(attestation, sort_keys=True) + "\n")
+    trusted = {
+        "schema": "profiling-skill/audited-runtime-migration-trust/v1",
+        "attestation_path": str(attestation_path.resolve()),
+        "attestation_file_sha256": sha(attestation_path),
+        "attestation_sha256": attestation["attestation_sha256"],
+    }
+    return config_path, config_sha256, trusted
+
+
+class TrustRecordingRunner(FakeRunner):
+    trusted = None
+
+    def __init__(self, *args, round_count, trusted_runtime_migration):
+        super().__init__(*args, round_count=round_count)
+        type(self).trusted = trusted_runtime_migration
+
+
+def test_launcher_authenticates_and_forwards_external_migration_trust(tmp_path: Path):
+    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    config_path, config_sha256, trusted = migration_trust_fixture(tmp_path, config)
+    TrustRecordingRunner.calls.clear()
+    launcher = production_launcher(
+        config, trusted_runtime_migration=trusted,
+        runtime_config_path=config_path, runtime_config_sha256=config_sha256,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(),
+        runner_factory=TrustRecordingRunner, verifier_invoke=valid_verifier,
+    )
+
+    receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 0})
+
+    assert receipt["status"] == "complete"
+    assert TrustRecordingRunner.trusted == trusted
+
+
+@pytest.mark.parametrize("defect", [
+    "missing-trust", "missing-config-binding", "trust-file-hash", "trust-seal",
+    "attestation-seal", "old-closure", "new-closure", "new-config-path",
+    "new-config-hash",
+])
+def test_launcher_rejects_untrusted_mixed_runtime_before_invoker(
+        tmp_path: Path, defect: str):
+    cell = {"cell_id": "bsa-project-guarded", "task": "bsa",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    config_path, config_sha256, trusted = migration_trust_fixture(tmp_path, config)
+    kwargs = {"runtime_config_path": config_path,
+              "runtime_config_sha256": config_sha256}
+    if defect == "missing-trust":
+        trusted = None
+        kwargs = {}
+    elif defect == "missing-config-binding":
+        kwargs.pop("runtime_config_path")
+    elif defect.startswith("trust-"):
+        trusted["attestation_file_sha256" if defect == "trust-file-hash"
+                else "attestation_sha256"] = "0" * 64
+    else:
+        attestation_path = Path(trusted["attestation_path"])
+        attestation = json.loads(attestation_path.read_text())
+        if defect == "attestation-seal":
+            attestation["attestation_sha256"] = "0" * 64
+        elif defect == "old-closure":
+            attestation["runtimes"]["old"]["closure_sha256"] = "0" * 64
+        elif defect == "new-closure":
+            attestation["runtimes"]["new"]["closure_sha256"] = "0" * 64
+        elif defect == "new-config-path":
+            attestation["runtimes"]["new"]["config_path"] = str(tmp_path / "other.json")
+        else:
+            attestation["runtimes"]["new"]["config_sha256"] = "0" * 64
+        if defect != "attestation-seal":
+            attestation["attestation_sha256"] = production.document_sha256({
+                key: value for key, value in attestation.items()
+                if key != "attestation_sha256"
+            })
+            trusted["attestation_sha256"] = attestation["attestation_sha256"]
+        attestation_path.write_text(json.dumps(attestation, sort_keys=True) + "\n")
+        trusted["attestation_file_sha256"] = sha(attestation_path)
+    invocations = []
+
+    with pytest.raises(production.ProductionError, match="migration|controller provenance"):
+        production_launcher(
+            config, trusted_runtime_migration=trusted, **kwargs,
+            invoker_factory=lambda *args, **kw: invocations.append((args, kw)),
+            controller_factory=lambda *args, **kw: object(), runner_factory=FakeRunner,
+        )
+    assert invocations == []
+
+
 def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Path):
     cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
             "treatment": "project-guarded", "round_count": 4, "request_budget": 24,

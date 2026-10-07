@@ -13,6 +13,7 @@ import pytest
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import audited_lifecycle as lifecycle  # noqa: E402
+import audited_campaign_production as production  # noqa: E402
 
 SPEC = importlib.util.spec_from_file_location(
     "audited_runtime_migration", ROOT / "scripts" / "audited_runtime_migration.py"
@@ -513,6 +514,125 @@ def test_apply_archives_and_repairs_only_attested_cells(campaign):
     )
     resumed = runner._resume("run", first["cell_id"])
     assert resumed["receipt"] == {} and resumed["controller_submissions"] == 0
+
+
+class RetryableLaunchFailure(RuntimeError):
+    def __init__(self, message, durable_handle=None):
+        super().__init__(message)
+        self.durable_handle = durable_handle
+
+
+class ResumeProbe(lifecycle.AuditedExperimentRunner):
+    resumed = []
+
+    def run(self, run_id, agent_id, *, resume=False):
+        assert resume is True
+        type(self).resumed.append(self._resume(run_id, agent_id))
+
+
+class ProductionInvoker(Component):
+    def __init__(self, identity, image):
+        super().__init__(identity)
+        self.docker_image_id = image
+
+    def scrub_auth(self):
+        pass
+
+
+def applied_production_launcher(campaign, tmp_path: Path, monkeypatch):
+    cell_plan = campaign["document"]["cells"][0]
+    repo = campaign["root"] / cell_plan["cell_id"] / "repo"
+    runtime = json.loads(Path(
+        campaign["document"]["new_runtime"]["config_path"]
+    ).read_text())["runtime_scripts"]
+    config = {
+        "schema": production.RUNTIME_SCHEMA,
+        "run_id": "run", "run_root": str(campaign["root"]),
+        "runtime_scripts": runtime,
+        "provenance": {
+            "controller_sha256": campaign["document"]["old_runtime"]["closure_sha256"],
+        },
+        "runtime_mode": "docker", "runtime_image_digest": "sha256:" + "e" * 64,
+        "agent_turn_timeout": 20, "controller_transaction_timeout": 15,
+        "verifier_timeout": 20, "backend_job_timeout": 10, "timeout_grace": 2,
+        "auth_home": str(tmp_path / "auth"), "model": "model",
+        "reasoning_effort": "low",
+        "prompt": {"path": str(repo / "PROMPT.md"),
+                   "sha256": sha(repo / "PROMPT.md")},
+        "tasks": {"bsa": {"path": str(repo / "TASK.md"),
+                            "sha256": sha(repo / "TASK.md")}},
+    }
+    remote_closure_sha256 = "f" * 64
+    config["cpl_remote_closure_sha256"] = remote_closure_sha256
+    config_path = tmp_path / "active-runtime-v4.json"
+    write_json(config_path, config)
+    campaign["document"]["new_runtime"].update({
+        "config_path": str(config_path), "config_sha256": sha(config_path),
+        "closure_sha256": runtime["sha256"],
+    })
+    write_json(campaign["plan"], campaign["document"])
+    attestation_path, trusted, transaction = apply_inputs(campaign)
+    result = migration_apply.apply(
+        campaign["plan"], attestation_path, trusted, transaction,
+    )
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+    monkeypatch.setattr(
+        production, "cpl_remote_closure_sha256",
+        lambda path: remote_closure_sha256,
+    )
+    monkeypatch.setattr(production.ProductionCellLauncher, "_validate_files", lambda self: None)
+    launcher = production.ProductionCellLauncher(
+        config, infrastructure_failure_type=RetryableLaunchFailure,
+        trusted_runtime_migration=result["trusted_runtime_migration"],
+        runtime_config_path=config_path, runtime_config_sha256=sha(config_path),
+        invoker_factory=lambda *args, **kwargs: ProductionInvoker(
+            seed["reproducibility"]["agent"], config["runtime_image_digest"],
+        ),
+        controller_factory=lambda *args, **kwargs: None,
+        runner_factory=ResumeProbe, audit_error_type=lifecycle.AuditError,
+    )
+    monkeypatch.setattr(launcher, "_prepare_repo", lambda cell: (repo, True))
+    monkeypatch.setattr(launcher, "_controller", lambda *args: Component(
+        cell_plan["new_controller_identity"]
+    ))
+    monkeypatch.setattr(launcher, "_verify", lambda *args: {})
+    monkeypatch.setattr(launcher, "_receipt", lambda *args: {"status": "complete"})
+    cell = {
+        "cell_id": cell_plan["cell_id"], "task": "bsa",
+        "treatment": "project-guarded", "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["project-guarded"]),
+        "task_sha256": sha(repo / "TASK.md"),
+        "prompt_contract": {
+            "task_sha256": sha(repo / "TASK.md"),
+            "invariant_sha256": sha(repo / "PROMPT.md"),
+        },
+    }
+    return launcher, cell, repo
+
+
+def test_production_launcher_resumes_applied_migrated_checkpoint(
+        campaign, tmp_path: Path, monkeypatch):
+    launcher, cell, _ = applied_production_launcher(campaign, tmp_path, monkeypatch)
+    ResumeProbe.resumed.clear()
+
+    receipt = launcher.launch(cell, {"target": "bz-a3-1", "device": 0})
+
+    assert receipt == {"status": "complete"}
+    assert ResumeProbe.resumed[-1]["runtime_migration"]["cell_id"] == cell["cell_id"]
+
+
+def test_production_launcher_classifies_migration_mismatch_as_deterministic(
+        campaign, tmp_path: Path, monkeypatch):
+    launcher, cell, repo = applied_production_launcher(campaign, tmp_path, monkeypatch)
+    blocked_path = repo / ".experiment/blocked.json"
+    blocked = json.loads(blocked_path.read_text())
+    blocked["runtime_migration"]["cell_id"] = "gdn-cannbot"
+    write_json(blocked_path, blocked)
+    git(repo, "add", ".experiment/blocked.json")
+    git(repo, "commit", "--amend", "--no-edit")
+
+    with pytest.raises(production.ProductionError, match="runtime migration"):
+        launcher.launch(cell, {"target": "bz-a3-1", "device": 0})
 
 
 @pytest.mark.parametrize("phase", [

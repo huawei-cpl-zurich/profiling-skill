@@ -25,6 +25,8 @@ finally:
     sys.path.pop(0)
 
 RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v2"
+MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
+MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
 DEVELOPMENT_CASES = {
     "matmul": [7, 8, 9],
     "gdn": [40, 49, 47, 46, 45],
@@ -197,7 +199,11 @@ class ProductionCellLauncher:
     def __init__(self, config: dict, *, infrastructure_failure_type: type[Exception],
                  invoker_factory=None,
                  controller_factory=None, runner_factory=None,
-                 verifier_invoke: Callable = subprocess.run):
+                 verifier_invoke: Callable = subprocess.run,
+                 trusted_runtime_migration: dict | None = None,
+                 runtime_config_path: Path | None = None,
+                 runtime_config_sha256: str | None = None,
+                 audit_error_type: type[Exception] | None = None):
         if config.get("schema") != RUNTIME_SCHEMA:
             raise ProductionError(f"runtime config requires schema {RUNTIME_SCHEMA}")
         self.config = config
@@ -209,6 +215,10 @@ class ProductionCellLauncher:
         self.scripts = Path(runtime.get("path", "")).resolve()
         if digest_tree(self.scripts) != runtime.get("sha256"):
             raise ProductionError("runtime scripts hash does not match pinned closure")
+        self.trusted_runtime_migration = trusted_runtime_migration
+        self._migration_attestation = self._validate_migration_trust(
+            runtime_config_path, runtime_config_sha256,
+        )
         self.verifier_invoke = verifier_invoke
         self.run_root = Path(config["run_root"]).resolve()
         if "cpl_remote" in config:
@@ -231,6 +241,7 @@ class ProductionCellLauncher:
         if invoker_factory is None or controller_factory is None or runner_factory is None:
             sys.path.insert(0, str(self.scripts))
             try:
+                from audited_contract import AuditError
                 from audited_lifecycle import AuditedExperimentRunner
                 from audited_runtime import CodexInvoker, CommandController
             finally:
@@ -238,9 +249,64 @@ class ProductionCellLauncher:
             invoker_factory = invoker_factory or CodexInvoker
             controller_factory = controller_factory or CommandController
             runner_factory = runner_factory or AuditedExperimentRunner
+            audit_error_type = audit_error_type or AuditError
+        if (audit_error_type is not None
+                and (not isinstance(audit_error_type, type)
+                     or not issubclass(audit_error_type, Exception))):
+            raise ProductionError("audit failure type must be an exception class")
         self.invoker_factory = invoker_factory
         self.controller_factory = controller_factory
         self.runner_factory = runner_factory
+        self.audit_error_types = ((audit_error_type,) if audit_error_type is not None else ())
+
+    def _validate_migration_trust(self, config_path: Path | None,
+                                  config_sha256: str | None) -> dict | None:
+        trusted = self.trusted_runtime_migration
+        supplied = (trusted is not None, config_path is not None, config_sha256 is not None)
+        if not any(supplied):
+            return None
+        if not all(supplied) or not isinstance(trusted, dict):
+            raise ProductionError("runtime migration trust requires its pinned runtime config")
+        expected_keys = {
+            "schema", "attestation_path", "attestation_file_sha256",
+            "attestation_sha256",
+        }
+        if (set(trusted) != expected_keys
+                or trusted.get("schema") != MIGRATION_TRUST_SCHEMA):
+            raise ProductionError("runtime migration trust binding is invalid")
+        pinned_config = Path(config_path).resolve()
+        if (not pinned_config.is_file()
+                or file_sha256(pinned_config) != config_sha256):
+            raise ProductionError("runtime migration config binding is invalid")
+        try:
+            attestation_path = Path(trusted["attestation_path"])
+            raw = attestation_path.read_bytes()
+            attestation = json.loads(raw)
+            seal = attestation["attestation_sha256"]
+            unsealed = {key: value for key, value in attestation.items()
+                        if key != "attestation_sha256"}
+            runtimes = attestation["runtimes"]
+            old_runtime, new_runtime = runtimes["old"], runtimes["new"]
+            provenance = self.config["provenance"]
+            runtime = self.config["runtime_scripts"]
+            if (not attestation_path.is_absolute()
+                    or attestation.get("schema") != MIGRATION_ATTESTATION_SCHEMA
+                    or trusted["attestation_file_sha256"]
+                    != hashlib.sha256(raw).hexdigest()
+                    or trusted["attestation_sha256"] != seal
+                    or document_sha256(unsealed) != seal
+                    or old_runtime.get("closure_sha256")
+                    != provenance.get("controller_sha256")
+                    or new_runtime.get("closure_sha256") != runtime.get("sha256")
+                    or Path(new_runtime.get("config_path", "")).resolve() != pinned_config
+                    or new_runtime.get("config_sha256") != config_sha256):
+                raise ProductionError("runtime migration attestation is invalid")
+        except ProductionError:
+            raise
+        except (KeyError, TypeError, ValueError, OSError,
+                json.JSONDecodeError) as error:
+            raise ProductionError("runtime migration attestation is malformed") from error
+        return attestation
 
     def _validate_timeouts(self) -> None:
         names = (
@@ -295,7 +361,8 @@ class ProductionCellLauncher:
         if revisions != {provenance.get("source_revision")}:
             raise ProductionError("source revision provenance does not match runtime inputs")
         runtime = self.config["runtime_scripts"]
-        if runtime.get("sha256") != provenance.get("controller_sha256"):
+        if (runtime.get("sha256") != provenance.get("controller_sha256")
+                and self._migration_attestation is None):
             raise ProductionError("controller provenance does not match runtime closure")
         if self.config.get("runtime_image_digest") != provenance.get("runtime_image_digest"):
             raise ProductionError("runtime image provenance does not match Docker input")
@@ -707,15 +774,20 @@ class ProductionCellLauncher:
             raise ProductionError("Codex runtime image does not match pinned digest")
         try:
             controller = self._controller(cell, slot, root, repo)
+            runner_options = {"round_count": 4}
+            if self.trusted_runtime_migration is not None:
+                runner_options["trusted_runtime_migration"] = self.trusted_runtime_migration
             runner = self.runner_factory(
                 repo, Path(self.config["prompt"]["path"]),
                 Path(self.config["tasks"][cell["task"]]["path"]),
-                invoker, controller, round_count=4,
+                invoker, controller, **runner_options,
             )
             try:
                 runner.run(
                     self.config["run_id"], cell["cell_id"], resume=resume
                 )
+            except self.audit_error_types as error:
+                raise ProductionError(str(error)) from error
             except Exception as error:
                 checkpoint = repo / ".experiment" / "blocked.json"
                 try:
@@ -752,7 +824,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--admission-sha256", required=True)
     parser.add_argument("--ledger", type=Path, required=True)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--migration-attestation", type=Path)
+    parser.add_argument("--migration-attestation-file-sha256")
+    parser.add_argument("--migration-attestation-sha256")
     args = parser.parse_args(argv)
+    migration_arguments = (
+        args.migration_attestation, args.migration_attestation_file_sha256,
+        args.migration_attestation_sha256,
+    )
+    if any(value is not None for value in migration_arguments) \
+            and not all(value is not None for value in migration_arguments):
+        parser.error("runtime migration trust arguments must be supplied together")
+    if args.migration_attestation is not None and not args.resume:
+        parser.error("runtime migration trust requires --resume")
     config = _read_pinned(args.runtime_config, args.runtime_config_sha256, "runtime config")
     if config.get("schema") != RUNTIME_SCHEMA:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")
@@ -783,6 +867,16 @@ def main(argv: list[str] | None = None) -> int:
         ),
         ProductionCellLauncher(
             config, infrastructure_failure_type=InfrastructureFailure,
+            **({
+                "trusted_runtime_migration": {
+                    "schema": MIGRATION_TRUST_SCHEMA,
+                    "attestation_path": str(args.migration_attestation.resolve()),
+                    "attestation_file_sha256": args.migration_attestation_file_sha256,
+                    "attestation_sha256": args.migration_attestation_sha256,
+                },
+                "runtime_config_path": args.runtime_config,
+                "runtime_config_sha256": args.runtime_config_sha256,
+            } if args.migration_attestation is not None else {}),
         ), resume=args.resume,
     )
     print(json.dumps({"status": ledger["status"], "ledger": str(args.ledger)}))

@@ -45,6 +45,32 @@ the identical command with the same transaction directory. Never choose a new
 directory for a partial transaction: its journal and archive are the recovery
 authority.
 
+Resume the production campaign with the same external trust values. The trust
+is deliberately supplied on the command line rather than embedded in the
+runtime configuration: the preflight attestation already binds that config's
+bytes, so embedding the attestation would create a circular hash dependency.
+
+```console
+python scripts/audited_campaign_production.py \
+  --manifest manifest.json \
+  --runtime-config runtime-v4.json \
+  --runtime-config-sha256 "$(sha256sum runtime-v4.json | cut -d' ' -f1)" \
+  --admission admission.json \
+  --admission-sha256 "$(sha256sum admission.json | cut -d' ' -f1)" \
+  --ledger ledger.json --resume \
+  --migration-attestation /absolute/path/to/preflight.json \
+  --migration-attestation-file-sha256 "$(sha256sum preflight.json | cut -d' ' -f1)" \
+  --migration-attestation-sha256 "$(python -c 'import json; print(json.load(open("preflight.json"))["attestation_sha256"])')"
+```
+
+All three migration arguments are required together and are accepted only with
+`--resume`; they cannot authorize a fresh campaign. The launcher verifies
+the outer file digest and inner seal, proves the attested old closure matches
+the unchanged manifest provenance, and proves the attested new closure and
+config match the active pinned runtime before it constructs an agent or
+controller. Ordinary campaigns omit all three arguments and retain their
+existing provenance checks.
+
 The plan schema is `profiling-skill/audited-runtime-migration-plan/v1`. Its
 top-level fields are `migration_id`, `run_root`, `ledger_sha256`,
 `old_runtime`, `new_runtime`, and `cells`. Runtime bindings contain

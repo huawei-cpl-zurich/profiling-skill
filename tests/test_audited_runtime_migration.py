@@ -11,6 +11,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import audited_lifecycle as lifecycle  # noqa: E402
+
 SPEC = importlib.util.spec_from_file_location(
     "audited_runtime_migration", ROOT / "scripts" / "audited_runtime_migration.py"
 )
@@ -300,3 +303,134 @@ def test_checkpoint_topology_must_be_resumable(campaign, defect):
     write_json(campaign["plan"], campaign["document"])
     with pytest.raises(migration.MigrationError, match="resume topology"):
         migration.run(campaign["plan"], campaign["plan"].with_suffix(".attestation"))
+
+
+class Component:
+    def __init__(self, identity):
+        self.identity = identity
+
+    def reproducibility_metadata(self):
+        return self.identity
+
+
+def migrated_runner(campaign):
+    attestation_path = campaign["plan"].with_name("attestation.json")
+    migration.run(campaign["plan"], attestation_path)
+    attestation = json.loads(attestation_path.read_text())
+    cell = campaign["document"]["cells"][0]
+    repo = campaign["root"] / cell["cell_id"] / "repo"
+    blocked_path = repo / ".experiment/blocked.json"
+    blocked = json.loads(blocked_path.read_text())
+    original_blocked_json = blocked_path.read_text()
+    blocked["runtime_migration"] = {
+        "schema": "profiling-skill/audited-runtime-migration-citation/v1",
+        "attestation_path": str(attestation_path),
+        "attestation_file_sha256": sha(attestation_path),
+        "attestation_sha256": attestation["attestation_sha256"],
+        "plan_sha256": attestation["plan_sha256"],
+        "cell_id": cell["cell_id"], "experiment": cell["experiment"],
+        "checkpoint_commit": cell["checkpoint_commit"],
+        "original_blocked_json": original_blocked_json,
+        "old_controller_identity": cell["old_controller_identity"],
+        "new_controller_identity": cell["new_controller_identity"],
+    }
+    write_json(blocked_path, blocked)
+    git(repo, "add", ".experiment/blocked.json")
+    git(repo, "commit", "--amend", "--no-edit")
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, repo / "PROMPT.md", repo / "TASK.md",
+        Component(seed["reproducibility"]["agent"]),
+        Component(cell["new_controller_identity"]), round_count=4,
+        trusted_runtime_migration={
+            "schema": "profiling-skill/audited-runtime-migration-trust/v1",
+            "attestation_path": str(attestation_path),
+            "attestation_file_sha256": sha(attestation_path),
+            "attestation_sha256": attestation["attestation_sha256"],
+        },
+    )
+    return runner, repo, blocked, attestation_path, cell
+
+
+def test_lifecycle_accepts_real_preflight_attestation(campaign):
+    runner, _, _, _, cell = migrated_runner(campaign)
+
+    resumed = runner._resume("run", cell["cell_id"])
+
+    assert resumed["runtime_migration"]["checkpoint_commit"] == cell["checkpoint_commit"]
+
+
+def migrated_recheckpoint(campaign):
+    runner, repo, _, _, cell = migrated_runner(campaign)
+    state = runner._resume("run", cell["cell_id"])
+    runner._checkpoint(
+        state["experiment"], state["session_id"], "retry failed", state["stage"],
+        state["branch"], state["seed_commit"], state["seed_hash"],
+        state["prior_candidate_sha256"], tuple(state["commands"]), state["receipt"],
+        controller_submissions=state["controller_submissions"],
+        measurement_attempts=state["measurement_attempts"],
+    )
+    second = lifecycle.AuditedExperimentRunner(
+        repo, repo / "PROMPT.md", repo / "TASK.md", runner.invoke, runner.controller,
+        round_count=4, trusted_runtime_migration=runner.trusted_runtime_migration,
+    )
+    return second, repo, cell
+
+
+def test_migrated_resume_preserves_provenance_across_another_checkpoint(campaign):
+    second, _, cell = migrated_recheckpoint(campaign)
+
+    resumed = second._resume("run", cell["cell_id"])
+
+    assert resumed["runtime_migration"]["continuation"]["state_sha256"]
+
+
+def test_migrated_resume_rejects_tampered_carried_provenance(campaign):
+    second, repo, cell = migrated_recheckpoint(campaign)
+    path = repo / ".experiment/blocked.json"
+    blocked = json.loads(path.read_text())
+    blocked["runtime_migration"]["continuation"]["state_sha256"] = "0" * 64
+    write_json(path, blocked)
+    git(repo, "add", ".experiment/blocked.json")
+    git(repo, "commit", "--amend", "--no-edit")
+
+    with pytest.raises(lifecycle.AuditError, match="continuation"):
+        second._resume("run", cell["cell_id"])
+
+
+@pytest.mark.parametrize("defect", [
+    "dummy", "untrusted", "missing", "tampered", "cell", "old-identity", "new-identity",
+    "agent", "config", "closure", "original-blocked",
+])
+def test_lifecycle_rejects_untrusted_runtime_migrations(campaign, defect):
+    runner, repo, blocked, attestation_path, cell = migrated_runner(campaign)
+    citation = blocked["runtime_migration"]
+    if defect == "dummy":
+        citation["attestation_sha256"] = "0" * 64
+    elif defect == "untrusted":
+        runner.trusted_runtime_migration = None
+    elif defect == "missing":
+        attestation_path.unlink()
+    elif defect == "tampered":
+        attestation_path.write_text(attestation_path.read_text() + " ")
+    elif defect == "cell":
+        citation["cell_id"] = "gdn-cannbot"
+    elif defect.endswith("identity"):
+        citation[f"{defect.split('-')[0]}_controller_identity"] = {
+            "identity_sha256": "0" * 64,
+        }
+    elif defect == "agent":
+        runner.invoke.identity = {"identity_sha256": "0" * 64}
+    elif defect == "config":
+        Path(campaign["document"]["new_runtime"]["config_path"]).write_text("{}\n")
+    elif defect == "original-blocked":
+        citation["original_blocked_json"] = "{}\n"
+    else:
+        runtime = json.loads(Path(campaign["document"]["new_runtime"]["config_path"]).read_text())
+        (Path(runtime["runtime_scripts"]["path"]) / "batch_profile_a3.py").write_text("changed\n")
+    if defect in {"dummy", "cell", "old-identity", "new-identity", "original-blocked"}:
+        write_json(repo / ".experiment/blocked.json", blocked)
+        git(repo, "add", ".experiment/blocked.json")
+        git(repo, "commit", "--amend", "--no-edit")
+    with pytest.raises(lifecycle.AuditError, match="runtime migration|agent identity"):
+        runner._resume("run", cell["cell_id"])

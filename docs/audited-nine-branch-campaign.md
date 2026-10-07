@@ -319,14 +319,20 @@ admission, real controller, and independent verifier, but never calls the
 nine-cell campaign scheduler. Each repair canary transforms exactly one
 completed real controller transaction into a declared compile diagnostic; the
 agent must change the candidate in the same numbered round and the repaired
-attempt obtains its own real `msprof op` evidence. The resume canary transforms
-one completed transaction into an observer interruption, commits the lifecycle
-checkpoint, and re-observes that exact durable handle and agent session.
+attempt obtains its own real `msprof op` evidence. For the resume canary, the
+BZ job client first persists the actual remote dispatch handle and then stops
+before its first transport observation. The lifecycle commits that pending
+controller checkpoint, and resume invokes the controller's explicit observe
+path for that exact handle and agent session. Acceptance requires the terminal
+`mode: observe` operation for that handle in the controller operation history;
+a cached terminal submit receipt or synthetic infrastructure result is not
+resume evidence.
 
 Per-cell injection markers and lifecycle checkpoints make the operation
-idempotent. A process restart after either marker is written replays the same
-candidate failure or reconstructs the resume receipt from `blocked.json`; it
-does not submit a replacement handle. Ordinary infrastructure errors remain
+idempotent. A process restart after either marker is written replays the exact
+candidate failure from its retained real transaction or authenticates the
+immutable original checkpoint and observer marker before reconstructing the
+resume receipt. It does not submit a replacement handle. Ordinary infrastructure errors remain
 infrastructure failures and do not become candidate repairs. Large profiler
 trees remain remote. The runner retains only compact receipts, independent
 verifier reports, the resume proof, and their hashes beneath the canary run

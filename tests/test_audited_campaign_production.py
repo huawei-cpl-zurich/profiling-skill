@@ -286,20 +286,51 @@ def canary_gate_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, Path, 
             ],
         }
         receipt_path = tmp_path / f"{item['id']}-receipt.json"
-        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
         resume_binding = None
         if index == 1:
+            handle = "remote:bz-a3-1:job:resume-pending"
+            operation = {
+                "request_sha256": "e" * 64, "mode": "observe", "status": "ok",
+                "terminal": True, "handle": handle, "action": "check",
+                "attempt_id": None,
+            }
+            receipt["rounds"][1]["policy"] = {"operation_history": [operation]}
+            checkpoint_document = {
+                "schema": "profiling-skill/audited-blocked/v2", "stage": "controller",
+                "experiment": 2, "session_id": verifier["session_id"],
+                "candidate_sha256": "a" * 64, "manifest_sha256": "b" * 64,
+                "receipt": {"handle": handle},
+            }
+            checkpoint_path = tmp_path / f"{item['id']}-checkpoint.json"
+            checkpoint_path.write_text(json.dumps(checkpoint_document, sort_keys=True) + "\n")
+            marker_document = {
+                "schema": "profiling-skill/canary-observer-interrupt/v1",
+                "job_request_sha256": "f" * 64,
+                "controller_request_sha256": operation["request_sha256"],
+                "handle": handle,
+                "candidate_sha256": "a" * 64, "manifest_sha256": "b" * 64,
+                "target": "bz-a3-1", "device": 6,
+                "job_identity": {"action": "profile"},
+            }
+            marker_path = tmp_path / f"{item['id']}-marker.json"
+            marker_path.write_text(json.dumps(marker_document, sort_keys=True) + "\n")
             resume = {
                 "schema": "profiling-skill/audited-repair-canary-resume/v1",
-                "canary_id": item["id"], "checkpoint_sha256": "d" * 64,
+                "canary_id": item["id"],
+                "checkpoint": {"path": str(checkpoint_path),
+                               "sha256": sha(checkpoint_path)},
+                "marker": {"path": str(marker_path), "sha256": sha(marker_path)},
+                "checkpoint_sha256": sha(checkpoint_path), "experiment": 2,
+                "candidate_sha256": "a" * 64, "manifest_sha256": "b" * 64,
                 "session_id_before": verifier["session_id"],
                 "session_id_after": verifier["session_id"],
-                "durable_handle_before": receipt["rounds"][1]["handle"],
-                "durable_handle_after": receipt["rounds"][1]["handle"],
+                "durable_handle_before": handle, "durable_handle_after": handle,
+                "observe_round": 2, "observe_operation": operation,
             }
             resume_path = tmp_path / f"{item['id']}-resume.json"
             resume_path.write_text(json.dumps(resume, sort_keys=True) + "\n")
             resume_binding = {"path": str(resume_path), "sha256": sha(resume_path)}
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
         records.append({
             "id": item["id"], "treatment": item["treatment"],
             "experiment_commit": commits[-1],
@@ -368,6 +399,45 @@ def test_repair_campaign_rejects_unsatisfied_canary_gate(
         receipt = Path(document["results"][0]["cell_receipt"]["path"])
         receipt.write_text("{}\n")
     results.write_text(json.dumps(document, sort_keys=True) + "\n")
+    with pytest.raises(production.ProductionError, match="canary"):
+        production.validate_canary_gate(config, results, sha(results))
+
+
+@pytest.mark.parametrize("mutation", [
+    "arbitrary-checkpoint-hash", "incomplete-marker", "missing-observe-operation",
+])
+def test_canary_gate_authenticates_resume_proof_artifacts(
+        tmp_path: Path, mutation: str):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition, definition_sha, results, _ = canary_gate_fixture(tmp_path, config)
+    config["canary_definition"] = {"path": str(definition), "sha256": definition_sha}
+    document = json.loads(results.read_text())
+    record = next(item for item in document["results"]
+                  if item["id"] == "matmul-project-cannbot-resume")
+    resume_path = Path(record["resume_receipt"]["path"])
+    resume = json.loads(resume_path.read_text())
+
+    if mutation == "arbitrary-checkpoint-hash":
+        resume["checkpoint_sha256"] = "0" * 64
+    elif mutation == "incomplete-marker":
+        marker_path = Path(resume["marker"]["path"])
+        marker = json.loads(marker_path.read_text())
+        marker.pop("job_identity")
+        marker_path.write_text(json.dumps(marker, sort_keys=True) + "\n")
+        resume["marker"]["sha256"] = sha(marker_path)
+    else:
+        receipt_path = Path(record["cell_receipt"]["path"])
+        receipt = json.loads(receipt_path.read_text())
+        receipt["rounds"][1]["policy"]["operation_history"] = []
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+        record["cell_receipt"]["sha256"] = sha(receipt_path)
+    resume_path.write_text(json.dumps(resume, sort_keys=True) + "\n")
+    record["resume_receipt"]["sha256"] = sha(resume_path)
+    results.write_text(json.dumps(document, sort_keys=True) + "\n")
+
     with pytest.raises(production.ProductionError, match="canary"):
         production.validate_canary_gate(config, results, sha(results))
 
@@ -992,6 +1062,39 @@ def test_repair_runtime_uses_48_operations_and_two_candidate_repairs(tmp_path: P
         Path(config["run_root"]) / cell["cell_id"] / "state/controller.json"
     ).read_text())
     assert controller_config["request_budget"] == 48
+
+
+def test_declared_resume_canary_routes_only_job_client_observation_fault(tmp_path: Path):
+    cell = {
+        "cell_id": "matmul-project-cannbot-resume", "task": "matmul",
+        "treatment": "project-cannbot", "round_count": 4, "request_budget": 48,
+        "skills": list(production.TREATMENT_SKILLS["project-cannbot"]),
+        "canary_fault": "interrupt-after-dispatch-once",
+    }
+    config = runtime_fixture(tmp_path, cell)
+    definition = tmp_path / "canaries.json"
+    definition.write_bytes((ROOT / "experiments/audited-repair-canaries.json").read_bytes())
+    config["canary_definition"] = {"path": str(definition), "sha256": sha(definition)}
+    captured = {}
+
+    def controller(command, repo, **kwargs):
+        captured["command"] = command
+        return object()
+
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=controller, runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    launcher._controller(cell, {"target": "bz-a3-1", "device": 3}, repo.parent, repo)
+
+    controller_config = json.loads((repo.parent / "state/controller.json").read_text())
+    backend = controller_config["backend_command"]
+    client = json.loads(backend[backend.index("--job-client-json") + 1])
+    flag = client.index("--canary-interrupt-after-dispatch-once")
+    assert Path(client[flag + 1]) == (
+        repo.parent / "state/canary-observer-interrupt.json"
+    ).resolve()
 
 
 @pytest.mark.parametrize("value", [-1, 0, 1, 3, True])

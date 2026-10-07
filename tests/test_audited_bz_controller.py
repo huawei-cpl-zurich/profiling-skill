@@ -219,6 +219,27 @@ def test_infrastructure_handle_is_checkpointed_and_observed_without_budget_charg
         contract.validate_controller_receipt(tampered, candidate_hash, manifest_hash)
 
 
+def test_subprocess_backend_marks_only_explicit_observation(monkeypatch, tmp_path: Path):
+    calls = []
+
+    def invoke(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, '{"status":"ok"}', "")
+
+    monkeypatch.setattr(controller.subprocess, "run", invoke)
+    backend = controller.SubprocessBackend(["backend"], tmp_path, 20)
+    request = {"action": "check"}
+
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
+    backend(request)
+    backend.observe(request)
+
+    assert "PROFILING_SKILL_CONTROLLER_MODE" not in calls[0][1]["env"]
+    assert calls[1][1]["env"]["PROFILING_SKILL_CONTROLLER_MODE"] == "observe"
+    assert calls[0][1]["env"]["PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"] == \
+        calls[1][1]["env"]["PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"]
+
+
 def test_infrastructure_retry_budget_stops_before_another_dispatch(tmp_path: Path):
     repo, candidate_hash, manifest_hash = repository(tmp_path)
 

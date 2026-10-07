@@ -284,6 +284,7 @@ class AuditedExperimentRunner:
         self.agent_retry_evidence: tuple[dict, ...] = ()
         self.candidate_attempts: list[dict] = []
         self.reasoning_output = ""
+        self._transient_checkpoint_active = False
         self.reproducibility = {
             "agent": _identity(invoke), "controller": _identity(controller),
         }
@@ -326,19 +327,31 @@ class AuditedExperimentRunner:
                     prior_hash,
                 )
             elif stage == "prepare":
-                session, commands = self._preparation_turn(
-                    number, session,
-                    (
-                        "Recover seed-only experiment 1 using the candidate and manifest "
-                        "already present. Preserve that work, inspect it, run a local check, "
-                        "and stop without starting another experiment."
-                    ) if continuing.get("seed_only_recovery") else
-                    None if continuing.get("pre_session") else (
-                        f"Resume blocked experiment {number}: repair the prepared candidate. "
-                        "Do not start another experiment; stop after a local check."
-                    ),
-                    commands, branch, seed_commit, seed_hash, prior_hash,
-                )
+                changed_repair = False
+                if self.candidate_attempts:
+                    previous = self.candidate_attempts[-1]
+                    candidate = self.repo / "candidate.py"
+                    manifest = self.repo / "candidate.manifest.json"
+                    changed_repair = (
+                        candidate.is_file() and manifest.is_file()
+                        and (sha256_bytes(candidate.read_bytes()),
+                             sha256_bytes(manifest.read_bytes())) !=
+                        (previous["candidate_sha256"], previous["manifest_sha256"])
+                    )
+                if not changed_repair:
+                    session, commands = self._preparation_turn(
+                        number, session,
+                        (
+                            "Recover seed-only experiment 1 using the candidate and manifest "
+                            "already present. Preserve that work, inspect it, run a local check, "
+                            "and stop without starting another experiment."
+                        ) if continuing.get("seed_only_recovery") else
+                        None if continuing.get("pre_session") else (
+                            f"Resume blocked experiment {number}: repair the prepared candidate. "
+                            "Do not start another experiment; stop after a local check."
+                        ),
+                        commands, branch, seed_commit, seed_hash, prior_hash,
+                    )
 
             recorded_terminal = bool(
                 continuing and stage == "finalize" and self.candidate_attempts
@@ -371,6 +384,10 @@ class AuditedExperimentRunner:
                         raise AuditError(
                             "candidate repair did not change candidate or manifest"
                         )
+                self._transient_attempt_checkpoint(
+                    number, session, "candidate ready for controller", "controller",
+                    branch, seed_commit, seed_hash, prior_hash, commands, {},
+                )
                 receipt = self._controller_turn(
                     number, session, candidate_hash, manifest_hash, continuing, stage,
                     branch, seed_commit, seed_hash, prior_hash, commands,
@@ -379,12 +396,17 @@ class AuditedExperimentRunner:
                     candidate_hash, manifest_hash, receipt,
                     number, commands[command_offset:], self.reasoning_output,
                 )
+                self._release_transient_checkpoint()
                 command_offset = len(commands)
                 continuing = None
                 stage = "prepare"
                 if (receipt["status"] != "candidate_error"
                         or len(self.candidate_attempts) > self.max_candidate_repairs):
                     break
+                self._transient_attempt_checkpoint(
+                    number, session, "candidate repair pending", "prepare",
+                    branch, seed_commit, seed_hash, prior_hash, commands, receipt,
+                )
                 failed_candidate, failed_manifest = candidate_hash, manifest_hash
                 session, commands = self._preparation_turn(
                     number, session,
@@ -395,6 +417,7 @@ class AuditedExperimentRunner:
                     "candidate.manifest.json, run a local smoke check, and stop.",
                     commands, branch, seed_commit, seed_hash, prior_hash,
                 )
+                self._release_transient_checkpoint()
                 repaired_candidate, repaired_manifest = self._validate_candidate(prior_hash)
                 if (repaired_candidate == failed_candidate
                         and sha256_bytes(repaired_manifest.read_bytes()) == failed_manifest):
@@ -925,6 +948,8 @@ class AuditedExperimentRunner:
                     commands: tuple[dict, ...], receipt: dict | None = None, *,
                     controller_submissions: int = 0,
                     measurement_attempts: int = 0) -> None:
+        if self._transient_checkpoint_active:
+            self._release_transient_checkpoint()
         if session is None and (stage != "prepare" or number != 1):
             raise AuditError("only the initial preparation may checkpoint before a session")
         path = self.repo / ".experiment" / "blocked.json"
@@ -971,12 +996,29 @@ class AuditedExperimentRunner:
         _git(self.repo, "add", *paths)
         _git(self.repo, "commit", "-m", f"checkpoint blocked experiment {number}")
 
+    def _transient_attempt_checkpoint(
+            self, number: int, session: str, reason: str, stage: str,
+            branch: str, seed_commit: str, seed_hash: str, prior_hash: str,
+            commands: tuple[dict, ...], receipt: dict) -> None:
+        if not getattr(self.controller, "durable_attempt_checkpoints", False):
+            return
+        self._checkpoint(
+            number, session, reason, stage, branch, seed_commit, seed_hash,
+            prior_hash, commands, receipt,
+        )
+        self._transient_checkpoint_active = True
+
+    def _release_transient_checkpoint(self) -> None:
+        if not self._transient_checkpoint_active:
+            return
+        _git(self.repo, "reset", "--mixed", "HEAD^")
+        (self.repo / ".experiment" / "blocked.json").unlink()
+        self._transient_checkpoint_active = False
+
     def _resume(self, run_id: str, agent_id: str) -> dict:
         path = self.repo / ".experiment" / "blocked.json"
         if not path.is_file():
             return self._resume_seed_only(run_id, agent_id)
-        if _git(self.repo, "status", "--porcelain"):
-            raise AuditError("blocked experiment repository must be clean before resume")
         try:
             state = json.loads(path.read_text())
         except json.JSONDecodeError as failure:
@@ -1023,6 +1065,13 @@ class AuditedExperimentRunner:
                 or (state["stage"] in {"controller", "measurement", "finalize"}
                     and not isinstance(state.get("receipt"), dict))):
             raise AuditError("blocked checkpoint schema is invalid")
+        changed = set(_git(self.repo, "diff", "--name-only", "HEAD").splitlines())
+        changed.update(_git(
+            self.repo, "ls-files", "--others", "--exclude-standard",
+        ).splitlines())
+        if changed and (state["stage"] != "prepare"
+                        or changed - {"candidate.py", "candidate.manifest.json"}):
+            raise AuditError("blocked experiment repository has invalid changes")
         agent_retries = list(_retry_records(
             state.get("agent_retries", ()), contextual=True,
         ))

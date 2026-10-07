@@ -389,7 +389,8 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
 class BzA3JobClient:
     def __init__(self, transport: GlobalCplRemoteTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
-                 batch_profiler: Path, remote_root: str):
+                 batch_profiler: Path, remote_root: str,
+                 interrupt_after_dispatch: Path | None = None):
         self.transport = transport
         self.state_dir = state_dir
         self.placements = validate_placements(placements)
@@ -397,8 +398,14 @@ class BzA3JobClient:
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler
         self.remote_root = validate_remote_root(remote_root)
+        self.interrupt_after_dispatch = (
+            Path(interrupt_after_dispatch).resolve()
+            if interrupt_after_dispatch is not None else None
+        )
 
-    def run(self, job: object, timeout: int = 3600) -> dict:
+    def run(self, job: object, timeout: int = 3600,
+            *, operation_mode: str = "submit",
+            controller_request_sha256: str | None = None) -> dict:
         identity: dict = {}
         placement = None
         handle = None
@@ -408,6 +415,14 @@ class BzA3JobClient:
         try:
             if not isinstance(job, dict):
                 raise JobError("request_error", "job must be a JSON object")
+            if operation_mode not in {"submit", "observe"}:
+                raise JobError("request_error", "controller operation mode is invalid")
+            if (self.interrupt_after_dispatch is not None
+                    and (not isinstance(controller_request_sha256, str)
+                         or not re.fullmatch(r"[0-9a-f]{64}",
+                                             controller_request_sha256))):
+                raise JobError("request_error",
+                               "canary controller request digest is invalid")
             if (isinstance(timeout, bool) or not isinstance(timeout, int)
                     or timeout <= 25):
                 raise JobError("request_error",
@@ -455,6 +470,10 @@ class BzA3JobClient:
                 expected = f'remote:{placement["target"]}:job:'
                 if not isinstance(handle, str) or not handle.startswith(expected):
                     raise JobError("request_error", "dispatch receipt handle mismatch")
+                self._interrupt_observer(
+                    request_sha, controller_request_sha256, placement, handle,
+                    identity, operation_mode, job,
+                )
                 response = self.transport.observe(
                     placement["target"], handle, self._remaining(deadline, handle))
             else:
@@ -481,6 +500,10 @@ class BzA3JobClient:
                                 "request_sha256": request_sha,
                                 "execution_provenance": provenance,
                                 "handle": handle})
+                    self._interrupt_observer(
+                        request_sha, controller_request_sha256, placement, handle,
+                        identity, operation_mode, job,
+                    )
                     response = self.transport.observe(
                         placement["target"], handle,
                         self._remaining(deadline, handle))
@@ -515,6 +538,43 @@ class BzA3JobClient:
             if request_lock is not None:
                 fcntl.flock(request_lock, fcntl.LOCK_UN)
                 request_lock.close()
+
+    def _interrupt_observer(self, request_sha: str,
+                            controller_request_sha256: str | None,
+                            placement: dict, handle: str, identity: dict,
+                            operation_mode: str, job: dict) -> None:
+        marker = self.interrupt_after_dispatch
+        if marker is None or "calibration_phase" in job:
+            return
+        candidate = Path(job["candidate"])
+        manifest = candidate.with_name("candidate.manifest.json")
+        if not manifest.is_file():
+            raise JobError("request_error", "canary candidate manifest is unavailable",
+                           handle)
+        document = {
+            "schema": "profiling-skill/canary-observer-interrupt/v1",
+            "job_request_sha256": request_sha,
+            "controller_request_sha256": controller_request_sha256,
+            "handle": handle,
+            "target": placement["target"], "device": placement["device"],
+            "job_identity": identity,
+            "candidate_sha256": _sha(candidate),
+            "manifest_sha256": _sha(manifest),
+        }
+        if marker.is_file():
+            try:
+                retained = json.loads(marker.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                raise JobError("request_error", "canary observer marker is invalid",
+                               handle) from exc
+            if retained != document:
+                return
+        else:
+            _write_json(marker, document)
+        if operation_mode != "observe":
+            raise JobError(
+                "observer_error", "deterministic canary observer interruption", handle,
+            )
 
     def _execution_provenance(self, runtime: str) -> dict[str, str]:
         digest = getattr(self.transport, "expected_sha256", None)
@@ -722,6 +782,7 @@ def main() -> int:
         help="existing writable remote staging root; run artifacts use its runs/ child",
     )
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--canary-interrupt-after-dispatch-once", type=Path)
     args = parser.parse_args()
     try:
         placements = json.loads(args.placements_json.read_text())
@@ -732,9 +793,15 @@ def main() -> int:
             runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
             batch_profiler=here / "batch_profile_a3.py",
             remote_root=args.remote_root,
+            interrupt_after_dispatch=args.canary_interrupt_after_dispatch_once,
         )
         job = json.load(sys.stdin)
-        result = client.run(job, args.timeout)
+        result = client.run(
+            job, args.timeout,
+            operation_mode=os.environ.get("PROFILING_SKILL_CONTROLLER_MODE", "submit"),
+            controller_request_sha256=os.environ.get(
+                "PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"),
+        )
     except (OSError, ValueError, json.JSONDecodeError, JobError) as exc:
         failure = exc.failure_type if isinstance(exc, JobError) else "request_error"
         result = {"status": "infrastructure_error", "failure_type": failure,

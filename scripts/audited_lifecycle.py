@@ -30,6 +30,7 @@ MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 STARTER_SELECTOR = "REPLACE_WITH_EXACT_EXPORTED_KERNEL"
 MIGRATION_CITATION_SCHEMA = "profiling-skill/audited-runtime-migration-citation/v1"
 MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
+MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
 
 
 def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
@@ -80,7 +81,8 @@ def _tree_sha256(root: Path) -> str:
 
 
 def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
-                                current: dict, agent_id: str) -> None:
+                                current: dict, agent_id: str,
+                                trusted: dict | None) -> dict:
     try:
         citation = state["runtime_migration"]
         path_text = citation["attestation_path"]
@@ -95,9 +97,13 @@ def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
         unsealed = {key: value for key, value in attestation.items()
                     if key != "attestation_sha256"}
         cells = [cell for cell in attestation.get("cells", []) if isinstance(cell, dict)
-                 and cell.get("cell_id") == agent_id
-                 and cell.get("experiment") == state["experiment"]]
+                 and cell.get("cell_id") == agent_id]
         if (attestation.get("schema") != MIGRATION_ATTESTATION_SCHEMA
+                or not isinstance(trusted, dict)
+                or trusted.get("schema") != MIGRATION_TRUST_SCHEMA
+                or trusted.get("attestation_path") != path_text
+                or trusted.get("attestation_file_sha256") != sha256_bytes(raw)
+                or trusted.get("attestation_sha256") != seal
                 or citation.get("attestation_file_sha256") != sha256_bytes(raw)
                 or citation.get("attestation_sha256") != seal
                 or citation.get("plan_sha256") != attestation.get("plan_sha256")
@@ -106,20 +112,39 @@ def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
             raise AuditError("runtime migration attestation is invalid")
         cell = cells[0]
         checkpoint = citation.get("checkpoint_commit")
-        old_blob = _git_blob(repo, checkpoint, ".experiment/blocked.json")
-        original = json.loads(old_blob)
+        original_raw = citation.get("original_blocked_json")
+        original = json.loads(original_raw)
         current_without_citation = {key: value for key, value in state.items()
                                     if key != "runtime_migration"}
         if (citation.get("cell_id") != agent_id
+                or citation.get("experiment") != cell.get("experiment")
                 or checkpoint != cell.get("checkpoint_commit")
-                or sha256_bytes(old_blob) != cell.get("blocked_sha256")
-                or current_without_citation != original
+                or sha256_bytes(original_raw.encode()) != cell.get("blocked_sha256")
                 or citation.get("old_controller_identity") != cell.get("old_controller_identity")
                 or citation.get("new_controller_identity") != cell.get("new_controller_identity")
                 or seed.get("reproducibility", {}).get("controller")
                 != cell.get("old_controller_identity")
                 or current["controller"] != cell.get("new_controller_identity")):
             raise AuditError("runtime migration cell or controller identity is invalid")
+        continuation = citation.get("continuation")
+        if continuation is None:
+            if state.get("experiment") != cell.get("experiment") \
+                    or current_without_citation != original:
+                raise AuditError("runtime migration initial checkpoint is invalid")
+        else:
+            state_sha = sha256_json(current_without_citation)
+            expected = {
+                "schema": "profiling-skill/audited-runtime-migration-continuation/v1",
+                "source_checkpoint_commit": checkpoint,
+                "source_experiment": cell["experiment"],
+                "experiment": state.get("experiment"), "stage": state.get("stage"),
+                "resume_parent": state.get("resume_parent"),
+                "candidate_sha256": state.get("candidate_sha256"),
+                "manifest_sha256": state.get("manifest_sha256"),
+                "state_sha256": state_sha,
+            }
+            if continuation != expected or state.get("experiment", 0) < cell["experiment"]:
+                raise AuditError("runtime migration continuation is invalid")
         for label in ("old", "new"):
             binding = attestation["runtimes"][label]
             config_path = Path(binding["config_path"])
@@ -133,6 +158,7 @@ def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
                     or _tree_sha256(runtime_path) != binding.get("closure_sha256")
                     or runtime.get("sha256") != binding.get("closure_sha256")):
                 raise AuditError("runtime migration runtime artifacts changed")
+        return json.loads(json.dumps(citation))
     except AuditError:
         raise
     except (AttributeError, KeyError, TypeError, ValueError, OSError,
@@ -156,7 +182,7 @@ class AuditedExperimentRunner:
                  invoke: Callable[[int, str | None, str | None], str],
                  controller: Callable[[int, str, str], dict], *, max_repairs: int = 2,
                  max_controller_resubmits: int = 2, max_remeasurements: int = 1,
-                 round_count: int = 3):
+                 round_count: int = 3, trusted_runtime_migration: dict | None = None):
         if type(round_count) is not int or round_count < 1:
             raise AuditError("round count must be a positive integer")
         self.repo = repo.resolve()
@@ -170,6 +196,8 @@ class AuditedExperimentRunner:
         self.max_controller_resubmits = max_controller_resubmits
         self.max_remeasurements = max_remeasurements
         self.round_count = round_count
+        self.trusted_runtime_migration = trusted_runtime_migration
+        self.runtime_migration: dict | None = None
         self.reproducibility = {
             "agent": _identity(invoke), "controller": _identity(controller),
         }
@@ -703,6 +731,20 @@ class AuditedExperimentRunner:
         }
         if self.round_count != 3:
             checkpoint["round_count"] = self.round_count
+        if self.runtime_migration is not None:
+            citation = {key: value for key, value in self.runtime_migration.items()
+                        if key != "continuation"}
+            citation["continuation"] = {
+                "schema": "profiling-skill/audited-runtime-migration-continuation/v1",
+                "source_checkpoint_commit": citation["checkpoint_commit"],
+                "source_experiment": citation["experiment"],
+                "experiment": number, "stage": stage,
+                "resume_parent": checkpoint["resume_parent"],
+                "candidate_sha256": checkpoint["candidate_sha256"],
+                "manifest_sha256": checkpoint["manifest_sha256"],
+                "state_sha256": sha256_json(checkpoint),
+            }
+            checkpoint["runtime_migration"] = citation
         path.write_text(json.dumps(checkpoint, indent=2, sort_keys=True) + "\n")
         paths = [".experiment/blocked.json"] + [
             name for name in ("candidate.py", "candidate.manifest.json")
@@ -799,8 +841,9 @@ class AuditedExperimentRunner:
         if controller_changed and state.get("runtime_migration") is None:
             raise AuditError("current reproducibility metadata differs from experiment seed")
         if controller_changed or state.get("runtime_migration") is not None:
-            _validate_runtime_migration(
+            self.runtime_migration = _validate_runtime_migration(
                 self.repo, state, seed, current_reproducibility, agent_id,
+                self.trusted_runtime_migration,
             )
         elif seed.get("reproducibility") != current_reproducibility:
             raise AuditError("current reproducibility metadata differs from experiment seed")

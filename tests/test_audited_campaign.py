@@ -101,6 +101,25 @@ def test_manifest_is_exact_three_by_three_with_four_rounds(tmp_path: Path):
     assert all("device" not in cell and "target" not in cell for cell in cells)
 
 
+def test_new_manifest_defaults_to_repair_aware_operation_budget(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path)
+    document = audited_campaign.build_manifest(
+        "repair-aware", prompt, tasks, provenance, "seed",
+    )
+    assert document["request_budget"] == 48
+    assert {cell["request_budget"] for cell in document["cells"]} == {48}
+    audited_campaign.verify_manifest(document)
+
+
+@pytest.mark.parametrize("budget", [0, 23, 25, 47, 49])
+def test_manifest_rejects_nonproduction_operation_budgets(tmp_path: Path, budget: int):
+    prompt, tasks, provenance = inputs(tmp_path)
+    with pytest.raises(audited_campaign.CampaignError, match="24 or 48"):
+        audited_campaign.build_manifest(
+            "bad-budget", prompt, tasks, provenance, "seed", request_budget=budget,
+        )
+
+
 def test_order_is_deterministic_fair_and_recorded(tmp_path: Path):
     first = manifest(tmp_path / "a")
     second = manifest(tmp_path / "b")
@@ -337,6 +356,45 @@ def test_report_contains_evolution_best_round_and_failures(tmp_path: Path):
     assert all(len(row["controls"]) == 4 for row in report["cells"])
     assert all(row["best_normalized_median_us"] == 5.0 for row in report["cells"])
     assert report["discarded_infrastructure_attempts"] == []
+
+
+def test_report_separates_raw_attempt_and_repaired_round_success(tmp_path: Path):
+    document = manifest(tmp_path)
+    ledger = audited_campaign._new_ledger(document)
+    for cell_id in document["order"]:
+        ledger["cells"][cell_id] = {
+            "status": "complete", "attempts": [{"status": "complete", "receipt": {
+                "status": "complete", "durable_handle": f"local:{cell_id}",
+                "rounds_completed": 4, "commits": ["1", "2", "3", "4"],
+                "rounds": [
+                    {"round": 1, "status": "ok", "handle": "h1", "median_us": 9.0,
+                     "attempt_statuses": ["compile_error", "ok"]},
+                    {"round": 2, "status": "ok", "handle": "h2", "median_us": 8.0,
+                     "attempt_statuses": ["ok"]},
+                    {"round": 3, "status": "ok", "handle": "h3", "median_us": 7.0,
+                     "attempt_statuses": ["runtime_error", "correctness_error", "ok"]},
+                    {"round": 4, "status": "ok", "handle": "h4", "median_us": 6.0,
+                     "attempt_statuses": ["ok"]},
+                ],
+            }}],
+        }
+    report = audited_campaign.build_report(document, ledger)
+    row = report["cells"][0]
+    assert row["attempt_summary"] == {
+        "attempts": 7, "successful_attempts": 4, "raw_attempt_success_rate": 4 / 7,
+        "successful_rounds": 4, "repair_attempted_rounds": 2,
+        "repaired_rounds": 2, "repaired_round_success_rate": 1.0,
+        "repair_count": 3,
+        "failure_transitions": [
+            {"round": 1, "from": "compile_error", "to": "ok"},
+            {"round": 3, "from": "runtime_error", "to": "correctness_error"},
+            {"round": 3, "from": "correctness_error", "to": "ok"},
+        ],
+        "final_timing": {"round": 4, "median_us": 6.0,
+                         "normalized_median_us": None},
+    }
+    assert report["attempt_summary"]["attempts"] == 63
+    assert report["attempt_summary"]["repaired_rounds"] == 18
 
 
 def test_report_retains_discarded_infrastructure_attempts(tmp_path: Path):

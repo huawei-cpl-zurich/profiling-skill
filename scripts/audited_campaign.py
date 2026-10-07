@@ -19,6 +19,9 @@ from typing import Protocol
 
 TASKS = ("matmul", "gdn", "bsa")
 TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+LEGACY_REQUEST_BUDGET = 24
+REPAIR_REQUEST_BUDGET = 48
+SUPPORTED_REQUEST_BUDGETS = {LEGACY_REQUEST_BUDGET, REPAIR_REQUEST_BUDGET}
 TREATMENT_SKILLS = {
     "cannbot": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
@@ -137,14 +140,14 @@ def build_manifest(
     ordering_seed: str,
     *,
     rounds: int = 4,
-    request_budget: int = 24,
+    request_budget: int = REPAIR_REQUEST_BUDGET,
 ) -> dict:
     if not run_id or "/" in run_id:
         raise CampaignError("run_id must be a nonempty branch-safe component")
     if rounds != 4:
         raise CampaignError("this campaign requires exactly four rounds")
-    if request_budget != 24:
-        raise CampaignError("this campaign requires a 24-request budget")
+    if request_budget not in SUPPORTED_REQUEST_BUDGETS:
+        raise CampaignError("this campaign requires a 24 or 48-request budget")
     if set(task_files) != set(TASKS):
         raise CampaignError("task files must cover exactly matmul, gdn, and bsa")
     if not prompt.is_file() or any(not task_files[name].is_file() for name in TASKS):
@@ -209,9 +212,14 @@ def verify_manifest(document: dict) -> None:
     expected = {(task, treatment) for task in TASKS for treatment in TREATMENTS}
     if actual != expected:
         raise CampaignError("manifest must contain the exact 3x3 treatment matrix")
+    budget = document.get("request_budget")
+    if budget not in SUPPORTED_REQUEST_BUDGETS:
+        raise CampaignError("campaign requires a 24 or 48-request budget")
     for cell in document["cells"]:
-        if cell["round_count"] != 4 or cell["request_budget"] != 24:
-            raise CampaignError("every cell requires four rounds and 24 requests")
+        if cell["round_count"] != 4 or cell["request_budget"] != budget:
+            raise CampaignError(
+                "every cell requires four rounds and the campaign request budget"
+            )
         if cell["skills"] != list(TREATMENT_SKILLS[cell["treatment"]]):
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
@@ -500,6 +508,9 @@ def build_report(manifest: dict, ledger: dict) -> dict:
     discarded = []
     summary = {"complete": 0, "candidate_failed": 0,
                "infrastructure_pending": 0}
+    aggregate_attempts = {"attempts": 0, "successful_attempts": 0,
+                          "successful_rounds": 0, "repair_attempted_rounds": 0,
+                          "repaired_rounds": 0, "repair_count": 0}
     by_id = {cell["cell_id"]: cell for cell in manifest["cells"]}
     for cell_id in manifest["order"]:
         state = ledger["cells"][cell_id]
@@ -555,6 +566,53 @@ def build_report(manifest: dict, ledger: dict) -> dict:
                     "error": attempt.get("error"),
                 })
         cell = by_id[cell_id]
+        attempts = 0
+        successful_attempts = 0
+        repair_attempted_rounds = 0
+        repaired_rounds = 0
+        transitions = []
+        for item in evolution:
+            statuses = item.get("attempt_statuses")
+            if not isinstance(statuses, list) or not statuses:
+                statuses = [item.get("failure_type", item.get("status"))]
+            attempts += len(statuses)
+            successful_attempts += sum(status == "ok" for status in statuses)
+            repair_attempted_rounds += int(len(statuses) > 1)
+            repaired_rounds += int(len(statuses) > 1 and statuses[-1] == "ok")
+            transitions.extend(
+                {"round": item.get("round"), "from": before, "to": after}
+                for before, after in zip(statuses, statuses[1:])
+            )
+        successful_rounds = sum(item.get("status") == "ok" for item in evolution)
+        terminal_round = evolution[-1] if evolution else {}
+        final_raw = terminal_round.get("median_us")
+        final_normalized = normalized_value(terminal_round)
+        valid_final_raw = (isinstance(final_raw, (int, float))
+                           and math.isfinite(final_raw) and final_raw > 0)
+        final_timing = (
+            {"round": terminal_round.get("round"), "median_us": final_raw,
+             "normalized_median_us": final_normalized}
+            if (valid_final_raw or final_normalized is not None) else None
+        )
+        attempt_summary = {
+            "attempts": attempts,
+            "successful_attempts": successful_attempts,
+            "raw_attempt_success_rate": (
+                successful_attempts / attempts if attempts else None
+            ),
+            "successful_rounds": successful_rounds,
+            "repair_attempted_rounds": repair_attempted_rounds,
+            "repaired_rounds": repaired_rounds,
+            "repaired_round_success_rate": (
+                repaired_rounds / repair_attempted_rounds
+                if repair_attempted_rounds else None
+            ),
+            "repair_count": attempts - len(evolution),
+            "failure_transitions": transitions,
+            "final_timing": final_timing,
+        }
+        for key in aggregate_attempts:
+            aggregate_attempts[key] += attempt_summary[key]
         rows.append({
             "cell_id": cell_id, "task": cell["task"],
             "treatment": cell["treatment"], "branch": cell["branch"],
@@ -591,13 +649,24 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "baseline_median_us": baseline_us,
             "speedup_vs_baseline": speedup,
             "candidate_errors": candidate_errors,
+            "attempt_summary": attempt_summary,
             "failure": candidate_errors or (
                 terminal.get("failure") if terminal else None
             ),
         })
+    aggregate_attempts["raw_attempt_success_rate"] = (
+        aggregate_attempts["successful_attempts"] / aggregate_attempts["attempts"]
+        if aggregate_attempts["attempts"] else None
+    )
+    aggregate_attempts["repaired_round_success_rate"] = (
+        aggregate_attempts["repaired_rounds"]
+        / aggregate_attempts["repair_attempted_rounds"]
+        if aggregate_attempts["repair_attempted_rounds"] else None
+    )
     return {"schema_version": 2, "run_id": manifest["run_id"],
             "manifest_sha256": manifest["manifest_sha256"],
             "summary": summary, "cells": rows,
+            "attempt_summary": aggregate_attempts,
             "discarded_infrastructure_attempts": discarded}
 
 
@@ -638,6 +707,7 @@ def _parser() -> argparse.ArgumentParser:
         generate.add_argument(f"--{task}-task", type=Path, required=True)
     generate.add_argument("--provenance", type=Path, required=True)
     generate.add_argument("--ordering-seed", required=True)
+    generate.add_argument("--request-budget", type=int, choices=(24, 48), default=48)
     generate.add_argument("--output", type=Path, required=True)
     simulate = subparsers.add_parser("simulate")
     simulate.add_argument("--manifest", type=Path, required=True)
@@ -658,6 +728,7 @@ def main(argv: list[str] | None = None) -> int:
             args.run_id, args.prompt,
             {task: getattr(args, f"{task}_task") for task in TASKS},
             json.loads(args.provenance.read_text()), args.ordering_seed,
+            request_budget=args.request_budget,
         )
         _atomic_json(args.output, document)
     elif args.command == "simulate":

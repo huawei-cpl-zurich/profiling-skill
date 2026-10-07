@@ -251,18 +251,28 @@ attempts, baseline fields, and calibration fields. Codex, controller,
 verification, and local lifecycle failures are infrastructure failures.
 Compilation, runtime, and correctness failures are candidate evidence only
 when they arrive in a contract-valid `candidate_error` controller receipt.
-Any independently verified branch containing such a receipt is terminal
-`candidate_failed`, never `complete`, while all round and verifier evidence is
-retained for offline analysis.
+The agent may repair a failed candidate twice inside the same numbered round.
+Each attempted candidate remains hash-bound in that round's evidence, but only
+the final attempt determines the round status. A round is terminal
+`candidate_error` only after all three attempts fail.
 
-## Acceptance
+## Repair-aware acceptance and rollout
 
-Before the measured run, validate manifest generation and a fake-controller
-end-to-end run locally. On BZ-A3, validate a known-good matmul candidate, an
-intentional compilation failure, observer reconnection to the same durable
-handle, and measurement-only resume. Then run one matmul canary per treatment.
-Do not start the nine branches while an infrastructure fault remains
-unclassified.
+New manifests default to 48 controller operations per cell; frozen legacy
+manifests with 24 operations remain valid. Production runtime configuration
+sets `max_candidate_repairs_per_round` to `2` (omission means the same value
+for legacy configuration compatibility). Run one matmul canary for each of the
+three treatments before the measured campaign. Together they must demonstrate
+an in-round compile/smoke repair, exact checkpoint/session resume, independent
+offline verification, and a positive `msprof op` timing. Dynamic admission
+chooses the physical BZ-A3 devices; canary definitions never encode devices.
+
+Freeze runtime scripts and benchmark assets from the reviewed merge commit,
+pin the unchanged prompt, tasks, starters, baselines, treatment skills, model,
+image, and source revision, then generate a new run ID and 48-operation
+manifest. Validate all hashes with `ProductionCellLauncher` before producing
+an admission receipt. Do not copy a prior ledger or cell worktree into the new
+run root, and do not launch the nine cells until all three canaries pass.
 
 The version-two final report contains one row per branch with status, attempt
 count, unchanged raw round receipts, per-case evidence, controls and policy,
@@ -276,3 +286,8 @@ Best-round and cross-device/cross-run comparison fields use normalized timing
 when present; raw timing remains available for device-local diagnosis. The
 report also aggregates every candidate-error round, including earlier rounds,
 with its round number, failure type, and reason.
+
+Repair-aware reports additionally expose raw successful attempts over all
+candidate attempts, successful and repaired round counts, total repairs,
+ordered failure transitions, and the final round timing. Legacy branches are
+reported as one candidate attempt per round.

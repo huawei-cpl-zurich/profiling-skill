@@ -383,8 +383,10 @@ def test_starter_manifest_contract_is_validated_before_materialization(tmp_path:
 class FakeRunner:
     calls = []
 
-    def __init__(self, repo, prompt, task, invoker, controller, *, round_count):
+    def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
+                 max_candidate_repairs):
         assert round_count == 4
+        assert max_candidate_repairs == 2
         self.repo = repo
 
     def run(self, run_id, agent_id, *, resume=False):
@@ -462,8 +464,12 @@ def migration_trust_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, di
 class TrustRecordingRunner(FakeRunner):
     trusted = None
 
-    def __init__(self, *args, round_count, trusted_runtime_migration):
-        super().__init__(*args, round_count=round_count)
+    def __init__(self, *args, round_count, max_candidate_repairs,
+                 trusted_runtime_migration):
+        super().__init__(
+            *args, round_count=round_count,
+            max_candidate_repairs=max_candidate_repairs,
+        )
         type(self).trusted = trusted_runtime_migration
 
 
@@ -693,11 +699,42 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
     assert created["invoker"][1]["timeout"] == 20
     assert created["verifier"][1]["timeout"] == 20
     assert FakeRunner.calls[-1][-1] is False
-
     launcher.launch(cell, slot)
     # A ledger-loss restart reconstructs the already-complete verified branch;
     # it does not ask the lifecycle to resume without a blocked checkpoint.
     assert FakeRunner.calls[-1][-1] is False
+
+
+def test_repair_runtime_uses_48_operations_and_two_candidate_repairs(tmp_path: Path):
+    cell = {"cell_id": "matmul-project-guarded", "task": "matmul",
+            "treatment": "project-guarded", "round_count": 4, "request_budget": 48,
+            "skills": ["ascend-profiling", "triton-guarded-kernel"]}
+    config = runtime_fixture(tmp_path, cell)
+    config["max_candidate_repairs_per_round"] = 2
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None, docker_image_id=config["runtime_image_digest"]),
+        controller_factory=lambda *args, **kwargs: object(),
+        runner_factory=FakeRunner, verifier_invoke=valid_verifier,
+    )
+    launcher.launch(cell, {"target": "bz-a3-1", "device": 2})
+    controller_config = json.loads((
+        Path(config["run_root"]) / cell["cell_id"] / "state/controller.json"
+    ).read_text())
+    assert controller_config["request_budget"] == 48
+
+
+@pytest.mark.parametrize("value", [-1, 0, 1, 3, True])
+def test_production_rejects_nonstandard_candidate_repair_limit(
+        tmp_path: Path, value):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    config["max_candidate_repairs_per_round"] = value
+    with pytest.raises(production.ProductionError, match="exactly two"):
+        production_launcher(config)
 
 
 def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
@@ -1190,8 +1227,12 @@ print(json.dumps({
     config["provenance"]["controller_sha256"] = closure_hash
 
     class ControllerRunner(FakeRunner):
-        def __init__(self, repo, prompt, task, invoker, controller, *, round_count):
-            super().__init__(repo, prompt, task, invoker, controller, round_count=round_count)
+        def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
+                     max_candidate_repairs):
+            super().__init__(
+                repo, prompt, task, invoker, controller, round_count=round_count,
+                max_candidate_repairs=max_candidate_repairs,
+            )
             self.controller = controller
 
         def run(self, run_id, agent_id, *, resume=False):

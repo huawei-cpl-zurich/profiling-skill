@@ -25,6 +25,7 @@ finally:
     sys.path.pop(0)
 
 RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v2"
+SUPPORTED_REQUEST_BUDGETS = {24, 48}
 MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
 DEVELOPMENT_CASES = {
@@ -237,6 +238,11 @@ class ProductionCellLauncher:
         if "adapter_command" in config or "remote_command" in config:
             raise ProductionError("runtime config cannot supply an adapter or remote command")
         self._validate_timeouts()
+        self.max_candidate_repairs = config.get("max_candidate_repairs_per_round", 2)
+        if self.max_candidate_repairs != 2 or type(self.max_candidate_repairs) is not int:
+            raise ProductionError(
+                "production max_candidate_repairs_per_round must be exactly two"
+            )
         self._validate_files()
         if invoker_factory is None or controller_factory is None or runner_factory is None:
             sys.path.insert(0, str(self.scripts))
@@ -627,7 +633,8 @@ class ProductionCellLauncher:
         ]
         document = {
             "schema": "profiling-skill/audited-bz-controller-config/v1",
-            "benchmark": cell["task"], "round_count": 4, "request_budget": 24,
+            "benchmark": cell["task"], "round_count": 4,
+            "request_budget": cell["request_budget"],
             "profile_repeats": 3, "variability_threshold": 0.25,
             "control_drift_threshold": 0.2, "infrastructure_retry_budget": 3,
             "timeout_seconds": (
@@ -697,7 +704,32 @@ class ProductionCellLauncher:
                 raise ProductionError(f"round {number} compact receipt is unavailable") from error
             if not isinstance(receipt, dict):
                 raise ProductionError(f"round {number} compact receipt is invalid")
-            rounds.append({"round": number, **receipt})
+            evidence_path = path.with_name("evidence.json")
+            attempt_statuses = None
+            if evidence_path.is_file():
+                try:
+                    evidence = json.loads(evidence_path.read_text())
+                    attempts = evidence.get("candidate_attempts")
+                    if isinstance(attempts, list) and attempts:
+                        attempt_statuses = []
+                        for attempt in attempts:
+                            attempt_number = attempt.get("attempt")
+                            attempt_receipt = json.loads((
+                                path.parent / "attempts" / f"{attempt_number:02d}"
+                                / "controller.json"
+                            ).read_text())
+                            attempt_statuses.append(
+                                attempt_receipt.get("failure_type", attempt_receipt["status"])
+                            )
+                except (OSError, KeyError, TypeError, ValueError,
+                        json.JSONDecodeError) as error:
+                    raise ProductionError(
+                        f"round {number} candidate attempt summary is invalid"
+                    ) from error
+            if attempt_statuses is None:
+                attempt_statuses = [receipt.get("failure_type", receipt.get("status"))]
+            rounds.append({"round": number, **receipt,
+                           "attempt_statuses": attempt_statuses})
         commits = tuple(item.get("commit") for item in verified["experiments"])
         if any(not isinstance(commit, str) or not commit for commit in commits):
             raise ProductionError("independent verifier omitted experiment commits")
@@ -750,8 +782,11 @@ class ProductionCellLauncher:
         return True
 
     def launch(self, cell: dict, slot: dict) -> dict:
-        if (cell.get("round_count"), cell.get("request_budget")) != (4, 24):
-            raise ProductionError("production cells require four rounds and 24 requests")
+        if (cell.get("round_count") != 4
+                or cell.get("request_budget") not in SUPPORTED_REQUEST_BUDGETS):
+            raise ProductionError(
+                "production cells require four rounds and a 24 or 48-operation budget"
+            )
         task_binding = self.config["tasks"].get(cell.get("task"), {})
         prompt_contract = cell.get("prompt_contract", {})
         if (cell.get("task_sha256") != task_binding.get("sha256")
@@ -791,7 +826,10 @@ class ProductionCellLauncher:
             raise ProductionError("Codex runtime image does not match pinned digest")
         try:
             controller = self._controller(cell, slot, root, repo)
-            runner_options = {"round_count": 4}
+            runner_options = {
+                "round_count": 4,
+                "max_candidate_repairs": self.max_candidate_repairs,
+            }
             if self.trusted_runtime_migration is not None:
                 runner_options["trusted_runtime_migration"] = self.trusted_runtime_migration
             runner = self.runner_factory(

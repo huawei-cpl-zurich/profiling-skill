@@ -88,8 +88,10 @@ def test_cli_passes_agent_identity_and_always_scrubs_auth(tmp_path: Path, monkey
             self.scrubbed = True
 
     class Lifecycle:
-        def __init__(self, repo, prompt, task, invoke, controller, *, round_count):
+        def __init__(self, repo, prompt, task, invoke, controller, *, round_count,
+                     max_candidate_repairs):
             seen["round_count"] = round_count
+            seen["max_candidate_repairs"] = max_candidate_repairs
 
         def run(self, *args, **kwargs):
             raise contract.AuditError("synthetic failure")
@@ -100,6 +102,7 @@ def test_cli_passes_agent_identity_and_always_scrubs_auth(tmp_path: Path, monkey
         cli.main(["--repo", str(repo), "--prompt", str(prompt), "--task", str(task),
                   "--run-id", "run", "--agent-id", "agent-7", "--controller", "true"])
     assert seen["agent_id"] == "agent-7"
+    assert seen["max_candidate_repairs"] == 2
     assert seen["invoker"].scrubbed is True
     assert "synthetic failure" in capsys.readouterr().err
 
@@ -120,8 +123,10 @@ def test_cli_passes_declared_round_count_to_lifecycle(tmp_path: Path, monkeypatc
             pass
 
     class Lifecycle:
-        def __init__(self, repo, prompt, task, invoke, controller, *, round_count):
+        def __init__(self, repo, prompt, task, invoke, controller, *, round_count,
+                     max_candidate_repairs):
             seen["round_count"] = round_count
+            seen["max_candidate_repairs"] = max_candidate_repairs
 
         def run(self, *args, **kwargs):
             return cli.RunResult("complete", "branch", "session", "seed", tuple("1234"))
@@ -132,9 +137,10 @@ def test_cli_passes_declared_round_count_to_lifecycle(tmp_path: Path, monkeypatc
     assert cli.main([
         "--repo", str(repo), "--prompt", str(prompt), "--task", str(task),
         "--run-id", "run", "--agent-id", "agent", "--controller", "true",
-        "--rounds", "4",
+        "--rounds", "4", "--max-candidate-repairs", "1",
     ]) == 0
     assert seen["round_count"] == 4
+    assert seen["max_candidate_repairs"] == 1
 
 
 def test_toy_controller_receipt_is_deterministic_and_policy_valid():

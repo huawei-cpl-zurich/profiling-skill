@@ -81,7 +81,8 @@ def invalid_command_events(thread: str, report: dict) -> str:
 
 def build_branch(tmp_path: Path, *, revert: int | None = 2, round_count: int = 3,
                  invalid_identity: str | None = None,
-                 repaired_attempts: bool = False) -> Path:
+                 repaired_attempts: bool = False,
+                 candidate_failures: int = 0) -> Path:
     repo = tmp_path / "repo"
     subprocess.run(["git", "init", "-q", "-b", "main", repo], check=True)
     git(repo, "config", "user.name", "Host Runner")
@@ -96,6 +97,7 @@ def build_branch(tmp_path: Path, *, revert: int | None = 2, round_count: int = 3
     prompt.write_text("Invariant prompt.\n")
     task.write_text("Make three toy changes.\n")
     bad_prepare = bad_finalize = repaired_attempts
+    controller_counts: dict[int, int] = {}
 
     def invoke(number: int, session: str | None, instruction: str | None) -> str:
         nonlocal bad_prepare, bad_finalize
@@ -106,6 +108,10 @@ def build_branch(tmp_path: Path, *, revert: int | None = 2, round_count: int = 3
                 return invalid_command_events("one-session", {"prepared": True})
             return events("one-session")
         if instruction.startswith("Repair preparation evidence"):
+            return events("one-session")
+        if instruction.startswith("Repair candidate attempt"):
+            value = int((repo / "candidate.py").read_text().split()[-1]) + 10
+            (repo / "candidate.py").write_text(f"VALUE = {value}\n")
             return events("one-session")
         candidate = sha((repo / "candidate.py").read_bytes())
         manifest = sha((repo / "candidate.manifest.json").read_bytes())
@@ -150,7 +156,16 @@ def build_branch(tmp_path: Path, *, revert: int | None = 2, round_count: int = 3
     }, invalid_identity if invalid_identity != "stale-controller" else None)
 
     def controller(number: int, candidate: str, manifest: str) -> dict:
-        return receipt(candidate, manifest, number)
+        controller_counts[number] = controller_counts.get(number, 0) + 1
+        result = receipt(candidate, manifest, number)
+        if controller_counts[number] <= candidate_failures:
+            result.update(status="candidate_error", reason="compile failed")
+            result.pop("samples_us")
+            result.pop("median_us")
+            result["policy"].pop("sample_count")
+            result["policy"].pop("variability_ratio")
+            result["policy"]["post_control"] = "not_run"
+        return result
 
     controller.reproducibility_metadata = lambda: identity({  # type: ignore[attr-defined]
         "adapter": "FixtureController", "argv": ["fixture-controller", "--compact"],
@@ -404,6 +419,49 @@ def test_accepts_legacy_evidence_without_retry_field(tmp_path: Path):
         repo, "experiments/03/evidence.json",
         lambda path: rewrite_json(path, lambda document: document.pop("agent_retries")),
     )
+
+    assert verifier.validate_branch(repo)["status"] == "valid"
+
+
+def test_validates_ordered_candidate_repair_attempts_and_rejects_tampering(
+    tmp_path: Path,
+):
+    repo = build_branch(tmp_path, candidate_failures=2)
+
+    result = verifier.validate_branch(repo)
+    assert result["status"] == "valid"
+    evidence_path = repo / "experiments/03/evidence.json"
+    rewrite_json(
+        evidence_path,
+        lambda document: document["candidate_attempts"][0].update(status="ok"),
+    )
+    git(repo, "add", "experiments/03/evidence.json")
+    git(repo, "commit", "--amend", "--no-edit")
+
+    with pytest.raises(contract.AuditError, match="attempt.*hash|ordering"):
+        verifier.validate_branch(repo)
+
+
+def test_accepts_pre_attempt_legacy_evidence(tmp_path: Path):
+    repo = build_branch(tmp_path)
+    commits = git(repo, "rev-list", "--first-parent", "--reverse", "main..HEAD").splitlines()
+    seed, experiments = commits[0], commits[1:]
+    git(repo, "reset", "--hard", seed)
+    for number, commit in enumerate(experiments, 1):
+        git(repo, "cherry-pick", commit)
+        root = repo / f"experiments/{number:02d}"
+        subprocess.run(
+            ["git", "rm", "-qr", f"experiments/{number:02d}/attempts"],
+            cwd=repo, check=True,
+        )
+        rewrite_json(
+            root / "evidence.json",
+            lambda document: (
+                document.pop("candidate_attempts"), document.pop("final_attempt")
+            ),
+        )
+        git(repo, "add", str(root / "evidence.json"))
+        git(repo, "commit", "--amend", "--no-edit")
 
     assert verifier.validate_branch(repo)["status"] == "valid"
 

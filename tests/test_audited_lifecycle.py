@@ -61,6 +61,18 @@ def receipt(candidate: str, manifest: str, number: int) -> dict:
     }
 
 
+def candidate_error_receipt(candidate: str, manifest: str, number: int,
+                            reason: str = "compile failed") -> dict:
+    result = receipt(candidate, manifest, number)
+    result.update(status="candidate_error", reason=reason)
+    result.pop("samples_us")
+    result.pop("median_us")
+    result["policy"].pop("sample_count")
+    result["policy"].pop("variability_ratio")
+    result["policy"]["post_control"] = "not_run"
+    return result
+
+
 def report(number: int, candidate: str, manifest: str, decision: str = "retain") -> dict:
     controller = receipt(candidate, manifest, number)
     return {
@@ -425,6 +437,222 @@ def test_unresolved_selector_is_repaired_before_controller_submission(tmp_path: 
     assert any(instruction and "unresolved starter selector" in instruction
                for _, _, instruction in calls)
     assert controller_calls == [(1, "actual_exported_kernel")]
+
+
+@pytest.mark.parametrize("failed_attempts", [1, 2])
+def test_candidate_errors_are_repaired_inside_one_experiment(
+    tmp_path: Path, failed_attempts: int,
+):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    calls = []
+    controller_calls = []
+
+    def invoke(number, session, instruction):
+        calls.append((number, session, instruction))
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-attempts", {"prepared": True})
+        if instruction.startswith("Repair candidate attempt"):
+            attempt = len([call for call in calls if call[2] and
+                           call[2].startswith("Repair candidate attempt")])
+            (repo / "candidate.py").write_text(f"VALUE = {attempt + 1}\n")
+            return events("thread-attempts", {"repair": attempt})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        return events("thread-attempts", report(number, candidate, manifest), command=False)
+
+    def controller(number, candidate, manifest):
+        controller_calls.append((number, candidate))
+        return (candidate_error_receipt(candidate, manifest, number)
+                if len(controller_calls) <= failed_attempts
+                else receipt(candidate, manifest, number))
+
+    result = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    ).run("attempts", "agent")
+
+    assert len(result.commits) == 1
+    assert [number for number, _ in controller_calls] == [1] * (failed_attempts + 1)
+    assert {session for _, session, _ in calls[1:]} == {"thread-attempts"}
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert [item["status"] for item in evidence["candidate_attempts"]] == (
+        ["candidate_error"] * failed_attempts + ["ok"]
+    )
+    assert evidence["final_attempt"] == failed_attempts + 1
+    for attempt in range(1, failed_attempts + 2):
+        root = repo / f"experiments/01/attempts/{attempt:02d}"
+        assert {path.name for path in root.iterdir()} == {
+            "candidate.py", "candidate.manifest.json", "controller.json",
+            "commands.jsonl", "reasoning.sha256",
+        }
+
+
+def test_candidate_repair_exhaustion_commits_final_attempt(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-exhausted", {"prepared": True})
+        if instruction.startswith("Repair candidate attempt"):
+            value = int((repo / "candidate.py").read_text().split()[-1]) + 1
+            (repo / "candidate.py").write_text(f"VALUE = {value}\n")
+            return events("thread-exhausted", {"repair": value})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        failed = candidate_error_receipt(candidate, manifest, number, "runtime failed")
+        document = report(number, candidate, manifest, "revert")
+        document["controller_receipt_sha256"] = contract.sha256_json(failed)
+        return events(
+            "thread-exhausted", document,
+            command=False,
+        )
+
+    def controller(number, candidate, manifest):
+        return candidate_error_receipt(candidate, manifest, number, "runtime failed")
+
+    lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    ).run("exhausted", "agent")
+
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert evidence["final_attempt"] == 3
+    assert [item["status"] for item in evidence["candidate_attempts"]] == [
+        "candidate_error", "candidate_error", "candidate_error",
+    ]
+    assert (repo / "candidate.py").read_text() == "VALUE = 0\n"
+
+
+def test_unchanged_candidate_repair_is_rejected(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+        return events("thread-unchanged", {"prepared": True})
+
+    def controller(number, candidate, manifest):
+        return candidate_error_receipt(candidate, manifest, number)
+
+    with pytest.raises(contract.AuditError, match="repair did not change"):
+        lifecycle.AuditedExperimentRunner(
+            repo, prompt, task, invoke, controller, round_count=1,
+        ).run("unchanged", "agent")
+
+
+def test_interrupted_candidate_repair_resumes_exact_attempt_and_session(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    controller_calls = []
+
+    class RepairInterrupted(RuntimeError):
+        structured_stdout = events("thread-resume", {"interrupted": True})
+
+    class Invoker:
+        fail_repair = True
+
+        def __call__(self, number, session, instruction):
+            if instruction is None:
+                (repo / "candidate.py").write_text("VALUE = 1\n")
+                return events("thread-resume", {"prepared": True})
+            if instruction.startswith("Repair candidate attempt") and self.fail_repair:
+                self.fail_repair = False
+                raise RepairInterrupted("transport ended")
+            if instruction.startswith("Resume blocked experiment"):
+                (repo / "candidate.py").write_text("VALUE = 2\n")
+                return events("thread-resume", {"repaired": True})
+            candidate = sha((repo / "candidate.py").read_bytes())
+            manifest = sha((repo / "candidate.manifest.json").read_bytes())
+            return events("thread-resume", report(number, candidate, manifest), command=False)
+
+    invoker = Invoker()
+
+    def controller(number, candidate, manifest):
+        controller_calls.append(candidate)
+        return (candidate_error_receipt(candidate, manifest, number)
+                if len(controller_calls) == 1 else receipt(candidate, manifest, number))
+
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoker, controller, round_count=1,
+    )
+    with pytest.raises(contract.AuditError, match="checkpointed session thread-resume"):
+        runner.run("resume-attempt", "agent")
+
+    checkpoint = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert checkpoint["experiment"] == 1 and checkpoint["stage"] == "prepare"
+    assert len(checkpoint["candidate_attempts"]) == 1
+
+    result = runner.run("resume-attempt", "agent", resume=True)
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert result.session_id == "thread-resume"
+    assert len(controller_calls) == 2
+    assert evidence["final_attempt"] == 2
+
+
+def test_infrastructure_checkpoint_does_not_consume_candidate_repair(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-infra", {"prepared": True})
+        if instruction.startswith("Repair candidate attempt"):
+            (repo / "candidate.py").write_text("VALUE = 2\n")
+            return events("thread-infra", {"repaired": True})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        observed = receipt(candidate, manifest, number)
+        observed["handle"] = "remote:retained"
+        observed["policy"]["submitted_handles"] = ["remote:retained"]
+        observed["policy"]["observed_handles"] = ["remote:retained"]
+        document = report(number, candidate, manifest)
+        document["controller_handle"] = "remote:retained"
+        document["controller_receipt_sha256"] = contract.sha256_json(observed)
+        return events("thread-infra", document, command=False)
+
+    class Controller:
+        calls = 0
+
+        def __call__(self, number, candidate, manifest):
+            self.calls += 1
+            if self.calls == 1:
+                return candidate_error_receipt(candidate, manifest, number)
+            return {
+                "status": "infrastructure_error", "handle": "remote:retained",
+                "candidate_sha256": candidate, "manifest_sha256": manifest,
+                "reason": "observer disconnected",
+            }
+
+        def observe(self, number, candidate, manifest, handle):
+            result = receipt(candidate, manifest, number)
+            result["handle"] = handle
+            result["policy"]["submitted_handles"] = [handle]
+            result["policy"]["observed_handles"] = [handle]
+            return result
+
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, Controller(), round_count=1,
+    )
+    with pytest.raises(contract.AuditError, match="blocked by controller"):
+        runner.run("infra-repair", "agent")
+    checkpoint = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert len(checkpoint["candidate_attempts"]) == 1
+
+    runner.run("infra-repair", "agent", resume=True)
+    evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert evidence["final_attempt"] == 2
+    assert [item["status"] for item in evidence["candidate_attempts"]] == [
+        "candidate_error", "ok",
+    ]
 
 
 def test_missing_preparation_commands_repair_in_reported_session(tmp_path: Path):

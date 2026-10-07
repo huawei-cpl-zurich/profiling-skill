@@ -1252,6 +1252,13 @@ if instruction is None:
         "type": "command_execution", "command": "python local-check.py",
         "exit_code": 0, "aggregated_output": "ok\n"}})
     document = {"prepared": True}
+elif instruction.startswith("Repair candidate attempt"):
+    value = int((repo / "candidate.py").read_text().split()[-1]) + 10
+    (repo / "candidate.py").write_text(f"VALUE = {value}\n")
+    events.append({"type": "item.completed", "item": {
+        "type": "command_execution", "command": "python local-check.py",
+        "exit_code": 0, "aggregated_output": "ok\n"}})
+    document = {"repaired": True}
 else:
     marker = "exact host controller receipt:\n"
     receipt_line = instruction.split(marker, 1)[1].splitlines()[0]

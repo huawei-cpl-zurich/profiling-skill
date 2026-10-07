@@ -237,11 +237,14 @@ class AuditedExperimentRunner:
     def __init__(self, repo: Path, prompt: Path, task: Path,
                  invoke: Callable[[int, str | None, str | None], str],
                  controller: Callable[[int, str, str], dict], *, max_repairs: int = 2,
+                 max_candidate_repairs: int = 2,
                  max_controller_resubmits: int = 2, max_remeasurements: int = 1,
                  round_count: int = 3,
                  trusted_runtime_migration: dict | list[dict] | None = None):
         if type(round_count) is not int or round_count < 1:
             raise AuditError("round count must be a positive integer")
+        if type(max_candidate_repairs) is not int or max_candidate_repairs < 0:
+            raise AuditError("candidate repair count must be a nonnegative integer")
         self.repo = repo.resolve()
         self.prompt_bytes = prompt.resolve().read_bytes()
         self.task_bytes = task.resolve().read_bytes()
@@ -250,12 +253,15 @@ class AuditedExperimentRunner:
         self.invoke = invoke
         self.controller = controller
         self.max_repairs = max_repairs
+        self.max_candidate_repairs = max_candidate_repairs
         self.max_controller_resubmits = max_controller_resubmits
         self.max_remeasurements = max_remeasurements
         self.round_count = round_count
         self.trusted_runtime_migration = trusted_runtime_migration
         self.runtime_migration: dict | None = None
         self.agent_retry_evidence: tuple[dict, ...] = ()
+        self.candidate_attempts: list[dict] = []
+        self.reasoning_sha256 = sha256_bytes(b"")
         self.reproducibility = {
             "agent": _identity(invoke), "controller": _identity(controller),
         }
@@ -287,6 +293,12 @@ class AuditedExperimentRunner:
             continuing = state if state and number == start else None
             commands = tuple(continuing.get("commands", ())) if continuing else ()
             stage = continuing.get("stage") if continuing else "prepare"
+            self.candidate_attempts = list(
+                continuing.get("candidate_attempts", ())) if continuing else []
+            self.reasoning_sha256 = (
+                continuing.get("reasoning_sha256", sha256_bytes(b""))
+                if continuing else sha256_bytes(b"")
+            )
 
             if not continuing:
                 session, commands = self._preparation_turn(
@@ -308,15 +320,44 @@ class AuditedExperimentRunner:
                     commands, branch, seed_commit, seed_hash, prior_hash,
                 )
 
-            candidate_hash, manifest, commands, session = self._repair_candidate(
-                number, session, prior_hash, commands, branch, seed_commit, seed_hash,
-            )
-            manifest_hash = sha256_bytes(manifest.read_bytes())
-
-            receipt = self._controller_turn(
-                number, session, candidate_hash, manifest_hash, continuing, stage,
-                branch, seed_commit, seed_hash, prior_hash, commands,
-            )
+            command_offset = sum(len(item["commands"]) for item in self.candidate_attempts)
+            while True:
+                candidate_hash, manifest, commands, session = self._repair_candidate(
+                    number, session, prior_hash, commands, branch, seed_commit, seed_hash,
+                )
+                manifest_hash = sha256_bytes(manifest.read_bytes())
+                receipt = self._controller_turn(
+                    number, session, candidate_hash, manifest_hash, continuing, stage,
+                    branch, seed_commit, seed_hash, prior_hash, commands,
+                )
+                self._record_candidate_attempt(
+                    candidate_hash, manifest_hash, receipt,
+                    commands[command_offset:], self.reasoning_sha256,
+                )
+                command_offset = len(commands)
+                continuing = None
+                stage = "prepare"
+                if (receipt["status"] != "candidate_error"
+                        or len(self.candidate_attempts) > self.max_candidate_repairs):
+                    break
+                failed_candidate, failed_manifest = candidate_hash, manifest_hash
+                session, commands = self._preparation_turn(
+                    number, session,
+                    f"Repair candidate attempt {len(self.candidate_attempts)} for experiment "
+                    f"{number} after this candidate failure:\n"
+                    f"{json.dumps(receipt, sort_keys=True)}\n"
+                    "Stay in the same experiment and session. Change candidate.py or "
+                    "candidate.manifest.json, run a local smoke check, and stop.",
+                    commands, branch, seed_commit, seed_hash, prior_hash,
+                )
+                repaired_candidate, repaired_manifest = self._validate_candidate(prior_hash)
+                if (repaired_candidate == failed_candidate
+                        and sha256_bytes(repaired_manifest.read_bytes()) == failed_manifest):
+                    self._checkpoint(
+                        number, session, "candidate repair did not change candidate or manifest",
+                        "prepare", branch, seed_commit, seed_hash, prior_hash, commands,
+                    )
+                    raise AuditError("candidate repair did not change candidate or manifest")
 
             tested_candidate = (self.repo / "candidate.py").read_bytes()
             tested_manifest = manifest.read_bytes()
@@ -339,6 +380,7 @@ class AuditedExperimentRunner:
                 committed_hash, restored_hash, tested_candidate,
             )
             self.agent_retry_evidence = ()
+            self.candidate_attempts = []
             _git(self.repo, "add", "candidate.py", "candidate.manifest.json",
                  f"experiments/{number:02d}")
             author = dict(os.environ)
@@ -541,6 +583,7 @@ class AuditedExperimentRunner:
                 number, session, turn_instruction, commands, "prepare", branch,
                 seed_commit, seed_hash, prior_hash,
             )
+            self.reasoning_sha256 = sha256_bytes(output.encode())
             session = extract_thread_id(output, session)
             try:
                 _, new_commands = parse_command_events(output, session)
@@ -553,6 +596,25 @@ class AuditedExperimentRunner:
         self._checkpoint(number, session, failure, "prepare", branch, seed_commit,
                          seed_hash, prior_hash, commands)
         raise AuditError(failure)
+
+    def _record_candidate_attempt(self, candidate_hash: str, manifest_hash: str,
+                                  receipt: dict, commands: tuple[dict, ...],
+                                  reasoning_sha256: str) -> None:
+        candidate = (self.repo / "candidate.py").read_bytes()
+        manifest = (self.repo / "candidate.manifest.json").read_bytes()
+        self.candidate_attempts.append({
+            "schema": "profiling-skill/candidate-attempt/v1",
+            "attempt": len(self.candidate_attempts) + 1,
+            "status": receipt["status"],
+            "candidate_sha256": candidate_hash,
+            "manifest_sha256": manifest_hash,
+            "controller_receipt_sha256": sha256_json(receipt),
+            "commands_sha256": sha256_json(list(commands)),
+            "reasoning_sha256": reasoning_sha256,
+            "candidate": candidate.decode("utf-8"),
+            "manifest": manifest.decode("utf-8"),
+            "receipt": receipt, "commands": list(commands),
+        })
 
     def _repair_candidate(self, number: int, session: str, prior_hash: str,
                           commands: tuple[dict, ...], branch: str, seed_commit: str,
@@ -766,6 +828,12 @@ class AuditedExperimentRunner:
             "prompt_sha256": self.prompt_hash, "task_sha256": self.task_hash,
             "reproducibility": self.reproducibility, "controller": receipt,
             "agent_retries": list(self.agent_retry_evidence),
+            "candidate_attempts": [
+                {key: value for key, value in attempt.items()
+                 if key not in {"candidate", "manifest", "receipt", "commands"}}
+                for attempt in self.candidate_attempts
+            ],
+            "final_attempt": len(self.candidate_attempts),
         }
         (directory / "evidence.json").write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n"
@@ -780,6 +848,20 @@ class AuditedExperimentRunner:
         (directory / "commands.jsonl").write_text("".join(
             json.dumps(command, sort_keys=True) + "\n" for command in parsed.commands
         ))
+        attempts = directory / "attempts"
+        for attempt in self.candidate_attempts:
+            target = attempts / f"{attempt['attempt']:02d}"
+            target.mkdir(parents=True)
+            (target / "candidate.py").write_text(attempt["candidate"])
+            (target / "candidate.manifest.json").write_text(attempt["manifest"])
+            (target / "controller.json").write_text(
+                json.dumps(attempt["receipt"], indent=2, sort_keys=True) + "\n"
+            )
+            (target / "commands.jsonl").write_text("".join(
+                json.dumps(command, sort_keys=True) + "\n"
+                for command in attempt["commands"]
+            ))
+            (target / "reasoning.sha256").write_text(attempt["reasoning_sha256"] + "\n")
 
     def _checkpoint(self, number: int, session: str | None, reason: str, stage: str,
                     branch: str, seed_commit: str, seed_hash: str, prior_hash: str,
@@ -802,6 +884,8 @@ class AuditedExperimentRunner:
             "resume_parent": _git(self.repo, "rev-parse", "HEAD"),
             "prior_candidate_sha256": prior_hash, "commands": commands,
             "agent_retries": list(self.agent_retry_evidence),
+            "candidate_attempts": self.candidate_attempts,
+            "reasoning_sha256": self.reasoning_sha256,
             "receipt": receipt,
             "candidate_sha256": sha256_bytes(candidate.read_bytes()) if candidate.is_file() else None,
             "manifest_sha256": sha256_bytes(manifest.read_bytes()) if manifest.is_file() else None,
@@ -888,6 +972,45 @@ class AuditedExperimentRunner:
         if any(record["experiment"] != state["experiment"]
                for record in agent_retries):
             raise AuditError("agent retry evidence belongs to a different experiment")
+        attempts = state.get("candidate_attempts", [])
+        if (not isinstance(attempts, list)
+                or len(attempts) > self.max_candidate_repairs + 1
+                or not valid_hash(state.get("reasoning_sha256", sha256_bytes(b"")))):
+            raise AuditError("blocked checkpoint candidate attempt history is invalid")
+        for index, attempt in enumerate(attempts, 1):
+            try:
+                candidate = attempt["candidate"].encode()
+                manifest = attempt["manifest"].encode()
+                commands = attempt["commands"]
+                receipt = attempt["receipt"]
+                valid = (
+                    set(attempt) == {
+                        "schema", "attempt", "status", "candidate_sha256",
+                        "manifest_sha256", "controller_receipt_sha256",
+                        "commands_sha256", "reasoning_sha256", "candidate",
+                        "manifest", "receipt", "commands",
+                    }
+                    and attempt["schema"] == "profiling-skill/candidate-attempt/v1"
+                    and attempt["attempt"] == index
+                    and (
+                        attempt["status"] == "candidate_error"
+                        or (state["stage"] == "finalize" and index == len(attempts)
+                            and attempt["status"] == "ok")
+                    )
+                    and sha256_bytes(candidate) == attempt["candidate_sha256"]
+                    and sha256_bytes(manifest) == attempt["manifest_sha256"]
+                    and sha256_json(receipt) == attempt["controller_receipt_sha256"]
+                    and sha256_json(commands) == attempt["commands_sha256"]
+                    and valid_hash(attempt["reasoning_sha256"])
+                    and isinstance(commands, list)
+                )
+                validate_controller_receipt(
+                    receipt, attempt["candidate_sha256"], attempt["manifest_sha256"]
+                )
+            except (AttributeError, KeyError, TypeError, UnicodeEncodeError, AuditError):
+                valid = False
+            if not valid:
+                raise AuditError("blocked checkpoint candidate attempt history is invalid")
         if state.get("branch") != expected_branch or _git(
             self.repo, "branch", "--show-current"
         ) != expected_branch:

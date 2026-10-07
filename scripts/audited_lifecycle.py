@@ -68,6 +68,35 @@ def _retry_records(value: object, *, contextual: bool = False) -> tuple[dict, ..
     return tuple(retained)
 
 
+def _validate_durable_observation_checkpoint(
+        receipt: object, candidate_hash: str, manifest_hash: str,
+        experiment: int) -> dict:
+    """Validate a nonterminal receipt whose durable handle must be re-observed.
+
+    A controller subprocess can lose its observer after the remote service has
+    allocated a handle. Such a compact transport receipt is not a terminal
+    controller result, so it need not repeat bindings authenticated by the
+    lifecycle checkpoint. Any repeated binding must still agree exactly.
+    """
+    if (not isinstance(receipt, dict)
+            or receipt.get("status") != "infrastructure_error"
+            or receipt.get("terminal") is not False
+            or not isinstance(receipt.get("handle"), str)
+            or not receipt["handle"]
+            or not isinstance(receipt.get("reason"), str)
+            or not receipt["reason"]):
+        raise AuditError("blocked checkpoint receipt is invalid")
+    bindings = {key for key in ("candidate_sha256", "manifest_sha256")
+                if key in receipt}
+    if bindings and (bindings != {"candidate_sha256", "manifest_sha256"}
+                     or receipt["candidate_sha256"] != candidate_hash
+                     or receipt["manifest_sha256"] != manifest_hash):
+        raise AuditError("blocked checkpoint receipt is invalid")
+    if "experiment" in receipt and receipt["experiment"] != experiment:
+        raise AuditError("blocked checkpoint receipt is invalid")
+    return receipt
+
+
 def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
     result = subprocess.run(
         ["git", *arguments], cwd=repo, text=True, capture_output=True, env=env,
@@ -1186,11 +1215,15 @@ class AuditedExperimentRunner:
         ):
             raise AuditError("blocked checkpoint candidate is invalid")
         handle = (state.get("receipt") or {}).get("handle")
-        bound_receipt = state["stage"] != "controller" or isinstance(handle, str) and handle
-        if bound_receipt and state["stage"] in {"controller", "measurement", "finalize"} and (
-            state["receipt"].get("candidate_sha256") != state["candidate_sha256"]
-            or state["receipt"].get("manifest_sha256") != state["manifest_sha256"]
-        ):
+        if state["stage"] == "controller" and isinstance(handle, str) and handle:
+            _validate_durable_observation_checkpoint(
+                state["receipt"], state["candidate_sha256"],
+                state["manifest_sha256"], state["experiment"],
+            )
+        elif state["stage"] in {"measurement", "finalize"} and (
+                state["receipt"].get("candidate_sha256") != state["candidate_sha256"]
+                or state["receipt"].get("manifest_sha256")
+                != state["manifest_sha256"]):
             raise AuditError("blocked checkpoint receipt is invalid")
         if state["stage"] == "finalize" and attempts:
             final = attempts[-1]

@@ -1744,6 +1744,7 @@ base = {"candidate_sha256": a.candidate_sha256,
         "device": "bz-a3-1/device-1"}
 if cell.startswith("matmul-") and a.experiment == 1 and not a.observe_handle:
     print(json.dumps({**base, "status": "infrastructure_error",
+                      "terminal": False,
                       "reason": "observer disconnected"}))
 elif cell.startswith("matmul-") and a.experiment == 2 and not a.remeasure_handle:
     print(json.dumps({**base, "status": "measurement_pending",

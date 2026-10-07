@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +28,8 @@ from audited_contract import (
 MAX_PARTIAL_OUTPUT = 65536
 MANIFEST_SCHEMA = "profiling-skill/candidate-kernel/v1"
 STARTER_SELECTOR = "REPLACE_WITH_EXACT_EXPORTED_KERNEL"
+MIGRATION_CITATION_SCHEMA = "profiling-skill/audited-runtime-migration-citation/v1"
+MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 
 
 def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
@@ -55,6 +59,85 @@ def _identity(component: object) -> dict:
     name = f"{getattr(component, '__module__', 'unknown')}." \
            f"{getattr(component, '__qualname__', type(component).__name__)}"
     return {"adapter": name, "identity_sha256": sha256_bytes(name.encode())}
+
+
+def _tree_sha256(root: Path) -> str:
+    if not root.is_dir() or root.is_symlink():
+        raise AuditError("runtime migration closure is unavailable")
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        mode = path.lstat().st_mode
+        if path.is_symlink() or not (path.is_dir() or stat.S_ISREG(mode)):
+            raise AuditError("runtime migration closure has an unsupported entry")
+        if path.is_file():
+            digest.update(relative.encode() + b"\0")
+            digest.update(oct(stat.S_IMODE(mode)).encode() + b"\0")
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _validate_runtime_migration(repo: Path, state: dict, seed: dict,
+                                current: dict, agent_id: str) -> None:
+    try:
+        citation = state["runtime_migration"]
+        path_text = citation["attestation_path"]
+        path = Path(path_text)
+        if (not isinstance(citation, dict) or citation.get("schema") != MIGRATION_CITATION_SCHEMA
+                or not isinstance(path_text, str) or not path.is_absolute()
+                or path.resolve().is_relative_to(repo) or not path.is_file()):
+            raise AuditError("runtime migration citation is invalid")
+        raw = path.read_bytes()
+        attestation = json.loads(raw)
+        seal = attestation.get("attestation_sha256")
+        unsealed = {key: value for key, value in attestation.items()
+                    if key != "attestation_sha256"}
+        cells = [cell for cell in attestation.get("cells", []) if isinstance(cell, dict)
+                 and cell.get("cell_id") == agent_id
+                 and cell.get("experiment") == state["experiment"]]
+        if (attestation.get("schema") != MIGRATION_ATTESTATION_SCHEMA
+                or citation.get("attestation_file_sha256") != sha256_bytes(raw)
+                or citation.get("attestation_sha256") != seal
+                or citation.get("plan_sha256") != attestation.get("plan_sha256")
+                or not isinstance(seal, str) or sha256_json(unsealed) != seal
+                or len(cells) != 1):
+            raise AuditError("runtime migration attestation is invalid")
+        cell = cells[0]
+        checkpoint = citation.get("checkpoint_commit")
+        old_blob = _git_blob(repo, checkpoint, ".experiment/blocked.json")
+        original = json.loads(old_blob)
+        current_without_citation = {key: value for key, value in state.items()
+                                    if key != "runtime_migration"}
+        if (citation.get("cell_id") != agent_id
+                or checkpoint != cell.get("checkpoint_commit")
+                or sha256_bytes(old_blob) != cell.get("blocked_sha256")
+                or current_without_citation != original
+                or citation.get("old_controller_identity") != cell.get("old_controller_identity")
+                or citation.get("new_controller_identity") != cell.get("new_controller_identity")
+                or seed.get("reproducibility", {}).get("controller")
+                != cell.get("old_controller_identity")
+                or current["controller"] != cell.get("new_controller_identity")):
+            raise AuditError("runtime migration cell or controller identity is invalid")
+        for label in ("old", "new"):
+            binding = attestation["runtimes"][label]
+            config_path = Path(binding["config_path"])
+            runtime_path = Path(binding["runtime_path"])
+            config_raw = config_path.read_bytes()
+            config = json.loads(config_raw)
+            runtime = config["runtime_scripts"]
+            if (not config_path.is_absolute() or not runtime_path.is_absolute()
+                    or sha256_bytes(config_raw) != binding.get("config_sha256")
+                    or Path(runtime["path"]).resolve() != runtime_path.resolve()
+                    or _tree_sha256(runtime_path) != binding.get("closure_sha256")
+                    or runtime.get("sha256") != binding.get("closure_sha256")):
+                raise AuditError("runtime migration runtime artifacts changed")
+    except AuditError:
+        raise
+    except (AttributeError, KeyError, TypeError, ValueError, OSError,
+            json.JSONDecodeError) as failure:
+        raise AuditError("runtime migration citation is malformed") from failure
 
 
 @dataclass(frozen=True)
@@ -709,7 +792,17 @@ class AuditedExperimentRunner:
         current_reproducibility = {
             "agent": _identity(self.invoke), "controller": _identity(self.controller),
         }
-        if seed.get("reproducibility") != current_reproducibility:
+        seeded = seed.get("reproducibility", {})
+        if seeded.get("agent") != current_reproducibility["agent"]:
+            raise AuditError("current agent identity differs from experiment seed")
+        controller_changed = seeded.get("controller") != current_reproducibility["controller"]
+        if controller_changed and state.get("runtime_migration") is None:
+            raise AuditError("current reproducibility metadata differs from experiment seed")
+        if controller_changed or state.get("runtime_migration") is not None:
+            _validate_runtime_migration(
+                self.repo, state, seed, current_reproducibility, agent_id,
+            )
+        elif seed.get("reproducibility") != current_reproducibility:
             raise AuditError("current reproducibility metadata differs from experiment seed")
         if state["stage"] in {"controller", "measurement", "finalize"} and (
             sha256_bytes((self.repo / "candidate.py").read_bytes()) != state["candidate_sha256"]

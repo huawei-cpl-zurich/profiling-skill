@@ -182,6 +182,188 @@ def rewrite_first_command(path: Path, **changes) -> None:
     path.write_text("".join(json.dumps(item) + "\n" for item in commands))
 
 
+def migrated_branch(tmp_path: Path, boundary: int) -> tuple[Path, dict, Path]:
+    repo = build_branch(tmp_path, round_count=4)
+    commits = git(repo, "rev-list", "--first-parent", "--reverse", "main..HEAD").splitlines()
+    seed_commit, experiments = commits[0], commits[1:]
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+    old_identity = seed["reproducibility"]["controller"]
+    new_identity = {
+        "adapter": "FixtureController",
+        "argv": ["fixture-controller", "--migration-aware"],
+        "executable_sha256": "2" * 64,
+    }
+    new_identity["identity_sha256"] = contract.sha256_json(new_identity)
+
+    git(repo, "reset", "--hard", seed_commit)
+    rewritten = []
+    for number, commit in enumerate(experiments, 1):
+        git(repo, "cherry-pick", commit)
+        if number >= boundary:
+            evidence_path = repo / f"experiments/{number:02d}/evidence.json"
+            rewrite_json(
+                evidence_path,
+                lambda value: value["reproducibility"].update(
+                    {"controller": new_identity}
+                ),
+            )
+            git(repo, "add", str(evidence_path.relative_to(repo)))
+            git(repo, "commit", "--amend", "--no-edit")
+        rewritten.append(git(repo, "rev-parse", "HEAD"))
+
+    cell = {
+        "cell_id": "agent-a", "experiment": boundary,
+        "branch": "experiment/validation/agent-a", "seed_commit": seed_commit,
+        "resume_parent": seed_commit if boundary == 1 else rewritten[boundary - 2],
+        "old_controller_identity": old_identity,
+        "new_controller_identity": new_identity,
+    }
+    attestation = {
+        "schema": "profiling-skill/audited-runtime-preflight/v1",
+        "migration_id": f"fixture-round-{boundary}", "plan_sha256": "3" * 64,
+        "cells": [cell], "runtimes": {"old": {}, "new": {}},
+    }
+    attestation["attestation_sha256"] = contract.sha256_json(attestation)
+    path = tmp_path / f"attestation-{boundary}.json"
+    path.write_text(json.dumps(attestation, sort_keys=True) + "\n")
+    proof = {
+        "schema": "profiling-skill/audited-runtime-migration-trust/v1",
+        "attestation_path": str(path.resolve()),
+        "attestation_file_sha256": sha(path.read_bytes()),
+        "attestation_sha256": attestation["attestation_sha256"],
+    }
+    return repo, proof, path
+
+
+@pytest.mark.parametrize("boundary", [1, 3])
+def test_validates_sealed_controller_migration_at_exact_round(
+    tmp_path: Path, boundary: int,
+):
+    repo, proof, _ = migrated_branch(tmp_path, boundary)
+
+    with pytest.raises(contract.AuditError, match="provenance diverges"):
+        verifier.validate_branch(repo)
+
+    result = verifier.validate_branch(repo, migration_proofs=[proof])
+
+    assert result["status"] == "valid"
+    assert result["controller_migrations"] == [{
+        "migration_id": f"fixture-round-{boundary}",
+        "experiment": boundary,
+        "attestation_sha256": proof["attestation_sha256"],
+    }]
+
+
+@pytest.mark.parametrize("defect", [
+    "missing", "tampered", "wrong-cell", "wrong-boundary", "identity", "nonmonotonic",
+])
+def test_rejects_invalid_controller_migration_proof(tmp_path: Path, defect: str):
+    repo, proof, path = migrated_branch(tmp_path, 3)
+    proofs = [proof]
+    if defect == "missing":
+        proofs = []
+    elif defect == "tampered":
+        path.write_text(path.read_text() + " ")
+    else:
+        attestation = json.loads(path.read_text())
+        cell = attestation["cells"][0]
+        if defect == "wrong-cell":
+            cell["cell_id"] = "other-agent"
+        elif defect == "wrong-boundary":
+            cell["experiment"] = 2
+        elif defect == "identity":
+            cell["old_controller_identity"] = cell["new_controller_identity"]
+        else:
+            second = json.loads(json.dumps(attestation))
+            second["migration_id"] = "earlier-after-later"
+            second["cells"][0]["experiment"] = 2
+            second["attestation_sha256"] = contract.sha256_json({
+                key: value for key, value in second.items()
+                if key != "attestation_sha256"
+            })
+            second_path = tmp_path / "attestation-2.json"
+            second_path.write_text(json.dumps(second, sort_keys=True) + "\n")
+            proofs.append({
+                "schema": proof["schema"],
+                "attestation_path": str(second_path.resolve()),
+                "attestation_file_sha256": sha(second_path.read_bytes()),
+                "attestation_sha256": second["attestation_sha256"],
+            })
+            with pytest.raises(contract.AuditError, match="migration proof"):
+                verifier.validate_branch(repo, migration_proofs=proofs)
+            return
+        attestation["attestation_sha256"] = contract.sha256_json({
+            key: value for key, value in attestation.items()
+            if key != "attestation_sha256"
+        })
+        path.write_text(json.dumps(attestation, sort_keys=True) + "\n")
+        proof["attestation_file_sha256"] = sha(path.read_bytes())
+        proof["attestation_sha256"] = attestation["attestation_sha256"]
+
+    with pytest.raises(contract.AuditError, match="migration proof|provenance diverges"):
+        verifier.validate_branch(repo, migration_proofs=proofs)
+
+
+def test_cli_accepts_an_ordered_pinned_migration_proof(tmp_path: Path):
+    repo, proof, _ = migrated_branch(tmp_path, 3)
+
+    result = subprocess.run([
+        sys.executable, str(ROOT / "scripts/validate_audited_experiment.py"),
+        str(repo), "--migration-proof", proof["attestation_path"],
+        proof["attestation_file_sha256"], proof["attestation_sha256"],
+    ], text=True, capture_output=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["controller_migrations"][0]["experiment"] == 3
+
+
+def test_validates_ordered_controller_migration_chain(tmp_path: Path):
+    repo, first, first_path = migrated_branch(tmp_path, 3)
+    first_attestation = json.loads(first_path.read_text())
+    first_cell = first_attestation["cells"][0]
+    second_identity = {
+        "adapter": "FixtureController", "argv": ["fixture-controller", "--v5"],
+        "executable_sha256": "4" * 64,
+    }
+    second_identity["identity_sha256"] = contract.sha256_json(second_identity)
+    evidence = repo / "experiments/04/evidence.json"
+    rewrite_json(
+        evidence,
+        lambda value: value["reproducibility"].update(
+            {"controller": second_identity}
+        ),
+    )
+    git(repo, "add", "experiments/04/evidence.json")
+    git(repo, "commit", "--amend", "--no-edit")
+    second_attestation = {
+        "schema": "profiling-skill/audited-runtime-preflight/v1",
+        "migration_id": "fixture-round-4", "plan_sha256": "5" * 64,
+        "runtimes": {"old": {}, "new": {}},
+        "cells": [{
+            "cell_id": "agent-a", "experiment": 4,
+            "branch": "experiment/validation/agent-a",
+            "seed_commit": first_cell["seed_commit"],
+            "resume_parent": git(repo, "rev-parse", "HEAD^"),
+            "old_controller_identity": first_cell["new_controller_identity"],
+            "new_controller_identity": second_identity,
+        }],
+    }
+    second_attestation["attestation_sha256"] = contract.sha256_json(
+        second_attestation
+    )
+    second_path = tmp_path / "attestation-4.json"
+    second_path.write_text(json.dumps(second_attestation, sort_keys=True) + "\n")
+    second = {
+        "schema": first["schema"], "attestation_path": str(second_path.resolve()),
+        "attestation_file_sha256": sha(second_path.read_bytes()),
+        "attestation_sha256": second_attestation["attestation_sha256"],
+    }
+
+    result = verifier.validate_branch(repo, migration_proofs=[first, second])
+
+    assert [item["experiment"] for item in result["controller_migrations"]] == [3, 4]
+
+
 def test_validates_complete_unmerged_branch_and_revert(tmp_path: Path):
     repo = build_branch(tmp_path)
 

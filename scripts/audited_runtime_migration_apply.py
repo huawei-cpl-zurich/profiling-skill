@@ -319,9 +319,11 @@ def apply(plan_path: Path, attestation_path: Path, trusted: dict,
                                      updated_ledger, "campaign ledger"), interrupt_after)
     journal["status"], journal["active"] = "complete", None
     _atomic_json(journal_path, journal)
+    history = [*plan.get("prior_migrations", []), trusted]
     return {"status": "complete", "migration_id": plan["migration_id"],
             "journal": str(journal_path), "archive_manifest": archive_manifest,
-            "trusted_runtime_migration": trusted}
+            "trusted_runtime_migration": trusted,
+            "trusted_runtime_migrations": history}
 
 
 def main(argv: list[str] | None = None) -> int:

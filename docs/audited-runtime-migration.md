@@ -71,9 +71,45 @@ config match the active pinned runtime before it constructs an agent or
 controller. Ordinary campaigns omit all three arguments and retain their
 existing provenance checks.
 
+For more than one transition, prefer repeatable ordered proof tuples. The
+launcher authenticates the complete closure chain, retains it for lifecycle
+resume, and forwards every cell-relevant proof to the independent verifier:
+
+```console
+python scripts/audited_campaign_production.py ... --resume \
+  --migration-proof /absolute/path/to/preflight-v4.json FILE_SHA256 SEAL \
+  --migration-proof /absolute/path/to/preflight-v5.json FILE_SHA256 SEAL
+```
+
+Do not mix the legacy single-attestation arguments with `--migration-proof`.
+For a later preflight, add the earlier ordered trust objects to the plan's
+optional `prior_migrations` array. The preflight accepts the current
+controller as its old identity only after that history authenticates a chain
+from the immutable seed identity to the checkpoint's latest citation. Apply
+returns both the legacy latest `trusted_runtime_migration` and the complete
+ordered `trusted_runtime_migrations` history.
+
+The independent verifier receives the same trust tuple for a completed
+migrated branch. Repeat `--migration-proof` in transition order when a branch
+crossed more than one authenticated runtime boundary:
+
+```console
+python scripts/validate_audited_experiment.py /path/to/branch \
+  --base BASE_REVISION \
+  --migration-proof /absolute/path/to/preflight.json \
+    ATTESTATION_FILE_SHA256 ATTESTATION_SHA256
+```
+
+Each proof must bind the branch's exact cell, seed commit, transition round,
+resume parent, and old/new controller identities. Without a matching proof,
+every experiment must retain the exact controller identity recorded in the
+seed. The production launcher supplies a cell's authenticated proof
+automatically after a migrated run completes.
+
 The plan schema is `profiling-skill/audited-runtime-migration-plan/v1`. Its
 top-level fields are `migration_id`, `run_root`, `ledger_sha256`,
-`old_runtime`, `new_runtime`, and `cells`. Runtime bindings contain
+`old_runtime`, `new_runtime`, and `cells`, plus optional ordered
+`prior_migrations` for a later transition. Runtime bindings contain
 `config_path`, `config_sha256`, and `closure_sha256`. Each cell contains:
 
 - `cell_id`, `experiment`, and `checkpoint_commit`

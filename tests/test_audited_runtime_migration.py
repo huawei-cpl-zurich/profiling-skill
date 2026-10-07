@@ -240,6 +240,73 @@ def test_check_accepts_production_receipt_without_redundant_artifact_hashes(camp
     assert checked["status"] == "ready"
 
 
+def test_preflight_chains_from_authenticated_current_controller(campaign, tmp_path: Path):
+    first_path = tmp_path / "first-attestation.json"
+    first_result = migration.run(campaign["plan"], first_path)
+    first = json.loads(first_path.read_text())
+    first_cells = {cell["cell_id"]: cell for cell in first["cells"]}
+    prior_trust = {
+        "schema": migration_apply.TRUST_SCHEMA,
+        "attestation_path": str(first_path.resolve()),
+        "attestation_file_sha256": first_result["attestation_sha256"],
+        "attestation_sha256": first["attestation_sha256"],
+    }
+    third_config, third = make_runtime(tmp_path, "third")
+    plan = campaign["document"]
+    plan["migration_id"] = "selector-fallback-v5"
+    plan["prior_migrations"] = [prior_trust]
+    plan["old_runtime"] = plan["new_runtime"]
+    plan["new_runtime"] = {
+        "config_path": str(third_config), "config_sha256": sha(third_config),
+        "closure_sha256": third["runtime_scripts"]["sha256"],
+    }
+    for cell in plan["cells"]:
+        repo = campaign["root"] / cell["cell_id"] / "repo"
+        blocked_path = repo / ".experiment/blocked.json"
+        blocked = json.loads(blocked_path.read_text())
+        attested = first_cells[cell["cell_id"]]
+        blocked["runtime_migration"] = {
+            "schema": "profiling-skill/audited-runtime-migration-citation/v1",
+            "attestation_path": str(first_path.resolve()),
+            "attestation_file_sha256": sha(first_path),
+            "attestation_sha256": first["attestation_sha256"],
+            "plan_sha256": first["plan_sha256"],
+            "cell_id": cell["cell_id"], "experiment": cell["experiment"],
+            "checkpoint_commit": attested["checkpoint_commit"],
+            "original_blocked_json": blocked_path.read_text(),
+            "old_controller_identity": attested["old_controller_identity"],
+            "new_controller_identity": attested["new_controller_identity"],
+        }
+        write_json(blocked_path, blocked)
+        git(repo, "add", ".experiment/blocked.json")
+        git(repo, "commit", "--amend", "--no-edit", "-q")
+        cell["checkpoint_commit"] = git(repo, "rev-parse", "HEAD")
+        cell["blocked_sha256"] = sha(blocked_path)
+        controller_config = campaign["root"] / cell["cell_id"] / "state/controller.json"
+        cell["old_controller_identity"] = attested["new_controller_identity"]
+        cell["new_controller_identity"] = controller_identity(
+            Path(third["runtime_scripts"]["path"]) / "audited_bz_controller.py",
+            controller_config, campaign["root"] / cell["cell_id"] / "state/controller",
+        )
+    write_json(campaign["plan"], plan)
+
+    second_path = tmp_path / "second-attestation.json"
+    result = migration.run(campaign["plan"], second_path)
+
+    assert result["status"] == "ready"
+    second = json.loads(second_path.read_text())
+    second_trust = {
+        "schema": migration_apply.TRUST_SCHEMA,
+        "attestation_path": str(second_path.resolve()),
+        "attestation_file_sha256": result["attestation_sha256"],
+        "attestation_sha256": second["attestation_sha256"],
+    }
+    applied = migration_apply.apply(
+        campaign["plan"], second_path, second_trust, tmp_path / "second-transaction",
+    )
+    assert applied["trusted_runtime_migrations"] == [prior_trust, second_trust]
+
+
 @pytest.mark.parametrize(("field", "value"), [
     ("candidate_sha256", "0" * 64),
     ("manifest_sha256", "0" * 64),
@@ -452,6 +519,71 @@ def test_migrated_resume_preserves_provenance_across_another_checkpoint(campaign
     resumed = second._resume("run", cell["cell_id"])
 
     assert resumed["runtime_migration"]["continuation"]["state_sha256"]
+
+
+def test_lifecycle_authenticates_ordered_sequential_migrations(campaign, tmp_path: Path):
+    runner, repo, _, first_path, first_cell = migrated_runner(campaign)
+    original = json.loads((repo / ".experiment/blocked.json").read_text())
+    original["experiment"] = 4
+    original_raw = json.dumps(original, indent=2, sort_keys=True) + "\n"
+    third_config, third = make_runtime(tmp_path, "third-lifecycle")
+    controller_config = campaign["root"] / first_cell["cell_id"] / "state/controller.json"
+    third_identity = controller_identity(
+        Path(third["runtime_scripts"]["path"]) / "audited_bz_controller.py",
+        controller_config, campaign["root"] / first_cell["cell_id"] / "state/controller",
+    )
+    first_attestation = json.loads(first_path.read_text())
+    second = {
+        "schema": migration.ATTESTATION_SCHEMA, "migration_id": "runtime-v5",
+        "plan_sha256": "7" * 64,
+        "ledger_sha256": first_attestation["ledger_sha256"],
+        "runtimes": {
+            "old": first_attestation["runtimes"]["new"],
+            "new": {
+                "config_path": str(third_config.resolve()),
+                "config_sha256": sha(third_config),
+                "closure_sha256": third["runtime_scripts"]["sha256"],
+                "runtime_path": third["runtime_scripts"]["path"],
+            },
+        },
+        "cells": [{
+            **first_cell, "experiment": 4, "branch": original["branch"],
+            "seed_commit": original["seed_commit"],
+            "blocked_sha256": sha_bytes(original_raw.encode()),
+            "old_controller_identity": first_cell["new_controller_identity"],
+            "new_controller_identity": third_identity,
+        }],
+    }
+    second["attestation_sha256"] = migration.document_sha256(second)
+    second_path = tmp_path / "second-lifecycle-attestation.json"
+    write_json(second_path, second)
+    second_trust = {
+        "schema": migration_apply.TRUST_SCHEMA,
+        "attestation_path": str(second_path.resolve()),
+        "attestation_file_sha256": sha(second_path),
+        "attestation_sha256": second["attestation_sha256"],
+    }
+    state = json.loads(original_raw)
+    state["runtime_migration"] = {
+        "schema": "profiling-skill/audited-runtime-migration-citation/v1",
+        "attestation_path": str(second_path.resolve()),
+        "attestation_file_sha256": sha(second_path),
+        "attestation_sha256": second["attestation_sha256"],
+        "plan_sha256": second["plan_sha256"], "cell_id": first_cell["cell_id"],
+        "experiment": 4, "checkpoint_commit": first_cell["checkpoint_commit"],
+        "original_blocked_json": original_raw,
+        "old_controller_identity": first_cell["new_controller_identity"],
+        "new_controller_identity": third_identity,
+    }
+    seed = json.loads((repo / ".experiment/seed.json").read_text())
+
+    citation = lifecycle._validate_runtime_migration(
+        repo, state, seed,
+        {"agent": runner.reproducibility["agent"], "controller": third_identity},
+        first_cell["cell_id"], [runner.trusted_runtime_migration, second_trust],
+    )
+
+    assert citation["attestation_sha256"] == second["attestation_sha256"]
 
 
 def test_migrated_resume_rejects_tampered_carried_provenance(campaign):

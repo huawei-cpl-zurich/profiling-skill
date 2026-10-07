@@ -20,7 +20,8 @@ from audited_contract import AuditError, MAX_EXCERPT, sanitize_argv, sha256_byte
 MAX_RECEIPT_BYTES = 65_536
 MAX_CODEX_FAILURE_BYTES = 65_536
 MAX_TRANSIENT_RETRIES = 5
-TRANSIENT_TERMINAL_ERRORS = ("server_overloaded",)
+CAPACITY_ERROR_MESSAGE = "Selected model is at capacity. Please try a different model."
+CODEX_RETRY_SCHEMA = "profiling-skill/codex-transient-retry/v1"
 _AGENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 _INTERPRETER = re.compile(r"(?:python|pypy)(?:\d+(?:\.\d+)*)?|bash|sh|node|env")
 _PATH_SUFFIXES = {".py", ".sh", ".json", ".toml", ".yaml", ".yml"}
@@ -111,16 +112,11 @@ def _thread_event_stream(value: str | bytes | None) -> str:
     return "\n".join(retained) + ("\n" if retained else "")
 
 
-def _terminal_error_code(event: dict) -> str | None:
-    containers = (event, event.get("error"))
-    for container in containers:
-        if not isinstance(container, dict):
-            continue
-        for key in ("codex_error_info", "codexErrorInfo"):
-            code = container.get(key)
-            if isinstance(code, str) and code:
-                return code
-    return None
+def _terminal_error_message(event: dict) -> str | None:
+    error = event.get("error")
+    container = error if isinstance(error, dict) else event
+    message = container.get("message")
+    return message if isinstance(message, str) else None
 
 
 def _retryable_terminal_failure(value: str | bytes | None,
@@ -131,7 +127,7 @@ def _retryable_terminal_failure(value: str | bytes | None,
     if not data or len(data) > MAX_CODEX_FAILURE_BYTES:
         return None
     threads = set()
-    codes = set()
+    messages = set()
     terminal = False
     for line in data.decode(errors="replace").splitlines():
         try:
@@ -150,21 +146,30 @@ def _retryable_terminal_failure(value: str | bytes | None,
             continue
         elif event_type in {"turn.failed", "error"}:
             terminal = True
-            code = _terminal_error_code(event)
-            if code is not None:
-                codes.add(code)
+            message = _terminal_error_message(event)
+            if message is not None:
+                messages.add(message)
         else:
             # Item, tool, command, file-change, assistant, completed-turn, and
             # unknown events all prove or may conceal progress.
             return None
-    if len(threads) > 1 or len(codes) != 1 or not terminal:
+    if len(threads) > 1 or messages != {CAPACITY_ERROR_MESSAGE} or not terminal:
         return None
     thread = next(iter(threads), expected_thread)
-    code = next(iter(codes))
-    if (thread is None or (expected_thread is not None and thread != expected_thread)
-            or code not in TRANSIENT_TERMINAL_ERRORS):
+    if thread is None or (expected_thread is not None and thread != expected_thread):
         return None
-    return code, thread
+    return "server_overloaded", thread
+
+
+def _retry_evidence(stdout: str | bytes | None, stderr: str | bytes | None,
+                    attempt: int, action: str) -> dict:
+    stdout_bytes, stderr_bytes = _stream_bytes(stdout), _stream_bytes(stderr)
+    return {
+        "schema": CODEX_RETRY_SCHEMA, "terminal_error": "server_overloaded",
+        "action": action, "attempt": attempt,
+        "stdout_sha256": sha256_bytes(stdout_bytes), "stdout_bytes": len(stdout_bytes),
+        "stderr_sha256": sha256_bytes(stderr_bytes), "stderr_bytes": len(stderr_bytes),
+    }
 
 
 class CodexTurnError(AuditError):
@@ -179,7 +184,8 @@ class CodexTurnError(AuditError):
                  stderr: str | bytes | None, timed_out: bool,
                  exit_code: int | None, thread_id: str | None = None,
                  terminal_error: str | None = None,
-                 transient_retries: int = 0):
+                 transient_retries: int = 0,
+                 retry_evidence: Sequence[dict] = ()):
         super().__init__(message)
         stdout_bytes, stderr_bytes = _stream_bytes(stdout), _stream_bytes(stderr)
         self.structured_stdout = _thread_event_stream(stdout)
@@ -191,6 +197,7 @@ class CodexTurnError(AuditError):
         self.stdout = self.structured_stdout
         self.timed_out = timed_out
         self.exit_code = exit_code
+        self.retry_evidence = tuple(retry_evidence)
         self.diagnostics = {
             "stdout_sha256": sha256_bytes(stdout_bytes),
             "stdout_bytes": len(stdout_bytes),
@@ -247,6 +254,7 @@ class CodexInvoker:
             raise AuditError("transient_retry_backoff_seconds must be finite and nonnegative")
         self.transient_retry_limit = transient_retry_limit
         self.transient_retry_backoff_seconds = float(transient_retry_backoff_seconds)
+        self.last_retry_evidence: tuple[dict, ...] = ()
         if not _AGENT_ID.fullmatch(agent_id):
             raise AuditError("agent_id must contain only letters, numbers, dot, dash, or underscore")
         self.agent_id = agent_id
@@ -366,11 +374,6 @@ class CodexInvoker:
             "codex_executable_sha256": self.executable_hash,
             "docker_image": self.image if self.runtime_mode == "docker" else "not-applicable",
             "docker_image_id": self.docker_image_id,
-            "transient_retry": {
-                "terminal_errors": list(TRANSIENT_TERMINAL_ERRORS),
-                "retry_limit": self.transient_retry_limit,
-                "backoff_seconds": self.transient_retry_backoff_seconds,
-            },
         }
         identity["identity_sha256"] = sha256_bytes(
             json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
@@ -421,6 +424,8 @@ class CodexInvoker:
             "candidate change, run local checks, summarize readiness, and stop for host profiling."
         )
         retries = 0
+        retained_retries = []
+        self.last_retry_evidence = ()
         while True:
             command, environment = invocation(active_session)
             try:
@@ -433,7 +438,7 @@ class CodexInvoker:
                     f"Codex turn timed out after {self.timeout} seconds",
                     stdout=failure.stdout, stderr=failure.stderr, timed_out=True,
                     exit_code=None, thread_id=active_session,
-                    transient_retries=retries,
+                    transient_retries=retries, retry_evidence=retained_retries,
                 ) from failure
             except OSError as failure:
                 raise AuditError(f"Codex runtime could not start: {failure}") from failure
@@ -443,10 +448,18 @@ class CodexInvoker:
             if transient is not None:
                 terminal_error, active_session = transient
                 if retries < self.transient_retry_limit:
+                    retained_retries.append(_retry_evidence(
+                        result.stdout, result.stderr, retries + 1, "retry",
+                    ))
+                    self.last_retry_evidence = tuple(retained_retries)
                     delay = self.transient_retry_backoff_seconds * (2 ** retries)
                     retries += 1
                     time.sleep(delay)
                     continue
+                retained_retries.append(_retry_evidence(
+                    result.stdout, result.stderr, retries + 1, "exhausted",
+                ))
+                self.last_retry_evidence = tuple(retained_retries)
             else:
                 terminal_error = None
             label = "Docker Codex" if self.runtime_mode == "docker" else "Codex"
@@ -455,6 +468,7 @@ class CodexInvoker:
                 stdout=result.stdout, stderr=result.stderr, timed_out=False,
                 exit_code=result.returncode, thread_id=active_session,
                 terminal_error=terminal_error, transient_retries=retries,
+                retry_evidence=retained_retries,
             )
 
     def docker_command(self, codex_arguments: Sequence[str]) -> list[str]:

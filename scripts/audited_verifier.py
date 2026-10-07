@@ -32,6 +32,10 @@ EVIDENCE_FIELDS = {
     "controller_receipt_sha256", "manifest_sha256", "prompt_sha256",
     "task_sha256", "reproducibility", "controller",
 }
+RETRY_FIELDS = {
+    "schema", "terminal_error", "action", "attempt", "stdout_sha256",
+    "stdout_bytes", "stderr_sha256", "stderr_bytes", "experiment", "stage",
+}
 COMMAND_FIELDS = {
     "command", "exit_code", "output_sha256", "output_excerpt", "output_truncated",
 }
@@ -73,6 +77,25 @@ def _json_blob(repo: Path, commit: str, path: str) -> dict:
 
 def _hash(value: object) -> bool:
     return isinstance(value, str) and _HASH.fullmatch(value) is not None
+
+
+def _validate_retries(value: object, experiment: int) -> None:
+    if not isinstance(value, list) or len(value) > 64:
+        raise AuditError(f"experiment {experiment} agent retry evidence is invalid")
+    for record in value:
+        if (not isinstance(record, dict) or set(record) != RETRY_FIELDS
+                or record.get("schema") != "profiling-skill/codex-transient-retry/v1"
+                or record.get("terminal_error") != "server_overloaded"
+                or record.get("action") not in {"retry", "exhausted"}
+                or type(record.get("attempt")) is not int
+                or not 1 <= record["attempt"] <= 6
+                or not _hash(record.get("stdout_sha256"))
+                or not _hash(record.get("stderr_sha256"))
+                or any(type(record.get(key)) is not int or record[key] < 0
+                       for key in ("stdout_bytes", "stderr_bytes"))
+                or record.get("experiment") != experiment
+                or record.get("stage") not in {"prepare", "finalize"}):
+            raise AuditError(f"experiment {experiment} agent retry evidence is invalid")
 
 
 def _validate_provenance(value: object) -> dict:
@@ -241,7 +264,10 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
             raise AuditError(f"experiment {number} sources schema is invalid")
         validate_sources(sources["sources"], sources["no_sources_reason"],
                          f"experiment {number}")
-        if (set(evidence) != EVIDENCE_FIELDS or evidence.get("schema") != EVIDENCE_SCHEMA
+        fields = frozenset(evidence)
+        if (fields not in {frozenset(EVIDENCE_FIELDS),
+                           frozenset(EVIDENCE_FIELDS | {"agent_retries"})}
+                or evidence.get("schema") != EVIDENCE_SCHEMA
                 or any(not _hash(evidence.get(field)) for field in (
                     "candidate_sha256", "tested_candidate_sha256",
                     "committed_candidate_sha256", "controller_receipt_sha256",
@@ -251,6 +277,7 @@ def validate_branch(repo: Path, base: str = "main") -> dict:
                 or not isinstance(evidence.get("session_id"), str)
                 or not evidence["session_id"]):
             raise AuditError(f"experiment {number} evidence schema is invalid")
+        _validate_retries(evidence.get("agent_retries", []), number)
         if (evidence["candidate_sha256"] != evidence["tested_candidate_sha256"]
                 or evidence["prompt_sha256"] != seed["prompt_sha256"]
                 or evidence["task_sha256"] != seed["task_sha256"]

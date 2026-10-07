@@ -274,17 +274,17 @@ def test_codex_failure_preserves_safe_bounded_session_event(tmp_path: Path, monk
     assert secret not in json.dumps(failure.diagnostics)
 
 
-def failed_turn(thread: str, code: str = "server_overloaded", *, progress=None) -> str:
+CAPACITY_MESSAGE = "Selected model is at capacity. Please try a different model."
+
+
+def failed_turn(thread: str, message: str = CAPACITY_MESSAGE, *, progress=None) -> str:
     events = [
         {"type": "thread.started", "thread_id": thread},
         {"type": "turn.started"},
     ]
     if progress is not None:
         events.append(progress)
-    events.append({
-        "type": "turn.failed",
-        "error": {"message": "sensitive service detail", "codex_error_info": code},
-    })
+    events.append({"type": "error", "message": message})
     return "".join(json.dumps(event) + "\n" for event in events)
 
 
@@ -323,6 +323,11 @@ def test_transient_failure_retries_existing_session_with_identical_turn(
     assert calls[0][0] == calls[1][0]
     assert calls[0][1]["input"] == calls[1][1]["input"]
     assert sleeps == [0.25]
+    assert invoker.last_retry_evidence[0]["action"] == "retry"
+    assert set(invoker.last_retry_evidence[0]) == {
+        "schema", "terminal_error", "action", "attempt",
+        "stdout_sha256", "stdout_bytes", "stderr_sha256", "stderr_bytes",
+    }
 
 
 def test_initial_transient_failure_recovers_thread_before_retry(
@@ -355,6 +360,9 @@ def test_transient_retry_exhaustion_retains_recovered_checkpoint_session(
     assert contract.extract_thread_id(failure.structured_stdout, None) == "thread-recover"
     assert failure.diagnostics["terminal_error"] == "server_overloaded"
     assert failure.diagnostics["transient_retries"] == 1
+    assert [entry["action"] for entry in failure.retry_evidence] == [
+        "retry", "exhausted",
+    ]
     assert len(calls) == 2 and sleeps == [2]
 
 
@@ -365,7 +373,7 @@ def test_transient_retry_exhaustion_retains_recovered_checkpoint_session(
             "exit_code": 0, "aggregated_output": "",
         },
     }),
-    failed_turn("thread-unknown", code="internal_server_error"),
+    failed_turn("thread-unknown", message="An internal service error occurred."),
 ])
 def test_progress_or_unknown_terminal_failure_is_not_retried(
         tmp_path: Path, monkeypatch, failure: str):
@@ -382,9 +390,7 @@ def test_progress_or_unknown_terminal_failure_is_not_retried(
 def test_transient_failure_diagnostics_never_retain_raw_sensitive_text(
         tmp_path: Path, monkeypatch):
     secret = "SECRET_CAPACITY_INCIDENT_123"
-    failure = failed_turn("thread-secret").replace(
-        "sensitive service detail", secret,
-    )
+    failure = failed_turn("thread-secret")
     invoker, _, _ = direct_invoker(tmp_path, monkeypatch, [
         subprocess.CompletedProcess([], 1, failure, secret),
     ], transient_retry_limit=0)
@@ -399,7 +405,7 @@ def test_transient_failure_diagnostics_never_retain_raw_sensitive_text(
     assert raised.value.diagnostics["terminal_error"] == "server_overloaded"
 
 
-def test_transient_retry_policy_is_reproducibility_identity(
+def test_transient_retry_policy_does_not_change_reproducibility_identity(
         tmp_path: Path, monkeypatch):
     invoker, _, _ = direct_invoker(
         tmp_path, monkeypatch, [], transient_retry_limit=3,
@@ -408,11 +414,7 @@ def test_transient_retry_policy_is_reproducibility_identity(
 
     metadata = invoker.reproducibility_metadata()
 
-    assert metadata["transient_retry"] == {
-        "terminal_errors": ["server_overloaded"],
-        "retry_limit": 3,
-        "backoff_seconds": 0.5,
-    }
+    assert "transient_retry" not in metadata
 
 
 def test_controller_executes_compact_json_and_records_sanitized_identity(tmp_path: Path):

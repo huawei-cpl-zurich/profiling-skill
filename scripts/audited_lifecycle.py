@@ -32,6 +32,38 @@ MIGRATION_CITATION_SCHEMA = "profiling-skill/audited-runtime-migration-citation/
 MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
 MIGRATION_RETRY_REASON = "audited selector-runtime migration prepared a fresh profile attempt"
+CODEX_RETRY_SCHEMA = "profiling-skill/codex-transient-retry/v1"
+_RETRY_KEYS = {
+    "schema", "terminal_error", "action", "attempt", "stdout_sha256",
+    "stdout_bytes", "stderr_sha256", "stderr_bytes",
+}
+
+
+def _retry_records(value: object, *, contextual: bool = False) -> tuple[dict, ...]:
+    if not isinstance(value, (list, tuple)) or len(value) > 64:
+        raise AuditError("agent retry evidence is invalid")
+    required = _RETRY_KEYS | ({"experiment", "stage"} if contextual else set())
+    retained = []
+    for record in value:
+        if (not isinstance(record, dict) or set(record) != required
+                or record.get("schema") != CODEX_RETRY_SCHEMA
+                or record.get("terminal_error") != "server_overloaded"
+                or record.get("action") not in {"retry", "exhausted"}
+                or type(record.get("attempt")) is not int
+                or not 1 <= record["attempt"] <= 6
+                or any(not isinstance(record.get(key), str)
+                       or re.fullmatch(r"[0-9a-f]{64}", record[key]) is None
+                       for key in ("stdout_sha256", "stderr_sha256"))
+                or any(type(record.get(key)) is not int or record[key] < 0
+                       for key in ("stdout_bytes", "stderr_bytes"))
+                or (contextual and (
+                    type(record.get("experiment")) is not int
+                    or record["experiment"] < 1
+                    or record.get("stage") not in {"prepare", "finalize"}
+                ))):
+            raise AuditError("agent retry evidence is invalid")
+        retained.append(dict(record))
+    return tuple(retained)
 
 
 def _git(repo: Path, *arguments: str, env: dict | None = None) -> str:
@@ -201,6 +233,7 @@ class AuditedExperimentRunner:
         self.round_count = round_count
         self.trusted_runtime_migration = trusted_runtime_migration
         self.runtime_migration: dict | None = None
+        self.agent_retry_evidence: tuple[dict, ...] = ()
         self.reproducibility = {
             "agent": _identity(invoke), "controller": _identity(controller),
         }
@@ -224,6 +257,7 @@ class AuditedExperimentRunner:
             start = 1
             prior_hash = sha256_bytes((self.repo / "candidate.py").read_bytes())
             commits = []
+        self.agent_retry_evidence = tuple(state.get("agent_retries", ())) if state else ()
 
         for number in range(start, self.round_count + 1):
             prior_candidate = _git_blob(self.repo, "HEAD", "candidate.py")
@@ -282,6 +316,7 @@ class AuditedExperimentRunner:
                 number, session, candidate_hash, tested_manifest, parsed, receipt,
                 committed_hash, restored_hash, tested_candidate,
             )
+            self.agent_retry_evidence = ()
             _git(self.repo, "add", "candidate.py", "candidate.manifest.json",
                  f"experiments/{number:02d}")
             author = dict(os.environ)
@@ -623,8 +658,11 @@ class AuditedExperimentRunner:
                               receipt: dict | None = None) -> str:
         """Honor the invoker's duck-typed ``structured_stdout`` failure field."""
         try:
-            return self.invoke(number, session, instruction)
+            output = self.invoke(number, session, instruction)
         except Exception as failure:
+            self._retain_agent_retries(
+                number, stage, getattr(failure, "retry_evidence", ()),
+            )
             partial = getattr(failure, "structured_stdout", "")
             if isinstance(partial, bytes):
                 partial = partial.decode(errors="replace")
@@ -657,6 +695,18 @@ class AuditedExperimentRunner:
                     f"{reason}; checkpointed before session start for resume"
                 ) from failure
             raise AuditError(f"{reason}; no durable session id was available") from failure
+        self._retain_agent_retries(
+            number, stage, getattr(self.invoke, "last_retry_evidence", ()),
+        )
+        return output
+
+    def _retain_agent_retries(self, number: int, stage: str, records: object) -> None:
+        retained = _retry_records(records)
+        self.agent_retry_evidence += tuple({
+            **record, "experiment": number, "stage": stage,
+        } for record in retained)
+        if len(self.agent_retry_evidence) > 64:
+            raise AuditError("agent retry evidence exceeds the per-experiment limit")
 
     @staticmethod
     def _invalid_attempt(output: str, error: str) -> dict:
@@ -693,6 +743,7 @@ class AuditedExperimentRunner:
             "manifest_sha256": sha256_bytes(manifest_bytes),
             "prompt_sha256": self.prompt_hash, "task_sha256": self.task_hash,
             "reproducibility": self.reproducibility, "controller": receipt,
+            "agent_retries": list(self.agent_retry_evidence),
         }
         (directory / "evidence.json").write_text(
             json.dumps(evidence, indent=2, sort_keys=True) + "\n"
@@ -728,6 +779,7 @@ class AuditedExperimentRunner:
             "seed_commit": seed_commit, "seed_hash": seed_hash,
             "resume_parent": _git(self.repo, "rev-parse", "HEAD"),
             "prior_candidate_sha256": prior_hash, "commands": commands,
+            "agent_retries": list(self.agent_retry_evidence),
             "receipt": receipt,
             "candidate_sha256": sha256_bytes(candidate.read_bytes()) if candidate.is_file() else None,
             "manifest_sha256": sha256_bytes(manifest.read_bytes()) if manifest.is_file() else None,
@@ -808,6 +860,12 @@ class AuditedExperimentRunner:
                 or (state["stage"] in {"controller", "measurement", "finalize"}
                     and not isinstance(state.get("receipt"), dict))):
             raise AuditError("blocked checkpoint schema is invalid")
+        agent_retries = list(_retry_records(
+            state.get("agent_retries", ()), contextual=True,
+        ))
+        if any(record["experiment"] != state["experiment"]
+               for record in agent_retries):
+            raise AuditError("agent retry evidence belongs to a different experiment")
         if state.get("branch") != expected_branch or _git(
             self.repo, "branch", "--show-current"
         ) != expected_branch:
@@ -850,6 +908,7 @@ class AuditedExperimentRunner:
             )
         elif seed.get("reproducibility") != current_reproducibility:
             raise AuditError("current reproducibility metadata differs from experiment seed")
+        state["agent_retries"] = agent_retries
         if state["stage"] in {"controller", "measurement", "finalize"} and (
             sha256_bytes((self.repo / "candidate.py").read_bytes()) != state["candidate_sha256"]
             or sha256_bytes((self.repo / "candidate.manifest.json").read_bytes())

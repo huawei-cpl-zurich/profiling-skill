@@ -651,16 +651,19 @@ def test_resumed_repair_must_differ_from_last_failed_attempt(tmp_path: Path):
         runner.run("same-resume", "agent", resume=True)
 
 
-def test_infrastructure_checkpoint_does_not_consume_candidate_repair(tmp_path: Path):
+def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path: Path):
     repo = tmp_path / "repo"
     init_repo(repo)
     prompt, task = inputs(tmp_path)
+    repair_turns = 0
 
     def invoke(number, session, instruction):
+        nonlocal repair_turns
         if instruction is None:
             (repo / "candidate.py").write_text("VALUE = 1\n")
             return events("thread-infra", {"prepared": True})
         if instruction.startswith("Repair candidate attempt"):
+            repair_turns += 1
             (repo / "candidate.py").write_text("VALUE = 2\n")
             return events("thread-infra", {"repaired": True})
         candidate = sha((repo / "candidate.py").read_bytes())
@@ -676,6 +679,7 @@ def test_infrastructure_checkpoint_does_not_consume_candidate_repair(tmp_path: P
 
     class Controller:
         calls = 0
+        observations = 0
 
         def __call__(self, number, candidate, manifest):
             self.calls += 1
@@ -683,31 +687,92 @@ def test_infrastructure_checkpoint_does_not_consume_candidate_repair(tmp_path: P
                 return candidate_error_receipt(candidate, manifest, number)
             return {
                 "status": "infrastructure_error", "handle": "remote:retained",
-                "candidate_sha256": candidate, "manifest_sha256": manifest,
+                "terminal": False,
                 "reason": "observer disconnected",
             }
 
         def observe(self, number, candidate, manifest, handle):
+            self.observations += 1
             result = receipt(candidate, manifest, number)
             result["handle"] = handle
             result["policy"]["submitted_handles"] = [handle]
             result["policy"]["observed_handles"] = [handle]
             return result
 
+    controller = Controller()
     runner = lifecycle.AuditedExperimentRunner(
-        repo, prompt, task, invoke, Controller(), round_count=1,
+        repo, prompt, task, invoke, controller, round_count=1,
     )
     with pytest.raises(contract.AuditError, match="blocked by controller"):
         runner.run("infra-repair", "agent")
     checkpoint = json.loads((repo / ".experiment/blocked.json").read_text())
     assert len(checkpoint["candidate_attempts"]) == 1
 
-    runner.run("infra-repair", "agent", resume=True)
+    result = runner.run("infra-repair", "agent", resume=True)
     evidence = json.loads((repo / "experiments/01/evidence.json").read_text())
+    assert result.status == "complete" and len(result.commits) == 1
+    assert repair_turns == 1
+    assert controller.calls == 2 and controller.observations == 1
     assert evidence["final_attempt"] == 2
     assert [item["status"] for item in evidence["candidate_attempts"]] == [
         "candidate_error", "ok",
     ]
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("terminal", True),
+    ("status", "ok"),
+    ("candidate_sha256", "0" * 64),
+    ("manifest_sha256", "1" * 64),
+    ("experiment", True),
+    ("experiment", 1.0),
+    ("experiment", 2),
+])
+def test_repaired_candidate_resume_rejects_tampered_observation_receipt(
+        tmp_path: Path, field: str, value: object):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-tamper", {"prepared": True})
+        if instruction.startswith("Repair candidate attempt"):
+            (repo / "candidate.py").write_text("VALUE = 2\n")
+            return events("thread-tamper", {"repaired": True})
+        raise AssertionError("resume must reject the checkpoint before another agent turn")
+
+    class Controller:
+        calls = 0
+
+        def __call__(self, number, candidate, manifest):
+            self.calls += 1
+            if self.calls == 1:
+                return candidate_error_receipt(candidate, manifest, number)
+            return {
+                "status": "infrastructure_error", "terminal": False,
+                "handle": "remote:retained", "reason": "observer disconnected",
+            }
+
+        def observe(self, *args):
+            raise AssertionError("tampered checkpoint must not observe a remote handle")
+
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, Controller(), round_count=1,
+    )
+    with pytest.raises(contract.AuditError, match="blocked by controller"):
+        runner.run("tampered-repair", "agent")
+
+    path = repo / ".experiment/blocked.json"
+    checkpoint = json.loads(path.read_text())
+    checkpoint["receipt"][field] = value
+    path.write_text(json.dumps(checkpoint, indent=2, sort_keys=True) + "\n")
+    subprocess.run(["git", "add", str(path.relative_to(repo))], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "--amend", "--no-edit", "-q"], cwd=repo, check=True)
+
+    with pytest.raises(contract.AuditError, match="blocked checkpoint receipt is invalid"):
+        runner.run("tampered-repair", "agent", resume=True)
 
 
 def test_missing_preparation_commands_repair_in_reported_session(tmp_path: Path):
@@ -775,6 +840,7 @@ def test_controller_resume_observes_durable_handle_without_resubmission(tmp_path
             if self.submissions == 1:
                 return {
                     "status": "infrastructure_error", "handle": "local:1",
+                    "terminal": False,
                     "candidate_sha256": candidate, "manifest_sha256": manifest,
                     "reason": "observer disconnected",
                 }
@@ -812,6 +878,7 @@ def test_controller_resume_without_observer_fails_without_resubmission(tmp_path:
         nonlocal submissions
         submissions += 1
         return {"status": "infrastructure_error", "handle": "durable:1",
+                "terminal": False,
                 "candidate_sha256": candidate, "manifest_sha256": manifest,
                 "reason": "observer disconnected"}
 

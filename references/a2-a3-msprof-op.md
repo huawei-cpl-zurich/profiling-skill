@@ -6,9 +6,14 @@ semantics. The source-backed definitions below come from
 `Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb` through
 `ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics`.
 
-Use `scripts/profile_a3.py` inside the managed `$gz-a3` native Python 3.11
-runtime. The profile wrapper selects the physical device; the workload and
-profiler see logical device 0. Do not pass a host physical ID to Triton code.
+For live control acquisition from an agent, use
+`scripts/acquire_profile.py` as described in
+[Two-pass live profile acquisition](acquisition-workflow.md). It owns the
+deployed profiler flags, named runtime, device environment, and retained
+transport lifecycle. `scripts/profile_a3.py` is the lower-level primitive for
+code already running inside a managed A3 job. In either route, the workload
+and profiler see logical device 0; do not pass a host physical ID to Triton
+code.
 
 The helper runs one bounded `BasicInfo` capture with kernel replay and writes:
 

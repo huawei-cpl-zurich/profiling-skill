@@ -1,12 +1,29 @@
 ---
 name: ascend-profiling
-description: Profile Triton kernels on Ascend A2/A3 or AscendC and Catlass kernels on Ascend 950/A5 with msprof, producing compact target-correct evidence without mixing product-specific metrics.
+description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascend 950/A5, or AscendC and Catlass kernels on A5, producing compact target-correct msprof evidence without mixing product-specific metrics.
 ---
 
 # Ascend kernel profiling
 
 Select the target before collecting or interpreting evidence. Product-specific
 metrics are not portable.
+
+## Acquire live control evidence
+
+For generic Torch/Triton workload acquisition on `bz-a3-1`, `bz-a3-2`, or
+`bz-a5`, use `scripts/acquire_profile.py`; do not construct raw `msprof op`
+flags. The helper owns the named runtime, content-addressed workload bundle,
+bounded device probe, deployed profiler syntax, persisted `cpl-remote` handle,
+resume lifecycle, and compact evidence.
+Run the installed skill's helper in place. Do not copy it into an experiment
+workspace, patch it, or synthesize a replacement; pass the workload bundle and
+evidence paths to the installed executable.
+Read [Two-pass acquisition](references/acquisition-workflow.md), run its
+`basic` pass, inspect the exported names, and then supply one relevant exact
+name to its `pipe` pass. Never guess a selector from a source function name or
+skip the discovery pass. The helper proves both passes used a byte-identical
+complete bundle and arguments. Resume an interrupted invocation from its
+persisted dispatch receipt and exact handle; never redispatch it.
 
 ## Shared saturation analysis
 
@@ -34,7 +51,10 @@ emitted operations are required.
 
 ## A2/A3 Triton timing and pipe evidence
 
-Use the repository's `$gz-a3` profile and its native `py311-torch` runtime.
+Use the repository's `$gz-a3` profile and its native `py311-torch` runtime only
+for repository-managed GZ compiler validation, mutable experiment bundles, and
+the workflows below. Generic BZ A3 acquisition uses the mandatory two-pass
+helper above.
 Select an eligible physical device through that profile; the one-shot job
 exposes it to the application as logical device 0. Do not use direct SSH,
 Docker, or a raw remote-agent client.
@@ -47,12 +67,10 @@ resumes the same handle. The managed-bundle engine's `--client` and `--remote`
 options remain internal integration APIs: do not invoke them directly or use
 raw SCP, SSH, Docker, or a raw remote-agent client.
 
-For reproducible kernel latency, run the correctness-checked workload through
-`scripts/profile_a3.py`. It performs a bounded `msprof op` `BasicInfo` capture
-and emits compact JSON with device-task durations and source hashes. Prefer an
-exact exported kernel name for timing; an unfiltered capture can select a
-framework setup operator instead. Run independent captures for repetitions and use
-their median; do not use profiled Python wall time.
+For reusable control acquisition, use the mandatory two-pass helper above.
+`scripts/profile_a3.py` remains an in-job primitive for an already selected A3
+kernel. Run independent timing captures for repetitions and use their median;
+do not use profiled Python wall time.
 
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, A3 pipe inventory, normalization command, and interpretation
@@ -110,8 +128,10 @@ not apply its event IDs, ceilings, formulas, `PipeTimeline`, or per-pipe
 `TimelineDetail` flow relationships or pipe ratios as A5 evidence.
 
 Use the configured TLA integration checkout (`TLA_ROOT`) and its checked-in
-BZ-A5 wrappers. Read that checkout's `AGENTS.md` and `$bz-a5` guidance before
-launching work. Never substitute direct SSH, SCP, Docker, or an ad-hoc CANN
+BZ-A5 wrappers for Catlass DSL and AscendC repository workflows. Read that
+checkout's `AGENTS.md` and `$bz-a5` guidance before launching those workflows.
+Generic BZ-A5 Torch/Triton control acquisition uses the mandatory two-pass
+helper above. Never substitute direct SSH, SCP, Docker, or an ad-hoc CANN
 environment.
 
 ## Choose evidence by question

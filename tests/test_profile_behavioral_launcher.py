@@ -117,6 +117,52 @@ def test_bubblewrap_exposes_only_selected_skill_and_remote_broker(tmp_path: Path
     assert "session" not in json.dumps(public).lower()
 
 
+def test_base_command_exposes_retained_broker_mode_to_agent_process(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    fake_bwrap = executable(
+        tmp_path / "functional-bwrap",
+        """#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+
+args = sys.argv[1:]
+environment = dict(os.environ)
+index = 0
+no_value = {"--die-with-parent", "--new-session", "--unshare-all", "--share-net"}
+one_value = {"--tmpfs", "--proc", "--dev", "--dir", "--chdir"}
+two_values = {"--ro-bind", "--bind"}
+while index < len(args):
+    option = args[index]
+    if option in no_value:
+        index += 1
+    elif option == "--clearenv":
+        environment = {}
+        index += 1
+    elif option in one_value:
+        index += 2
+    elif option in two_values:
+        index += 3
+    elif option == "--setenv":
+        environment[args[index + 1]] = args[index + 2]
+        index += 3
+    else:
+        break
+raise SystemExit(subprocess.run(args[index:], env=environment, check=False).returncode)
+""",
+    )
+    instance.bwrap = str(fake_bwrap)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+
+    run = subprocess.run(
+        [*instance.base_command(paths, request), "/bin/sh", "-ceu",
+         'test "$CPL_REMOTE_MODE" = retained-broker'],
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode == 0, run.stderr
+
+
 @pytest.mark.skipif(shutil.which("bwrap") is None, reason="Bubblewrap is unavailable")
 def test_real_bubblewrap_executes_mounted_remote_wrapper_and_dependency(tmp_path: Path):
     instance, request = fixture(tmp_path)

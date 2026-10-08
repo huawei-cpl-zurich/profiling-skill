@@ -955,7 +955,8 @@ class BehavioralLauncher(ProductionLauncher):
                     "--setenv", "CODEX_HOME", "/codex-home", "--setenv", "PATH",
                     "/tools:/runtime/node/bin:/usr/bin:/bin", "--setenv",
                     "PROFILE_GATE_REQUEST", "/workspace/request.json", "--setenv",
-                    "PROFILE_GATE_OUTPUT", "/workspace/agent-output.json"]
+                    "PROFILE_GATE_OUTPUT", "/workspace/agent-output.json", "--setenv",
+                    "CPL_REMOTE_MODE", "retained-broker"]
         return command
 
     @staticmethod

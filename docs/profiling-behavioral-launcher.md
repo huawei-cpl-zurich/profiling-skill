@@ -71,6 +71,13 @@ failed captures below the artifact limit without recursively failing while
 writing failure evidence. Bound result/log calls and bounded redacted Codex
 logs are retained on success and failure.
 
+The isolated agent environment sets the generic, arm-neutral contract
+`CPL_REMOTE_MODE=retained-broker`. Installed acquisition helpers use it to
+select broker-compatible dispatch keys, workspace staging, and duplicate
+receipt handling. It does not disclose an experiment arm, session identity,
+credentials, or host routing configuration; wrapper and broker validation
+remain authoritative.
+
 An acquisition agent uses one Codex thread for its A3 turn and resumed A5
 turn. An interpretation agent uses one independent thread resumed across all
 four cases. Each final message must be exactly one JSON object. Acquisition

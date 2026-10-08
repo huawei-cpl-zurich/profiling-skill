@@ -672,7 +672,7 @@ def test_controller_observe_rejects_replaced_handle(tmp_path: Path, monkeypatch)
 
     assert result["status"] == "infrastructure_error"
     assert result["handle"] == "job:retained"
-    assert "different handle" in result["reason"]
+    assert "transaction proof" in result["reason"]
 
 
 def test_controller_observe_accepts_valid_multi_operation_transaction(
@@ -722,6 +722,70 @@ def test_controller_observe_accepts_valid_multi_operation_transaction(
 
     assert result["status"] == "candidate_error"
     assert result["handle"] == final
+
+    same_handle = json.loads(json.dumps(receipt))
+    same_handle["handle"] = retained
+    same_handle["policy"]["submitted_handles"] = [retained]
+    same_handle["policy"]["observed_handles"] = [retained]
+    same_handle["policy"]["operation_history"][-1]["handle"] = retained
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 2, json.dumps(same_handle), "compile diagnostic",
+        ),
+    )
+    assert adapter.observe(1, candidate, manifest, retained)["status"] == "candidate_error"
+
+    same_handle["policy"]["operation_history"][1]["mode"] = "retry_submit"
+    same_handle["policy"]["infra_retries"] = 2
+    rejected = adapter.observe(1, candidate, manifest, retained)
+    assert rejected["status"] == "infrastructure_error"
+    assert rejected["handle"] == retained
+    assert "transaction proof" in rejected["reason"]
+
+
+def test_controller_observe_preserves_authenticated_next_pending_handle(
+        tmp_path: Path, monkeypatch):
+    candidate = hashlib.sha256(b"candidate").hexdigest()
+    manifest = hashlib.sha256(b"manifest").hexdigest()
+    first, second = "job:check", "job:profile"
+    first_request = hashlib.sha256(b"check-request").hexdigest()
+    second_request = hashlib.sha256(b"profile-request").hexdigest()
+    history = [
+        {"request_sha256": first_request, "mode": "submit",
+         "status": "infrastructure_error", "terminal": False,
+         "handle": first, "action": "check", "attempt_id": None},
+        {"request_sha256": first_request, "mode": "observe", "status": "ok",
+         "terminal": True, "handle": first, "action": "check", "attempt_id": None},
+        {"request_sha256": second_request, "mode": "submit",
+         "status": "infrastructure_error", "terminal": False,
+         "handle": second, "action": "profile", "attempt_id": "primary"},
+    ]
+    transition = {
+        "status": "infrastructure_error", "terminal": False,
+        "reason": "profile observer disconnected", "handle": second,
+        "experiment": 1, "candidate_sha256": candidate,
+        "manifest_sha256": manifest, "observe_transition": {
+            "schema": contract.OBSERVE_TRANSITION_SCHEMA,
+            "observed_handle": first, "pending_handle": second,
+            "operation_history": history,
+        },
+    }
+    adapter = runtime.CommandController(["controller"], tmp_path)
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 3, json.dumps(transition), "transport interrupted",
+        ),
+    )
+
+    assert adapter.observe(1, candidate, manifest, first)["handle"] == second
+
+    transition["observe_transition"]["operation_history"][1]["request_sha256"] = \
+        hashlib.sha256(b"wrong").hexdigest()
+    rejected = adapter.observe(1, candidate, manifest, first)
+    assert rejected["status"] == "infrastructure_error"
+    assert rejected["handle"] == first
 
 
 def test_controller_remeasure_uses_exact_pending_handle(tmp_path: Path, monkeypatch):

@@ -711,24 +711,34 @@ class CommandController:
                     result.stdout, result.stderr, self._credential_values,
                 ),
             }
-        observed_transaction = False
-        if (allow_observe_transaction and expected_handle is not None
-                and receipt.get("handle") != expected_handle):
+        observed_transaction = (expected_handle is None or (
+            not allow_observe_transaction and receipt.get("handle") == expected_handle
+        ))
+        if allow_observe_transaction and expected_handle is not None:
             try:
-                evidence_contract.validate_controller_receipt(
-                    receipt, candidate_hash, manifest_hash,
-                )
-                evidence_contract.validate_observe_transaction(receipt, expected_handle)
+                if receipt.get("status") in {
+                        "ok", "candidate_error", "measurement_pending"}:
+                    evidence_contract.validate_controller_receipt(
+                        receipt, candidate_hash, manifest_hash,
+                    )
+                    evidence_contract.validate_observe_transaction(
+                        receipt, expected_handle,
+                    )
+                elif receipt.get("handle") != expected_handle:
+                    evidence_contract.validate_observe_transition(
+                        receipt, expected_handle, candidate_hash, manifest_hash, number,
+                    )
                 observed_transaction = True
             except AuditError:
                 pass
-        if (expected_handle is not None and receipt.get("handle") != expected_handle
-                and not observed_transaction):
+        if expected_handle is not None and not observed_transaction:
             return {
                 "status": "infrastructure_error",
                 "terminal": False,
                 "handle": expected_handle,
-                "reason": "controller observation returned a different handle",
+                "reason": ("controller observation lacks valid transaction proof"
+                           if allow_observe_transaction else
+                           "controller observation returned a different handle"),
                 "experiment": number,
                 "candidate_sha256": candidate_hash,
                 "manifest_sha256": manifest_hash,

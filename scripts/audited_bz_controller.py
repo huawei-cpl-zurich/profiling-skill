@@ -293,6 +293,21 @@ class AuditedBzController:
                     handle=pending["handle"],
                 )
             receipt = self._advance(state, state_path, budget, budget_path)
+            if (observe_handle is not None
+                    and receipt.get("status") == "infrastructure_error"
+                    and isinstance(receipt.get("handle"), str)
+                    and receipt["handle"] != observe_handle):
+                receipt.update(
+                    experiment=experiment,
+                    candidate_sha256=candidate_hash,
+                    manifest_sha256=manifest_hash,
+                    observe_transition={
+                        "schema": "profiling-skill/controller-observe-transition/v1",
+                        "observed_handle": observe_handle,
+                        "pending_handle": receipt["handle"],
+                        "operation_history": self._operation_history(state),
+                    },
+                )
             if receipt.get("status") in {"ok", "candidate_error", "measurement_pending"}:
                 state["terminal"] = receipt
                 state["pending"] = None
@@ -510,13 +525,17 @@ class AuditedBzController:
         value = artifacts.get("remote_profile_evidence")
         return [value] if isinstance(value, str) and value else []
 
-    def _policy(self, state: dict, handle: str, post_control: str) -> dict:
-        history = [{key: record.get(key) for key in (
+    @staticmethod
+    def _operation_history(state: dict) -> list[dict]:
+        return [{key: record.get(key) for key in (
             "request_sha256", "mode", "status", "terminal", "handle"
         )} | {
             "action": record["request"].get("action"),
             "attempt_id": record["request"].get("attempt_id"),
         } for record in state["operations"]]
+
+    def _policy(self, state: dict, handle: str, post_control: str) -> dict:
+        history = self._operation_history(state)
         submitted = []
         observed = []
         for record in history:

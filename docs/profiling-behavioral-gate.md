@@ -23,9 +23,10 @@ The command reads its three inputs and atomically writes only the report.
 The manifest pins a nonempty bounded text prompt artifact and its SHA-256, both
 skill trees, audited launcher, model/config,
 manual reviewer/config, allowed product targets, and four evidence cases (two A3 and two A5). Each case
-contains a byte-pinned compact JSON evidence reference and an exact rubric:
-the complete conclusion list and complete structured saturation-claim list.
-Extra, missing, malformed, or contradictory claims fail that case.
+contains a byte-pinned compact JSON evidence reference, allowed target, valid
+durable handle, and bounded capture command/log. Rubrics are duplicate-free
+semantic sets of conclusions and structured saturation claims: ordering is
+irrelevant, while extra, missing, malformed, or contradictory claims fail.
 
 The launcher record envelope—not agent output—contains the arm, session and
 failure classification, launcher/model/skill identities, artifact references,
@@ -38,8 +39,11 @@ Every referenced artifact must be a nonempty regular nonsymlink below the
 artifact root, no larger than 64 KiB, and match its SHA-256. Evidence is also
 valid JSON whose schema and provenance match the envelope. Acquisition handles
 must bind an allowed target, and their provenance must bind the same product,
-target, and durable handle. Failure receipts are compact JSON objects whose
-session, classification, and failure type exactly match their trusted record.
+target, and durable handle; successful acquisition handles and evidence hashes
+must be globally unique. Failure records retain stage, product/target/optional
+handle, and bounded command/log/diagnostic references. Their compact receipts
+bind those fields, artifact hashes, kind, arm, session, classification, and
+failure type exactly.
 Both `remote:<target>:job:<id>` and the managed `gz-a3:<job-id>` handle are
 accepted when they bind the declared allowed target. Command, log, reasoning,
 and review-note artifacts must also decode as nonempty bounded text.
@@ -47,9 +51,11 @@ and review-note artifacts must also decode as nonempty bounded text.
 ## Session and acceptance contract
 
 Each successful acquisition record represents one persistent launcher-attested
-session with both A3 and A5 outcomes. Exactly three paired successes are
-required; counted failures and discarded infrastructure replacement sessions
-remain in the report counts and retain their receipt references.
+session with both A3 and A5 outcomes. Exactly three terminal
+non-infrastructure sessions are allowed. A counted failure consumes one slot
+and makes the three-of-three acquisition score fail; only discarded
+infrastructure attempts may precede replacements. All attempts and their
+failure evidence remain directly visible in the report.
 
 Each successful interpretation record represents one independent session with
 all four answers. There must be exactly three terminal non-infrastructure
@@ -57,7 +63,7 @@ sessions per arm. A counted terminal failure occupies four failed score slots,
 so the report always scores 24 interpretation slots. Infrastructure-discarded
 sessions do not occupy a slot and may precede replacements.
 
-Acceptance requires three acquisition pairs, candidate 12/12, candidate score
+Acceptance requires acquisition 3/3, candidate 12/12, candidate score
 strictly above current, and a trusted positive manual review with the pinned
 reviewer and nonempty notes for every successful acquisition and interpretation
 reasoning log in both arms. The report lists an attempt summary plus the exact

@@ -26,20 +26,57 @@ def artifact(root: Path, name: str, value, **metadata) -> dict:
     return {"path": name, "sha256": sha(path), **metadata}
 
 
+def repin(manifest_path: Path, records: dict) -> None:
+    identity = sha(manifest_path)
+    for row in records["acquisition"] + records["interpretation"]:
+        row["manifest_sha256"] = identity
+
+
+def failed_record(root: Path, manifest_path: Path, manifest: dict, kind: str,
+                  session: str, classification: str, arm=None) -> dict:
+    failure = "device_busy" if classification == "discarded_infrastructure" else "compile"
+    stage = "observer" if classification == "discarded_infrastructure" else "compile"
+    target = "bz-a3-1"; product = "a3"
+    handle = f"remote:{target}:job:{session}" if classification == "discarded_infrastructure" else None
+    refs = {name: artifact(root, f"failures/{session}-{name}.txt", f"{name}\n")
+            for name in ("command", "log", "diagnostic")}
+    receipt_body = {"schema": gate.RECEIPT_SCHEMA, "session_id": session,
+        "kind": kind, "arm": arm, "classification": classification,
+        "failure_type": failure, "stage": stage, "product": product,
+        "target": target, "handle": handle,
+        "artifacts": {name: ref["sha256"] for name, ref in refs.items()}}
+    row = {"kind": kind, "session_id": session, "classification": classification,
+        "failure_type": failure, "stage": stage, "product": product, "target": target,
+        "handle": handle, **refs,
+        "receipt": artifact(root, f"receipts/{session}.json", receipt_body),
+        "manifest_sha256": sha(manifest_path), "launcher": manifest["launcher"],
+        "model": manifest["model"], "skill_sha256": manifest["skills"][arm or "candidate"]}
+    if arm is not None: row["arm"] = arm
+    return row
+
+
 def fixture(tmp_path: Path):
     root = tmp_path / "artifacts"; root.mkdir()
     prompt = artifact(root, "prompt.md", "Interpret the supplied evidence.\n")
     cases = []
     for number, product in enumerate(("a3", "a3", "a5", "a5"), 1):
-        provenance = {"product": product, "handle": f"frozen:{product}:{number}"}
+        target = "bz-a3-1" if product == "a3" else "bz-a5"
+        handle = f"remote:{target}:job:frozen-{number}"
+        provenance = {"product": product, "target": target, "handle": handle}
         evidence = artifact(root, f"cases/{number}.json",
             {"schema": "compact/v1", "provenance": provenance, "value": number},
             schema="compact/v1", provenance=provenance)
+        capture = {"target": target, "handle": handle,
+            "command": artifact(root, f"cases/{number}-command.txt", "capture\n"),
+            "log": artifact(root, f"cases/{number}-log.txt", "captured\n")}
         claims = ([{"state": "saturated", "resource": "MTE2",
-                    "interval": "whole-kernel", "provenance": "capacity/v1"}]
+                    "interval": "whole-kernel", "provenance": "capacity/v1"},
+                   {"state": "unknown", "resource": "MTE3",
+                    "interval": "tail", "provenance": "activity-only"}]
                   if number == 4 else [])
         cases.append({"id": f"case-{number}", "product": product, "evidence": evidence,
-                      "rubric": {"conclusions": [f"fact-{number}"],
+                      "capture": capture,
+                      "rubric": {"conclusions": [f"fact-{number}", "shared"],
                                  "saturation_claims": claims}})
     manifest = {
         "schema": gate.MANIFEST_SCHEMA, "prompt": prompt, "prompt_sha256": prompt["sha256"],
@@ -52,16 +89,10 @@ def fixture(tmp_path: Path):
     }
     manifest_path = tmp_path / "manifest.json"; manifest_path.write_text(json.dumps(manifest))
 
-    def common(session: str, arm: str, classification="success"):
-        row = {"session_id": session, "classification": classification,
+    def common(session: str, arm: str):
+        return {"session_id": session, "classification": "success",
                "manifest_sha256": sha(manifest_path), "launcher": deepcopy(manifest["launcher"]),
                "model": deepcopy(manifest["model"]), "skill_sha256": manifest["skills"][arm]}
-        if classification != "success":
-            failure = "device_busy" if classification == "discarded_infrastructure" else "compile"
-            row.update(failure_type=failure, receipt=artifact(root, f"receipts/{session}.json", {
-                "schema": gate.RECEIPT_SCHEMA, "session_id": session,
-                "classification": classification, "failure_type": failure}))
-        return row
 
     acquisitions = []
     for agent in range(1, 4):
@@ -70,7 +101,7 @@ def fixture(tmp_path: Path):
             handle = f"remote:{target}:job:{session}-{product}"
             provenance = {"product": product, "target": target, "handle": handle}
             evidence = artifact(root, f"evidence/{session}-{product}.json",
-                {"schema": "profile/v1", "provenance": provenance},
+                {"schema": "profile/v1", "provenance": provenance, "session": session},
                 schema="profile/v1", provenance=provenance)
             outcomes.append({"session_id": session, "product": product, "target": target,
                 "handle": handle, "evidence": evidence,
@@ -91,7 +122,7 @@ def fixture(tmp_path: Path):
             for case in cases:
                 conclusions = list(case["rubric"]["conclusions"])
                 if arm == "current" and agent == 1 and case["id"] == "case-1":
-                    conclusions = ["wrong"]
+                    conclusions = ["wrong", "shared"]
                 answers.append({"case_id": case["id"],
                     "evidence_sha256": case["evidence"]["sha256"],
                     "conclusions": conclusions,
@@ -175,7 +206,7 @@ def test_rejects_fabricated_evidence_or_remote_identity(tmp_path: Path, damage: 
 
 
 @pytest.mark.parametrize("field,value", [
-    ("conclusions", ["fact-1", "contradiction"]),
+    ("conclusions", ["fact-1", "shared", "contradiction"]),
     ("saturation_claims", [{"state": "saturated", "resource": "MTE2",
                             "interval": "whole-kernel", "provenance": "activity-only"}]),
 ])
@@ -206,18 +237,109 @@ def test_rejects_duplicate_session(tmp_path: Path):
 
 def test_counts_infra_replacement_and_counted_failure(tmp_path: Path):
     manifest_path, path, root, manifest, records = fixture(tmp_path)
-    for classification, session in (("discarded_infrastructure", "infra-1"),
-                                    ("counted_failure", "failed-1")):
-        failure = "device_busy" if classification.startswith("discarded") else "compile"
-        receipt = artifact(root, f"receipts/{session}.json", {"schema": gate.RECEIPT_SCHEMA,
-            "session_id": session, "classification": classification, "failure_type": failure})
-        records["acquisition"].append({"kind": "acquisition", "session_id": session,
-            "classification": classification, "failure_type": failure, "receipt": receipt,
-            "manifest_sha256": sha(manifest_path), "launcher": manifest["launcher"],
-            "model": manifest["model"], "skill_sha256": manifest["skills"]["candidate"]})
+    records["acquisition"].pop()
+    records["acquisition"].extend([
+        failed_record(root, manifest_path, manifest, "acquisition", "infra-1",
+                      "discarded_infrastructure"),
+        failed_record(root, manifest_path, manifest, "acquisition", "failed-1",
+                      "counted_failure"),
+    ])
     path.write_text(json.dumps(records)); report = gate.evaluate(manifest_path, path, root)
-    assert report["counts"] == {"success": 9, "discarded_infrastructure": 1,
+    assert report["counts"] == {"success": 8, "discarded_infrastructure": 1,
                                 "counted_failure": 1}
+    assert report["acquisition"] == {
+        "terminal_sessions": 3, "successful_pairs": 2,
+        "score": {"passed": 2, "total": 3},
+    }
+    assert report["acceptance"]["passed"] is False
+    failed = next(item for item in report["attempts"] if item["session_id"] == "failed-1")
+    assert failed["stage"] == "compile" and failed["diagnostic"]["sha256"]
+
+
+def test_rejects_equal_skill_hashes(tmp_path: Path):
+    manifest_path, path, root, manifest, _ = fixture(tmp_path)
+    manifest["skills"]["candidate"] = manifest["skills"]["current"]
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(gate.GateError, match="distinct"):
+        gate.evaluate(manifest_path, path, root)
+
+
+@pytest.mark.parametrize("reuse", ["handle", "evidence"])
+def test_rejects_reused_acquisition_capture(tmp_path: Path, reuse: str):
+    manifest, path, root, _, records = fixture(tmp_path)
+    first = records["acquisition"][0]["outcomes"][0]
+    second = records["acquisition"][1]["outcomes"][0]
+    if reuse == "handle":
+        second["handle"] = first["handle"]
+        provenance = {"product": "a3", "target": second["target"], "handle": second["handle"]}
+        second["evidence"]["provenance"] = provenance
+        evidence = root / second["evidence"]["path"]
+        evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance,
+                                        "session": "different"}))
+        second["evidence"]["sha256"] = sha(evidence)
+    else:
+        second["handle"] = first["handle"]
+        second["evidence"] = deepcopy(first["evidence"])
+    path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError, match="reused acquisition"):
+        gate.evaluate(manifest, path, root)
+
+
+def test_frozen_case_requires_live_capture_attestation(tmp_path: Path):
+    manifest_path, path, root, manifest, _ = fixture(tmp_path)
+    manifest["cases"][0]["capture"]["target"] = "unapproved"
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(gate.GateError, match="case capture"):
+        gate.evaluate(manifest_path, path, root)
+
+
+def test_rubrics_are_order_insensitive_semantic_sets(tmp_path: Path):
+    manifest, path, root, _, records = fixture(tmp_path)
+    answer = records["interpretation"][3]["answers"][3]
+    answer["conclusions"].reverse()
+    answer["saturation_claims"].reverse()
+    path.write_text(json.dumps(records))
+    assert gate.evaluate(manifest, path, root)["interpretation"]["candidate"]["passed"] == 12
+
+
+@pytest.mark.parametrize("where", ["rubric", "answer"])
+def test_rejects_duplicate_semantic_claims(tmp_path: Path, where: str):
+    manifest_path, path, root, manifest, records = fixture(tmp_path)
+    if where == "rubric":
+        manifest["cases"][0]["rubric"]["conclusions"].append("shared")
+        manifest_path.write_text(json.dumps(manifest)); repin(manifest_path, records)
+    else:
+        records["interpretation"][0]["answers"][0]["conclusions"].append("shared")
+    path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError, match="duplicate"):
+        gate.evaluate(manifest_path, path, root)
+
+
+@pytest.mark.parametrize("damage", ["classification", "product", "evidence", "claims", "targets",
+                                    "arm", "case_id"])
+def test_malformed_types_fail_closed_without_traceback(tmp_path: Path, damage: str):
+    manifest, path, root, document, records = fixture(tmp_path)
+    if damage == "classification": records["acquisition"][0]["classification"] = []
+    elif damage == "product": records["acquisition"][0]["outcomes"][0]["product"] = []
+    elif damage == "evidence": records["acquisition"][0]["outcomes"][0]["evidence"] = []
+    elif damage == "claims": records["interpretation"][0]["answers"][0]["saturation_claims"] = {}
+    elif damage == "arm": records["interpretation"][0]["arm"] = []
+    elif damage == "case_id": records["interpretation"][0]["answers"][0]["case_id"] = []
+    else:
+        document["allowed_targets"]["a3"] = [{}]
+        manifest.write_text(json.dumps(document))
+    path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError): gate.evaluate(manifest, path, root)
+
+
+def test_cli_maps_malformed_record_to_exit_two(tmp_path: Path):
+    manifest, records_path, root, _, records = fixture(tmp_path)
+    records["acquisition"][0]["classification"] = []
+    records_path.write_text(json.dumps(records))
+    with pytest.raises(SystemExit) as failure:
+        gate.main(["--manifest", str(manifest), "--records", str(records_path),
+                   "--artifact-root", str(root), "--output", str(tmp_path / "report.json")])
+    assert failure.value.code == 2
 
 
 def test_candidate_requires_manual_review_pass_and_notes(tmp_path: Path):

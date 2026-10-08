@@ -22,6 +22,8 @@ HEX = re.compile(r"[0-9a-f]{64}")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
 INFRA = {"transport", "device_busy", "target_unavailable", "observer"}
 COUNTED = {"compile", "runtime", "profiler_command", "evidence", "interpretation", "launcher"}
+STAGES = {"launcher", "compile", "runtime", "profiler", "evidence", "interpretation",
+          "observer", "transport"}
 
 
 class GateError(RuntimeError):
@@ -62,6 +64,35 @@ def _identity(value, hash_key: str, label: str) -> dict:
     return value
 
 
+def _handle(target, handle, label: str) -> str:
+    if not isinstance(target, str) or not isinstance(handle, str) or len(handle) > 256:
+        raise GateError(f"invalid {label} handle")
+    prefix = f"remote:{target}:job:"
+    handle_id = (handle.removeprefix(prefix) if handle.startswith(prefix) else
+                 handle.removeprefix("gz-a3:")
+                 if target == "gz-a3" and handle.startswith("gz-a3:") else "")
+    if not IDENTIFIER.fullmatch(handle_id):
+        raise GateError(f"invalid {label} handle")
+    return handle
+
+
+def _semantic(values, label: str, validate) -> set[str]:
+    if not isinstance(values, list):
+        raise GateError(f"invalid {label}")
+    canonical = []
+    for value in values:
+        validate(value)
+        canonical.append(json.dumps(value, sort_keys=True, separators=(",", ":")))
+    if len(canonical) != len(set(canonical)):
+        raise GateError(f"duplicate {label}")
+    return set(canonical)
+
+
+def _conclusion(value) -> None:
+    if not isinstance(value, str) or not value or len(value) > 256:
+        raise GateError("invalid conclusion")
+
+
 def _artifact(reference, root: Path, label: str, *, metadata=False,
               text=False) -> tuple[dict, dict | None]:
     keys = {"path", "sha256", "schema", "provenance"} if metadata else {"path", "sha256"}
@@ -94,7 +125,8 @@ def _artifact(reference, root: Path, label: str, *, metadata=False,
 
 def _claim(claim) -> dict:
     claim = _exact(claim, {"state", "resource", "interval", "provenance"}, "saturation claim")
-    if claim["state"] not in {"saturated", "unsaturated", "unknown"}:
+    if not isinstance(claim["state"], str) or claim["state"] not in {
+            "saturated", "unsaturated", "unknown"}:
         raise GateError("invalid saturation claim state")
     if any(not isinstance(claim[key], str) or not claim[key] or len(claim[key]) > 256
            for key in ("resource", "interval", "provenance")):
@@ -113,32 +145,41 @@ def _manifest(path: Path, root: Path) -> tuple[dict, dict[str, dict], str]:
         raise GateError("prompt identity mismatch")
     skills = _exact(value["skills"], {"current", "candidate"}, "skills")
     for arm in skills: _hex(skills[arm], f"{arm} skill")
+    if skills["current"] == skills["candidate"]:
+        raise GateError("current and candidate skills must be distinct")
     _identity(value["launcher"], "sha256", "launcher")
     _identity(value["model"], "config_sha256", "model")
     _identity(value["reviewer"], "config_sha256", "reviewer")
     targets = _exact(value["allowed_targets"], {"a3", "a5"}, "allowed targets")
     for product, names in targets.items():
-        if not isinstance(names, list) or not names or len(set(names)) != len(names) or any(
-                not isinstance(name, str) or not IDENTIFIER.fullmatch(name) for name in names):
+        if (not isinstance(names, list) or not names
+                or any(not isinstance(name, str) or not IDENTIFIER.fullmatch(name) for name in names)
+                or len(set(names)) != len(names)):
             raise GateError(f"invalid {product} targets")
     if not isinstance(value["cases"], list) or len(value["cases"]) != 4:
         raise GateError("exactly four cases are required")
     cases = {}
     for case in value["cases"]:
-        case = _exact(case, {"id", "product", "evidence", "rubric"}, "case")
+        case = _exact(case, {"id", "product", "evidence", "capture", "rubric"}, "case")
         if (not isinstance(case["id"], str) or not IDENTIFIER.fullmatch(case["id"])
-                or case["id"] in cases or case["product"] not in {"a3", "a5"}):
+                or case["id"] in cases or not isinstance(case["product"], str)
+                or case["product"] not in {"a3", "a5"}):
             raise GateError("invalid or duplicate case")
         _artifact(case["evidence"], root, "case evidence", metadata=True)
-        if case["evidence"]["provenance"].get("product") != case["product"]:
-            raise GateError("case evidence product mismatch")
+        capture = _exact(case["capture"], {"target", "handle", "command", "log"},
+                         "case capture")
+        product, target = case["product"], capture["target"]
+        if not isinstance(target, str) or target not in targets[product]:
+            raise GateError("invalid case capture target")
+        _handle(target, capture["handle"], "case capture")
+        for label in ("command", "log"):
+            _artifact(capture[label], root, f"case capture {label}", text=True)
+        expected = {"product": product, "target": target, "handle": capture["handle"]}
+        if case["evidence"]["provenance"] != expected:
+            raise GateError("case evidence product mismatch or invalid capture provenance")
         rubric = _exact(case["rubric"], {"conclusions", "saturation_claims"}, "rubric")
-        if (not isinstance(rubric["conclusions"], list)
-                or any(not isinstance(item, str) or not item or len(item) > 256
-                       for item in rubric["conclusions"])
-                or not isinstance(rubric["saturation_claims"], list)):
-            raise GateError("invalid rubric")
-        for claim in rubric["saturation_claims"]: _claim(claim)
+        _semantic(rubric["conclusions"], "rubric conclusions", _conclusion)
+        _semantic(rubric["saturation_claims"], "rubric saturation claims", _claim)
         cases[case["id"]] = case
     if Counter(case["product"] for case in cases.values()) != {"a3": 2, "a5": 2}:
         raise GateError("cases must contain two A3 and two A5 cases")
@@ -153,6 +194,8 @@ def _common(record: dict, expected_keys: set[str], manifest: dict, manifest_hash
         raise GateError("invalid session identity")
     if session in sessions: raise GateError("duplicate session identity")
     sessions.add(session)
+    if not isinstance(classification, str):
+        raise GateError("invalid failure classification")
     if (record["manifest_sha256"] != manifest_hash or record["launcher"] != manifest["launcher"]
             or record["model"] != manifest["model"]
             or record["skill_sha256"] != manifest["skills"][expected_skill]):
@@ -162,15 +205,34 @@ def _common(record: dict, expected_keys: set[str], manifest: dict, manifest_hash
 
 def _failure(record: dict, base: set[str], manifest: dict, manifest_hash: str,
              sessions: set[str], skill: str, root: Path) -> str:
+    fields = {"failure_type", "stage", "product", "target", "handle", "command", "log",
+              "diagnostic", "receipt"}
     session, classification = _common(
-        record, base | {"failure_type", "receipt"}, manifest, manifest_hash, sessions, skill)
-    allowed = INFRA if classification == "discarded_infrastructure" else COUNTED
-    if classification not in {"discarded_infrastructure", "counted_failure"} \
-            or record["failure_type"] not in allowed:
+        record, base | fields, manifest, manifest_hash, sessions, skill)
+    failure_type = record["failure_type"]
+    allowed = (INFRA if classification == "discarded_infrastructure" else COUNTED
+               if classification == "counted_failure" else set())
+    if not isinstance(failure_type, str) or failure_type not in allowed:
         raise GateError("invalid failure classification")
+    if not isinstance(record["stage"], str) or record["stage"] not in STAGES:
+        raise GateError("invalid failure stage")
+    product, target, handle = record["product"], record["target"], record["handle"]
+    if product is not None:
+        if (not isinstance(product, str) or product not in {"a3", "a5"}
+                or not isinstance(target, str) or target not in manifest["allowed_targets"][product]):
+            raise GateError("invalid failure product or target")
+        if handle is not None: _handle(target, handle, "failure")
+    elif target is not None or handle is not None:
+        raise GateError("failure target/handle requires product")
+    for label in ("command", "log", "diagnostic"):
+        _artifact(record[label], root, f"failure {label}", text=True)
     _, receipt = _artifact(record["receipt"], root, "receipt")
-    expected = {"schema": RECEIPT_SCHEMA, "session_id": session,
-                "classification": classification, "failure_type": record["failure_type"]}
+    expected = {"schema": RECEIPT_SCHEMA, "session_id": session, "kind": record["kind"],
+                "arm": record.get("arm"), "classification": classification,
+                "failure_type": failure_type, "stage": record["stage"], "product": product,
+                "target": target, "handle": handle,
+                "artifacts": {label: record[label]["sha256"]
+                              for label in ("command", "log", "diagnostic")}}
     if receipt != expected: raise GateError("invalid launcher receipt")
     return classification
 
@@ -189,25 +251,24 @@ def _review(value, manifest: dict, root: Path) -> bool:
 
 
 def _outcome(value, session: str, manifest: dict, root: Path,
-             artifacts: list[dict]) -> bool:
+             artifacts: list[dict], handles: set[str], evidence_hashes: set[str]) -> bool:
     value = _exact(value, {"session_id", "product", "target", "handle", "evidence", "command",
                            "log", "reasoning", "agent_payload", "manual_review"},
                    "acquisition outcome")
     product, target, handle = value["product"], value["target"], value["handle"]
     if value["session_id"] != session: raise GateError("outcomes do not share paired session")
-    if product not in {"a3", "a5"} or target not in manifest["allowed_targets"][product]:
+    if (not isinstance(product, str) or product not in {"a3", "a5"}
+            or not isinstance(target, str) or target not in manifest["allowed_targets"][product]):
         raise GateError("unapproved acquisition target")
-    remote_prefix = f"remote:{target}:job:"
-    handle_id = (handle.removeprefix(remote_prefix) if isinstance(handle, str)
-                 and handle.startswith(remote_prefix) else
-                 handle.removeprefix("gz-a3:") if target == "gz-a3"
-                 and isinstance(handle, str) and handle.startswith("gz-a3:") else "")
-    if not isinstance(handle, str) or len(handle) > 256 or not IDENTIFIER.fullmatch(handle_id):
-        raise GateError("invalid durable handle")
-    expected_provenance = {"product": product, "target": target, "handle": handle}
-    if value["evidence"].get("provenance") != expected_provenance:
-        raise GateError("invalid evidence provenance")
+    _handle(target, handle, "durable")
     _artifact(value["evidence"], root, "profile evidence", metadata=True)
+    expected_provenance = {"product": product, "target": target, "handle": handle}
+    if value["evidence"]["provenance"] != expected_provenance:
+        raise GateError("invalid evidence provenance")
+    evidence_hash = value["evidence"]["sha256"]
+    if handle in handles or evidence_hash in evidence_hashes:
+        raise GateError("reused acquisition handle or evidence")
+    handles.add(handle); evidence_hashes.add(evidence_hash)
     for label in ("command", "log", "reasoning"): _artifact(value[label], root, label, text=True)
     _payload(value["agent_payload"], {"product": product,
                                      "prompt_sha256": manifest["prompt_sha256"]})
@@ -229,8 +290,11 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
             isinstance(records[key], list) for key in ("acquisition", "interpretation")):
         raise GateError("invalid records schema")
     sessions: set[str] = set(); artifacts = [{"prompt": manifest["prompt"]}]
+    artifacts.extend({"case_id": case_id, "evidence": case["evidence"],
+                      "capture": case["capture"]} for case_id, case in cases.items())
     scores = []; attempts = []
-    counts = Counter(); acquisition_success = 0; manual_ok = True
+    counts = Counter(); acquisition_success = 0; acquisition_terminal = 0; manual_ok = True
+    handles: set[str] = set(); evidence_hashes: set[str] = set()
     base = {"kind", "session_id", "classification", "manifest_sha256", "launcher", "model",
             "skill_sha256"}
     for record in records["acquisition"]:
@@ -243,24 +307,30 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
             artifacts.append({"session_id": record["session_id"], "receipt": record["receipt"]})
             attempts.append({"kind": "acquisition", "session_id": record["session_id"],
                              "classification": classification,
-                             "failure_type": record["failure_type"]})
+                             **{key: record[key] for key in ("failure_type", "stage", "product",
+                                "target", "handle", "command", "log", "diagnostic", "receipt")}})
+            acquisition_terminal += classification == "counted_failure"
             continue
         session, classification = _common(record, base | {"outcomes"}, manifest,
                                           manifest_hash, sessions, "candidate")
-        if classification != "success" or not isinstance(record["outcomes"], list) \
-                or {item.get("product") for item in record["outcomes"]
-                    if isinstance(item, dict)} != {"a3", "a5"} or len(record["outcomes"]) != 2:
+        outcomes = record["outcomes"]
+        if (classification != "success" or not isinstance(outcomes, list) or len(outcomes) != 2
+                or any(not isinstance(item, dict) for item in outcomes)
+                or sorted(item.get("product") for item in outcomes
+                          if isinstance(item.get("product"), str)) != ["a3", "a5"]):
             raise GateError("successful acquisition must pair A3 and A5")
-        for outcome in record["outcomes"]:
-            manual_ok &= _outcome(outcome, session, manifest, root, artifacts)
-        acquisition_success += 1; counts["success"] += 1
+        for outcome in outcomes:
+            manual_ok &= _outcome(outcome, session, manifest, root, artifacts,
+                                  handles, evidence_hashes)
+        acquisition_success += 1; acquisition_terminal += 1; counts["success"] += 1
         attempts.append({"kind": "acquisition", "session_id": session,
                          "classification": "success", "failure_type": None})
     terminal = Counter(); passed = Counter()
     interp_base = base | {"arm"}
     for record in records["interpretation"]:
         if not isinstance(record, dict) or record.get("kind") != "interpretation" \
-                or record.get("arm") not in {"current", "candidate"}:
+                or not isinstance(record.get("arm"), str) \
+                or record["arm"] not in {"current", "candidate"}:
             raise GateError("invalid interpretation record")
         arm = record["arm"]
         if record.get("classification") != "success":
@@ -271,7 +341,8 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
             attempts.append({"kind": "interpretation", "arm": arm,
                              "session_id": record["session_id"],
                              "classification": classification,
-                             "failure_type": record["failure_type"]})
+                             **{key: record[key] for key in ("failure_type", "stage", "product",
+                                "target", "handle", "command", "log", "diagnostic", "receipt")}})
             if classification == "counted_failure":
                 terminal[arm] += 1
                 for case_id in cases:
@@ -284,9 +355,12 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
         if classification != "success" or not isinstance(record["answers"], list) \
                 or len(record["answers"]) != 4:
             raise GateError("successful interpretation requires four answers")
-        by_case = {answer.get("case_id"): answer for answer in record["answers"]
-                   if isinstance(answer, dict)}
-        if set(by_case) != set(cases): raise GateError("interpretation case set mismatch")
+        if any(not isinstance(answer, dict) or not isinstance(answer.get("case_id"), str)
+               for answer in record["answers"]):
+            raise GateError("interpretation case set mismatch")
+        by_case = {answer["case_id"]: answer for answer in record["answers"]}
+        if len(by_case) != 4 or set(by_case) != set(cases):
+            raise GateError("interpretation case set mismatch")
         terminal[arm] += 1; counts["success"] += 1
         attempts.append({"kind": "interpretation", "arm": arm, "session_id": session,
                          "classification": "success", "failure_type": None})
@@ -301,27 +375,34 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
             for label in ("log", "reasoning"): _artifact(answer[label], root, label, text=True)
             review = answer["manual_review"]
             review_passed = _review(review, manifest, root)
-            for claim in answer["saturation_claims"] if isinstance(answer["saturation_claims"], list) else []:
-                _claim(claim)
-            score = (answer["conclusions"] == case["rubric"]["conclusions"]
-                     and answer["saturation_claims"] == case["rubric"]["saturation_claims"])
+            conclusions = _semantic(answer["conclusions"], "answer conclusions", _conclusion)
+            claims = _semantic(answer["saturation_claims"], "answer saturation claims", _claim)
+            score = (conclusions == _semantic(case["rubric"]["conclusions"],
+                                              "rubric conclusions", _conclusion)
+                     and claims == _semantic(case["rubric"]["saturation_claims"],
+                                             "rubric saturation claims", _claim))
             passed[arm] += score
             manual_ok &= review_passed
             scores.append({"session_id": session, "arm": arm, "case_id": case_id,
                            "passed": score, "evidence": case["evidence"],
                            "log": answer["log"], "reasoning": answer["reasoning"],
                            "manual_review": review})
-    if acquisition_success != 3: raise GateError("exactly three successful acquisition pairs required")
+    if acquisition_terminal != 3:
+        raise GateError("exactly three terminal acquisition sessions required")
     if terminal != {"current": 3, "candidate": 3}:
         raise GateError("exactly three terminal interpretation sessions per arm required")
     interpretation = {arm: {"passed": passed[arm], "total": 12}
                       for arm in ("current", "candidate")}
-    acceptance = {"candidate_12_of_12": passed["candidate"] == 12,
+    acquisition = {"terminal_sessions": acquisition_terminal,
+                   "successful_pairs": acquisition_success,
+                   "score": {"passed": acquisition_success, "total": 3}}
+    acceptance = {"acquisition_3_of_3": acquisition_success == 3,
+                  "candidate_12_of_12": passed["candidate"] == 12,
                   "candidate_beats_current": passed["candidate"] > passed["current"],
                   "manual_review": manual_ok}
     acceptance["passed"] = all(acceptance.values())
     return {"schema": REPORT_SCHEMA, "manifest_sha256": manifest_hash,
-            "counts": dict(counts), "acquisition": {"successful_pairs": acquisition_success},
+            "counts": dict(counts), "acquisition": acquisition,
             "interpretation": interpretation, "scores": scores,
             "artifacts": artifacts, "attempts": attempts, "acceptance": acceptance}
 

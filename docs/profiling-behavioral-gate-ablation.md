@@ -46,6 +46,9 @@ but those tests exercised a fake executor rather than the live trust boundary.
 | A7 | Added envelope-only failure receipts and replacement counts | Preserve infra and counted failures without agent control | Failure tests |
 | A8 | Added pinned trusted review for every successful acquisition and interpretation reasoning log | Keep acceptance dependent on inspected reasoning | Review tests |
 | A9 | Added actual remote handle formats and direct attempt summaries | Support GZ handles and keep failure reasons analyzable | Handle/aggregate tests |
+| A10 | Made acquisition a three-terminal-slot score and enriched failure envelopes | Prevent replacement after counted failures and make classifications auditable | Terminal/failure tests |
+| A11 | Added live frozen-case attestations and unique acquisition captures | Prevent fixture fabrication or capture reuse | Capture tests |
+| A12 | Canonicalized rubrics as duplicate-free semantic sets and hardened all type boundaries | Preserve meaning across order while failing closed without tracebacks | Rubric/type tests |
 
 ## Complexity intentionally kept
 
@@ -56,17 +59,19 @@ but those tests exercised a fake executor rather than the live trust boundary.
 
 ## Test changes
 
-The 27 focused tests cover treatment-blind agent payloads, paired persistent
+The 42 focused tests cover treatment-blind agent payloads, paired persistent
 sessions, trusted-vs-agent failure classification, evidence/hash/JSON/symlink/
 escape checks, exact contradictory rubrics, identity drift, duplicates,
 infrastructure replacements, counted failures, all-log manual review, text
-artifacts, prompt retention/hash/content, GZ handles, 12/12 comparison, and atomic output. They do not assert
+artifacts, prompt retention/hash/content, terminal acquisition scoring, live
+case attestations, capture reuse, semantic-set ordering/duplicates, malformed
+types, GZ handles, 12/12 comparison, and atomic output. They do not assert
 documentation wording.
 
 ## PR review assessment
 
-The result is reviewable as one PR: 352 source and 287 functional-test lines
-(639 source/test lines) with one pure validation/aggregation story. The live
+The result is reviewable as one PR: 433 source and 409 functional-test lines
+(842 source/test lines) with one pure validation/aggregation story. The live
 launcher remains a separate security/runtime PR. The principal review risk is
 keeping that launcher's emitted trusted-record schema exactly aligned with this
 validator.
@@ -75,8 +80,8 @@ validator.
 
 | Command | Result |
 | --- | --- |
-| `pytest -q tests/test_profile_behavioral_gate.py` | 27 passed |
-| `PYTHONPATH=. pytest -q` | 1063 passed |
+| `pytest -q tests/test_profile_behavioral_gate.py` | 42 passed |
+| `PYTHONPATH=. pytest -q` | 1078 passed |
 | `git diff --check` | passed |
 
 ## Suggested PR order

@@ -675,6 +675,55 @@ def test_controller_observe_rejects_replaced_handle(tmp_path: Path, monkeypatch)
     assert "different handle" in result["reason"]
 
 
+def test_controller_observe_accepts_valid_multi_operation_transaction(
+        tmp_path: Path, monkeypatch):
+    candidate = hashlib.sha256(b"candidate").hexdigest()
+    manifest = hashlib.sha256(b"manifest").hexdigest()
+    retained, final = "job:retained", "job:post-control"
+    request = hashlib.sha256(b"request").hexdigest()
+    final_request = hashlib.sha256(b"final-request").hexdigest()
+    receipt = {
+        "status": "candidate_error", "reason": "compile failed", "handle": final,
+        "candidate_sha256": candidate, "manifest_sha256": manifest,
+        "device": "dynamic-1", "policy": {
+            "schema": runtime.evidence_contract.CONTROLLER_POLICY_SCHEMA,
+            "selected_device": "dynamic-1", "admission_controls": [{
+                "device": "dynamic-1", "status": "pass", "healthy": True,
+                "idle": True, "warmed": True,
+            }],
+            "submission_candidate_sha256": candidate,
+            "submitted_handles": [retained, final],
+            "observed_handles": [retained, final], "infra_retries": 1,
+            "retry_budget": 2, "quarantined_devices": [],
+            "quarantine_controls": {}, "confirmation_count": 0,
+            "post_control": "not_run", "variability_threshold": .25,
+            "measurement_generation": 0, "operation_history": [
+                {"request_sha256": request, "mode": "submit",
+                 "status": "infrastructure_error", "terminal": False,
+                 "handle": retained, "action": "calibrate", "attempt_id": "before"},
+                {"request_sha256": request, "mode": "observe", "status": "ok",
+                 "terminal": True, "handle": retained, "action": "calibrate",
+                 "attempt_id": "before"},
+                {"request_sha256": final_request, "mode": "submit",
+                 "status": "compile_error", "terminal": True, "handle": final,
+                 "action": "check", "attempt_id": None},
+            ],
+        },
+    }
+    adapter = runtime.CommandController(["controller"], tmp_path)
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 2, json.dumps(receipt), "compile diagnostic",
+        ),
+    )
+
+    result = adapter.observe(1, candidate, manifest, retained)
+
+    assert result["status"] == "candidate_error"
+    assert result["handle"] == final
+
+
 def test_controller_remeasure_uses_exact_pending_handle(tmp_path: Path, monkeypatch):
     adapter = runtime.CommandController(["controller", "--mode", "profile"], tmp_path)
     calls = []

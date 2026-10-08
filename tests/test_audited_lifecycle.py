@@ -73,6 +73,34 @@ def candidate_error_receipt(candidate: str, manifest: str, number: int,
     return result
 
 
+def observed_transaction_receipt(candidate: str, manifest: str, number: int,
+                                 retained: str = "remote:retained") -> dict:
+    result = receipt(candidate, manifest, number)
+    final_handle = f"remote:final:{number}"
+    result["handle"] = final_handle
+    request = sha(f"retained-request:{number}")
+    final_request = sha(f"final-request:{number}")
+    result["policy"].update(
+        submitted_handles=[retained, final_handle],
+        observed_handles=[retained, final_handle],
+        infra_retries=1,
+        measurement_generation=0,
+        operation_history=[
+            {"request_sha256": request, "mode": "submit",
+             "status": "infrastructure_error", "terminal": False,
+             "handle": retained, "action": "calibrate",
+             "attempt_id": f"experiment-{number}-before"},
+            {"request_sha256": request, "mode": "observe", "status": "ok",
+             "terminal": True, "handle": retained, "action": "calibrate",
+             "attempt_id": f"experiment-{number}-before"},
+            {"request_sha256": final_request, "mode": "submit", "status": "ok",
+             "terminal": True, "handle": final_handle, "action": "calibrate",
+             "attempt_id": f"experiment-{number}-after"},
+        ],
+    )
+    return result
+
+
 def report(number: int, candidate: str, manifest: str, decision: str = "retain") -> dict:
     controller = receipt(candidate, manifest, number)
     return {
@@ -657,6 +685,8 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
     prompt, task = inputs(tmp_path)
     repair_turns = 0
 
+    terminal_receipts = {}
+
     def invoke(number, session, instruction):
         nonlocal repair_turns
         if instruction is None:
@@ -668,12 +698,9 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
             return events("thread-infra", {"repaired": True})
         candidate = sha((repo / "candidate.py").read_bytes())
         manifest = sha((repo / "candidate.manifest.json").read_bytes())
-        observed = receipt(candidate, manifest, number)
-        observed["handle"] = "remote:retained"
-        observed["policy"]["submitted_handles"] = ["remote:retained"]
-        observed["policy"]["observed_handles"] = ["remote:retained"]
+        observed = terminal_receipts[number]
         document = report(number, candidate, manifest)
-        document["controller_handle"] = "remote:retained"
+        document["controller_handle"] = observed["handle"]
         document["controller_receipt_sha256"] = contract.sha256_json(observed)
         return events("thread-infra", document, command=False)
 
@@ -693,10 +720,8 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
 
         def observe(self, number, candidate, manifest, handle):
             self.observations += 1
-            result = receipt(candidate, manifest, number)
-            result["handle"] = handle
-            result["policy"]["submitted_handles"] = [handle]
-            result["policy"]["observed_handles"] = [handle]
+            result = observed_transaction_receipt(candidate, manifest, number, handle)
+            terminal_receipts[number] = result
             return result
 
     controller = Controller()
@@ -713,10 +738,43 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
     assert result.status == "complete" and len(result.commits) == 1
     assert repair_turns == 1
     assert controller.calls == 2 and controller.observations == 1
+    assert evidence["controller"]["handle"] == "remote:final:1"
     assert evidence["final_attempt"] == 2
     assert [item["status"] for item in evidence["candidate_attempts"]] == [
         "candidate_error", "ok",
     ]
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda history: history[1].update(request_sha256="0" * 64),
+    lambda history: history[1].update(handle="remote:wrong"),
+    lambda history: history[1].update(mode="retry_submit"),
+    lambda history: history[0].update(terminal=True),
+    lambda history: history[0].update(action="check"),
+])
+def test_observe_transaction_rejects_tampered_request_proof(mutation):
+    candidate, manifest = sha("candidate"), sha("manifest")
+    retained = "remote:retained"
+    result = observed_transaction_receipt(candidate, manifest, 1, retained)
+    mutation(result["policy"]["operation_history"])
+
+    with pytest.raises(contract.AuditError):
+        contract.validate_controller_receipt(result, candidate, manifest)
+        contract.validate_observe_transaction(result, retained)
+
+
+def test_observe_transaction_accepts_repeated_observer_transport_failure():
+    candidate, manifest = sha("candidate"), sha("manifest")
+    retained = "remote:retained"
+    result = observed_transaction_receipt(candidate, manifest, 1, retained)
+    failed_observe = dict(result["policy"]["operation_history"][1])
+    failed_observe.update(status="infrastructure_error", terminal=False)
+    result["policy"]["operation_history"].insert(1, failed_observe)
+    result["policy"]["infra_retries"] = 2
+    result["policy"]["retry_budget"] = 2
+
+    contract.validate_controller_receipt(result, candidate, manifest)
+    assert contract.validate_observe_transaction(result, retained) is result
 
 
 @pytest.mark.parametrize(("field", "value"), [

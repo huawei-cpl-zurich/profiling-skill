@@ -24,6 +24,7 @@ from audited_contract import (
     sha256_bytes,
     sha256_json,
     validate_controller_receipt,
+    validate_observe_transaction,
 )
 
 MAX_PARTIAL_OUTPUT = 65536
@@ -527,7 +528,7 @@ class AuditedExperimentRunner:
                     raise AuditError(
                         f"controller observation failed for durable handle {handle}"
                     ) from failure
-                if not isinstance(receipt, dict) or receipt.get("handle") != handle:
+                if not isinstance(receipt, dict):
                     self._controller_checkpoint(
                         number, session, "controller observation changed durable handle",
                         branch, seed_commit, seed_hash, prior_hash, commands, previous,
@@ -603,6 +604,9 @@ class AuditedExperimentRunner:
             raise AuditError(f"experiment {number} blocked by controller status {status!r}")
         try:
             receipt = validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+            if continuing and stage == "controller" and isinstance(handle, str) \
+                    and receipt.get("handle") != handle:
+                validate_observe_transaction(receipt, handle)
         except AuditError as failure:
             self._controller_checkpoint(
                 number, session, str(failure), branch, seed_commit, seed_hash,

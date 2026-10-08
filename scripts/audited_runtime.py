@@ -624,6 +624,7 @@ class CommandController:
         ]
         return self._execute(
             command, number, candidate_hash, manifest_hash, expected_handle=handle,
+            allow_observe_transaction=True,
         )
 
     def remeasure(self, number: int, candidate_hash: str, manifest_hash: str,
@@ -640,7 +641,8 @@ class CommandController:
         )
 
     def _execute(self, command: Sequence[str], number: int, candidate_hash: str,
-                 manifest_hash: str, *, expected_handle: str | None = None) -> dict:
+                 manifest_hash: str, *, expected_handle: str | None = None,
+                 allow_observe_transaction: bool = False) -> dict:
         try:
             result = subprocess.run(
                 command, cwd=self.repo, text=True, capture_output=True,
@@ -709,7 +711,19 @@ class CommandController:
                     result.stdout, result.stderr, self._credential_values,
                 ),
             }
-        if expected_handle is not None and receipt.get("handle") != expected_handle:
+        observed_transaction = False
+        if (allow_observe_transaction and expected_handle is not None
+                and receipt.get("handle") != expected_handle):
+            try:
+                evidence_contract.validate_controller_receipt(
+                    receipt, candidate_hash, manifest_hash,
+                )
+                evidence_contract.validate_observe_transaction(receipt, expected_handle)
+                observed_transaction = True
+            except AuditError:
+                pass
+        if (expected_handle is not None and receipt.get("handle") != expected_handle
+                and not observed_transaction):
             return {
                 "status": "infrastructure_error",
                 "terminal": False,

@@ -22,7 +22,7 @@ def run_cli(*arguments: str):
 
 
 def test_direct_copy_lookup_preserves_compiler_provenance_and_scope():
-    run = run_cli("--construct", "gm_to_l1_copy")
+    run = run_cli("--construct", "gm_to_l1_copy", "--product", "a3")
 
     assert run.returncode == 0, run.stderr
     result = json.loads(run.stdout)
@@ -49,7 +49,7 @@ def test_all_source_proven_direct_mappings_are_queryable():
     }
 
     for construct, pipe in expected.items():
-        run = run_cli("--construct", construct)
+        run = run_cli("--construct", construct, "--product", "a3")
         assert run.returncode == 0, run.stderr
         result = json.loads(run.stdout)
         assert result["status"] == "direct"
@@ -57,7 +57,7 @@ def test_all_source_proven_direct_mappings_are_queryable():
 
 
 def test_unresolved_construct_returns_unknown_without_likely_pipe():
-    run = run_cli("--construct", "triton_dot")
+    run = run_cli("--construct", "triton_dot", "--product", "a3")
 
     assert run.returncode == 0, run.stderr
     result = json.loads(run.stdout)
@@ -69,7 +69,7 @@ def test_unresolved_construct_returns_unknown_without_likely_pipe():
 
 
 def test_original_triton_op_is_not_promoted_from_lowering_sequence():
-    run = run_cli("--construct", "triton_load")
+    run = run_cli("--construct", "triton_load", "--product", "a3")
 
     assert run.returncode == 0, run.stderr
     result = json.loads(run.stdout)
@@ -89,6 +89,14 @@ def test_a2_and_a5_stay_unknown_without_product_validation():
         assert result["profiler_pipe"] is None
 
 
+def test_construct_lookup_requires_explicit_product():
+    run = run_cli("--construct", "gm_to_l1_copy")
+
+    assert run.returncode == 2
+    assert run.stdout == ""
+    assert "--product is required with --construct" in run.stderr
+
+
 def test_inventory_lists_direct_inferred_and_unknown_claims():
     run = run_cli("--list")
 
@@ -102,7 +110,7 @@ def test_inventory_lists_direct_inferred_and_unknown_claims():
 
 
 def test_unknown_selector_fails_clearly_without_fabricating_a_mapping():
-    run = run_cli("--construct", "not_in_inventory")
+    run = run_cli("--construct", "not_in_inventory", "--product", "a3")
 
     assert run.returncode == 3
     result = json.loads(run.stdout)

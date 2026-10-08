@@ -4,7 +4,8 @@ The reviewed inventory is
 `references/triton-pipe-attribution.json`. Query it rather than guessing:
 
 ```bash
-python3 scripts/query_triton_pipe_attribution.py --construct gm_to_l1_copy
+python3 scripts/query_triton_pipe_attribution.py \
+  --construct gm_to_l1_copy --product a3
 python3 scripts/query_triton_pipe_attribution.py --construct triton_dot --product a3
 ```
 

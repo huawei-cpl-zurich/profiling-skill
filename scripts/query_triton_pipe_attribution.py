@@ -137,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
     action.add_argument("--validate", action="store_true")
     parser.add_argument("--product", choices=("a2", "a3", "a5"))
     args = parser.parse_args(argv)
+    if args.construct is not None and args.product is None:
+        parser.error("--product is required with --construct")
     try:
         inventory = load_inventory(args.mapping)
     except InvalidInventory as error:

@@ -99,7 +99,7 @@ def fixture(tmp_path: Path):
         session = f"acq-{agent}"; outcomes = []
         for product, target in (("a3", "bz-a3-1"), ("a5", "bz-a5")):
             handle = f"remote:{target}:job:{session}-{product}"
-            provenance = {"product": product, "target": target, "handle": handle}
+            provenance = {"product": product, "target": target}
             evidence = artifact(root, f"evidence/{session}-{product}.json",
                 {"schema": "profile/v1", "provenance": provenance, "session": session},
                 schema="profile/v1", provenance=provenance)
@@ -154,6 +154,47 @@ def test_accepts_12_of_12_candidate_and_blinded_payload(tmp_path: Path):
     payloads = [a["agent_payload"] for row in records["interpretation"] for a in row["answers"]]
     assert all("arm" not in p and "workspace" not in p for p in payloads)
     assert report["artifacts"][0] == {"prompt": json.loads(manifest.read_text())["prompt"]}
+
+
+def test_acquired_evidence_provenance_excludes_post_dispatch_handle(tmp_path: Path):
+    manifest, records_path, root, _, records = fixture(tmp_path)
+    outcome = records["acquisition"][0]["outcomes"][0]
+    provenance = outcome["evidence"]["provenance"]
+    provenance["handle"] = outcome["handle"]
+    evidence = root / outcome["evidence"]["path"]
+    evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance}))
+    outcome["evidence"]["sha256"] = sha(evidence)
+    outcome["evidence"]["remote_sha256"] = outcome["evidence"]["sha256"]
+    records_path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError, match="evidence provenance"):
+        gate.evaluate(manifest, records_path, root)
+
+
+@pytest.mark.parametrize("field,value", [("product", "a5"), ("target", "bz-a3-2")])
+def test_acquired_evidence_provenance_must_match_outcome(
+        tmp_path: Path, field: str, value: str):
+    manifest, records_path, root, _, records = fixture(tmp_path)
+    outcome = records["acquisition"][0]["outcomes"][0]
+    provenance = outcome["evidence"]["provenance"]
+    provenance[field] = value
+    evidence = root / outcome["evidence"]["path"]
+    evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance}))
+    outcome["evidence"]["sha256"] = sha(evidence)
+    outcome["evidence"]["remote_sha256"] = outcome["evidence"]["sha256"]
+    records_path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError, match="evidence provenance"):
+        gate.evaluate(manifest, records_path, root)
+
+
+def test_frozen_case_provenance_retains_capture_handle(tmp_path: Path):
+    manifest_path, records_path, root, manifest, _ = fixture(tmp_path)
+    case = manifest["cases"][0]
+    assert case["evidence"]["provenance"] == {
+        "product": case["product"],
+        "target": case["capture"]["target"],
+        "handle": case["capture"]["handle"],
+    }
+    assert gate.evaluate(manifest_path, records_path, root)["acceptance"]["passed"] is True
 
 
 @pytest.mark.parametrize("damage", ["hash", "empty"])
@@ -346,7 +387,7 @@ def test_rejects_reused_acquisition_capture(tmp_path: Path, reuse: str):
     second = records["acquisition"][1]["outcomes"][0]
     if reuse == "handle":
         second["handle"] = first["handle"]
-        provenance = {"product": "a3", "target": second["target"], "handle": second["handle"]}
+        provenance = {"product": "a3", "target": second["target"]}
         second["evidence"]["provenance"] = provenance
         evidence = root / second["evidence"]["path"]
         evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance,
@@ -456,7 +497,7 @@ def test_accepts_gz_a3_durable_handle(tmp_path: Path):
         row["manifest_sha256"] = manifest_hash
     outcome = records["acquisition"][0]["outcomes"][0]
     outcome.update(target="gz-a3", handle="gz-a3:job-123")
-    provenance = {"product": "a3", "target": "gz-a3", "handle": "gz-a3:job-123"}
+    provenance = {"product": "a3", "target": "gz-a3"}
     outcome["evidence"]["provenance"] = provenance
     evidence = root / outcome["evidence"]["path"]
     evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance}))

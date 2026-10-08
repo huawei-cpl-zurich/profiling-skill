@@ -291,7 +291,7 @@ def _outcome(value, session: str, manifest: dict, root: Path,
         raise GateError("unapproved acquisition target")
     _handle(target, handle, "durable")
     _artifact(value["evidence"], root, "profile evidence", metadata=True, remote_hash=True)
-    expected_provenance = {"product": product, "target": target, "handle": handle}
+    expected_provenance = {"product": product, "target": target}
     if value["evidence"]["provenance"] != expected_provenance:
         raise GateError("invalid evidence provenance")
     evidence_hash = value["evidence"]["sha256"]

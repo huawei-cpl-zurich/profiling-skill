@@ -3,6 +3,31 @@
 These rules apply to the validated Ascend 950/A5 target (28 AIC and 56 AIV).
 Do not transfer event IDs, byte multipliers, or ceilings to another product.
 
+The profiler source names this architecture **Ascend950/V6**. `bz-a5` is a
+local target label, not a vendor product name; record live product output when
+using that target as evidence. The pipe definitions below come from
+`Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb` through
+`ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics`.
+
+## Pipes and code-level meaning
+
+| Pipe | V6 event | Operation represented |
+| --- | ---: | --- |
+| Scalar | `0x001` | Scalar/control instructions |
+| Cube/MAC | `0x301` | Matrix/cube arithmetic |
+| Vector | `0x501` | Vector arithmetic |
+| MTE1 | `0x701` | L1 to L0A/L0B movement |
+| MTE2 | `0x202` | DDR/GM into the AI Core memory hierarchy |
+| MTE3 | `0x203` | AI Core memory hierarchy to DDR/GM |
+| FixPipe | `0x714` | L0C output toward OUT/GM or L1 |
+
+V6 pipe ratios divide the corresponding active cycles by `taskCyc`. They show
+how much of the task window a pipe was active; they are neither achieved
+bandwidth nor proof that the pipe reached capacity. The source's diagnostic
+`memory_bound = mte2_ratio / max(mac_ratio, vec_ratio)` says memory does not
+dominate below `1`, memory dominates above `1`, and exactly `1` is
+unclassified. It does not establish that MTE2 is saturated.
+
 ## Keep measurement layers separate
 
 | Quantity | Meaning |
@@ -44,6 +69,15 @@ Whole-device cube utilization is
 It does not use operation counts or multiply by Cube/MAC ratio. On 28 AICs, a
 single balanced 24-block wave has a coverage ceiling of `24/28 = 85.714%`
 even if each participating row reports about 95% Cube composition.
+
+The reviewed capacity model in `a5-pipe-capacity-model.json` therefore uses
+only whole-device Cube coverage and the validated GM-to-L1 reference ceiling.
+Its threshold is `1.0`: the profiler source says Cube utilization approaches
+the theoretical 100%, and the bandwidth ratio is defined against the embedded
+reference ceiling. There is no supported universal 80% or 90% pipe cutoff.
+Values below the model threshold are not evidence that more utilization is
+attainable; they only establish that the reviewed capacity reference was not
+reached in that capture.
 
 For a memory path, average bandwidth divides event-derived bytes by complete
 duration; active bandwidth divides by path-active cycles. State which one is

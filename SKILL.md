@@ -19,6 +19,8 @@ not capacity denominators and cannot establish saturation by themselves.
 Read [Pipe saturation contract](references/pipe-saturation-contract.md) before
 creating model or evidence JSON. No built-in A2/A3 or A5 capacity model is
 provided yet; return `unknown` rather than borrowing another product's model.
+A2/A3 `PipeUtilization` block rows are non-temporal activity observations, not
+phase evidence, and must never be passed to this analyzer.
 
 ## A2/A3 Triton timing and pipe evidence
 
@@ -46,11 +48,11 @@ Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, A3 pipe inventory, normalization command, and interpretation
 boundaries. `PipeUtilization` ratios are activity divided by task cycles; they
 are not proof that a pipe reached hardware capacity. Normalize compact exports
-with `scripts/normalize_a3_pipe_evidence.py` and analyze them with
-`references/a3-pipe-model.json`. The built-in A3 model deliberately returns
-`unknown` for saturation until a product-valid capacity denominator and
-threshold are established. Preserve the full transcript so compilation and
-runtime errors remain actionable.
+with `scripts/normalize_a3_pipe_evidence.py` and
+`references/a3-pipe-activity-model.json`. The activity model describes export
+fields and emits `unknown` saturation for every observation; it is not a
+capacity model. Preserve the full transcript so compilation and runtime errors
+remain actionable.
 
 ### Development diagnostics before profiling
 

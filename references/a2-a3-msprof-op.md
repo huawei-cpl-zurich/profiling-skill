@@ -94,39 +94,47 @@ lower universal saturation cutoff is documented.
 ## Normalize compact pipe evidence
 
 Capture `PipeUtilization` and, when needed, `Memory` in separate comparable
-replays with the same exact kernel selector. Keep the vendor report remotely
-and pass only its compact exported CSVs to:
+single-launch replays (`--launch-count=1`) with the same exact kernel selector.
+Each replay's `OpBasicInfo` must contain exactly one total row, and that row
+must exactly match the selector. Repeated launches and multi-operator exports
+are rejected rather than ambiguously associated. Keep the vendor report
+remotely and pass only its compact exported CSVs to:
 
 ```bash
 python3 scripts/normalize_a3_pipe_evidence.py \
   --product a3 \
+  --activity-model references/a3-pipe-activity-model.json \
   --basic-info PipeCapture/OpBasicInfo.csv \
   --pipe-utilization PipeCapture/PipeUtilization.csv \
+  --capture-id '<pipe replay durable handle>' \
   --memory-access MemoryCapture/Memory.csv \
   --memory-basic-info MemoryCapture/OpBasicInfo.csv \
+  --memory-capture-id '<distinct memory replay durable handle>' \
   --kernel-name '<exact exported kernel>' \
-  --capture-id '<durable remote handle>' \
-  --output phase-evidence.json
-
-python3 scripts/analyze_pipe_saturation.py \
-  --product a3 \
-  --model references/a3-pipe-model.json \
-  --evidence phase-evidence.json
+  --launch-count 1 \
+  --output activity-evidence.json
 ```
 
-Each exported block/sub-block row is a separate relative interval from zero
-through its exact reported AIC or AIV active duration; it is not a global
-cross-core timeline. Rows have no common clock and must never be aligned or
-used to infer overlap or temporal phases across blocks. The normalizer
-requires an exact kernel selector and binds rows to exactly one `OpBasicInfo`
-entry from the same profiler report directory. A separate `Memory` replay must
-likewise supply its matching `OpBasicInfo`. It hashes every source and
-preserves activity ratios
-separately from metrics, and retains raw memory-path values. The
-shipped A3 model marks every capacity denominator unavailable, so saturation
-is `unknown`. This is deliberate: the ratios can identify a compute-heavy or
-movement-heavy block/sub-block observation, but cannot prove a saturated
-bottleneck or locate a temporal phase.
+Each exported block/sub-block row becomes an `observation` with a reported
+duration, not a temporal phase or interval. Rows have no common clock and must
+never be aligned or used to infer overlap or temporal phases across blocks.
+Duplicate `(block_id, sub_block_id)` keys are rejected.
+
+Pipe and Memory reports are distinct captures and retain distinct durable
+capture IDs. Automatic joining is permitted only when both single-launch
+reports have exactly the same `(block_id, sub_block_id)` key set; missing,
+extra, disjoint, or duplicate keys fail closed. Source hashes carry stable
+roles (`pipe_basic_info`, `pipe_utilization`, `memory_basic_info`, and
+`memory_access`) and the combined digest binds those roles. Memory columns
+retain their source labels, but their normalized unit is `null` and scaling is
+`unvalidated`, even when a vendor column name contains `(KB)`.
+
+The activity model marks saturation `unknown` because no capacity denominator
+is available. Do not pass this output to `analyze_pipe_saturation.py`; that
+interface accepts temporal phase/capacity evidence, which A3 block exports are
+not. Activity ratios can identify a compute-heavy or movement-heavy
+block/sub-block observation, but cannot prove a saturated bottleneck or locate
+a temporal phase.
 
 `TimelineDetail` flow events describe mapping relationships, not capacity.
 Sampled usage is based on task cycles divided by frequency times elapsed

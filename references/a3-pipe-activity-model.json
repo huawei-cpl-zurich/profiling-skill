@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "model_id": "ascend-a2-a3-msprof-activity-v1",
+  "product": "a3",
+  "evidence_kind": "per-block-pipe-activity",
+  "provenance": {
+    "source": "ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics",
+    "revision": "922ce56938fe48063bbffb5019b65645b2bb77cb"
+  },
+  "saturation": {
+    "state": "unknown",
+    "reason": "activity fractions have no validated A2/A3 capacity denominator or saturation threshold"
+  },
+  "resources": [
+    {"resource": "aic_cube", "export_field": "aic_cube_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aic_fixpipe", "export_field": "aic_fixpipe_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aic_mte1", "export_field": "aic_mte1_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aic_mte2", "export_field": "aic_mte2_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aic_mte3", "export_field": "aic_mte3_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aic_scalar", "export_field": "aic_scalar_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aiv_mte2", "export_field": "aiv_mte2_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aiv_mte3", "export_field": "aiv_mte3_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aiv_scalar", "export_field": "aiv_scalar_ratio", "evidence_kind": "activity_only"},
+    {"resource": "aiv_vector", "export_field": "aiv_vec_ratio", "evidence_kind": "activity_only"}
+  ]
+}

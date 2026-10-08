@@ -28,8 +28,12 @@ valid capture containing the required tracks. A scalar-only trace is not a
 mixed-kernel common clock.
 
 `scripts/summarize_timelines.py` partitions that common clock at every event
-start and end. Adjacent intervals retain the exact integer-nanosecond boundary
-and the set of active pipes; an empty set is an observed no-pipe gap. These
+start and end. The profiler exports cycle-derived floating-point microseconds,
+so boundaries are deterministically rounded half-up to integer nanoseconds;
+positive events receive a minimum one-nanosecond width and the compact evidence
+records that quantization policy. Adjacent intervals retain the resulting
+integer-nanosecond boundary and the set of active pipes; an empty set is an
+observed no-pipe gap. These
 activity phases locate overlap and bubbles but do not establish saturation.
 The generated `phase-evidence.json` is accepted by
 `analyze_pipe_saturation.py`.

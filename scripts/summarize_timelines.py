@@ -10,7 +10,7 @@ import hashlib
 import io
 import json
 from collections import Counter, defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -34,17 +34,19 @@ def trace_payload(path: Path) -> tuple[list[Any], dict[str, Any]]:
     return raw, metadata
 
 
-def exact_ns(value: Any, unit: str, location: str) -> int:
+def decimal_ns(value: Any, unit: str, location: str) -> Decimal:
     try:
         converted = Decimal(str(value)) * TIME_UNITS_NS[unit]
     except (InvalidOperation, ValueError) as error:
         raise InvalidTimeline(f"invalid {location}: {value!r}") from error
-    if not converted.is_finite() or converted != converted.to_integral_value():
-        raise InvalidTimeline(f"{location} does not resolve to an integer nanosecond")
-    result = int(converted)
-    if result < 0:
+    if not converted.is_finite() or converted < 0:
         raise InvalidTimeline(f"{location} must be non-negative")
-    return result
+    return converted
+
+
+def quantized_ns(value: Decimal) -> int:
+    """Map profiler float timestamps onto the integer-nanosecond contract."""
+    return int(value.to_integral_value(rounding=ROUND_HALF_UP))
 
 
 def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict]:
@@ -69,10 +71,16 @@ def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict
                 or "unknown"
             ).lower()
         )
-        start_ns = exact_ns(event["ts"], unit, f"event timestamp in {path}")
-        duration_ns = exact_ns(event["dur"], unit, f"event duration in {path}")
-        if duration_ns == 0:
+        start_value_ns = decimal_ns(
+            event["ts"], unit, f"event timestamp in {path}"
+        )
+        duration_value_ns = decimal_ns(
+            event["dur"], unit, f"event duration in {path}"
+        )
+        if duration_value_ns == 0:
             continue
+        start_ns = quantized_ns(start_value_ns)
+        end_ns = max(start_ns + 1, quantized_ns(start_value_ns + duration_value_ns))
         out.append(
             {
                 "source": source,
@@ -84,7 +92,7 @@ def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict
                 "start": float(event["ts"]),
                 "duration": float(event["dur"]),
                 "start_ns": start_ns,
-                "end_ns": start_ns + duration_ns,
+                "end_ns": end_ns,
             }
         )
     if not out:
@@ -205,6 +213,7 @@ def phase_evidence(path: Path, rows: list[dict], capacity_path: Path | None) -> 
         "product": "a5",
         "target_product": "Ascend950/V6",
         "clock": "pipe-timeline-common-clock-ns",
+        "time_quantization": "nearest-nanosecond-half-up; positive events minimum 1ns",
         "timeline_complete": not truncated,
         "provenance": {"capture_id": capture_id, "source_sha256": trace_hash},
         "capacity_provenance": capacity_provenance,

@@ -115,6 +115,26 @@ def test_common_clock_segmentation_is_deterministic_and_keeps_gaps(tmp_path: Pat
     assert result["phases"][3]["capacity_join"]["state"] == "unavailable"
 
 
+def test_profiler_fractional_nanoseconds_are_quantized_deterministically(tmp_path: Path):
+    rows = [
+        event("scalar", 1.8915151357650757, 1.7296969890594482),
+        event("cube", 2.2799999713897705, 0.001212121220305562),
+    ]
+
+    run, output, _ = run_summary(tmp_path, rows)
+
+    assert run.returncode == 0, run.stderr
+    result = json.loads((output / "phase-evidence.json").read_text())
+    assert result["time_quantization"] == (
+        "nearest-nanosecond-half-up; positive events minimum 1ns"
+    )
+    assert [(phase["start_ns"], phase["end_ns"]) for phase in result["phases"]] == [
+        (1_892, 2_280),
+        (2_280, 2_281),
+        (2_281, 3_621),
+    ]
+
+
 def test_only_exact_common_clock_capacity_windows_are_joined(tmp_path: Path):
     rows = [event("cube", 0, 10), event("mte2", 10, 10)]
     trace = tmp_path / "pipe.json"

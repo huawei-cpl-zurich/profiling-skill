@@ -15,7 +15,7 @@
 | Current branch | `codex/profiling-behavioral-launcher` |
 | Base branch | `codex/profiling-behavioral-gates` |
 | Changed files | launcher, functional tests, operator guide, this report |
-| Diff size | approximately 680 source and 270 test lines before final cleanup |
+| Diff size | exactly 1,061 source, 993 functional-test, and 249 documentation lines (2,303 total additions) |
 | Main changed areas | Bubblewrap specialization, remote broker/checkpointing, record retention/review |
 | Suspected unrelated changes | none |
 
@@ -23,8 +23,8 @@
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `pytest -q tests/test_profile_behavioral_launcher.py` | 13 passed | focused behavior |
-| `pytest -q` | 1091 passed | full local suite |
+| `pytest -q tests/test_profile_behavioral_launcher.py` | 50 passed | focused behavior |
+| `PYTHONPATH=. pytest -q` | 1128 passed | full local suite |
 | `git diff --check` | passed | no whitespace errors |
 
 ## Changed Areas
@@ -94,30 +94,46 @@
 
 | ID | Change | Behavior protected | Validation |
 | --- | --- | --- | --- |
-| T1 | 13 functional tests | mounts, pinning, persistence, broker replay, classification, receipts, review | focused suite |
+| T1 | 50 functional tests | mounts, pinning, persistence, broker replay, classification, receipts, review | focused suite |
 
 ## Final Validation
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `pytest -q tests/test_profile_behavioral_launcher.py` | 34 passed | completed-review final; includes real local Bubblewrap |
-| `pytest -q` | 1112 passed in 61.84s | completed-review final full run |
+| `pytest -q tests/test_profile_behavioral_launcher.py` | 50 passed in 2.26s | verifier fixes; includes real local Bubblewrap when available |
+| `PYTHONPATH=. pytest -q` | 1128 passed in 59.34s | verifier-fix final full run |
 | BZ-A3 focused run | 33 passed, 1 skipped in 1.45s | final handle `remote:bz-a3-1:job:20261008T154157Z-9d84d44ef2c5`; Bubblewrap unavailable remotely |
 
 ## PR Review Assessment
 
 | Item | Assessment |
 | --- | --- |
-| Reviewable as one PR | yes, as one trust-boundary adapter stacked on the pure core |
+| Reviewable as one PR | technically yes, but larger than necessary and cleanly separable with an explicit broker API |
 | Main review risks | size and failure-envelope compatibility |
-| Distinct review stories | one: run live agents and emit trusted core inputs |
+| Distinct review stories | two: enforce the remote protocol; then orchestrate blinded sessions and retained records |
 | Backend/compiler/runtime/frontend mix | launcher only; product execution stays behind remote-access |
 | Human reviewer notes | review allowlist, handle replay, and external-review boundary first |
 
 ## Suggested PR Split
 
-No split recommended. Separating the broker from its isolation and record
-tests would make the trust boundary harder to review and temporarily unusable.
+A two-PR dependency chain is viable and preferable if the branch is
+reorganized. PR 1 should extract the remote protocol into a small module with
+stable entry points for `RemoteBroker`, `restrict_targets`, `broker_client`,
+the journal schema, dispatch-scoped failure evidence, and retained-content
+digest lookup. Its runtime proof is independent: fake-client transaction tests,
+same-handle replay and call attribution, Unix-socket client execution, real
+Bubblewrap wrapper execution where available, and one capable A3 remote
+protocol validation.
+
+PR 2 should depend on PR 1 and contain `BehavioralLauncher`, request/turn
+validation, prompt and skill snapshots, Codex session/resume orchestration,
+exact artifact retention, review finalization, and gate-record construction.
+Its tests can consume the PR 1 API with frozen broker journals and mocked Codex
+events, while its A3 runtime proof exercises the composed launcher. The current
+code directly reads raw journal dictionaries, so the split is safe only after
+PR 1 owns and documents those evidence-query helpers; splitting by line range
+without that API would leave PR 2 coupled to broker internals. No branches or
+pull requests were created during this reassessment.
 
 ## Residual Risks
 

@@ -166,6 +166,42 @@ def test_request_requires_pinned_skill_prompt_and_exact_unit_shape(tmp_path: Pat
     with pytest.raises(launcher.LaunchError, match="skill changed"):
         instance.validate_request(request)
 
+
+def test_request_rejects_non_string_session_and_case_ids(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    request["session_id"] = 7
+    with pytest.raises(launcher.LaunchError, match="behavioral session"):
+        instance.validate_request(request)
+
+    instance, request = fixture(tmp_path / "interpretation", "interpretation")
+    request["units"][0]["case_id"] = 7
+    with pytest.raises(launcher.LaunchError, match="unique case IDs"):
+        instance.validate_request(request)
+
+
+@pytest.mark.parametrize("targets,error", [
+    ({"a3": ["bz-a3-1", "bz-a3-1"], "a5": ["bz-a5"]}, "unique"),
+    ({"a3": ["shared"], "a5": ["shared"]}, "product-scoped"),
+    ({"a3": [7], "a5": ["bz-a5"]}, "valid target IDs"),
+    ({"a3": ["bad target"], "a5": ["bz-a5"]}, "valid target IDs"),
+])
+def test_request_requires_unique_product_scoped_valid_target_ids(
+        tmp_path: Path, targets: dict, error: str):
+    instance, request = fixture(tmp_path)
+    request["allowed_targets"] = targets
+
+    with pytest.raises(launcher.LaunchError, match=error):
+        instance.validate_request(request)
+
+
+def test_acquisition_requires_distinct_assigned_targets(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    request["allowed_targets"]["a5"].append("bz-a3-1")
+    request["units"][1]["target"] = "bz-a3-1"
+
+    with pytest.raises(launcher.LaunchError, match="distinct assigned targets"):
+        instance.validate_request(request)
+
     _, request = fixture(tmp_path / "other")
     request["units"].append({"product": "a3", "target": "bz-a3-1"})
     with pytest.raises(launcher.LaunchError, match="paired A3 and A5"):
@@ -185,7 +221,9 @@ def test_acquisition_turns_resume_one_session_for_a5(tmp_path: Path):
     instance, request = fixture(tmp_path)
     turns = instance.turn_plan(instance.validate_request(request))
     assert [turn["payload"]["product"] for turn in turns] == ["a3", "a5"]
-    assert all(set(turn["payload"]) == {"product", "prompt_sha256"} for turn in turns)
+    assert all(set(turn["payload"]) == {"product", "target", "prompt_sha256"}
+               for turn in turns)
+    assert [turn["payload"]["target"] for turn in turns] == ["bz-a3-1", "bz-a5"]
     assert turns[0]["resume"] is False and turns[1]["resume"] is True
 
 
@@ -195,6 +233,28 @@ def test_interpretation_uses_one_persistent_session_for_four_blinded_cases(tmp_p
     assert len(turns) == 4 and [turn["resume"] for turn in turns] == [False, True, True, True]
     assert all("arm" not in turn["payload"] and "skill" not in turn["payload"] for turn in turns)
     assert {turn["payload"]["case_id"] for turn in turns} == {f"case-{i}" for i in range(1, 5)}
+
+
+@pytest.mark.parametrize("mutation,error", [
+    (lambda units: units[1].update(case_id=units[0]["case_id"]), "unique case IDs"),
+    (lambda units: units[1].update(product="a5"), "two A3 and two A5"),
+])
+def test_interpretation_request_validates_case_identity_and_product_distribution(
+        tmp_path: Path, mutation, error: str):
+    instance, request = fixture(tmp_path, "interpretation")
+    mutation(request["units"])
+
+    with pytest.raises(launcher.LaunchError, match=error):
+        instance.validate_request(request)
+
+
+def test_broker_target_scope_can_be_narrowed_for_each_active_turn(tmp_path: Path):
+    broker = launcher.RemoteBroker(["cpl-remote"], tmp_path / "journal.json", tmp_path,
+                                   {"bz-a3-1", "bz-a5"})
+    broker.restrict_targets({"bz-a3-1"})
+
+    with pytest.raises(launcher.LaunchError, match="unapproved target"):
+        broker.execute(["preflight", "bz-a5"])
 
 
 def test_remote_broker_checkpoints_before_dispatch_and_reobserves_same_handle(
@@ -388,8 +448,31 @@ def test_evidenced_infrastructure_dispatch_may_be_replaced():
     assert launcher.counted_dispatch_failure(journal, (0, 0), "bz-a5") is None
 
 
+def test_mixed_infrastructure_then_counted_failure_uses_selected_dispatch_calls_only():
+    busy_handle = "remote:bz-a3-1:job:busy"
+    failed_handle = "remote:bz-a3-1:job:runtime"
+    busy = {"target": "bz-a3-1", "handle": busy_handle, "state": "failed",
+            "result": {"returncode": 1, "state": "device-busy",
+                       "failure_type": "device_busy", "stdout": "", "stderr": ""}}
+    failed = {"target": "bz-a3-1", "handle": failed_handle, "state": "failed",
+              "result": {"returncode": 1, "state": "failed", "failure_type": None,
+                         "stdout": "", "stderr": "remote job failed"}}
+    journal = {"dispatches": [busy, failed], "calls": [
+        {"operation": "logs", "target": "bz-a3-1", "handle": busy_handle,
+         "result": {"returncode": 0, "state": "completed",
+                    "failure_type": "device_busy", "stdout": "device busy", "stderr": ""}},
+        {"operation": "logs", "target": "bz-a3-1", "handle": failed_handle,
+         "result": {"returncode": 0, "state": "completed", "failure_type": "compile",
+                    "stdout": "triton compile error", "stderr": ""}},
+    ]}
+
+    assert launcher.counted_dispatch_failure(journal, (0, 0), "bz-a3-1") == failed
+    evidence = launcher.dispatch_failure_evidence(journal, failed, 0)
+    assert launcher.classify_failure(evidence) == ("counted_failure", "compile", "compile")
+    assert "device busy" not in evidence["stdout"]
+
+
 @pytest.mark.parametrize("operation,stdout,returncode,expected", [
-    ("preflight", "REMOTE_STATE=failed\n", 1, "target_unavailable"),
     ("preflight", "REMOTE_STATE=failed\nREMOTE_FAILURE_TYPE=device_busy\n", 1,
      "device_busy"),
 ])
@@ -408,6 +491,25 @@ def test_remote_broker_preserves_or_normalizes_evidenced_infrastructure_failure(
 
     assert result["failure_type"] == expected
     assert launcher.classify_failure(result)[0] == "discarded_infrastructure"
+
+
+@pytest.mark.parametrize("stdout,stderr", [
+    ("REMOTE_STATE=failed\n", "preflight rejected malformed profile"),
+    ("not remote protocol output\n", "preflight command failed"),
+])
+def test_preflight_errors_without_explicit_availability_evidence_are_counted(
+        tmp_path: Path, monkeypatch, stdout: str, stderr: str):
+    monkeypatch.setattr(
+        launcher.subprocess, "run",
+        lambda *_args, **_kwargs: type(
+            "Result", (), {"returncode": 2, "stdout": stdout, "stderr": stderr})())
+    broker = launcher.RemoteBroker(["cpl-remote"], tmp_path / "journal.json", tmp_path,
+                                   {"bz-a3-1"})
+
+    result = broker.execute(["preflight", "bz-a3-1"])
+
+    assert result["failure_type"] is None
+    assert launcher.classify_failure(result)[0] == "counted_failure"
 
 
 def test_trusted_cpl_remote_transport_diagnostic_is_normalized():
@@ -459,26 +561,38 @@ def test_acquisition_draft_binds_actual_thread_handle_target_and_remote_command(
     store = launcher.ArtifactStore(tmp_path / "artifacts")
     turns = []
     dispatches = []
+    journal_calls = []
     for index, unit in enumerate(request["units"], 1):
         handle = f"remote:{unit['target']}:job:job-{index}"
         provenance = {"product": unit["product"], "target": unit["target"], "handle": handle}
         evidence = paths.workspace / f"profile-{index}.json"
         evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
+        evidence_sha256 = digest(evidence)
         command = store.text(f"agent-command-{index}.txt", "codex exec\n")
         log = store.text(f"agent-log-{index}.txt", "agent output\n")
-        turns.append({"payload": {"product": unit["product"],
+        turns.append({"payload": {"product": unit["product"], "target": unit["target"],
                                   "prompt_sha256": request["prompt_sha256"]},
                       "answer": {"product": unit["product"], "target": unit["target"],
                                  "handle": handle, "evidence": evidence.name,
                                  "reasoning": "capacity evidence is explicit"},
                       "command": command, "log": log})
+        result_stdout = ("REMOTE_STATE=completed\n" if index == 1 else
+                         f"REMOTE_CONTENT_SHA256={evidence_sha256}\n")
         dispatches.append({"request_sha256": str(index) * 64, "target": unit["target"],
                            "arguments": ["run", unit["target"], "--file", "/workspace/job.sh"],
                            "state": "completed", "handle": handle,
                            "result": {"returncode": 0, "state": "completed",
-                                      "stdout": "REMOTE_STATE=completed\n", "stderr": ""}})
+                                      "stdout": result_stdout,
+                                      "stderr": ""}})
+        if index == 1:
+            journal_calls.extend([
+                {"operation": "logs", "handle": "remote:bz-a3-1:job:unrelated",
+                 "result": {"stdout": f"REMOTE_CONTENT_SHA256={'0' * 64}\n"}},
+                {"operation": "logs", "handle": handle,
+                 "result": {"stdout": f"REMOTE_CONTENT_SHA256={evidence_sha256}\n"}},
+            ])
     paths.journal.write_text(json.dumps({"schema": "profiling-skill/remote-journal/v1",
-                                         "dispatches": dispatches, "calls": []}))
+                                         "dispatches": dispatches, "calls": journal_calls}))
 
     draft, _ = instance._success_draft(request, turns, paths, store, "actual-thread")
 
@@ -486,6 +600,49 @@ def test_acquisition_draft_binds_actual_thread_handle_target_and_remote_command(
     assert all(outcome["session_id"] == "actual-thread" for outcome in draft["outcomes"])
     command_text = (store.root / draft["outcomes"][0]["command"]["path"]).read_text()
     assert command_text.startswith("cpl-remote run bz-a3-1 --file")
+
+
+def test_acquisition_retains_exact_noncanonical_remote_evidence_bytes(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    turns = []
+    dispatches = []
+    expected = {}
+    for index, unit in enumerate(request["units"], 1):
+        handle = f"remote:{unit['target']}:job:exact-{index}"
+        provenance = {"product": unit["product"], "target": unit["target"],
+                      "handle": handle}
+        evidence = paths.workspace / f"exact-{index}.json"
+        evidence.write_text(
+            '{\n  "provenance": ' + json.dumps(provenance, separators=(", ", ": "))
+            + ',\n  "schema": "compact/v1"\n}\n')
+        evidence_sha256 = digest(evidence)
+        expected[unit["product"]] = (evidence.read_bytes(), evidence_sha256)
+        turns.append({"payload": {"product": unit["product"], "target": unit["target"],
+                                  "prompt_sha256": request["prompt_sha256"]},
+                      "answer": {"product": unit["product"], "target": unit["target"],
+                                 "handle": handle, "evidence": evidence.name,
+                                 "reasoning": "exact bytes retained"},
+                      "command": store.text(f"command-exact-{index}.txt", "codex\n"),
+                      "log": store.text(f"log-exact-{index}.txt", "agent\n")})
+        dispatches.append({"request_sha256": str(index) * 64, "target": unit["target"],
+                           "arguments": ["run", unit["target"], "--file", "/workspace/job.sh"],
+                           "state": "completed", "handle": handle,
+                           "result": {"returncode": 0, "state": "completed",
+                                      "stdout": f"REMOTE_CONTENT_SHA256={evidence_sha256}\n",
+                                      "stderr": ""}})
+    paths.journal.write_text(json.dumps({"schema": "profiling-skill/remote-journal/v1",
+                                         "dispatches": dispatches, "calls": []}))
+
+    draft, _ = instance._success_draft(request, turns, paths, store, "actual-thread")
+
+    for outcome in draft["outcomes"]:
+        content, emitted_hash = expected[outcome["product"]]
+        retained = store.root / outcome["evidence"]["path"]
+        assert retained.read_bytes() == content
+        assert outcome["evidence"]["sha256"] == emitted_hash
+        assert outcome["evidence"]["remote_sha256"] == emitted_hash
 
 
 @pytest.mark.parametrize("state,returncode", [("running", 0), ("failed", 1),
@@ -502,7 +659,8 @@ def test_acquisition_draft_rejects_nonterminal_or_failed_dispatch(
         provenance = {"product": unit["product"], "target": unit["target"], "handle": handle}
         evidence = paths.workspace / f"profile-{index}.json"
         evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
-        turns.append({"payload": {"product": unit["product"],
+        evidence_sha256 = digest(evidence)
+        turns.append({"payload": {"product": unit["product"], "target": unit["target"],
                                   "prompt_sha256": request["prompt_sha256"]},
                       "answer": {"product": unit["product"], "target": unit["target"],
                                  "handle": handle, "evidence": evidence.name,
@@ -514,11 +672,52 @@ def test_acquisition_draft_rejects_nonterminal_or_failed_dispatch(
                            "state": state if index == 1 else "completed", "handle": handle,
                            "result": {"returncode": returncode if index == 1 else 0,
                                       "state": state if index == 1 else "completed",
-                                      "stdout": "evidence", "stderr": ""}})
+                                      "stdout": f"REMOTE_CONTENT_SHA256={evidence_sha256}\n",
+                                      "stderr": ""}})
     paths.journal.write_text(json.dumps({"schema": "profiling-skill/remote-journal/v1",
                                          "dispatches": dispatches, "calls": []}))
 
     with pytest.raises(launcher.LaunchError, match="terminal successful dispatch"):
+        instance._success_draft(request, turns, paths, store, "actual-thread")
+
+
+def test_acquisition_draft_rejects_agent_evidence_not_bound_to_remote_bytes(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    turns = []
+    dispatches = []
+    journal_calls = []
+    for index, unit in enumerate(request["units"], 1):
+        handle = f"remote:{unit['target']}:job:job-{index}"
+        provenance = {"product": unit["product"], "target": unit["target"],
+                      "handle": handle}
+        evidence = paths.workspace / f"profile-{index}.json"
+        evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
+        turns.append({"payload": {"product": unit["product"], "target": unit["target"],
+                                  "prompt_sha256": request["prompt_sha256"]},
+                      "answer": {"product": unit["product"], "target": unit["target"],
+                                 "handle": handle, "evidence": evidence.name,
+                                 "reasoning": "remote evidence is retained"},
+                      "command": store.text(f"command-{index}.txt", "codex\n"),
+                      "log": store.text(f"log-{index}.txt", "agent\n")})
+        emitted_hash = (None if index == 1 else digest(evidence))
+        dispatches.append({"request_sha256": str(index) * 64, "target": unit["target"],
+                           "arguments": ["run", unit["target"], "--file", "/workspace/job.sh"],
+                           "state": "completed", "handle": handle,
+                           "result": {"returncode": 0, "state": "completed",
+                                      "stdout": (f"REMOTE_CONTENT_SHA256={emitted_hash}\n"
+                                                 if emitted_hash else "REMOTE_STATE=completed\n"),
+                                      "stderr": ""}})
+        if index == 1:
+            journal_calls.append({
+                "operation": "logs", "handle": "remote:bz-a3-1:job:unrelated",
+                "result": {"stdout": f"REMOTE_CONTENT_SHA256={digest(evidence)}\n"},
+            })
+    paths.journal.write_text(json.dumps({"schema": "profiling-skill/remote-journal/v1",
+                                         "dispatches": dispatches, "calls": journal_calls}))
+
+    with pytest.raises(launcher.LaunchError, match="remote evidence bytes"):
         instance._success_draft(request, turns, paths, store, "actual-thread")
 
 
@@ -568,10 +767,12 @@ def test_paired_a5_process_failure_ignores_prior_a3_remote_history_and_is_gate_c
         tmp_path: Path, monkeypatch):
     instance, request = fixture(tmp_path / "launch")
     calls = 0
+    prompts = []
 
     def run(command, **_kwargs):
         nonlocal calls
         calls += 1
+        prompts.append(_kwargs.get("input", ""))
         if calls == 1:
             state_mount = Path(command[command.index("/experiment-state") - 1])
             journal = state_mount.parent / "remote-journal.json"
@@ -618,6 +819,8 @@ def test_paired_a5_process_failure_ignores_prior_a3_remote_history_and_is_gate_c
     assert record["failure_type"] == "launcher"
     failure_log = (artifact_root / record["log"]["path"]).read_text()
     assert "old triton compile error" not in failure_log
+    assert "REMOTE_CONTENT_SHA256=<hex>" in prompts[0]
+    assert '"target": "bz-a3-1"' in prompts[0]
     retained = json.loads((artifact_root / result["remote_journal"]["path"]).read_text())
     assert retained["dispatches"][0]["handle"] == "remote:bz-a3-1:job:a3-completed"
 
@@ -749,6 +952,7 @@ def test_live_adapter_writes_review_pending_draft_after_four_resumed_turns(
     assert "resume" not in codex[0]
     assert all("resume" in command and "thread-opaque" in command for command in codex[1:])
     assert all("candidate" not in prompt and "current" not in prompt for prompt in prompts)
+    assert all("REMOTE_CONTENT_SHA256" not in prompt for prompt in prompts)
 
 
 def test_interpretation_process_failure_is_end_to_end_gate_compatible(

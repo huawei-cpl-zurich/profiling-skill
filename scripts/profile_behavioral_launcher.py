@@ -113,6 +113,20 @@ class ArtifactStore:
     def json(self, relative: str, value: object) -> dict:
         return self.text(relative, json.dumps(value, sort_keys=True) + "\n")
 
+    def exact(self, relative: str, value: bytes) -> dict:
+        """Retain already-validated bounded bytes without reserialization."""
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts:
+            raise LaunchError("artifact path escaped retained root")
+        if not value or len(value) > MAX_ARTIFACT:
+            raise LaunchError("artifact exceeds bounded retention limit or is empty")
+        target = self.root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.tmp-{os.getpid()}")
+        temporary.write_bytes(value)
+        os.replace(temporary, target)
+        return {"path": path.as_posix(), "sha256": _sha(target)}
+
 
 def classify_failure(document: dict) -> tuple[str, str, str]:
     """Map trusted process/controller evidence; unknown failures count."""
@@ -153,23 +167,44 @@ def counted_dispatch_failure(journal: dict, journal_start: tuple[int, int],
                 or (dispatch.get("state") not in {"failed", "cancelled"}
                     and result.get("returncode") in (None, 0)):
             continue
-        related = [entry.get("result") for entry in calls
-                   if entry.get("handle") == dispatch.get("handle")]
-        related = [entry for entry in related if isinstance(entry, dict)]
-        structured = next((entry.get("failure_type") for entry in [result, *related]
-                           if entry.get("failure_type")), None)
-        evidence = {
-            "returncode": result.get("returncode"),
-            "state": result.get("state") or dispatch.get("state"),
-            "failure_type": structured,
-            "stdout": "\n".join(str(entry.get("stdout", ""))
-                                  for entry in [result, *related]),
-            "stderr": "\n".join(str(entry.get("stderr", ""))
-                                  for entry in [result, *related]),
-        }
+        evidence = dispatch_failure_evidence(
+            {"dispatches": dispatches, "calls": calls}, dispatch, 0)
         if classify_failure(evidence)[0] == "counted_failure":
             return dispatch
     return None
+
+
+def dispatch_failure_evidence(journal: dict, dispatch: dict, calls_start: int) -> dict:
+    """Build failure evidence from one dispatch and only calls for its retained handle."""
+    result = dispatch.get("result") if isinstance(dispatch.get("result"), dict) else {}
+    handle = dispatch.get("handle")
+    related = [entry.get("result") for entry in journal.get("calls", [])[calls_start:]
+               if handle and entry.get("handle") == handle
+               and entry.get("operation") in {"observe", "logs", "result"}]
+    related = [entry for entry in related if isinstance(entry, dict)]
+    records = [result, *related]
+    structured = next((entry.get("failure_type") for entry in records
+                       if entry.get("failure_type")), None)
+    return {
+        "returncode": result.get("returncode"),
+        "state": result.get("state") or dispatch.get("state"),
+        "failure_type": structured,
+        "stdout": "\n".join(str(entry.get("stdout", "")) for entry in records),
+        "stderr": "\n".join(str(entry.get("stderr", "")) for entry in records),
+    }
+
+
+def retained_content_sha256(journal: dict, dispatch: dict) -> str | None:
+    """Read one unambiguous content digest from a dispatch and its own retained calls."""
+    handle = dispatch.get("handle")
+    results = [dispatch.get("result")]
+    results += [call.get("result") for call in journal.get("calls", [])
+                if handle and call.get("handle") == handle
+                and call.get("operation") in {"observe", "logs", "result"}]
+    hashes = {_parse_remote(str(result.get("stdout", ""))).get("content_sha256")
+              for result in results if isinstance(result, dict)}
+    hashes = {value for value in hashes if HEX.fullmatch(str(value))}
+    return next(iter(hashes)) if len(hashes) == 1 else None
 
 
 def failure_record(*, store: ArtifactStore, session_id: str, kind: str, arm: str | None,
@@ -297,8 +332,6 @@ def _remote_failure_type(operation: str, parsed: dict, raw: CommandResult) -> st
         return "device_busy"
     if state in {"target-unavailable", "missing"}:
         return "target_unavailable"
-    if operation == "preflight" and (state == "failed" or raw.returncode != 0):
-        return "target_unavailable"
     if raw.returncode == 124:
         return "observer" if operation in {"observe", "logs", "result"} else "transport"
     diagnostic = raw.stderr.lower()
@@ -320,7 +353,8 @@ class RemoteBroker:
         self.command = list(command)
         self.journal = journal
         self.workspace = workspace.resolve()
-        self.allowed_targets = allowed_targets
+        self.configured_targets = None if allowed_targets is None else set(allowed_targets)
+        self.allowed_targets = None if allowed_targets is None else set(allowed_targets)
         self.timeout = timeout
         self.lock = threading.Lock()
         if not journal.exists():
@@ -332,6 +366,13 @@ class RemoteBroker:
         if not isinstance(value, dict) or not isinstance(value.get("dispatches"), list):
             raise LaunchError("invalid remote checkpoint journal")
         return value
+
+    def restrict_targets(self, targets: set[str]) -> None:
+        """Restrict subsequent calls to the target assigned to the active turn."""
+        with self.lock:
+            if self.configured_targets is not None and not targets <= self.configured_targets:
+                raise LaunchError("active target is outside the launch allowlist")
+            self.allowed_targets = set(targets)
 
     def _validate(self, arguments: Sequence[str]) -> tuple[
             str, str | None, list[str], str | None, str | None, bytes | None]:
@@ -530,7 +571,8 @@ class BehavioralLauncher(ProductionLauncher):
         if not isinstance(request, dict) or set(request) != keys or request["schema"] != REQUEST_SCHEMA:
             raise LaunchError("invalid behavioral launch request")
         if request["kind"] not in {"acquisition", "interpretation"} \
-                or not IDENTIFIER.fullmatch(str(request["session_id"])):
+                or not isinstance(request["session_id"], str) \
+                or not IDENTIFIER.fullmatch(request["session_id"]):
             raise LaunchError("invalid behavioral session")
         for name in ("manifest_sha256", "prompt_sha256", "skill_sha256"):
             if not HEX.fullmatch(str(request[name])):
@@ -558,8 +600,22 @@ class BehavioralLauncher(ProductionLauncher):
         if not isinstance(targets, dict) or set(targets) != {"a3", "a5"} \
                 or any(not isinstance(value, list) or not value for value in targets.values()):
             raise LaunchError("invalid allowed targets")
-        review_queue([], request["reviewer"])
+        flattened = [target for product_targets in targets.values()
+                     for target in product_targets]
+        if any(not isinstance(target, str) or not IDENTIFIER.fullmatch(target)
+               for target in flattened):
+            raise LaunchError("allowed targets require valid target IDs")
+        if any(len(product_targets) != len(set(product_targets))
+               for product_targets in targets.values()):
+            raise LaunchError("allowed target IDs must be unique within each product")
         units = request["units"]
+        if request["kind"] == "acquisition" and isinstance(units, list) \
+                and len(units) == 2 and all(isinstance(unit, dict) for unit in units) \
+                and len({unit.get("target") for unit in units}) != len(units):
+            raise LaunchError("acquisition requires distinct assigned targets")
+        if set(targets["a3"]) & set(targets["a5"]):
+            raise LaunchError("allowed target IDs must be product-scoped")
+        review_queue([], request["reviewer"])
         if request["kind"] == "acquisition":
             if request["arm"] is not None or not isinstance(units, list) or len(units) != 2 \
                     or [unit.get("product") for unit in units if isinstance(unit, dict)] != ["a3", "a5"]:
@@ -579,13 +635,22 @@ class BehavioralLauncher(ProductionLauncher):
                 if evidence.is_symlink() or not evidence.is_file() \
                         or _sha(evidence) != unit["evidence_sha256"]:
                     raise LaunchError("frozen evidence changed")
+            case_ids = [unit["case_id"] for unit in units]
+            if any(not isinstance(case_id, str) or not IDENTIFIER.fullmatch(case_id)
+                   for case_id in case_ids) \
+                    or len(set(case_ids)) != len(case_ids):
+                raise LaunchError("interpretation requires unique case IDs")
+            if [unit["product"] for unit in units].count("a3") != 2 \
+                    or [unit["product"] for unit in units].count("a5") != 2:
+                raise LaunchError("interpretation requires exactly two A3 and two A5 cases")
         return request
 
     def turn_plan(self, request: dict) -> list[dict]:
         turns = []
         for index, unit in enumerate(request["units"]):
             if request["kind"] == "acquisition":
-                payload = {"product": unit["product"], "prompt_sha256": request["prompt_sha256"]}
+                payload = {"product": unit["product"], "target": unit["target"],
+                           "prompt_sha256": request["prompt_sha256"]}
             else:
                 payload = {"case_id": unit["case_id"], "product": unit["product"],
                            "prompt_sha256": request["prompt_sha256"],
@@ -729,9 +794,6 @@ class BehavioralLauncher(ProductionLauncher):
                 if not isinstance(evidence, dict) or not isinstance(evidence.get("schema"), str) \
                         or evidence.get("provenance") != provenance:
                     raise LaunchError("acquisition evidence lacks exact provenance")
-                evidence_ref = store.json(
-                    f"evidence/{request['session_id']}-{unit['product']}.json", evidence)
-                evidence_ref.update(schema=evidence["schema"], provenance=provenance)
                 reasoning = store.text(
                     f"reasoning/{request['session_id']}-{unit['product']}.txt",
                     _bounded(answer["reasoning"]))
@@ -742,6 +804,15 @@ class BehavioralLauncher(ProductionLauncher):
                         or remote_result.get("returncode") != 0):
                     raise LaunchError(
                         "acquisition evidence requires a terminal successful dispatch")
+                emitted_hash = retained_content_sha256(journal, dispatch)
+                if not HEX.fullmatch(str(emitted_hash)) or _sha(source) != emitted_hash:
+                    raise LaunchError(
+                        "acquisition remote evidence bytes do not match retained job hash")
+                evidence_ref = store.exact(
+                    f"evidence/{request['session_id']}-{unit['product']}.json",
+                    source.read_bytes())
+                evidence_ref.update(schema=evidence["schema"], provenance=provenance,
+                                    remote_sha256=emitted_hash)
                 remote_command = store.text(
                     f"commands/{request['session_id']}-{unit['product']}.txt",
                     shlex.join(["cpl-remote", *dispatch["arguments"]]) + "\n")
@@ -796,25 +867,22 @@ class BehavioralLauncher(ProductionLauncher):
         calls = journal.get("calls", [])[journal_start[1]:] if acquisition else []
         calls = [entry for entry in calls
                  if entry.get("target") == target or entry.get("handle") in handles]
-        results = [entry.get("result") for entry in dispatches]
-        results += [entry.get("result") for entry in calls]
-        results = [result for result in results if isinstance(result, dict)]
         dispatch = (next((entry for entry in dispatches
                           if entry.get("handle") == failed_handle), {})
                     if failed_handle else dispatches[-1] if dispatches else {})
         handle = dispatch.get("handle")
-        structured = next((result.get("failure_type") for result in results
-                           if result.get("failure_type")), None)
-        remote_text = "\n".join(
-            f"remote result {index}:\nstdout:\n{result.get('stdout', '')}\n"
-            f"stderr:\n{result.get('stderr', '')}"
-            for index, result in enumerate(results, 1))
+        selected = dispatch_failure_evidence(journal, dispatch, journal_start[1]) \
+            if dispatch else {"returncode": None, "state": "", "failure_type": None,
+                              "stdout": "", "stderr": ""}
+        remote_text = (f"remote result:\nstdout:\n{selected['stdout']}\n"
+                       f"stderr:\n{selected['stderr']}")
         combined_stdout = f"{remote_text}\ncodex stdout:\n{codex_stdout}"
         combined_stderr = f"codex stderr:\n{codex_stderr}\nlauncher diagnostic:\n{error}"
         evidence = {
             "returncode": (codex_returncode if codex_returncode not in (None, 0)
-                           else (dispatch.get("result") or {}).get("returncode", 1)),
-            "state": dispatch.get("state", ""), "failure_type": structured,
+                           else selected.get("returncode", 1)),
+            "state": selected.get("state", ""),
+            "failure_type": selected.get("failure_type"),
             "stdout": combined_stdout, "stderr": combined_stderr,
         }
         classification, failure_type, stage = classify_failure(evidence)
@@ -866,6 +934,8 @@ class BehavioralLauncher(ProductionLauncher):
             self.sandbox_preflight(base)
             for index, planned in enumerate(self.turn_plan(request), 1):
                 active_unit = planned["unit"]
+                broker.restrict_targets(
+                    {active_unit["target"]} if request["kind"] == "acquisition" else set())
                 current_journal = json.loads(paths.journal.read_text())
                 journal_start = (len(current_journal.get("dispatches", [])),
                                  len(current_journal.get("calls", [])))
@@ -877,6 +947,11 @@ class BehavioralLauncher(ProductionLauncher):
                      "Transfers are unavailable; have the retained file-backed job emit only "
                      "compact evidence on stdout, then use its handle for observe/result/logs.\n"
                      "Return exactly one JSON object as the final answer.\n")
+                if request["kind"] == "acquisition":
+                    prompt += (
+                        "The retained terminal remote output must include "
+                        "`REMOTE_CONTENT_SHA256=<hex>` containing the SHA-256 of the exact "
+                        "evidence file bytes named in your final answer.\n")
                 if planned["resume"]:
                     codex = ["/runtime/node/bin/codex", "exec", "resume", "--json",
                              "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",

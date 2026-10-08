@@ -11,7 +11,11 @@ request pins the prompt bytes, selected profiling-skill tree, model, launcher,
 reviewer, allowed targets, and either the paired A3/A5 acquisition units or the
 four interpretation cases. Source paths and the arm never enter the
 agent-visible `request.json`; that file contains only its schema and blinded
-turn payloads. The selected skill is mounted read-only at the
+turn payloads. Acquisition payloads expose only the assigned product, target,
+and prompt hash—never the arm or host session label. Interpretation cases have
+unique case IDs and exactly two A3 plus two A5 products; they carry no target,
+while the product-scoped allowed-target registry requires valid, unique,
+non-overlapping A3/A5 target IDs. The selected skill is mounted read-only at the
 generic `.agents/skills/ascend-profiling` path. User-wide skills and Codex
 plugins are absent. Prompt, selected-skill, and frozen-case bytes are copied
 and rehashed before launch so later source-tree changes cannot alter a session.
@@ -24,8 +28,10 @@ reused with identical argv and bytes observes the original transaction; a key
 reused after any change fails closed, while a new key permits an intentional
 corrected or repeated capture. Arbitrary command payloads, raw SSH, unknown targets, and
 local paths outside `/workspace` are rejected. Observe, log, and result calls
-are limited to handles dispatched by the same retained broker journal. Before
-dispatch, the broker atomically records a request hash. If observation is
+are limited to handles dispatched by the same retained broker journal. Each
+acquisition turn narrows the broker to its assigned target; interpretation
+turns have no remote target capability. Before dispatch, the broker atomically
+records a request hash. If observation is
 interrupted after a handle is known, the same request observes that handle
 instead of dispatching a replacement. A handle-less uncertain dispatch is
 never resubmitted and must
@@ -33,7 +39,10 @@ be reconciled externally from its retained journal evidence. Explicit
 observation updates the originating dispatch, and acquisition evidence is
 eligible only after that dispatch is `completed` with exit code zero. Upload
 and download are not exposed to agents; `run --file` and compact stdout
-evidence are the supported surface. The complete journal, bound result/log
+evidence are the supported surface. The retained terminal output must include
+`REMOTE_CONTENT_SHA256=<hex>` for the exact compact evidence file bytes, and
+the launcher recomputes that digest before retaining those same bytes without
+JSON reserialization. The complete journal, bound result/log
 calls, and bounded redacted Codex logs are retained on success and failure.
 
 An acquisition agent uses one Codex thread for its A3 turn and resumed A5

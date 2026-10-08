@@ -415,6 +415,75 @@ def test_v2_canary_gate_exactly_matches_selected_profile_treatments(tmp_path: Pa
         )
 
 
+def test_v2_guarded_only_gate_does_not_require_resume_evidence(tmp_path: Path):
+    cell = {"cell_id": "matmul-project-guarded", "task": "matmul",
+            "treatment": "project-guarded", "round_count": 4,
+            "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition_path, _definition_sha, results_path, _results_sha = (
+        canary_gate_fixture(tmp_path, config)
+    )
+    definition = json.loads(definition_path.read_text())
+    definition.update(
+        schema="profiling-skill/audited-repair-canaries/v2",
+        treatments=["project-guarded"],
+    )
+    definition["canaries"] = [definition["canaries"][2]]
+    definition["gate"].update(
+        minimum_repaired_canaries=1, resume_canary_required=False,
+    )
+    definition_path.write_text(json.dumps(definition, sort_keys=True) + "\n")
+    config["canary_definition"] = {
+        "path": str(definition_path), "sha256": sha(definition_path),
+    }
+    results = json.loads(results_path.read_text())
+    results["definition_sha256"] = config["canary_definition"]["sha256"]
+    results["results"] = [results["results"][2]]
+    results["runtime_config_sha256"] = production.document_sha256(config)
+    results_path.write_text(json.dumps(results, sort_keys=True) + "\n")
+
+    assert production.validate_canary_gate(
+        config, results_path, sha(results_path),
+        selected_treatments=("project-guarded",),
+    )["resumed_canaries"] == []
+
+    results["results"][0]["resume_receipt"] = {
+        "path": str(tmp_path / "undeclared.json"), "sha256": "0" * 64,
+    }
+    results_path.write_text(json.dumps(results, sort_keys=True) + "\n")
+    with pytest.raises(production.ProductionError, match="undeclared canary resume"):
+        production.validate_canary_gate(
+            config, results_path, sha(results_path),
+            selected_treatments=("project-guarded",),
+        )
+
+
+def test_v1_gate_preserves_reordered_complete_declarations(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+            "round_count": 4, "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition_path, _definition_sha, results_path, _results_sha = (
+        canary_gate_fixture(tmp_path, config)
+    )
+    definition = json.loads(definition_path.read_text())
+    definition["canaries"].reverse()
+    definition_path.write_text(json.dumps(definition, sort_keys=True) + "\n")
+    config["canary_definition"] = {
+        "path": str(definition_path), "sha256": sha(definition_path),
+    }
+    results = json.loads(results_path.read_text())
+    results["definition_sha256"] = config["canary_definition"]["sha256"]
+    results["results"].reverse()
+    results["runtime_config_sha256"] = production.document_sha256(config)
+    results_path.write_text(json.dumps(results, sort_keys=True) + "\n")
+
+    receipt = production.validate_canary_gate(config, results_path, sha(results_path))
+
+    assert set(receipt["treatments"]) == set(production.TREATMENT_SKILLS)
+
+
 @pytest.mark.parametrize("mutation", ["missing", "malformed", "failed", "artifact-drift"])
 def test_repair_campaign_rejects_unsatisfied_canary_gate(
         tmp_path: Path, mutation: str):

@@ -172,6 +172,9 @@ def validate_canary_gate(config: dict, results_path: Path | None,
         definition_treatments = ()
     expected_treatments = (tuple(TREATMENT_SKILLS) if selected_treatments is None
                            else tuple(selected_treatments))
+    def treatments_match(actual: tuple[str, ...], expected: tuple[str, ...]) -> bool:
+        return (actual == expected if schema == "profiling-skill/audited-repair-canaries/v2"
+                else len(actual) == len(expected) and set(actual) == set(expected))
     expected_gate = {
         "all_canaries_terminal_ok": True,
         "all_branches_offline_valid": True,
@@ -188,8 +191,8 @@ def validate_canary_gate(config: dict, results_path: Path | None,
     if (not definition_treatments
             or len(definition_treatments) != len(set(definition_treatments))
             or any(name not in TREATMENT_SKILLS for name in definition_treatments)
-            or definition_treatments != expected_treatments
-            or declared_treatments != definition_treatments
+            or not treatments_match(definition_treatments, expected_treatments)
+            or not treatments_match(declared_treatments, definition_treatments)
             or definition.get("benchmark") != "matmul"
             or definition.get("request_budget") != 48
             or definition.get("max_candidate_repairs_per_round") != 2
@@ -215,7 +218,9 @@ def validate_canary_gate(config: dict, results_path: Path | None,
                 or item["id"] in declared):
             raise ProductionError("canary declaration is malformed")
         declared[item["id"]] = item
-    if tuple(item["treatment"] for item in declarations) != expected_treatments:
+    if not treatments_match(
+        tuple(item["treatment"] for item in declarations), expected_treatments,
+    ):
         raise ProductionError("canary declarations must exactly cover selected treatments")
 
     expected_runtime = runtime_config_sha256 or document_sha256(config)
@@ -382,7 +387,8 @@ def validate_canary_gate(config: dict, results_path: Path | None,
                   if "checkpoint-resume" in item["required_evidence"]}
     if (seen != set(declared)
             or repaired < expected_gate["minimum_repaired_canaries"]
-            or not resume_ids or not resume_ids.issubset(resumed)):
+            or (expected_gate["resume_canary_required"]
+                and (not resume_ids or not resume_ids.issubset(resumed)))):
         raise ProductionError("canary results do not satisfy the aggregate gate")
     return {
         "schema": "profiling-skill/audited-repair-canary-gate/v1",
@@ -393,7 +399,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
         "runtime_config_sha256": results["runtime_config_sha256"],
         "canary_ids": sorted(seen), "repaired_canaries": repaired,
         "resumed_canaries": sorted(resumed),
-        "treatments": list(expected_treatments),
+        "treatments": list(definition_treatments),
     }
 
 

@@ -243,6 +243,10 @@ class CanaryRunner:
         identifiers = ([item.get("id") for item in rows]
                        if isinstance(rows, list)
                        and all(isinstance(item, dict) for item in rows) else [])
+        rows_match = (actual_rows == expected_rows if schema ==
+                      "profiling-skill/audited-repair-canaries/v2"
+                      else {name: evidence for name, evidence in actual_rows}
+                      == {name: evidence for name, evidence in expected_rows})
         gate = {"all_canaries_terminal_ok": True,
                 "all_branches_offline_valid": True,
                 "all_final_timings_positive": True,
@@ -258,7 +262,7 @@ class CanaryRunner:
                 or self.definition.get("max_candidate_repairs_per_round") != 2
                 or self.definition.get("placement") != "dynamic-bz-a3-admission"
                 or self.definition.get("gate") != gate
-                or actual_rows != expected_rows):
+                or not rows_match):
             raise CanaryError("canary definition is not the declared treatment contract")
 
     def _cell(self, declaration: dict) -> dict:
@@ -492,6 +496,7 @@ class CanaryRunner:
         if output.is_file():
             production.validate_canary_gate(
                 self.config, output, _sha(output), self.runtime_config_sha256,
+                tuple(item["treatment"] for item in self.definition["canaries"]),
             )
             result = json.loads(output.read_text())
             state_path = self.run_root / "state" / "run.json"

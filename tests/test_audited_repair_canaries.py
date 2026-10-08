@@ -219,11 +219,35 @@ def test_runner_accepts_v2_exact_profile_treatment_subset(tmp_path: Path):
     )
 
     result = runner.run(output)
+    calls = list(FakeLauncher.calls)
+    repeated = runner.run(output)
 
     assert [item["treatment"] for item in result["results"]] == selected
+    assert repeated == result
+    assert FakeLauncher.calls == calls
     assert production.validate_canary_gate(
         config, output, sha(output), selected_treatments=tuple(selected),
     )["status"] == "passed"
+
+
+def test_runner_preserves_reordered_complete_v1_definition(tmp_path: Path):
+    definition, config, output = inputs(tmp_path)
+    document = json.loads(definition.read_text())
+    document["canaries"].reverse()
+    definition.write_text(json.dumps(document, sort_keys=True) + "\n")
+    config["canary_definition"] = {"path": str(definition), "sha256": sha(definition)}
+    FakeLauncher.calls = []
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), tmp_path / "canary-run", FakePool(),
+        launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+    )
+
+    result = runner.run(output)
+
+    assert [item["treatment"] for item in result["results"]] == [
+        "project-guarded", "project-cannbot", "cannbot",
+    ]
+    assert production.validate_canary_gate(config, output, sha(output))["status"] == "passed"
 
 
 def test_completed_results_are_idempotently_verified_without_launch(tmp_path: Path):

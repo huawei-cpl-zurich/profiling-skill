@@ -8,6 +8,18 @@ description: Profile Triton kernels on Ascend A2/A3 or AscendC and Catlass kerne
 Select the target before collecting or interpreting evidence. Product-specific
 metrics are not portable.
 
+## Acquire live control evidence
+
+For an arbitrary self-contained Torch/Triton workload on `bz-a3-1`,
+`bz-a3-2`, or `bz-a5`, use `scripts/acquire_profile.py`; do not construct raw
+`msprof op` flags. The helper owns the named runtime, bounded device probe,
+deployed profiler syntax, retained `cpl-remote` handle, and compact evidence.
+Read [Two-pass acquisition](references/acquisition-workflow.md), run its
+`basic` pass, inspect the exported names, and then supply one relevant exact
+name to its `pipe` pass. Never guess a selector from a source function name or
+skip the discovery pass. The helper proves both passes used byte-identical
+workload content and arguments.
+
 ## Shared saturation analysis
 
 Use `scripts/analyze_pipe_saturation.py` only with a validated model for the
@@ -47,12 +59,10 @@ resumes the same handle. The managed-bundle engine's `--client` and `--remote`
 options remain internal integration APIs: do not invoke them directly or use
 raw SCP, SSH, Docker, or a raw remote-agent client.
 
-For reproducible kernel latency, run the correctness-checked workload through
-`scripts/profile_a3.py`. It performs a bounded `msprof op` `BasicInfo` capture
-and emits compact JSON with device-task durations and source hashes. Prefer an
-exact exported kernel name for timing; an unfiltered capture can select a
-framework setup operator instead. Run independent captures for repetitions and use
-their median; do not use profiled Python wall time.
+For reusable control acquisition, use the mandatory two-pass helper above.
+`scripts/profile_a3.py` remains an in-job primitive for an already selected A3
+kernel. Run independent timing captures for repetitions and use their median;
+do not use profiled Python wall time.
 
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, A3 pipe inventory, normalization command, and interpretation

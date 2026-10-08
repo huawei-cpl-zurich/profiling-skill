@@ -129,7 +129,13 @@ class ArtifactStore:
 
 
 def classify_failure(document: dict) -> tuple[str, str, str]:
-    """Map trusted process/controller evidence; unknown failures count."""
+    """Map trusted process/controller evidence; unknown failures count.
+
+    ``trusted_stdout`` and ``trusted_stderr`` scope text classification to the
+    selected remote dispatch.  The untrusted aggregate remains useful as a
+    retained diagnostic, but agent commentary in it cannot relabel a concrete
+    remote failure.
+    """
     state = str(document.get("state", "")).lower().replace("_", "-")
     failure = str(document.get("failure_type", "")).lower().replace("_", "-")
     if state in INFRA_STATES or failure in {
@@ -144,11 +150,28 @@ def classify_failure(document: dict) -> tuple[str, str, str]:
         normalized = failure.replace("-", "_")
         return "counted_failure", normalized, (
             "profiler" if normalized == "profiler_command" else normalized)
-    text = f"{document.get('stdout', '')}\n{document.get('stderr', '')}".lower()
+    trusted = "trusted_stdout" in document or "trusted_stderr" in document
+    stdout_key = "trusted_stdout" if trusted else "stdout"
+    stderr_key = "trusted_stderr" if trusted else "stderr"
+    text = f"{document.get(stdout_key, '')}\n{document.get(stderr_key, '')}".lower()
+    profiler_diagnostic = any(marker in text for marker in (
+        "profile_command=msprof ", "profiler failure", "msprof op --help",
+        "msprof op simulator --help",
+    ))
+    if profiler_diagnostic:
+        return "counted_failure", "profiler_command", "profiler"
+    missing_selector = (
+        "no exported kernel row" in text
+        or ("expected one exported" in text and "selector" in text)
+        or any(marker in text for marker in (
+            "missing selector", "missing kernel selector",
+            "missing exported selector", "missing exported kernel selector",
+        ))
+    )
+    if missing_selector:
+        return "counted_failure", "evidence", "evidence"
     if "compile" in text:
         return "counted_failure", "compile", "compile"
-    if "profiler" in text or "msprof" in text:
-        return "counted_failure", "profiler_command", "profiler"
     if "evidence" in text:
         return "counted_failure", "evidence", "evidence"
     if document.get("returncode") not in (None, 0):
@@ -884,6 +907,9 @@ class BehavioralLauncher(ProductionLauncher):
             "failure_type": selected.get("failure_type"),
             "stdout": combined_stdout, "stderr": combined_stderr,
         }
+        if dispatch:
+            evidence.update(trusted_stdout=selected.get("stdout", ""),
+                            trusted_stderr=selected.get("stderr", ""))
         classification, failure_type, stage = classify_failure(evidence)
         label = request["session_id"]
         command = store.text(

@@ -423,6 +423,76 @@ def test_failure_classification_is_host_owned_and_fail_closed(document, expected
     assert launcher.classify_failure(document) == expected
 
 
+@pytest.mark.parametrize("remote_output,expected", [
+    (
+        "PROFILE_COMMAND=msprof op --application=python workload.py "
+        "--output=/tmp/basic --metrics=BasicInfo\n"
+        "[ERROR] unexpected argument --metrics=BasicInfo\n"
+        "no exported kernel row in BasicInfo\n",
+        ("counted_failure", "profiler_command", "profiler"),
+    ),
+    (
+        "Traceback (most recent call last):\n"
+        "RuntimeError: expected one exported matmul selector, got []\n",
+        ("counted_failure", "evidence", "evidence"),
+    ),
+    (
+        'EXPERIMENT_FAILURE={"message": "BasicInfo profiler failure rc=0: '
+        "[ERROR] unexpected argument --device=0\\n"
+        '[INFO] Use msprof op --help", "type": "RuntimeError"}\n',
+        ("counted_failure", "profiler_command", "profiler"),
+    ),
+])
+def test_remote_profiler_evidence_outranks_incidental_agent_compilation_prose(
+        remote_output: str, expected: tuple[str, str, str]):
+    document = {
+        "returncode": 1,
+        "state": "failed",
+        "trusted_stdout": remote_output,
+        "trusted_stderr": "",
+        "stdout": f"remote result:\n{remote_output}",
+        "stderr": (
+            "codex stderr:\nThe profiling guide says compile and compilation errors remain actionable.\n"
+            "launcher diagnostic:\ncounted remote failure cannot be replaced"
+        ),
+    }
+
+    assert launcher.classify_failure(document) == expected
+
+
+def test_agent_profiler_prose_cannot_relabel_trusted_remote_compile_failure():
+    document = {
+        "returncode": 1,
+        "state": "failed",
+        "trusted_stdout": "Triton compile error at candidate.py:17\n",
+        "trusted_stderr": "",
+        "stdout": "remote result:\nTriton compile error at candidate.py:17\n",
+        "stderr": "codex stderr:\nI consulted the msprof profiler guide.\n",
+    }
+
+    assert launcher.classify_failure(document) == (
+        "counted_failure", "compile", "compile")
+
+
+@pytest.mark.parametrize("remote_output", [
+    "Triton compile error in profiler_wrapper.py: invalid layout\n",
+    "Triton compile error: selector expression has invalid type\n",
+])
+def test_incidental_profiler_or_selector_words_do_not_relabel_remote_compile(
+        remote_output: str):
+    document = {
+        "returncode": 1,
+        "state": "failed",
+        "trusted_stdout": remote_output,
+        "trusted_stderr": "",
+        "stdout": remote_output,
+        "stderr": "",
+    }
+
+    assert launcher.classify_failure(document) == (
+        "counted_failure", "compile", "compile")
+
+
 def test_counted_remote_failure_cannot_be_hidden_by_later_success():
     failed = {"target": "bz-a3-1", "handle": "remote:bz-a3-1:job:bad",
               "state": "failed", "result": {"returncode": 1, "state": "failed",
@@ -792,7 +862,9 @@ def test_failed_job_retains_complete_journal_and_compiler_diagnostics_from_logs(
     store = launcher.ArtifactStore(tmp_path / "artifacts")
     failed = instance._failure_result(
         request, paths, store, request["units"][0], "agent stopped after failed result",
-        codex_command="codex exec", codex_stderr="remote check failed", codex_returncode=1)
+        codex_command="codex exec",
+        codex_stderr="I consulted the msprof guide; remote check failed",
+        codex_returncode=1)
 
     assert failed["record"]["failure_type"] == "compile"
     log = (store.root / failed["record"]["log"]["path"]).read_text()

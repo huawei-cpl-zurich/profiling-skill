@@ -68,6 +68,12 @@ Infrastructure discard is fail-closed: only structured remote-access states
 or failure types for transport, observer, target availability, or device busy
 qualify. Agent timeout, launcher failure, compilation, runtime, profiler
 command, evidence, and interpretation failures consume a scored attempt.
+Failure text is classified only from the selected dispatch and its same-handle
+remote observations; retained Codex prose cannot relabel that result. Within
+that trusted remote text, concrete `msprof` or profiler-command diagnostics
+take precedence over generic compile wording, while a missing exported kernel
+selector is an evidence failure. Structured remote failure types remain
+authoritative.
 
 Live A5 acquisition remains blocked until `bz-a5` has a registered runtime or
 supported wrapper in the global remote registry. Do not substitute raw SSH,

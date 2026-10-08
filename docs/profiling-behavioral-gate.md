@@ -46,11 +46,16 @@ valid JSON whose schema and provenance match the envelope. Acquired evidence
 references additionally carry the remote SHA-256, which must equal the retained
 artifact SHA-256; frozen-case evidence references retain their original schema.
 Successful acquisition payloads contain exactly product, target, and the pinned
-prompt SHA-256. Acquisition handles
-must bind an allowed target, and their provenance must bind the same product,
-target, and durable handle; successful acquisition handles and evidence hashes
-must be globally unique. Failure records retain stage, product/target/optional
-handle, and bounded command/log/diagnostic references. Their compact receipts
+prompt SHA-256. Acquired evidence provenance contains exactly product and target
+because the remote evidence producer cannot access the broker-assigned durable
+handle. The trusted outcome
+separately retains the durable handle and target: the target must be allowed,
+the handle must bind that target, and the evidence provenance must match the
+same product and target. Successful acquisition handles and evidence hashes
+must be globally unique. Frozen-case evidence keeps its distinct capture
+provenance with product, target, and handle. Failure records retain stage,
+product/target/optional handle, and bounded command/log/diagnostic references.
+Their compact receipts
 bind those fields, artifact hashes, kind, arm, session, classification, and
 failure type exactly.
 Both `remote:<target>:job:<id>` and the managed `gz-a3:<job-id>` handle are

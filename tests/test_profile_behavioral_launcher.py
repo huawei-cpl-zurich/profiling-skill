@@ -588,6 +588,195 @@ def test_mixed_infrastructure_then_counted_failure_uses_selected_dispatch_calls_
     assert "device busy" not in evidence["stdout"]
 
 
+@pytest.mark.parametrize("marker_classification,expected", [
+    ("device_unavailable", ("discarded_infrastructure", "device_busy", "transport")),
+    ("host_environment", ("discarded_infrastructure", "target_unavailable", "transport")),
+    ("workload_failure", ("counted_failure", "runtime", "runtime")),
+    ("profiler_failure", ("counted_failure", "profiler_command", "profiler")),
+    ("evidence_failure", ("counted_failure", "evidence", "evidence")),
+    ("bundle_failure", ("counted_failure", "launcher", "launcher")),
+])
+def test_selected_remote_acquisition_failure_marker_is_classified(
+        marker_classification: str, expected: tuple[str, str, str]):
+    handle = "remote:bz-a3-1:job:structured-failure"
+    marker = "ACQUIRE_FAILURE_JSON=" + json.dumps({
+        "classification": marker_classification, "phase": "retention",
+        "detail": "bounded remote failure",
+    }, separators=(",", ":"))
+    dispatch = {
+        "target": "bz-a3-1", "handle": handle, "state": "failed",
+        "result": {"returncode": 1, "state": "failed", "stdout": "", "stderr": ""},
+    }
+    journal = {"dispatches": [dispatch], "calls": [{
+        "operation": "logs", "target": "bz-a3-1", "handle": handle,
+        "result": {"returncode": 0, "state": "completed",
+                   "stdout": marker + "\n", "stderr": ""},
+    }]}
+
+    evidence = launcher.dispatch_failure_evidence(journal, dispatch, 0)
+
+    assert launcher.classify_failure(evidence) == expected
+
+
+@pytest.mark.parametrize("log_text", [
+    'ACQUIRE_FAILURE_JSON={"classification":"host_environment"}\n',
+    'ACQUIRE_FAILURE_JSON={"classification":"unknown","phase":"retention"}\n',
+    'ACQUIRE_FAILURE_JSON={not-json}\n',
+    ('ACQUIRE_FAILURE_JSON={"classification":"host_environment","phase":"retention"}\n'
+     'ACQUIRE_FAILURE_JSON={"classification":"host_environment","phase":"retention"}\n'),
+])
+def test_malformed_unknown_or_duplicate_acquisition_failure_marker_fails_closed(
+        log_text: str):
+    handle = "remote:bz-a3-1:job:invalid-marker"
+    dispatch = {
+        "target": "bz-a3-1", "handle": handle, "state": "failed",
+        "result": {"returncode": 1, "state": "failed", "stdout": "", "stderr": ""},
+    }
+    journal = {"dispatches": [dispatch], "calls": [{
+        "operation": "logs", "target": "bz-a3-1", "handle": handle,
+        "result": {"returncode": 0, "state": "completed",
+                   "stdout": log_text, "stderr": ""},
+    }]}
+
+    evidence = launcher.dispatch_failure_evidence(journal, dispatch, 0)
+
+    assert launcher.classify_failure(evidence) == (
+        "counted_failure", "launcher", "launcher")
+
+
+def test_agent_prose_cannot_spoof_acquisition_infrastructure_marker():
+    marker = ('ACQUIRE_FAILURE_JSON={"classification":"host_environment",'
+              '"phase":"retention"}')
+    document = {
+        "returncode": 1, "state": "failed",
+        "trusted_stdout": "", "trusted_stderr": "",
+        "stdout": "", "stderr": f"agent explanation:\n{marker}\n",
+    }
+
+    assert launcher.classify_failure(document) == (
+        "counted_failure", "launcher", "launcher")
+
+
+@pytest.mark.parametrize("marker_location", ["dispatch_stdout", "unrelated_log"])
+def test_acquisition_failure_marker_outside_selected_remote_stderr_or_logs_is_ignored(
+        marker_location: str):
+    handle = "remote:bz-a3-1:job:selected"
+    marker = ('ACQUIRE_FAILURE_JSON={"classification":"host_environment",'
+              '"phase":"retention"}\n')
+    dispatch = {
+        "target": "bz-a3-1", "handle": handle, "state": "failed",
+        "result": {"returncode": 1, "state": "failed",
+                   "stdout": marker if marker_location == "dispatch_stdout" else "",
+                   "stderr": ""},
+    }
+    calls = ([{
+        "operation": "logs", "target": "bz-a3-1",
+        "handle": "remote:bz-a3-1:job:unrelated",
+        "result": {"returncode": 0, "state": "completed", "stdout": marker, "stderr": ""},
+    }] if marker_location == "unrelated_log" else [])
+
+    evidence = launcher.dispatch_failure_evidence(
+        {"dispatches": [dispatch], "calls": calls}, dispatch, 0)
+
+    assert launcher.classify_failure(evidence) == (
+        "counted_failure", "launcher", "launcher")
+
+
+def test_failure_result_uses_selected_retained_acquisition_marker(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    handle = "remote:bz-a3-1:job:20261008T210414Z-9865c9544328"
+    marker = ("ACQUIRE_FAILURE_JSON="
+              '{"classification": "host_environment", '
+              '"message": "dispatch key already retained", "phase": "retention"}\n')
+    paths.journal.write_text(json.dumps({
+        "schema": "profiling-skill/remote-journal/v1",
+        "dispatches": [{
+            "target": "bz-a3-1", "handle": handle, "state": "failed",
+            "arguments": ["run", "bz-a3-1", "--file", "/workspace/job.sh"],
+            "result": {"returncode": 1, "state": "failed", "stdout": "", "stderr": ""},
+        }],
+        "calls": [{
+            "operation": "logs", "target": "bz-a3-1", "handle": handle,
+            "arguments": ["logs", "--stream", "stderr", handle],
+            "result": {"returncode": 0, "state": "completed",
+                       "stdout": marker, "stderr": ""},
+        }],
+    }))
+
+    result = instance._failure_result(
+        request, paths, store, request["units"][0], "remote acquisition failed",
+        journal_start=(0, 0), failed_handle=handle,
+    )
+
+    assert result["status"] == "discarded_infrastructure"
+    assert result["record"]["failure_type"] == "target_unavailable"
+    assert result["record"]["stage"] == "transport"
+    assert result["record"]["handle"] == handle
+
+
+def test_structured_infrastructure_retry_can_succeed_in_same_turn():
+    failed_handle = "remote:bz-a3-1:job:host-environment"
+    failed = {
+        "target": "bz-a3-1", "handle": failed_handle, "state": "failed",
+        "result": {"returncode": 1, "state": "failed", "stdout": "", "stderr": ""},
+    }
+    succeeded = {
+        "target": "bz-a3-1", "handle": "remote:bz-a3-1:job:success",
+        "state": "completed",
+        "result": {"returncode": 0, "state": "completed", "stdout": "", "stderr": ""},
+    }
+    marker = ('ACQUIRE_FAILURE_JSON={"classification":"host_environment",'
+              '"phase":"retention"}\n')
+    journal = {"dispatches": [failed, succeeded], "calls": [{
+        "operation": "logs", "target": "bz-a3-1", "handle": failed_handle,
+        "result": {"returncode": 0, "state": "completed", "stdout": marker, "stderr": ""},
+    }]}
+
+    assert launcher.counted_dispatch_failure(journal, (0, 0), "bz-a3-1") is None
+
+
+def test_structured_counted_failure_cannot_be_hidden_by_retry_success():
+    failed_handle = "remote:bz-a3-1:job:workload-failure"
+    failed = {
+        "target": "bz-a3-1", "handle": failed_handle, "state": "failed",
+        "result": {"returncode": 1, "state": "failed", "stdout": "", "stderr": ""},
+    }
+    succeeded = {
+        "target": "bz-a3-1", "handle": "remote:bz-a3-1:job:success",
+        "state": "completed",
+        "result": {"returncode": 0, "state": "completed", "stdout": "", "stderr": ""},
+    }
+    marker = ('ACQUIRE_FAILURE_JSON={"classification":"workload_failure",'
+              '"phase":"execution"}\n')
+    journal = {"dispatches": [failed, succeeded], "calls": [{
+        "operation": "logs", "target": "bz-a3-1", "handle": failed_handle,
+        "result": {"returncode": 0, "state": "completed", "stdout": marker, "stderr": ""},
+    }]}
+
+    assert launcher.counted_dispatch_failure(journal, (0, 0), "bz-a3-1") == failed
+
+
+def test_structured_counted_failure_keeps_existing_diagnostic_precedence():
+    handle = "remote:bz-a3-1:job:diagnostic-precedence"
+    dispatch = {
+        "target": "bz-a3-1", "handle": handle, "state": "failed",
+        "result": {"returncode": 1, "state": "failed", "stdout": "", "stderr": ""},
+    }
+    marker = ('ACQUIRE_FAILURE_JSON={"classification":"workload_failure",'
+              '"phase":"profiling"}\nmsprof op --help\n')
+    journal = {"dispatches": [dispatch], "calls": [{
+        "operation": "logs", "target": "bz-a3-1", "handle": handle,
+        "result": {"returncode": 0, "state": "completed", "stdout": marker, "stderr": ""},
+    }]}
+
+    evidence = launcher.dispatch_failure_evidence(journal, dispatch, 0)
+
+    assert launcher.classify_failure(evidence) == (
+        "counted_failure", "profiler_command", "profiler")
+
+
 @pytest.mark.parametrize("operation,stdout,returncode,expected", [
     ("preflight", "REMOTE_STATE=failed\nREMOTE_FAILURE_TYPE=device_busy\n", 1,
      "device_busy"),

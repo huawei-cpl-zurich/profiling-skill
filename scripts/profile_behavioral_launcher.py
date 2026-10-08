@@ -34,6 +34,10 @@ HANDLE = re.compile(r"(?:remote:[A-Za-z0-9_.-]+:job:|gz-a3:)[A-Za-z0-9_.:-]+")
 TERMINAL = {"completed", "failed", "cancelled"}
 INFRA_STATES = {"reconnecting", "observation-unavailable", "target-unavailable",
                 "device-busy", "transport-error"}
+ACQUIRE_FAILURE_CLASSIFICATIONS = {
+    "device_unavailable", "host_environment", "workload_failure",
+    "profiler_failure", "evidence_failure", "bundle_failure",
+}
 
 
 @dataclass(frozen=True)
@@ -341,6 +345,25 @@ class ArtifactStore:
         return {"path": path.as_posix(), "sha256": _sha(target)}
 
 
+def _parse_acquire_failure(sources: Sequence[str]) -> dict | None:
+    """Parse one bounded helper marker from already trusted remote evidence."""
+    prefix = "ACQUIRE_FAILURE_JSON="
+    markers = [line[len(prefix):] for source in sources for line in source.splitlines()
+               if line.startswith(prefix)]
+    if len(markers) != 1 or len(markers[0].encode(errors="replace")) > 4_096:
+        return None
+    try:
+        value = json.loads(markers[0])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(value, dict) \
+            or value.get("classification") not in ACQUIRE_FAILURE_CLASSIFICATIONS \
+            or not isinstance(value.get("phase"), str) \
+            or not IDENTIFIER.fullmatch(value["phase"]):
+        return None
+    return value
+
+
 def classify_failure(document: dict) -> tuple[str, str, str]:
     """Map trusted process/controller evidence; unknown failures count.
 
@@ -359,6 +382,13 @@ def classify_failure(document: dict) -> tuple[str, str, str]:
                       else "observer")
         return "discarded_infrastructure", normalized, (
             "observer" if normalized == "observer" else "transport")
+    acquire_failure = document.get("trusted_acquire_failure")
+    acquire_classification = (acquire_failure.get("classification")
+                              if isinstance(acquire_failure, dict) else None)
+    if acquire_classification == "device_unavailable":
+        return "discarded_infrastructure", "device_busy", "transport"
+    if acquire_classification == "host_environment":
+        return "discarded_infrastructure", "target_unavailable", "transport"
     if failure in {"compile", "runtime", "profiler-command", "evidence"}:
         normalized = failure.replace("-", "_")
         return "counted_failure", normalized, (
@@ -387,6 +417,14 @@ def classify_failure(document: dict) -> tuple[str, str, str]:
         return "counted_failure", "compile", "compile"
     if "evidence" in text:
         return "counted_failure", "evidence", "evidence"
+    structured_acquire = {
+        "workload_failure": ("counted_failure", "runtime", "runtime"),
+        "profiler_failure": ("counted_failure", "profiler_command", "profiler"),
+        "evidence_failure": ("counted_failure", "evidence", "evidence"),
+        "bundle_failure": ("counted_failure", "launcher", "launcher"),
+    }.get(acquire_classification)
+    if structured_acquire:
+        return structured_acquire
     if document.get("returncode") not in (None, 0):
         return "counted_failure", "launcher", "launcher"
     return "counted_failure", "runtime", "runtime"
@@ -414,9 +452,16 @@ def dispatch_failure_evidence(journal: dict, dispatch: dict, calls_start: int) -
     """Build failure evidence from one dispatch and only calls for its retained handle."""
     result = dispatch.get("result") if isinstance(dispatch.get("result"), dict) else {}
     handle = dispatch.get("handle")
-    related = [entry.get("result") for entry in journal.get("calls", [])[calls_start:]
-               if handle and entry.get("handle") == handle
-               and entry.get("operation") in {"observe", "logs", "result"}]
+    related_entries = [entry for entry in journal.get("calls", [])[calls_start:]
+                       if handle and entry.get("handle") == handle
+                       and entry.get("operation") in {"observe", "logs", "result"}]
+    marker_sources = [str(result.get("stderr", ""))]
+    for entry in related_entries:
+        if entry.get("operation") != "logs" or not isinstance(entry.get("result"), dict):
+            continue
+        marker_sources.extend(str(entry["result"].get(field, ""))
+                              for field in ("stdout", "stderr", "content"))
+    related = [entry.get("result") for entry in related_entries]
     related = [entry for entry in related if isinstance(entry, dict)]
     records = [result, *related]
     structured = next((entry.get("failure_type") for entry in records
@@ -427,6 +472,7 @@ def dispatch_failure_evidence(journal: dict, dispatch: dict, calls_start: int) -
         "failure_type": structured,
         "stdout": "\n".join(str(entry.get("stdout", "")) for entry in records),
         "stderr": "\n".join(str(entry.get("stderr", "")) for entry in records),
+        "trusted_acquire_failure": _parse_acquire_failure(marker_sources),
     }
 
 
@@ -1119,6 +1165,7 @@ class BehavioralLauncher(ProductionLauncher):
                            else selected.get("returncode", 1)),
             "state": selected.get("state", ""),
             "failure_type": selected.get("failure_type"),
+            "trusted_acquire_failure": selected.get("trusted_acquire_failure"),
             "stdout": combined_stdout, "stderr": combined_stderr,
         }
         if dispatch:

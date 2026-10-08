@@ -103,6 +103,20 @@ take precedence over generic compile wording, while a missing exported kernel
 selector is an evidence failure. Structured remote failure types remain
 authoritative.
 
+The acquisition helper may emit exactly one line
+`ACQUIRE_FAILURE_JSON=<object>` in the selected dispatch's remote stderr or a
+same-handle retained log. The object must contain a known `classification` and
+a bounded `phase`. `device_unavailable` and `host_environment` are discardable
+infrastructure; `workload_failure`, `profiler_failure`, `evidence_failure`, and
+`bundle_failure` are counted and map to the existing runtime, profiler,
+evidence, and launcher categories. Concrete trusted diagnostics retain their
+existing precedence for counted failures. Unknown, malformed, missing-field,
+or duplicate markers fail closed as counted launcher failures. Markers in
+agent prose, dispatch stdout, or unrelated-handle logs are ignored. A
+discardable infrastructure dispatch may be followed by a corrected successful
+dispatch in the same turn; any counted dispatch failure still makes that turn
+unsuccessful even if the agent later dispatches a successful job.
+
 Live A5 acquisition remains blocked until `bz-a5` has a registered runtime or
 supported wrapper in the global remote registry. Do not substitute raw SSH,
 an ad-hoc environment activation, or another target.

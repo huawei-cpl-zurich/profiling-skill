@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any
 
 
+SUPPORTED_PRODUCTS = {"a2", "a3", "a5"}
+
+
 class InvalidInventory(ValueError):
     pass
 
@@ -26,11 +29,37 @@ def require_strings(value: Any, location: str) -> list[str]:
     return [require_string(item, f"{location}[]") for item in value]
 
 
+def validate_runtime_scope(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        raise InvalidInventory("runtime_scope must be an object")
+    live = require_strings(
+        value.get("live_validated_products"),
+        "runtime_scope.live_validated_products",
+    )
+    unvalidated = require_strings(
+        value.get("unvalidated_products"),
+        "runtime_scope.unvalidated_products",
+    )
+    if len(set(live)) != len(live) or len(set(unvalidated)) != len(unvalidated):
+        raise InvalidInventory("runtime_scope product arrays must not contain duplicates")
+    live_set, unvalidated_set = set(live), set(unvalidated)
+    if not live_set.union(unvalidated_set).issubset(SUPPORTED_PRODUCTS):
+        raise InvalidInventory("runtime_scope contains an unsupported product")
+    if live_set.intersection(unvalidated_set):
+        raise InvalidInventory("runtime_scope product arrays must be disjoint")
+    if live_set.union(unvalidated_set) != SUPPORTED_PRODUCTS:
+        raise InvalidInventory("runtime_scope must cover a2, a3, and a5")
+    return value
+
+
 def validate_inventory(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise InvalidInventory("inventory must be an object")
     if type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
         raise InvalidInventory("schema_version must be integer 1")
+    require_string(raw.get("inventory_id"), "inventory_id")
+    runtime_scope = validate_runtime_scope(raw.get("runtime_scope"))
+    live_products = set(runtime_scope["live_validated_products"])
     revisions = raw.get("compiler_revisions")
     if not isinstance(revisions, dict):
         raise InvalidInventory("compiler_revisions must be an object")
@@ -68,7 +97,7 @@ def validate_inventory(raw: Any) -> dict[str, Any]:
         if status not in {"direct", "inferred", "unknown"}:
             raise InvalidInventory(f"mapping {construct!r} has invalid status")
         products = require_strings(mapping.get("products"), f"mapping {construct!r}.products")
-        if any(product not in {"a2", "a3", "a5"} for product in products):
+        if any(product not in SUPPORTED_PRODUCTS for product in products):
             raise InvalidInventory(f"mapping {construct!r} has invalid product")
         citations = require_strings(mapping.get("citations"), f"mapping {construct!r}.citations")
         if any(not citation.startswith("ref://") for citation in citations):
@@ -79,6 +108,11 @@ def validate_inventory(raw: Any) -> dict[str, Any]:
             require_string(mapping.get("why_unknown"), f"mapping {construct!r}.why_unknown")
             require_string(mapping.get("next_evidence"), f"mapping {construct!r}.next_evidence")
         else:
+            if not set(products).issubset(live_products):
+                raise InvalidInventory(
+                    f"mapping {construct!r} products must be a subset of "
+                    "runtime_scope.live_validated_products"
+                )
             pipe = require_string(mapping.get("compiler_pipe"), f"mapping {construct!r}.compiler_pipe")
             if not pipe.startswith("PIPE_"):
                 raise InvalidInventory(f"mapping {construct!r}.compiler_pipe must start PIPE_")
@@ -105,7 +139,8 @@ def query(inventory: dict[str, Any], construct: str, product: str | None) -> dic
     )
     if mapping is None:
         return None
-    if product is not None and product not in mapping["products"]:
+    live_products = inventory.get("runtime_scope", {}).get("live_validated_products", [])
+    if product not in live_products or product not in mapping["products"]:
         return {
             "construct": construct,
             "product": product,
@@ -139,13 +174,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.construct is not None and args.product is None:
         parser.error("--product is required with --construct")
+    if args.construct is None and args.product is not None:
+        parser.error("--product is only valid with --construct")
     try:
         inventory = load_inventory(args.mapping)
     except InvalidInventory as error:
         parser.error(str(error))
 
     if args.validate:
-        payload = {"status": "valid", "inventory_id": inventory.get("inventory_id")}
+        payload = {
+            "status": "valid",
+            "inventory_id": inventory["inventory_id"],
+            "compiler_revisions": inventory["compiler_revisions"],
+            "runtime_scope": inventory["runtime_scope"],
+        }
     elif args.list:
         mappings = inventory["mappings"]
         payload = {

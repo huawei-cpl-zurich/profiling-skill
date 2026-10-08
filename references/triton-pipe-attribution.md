@@ -45,6 +45,10 @@ profiler capture through `remote-access`. A pipe timeline can correlate
 activity with emitted instructions; activity alone neither proves source
 attribution nor capacity saturation.
 
+The probe's `--contract` output uses `constructs[]`; every identifier is an
+independent lookup key for this inventory. Do not join several constructs into
+an unreviewed composite attribution.
+
 Do not transfer an A3 result to A2 or A5. The current inventory has live A3
 scope; A2 and A5 queries deliberately return `unknown` until pinned compiler
 builds and product-correct captures establish those mappings.

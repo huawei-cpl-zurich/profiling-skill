@@ -18,19 +18,19 @@ SEED = 20261008
 CASES = (
     {
         "name": "copy",
-        "construct": "triton_load+triton_store",
+        "constructs": ["triton_load", "triton_store"],
         "kernel_name": "pipe_probe_copy",
         "expected_status": "unknown",
     },
     {
         "name": "elementwise",
-        "construct": "triton_elementwise",
+        "constructs": ["triton_load", "triton_elementwise", "triton_store"],
         "kernel_name": "pipe_probe_elementwise",
         "expected_status": "unknown",
     },
     {
         "name": "dot",
-        "construct": "triton_dot",
+        "constructs": ["triton_load", "triton_dot", "triton_store"],
         "kernel_name": "pipe_probe_dot",
         "expected_status": "unknown",
     },

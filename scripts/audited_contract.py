@@ -20,6 +20,7 @@ from typing import Sequence
 MAX_EXCERPT = 512
 MAX_REPORT_FIELD = 8192
 CONTROLLER_POLICY_SCHEMA = "profiling-skill/controller-policy/v1"
+OBSERVE_TRANSITION_SCHEMA = "profiling-skill/controller-observe-transition/v1"
 REPORT_FIELDS = (
     "hypothesis", "expected_result", "change", "evidence", "observed_result",
     "decision", "postmortem", "next_experiment",
@@ -273,6 +274,132 @@ def _validate_handles(receipt: dict, policy: dict) -> None:
     if (submitted != expected_submitted or observed != expected_observed
             or policy.get("infra_retries") != retry_count):
         raise AuditError("controller operation history does not bind handle or retry proof")
+
+
+def validate_observe_transaction(receipt: dict, requested_handle: str) -> dict:
+    """Prove that a terminal transaction observed one exact retained operation.
+
+    A controller may finish later operations after observing the retained one,
+    so its terminal top-level handle need not be the handle passed to
+    ``observe``.  The history must nevertheless show an unbroken transaction:
+    an infrastructure failure allocated that handle, every subsequent attempt
+    for the same request was an observation, and exactly one observation
+    completed it.
+    """
+    if not isinstance(requested_handle, str) or not requested_handle:
+        raise AuditError("controller observe transaction proof is invalid")
+    policy = receipt.get("policy") if isinstance(receipt, dict) else None
+    history = policy.get("operation_history") if isinstance(policy, dict) else None
+    if not isinstance(history, list):
+        raise AuditError("controller observe transaction proof is invalid")
+    completed = [record for record in history if (
+        isinstance(record, dict)
+        and record.get("mode") == "observe"
+        and record.get("handle") == requested_handle
+        and record.get("terminal") is True
+    )]
+    if len(completed) != 1:
+        raise AuditError("controller observe transaction proof is invalid")
+    terminal = completed[0]
+    request_hash = terminal.get("request_sha256")
+    related = [record for record in history if (
+        isinstance(record, dict) and record.get("request_sha256") == request_hash
+    )]
+    if len(related) < 2 or related[-1] is not terminal:
+        raise AuditError("controller observe transaction proof is invalid")
+    identity = (terminal.get("action"), terminal.get("attempt_id"))
+    allocations = [index for index, record in enumerate(related[:-1]) if (
+        record.get("mode") in {"submit", "retry_submit"}
+        and record.get("handle") == requested_handle
+    )]
+    if (not allocations
+            or terminal.get("status") not in {
+                "ok", "candidate_error", "submission_error", "compile_error",
+                "compilation_error", "runtime_error", "correctness_error",
+            }):
+        raise AuditError("controller observe transaction proof is invalid")
+    allocation_index = allocations[0]
+    global_allocation = next(index for index, record in enumerate(history) if (
+        record is related[allocation_index]
+    ))
+    global_terminal = next(index for index, record in enumerate(history) if (
+        record is terminal
+    ))
+    if (global_allocation >= global_terminal
+            or any(record.get("request_sha256") != request_hash
+                   for record in history[global_allocation:global_terminal + 1])):
+        raise AuditError("controller observe transaction proof is invalid")
+    for index, record in enumerate(related[:-1]):
+        expected_modes = ({"submit"} if index == 0 else
+                          {"retry_submit"} if index <= allocation_index else
+                          {"observe"})
+        if (record.get("terminal") is not False
+                or record.get("status") != "infrastructure_error"
+                or record.get("mode") not in expected_modes
+                or (record.get("handle") not in (
+                    {None, requested_handle} if index < allocation_index
+                    else {requested_handle}
+                ))
+                or identity != (record.get("action"), record.get("attempt_id"))):
+            raise AuditError("controller observe transaction proof is invalid")
+    return receipt
+
+
+def validate_observe_transition(receipt: dict, requested_handle: str,
+                                candidate_hash: str, manifest_hash: str,
+                                experiment: int) -> dict:
+    """Authenticate a completed observation followed by a new pending handle."""
+    if (not isinstance(receipt, dict)
+            or receipt.get("status") != "infrastructure_error"
+            or receipt.get("terminal") is not False
+            or receipt.get("candidate_sha256") != candidate_hash
+            or receipt.get("manifest_sha256") != manifest_hash
+            or type(receipt.get("experiment")) is not int
+            or receipt["experiment"] != experiment):
+        raise AuditError("controller observe transition proof is invalid")
+    pending_handle = receipt.get("handle")
+    proof = receipt.get("observe_transition")
+    required = {"schema", "observed_handle", "pending_handle", "operation_history"}
+    if (not isinstance(pending_handle, str) or not pending_handle
+            or pending_handle == requested_handle
+            or not isinstance(proof, dict) or set(proof) != required
+            or proof.get("schema") != OBSERVE_TRANSITION_SCHEMA
+            or proof.get("observed_handle") != requested_handle
+            or proof.get("pending_handle") != pending_handle
+            or not isinstance(proof.get("operation_history"), list)):
+        raise AuditError("controller observe transition proof is invalid")
+    history = proof["operation_history"]
+    # Validate the common operation record shape before interpreting the chain.
+    for record in history:
+        if (not isinstance(record, dict)
+                or set(record) != {"request_sha256", "mode", "status", "terminal",
+                                   "handle", "action", "attempt_id"}
+                or not _valid_hash(record["request_sha256"])
+                or record["mode"] not in {"submit", "retry_submit", "observe"}
+                or not isinstance(record["status"], str)
+                or type(record["terminal"]) is not bool
+                or not isinstance(record["action"], str)
+                or (record["attempt_id"] is not None
+                    and not isinstance(record["attempt_id"], str))
+                or (record["handle"] is not None
+                    and not isinstance(record["handle"], str))):
+            raise AuditError("controller observe transition proof is invalid")
+    validate_observe_transaction(
+        {"policy": {"operation_history": history}}, requested_handle,
+    )
+    observed_index = next(index for index, record in enumerate(history) if (
+        record["mode"] == "observe" and record["handle"] == requested_handle
+        and record["terminal"] is True
+    ))
+    pending = history[-1] if history else None
+    if (not isinstance(pending, dict) or observed_index >= len(history) - 1
+            or pending["mode"] not in {"submit", "retry_submit"}
+            or pending["status"] != "infrastructure_error"
+            or pending["terminal"] is not False
+            or pending["handle"] != pending_handle
+            or pending["request_sha256"] == history[observed_index]["request_sha256"]):
+        raise AuditError("controller observe transition proof is invalid")
+    return receipt
 
 
 def validate_controller_receipt(receipt: object, candidate_hash: str,

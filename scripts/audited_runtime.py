@@ -624,6 +624,7 @@ class CommandController:
         ]
         return self._execute(
             command, number, candidate_hash, manifest_hash, expected_handle=handle,
+            allow_observe_transaction=True,
         )
 
     def remeasure(self, number: int, candidate_hash: str, manifest_hash: str,
@@ -640,7 +641,8 @@ class CommandController:
         )
 
     def _execute(self, command: Sequence[str], number: int, candidate_hash: str,
-                 manifest_hash: str, *, expected_handle: str | None = None) -> dict:
+                 manifest_hash: str, *, expected_handle: str | None = None,
+                 allow_observe_transaction: bool = False) -> dict:
         try:
             result = subprocess.run(
                 command, cwd=self.repo, text=True, capture_output=True,
@@ -709,12 +711,34 @@ class CommandController:
                     result.stdout, result.stderr, self._credential_values,
                 ),
             }
-        if expected_handle is not None and receipt.get("handle") != expected_handle:
+        observed_transaction = (expected_handle is None or (
+            not allow_observe_transaction and receipt.get("handle") == expected_handle
+        ))
+        if allow_observe_transaction and expected_handle is not None:
+            try:
+                if receipt.get("status") in {
+                        "ok", "candidate_error", "measurement_pending"}:
+                    evidence_contract.validate_controller_receipt(
+                        receipt, candidate_hash, manifest_hash,
+                    )
+                    evidence_contract.validate_observe_transaction(
+                        receipt, expected_handle,
+                    )
+                elif receipt.get("handle") != expected_handle:
+                    evidence_contract.validate_observe_transition(
+                        receipt, expected_handle, candidate_hash, manifest_hash, number,
+                    )
+                observed_transaction = True
+            except AuditError:
+                pass
+        if expected_handle is not None and not observed_transaction:
             return {
                 "status": "infrastructure_error",
                 "terminal": False,
                 "handle": expected_handle,
-                "reason": "controller observation returned a different handle",
+                "reason": ("controller observation lacks valid transaction proof"
+                           if allow_observe_transaction else
+                           "controller observation returned a different handle"),
                 "experiment": number,
                 "candidate_sha256": candidate_hash,
                 "manifest_sha256": manifest_hash,

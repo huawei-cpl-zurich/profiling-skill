@@ -672,7 +672,120 @@ def test_controller_observe_rejects_replaced_handle(tmp_path: Path, monkeypatch)
 
     assert result["status"] == "infrastructure_error"
     assert result["handle"] == "job:retained"
-    assert "different handle" in result["reason"]
+    assert "transaction proof" in result["reason"]
+
+
+def test_controller_observe_accepts_valid_multi_operation_transaction(
+        tmp_path: Path, monkeypatch):
+    candidate = hashlib.sha256(b"candidate").hexdigest()
+    manifest = hashlib.sha256(b"manifest").hexdigest()
+    retained, final = "job:retained", "job:post-control"
+    request = hashlib.sha256(b"request").hexdigest()
+    final_request = hashlib.sha256(b"final-request").hexdigest()
+    receipt = {
+        "status": "candidate_error", "reason": "compile failed", "handle": final,
+        "candidate_sha256": candidate, "manifest_sha256": manifest,
+        "device": "dynamic-1", "policy": {
+            "schema": runtime.evidence_contract.CONTROLLER_POLICY_SCHEMA,
+            "selected_device": "dynamic-1", "admission_controls": [{
+                "device": "dynamic-1", "status": "pass", "healthy": True,
+                "idle": True, "warmed": True,
+            }],
+            "submission_candidate_sha256": candidate,
+            "submitted_handles": [retained, final],
+            "observed_handles": [retained, final], "infra_retries": 1,
+            "retry_budget": 2, "quarantined_devices": [],
+            "quarantine_controls": {}, "confirmation_count": 0,
+            "post_control": "not_run", "variability_threshold": .25,
+            "measurement_generation": 0, "operation_history": [
+                {"request_sha256": request, "mode": "submit",
+                 "status": "infrastructure_error", "terminal": False,
+                 "handle": retained, "action": "calibrate", "attempt_id": "before"},
+                {"request_sha256": request, "mode": "observe", "status": "ok",
+                 "terminal": True, "handle": retained, "action": "calibrate",
+                 "attempt_id": "before"},
+                {"request_sha256": final_request, "mode": "submit",
+                 "status": "compile_error", "terminal": True, "handle": final,
+                 "action": "check", "attempt_id": None},
+            ],
+        },
+    }
+    adapter = runtime.CommandController(["controller"], tmp_path)
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 2, json.dumps(receipt), "compile diagnostic",
+        ),
+    )
+
+    result = adapter.observe(1, candidate, manifest, retained)
+
+    assert result["status"] == "candidate_error"
+    assert result["handle"] == final
+
+    same_handle = json.loads(json.dumps(receipt))
+    same_handle["handle"] = retained
+    same_handle["policy"]["submitted_handles"] = [retained]
+    same_handle["policy"]["observed_handles"] = [retained]
+    same_handle["policy"]["operation_history"][-1]["handle"] = retained
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 2, json.dumps(same_handle), "compile diagnostic",
+        ),
+    )
+    assert adapter.observe(1, candidate, manifest, retained)["status"] == "candidate_error"
+
+    same_handle["policy"]["operation_history"][1]["mode"] = "retry_submit"
+    same_handle["policy"]["infra_retries"] = 2
+    rejected = adapter.observe(1, candidate, manifest, retained)
+    assert rejected["status"] == "infrastructure_error"
+    assert rejected["handle"] == retained
+    assert "transaction proof" in rejected["reason"]
+
+
+def test_controller_observe_preserves_authenticated_next_pending_handle(
+        tmp_path: Path, monkeypatch):
+    candidate = hashlib.sha256(b"candidate").hexdigest()
+    manifest = hashlib.sha256(b"manifest").hexdigest()
+    first, second = "job:check", "job:profile"
+    first_request = hashlib.sha256(b"check-request").hexdigest()
+    second_request = hashlib.sha256(b"profile-request").hexdigest()
+    history = [
+        {"request_sha256": first_request, "mode": "submit",
+         "status": "infrastructure_error", "terminal": False,
+         "handle": first, "action": "check", "attempt_id": None},
+        {"request_sha256": first_request, "mode": "observe", "status": "ok",
+         "terminal": True, "handle": first, "action": "check", "attempt_id": None},
+        {"request_sha256": second_request, "mode": "submit",
+         "status": "infrastructure_error", "terminal": False,
+         "handle": second, "action": "profile", "attempt_id": "primary"},
+    ]
+    transition = {
+        "status": "infrastructure_error", "terminal": False,
+        "reason": "profile observer disconnected", "handle": second,
+        "experiment": 1, "candidate_sha256": candidate,
+        "manifest_sha256": manifest, "observe_transition": {
+            "schema": contract.OBSERVE_TRANSITION_SCHEMA,
+            "observed_handle": first, "pending_handle": second,
+            "operation_history": history,
+        },
+    }
+    adapter = runtime.CommandController(["controller"], tmp_path)
+    monkeypatch.setattr(
+        runtime.subprocess, "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 3, json.dumps(transition), "transport interrupted",
+        ),
+    )
+
+    assert adapter.observe(1, candidate, manifest, first)["handle"] == second
+
+    transition["observe_transition"]["operation_history"][1]["request_sha256"] = \
+        hashlib.sha256(b"wrong").hexdigest()
+    rejected = adapter.observe(1, candidate, manifest, first)
+    assert rejected["status"] == "infrastructure_error"
+    assert rejected["handle"] == first
 
 
 def test_controller_remeasure_uses_exact_pending_handle(tmp_path: Path, monkeypatch):

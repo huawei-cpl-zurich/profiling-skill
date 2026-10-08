@@ -219,6 +219,43 @@ def test_infrastructure_handle_is_checkpointed_and_observed_without_budget_charg
         contract.validate_controller_receipt(tampered, candidate_hash, manifest_hash)
 
 
+def test_observe_transition_authenticates_later_pending_handle(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    check_handle, profile_handle = "bz-a3-1:check", "bz-a3-1:profile"
+    rows = [{"case": case, "samples_us": [10.0, 20.0, 40.0],
+             "median_us": 20.0} for case in [7, 8, 9]]
+    backend = FakeBackend([
+        None,
+        {"status": "infrastructure_error", "failure_type": "observer_error",
+         "diagnostics": "check disconnected", "handle": check_handle},
+        {"status": "ok", "handle": check_handle, "passed": True},
+        {"status": "infrastructure_error", "failure_type": "observer_error",
+         "diagnostics": "profile disconnected", "handle": profile_handle},
+        {"status": "ok", "handle": profile_handle, "cases": rows,
+         "kernel_name": "kernel"},
+    ])
+    adapter = make_controller(repo, backend)
+    first = adapter.run(1, candidate_hash, manifest_hash)
+    assert first["handle"] == check_handle
+
+    transition = adapter.run(
+        1, candidate_hash, manifest_hash, observe_handle=check_handle,
+    )
+    assert transition["handle"] == profile_handle
+    contract.validate_observe_transition(
+        transition, check_handle, candidate_hash, manifest_hash, 1,
+    )
+
+    terminal = adapter.run(
+        1, candidate_hash, manifest_hash, observe_handle=profile_handle,
+    )
+    contract.validate_controller_receipt(terminal, candidate_hash, manifest_hash)
+    contract.validate_observe_transaction(terminal, profile_handle)
+    assert [item["mode"] for item in terminal["policy"]["operation_history"]] == [
+        "submit", "submit", "observe", "submit", "observe", "submit",
+    ]
+
+
 def test_subprocess_backend_marks_only_explicit_observation(monkeypatch, tmp_path: Path):
     calls = []
 

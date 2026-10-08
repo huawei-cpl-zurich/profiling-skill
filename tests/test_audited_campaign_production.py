@@ -1703,7 +1703,7 @@ print("\n".join(json.dumps(event) for event in events))
 ''')
     controller_script = runtime_root / "audited_bz_controller.py"
     controller_script.write_text(r'''\
-import argparse, json
+import argparse, hashlib, json
 from pathlib import Path
 
 p = argparse.ArgumentParser()
@@ -1724,6 +1724,8 @@ state_path.write_text(json.dumps(state))
 handle = a.observe_handle or a.remeasure_handle or f"remote:bz-a3-1:job:{cell}-{a.experiment}"
 
 def policy(post="stable", samples=True):
+    request_sha = hashlib.sha256(
+        f"{cell}:{a.experiment}:observed".encode()).hexdigest()
     result = {
         "schema": "profiling-skill/controller-policy/v1",
         "selected_device": "bz-a3-1/device-1",
@@ -1731,12 +1733,22 @@ def policy(post="stable", samples=True):
             "healthy": True, "idle": True, "warmed": True}],
         "submission_candidate_sha256": a.candidate_sha256,
         "submitted_handles": [handle], "observed_handles": [handle],
-        "infra_retries": 0, "retry_budget": 3, "quarantined_devices": [],
+        "infra_retries": 1 if a.observe_handle else 0, "retry_budget": 3,
+        "quarantined_devices": [],
         "quarantine_controls": {}, "confirmation_count": 0,
         "post_control": post, "variability_threshold": 0.25,
     }
     if samples:
         result.update({"sample_count": 3, "variability_ratio": 0.02})
+    if a.observe_handle:
+        result.update({"measurement_generation": 0, "operation_history": [
+            {"request_sha256": request_sha, "mode": "submit",
+             "status": "infrastructure_error", "terminal": False,
+             "handle": handle, "action": "check", "attempt_id": None},
+            {"request_sha256": request_sha, "mode": "observe",
+             "status": "ok", "terminal": True, "handle": handle,
+             "action": "check", "attempt_id": None},
+        ]})
     return result
 
 base = {"candidate_sha256": a.candidate_sha256,

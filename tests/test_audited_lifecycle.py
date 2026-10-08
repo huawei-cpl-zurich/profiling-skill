@@ -73,6 +73,87 @@ def candidate_error_receipt(candidate: str, manifest: str, number: int,
     return result
 
 
+def observed_transaction_receipt(candidate: str, manifest: str, number: int,
+                                 retained: str = "remote:retained",
+                                 final_handle: str | None = None) -> dict:
+    result = receipt(candidate, manifest, number)
+    final_handle = final_handle or f"remote:final:{number}"
+    result["handle"] = final_handle
+    request = sha(f"retained-request:{number}")
+    final_request = sha(f"final-request:{number}")
+    handles = list(dict.fromkeys((retained, final_handle)))
+    result["policy"].update(
+        submitted_handles=handles,
+        observed_handles=handles,
+        infra_retries=1,
+        measurement_generation=0,
+        operation_history=[
+            {"request_sha256": request, "mode": "submit",
+             "status": "infrastructure_error", "terminal": False,
+             "handle": retained, "action": "calibrate",
+             "attempt_id": f"experiment-{number}-before"},
+            {"request_sha256": request, "mode": "observe", "status": "ok",
+             "terminal": True, "handle": retained, "action": "calibrate",
+             "attempt_id": f"experiment-{number}-before"},
+            {"request_sha256": final_request, "mode": "submit", "status": "ok",
+             "terminal": True, "handle": final_handle, "action": "calibrate",
+             "attempt_id": f"experiment-{number}-after"},
+        ],
+    )
+    return result
+
+
+def observe_transition_receipt(candidate: str, manifest: str, number: int,
+                               observed: str, pending: str) -> dict:
+    request = sha(f"observed-request:{number}")
+    pending_request = sha(f"pending-request:{number}")
+    history = [
+        {"request_sha256": request, "mode": "submit",
+         "status": "infrastructure_error", "terminal": False,
+         "handle": observed, "action": "check", "attempt_id": None},
+        {"request_sha256": request, "mode": "observe", "status": "ok",
+         "terminal": True, "handle": observed, "action": "check",
+         "attempt_id": None},
+        {"request_sha256": pending_request, "mode": "submit",
+         "status": "infrastructure_error", "terminal": False,
+         "handle": pending, "action": "profile",
+         "attempt_id": f"experiment-{number}-measurement-0-primary"},
+    ]
+    return {
+        "status": "infrastructure_error", "terminal": False,
+        "reason": "profile observer disconnected", "handle": pending,
+        "experiment": number, "candidate_sha256": candidate,
+        "manifest_sha256": manifest,
+        "observe_transition": {
+            "schema": contract.OBSERVE_TRANSITION_SCHEMA,
+            "observed_handle": observed, "pending_handle": pending,
+            "operation_history": history,
+        },
+    }
+
+
+def chained_observed_receipt(candidate: str, manifest: str, number: int,
+                             first: str, second: str) -> dict:
+    result = receipt(candidate, manifest, number)
+    final = f"remote:final:{number}"
+    history = observe_transition_receipt(
+        candidate, manifest, number, first, second,
+    )["observe_transition"]["operation_history"]
+    history.extend([
+        {**history[-1], "mode": "observe", "status": "ok", "terminal": True},
+        {"request_sha256": sha(f"final-request:{number}"), "mode": "submit",
+         "status": "ok", "terminal": True, "handle": final,
+         "action": "calibrate", "attempt_id": f"experiment-{number}-after"},
+    ])
+    result["handle"] = final
+    result["policy"].update(
+        submitted_handles=[first, second, final],
+        observed_handles=[first, second, final], infra_retries=2,
+        retry_budget=2, measurement_generation=0, operation_history=history,
+    )
+    return result
+
+
 def report(number: int, candidate: str, manifest: str, decision: str = "retain") -> dict:
     controller = receipt(candidate, manifest, number)
     return {
@@ -657,6 +738,8 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
     prompt, task = inputs(tmp_path)
     repair_turns = 0
 
+    terminal_receipts = {}
+
     def invoke(number, session, instruction):
         nonlocal repair_turns
         if instruction is None:
@@ -668,12 +751,9 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
             return events("thread-infra", {"repaired": True})
         candidate = sha((repo / "candidate.py").read_bytes())
         manifest = sha((repo / "candidate.manifest.json").read_bytes())
-        observed = receipt(candidate, manifest, number)
-        observed["handle"] = "remote:retained"
-        observed["policy"]["submitted_handles"] = ["remote:retained"]
-        observed["policy"]["observed_handles"] = ["remote:retained"]
+        observed = terminal_receipts[number]
         document = report(number, candidate, manifest)
-        document["controller_handle"] = "remote:retained"
+        document["controller_handle"] = observed["handle"]
         document["controller_receipt_sha256"] = contract.sha256_json(observed)
         return events("thread-infra", document, command=False)
 
@@ -693,10 +773,8 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
 
         def observe(self, number, candidate, manifest, handle):
             self.observations += 1
-            result = receipt(candidate, manifest, number)
-            result["handle"] = handle
-            result["policy"]["submitted_handles"] = [handle]
-            result["policy"]["observed_handles"] = [handle]
+            result = observed_transaction_receipt(candidate, manifest, number, handle)
+            terminal_receipts[number] = result
             return result
 
     controller = Controller()
@@ -713,10 +791,62 @@ def test_repaired_candidate_observer_interruption_resumes_exact_handle(tmp_path:
     assert result.status == "complete" and len(result.commits) == 1
     assert repair_turns == 1
     assert controller.calls == 2 and controller.observations == 1
+    assert evidence["controller"]["handle"] == "remote:final:1"
     assert evidence["final_attempt"] == 2
     assert [item["status"] for item in evidence["candidate_attempts"]] == [
         "candidate_error", "ok",
     ]
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda history: history[1].update(request_sha256="0" * 64),
+    lambda history: history[1].update(handle="remote:wrong"),
+    lambda history: history[1].update(mode="retry_submit"),
+    lambda history: history[0].update(terminal=True),
+    lambda history: history[0].update(action="check"),
+])
+def test_observe_transaction_rejects_tampered_request_proof(mutation):
+    candidate, manifest = sha("candidate"), sha("manifest")
+    retained = "remote:retained"
+    result = observed_transaction_receipt(candidate, manifest, 1, retained)
+    mutation(result["policy"]["operation_history"])
+
+    with pytest.raises(contract.AuditError):
+        contract.validate_controller_receipt(result, candidate, manifest)
+        contract.validate_observe_transaction(result, retained)
+
+
+def test_observe_transaction_rejects_unrelated_interleaved_operation():
+    candidate, manifest = sha("candidate"), sha("manifest")
+    retained = "remote:retained"
+    result = observed_transaction_receipt(candidate, manifest, 1, retained)
+    unrelated = dict(result["policy"]["operation_history"][-1])
+    unrelated.update(handle="remote:unrelated", terminal=True)
+    result["policy"]["operation_history"].insert(1, unrelated)
+    result["policy"]["submitted_handles"] = [
+        retained, "remote:unrelated", result["handle"],
+    ]
+    result["policy"]["observed_handles"] = [
+        "remote:unrelated", retained, result["handle"],
+    ]
+
+    contract.validate_controller_receipt(result, candidate, manifest)
+    with pytest.raises(contract.AuditError, match="observe transaction proof"):
+        contract.validate_observe_transaction(result, retained)
+
+
+def test_observe_transaction_accepts_repeated_observer_transport_failure():
+    candidate, manifest = sha("candidate"), sha("manifest")
+    retained = "remote:retained"
+    result = observed_transaction_receipt(candidate, manifest, 1, retained)
+    failed_observe = dict(result["policy"]["operation_history"][1])
+    failed_observe.update(status="infrastructure_error", terminal=False)
+    result["policy"]["operation_history"].insert(1, failed_observe)
+    result["policy"]["infra_retries"] = 2
+    result["policy"]["retry_budget"] = 2
+
+    contract.validate_controller_receipt(result, candidate, manifest)
+    assert contract.validate_observe_transaction(result, retained) is result
 
 
 @pytest.mark.parametrize(("field", "value"), [
@@ -828,7 +958,20 @@ def test_controller_resume_observes_durable_handle_without_resubmission(tmp_path
     repo = tmp_path / "repo"
     init_repo(repo)
     prompt, task = inputs(tmp_path)
-    invoke, _ = updating_invoker(repo)
+    terminal_receipts = {}
+
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text(f"VALUE = {number}\n")
+            return events("thread-fixed", {"prepared": True})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        document = report(number, candidate, manifest)
+        observed = terminal_receipts.get(number)
+        if observed is not None:
+            document["controller_handle"] = observed["handle"]
+            document["controller_receipt_sha256"] = contract.sha256_json(observed)
+        return events("thread-fixed", document, command=False)
 
     class Controller:
         def __init__(self):
@@ -848,10 +991,10 @@ def test_controller_resume_observes_durable_handle_without_resubmission(tmp_path
 
         def observe(self, number, candidate, manifest, handle):
             self.observations.append((number, handle, candidate, manifest))
-            document = receipt(candidate, manifest, number)
-            document["handle"] = handle
-            document["policy"]["submitted_handles"] = [handle]
-            document["policy"]["observed_handles"] = [handle]
+            document = observed_transaction_receipt(
+                candidate, manifest, number, handle, handle,
+            )
+            terminal_receipts[number] = document
             return document
 
     controller = Controller()
@@ -865,6 +1008,105 @@ def test_controller_resume_observes_durable_handle_without_resubmission(tmp_path
     assert controller.submissions == 3
     assert len(controller.observations) == 1
     assert controller.observations[0][1] == "local:1"
+
+
+def test_chained_observer_interruption_checkpoints_new_handle_without_redispatch(
+        tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    terminal_receipts = {}
+    preparation_turns = 0
+
+    def invoke(number, session, instruction):
+        nonlocal preparation_turns
+        if instruction is None:
+            preparation_turns += 1
+            (repo / "candidate.py").write_text("VALUE = 1\n")
+            return events("thread-chain", {"prepared": True})
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        document = report(number, candidate, manifest)
+        terminal = terminal_receipts[number]
+        document["controller_handle"] = terminal["handle"]
+        document["controller_receipt_sha256"] = contract.sha256_json(terminal)
+        return events("thread-chain", document, command=False)
+
+    class Controller:
+        submissions = 0
+        observations = []
+
+        def __call__(self, number, candidate, manifest):
+            self.submissions += 1
+            return {
+                "status": "infrastructure_error", "terminal": False,
+                "handle": "remote:check", "reason": "check observer disconnected",
+                "experiment": number, "candidate_sha256": candidate,
+                "manifest_sha256": manifest,
+            }
+
+        def observe(self, number, candidate, manifest, handle):
+            self.observations.append(handle)
+            if handle == "remote:check":
+                return observe_transition_receipt(
+                    candidate, manifest, number, handle, "remote:profile",
+                )
+            result = chained_observed_receipt(
+                candidate, manifest, number, "remote:check", handle,
+            )
+            terminal_receipts[number] = result
+            return result
+
+    controller = Controller()
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    )
+    with pytest.raises(contract.AuditError, match="blocked by controller"):
+        runner.run("observe-chain", "agent")
+    with pytest.raises(contract.AuditError, match="blocked by controller"):
+        runner.run("observe-chain", "agent", resume=True)
+    checkpoint = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert checkpoint["receipt"]["handle"] == "remote:profile"
+
+    result = runner.run("observe-chain", "agent", resume=True)
+
+    assert result.status == "complete" and len(result.commits) == 1
+    assert controller.submissions == 1
+    assert controller.observations == ["remote:check", "remote:profile"]
+    assert preparation_turns == 1
+
+
+def test_lifecycle_rejects_same_handle_retry_submit_as_observation(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    invoke, _ = updating_invoker(repo)
+
+    class Controller:
+        submissions = 0
+
+        def __call__(self, number, candidate, manifest):
+            self.submissions += 1
+            return {"status": "infrastructure_error", "terminal": False,
+                    "handle": "remote:same", "reason": "disconnected",
+                    "candidate_sha256": candidate, "manifest_sha256": manifest}
+
+        def observe(self, number, candidate, manifest, handle):
+            result = observed_transaction_receipt(
+                candidate, manifest, number, handle, handle,
+            )
+            result["policy"]["operation_history"][1]["mode"] = "retry_submit"
+            return result
+
+    controller = Controller()
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, controller, round_count=1,
+    )
+    with pytest.raises(contract.AuditError, match="blocked by controller"):
+        runner.run("same-handle-tamper", "agent")
+    with pytest.raises(contract.AuditError, match="observe transaction proof"):
+        runner.run("same-handle-tamper", "agent", resume=True)
+    assert controller.submissions == 1
 
 
 def test_controller_resume_without_observer_fails_without_resubmission(tmp_path: Path):

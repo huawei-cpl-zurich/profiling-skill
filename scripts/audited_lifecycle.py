@@ -24,6 +24,8 @@ from audited_contract import (
     sha256_bytes,
     sha256_json,
     validate_controller_receipt,
+    validate_observe_transaction,
+    validate_observe_transition,
 )
 
 MAX_PARTIAL_OUTPUT = 65536
@@ -527,13 +529,26 @@ class AuditedExperimentRunner:
                     raise AuditError(
                         f"controller observation failed for durable handle {handle}"
                     ) from failure
-                if not isinstance(receipt, dict) or receipt.get("handle") != handle:
+                if not isinstance(receipt, dict):
                     self._controller_checkpoint(
                         number, session, "controller observation changed durable handle",
                         branch, seed_commit, seed_hash, prior_hash, commands, previous,
                         submissions, measurements,
                     )
                     raise AuditError("controller observation changed the durable handle")
+                if (receipt.get("status") == "infrastructure_error"
+                        and receipt.get("handle") != handle):
+                    try:
+                        validate_observe_transition(
+                            receipt, handle, candidate_hash, manifest_hash, number,
+                        )
+                    except AuditError as failure:
+                        self._controller_checkpoint(
+                            number, session, str(failure), branch, seed_commit,
+                            seed_hash, prior_hash, commands, previous, submissions,
+                            measurements,
+                        )
+                        raise
             else:
                 if submissions > self.max_controller_resubmits:
                     self._controller_checkpoint(
@@ -603,6 +618,8 @@ class AuditedExperimentRunner:
             raise AuditError(f"experiment {number} blocked by controller status {status!r}")
         try:
             receipt = validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+            if continuing and stage == "controller" and isinstance(handle, str):
+                validate_observe_transaction(receipt, handle)
         except AuditError as failure:
             self._controller_checkpoint(
                 number, session, str(failure), branch, seed_commit, seed_hash,

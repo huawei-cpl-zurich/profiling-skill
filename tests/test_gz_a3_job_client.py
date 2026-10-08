@@ -37,9 +37,59 @@ def load_client():
 
 def test_runner_classifies_source_and_triton_compilation_failures():
     module = load_runner()
+
+    class CompilationError(Exception):
+        pass
+
     assert module.classify(NameError("name 'tl' is not defined")) == "compile_error"
+    assert module.classify(CompilationError("at 17: invalid operands")) == "compile_error"
     assert module.classify(RuntimeError("Triton compilation failed at candidate.py:17")) == "compile_error"
     assert module.classify(RuntimeError("device kernel launch failed")) == "runtime_error"
+    assert module.classify(RuntimeError("Triton device kernel launch failed")) == "runtime_error"
+
+
+def test_runner_classifies_lazy_jit_failure_during_candidate_execution(monkeypatch, tmp_path: Path):
+    module = load_runner()
+
+    class CompilationError(Exception):
+        pass
+
+    class BaselineModel:
+        def __call__(self, *_inputs):
+            return "expected"
+
+    class CandidateModel:
+        def __call__(self, *_inputs):
+            raise CompilationError("at 23: unsupported tensor index")
+
+    baseline = SimpleNamespace(Model=BaselineModel)
+    candidate = SimpleNamespace(Model=CandidateModel)
+    fake_torch = SimpleNamespace(
+        no_grad=nullcontext,
+        npu=SimpleNamespace(synchronize=lambda: None),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(
+        module, "load",
+        lambda path, _name: baseline if path.name == "baseline.py" else candidate,
+    )
+    monkeypatch.setattr(module, "selected_inputs", lambda *_args: (object(),))
+    monkeypatch.setattr(module, "clone", lambda value: value)
+
+    result = module.execute({
+        "benchmark": "bsa",
+        "action": "check",
+        "device": 0,
+        "cases": [47],
+        "scope": "development",
+        "baseline": str(tmp_path / "baseline.py"),
+        "candidate": str(tmp_path / "candidate.py"),
+        "case_spec": str(tmp_path / "cases.jsonl"),
+    })
+
+    assert result["status"] == "compile_error"
+    assert result["case_evidence"] == []
+    assert "CompilationError: at 23: unsupported tensor index" in result["diagnostics"]
 
 
 def test_runner_applies_the_job_specific_tolerance_contract():

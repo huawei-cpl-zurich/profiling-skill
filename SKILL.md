@@ -22,6 +22,16 @@ provided yet; return `unknown` rather than borrowing another product's model.
 A2/A3 `PipeUtilization` block rows are non-temporal activity observations, not
 phase evidence, and must never be passed to this analyzer.
 
+## Triton compiler attribution
+
+Before mapping a Triton construct to a hardware pipe, query the pinned
+compiler inventory with `scripts/query_triton_pipe_attribution.py`. Read
+[Triton-to-pipe attribution](references/triton-pipe-attribution.md) for its
+direct, inferred, and unknown semantics. A known compiler pass sequence does
+not make an original Triton operation single-pipe. Keep unsupported mappings
+unknown and use the focused probe plus `mlir-triton-dump` workflow when exact
+emitted operations are required.
+
 ## A2/A3 Triton timing and pipe evidence
 
 Use the repository's `$gz-a3` profile and its native `py311-torch` runtime.

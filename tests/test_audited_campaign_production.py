@@ -377,6 +377,44 @@ def test_repair_campaign_requires_pinned_successful_canary_gate(tmp_path: Path):
         production.validate_canary_gate(config, results, results_sha)
 
 
+def test_v2_canary_gate_exactly_matches_selected_profile_treatments(tmp_path: Path):
+    cell = {"cell_id": "matmul-project-cannbot", "task": "matmul",
+            "treatment": "project-cannbot", "round_count": 4,
+            "request_budget": 48,
+            "skills": list(production.TREATMENT_SKILLS["project-cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    definition_path, _definition_sha, results_path, _results_sha = (
+        canary_gate_fixture(tmp_path, config)
+    )
+    selected = ("project-cannbot", "project-guarded")
+    definition = json.loads(definition_path.read_text())
+    definition["schema"] = "profiling-skill/audited-repair-canaries/v2"
+    definition["treatments"] = list(selected)
+    definition["canaries"] = [item for item in definition["canaries"]
+                               if item["treatment"] in selected]
+    definition["gate"]["minimum_repaired_canaries"] = 1
+    definition_path.write_text(json.dumps(definition, sort_keys=True) + "\n")
+    config["canary_definition"] = {
+        "path": str(definition_path), "sha256": sha(definition_path),
+    }
+    results = json.loads(results_path.read_text())
+    results["definition_sha256"] = config["canary_definition"]["sha256"]
+    results["results"] = [item for item in results["results"]
+                          if item["treatment"] in selected]
+    results["runtime_config_sha256"] = production.document_sha256(config)
+    results_path.write_text(json.dumps(results, sort_keys=True) + "\n")
+
+    receipt = production.validate_canary_gate(
+        config, results_path, sha(results_path), selected_treatments=selected,
+    )
+    assert receipt["treatments"] == list(selected)
+    with pytest.raises(production.ProductionError, match="selected treatments"):
+        production.validate_canary_gate(
+            config, results_path, sha(results_path),
+            selected_treatments=("project-cannbot",),
+        )
+
+
 @pytest.mark.parametrize("mutation", ["missing", "malformed", "failed", "artifact-drift"])
 def test_repair_campaign_rejects_unsatisfied_canary_gate(
         tmp_path: Path, mutation: str):
@@ -494,6 +532,41 @@ def test_production_entrypoint_gates_dispatch_on_pinned_canary_results(
         Path(config["run_root"]) / "state/canary-gate.json"
     ).read_text())
     assert retained["results_sha256"] == results_sha
+
+
+def test_production_entrypoint_accepts_schema_v3_subset(tmp_path: Path, monkeypatch):
+    cell = {"cell_id": "matmul-project-cannbot", "task": "matmul",
+            "treatment": "project-cannbot", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["project-cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    selected = ("project-cannbot", "project-guarded")
+    manifest = campaign.build_manifest(
+        config["run_id"], Path(config["prompt"]["path"]),
+        {name: Path(binding["path"]) for name, binding in config["tasks"].items()},
+        config["provenance"], "subset-production", request_budget=24,
+        treatments=selected,
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    config_path = tmp_path / "runtime.json"
+    config_path.write_text(json.dumps(config))
+    admission = tmp_path / "admission.json"
+    admission.write_text("{}")
+    dispatched = []
+    monkeypatch.setattr(production, "CplRemoteResourcePool", lambda *args, **kwargs: object())
+    monkeypatch.setattr(production, "ProductionCellLauncher", lambda *args, **kwargs: object())
+    monkeypatch.setattr(sys.modules["audited_campaign"], "run_campaign",
+                        lambda manifest, *args, **kwargs: (
+        dispatched.append(manifest) or {"status": "complete"}
+    ))
+
+    assert production.main([
+        "--manifest", str(manifest_path), "--runtime-config", str(config_path),
+        "--runtime-config-sha256", sha(config_path), "--admission", str(admission),
+        "--admission-sha256", sha(admission), "--ledger", str(tmp_path / "ledger.json"),
+    ]) == 0
+    assert dispatched[0]["dimensions"]["treatments"] == list(selected)
 
 
 def test_migration_trust_cli_requires_resume(capsys):

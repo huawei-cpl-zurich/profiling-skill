@@ -48,6 +48,12 @@ TREATMENT_SKILLS = {
     ),
     "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
 }
+CANARY_EVIDENCE = {
+    "cannbot": ["candidate-repair", "offline-verifier", "msprof-op-timing"],
+    "project-cannbot": ["checkpoint-resume", "same-session", "offline-verifier",
+                        "msprof-op-timing"],
+    "project-guarded": ["candidate-repair", "offline-verifier", "msprof-op-timing"],
+}
 CANNBOT_SKILLS = tuple(sorted({
     skill for treatment in ("cannbot", "project-cannbot")
     for skill in TREATMENT_SKILLS[treatment]
@@ -137,8 +143,9 @@ def _write_json_atomic(path: Path, document: dict) -> None:
 
 def validate_canary_gate(config: dict, results_path: Path | None,
                          results_sha256: str | None,
-                         runtime_config_sha256: str | None = None) -> dict:
-    """Authenticate the three declared canaries before a repair-aware campaign."""
+                         runtime_config_sha256: str | None = None,
+                         selected_treatments: tuple[str, ...] | None = None) -> dict:
+    """Authenticate one declared canary per selected treatment."""
     if results_path is None or results_sha256 is None:
         raise ProductionError("pinned canary results are required")
     binding = config.get("canary_definition")
@@ -150,28 +157,57 @@ def validate_canary_gate(config: dict, results_path: Path | None,
     definition = _read_pinned(
         Path(binding["path"]), binding["sha256"], "canary definition"
     )
+    declarations = definition.get("canaries")
+    schema = definition.get("schema")
+    declared_treatments = tuple(
+        item.get("treatment") for item in declarations
+    ) if isinstance(declarations, list) and all(isinstance(item, dict)
+                                                for item in declarations) else ()
+    if schema == "profiling-skill/audited-repair-canaries/v1":
+        definition_treatments = tuple(TREATMENT_SKILLS)
+    elif schema == "profiling-skill/audited-repair-canaries/v2":
+        raw_treatments = definition.get("treatments")
+        definition_treatments = tuple(raw_treatments) if isinstance(raw_treatments, list) else ()
+    else:
+        definition_treatments = ()
+    expected_treatments = (tuple(TREATMENT_SKILLS) if selected_treatments is None
+                           else tuple(selected_treatments))
     expected_gate = {
         "all_canaries_terminal_ok": True,
         "all_branches_offline_valid": True,
         "all_final_timings_positive": True,
-        "minimum_repaired_canaries": 2,
-        "resume_canary_required": True,
+        "minimum_repaired_canaries": sum(
+            "candidate-repair" in CANARY_EVIDENCE[name]
+            for name in definition_treatments if name in CANARY_EVIDENCE
+        ),
+        "resume_canary_required": any(
+            "checkpoint-resume" in CANARY_EVIDENCE[name]
+            for name in definition_treatments if name in CANARY_EVIDENCE
+        ),
     }
-    declarations = definition.get("canaries")
-    if (definition.get("schema") != "profiling-skill/audited-repair-canaries/v1"
+    if (not definition_treatments
+            or len(definition_treatments) != len(set(definition_treatments))
+            or any(name not in TREATMENT_SKILLS for name in definition_treatments)
+            or definition_treatments != expected_treatments
+            or declared_treatments != definition_treatments
             or definition.get("benchmark") != "matmul"
             or definition.get("request_budget") != 48
             or definition.get("max_candidate_repairs_per_round") != 2
             or definition.get("placement") != "dynamic-bz-a3-admission"
             or definition.get("gate") != expected_gate
-            or not isinstance(declarations, list) or len(declarations) != 3):
-        raise ProductionError("canary definition does not match the production gate")
+            or not isinstance(declarations, list)
+            or len(declarations) != len(expected_treatments)):
+        raise ProductionError(
+            "canary definition does not match selected treatments and production gate"
+        )
     declared = {}
     for item in declarations:
         if (not isinstance(item, dict)
                 or set(item) != {"id", "treatment", "required_evidence"}
                 or not isinstance(item.get("id"), str) or not item["id"]
                 or item.get("treatment") not in TREATMENT_SKILLS
+                or item.get("required_evidence") != CANARY_EVIDENCE.get(
+                    item.get("treatment"))
                 or not isinstance(item.get("required_evidence"), list)
                 or not item["required_evidence"]
                 or any(not isinstance(value, str) or not value
@@ -179,8 +215,8 @@ def validate_canary_gate(config: dict, results_path: Path | None,
                 or item["id"] in declared):
             raise ProductionError("canary declaration is malformed")
         declared[item["id"]] = item
-    if {item["treatment"] for item in declarations} != set(TREATMENT_SKILLS):
-        raise ProductionError("canary declarations must cover all three treatments")
+    if tuple(item["treatment"] for item in declarations) != expected_treatments:
+        raise ProductionError("canary declarations must exactly cover selected treatments")
 
     expected_runtime = runtime_config_sha256 or document_sha256(config)
     results = _read_pinned(Path(results_path), results_sha256, "canary results")
@@ -192,7 +228,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
             or results.get("runtime_closure_sha256") != config.get(
                 "runtime_scripts", {}).get("sha256")
             or results.get("runtime_config_sha256") != expected_runtime
-            or not isinstance(records, list) or len(records) != 3):
+            or not isinstance(records, list) or len(records) != len(declarations)):
         raise ProductionError("canary results do not match pinned production inputs")
     def artifact(binding: object, label: str) -> dict:
         if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
@@ -357,6 +393,7 @@ def validate_canary_gate(config: dict, results_path: Path | None,
         "runtime_config_sha256": results["runtime_config_sha256"],
         "canary_ids": sorted(seen), "repaired_canaries": repaired,
         "resumed_canaries": sorted(resumed),
+        "treatments": list(expected_treatments),
     }
 
 
@@ -1244,8 +1281,13 @@ def main(argv: list[str] | None = None) -> int:
     if config.get("schema") != RUNTIME_SCHEMA:
         parser.error(f"runtime config requires schema {RUNTIME_SCHEMA}")
     manifest = json.loads(args.manifest.read_text())
-    if manifest.get("schema_version") != 2:
-        parser.error("production campaign requires starter-bound manifest schema_version 2")
+    from audited_campaign import verify_manifest
+    try:
+        verify_manifest(manifest)
+    except (KeyError, TypeError, ValueError, RuntimeError) as error:
+        parser.error(str(error))
+    if manifest.get("schema_version") not in {2, 3}:
+        parser.error("production campaign requires starter-bound manifest schema_version 2 or 3")
     config["run_id"] = manifest["run_id"]
     config["manifest_sha256"] = manifest["manifest_sha256"]
     if config.get("provenance") != manifest.get("provenance"):
@@ -1260,6 +1302,7 @@ def main(argv: list[str] | None = None) -> int:
         gate = validate_canary_gate(
             config, args.canary_results, args.canary_results_sha256,
             immutable_runtime_config_sha256,
+            tuple(manifest["dimensions"]["treatments"]),
         )
         _retain_canary_gate(config, gate)
     from audited_campaign import InfrastructureFailure, run_campaign

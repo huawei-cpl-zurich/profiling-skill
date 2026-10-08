@@ -201,6 +201,31 @@ def test_runner_emits_gate_accepted_artifacts_and_exact_resume(tmp_path: Path):
     assert retained["status"] == "complete" and retained["production_campaign_launched"] is False
 
 
+def test_runner_accepts_v2_exact_profile_treatment_subset(tmp_path: Path):
+    definition, config, output = inputs(tmp_path)
+    document = json.loads(definition.read_text())
+    selected = ["project-cannbot", "project-guarded"]
+    document["schema"] = "profiling-skill/audited-repair-canaries/v2"
+    document["treatments"] = selected
+    document["canaries"] = [item for item in document["canaries"]
+                            if item["treatment"] in selected]
+    document["gate"]["minimum_repaired_canaries"] = 1
+    definition.write_text(json.dumps(document, sort_keys=True) + "\n")
+    config["canary_definition"] = {"path": str(definition), "sha256": sha(definition)}
+    FakeLauncher.calls = []
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), tmp_path / "canary-run", FakePool(),
+        launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+    )
+
+    result = runner.run(output)
+
+    assert [item["treatment"] for item in result["results"]] == selected
+    assert production.validate_canary_gate(
+        config, output, sha(output), selected_treatments=tuple(selected),
+    )["status"] == "passed"
+
+
 def test_completed_results_are_idempotently_verified_without_launch(tmp_path: Path):
     definition, config, output = inputs(tmp_path)
     FakeLauncher.calls = []

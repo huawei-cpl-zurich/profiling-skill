@@ -117,19 +117,37 @@ def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> 
         _require_hex(digest, 64, f"skills.{name}")
 
 
-def _balanced_order(seed: str) -> list[tuple[str, str]]:
-    """Return three balanced blocks; every block covers every axis once."""
+def _balanced_order(
+    seed: str, treatments: tuple[str, ...] = TREATMENTS,
+) -> list[tuple[str, str]]:
+    """Return task-complete blocks balanced across the selected treatments."""
     rng = random.Random(int(hashlib.sha256(seed.encode()).hexdigest(), 16))
     tasks = list(TASKS)
-    treatments = list(TREATMENTS)
+    treatments = list(treatments)
     rng.shuffle(tasks)
     rng.shuffle(treatments)
     direction = -1 if rng.randrange(2) else 1
     return [
-        (tasks[index], treatments[(index + direction * offset) % 3])
-        for offset in range(3)
-        for index in range(3)
+        (tasks[index], treatments[(index + direction * offset) % len(treatments)])
+        for offset in range(len(treatments))
+        for index in range(len(tasks))
     ]
+
+
+def _validate_treatment_subset(treatments: tuple[str, ...]) -> None:
+    if not treatments:
+        raise CampaignError("treatment subset must be nonempty")
+    if len(treatments) != len(set(treatments)):
+        raise CampaignError("treatment subset must contain unique names")
+    if any(treatment not in TREATMENT_SKILLS for treatment in treatments):
+        raise CampaignError("treatment subset must contain only known treatments")
+    missing = [name for name in treatments
+               if "ascend-profiling" not in TREATMENT_SKILLS[name]]
+    if missing:
+        raise CampaignError(
+            "schema v3 treatment profiles must include ascend-profiling: "
+            + ", ".join(missing)
+        )
 
 
 def build_manifest(
@@ -141,6 +159,7 @@ def build_manifest(
     *,
     rounds: int = 4,
     request_budget: int = REPAIR_REQUEST_BUDGET,
+    treatments: tuple[str, ...] | None = None,
 ) -> dict:
     if not run_id or "/" in run_id:
         raise CampaignError("run_id must be a nonempty branch-safe component")
@@ -153,7 +172,10 @@ def build_manifest(
     if not prompt.is_file() or any(not task_files[name].is_file() for name in TASKS):
         raise CampaignError("prompt and task files must be regular files")
     _validate_provenance(provenance)
-    order = _balanced_order(ordering_seed)
+    selected = TREATMENTS if treatments is None else tuple(treatments)
+    if treatments is not None:
+        _validate_treatment_subset(selected)
+    order = _balanced_order(ordering_seed, selected)
     prompt_digest = _sha256(prompt)
     task_digests = {name: _sha256(task_files[name]) for name in TASKS}
     cells = []
@@ -174,9 +196,9 @@ def build_manifest(
             },
         })
     document = {
-        "schema_version": 2,
+        "schema_version": 2 if treatments is None else 3,
         "run_id": run_id,
-        "dimensions": {"tasks": list(TASKS), "treatments": list(TREATMENTS),
+        "dimensions": {"tasks": list(TASKS), "treatments": list(selected),
                        "round_count": rounds},
         "request_budget": request_budget,
         "prompt": {"path": str(prompt.resolve()), "sha256": prompt_digest},
@@ -200,18 +222,25 @@ def _document_digest(document: dict) -> str:
 
 def verify_manifest(document: dict) -> None:
     version = document.get("schema_version")
-    if version not in {1, 2}:
-        raise CampaignError("manifest schema_version must be 1 or 2")
+    if version not in {1, 2, 3}:
+        raise CampaignError("manifest schema_version must be 1, 2, or 3")
     if document.get("manifest_sha256") != _document_digest(document):
         raise CampaignError("manifest hash mismatch")
     if document.get("order") != [cell.get("cell_id") for cell in document.get("cells", [])]:
         raise CampaignError("manifest order and cells disagree")
-    if len(document["cells"]) != 9:
-        raise CampaignError("manifest must contain exactly nine cells")
+    dimensions = document.get("dimensions")
+    selected = tuple(dimensions.get("treatments", [])) if isinstance(dimensions, dict) else ()
+    if version in {1, 2}:
+        if selected != TREATMENTS:
+            raise CampaignError("legacy manifests require all three treatments")
+    else:
+        _validate_treatment_subset(selected)
+    if len(document["cells"]) != len(TASKS) * len(selected):
+        raise CampaignError("manifest cell count does not match its treatment matrix")
     actual = {(cell["task"], cell["treatment"]) for cell in document["cells"]}
-    expected = {(task, treatment) for task in TASKS for treatment in TREATMENTS}
+    expected = {(task, treatment) for task in TASKS for treatment in selected}
     if actual != expected:
-        raise CampaignError("manifest must contain the exact 3x3 treatment matrix")
+        raise CampaignError("manifest must contain the exact declared treatment matrix")
     budget = document.get("request_budget")
     if budget not in SUPPORTED_REQUEST_BUDGETS:
         raise CampaignError("campaign requires a 24 or 48-request budget")
@@ -224,7 +253,7 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
-    _validate_provenance(document["provenance"], require_starters=version == 2)
+    _validate_provenance(document["provenance"], require_starters=version in {2, 3})
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -738,6 +767,10 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--provenance", type=Path, required=True)
     generate.add_argument("--ordering-seed", required=True)
     generate.add_argument("--request-budget", type=int, choices=(24, 48), default=48)
+    generate.add_argument(
+        "--treatment", action="append", choices=TREATMENTS,
+        help="repeat to select a schema-v3 treatment subset; defaults to all treatments",
+    )
     generate.add_argument("--output", type=Path, required=True)
     simulate = subparsers.add_parser("simulate")
     simulate.add_argument("--manifest", type=Path, required=True)
@@ -759,6 +792,7 @@ def main(argv: list[str] | None = None) -> int:
             {task: getattr(args, f"{task}_task") for task in TASKS},
             json.loads(args.provenance.read_text()), args.ordering_seed,
             request_budget=args.request_budget,
+            treatments=(tuple(args.treatment) if args.treatment is not None else None),
         )
         _atomic_json(args.output, document)
     elif args.command == "simulate":

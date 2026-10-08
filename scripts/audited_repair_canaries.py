@@ -221,34 +221,45 @@ class CanaryRunner:
         }
 
     def _validate_definition(self) -> None:
-        expected = {
-            "matmul-cannbot-repair": (
-                "cannbot", ["candidate-repair", "offline-verifier", "msprof-op-timing"]),
-            "matmul-project-cannbot-resume": (
-                "project-cannbot", ["checkpoint-resume", "same-session",
-                                    "offline-verifier", "msprof-op-timing"]),
-            "matmul-project-guarded-repair": (
-                "project-guarded", ["candidate-repair", "offline-verifier",
-                                    "msprof-op-timing"]),
-        }
         rows = self.definition.get("canaries")
-        actual = ({item.get("id"): (item.get("treatment"), item.get("required_evidence"))
-                   for item in rows
-                   if set(item) == {"id", "treatment", "required_evidence"}}
-                  if isinstance(rows, list) and all(isinstance(item, dict) for item in rows)
-                  else {})
+        schema = self.definition.get("schema")
+        if schema == "profiling-skill/audited-repair-canaries/v1":
+            treatments = tuple(production.TREATMENT_SKILLS)
+        elif schema == "profiling-skill/audited-repair-canaries/v2":
+            raw_treatments = self.definition.get("treatments")
+            treatments = tuple(raw_treatments) if isinstance(raw_treatments, list) else ()
+        else:
+            treatments = ()
+        expected_rows = [
+            (treatment, production.CANARY_EVIDENCE[treatment])
+            for treatment in treatments if treatment in production.CANARY_EVIDENCE
+        ]
+        actual_rows = ([(item.get("treatment"), item.get("required_evidence"))
+                        for item in rows
+                        if set(item) == {"id", "treatment", "required_evidence"}
+                        and isinstance(item.get("id"), str) and item["id"]]
+                       if isinstance(rows, list)
+                       and all(isinstance(item, dict) for item in rows) else [])
+        identifiers = ([item.get("id") for item in rows]
+                       if isinstance(rows, list)
+                       and all(isinstance(item, dict) for item in rows) else [])
         gate = {"all_canaries_terminal_ok": True,
                 "all_branches_offline_valid": True,
                 "all_final_timings_positive": True,
-                "minimum_repaired_canaries": 2,
-                "resume_canary_required": True}
-        if (self.definition.get("schema") != "profiling-skill/audited-repair-canaries/v1"
+                "minimum_repaired_canaries": sum(
+                    "candidate-repair" in evidence for _, evidence in expected_rows),
+                "resume_canary_required": any(
+                    "checkpoint-resume" in evidence for _, evidence in expected_rows)}
+        if (not treatments or len(treatments) != len(set(treatments))
+                or len(expected_rows) != len(treatments)
+                or len(identifiers) != len(set(identifiers))
                 or self.definition.get("benchmark") != "matmul"
                 or self.definition.get("request_budget") != 48
                 or self.definition.get("max_candidate_repairs_per_round") != 2
                 or self.definition.get("placement") != "dynamic-bz-a3-admission"
-                or self.definition.get("gate") != gate or actual != expected):
-            raise CanaryError("canary definition is not the declared three-canary contract")
+                or self.definition.get("gate") != gate
+                or actual_rows != expected_rows):
+            raise CanaryError("canary definition is not the declared treatment contract")
 
     def _cell(self, declaration: dict) -> dict:
         task = self.config.get("tasks", {}).get("matmul", {})
@@ -527,6 +538,7 @@ class CanaryRunner:
         _atomic_json(pending, results)
         production.validate_canary_gate(
             self.config, pending, _sha(pending), self.runtime_config_sha256,
+            tuple(item["treatment"] for item in self.definition["canaries"]),
         )
         pending.replace(output)
         state["status"] = "complete"

@@ -94,8 +94,10 @@ def _conclusion(value) -> None:
 
 
 def _artifact(reference, root: Path, label: str, *, metadata=False,
-              text=False) -> tuple[dict, dict | None]:
+              remote_hash=False, text=False) -> tuple[dict, dict | None]:
     keys = {"path", "sha256", "schema", "provenance"} if metadata else {"path", "sha256"}
+    if remote_hash:
+        keys.add("remote_sha256")
     reference = _exact(reference, keys, f"{label} reference")
     relative = Path(reference["path"]) if isinstance(reference["path"], str) else Path("..")
     path = root / relative
@@ -109,6 +111,8 @@ def _artifact(reference, root: Path, label: str, *, metadata=False,
     size = path.stat().st_size
     if not 0 < size <= MAX_ARTIFACT or _hex(reference["sha256"], label) != _hash(path):
         raise GateError(f"invalid {label} hash or size")
+    if remote_hash and _hex(reference["remote_sha256"], f"{label} remote") != reference["sha256"]:
+        raise GateError(f"invalid {label} remote hash")
     if text:
         try: content = path.read_text()
         except UnicodeDecodeError as error: raise GateError(f"invalid {label} text") from error
@@ -132,6 +136,29 @@ def _claim(claim) -> dict:
            for key in ("resource", "interval", "provenance")):
         raise GateError("invalid saturation claim value")
     return claim
+
+
+def _claims_conflict(claims: list[dict]) -> bool:
+    states = {}
+    for claim in claims:
+        scope = claim["resource"], claim["interval"], claim["provenance"]
+        if scope in states and states[scope] != claim["state"]:
+            return True
+        states[scope] = claim["state"]
+    return False
+
+
+def _rubric_score(conclusions: set[str], claims: set[str], case: dict,
+                  review_passed: bool) -> bool:
+    required_conclusions = _semantic(
+        case["rubric"]["conclusions"], "rubric conclusions", _conclusion)
+    required_claims = _semantic(
+        case["rubric"]["saturation_claims"], "rubric saturation claims", _claim)
+    if not required_conclusions <= conclusions or not required_claims <= claims:
+        return False
+    conflict = _claims_conflict(list(map(json.loads, claims)))
+    has_extras = conclusions != required_conclusions or claims != required_claims
+    return not conflict and (not has_extras or review_passed)
 
 
 def _manifest(path: Path, root: Path) -> tuple[dict, dict[str, dict], str]:
@@ -180,6 +207,8 @@ def _manifest(path: Path, root: Path) -> tuple[dict, dict[str, dict], str]:
         rubric = _exact(case["rubric"], {"conclusions", "saturation_claims"}, "rubric")
         _semantic(rubric["conclusions"], "rubric conclusions", _conclusion)
         _semantic(rubric["saturation_claims"], "rubric saturation claims", _claim)
+        if _claims_conflict(rubric["saturation_claims"]):
+            raise GateError("conflicting rubric saturation claims")
         cases[case["id"]] = case
     if Counter(case["product"] for case in cases.values()) != {"a3": 2, "a5": 2}:
         raise GateError("cases must contain two A3 and two A5 cases")
@@ -261,7 +290,7 @@ def _outcome(value, session: str, manifest: dict, root: Path,
             or not isinstance(target, str) or target not in manifest["allowed_targets"][product]):
         raise GateError("unapproved acquisition target")
     _handle(target, handle, "durable")
-    _artifact(value["evidence"], root, "profile evidence", metadata=True)
+    _artifact(value["evidence"], root, "profile evidence", metadata=True, remote_hash=True)
     expected_provenance = {"product": product, "target": target, "handle": handle}
     if value["evidence"]["provenance"] != expected_provenance:
         raise GateError("invalid evidence provenance")
@@ -270,7 +299,7 @@ def _outcome(value, session: str, manifest: dict, root: Path,
         raise GateError("reused acquisition handle or evidence")
     handles.add(handle); evidence_hashes.add(evidence_hash)
     for label in ("command", "log", "reasoning"): _artifact(value[label], root, label, text=True)
-    _payload(value["agent_payload"], {"product": product,
+    _payload(value["agent_payload"], {"product": product, "target": target,
                                      "prompt_sha256": manifest["prompt_sha256"]})
     review_passed = _review(value["manual_review"], manifest, root)
     artifacts.append({"session_id": session, "product": product,
@@ -377,10 +406,7 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
             review_passed = _review(review, manifest, root)
             conclusions = _semantic(answer["conclusions"], "answer conclusions", _conclusion)
             claims = _semantic(answer["saturation_claims"], "answer saturation claims", _claim)
-            score = (conclusions == _semantic(case["rubric"]["conclusions"],
-                                              "rubric conclusions", _conclusion)
-                     and claims == _semantic(case["rubric"]["saturation_claims"],
-                                             "rubric saturation claims", _claim))
+            score = _rubric_score(conclusions, claims, case, review_passed)
             passed[arm] += score
             manual_ok &= review_passed
             scores.append({"session_id": session, "arm": arm, "case_id": case_id,

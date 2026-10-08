@@ -21,7 +21,7 @@ but those tests exercised a fake executor rather than the live trust boundary.
 | C2 | Runtime-input/auth handoff | speculative | Non-live core could not safely provide Codex/remote auth | Removed; separate launcher owns it |
 | C3 | Arm-labelled agent paths/payload context | accidental | Could reveal treatment | Arm exists only in trusted envelope; payload schema is exact |
 | C4 | Agent-controlled failure classification | accidental | Agent could claim infrastructure and discard its own failure | Classification and matching receipts exist only in trusted records |
-| C5 | Subset semantic scoring | accidental | Extra/contradictory claims passed | Exact conclusions and structured claim equality |
+| C5 | Unbounded subset semantic scoring | accidental | Unsupported extras or contradictory structured claims could pass | Required-set containment plus structured conflict rejection and review-gated extras |
 | C6 | 317 lifecycle-oriented test lines | accidental | Missed persistent-session and real isolation boundaries | Replaced with pure contract tests |
 
 ## Unsupported capabilities
@@ -49,19 +49,22 @@ but those tests exercised a fake executor rather than the live trust boundary.
 | A10 | Made acquisition a three-terminal-slot score and enriched failure envelopes | Prevent replacement after counted failures and make classifications auditable | Terminal/failure tests |
 | A11 | Added live frozen-case attestations and unique acquisition captures | Prevent fixture fabrication or capture reuse | Capture tests |
 | A12 | Canonicalized rubrics as duplicate-free semantic sets and hardened all type boundaries | Preserve meaning across order while failing closed without tracebacks | Rubric/type tests |
+| A13 | Scored required rubric containment with pinned-review supersets and structured conflict rejection | Permit supported elaboration without dropping frozen claims or accepting incompatible saturation states | Missing, superset, unreviewed-extra, and conflict tests |
+| A14 | Aligned acquired evidence and payload validation with the audited launcher | Bind the selected target in the payload and the remote bytes to the retained artifact | Exact payload and remote-hash tests |
 
 ## Complexity intentionally kept
 
 | Item | Reason |
 | --- | --- |
 | Separate manifest, records, and artifact tree | They encode immutable inputs, trusted launcher assertions, and bounded evidence as distinct domain boundaries |
-| Exact schemas | Fail-closed evaluation is the purpose of this core |
+| Exact schemas | Fail-closed evaluation is the purpose of this core; acquisition and frozen-case evidence intentionally use distinct reference schemas |
 
 ## Test changes
 
-The 42 focused tests cover treatment-blind agent payloads, paired persistent
+The focused tests cover treatment-blind agent payloads, paired persistent
 sessions, trusted-vs-agent failure classification, evidence/hash/JSON/symlink/
-escape checks, exact contradictory rubrics, identity drift, duplicates,
+escape checks, required rubric containment, reviewed supersets, missing claims,
+structured conflicts, identity drift, duplicates,
 infrastructure replacements, counted failures, all-log manual review, text
 artifacts, prompt retention/hash/content, terminal acquisition scoring, live
 case attestations, capture reuse, semantic-set ordering/duplicates, malformed
@@ -80,8 +83,8 @@ validator.
 
 | Command | Result |
 | --- | --- |
-| `pytest -q tests/test_profile_behavioral_gate.py` | 42 passed |
-| `PYTHONPATH=. pytest -q` | 1078 passed |
+| `pytest -q tests/test_profile_behavioral_gate.py` | 50 passed |
+| `PYTHONPATH=. pytest -q` | 1086 passed |
 | `git diff --check` | passed |
 
 ## Suggested PR order

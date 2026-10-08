@@ -25,8 +25,13 @@ skill trees, audited launcher, model/config,
 manual reviewer/config, allowed product targets, and four evidence cases (two A3 and two A5). Each case
 contains a byte-pinned compact JSON evidence reference, allowed target, valid
 durable handle, and bounded capture command/log. Rubrics are duplicate-free
-semantic sets of conclusions and structured saturation claims: ordering is
-irrelevant, while extra, missing, malformed, or contradictory claims fail.
+semantic sets of required conclusions and structured saturation claims.
+Ordering is irrelevant. Every required member must appear; missing or malformed
+members fail. Supported supersets may score only with the pinned positive manual
+review. Structured saturation claims conflict when the same resource, interval,
+and provenance has different states. A conflicting frozen rubric is invalid;
+a conflicting answer does not score, including conflict between two extras or
+between a required claim and an extra.
 
 The launcher record envelope—not agent output—contains the arm, session and
 failure classification, launcher/model/skill identities, artifact references,
@@ -37,7 +42,11 @@ the same payload and exactly one selected skill.
 
 Every referenced artifact must be a nonempty regular nonsymlink below the
 artifact root, no larger than 64 KiB, and match its SHA-256. Evidence is also
-valid JSON whose schema and provenance match the envelope. Acquisition handles
+valid JSON whose schema and provenance match the envelope. Acquired evidence
+references additionally carry the remote SHA-256, which must equal the retained
+artifact SHA-256; frozen-case evidence references retain their original schema.
+Successful acquisition payloads contain exactly product, target, and the pinned
+prompt SHA-256. Acquisition handles
 must bind an allowed target, and their provenance must bind the same product,
 target, and durable handle; successful acquisition handles and evidence hashes
 must be globally unique. Failure records retain stage, product/target/optional

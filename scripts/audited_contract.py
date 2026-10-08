@@ -319,6 +319,16 @@ def validate_observe_transaction(receipt: dict, requested_handle: str) -> dict:
             }):
         raise AuditError("controller observe transaction proof is invalid")
     allocation_index = allocations[0]
+    global_allocation = next(index for index, record in enumerate(history) if (
+        record is related[allocation_index]
+    ))
+    global_terminal = next(index for index, record in enumerate(history) if (
+        record is terminal
+    ))
+    if (global_allocation >= global_terminal
+            or any(record.get("request_sha256") != request_hash
+                   for record in history[global_allocation:global_terminal + 1])):
+        raise AuditError("controller observe transaction proof is invalid")
     for index, record in enumerate(related[:-1]):
         expected_modes = ({"submit"} if index == 0 else
                           {"retry_submit"} if index <= allocation_index else

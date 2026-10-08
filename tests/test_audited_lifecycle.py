@@ -816,6 +816,25 @@ def test_observe_transaction_rejects_tampered_request_proof(mutation):
         contract.validate_observe_transaction(result, retained)
 
 
+def test_observe_transaction_rejects_unrelated_interleaved_operation():
+    candidate, manifest = sha("candidate"), sha("manifest")
+    retained = "remote:retained"
+    result = observed_transaction_receipt(candidate, manifest, 1, retained)
+    unrelated = dict(result["policy"]["operation_history"][-1])
+    unrelated.update(handle="remote:unrelated", terminal=True)
+    result["policy"]["operation_history"].insert(1, unrelated)
+    result["policy"]["submitted_handles"] = [
+        retained, "remote:unrelated", result["handle"],
+    ]
+    result["policy"]["observed_handles"] = [
+        "remote:unrelated", retained, result["handle"],
+    ]
+
+    contract.validate_controller_receipt(result, candidate, manifest)
+    with pytest.raises(contract.AuditError, match="observe transaction proof"):
+        contract.validate_observe_transaction(result, retained)
+
+
 def test_observe_transaction_accepts_repeated_observer_transport_failure():
     candidate, manifest = sha("candidate"), sha("manifest")
     retained = "remote:retained"

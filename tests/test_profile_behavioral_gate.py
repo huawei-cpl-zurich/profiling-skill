@@ -103,12 +103,13 @@ def fixture(tmp_path: Path):
             evidence = artifact(root, f"evidence/{session}-{product}.json",
                 {"schema": "profile/v1", "provenance": provenance, "session": session},
                 schema="profile/v1", provenance=provenance)
+            evidence["remote_sha256"] = evidence["sha256"]
             outcomes.append({"session_id": session, "product": product, "target": target,
                 "handle": handle, "evidence": evidence,
                 "command": artifact(root, f"commands/{session}-{product}.txt", "run\n"),
                 "log": artifact(root, f"logs/{session}-{product}.txt", "ok\n"),
                 "reasoning": artifact(root, f"reason/{session}-{product}.txt", "why\n"),
-                "agent_payload": {"product": product,
+                "agent_payload": {"product": product, "target": target,
                                   "prompt_sha256": manifest["prompt_sha256"]},
                 "manual_review": {"passed": True, "reviewer": manifest["reviewer"],
                     "notes": artifact(root, f"review/{session}-{product}.txt", "sound\n")}})
@@ -205,17 +206,91 @@ def test_rejects_fabricated_evidence_or_remote_identity(tmp_path: Path, damage: 
     with pytest.raises(gate.GateError): gate.evaluate(manifest, path, root)
 
 
-@pytest.mark.parametrize("field,value", [
-    ("conclusions", ["fact-1", "shared", "contradiction"]),
-    ("saturation_claims", [{"state": "saturated", "resource": "MTE2",
-                            "interval": "whole-kernel", "provenance": "activity-only"}]),
-])
-def test_exact_rubric_fails_extra_or_contradictory_claim(tmp_path: Path, field: str, value):
+def test_reviewed_supported_superset_satisfies_frozen_rubric(tmp_path: Path):
     manifest, path, root, _, records = fixture(tmp_path)
-    records["interpretation"][3]["answers"][0][field] = value
-    path.write_text(json.dumps(records)); report = gate.evaluate(manifest, path, root)
+    answer = records["interpretation"][3]["answers"][3]
+    answer["conclusions"].append("additional supported conclusion")
+    answer["saturation_claims"].append({
+        "state": "unsaturated", "resource": "Vector Core",
+        "interval": "steady-state", "provenance": "counter/v1",
+    })
+    path.write_text(json.dumps(records))
+    report = gate.evaluate(manifest, path, root)
+    assert report["interpretation"]["candidate"]["passed"] == 12
+    assert report["acceptance"]["passed"] is True
+
+
+def test_unreviewed_extra_conclusion_does_not_score(tmp_path: Path):
+    manifest, path, root, _, records = fixture(tmp_path)
+    answer = records["interpretation"][3]["answers"][0]
+    answer["conclusions"].append("additional supported conclusion")
+    answer["manual_review"]["passed"] = False
+    path.write_text(json.dumps(records))
+    report = gate.evaluate(manifest, path, root)
     assert report["interpretation"]["candidate"]["passed"] == 11
     assert report["acceptance"]["passed"] is False
+
+
+@pytest.mark.parametrize("field", ["conclusions", "saturation_claims"])
+def test_missing_required_rubric_member_does_not_score(tmp_path: Path, field: str):
+    manifest, path, root, _, records = fixture(tmp_path)
+    answer = records["interpretation"][3]["answers"][3]
+    answer[field].pop()
+    path.write_text(json.dumps(records))
+    report = gate.evaluate(manifest, path, root)
+    assert report["interpretation"]["candidate"]["passed"] == 11
+    assert report["acceptance"]["passed"] is False
+
+
+def test_structured_saturation_conflict_does_not_score(tmp_path: Path):
+    manifest, path, root, _, records = fixture(tmp_path)
+    answer = records["interpretation"][3]["answers"][3]
+    answer["saturation_claims"].append({
+        **answer["saturation_claims"][0], "state": "unsaturated",
+    })
+    path.write_text(json.dumps(records))
+    report = gate.evaluate(manifest, path, root)
+    assert report["interpretation"]["candidate"]["passed"] == 11
+    assert report["acceptance"]["passed"] is False
+
+
+def test_internally_conflicting_extra_saturation_claims_do_not_score(tmp_path: Path):
+    manifest, path, root, _, records = fixture(tmp_path)
+    answer = records["interpretation"][3]["answers"][3]
+    extra = {"state": "saturated", "resource": "Scalar Core",
+             "interval": "steady-state", "provenance": "counter/v1"}
+    answer["saturation_claims"].extend([extra, {**extra, "state": "unsaturated"}])
+    path.write_text(json.dumps(records))
+    report = gate.evaluate(manifest, path, root)
+    assert report["interpretation"]["candidate"]["passed"] == 11
+    assert report["acceptance"]["passed"] is False
+
+
+def test_rejects_internally_conflicting_frozen_saturation_rubric(tmp_path: Path):
+    manifest_path, path, root, manifest, records = fixture(tmp_path)
+    claim = manifest["cases"][3]["rubric"]["saturation_claims"][0]
+    manifest["cases"][3]["rubric"]["saturation_claims"].append(
+        {**claim, "state": "unsaturated"})
+    manifest_path.write_text(json.dumps(manifest))
+    repin(manifest_path, records)
+    path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError, match="conflicting rubric saturation claims"):
+        gate.evaluate(manifest_path, path, root)
+
+
+@pytest.mark.parametrize("damage", ["payload_target", "remote_sha256", "missing_remote_sha256"])
+def test_acquisition_requires_pr75_payload_and_remote_hash(tmp_path: Path, damage: str):
+    manifest, path, root, _, records = fixture(tmp_path)
+    outcome = records["acquisition"][0]["outcomes"][0]
+    if damage == "payload_target":
+        outcome["agent_payload"].pop("target")
+    elif damage == "remote_sha256":
+        outcome["evidence"]["remote_sha256"] = "0" * 64
+    else:
+        outcome["evidence"].pop("remote_sha256")
+    path.write_text(json.dumps(records))
+    with pytest.raises(gate.GateError):
+        gate.evaluate(manifest, path, root)
 
 
 @pytest.mark.parametrize("identity", ["manifest_sha256", "launcher", "model", "skill_sha256"])
@@ -277,6 +352,7 @@ def test_rejects_reused_acquisition_capture(tmp_path: Path, reuse: str):
         evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance,
                                         "session": "different"}))
         second["evidence"]["sha256"] = sha(evidence)
+        second["evidence"]["remote_sha256"] = second["evidence"]["sha256"]
     else:
         second["handle"] = first["handle"]
         second["evidence"] = deepcopy(first["evidence"])
@@ -385,6 +461,8 @@ def test_accepts_gz_a3_durable_handle(tmp_path: Path):
     evidence = root / outcome["evidence"]["path"]
     evidence.write_text(json.dumps({"schema": "profile/v1", "provenance": provenance}))
     outcome["evidence"]["sha256"] = sha(evidence)
+    outcome["evidence"]["remote_sha256"] = outcome["evidence"]["sha256"]
+    outcome["agent_payload"]["target"] = "gz-a3"
     path.write_text(json.dumps(records))
     assert gate.evaluate(manifest_path, path, root)["acceptance"]["passed"] is True
 

@@ -19,6 +19,8 @@ not capacity denominators and cannot establish saturation by themselves.
 Read [Pipe saturation contract](references/pipe-saturation-contract.md) before
 creating model or evidence JSON. No built-in A2/A3 or A5 capacity model is
 provided yet; return `unknown` rather than borrowing another product's model.
+A2/A3 `PipeUtilization` block rows are non-temporal activity observations, not
+phase evidence, and must never be passed to this analyzer.
 
 ## Triton compiler attribution
 
@@ -30,7 +32,7 @@ not make an original Triton operation single-pipe. Keep unsupported mappings
 unknown and use the focused probe plus `mlir-triton-dump` workflow when exact
 emitted operations are required.
 
-## A2/A3 Triton timing
+## A2/A3 Triton timing and pipe evidence
 
 Use the repository's `$gz-a3` profile and its native `py311-torch` runtime.
 Select an eligible physical device through that profile; the one-shot job
@@ -53,8 +55,14 @@ framework setup operator instead. Run independent captures for repetitions and u
 their median; do not use profiled Python wall time.
 
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
-JSON contract, acceptance rules, and interpretation boundaries. Preserve the
-full transcript so compilation and runtime errors remain actionable.
+JSON contract, A3 pipe inventory, normalization command, and interpretation
+boundaries. `PipeUtilization` ratios are activity divided by task cycles; they
+are not proof that a pipe reached hardware capacity. Normalize compact exports
+with `scripts/normalize_a3_pipe_evidence.py` and
+`references/a3-pipe-activity-model.json`. The activity model describes export
+fields and emits `unknown` saturation for every observation; it is not a
+capacity model. Preserve the full transcript so compilation and runtime errors
+remain actionable.
 
 ### Development diagnostics before profiling
 
@@ -97,7 +105,9 @@ because observation stopped.
 
 Use this skill for A5 kernel timing, PMU diagnosis, sampled utilization, or
 instruction/pipe timeline analysis. It is intentionally target-specific: do
-not apply its event IDs, ceilings, or formulas to another Ascend product.
+not apply its event IDs, ceilings, formulas, `PipeTimeline`, or per-pipe
+`InstrTimeline` workflow to A2/A3. Conversely, do not treat A2/A3
+`TimelineDetail` flow relationships or pipe ratios as A5 evidence.
 
 Use the configured TLA integration checkout (`TLA_ROOT`) and its checked-in
 BZ-A5 wrappers. Read that checkout's `AGENTS.md` and `$bz-a5` guidance before

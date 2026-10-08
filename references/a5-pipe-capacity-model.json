@@ -1,0 +1,31 @@
+{
+  "model_id": "ascend950-v6-reviewed-capacity-v1",
+  "product": "a5",
+  "provenance": {
+    "revision": "Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb",
+    "source": "ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics"
+  },
+  "resources": [
+    {
+      "capacity_validation": {
+        "source": "references/a5-metric-semantics.md#aggregate-from-events",
+        "state": "validated"
+      },
+      "denominator_metric": "whole_device_cube_capacity_cycles",
+      "numerator_metric": "accumulated_cube_block_cycles",
+      "resource": "cube",
+      "saturation_threshold": 1.0
+    },
+    {
+      "capacity_validation": {
+        "source": "references/a5-metric-semantics.md#aggregate-from-events",
+        "state": "validated"
+      },
+      "denominator_metric": "gm_to_l1_reference_gib_s",
+      "numerator_metric": "gm_to_l1_bandwidth_gib_s",
+      "resource": "gm-to-l1-bandwidth",
+      "saturation_threshold": 1.0
+    }
+  ],
+  "schema_version": 1
+}

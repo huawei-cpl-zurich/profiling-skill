@@ -111,6 +111,73 @@ def test_new_manifest_defaults_to_repair_aware_operation_budget(tmp_path: Path):
     audited_campaign.verify_manifest(document)
 
 
+def test_manifest_supports_deterministic_profile_skill_subset(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path)
+    selected = ("project-cannbot", "project-guarded")
+    first = audited_campaign.build_manifest(
+        "profile-only", prompt, tasks, provenance, "seed",
+        treatments=selected,
+    )
+    second = audited_campaign.build_manifest(
+        "profile-only", prompt, tasks, provenance, "seed",
+        treatments=selected,
+    )
+
+    assert first["schema_version"] == 3
+    assert first["dimensions"]["treatments"] == list(selected)
+    assert first["order"] == second["order"]
+    assert len(first["cells"]) == 6
+    assert {(cell["task"], cell["treatment"]) for cell in first["cells"]} == {
+        (task, treatment) for task in audited_campaign.TASKS
+        for treatment in selected
+    }
+    for start in range(0, 6, 3):
+        block = first["cells"][start:start + 3]
+        assert {cell["task"] for cell in block} == set(audited_campaign.TASKS)
+        assert sorted(sum(cell["treatment"] == treatment for cell in block)
+                      for treatment in selected) == [1, 2]
+    audited_campaign.verify_manifest(first)
+
+
+@pytest.mark.parametrize(
+    "selected, message",
+    [
+        ((), "nonempty"),
+        (("project-cannbot", "project-cannbot"), "unique"),
+        (("unknown",), "known"),
+        (("cannbot",), "ascend-profiling"),
+    ],
+)
+def test_subset_manifest_rejects_invalid_or_leaky_treatments(
+    tmp_path: Path, selected: tuple[str, ...], message: str,
+):
+    prompt, tasks, provenance = inputs(tmp_path)
+    with pytest.raises(audited_campaign.CampaignError, match=message):
+        audited_campaign.build_manifest(
+            "bad-subset", prompt, tasks, provenance, "seed",
+            treatments=selected,
+        )
+
+
+def test_generate_cli_accepts_repeatable_treatment_selection(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path)
+    provenance_path = tmp_path / "provenance.json"
+    provenance_path.write_text(json.dumps(provenance))
+    output = tmp_path / "manifest.json"
+    arguments = [
+        "generate", "--run-id", "profile-only", "--prompt", str(prompt),
+        "--matmul-task", str(tasks["matmul"]), "--gdn-task", str(tasks["gdn"]),
+        "--bsa-task", str(tasks["bsa"]), "--provenance", str(provenance_path),
+        "--ordering-seed", "seed", "--output", str(output),
+        "--treatment", "project-cannbot",
+        "--treatment", "project-guarded",
+    ]
+    assert audited_campaign.main(arguments) == 0
+    assert json.loads(output.read_text())["dimensions"]["treatments"] == [
+        "project-cannbot", "project-guarded",
+    ]
+
+
 @pytest.mark.parametrize("budget", [0, 23, 25, 47, 49])
 def test_manifest_rejects_nonproduction_operation_budgets(tmp_path: Path, budget: int):
     prompt, tasks, provenance = inputs(tmp_path)

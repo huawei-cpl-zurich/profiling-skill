@@ -52,6 +52,25 @@ python scripts/audited_campaign.py generate \
   --output /absolute/campaign/manifest.json
 ```
 
+Omit `--treatment` to retain the legacy full 3×3 schema-v2 campaign. Repeat
+`--treatment` to generate a schema-v3 subset; the order remains a deterministic,
+balanced task/treatment cross product. Profile-skill-only campaigns use:
+
+```bash
+python scripts/audited_campaign.py generate \
+  --run-id "$RUN_ID" --prompt "$PROMPT" \
+  --matmul-task "$MATMUL_TASK" --gdn-task "$GDN_TASK" --bsa-task "$BSA_TASK" \
+  --provenance "$PROVENANCE" --ordering-seed "$RUN_ID" \
+  --treatment project-cannbot --treatment project-guarded \
+  --output "$MANIFEST"
+```
+
+Schema v3 rejects duplicate, unknown, empty, or non-`ascend-profiling`
+treatments. For its 2×3 repair-aware production run, pin
+`experiments/audited-profile-skill-canaries.json`; canary schema v2 requires
+exactly one canary for each selected treatment and production cross-checks the
+canary treatment list against the manifest before dispatch.
+
 The manifest intentionally contains no target or device number. Every task
 uses one byte-identical task document across its three treatments, and every
 cell carries the exact treatment skill allowlist. The runtime must prepare the

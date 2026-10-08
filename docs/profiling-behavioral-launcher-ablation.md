@@ -5,7 +5,7 @@
 - Source PRD: user profiling-skill behavioral acceptance request
 - Source TDD plan: `.agent-state/tasks/profiling-behavioral-launcher.md`
 - Implementation branch: `codex/profiling-behavioral-launcher`
-- Review base branch: `codex/profiling-behavioral-gates` at `b99b904286ecaf5860382689e9404ca0a573da73`
+- Review base branch: `codex/profiling-behavioral-gates` at `1a964d36df9fdbc8036e9a342e3cd4236978bbb4`
 - Status: ready-for-pr-review
 
 ## Branch And Diff Summary
@@ -24,7 +24,7 @@
 | Command | Result | Notes |
 | --- | --- | --- |
 | `pytest -q tests/test_profile_behavioral_launcher.py` | 50 passed | focused behavior |
-| `PYTHONPATH=. pytest -q` | 1128 passed | full local suite |
+| `PYTHONPATH=. pytest -q` | 1136 passed | full local suite after restack on final gate |
 | `git diff --check` | passed | no whitespace errors |
 
 ## Changed Areas
@@ -101,7 +101,7 @@
 | Command | Result | Notes |
 | --- | --- | --- |
 | `pytest -q tests/test_profile_behavioral_launcher.py` | 50 passed in 2.26s | verifier fixes; includes real local Bubblewrap when available |
-| `PYTHONPATH=. pytest -q` | 1128 passed in 59.34s | verifier-fix final full run |
+| `PYTHONPATH=. pytest -q` | 1136 passed in 60.39s | restacked final full run |
 | BZ-A3 focused run | 33 passed, 1 skipped in 1.45s | final handle `remote:bz-a3-1:job:20261008T154157Z-9d84d44ef2c5`; Bubblewrap unavailable remotely |
 
 ## PR Review Assessment

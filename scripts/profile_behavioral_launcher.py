@@ -27,6 +27,7 @@ from production_launcher import LaunchError, ProductionLauncher  # noqa: E402
 REQUEST_SCHEMA = "profiling-skill/behavioral-launch-request/v1"
 RECEIPT_SCHEMA = "profiling-skill/launcher-receipt/v1"
 MAX_ARTIFACT = 65_536
+RETAINED_REMOTE_FIELD = 4_096
 HEX = re.compile(r"[0-9a-f]{64}")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
 HANDLE = re.compile(r"(?:remote:[A-Za-z0-9_.-]+:job:|gz-a3:)[A-Za-z0-9_.:-]+")
@@ -89,6 +90,218 @@ def _bounded(value: object) -> str:
     if len(encoded) > MAX_ARTIFACT:
         encoded = encoded[:MAX_ARTIFACT - 18] + b"\n...[truncated]\n"
     return encoded.decode(errors="replace")
+
+
+def _compact_remote_text(value: str, limit: int,
+                         result_failure_type: str | None = None) -> str:
+    """Replace a large remote field with bounded, classification-safe evidence."""
+    encoded = value.encode(errors="replace")
+    if len(encoded) <= limit:
+        return value
+    digest = hashlib.sha256(encoded).hexdigest()
+    content_hashes = list(dict.fromkeys(re.findall(
+        r"(?m)^REMOTE_CONTENT_SHA256=([0-9a-f]{64})\s*$", value)))
+    parsed_hash = _parse_remote(value).get("content_sha256")
+    authoritative_hash = (parsed_hash if HEX.fullmatch(str(parsed_hash))
+                          else content_hashes[-1] if content_hashes else None)
+    if authoritative_hash and authoritative_hash not in content_hashes:
+        content_hashes.append(authoritative_hash)
+
+    failure_type = result_failure_type or classify_failure(
+        {"stdout": value, "stderr": ""})[1]
+    decisive_markers = {
+        "profiler_command": ("profile_command=msprof ", "profiler failure",
+                             "msprof op --help", "msprof op simulator --help"),
+        "evidence": ("no exported kernel row", "expected one exported", "selector",
+                     "evidence"),
+        "compile": ("compile",),
+        "runtime": ("runtime",),
+    }.get(failure_type, ())
+    decisive = next((line for line in value.splitlines()
+                     if any(marker in line.lower() for marker in decisive_markers)), None)
+
+    lines = [f"[compacted bytes={len(encoded)} sha256={digest}]"]
+    classification_marker = {
+        "profiler_command": "profiler failure",
+        "evidence": "evidence failure",
+        "compile": "compile failure",
+    }.get(failure_type)
+    if classification_marker:
+        lines.append(
+            f"[compacted-classification={classification_marker} source-sha256={digest}]")
+    historical = [item for item in content_hashes if item != authoritative_hash]
+    if historical:
+        lines.append(
+            f"[remote-content-history count={len(historical)} "
+            f"sha256={_canonical_sha256(historical)}]")
+    required_hash = (f"REMOTE_CONTENT_SHA256={authoritative_hash}"
+                     if authoritative_hash else None)
+    reserved = len((required_hash + "\n").encode()) if required_hash else 0
+    if decisive:
+        bounded_decisive = _bounded(decisive)
+        available = limit - len(("\n".join(lines) + "\n").encode()) - reserved - 1
+        if available > 0:
+            positions = [bounded_decisive.lower().find(marker)
+                         for marker in decisive_markers
+                         if marker in bounded_decisive.lower()]
+            start = max(0, min(positions, default=0) - min(64, available // 4))
+            excerpt = bounded_decisive[start:].encode(errors="replace")[:available]
+            lines.append(excerpt.decode(errors="ignore"))
+    if required_hash:
+        # Keep the authoritative value last so line-oriented replay selects it.
+        lines.append(required_hash)
+    return "\n".join(lines) + "\n"
+
+
+def _compact_remote_journal(journal: dict, field_limit: int) -> dict:
+    retained = deepcopy(journal)
+    for collection in ("dispatches", "calls"):
+        for entry in retained.get(collection, []):
+            if not isinstance(entry, dict) or not isinstance(entry.get("result"), dict):
+                continue
+            result = entry["result"]
+            result_failure_type = classify_failure(result)[1]
+            for field in ("stdout", "stderr", "content"):
+                if isinstance(result.get(field), str):
+                    result[field] = _compact_remote_text(
+                        result[field], field_limit,
+                        result_failure_type if field in {"stdout", "stderr"} else None)
+    return retained
+
+
+def _canonical_sha256(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _summary_value(value: object, limit: int = 256) -> object:
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    text = str(value)
+    if len(text.encode(errors="replace")) <= limit:
+        return text
+    return {"bytes": len(text.encode(errors="replace")),
+            "sha256": hashlib.sha256(text.encode(errors="replace")).hexdigest()}
+
+
+def _summary_arguments(arguments: object) -> object:
+    if isinstance(arguments, list) and all(isinstance(item, str) for item in arguments):
+        encoded = json.dumps(arguments, separators=(",", ":")).encode()
+        if len(encoded) <= 2_048:
+            return arguments
+        return {"count": len(arguments), "sha256": hashlib.sha256(encoded).hexdigest()}
+    return {"sha256": _canonical_sha256(arguments)}
+
+
+def _result_summary(result: object) -> object:
+    if not isinstance(result, dict):
+        return None
+    summary = {key: _summary_value(result.get(key)) for key in (
+        "returncode", "state", "handle", "exit", "reason", "failure_type")
+        if result.get(key) is not None}
+    fields = {}
+    content_hashes = []
+    for key in ("stdout", "stderr", "content"):
+        value = result.get(key)
+        if not isinstance(value, str):
+            continue
+        encoded = value.encode(errors="replace")
+        fields[key] = {"bytes": len(encoded),
+                       "sha256": hashlib.sha256(encoded).hexdigest()}
+        hashes = re.findall(r"(?m)^REMOTE_CONTENT_SHA256=([0-9a-f]{64})\s*$", value)
+        parsed = _parse_remote(value).get("content_sha256")
+        if HEX.fullmatch(str(parsed)):
+            hashes.append(parsed)
+        content_hashes.extend(item for item in hashes if item not in content_hashes)
+    if fields:
+        summary["fields"] = fields
+    if content_hashes:
+        unique = list(dict.fromkeys(content_hashes))
+        summary["remote_content_sha256"] = unique[:4] + unique[-4:] \
+            if len(unique) > 8 else unique
+        if len(unique) > 8:
+            summary["remote_content_sha256_count"] = len(unique)
+            summary["remote_content_sha256_set_digest"] = _canonical_sha256(unique)
+    return summary
+
+
+def _representatives(entries: object, keys: tuple[str, ...]) -> list[dict]:
+    if not isinstance(entries, list):
+        return []
+    selected = entries[:2] + entries[-2:] if len(entries) > 4 else entries
+    rows = []
+    for entry in selected:
+        if not isinstance(entry, dict):
+            rows.append({"entry_sha256": _canonical_sha256(entry)})
+            continue
+        row = {key: _summary_value(entry.get(key)) for key in keys
+               if entry.get(key) is not None}
+        if "arguments" in entry:
+            row["arguments"] = _summary_arguments(entry["arguments"])
+        row["result"] = _result_summary(entry.get("result"))
+        rows.append(row)
+    return rows
+
+
+def _journal_summary(journal: dict, source_sha256: str) -> dict:
+    structural = deepcopy(journal)
+    for collection in ("dispatches", "calls"):
+        for entry in structural.get(collection, []):
+            if isinstance(entry, dict) and isinstance(entry.get("result"), dict):
+                for field in ("stdout", "stderr", "content"):
+                    entry["result"].pop(field, None)
+    dispatches, calls = journal.get("dispatches", []), journal.get("calls", [])
+    return {
+        "schema": _summary_value(journal.get("schema")),
+        "source_canonical_sha256": source_sha256,
+        "retention": {
+            "schema": "profiling-skill/compact-remote-journal/v1",
+            "mode": "representative-summary",
+            "dispatch_count": len(dispatches) if isinstance(dispatches, list) else None,
+            "call_count": len(calls) if isinstance(calls, list) else None,
+            "structural_metadata_sha256": _canonical_sha256(structural),
+        },
+        "dispatches": _representatives(
+            dispatches, ("request_sha256", "target", "dispatch_key", "file_sha256",
+                         "state", "handle")),
+        "calls": _representatives(
+            calls, ("operation", "target", "request_sha256", "handle")),
+    }
+
+
+def retain_remote_journal(store: "ArtifactStore", relative: str, journal: dict) -> dict:
+    """Retain an audit journal without copying unbounded remote output fields."""
+    source_sha256 = _canonical_sha256(journal)
+    for field_limit in (RETAINED_REMOTE_FIELD, 2_048, 1_024, 512):
+        retained = _compact_remote_journal(journal, field_limit)
+        retained["source_canonical_sha256"] = source_sha256
+        retained["retention"] = {
+            "schema": "profiling-skill/compact-remote-journal/v1",
+            "result_field_limit": field_limit,
+        }
+        encoded = (json.dumps(retained, sort_keys=True) + "\n").encode()
+        if len(encoded) <= MAX_ARTIFACT:
+            return store.exact(relative, encoded)
+    summary = (json.dumps(_journal_summary(journal, source_sha256), sort_keys=True) + "\n").encode()
+    if len(summary) > MAX_ARTIFACT:  # A fixed digest-only last resort cannot overflow.
+        dispatches, calls = journal.get("dispatches", []), journal.get("calls", [])
+        structural = deepcopy(journal)
+        for collection in ("dispatches", "calls"):
+            for entry in structural.get(collection, []):
+                if isinstance(entry, dict) and isinstance(entry.get("result"), dict):
+                    for field in ("stdout", "stderr", "content"):
+                        entry["result"].pop(field, None)
+        summary = (json.dumps({
+            "schema": "profiling-skill/compact-remote-journal/v1",
+            "source_canonical_sha256": source_sha256,
+            "retention": {
+                "mode": "digest-only-summary",
+                "dispatch_count": len(dispatches) if isinstance(dispatches, list) else None,
+                "call_count": len(calls) if isinstance(calls, list) else None,
+                "structural_metadata_sha256": _canonical_sha256(structural),
+            },
+        }, sort_keys=True) + "\n").encode()
+    return store.exact(relative, summary)
 
 
 class ArtifactStore:
@@ -933,7 +1146,8 @@ class BehavioralLauncher(ProductionLauncher):
             model_identity={key: request["model"][key]
                             for key in ("identity", "config_sha256")},
             skill_sha256=request["skill_sha256"])
-        retained_journal = store.json(f"remote/{label}-failure.json", journal)
+        retained_journal = retain_remote_journal(
+            store, f"remote/{label}-failure.json", journal)
         return {"status": classification, "record": record,
                 "remote_journal": retained_journal}
 
@@ -1027,8 +1241,9 @@ class BehavioralLauncher(ProductionLauncher):
                 request, turns, paths, store, thread_id)
             result = {"status": "review_pending", "session_id": thread_id,
                       "draft_record": draft,
-                      "remote_journal": store.json(f"remote/{request['session_id']}.json",
-                                                   json.loads(paths.journal.read_text())),
+                      "remote_journal": retain_remote_journal(
+                          store, f"remote/{request['session_id']}.json",
+                          json.loads(paths.journal.read_text())),
                       "review": review_queue(reasoning_items, request["reviewer"])}
             _atomic_json(output, result)
             return result

@@ -874,6 +874,221 @@ def test_failed_job_retains_complete_journal_and_compiler_diagnostics_from_logs(
     assert [call["operation"] for call in journal["calls"]] == ["run", "result", "logs"]
 
 
+def test_oversized_success_journal_is_compact_and_keeps_remote_digest_binding(tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    turns = []
+    dispatches = []
+    original_payload = "profile sample\n" * 10_000
+    for index, unit in enumerate(request["units"], 1):
+        handle = f"remote:{unit['target']}:job:large-{index}"
+        evidence = paths.workspace / f"large-{index}.json"
+        evidence.write_text(json.dumps({
+            "schema": "compact/v1",
+            "provenance": {"product": unit["product"], "target": unit["target"]},
+        }))
+        evidence_sha256 = digest(evidence)
+        turns.append({
+            "payload": {"product": unit["product"], "target": unit["target"],
+                        "prompt_sha256": request["prompt_sha256"]},
+            "answer": {"product": unit["product"], "target": unit["target"],
+                       "handle": handle, "evidence": evidence.name,
+                       "reasoning": "large remote output remains digest-bound"},
+            "command": store.text(f"large-command-{index}.txt", "codex\n"),
+            "log": store.text(f"large-log-{index}.txt", "agent\n"),
+        })
+        stdout = (f"REMOTE_CONTENT_SHA256={evidence_sha256}\n" + original_payload
+                  if index == 1 else json.dumps({
+                      "REMOTE_CONTENT_SHA256": evidence_sha256,
+                      "content": original_payload,
+                  }))
+        dispatches.append({
+            "request_sha256": str(index) * 64,
+            "target": unit["target"],
+            "dispatch_key": f"large-{index}",
+            "file_sha256": str(index + 2) * 64,
+            "arguments": ["run", unit["target"], "--file", "/workspace/job.sh"],
+            "state": "completed", "handle": handle,
+            "result": {"returncode": 0, "state": "completed", "handle": handle,
+                       "stdout": stdout,
+                       "stderr": ""},
+        })
+    live_journal = {"schema": "profiling-skill/remote-journal/v1",
+                    "dispatches": dispatches, "calls": []}
+    paths.journal.write_text(json.dumps(live_journal))
+
+    draft, _ = instance._success_draft(request, turns, paths, store, "actual-thread")
+    retained_ref = launcher.retain_remote_journal(
+        store, "remote/large-success.json", json.loads(paths.journal.read_text()))
+    retained_path = store.root / retained_ref["path"]
+    retained = json.loads(retained_path.read_text())
+
+    assert len(retained_path.read_bytes()) < launcher.MAX_ARTIFACT
+    assert paths.journal.stat().st_size > launcher.MAX_ARTIFACT
+    source_bytes = json.dumps(
+        live_journal, sort_keys=True, separators=(",", ":")).encode()
+    assert retained["source_canonical_sha256"] == hashlib.sha256(source_bytes).hexdigest()
+    assert retained["dispatches"][0]["handle"] == dispatches[0]["handle"]
+    assert retained["dispatches"][0]["arguments"] == dispatches[0]["arguments"]
+    assert retained["dispatches"][0]["request_sha256"] == dispatches[0]["request_sha256"]
+    assert retained["dispatches"][0]["file_sha256"] == dispatches[0]["file_sha256"]
+    assert f"sha256={hashlib.sha256(dispatches[0]['result']['stdout'].encode()).hexdigest()}" \
+        in retained["dispatches"][0]["result"]["stdout"]
+    assert f"REMOTE_CONTENT_SHA256={draft['outcomes'][0]['evidence']['remote_sha256']}" \
+        in retained["dispatches"][0]["result"]["stdout"]
+    assert f"REMOTE_CONTENT_SHA256={draft['outcomes'][1]['evidence']['remote_sha256']}" \
+        in retained["dispatches"][1]["result"]["stdout"]
+    assert json.loads(paths.journal.read_text())["dispatches"][0]["result"]["stdout"] \
+        .endswith(original_payload)
+
+
+def test_oversized_failure_journal_retains_classification_and_never_recurses(
+        tmp_path: Path):
+    instance, request = fixture(tmp_path)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    handle = "remote:bz-a3-1:job:large-failure"
+    diagnostic = "triton compile error: invalid layout\n" + ("compiler trace\n" * 10_000)
+    journal = {
+        "schema": "profiling-skill/remote-journal/v1",
+        "dispatches": [{
+            "request_sha256": "a" * 64, "target": "bz-a3-1",
+            "dispatch_key": "large-failure", "file_sha256": "b" * 64,
+            "arguments": ["run", "bz-a3-1", "--file", "/workspace/job.sh"],
+            "state": "failed", "handle": handle,
+            "result": {"returncode": 1, "state": "failed", "handle": handle,
+                       "stdout": diagnostic, "stderr": ""},
+        }],
+        "calls": [{
+            "operation": "logs", "target": "bz-a3-1", "handle": handle,
+            "arguments": ["logs", handle], "request_sha256": "c" * 64,
+            "result": {"returncode": 0, "state": "completed", "handle": handle,
+                       "content": diagnostic, "stdout": diagnostic, "stderr": ""},
+        }],
+    }
+    paths.journal.write_text(json.dumps(journal))
+
+    failed = instance._failure_result(
+        request, paths, store, request["units"][0], "remote compilation failed",
+        journal_start=(0, 0), failed_handle=handle)
+    retained_path = store.root / failed["remote_journal"]["path"]
+    retained = json.loads(retained_path.read_text())
+    retained_evidence = launcher.dispatch_failure_evidence(
+        retained, retained["dispatches"][0], 0)
+
+    assert failed["record"]["failure_type"] == "compile"
+    assert launcher.classify_failure(retained_evidence) == (
+        "counted_failure", "compile", "compile")
+    assert len(retained_path.read_bytes()) < launcher.MAX_ARTIFACT
+    assert retained["dispatches"][0]["handle"] == handle
+    assert retained["calls"][0]["handle"] == handle
+    assert "sha256=" in retained["calls"][0]["result"]["content"]
+
+
+def test_pathological_journal_uses_bounded_representative_audit_summary(tmp_path: Path):
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    calls = []
+    for index in range(2_000):
+        handle = f"remote:bz-a3-1:job:pathological-{index}"
+        calls.append({
+            "operation": "logs", "target": "bz-a3-1", "handle": handle,
+            "arguments": ["logs", handle], "request_sha256": f"{index:064x}",
+            "result": {"returncode": 0, "state": "completed", "handle": handle,
+                       "stdout": "short result", "stderr": ""},
+        })
+    journal = {"schema": "profiling-skill/remote-journal/v1",
+               "dispatches": [], "calls": calls}
+
+    retained_ref = launcher.retain_remote_journal(
+        store, "remote/pathological.json", journal)
+    retained_path = store.root / retained_ref["path"]
+    retained = json.loads(retained_path.read_text())
+
+    assert len(retained_path.read_bytes()) < launcher.MAX_ARTIFACT
+    assert retained["retention"]["mode"] == "representative-summary"
+    assert retained["retention"]["call_count"] == 2_000
+    assert len(retained["calls"]) == 4
+    assert retained["calls"][0]["handle"] == calls[0]["handle"]
+    assert retained["calls"][-1]["handle"] == calls[-1]["handle"]
+    assert retained["source_canonical_sha256"] == launcher._canonical_sha256(journal)
+    assert len(retained["retention"]["structural_metadata_sha256"]) == 64
+
+
+def test_compaction_preserves_late_decisive_compile_after_runtime_setup_noise():
+    setup = "\n".join(f"runtime setup diagnostic {index}" for index in range(8))
+    original = setup + "\ntriton compile error: invalid layout\n" + ("trace\n" * 10_000)
+
+    compact = launcher._compact_remote_text(original, 512)
+
+    assert launcher.classify_failure({"stdout": compact, "stderr": ""}) == (
+        "counted_failure", "compile", "compile")
+    assert "triton compile error: invalid layout" in compact
+
+
+def test_compaction_keeps_authoritative_last_remote_content_hash():
+    historical = [f"{index:064x}" for index in range(100)]
+    authoritative = "f" * 64
+    original = "\n".join(
+        f"REMOTE_CONTENT_SHA256={value}" for value in [*historical, authoritative]
+    ) + "\n" + ("profile output\n" * 10_000)
+
+    compact = launcher._compact_remote_text(original, 512)
+
+    assert launcher._parse_remote(compact)["content_sha256"] == authoritative
+    assert f"REMOTE_CONTENT_SHA256={authoritative}" in compact
+    assert len(compact.encode()) <= 512
+
+
+@pytest.mark.parametrize("diagnostic", [
+    "selector chosen: foo\nevidence mismatch: exported row belongs to another kernel",
+    "expected one exported kernel row\nselector details: foo",
+])
+def test_compaction_preserves_multiline_evidence_classification(diagnostic: str):
+    original = diagnostic + "\n" + ("profile trace\n" * 10_000)
+    original_evidence = {"stdout": original, "stderr": "", "returncode": 1}
+
+    compact = launcher._compact_remote_text(original, 512)
+    compact_evidence = {"stdout": compact, "stderr": "", "returncode": 1}
+
+    assert launcher.classify_failure(original_evidence) == (
+        "counted_failure", "evidence", "evidence")
+    assert launcher.classify_failure(compact_evidence) == (
+        "counted_failure", "evidence", "evidence")
+
+
+def test_retained_compaction_preserves_cross_field_evidence_classification(tmp_path: Path):
+    stdout = "expected one exported kernel row\n" + ("stdout trace\n" * 10_000)
+    stderr = "selector details: foo\n" + ("stderr trace\n" * 10_000)
+    handle = "remote:bz-a3-1:job:cross-field"
+    result = {"returncode": 1, "state": "failed", "handle": handle,
+              "stdout": stdout, "stderr": stderr}
+    journal = {
+        "schema": "profiling-skill/remote-journal/v1",
+        "dispatches": [{
+            "request_sha256": "d" * 64, "target": "bz-a3-1",
+            "dispatch_key": "cross-field", "file_sha256": "e" * 64,
+            "arguments": ["run", "bz-a3-1", "--file", "/workspace/job.sh"],
+            "state": "failed", "handle": handle, "result": result,
+        }],
+        "calls": [],
+    }
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+
+    retained_ref = launcher.retain_remote_journal(store, "remote/cross-field.json", journal)
+    retained_path = store.root / retained_ref["path"]
+    retained = json.loads(retained_path.read_text())
+    compact_result = retained["dispatches"][0]["result"]
+
+    assert launcher.classify_failure(result) == (
+        "counted_failure", "evidence", "evidence")
+    assert launcher.classify_failure(compact_result) == (
+        "counted_failure", "evidence", "evidence")
+    assert len(retained_path.read_bytes()) < launcher.MAX_ARTIFACT
+    assert journal["dispatches"][0]["result"]["stdout"] == stdout
+    assert journal["dispatches"][0]["result"]["stderr"] == stderr
+
+
 def test_paired_a5_process_failure_ignores_prior_a3_remote_history_and_is_gate_compatible(
         tmp_path: Path, monkeypatch):
     instance, request = fixture(tmp_path / "launch")

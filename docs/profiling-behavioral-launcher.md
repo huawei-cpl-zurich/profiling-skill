@@ -47,8 +47,29 @@ the assigned product and target, not a durable handle that only becomes known
 after broker dispatch. The trusted launcher separately binds the final
 answer's handle and target to the selected terminal-successful dispatch, and
 records that handle in the outcome beside the matching remote SHA-256. The
-complete journal, bound result/log
-calls, and bounded redacted Codex logs are retained on success and failure.
+live broker journal is unchanged. Before artifact retention, oversized remote
+`stdout`, `stderr`, and `content` fields are replaced by bounded, redacted
+classification excerpts plus their byte counts and SHA-256 digests. Exact
+authoritative `REMOTE_CONTENT_SHA256` values remain in the compact journal;
+historical values are count-and-digest summarized so they cannot displace the
+last authoritative value. Diagnostic compaction follows the trusted failure
+classifier's priority and retains a source-digest-bound classification marker,
+so earlier generic setup or selector messages cannot displace a later decisive
+profiler, evidence, or compile diagnostic, including multi-line evidence
+conditions. The marker is computed once from the complete result's combined
+stdout and stderr before either field is compacted, preserving conditions whose
+required phrases span those fields. The exact
+compact evidence bytes are retained separately. Dispatch and call arguments,
+request and payload-file hashes, target, handle, state, and return code remain
+available for same-handle replay and audit. The retained journal also binds the
+canonical JSON form of the full live journal with `source_canonical_sha256`.
+Normal four-job campaigns retain every entry. If entry metadata alone would
+still exceed the artifact limit, a fixed-size fallback retains first/last
+representative dispatch and call identities, entry counts, compact result
+digests, and a structural-metadata digest. This keeps both successful and
+failed captures below the artifact limit without recursively failing while
+writing failure evidence. Bound result/log calls and bounded redacted Codex
+logs are retained on success and failure.
 
 An acquisition agent uses one Codex thread for its A3 turn and resumed A5
 turn. An interpretation agent uses one independent thread resumed across all

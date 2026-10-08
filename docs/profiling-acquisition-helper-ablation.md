@@ -19,7 +19,7 @@
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `PYTHONPATH=. pytest -q` | 1111 passed | Full post-transport suite |
+| `PYTHONPATH=. pytest -q` | 1115 passed | Full post-broker-contract suite |
 | focused tests, quick validation, Ruff, diff check | passed | No failures |
 
 ## Complexity Inventory
@@ -60,13 +60,15 @@
 | F7 | Resolve the approved broker client from `PATH` before the user-wide fallback | Isolated launchers mount `cpl-remote` at `/tools` | resolver and no-hidden-override subprocess tests | CLI |
 | F8 | Add launcher-compatible schema, provenance, normal-run digest, and remote-content marker | Let the trusted launcher bind and consume the same compact bytes | generated-payload marker/evidence tests | CLI |
 | F9 | Use one action-first transport form and parse JSON or stable `REMOTE_*` receipts | Broker rejects global-only `--json`; alternate dispatch probes could duplicate jobs | full text-receipt lifecycle, failure, and resume tests | CLI |
+| F10 | Bind retained-broker dispatch keys and stage payloads beside evidence | Broker requires stable key; isolated launcher rejects `/tmp` payloads | exact broker/global argv and workspace cleanup tests | CLI |
+| F11 | Accept only consistent repeated receipt fields | Broker can repeat stable fields while conflicting values are ambiguous | identical/conflicting duplicate tests | CLI |
 
 ## Final Validation
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `pytest -q tests/test_acquire_profile.py` | 35 passed | Includes JSON/text transport, multiline logs, bundle, restart/resume, failure classes, and launcher metadata |
-| `PYTHONPATH=. pytest -q` | 1111 passed | Full suite |
+| `pytest -q tests/test_acquire_profile.py` | 39 passed | Includes broker/global argv, workspace staging, JSON/text transport, duplicates, and same-handle resume |
+| `PYTHONPATH=. pytest -q` | 1115 passed | Full suite |
 | `quick_validate.py .` | passed | Skill package valid |
 | Ruff and `git diff --check` | passed | Clean |
 | A3 BasicInfo + PipeUtilization | passed | Three-file bundle; interrupted controller resumed same BasicInfo handle; exact selector and 24 pipe rows |

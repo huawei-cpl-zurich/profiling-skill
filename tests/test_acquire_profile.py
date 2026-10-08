@@ -207,6 +207,7 @@ def run_cli(
     attempts: int = 2,
     cpl_override: bool = True,
     receipt_format: str = "json",
+    remote_mode: str | None = None,
 ):
     workload = tmp_path / "user workload.py"
     if not workload.exists():
@@ -245,15 +246,19 @@ def run_cli(
         command += ["--kernel-name", selector]
     if resume:
         command += ["--resume-handle", resume]
+    environment = {
+        **os.environ,
+        "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        "CPL_TEST_LOG": str(log),
+    }
+    environment.pop("CPL_REMOTE_MODE", None)
+    if remote_mode is not None:
+        environment["CPL_REMOTE_MODE"] = remote_mode
     result = subprocess.run(
         command,
         text=True,
         capture_output=True,
-        env={
-            **os.environ,
-            "PATH": f"{tmp_path}:{os.environ['PATH']}",
-            "CPL_TEST_LOG": str(log),
-        },
+        env=environment,
     )
     calls = (
         [json.loads(line) for line in log.read_text().splitlines()]
@@ -272,7 +277,11 @@ def test_cli_uses_broker_client_on_path_without_hidden_override(tmp_path):
 
 def test_text_receipts_use_one_action_first_dispatch_and_decode_evidence(tmp_path):
     result, output, expected, calls, _ = run_cli(
-        tmp_path, "basic", receipt_format="text", cpl_override=False
+        tmp_path,
+        "basic",
+        receipt_format="text",
+        cpl_override=False,
+        remote_mode="retained-broker",
     )
     assert result.returncode == 0, result.stderr
     assert output.read_bytes() == expected
@@ -284,6 +293,28 @@ def test_text_receipts_use_one_action_first_dispatch_and_decode_evidence(tmp_pat
     ]
     assert all("--json" not in call for call in calls)
     assert len([call for call in calls if call[0] == "run"]) == 1
+    run = calls[0]
+    assert run.count("--dispatch-key") == 1
+    assert run[run.index("--dispatch-key") + 1] == "test-key"
+
+
+def test_global_transport_omits_broker_dispatch_key(tmp_path):
+    result, _, _, calls, _ = run_cli(tmp_path, "basic")
+    assert result.returncode == 0, result.stderr
+    run = next(call for call in calls if call[0] == "run")
+    assert "--dispatch-key" not in run
+
+
+def test_payload_is_staged_beside_evidence_and_cleaned_after_dispatch(tmp_path):
+    result, output, _, calls, _ = run_cli(
+        tmp_path, "basic", remote_mode="retained-broker"
+    )
+    assert result.returncode == 0, result.stderr
+    run = next(call for call in calls if call[0] == "run")
+    payload = Path(run[run.index("--file") + 1])
+    assert payload.parent == output.parent
+    assert payload.name.startswith(".acquire-payload-")
+    assert not payload.exists()
 
 
 def test_text_receipt_parser_preserves_metadata_and_multiline_content():
@@ -313,6 +344,39 @@ def test_text_receipt_parser_preserves_metadata_and_multiline_content():
         "stream": "stdout",
         "content": 'first\n{"message":"inside"}\nREMOTE_NOT_METADATA=inside\n',
     }
+
+
+def test_text_receipt_accepts_repeated_identical_metadata():
+    module = load_module()
+    result = subprocess.CompletedProcess(
+        [],
+        0,
+        stdout=(
+            "REMOTE_TARGET=bz-a3-1\n"
+            "REMOTE_HANDLE=remote:bz-a3-1:job:7\n"
+            "REMOTE_HANDLE=remote:bz-a3-1:job:7\n"
+            "REMOTE_STATE=completed\n"
+            "REMOTE_STATE=completed\n"
+        ),
+        stderr="",
+    )
+    assert module._receipt(result, "observe")["handle"].endswith(":7")
+
+
+def test_text_receipt_rejects_conflicting_duplicate_metadata():
+    module = load_module()
+    result = subprocess.CompletedProcess(
+        [],
+        0,
+        stdout=(
+            "REMOTE_HANDLE=remote:bz-a3-1:job:7\n"
+            "REMOTE_HANDLE=remote:bz-a3-1:job:8\n"
+            "REMOTE_STATE=completed\n"
+        ),
+        stderr="",
+    )
+    with pytest.raises(module.AcquisitionError, match="unambiguous receipt"):
+        module._receipt(result, "observe")
 
 
 @pytest.mark.parametrize(
@@ -460,6 +524,7 @@ def test_text_receipt_restart_resumes_same_handle_without_redispatch(tmp_path):
         scenario="interrupt-always",
         attempts=1,
         receipt_format="text",
+        remote_mode="retained-broker",
     )
     assert first.returncode == 1
     saved = json.loads(Path(str(output) + ".dispatch.json").read_text())
@@ -470,10 +535,13 @@ def test_text_receipt_restart_resumes_same_handle_without_redispatch(tmp_path):
         resume=saved["handle"],
         scenario="ok",
         receipt_format="text",
+        remote_mode="retained-broker",
     )
     assert second.returncode == 0, second.stderr
     assert output.read_bytes() == expected
     assert len([call for call in calls if call[0] == "run"]) == 1
+    run = next(call for call in calls if call[0] == "run")
+    assert run[run.index("--dispatch-key") + 1] == "test-key"
 
 
 def test_resume_rejects_corrupted_receipt_metadata_hash(tmp_path):

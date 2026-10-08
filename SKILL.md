@@ -15,6 +15,9 @@ For generic Torch/Triton workload acquisition on `bz-a3-1`, `bz-a3-2`, or
 flags. The helper owns the named runtime, content-addressed workload bundle,
 bounded device probe, deployed profiler syntax, persisted `cpl-remote` handle,
 resume lifecycle, and compact evidence.
+Run the installed skill's helper in place. Do not copy it into an experiment
+workspace, patch it, or synthesize a replacement; pass the workload bundle and
+evidence paths to the installed executable.
 Read [Two-pass acquisition](references/acquisition-workflow.md), run its
 `basic` pass, inspect the exported names, and then supply one relevant exact
 name to its `pipe` pass. Never guess a selector from a source function name or

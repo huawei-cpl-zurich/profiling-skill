@@ -440,7 +440,9 @@ def _receipt(result, phase, handle=None):
             continue
         key = match.group(1).lower()
         if key in fields:
-            return _invalid_receipt(result, phase, handle)
+            if fields[key] != match.group(2):
+                return _invalid_receipt(result, phase, handle)
+            continue
         fields[key] = match.group(2)
     if content_match is not None:
         fields["content"] = result.stdout[content_match.end() :]
@@ -463,6 +465,24 @@ def _invalid_receipt(result, phase, handle):
         handle=handle,
         excerpt=excerpt,
     )
+
+
+def _stage_payload(payload: str, evidence: Path) -> Path:
+    parent = evidence.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    parent = parent.resolve()
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        prefix=".acquire-payload-",
+        suffix=".py",
+        dir=parent,
+        delete=False,
+    ) as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+        return Path(stream.name)
 
 
 def _invoke(cpl, argv, phase, handle=None, timeout=660):
@@ -787,22 +807,23 @@ def main(argv=None):
                 args.kernel_name,
                 args.launch_count,
             )
-            with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as stream:
-                stream.write(payload)
-                script = Path(stream.name)
+            script = _stage_payload(payload, args.evidence)
+            run_argv = [
+                "run",
+                args.target,
+                "--runtime",
+                TARGETS[args.product][args.target],
+                "--file",
+                str(script),
+                "--timeout",
+                "900",
+            ]
+            if os.environ.get("CPL_REMOTE_MODE") == "retained-broker":
+                run_argv.extend(["--dispatch-key", args.dispatch_key])
             try:
                 run = _invoke(
                     args.cpl_remote,
-                    [
-                        "run",
-                        args.target,
-                        "--runtime",
-                        TARGETS[args.product][args.target],
-                        "--file",
-                        str(script),
-                        "--timeout",
-                        "900",
-                    ],
+                    run_argv,
                     "dispatch",
                 )
             finally:

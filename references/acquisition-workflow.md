@@ -94,6 +94,14 @@ receipt. It does not probe alternate dispatch forms after `run`. Text log
 content is preserved verbatim from `REMOTE_CONTENT=` through end of output so
 multiline evidence markers and base64 remain intact.
 
+An isolated retained broker sets `CPL_REMOTE_MODE=retained-broker`; in that
+explicit mode the helper binds the user-supplied dispatch key to the one
+`cpl-remote run`. Ordinary user-wide clients receive their normal argv without
+the broker-only option. The generated remote payload is fsynced beside the
+requested evidence output, passed from that workspace-approved path, and
+removed after the dispatch attempt. Run this installed helper in place—never
+copy or patch it inside an experiment workspace.
+
 ## Failure receipts
 
 Failures preserve the durable handle, remote phase, classification, and a

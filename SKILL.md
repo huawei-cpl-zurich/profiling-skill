@@ -8,6 +8,18 @@ description: Profile Triton kernels on Ascend A2/A3 or AscendC and Catlass kerne
 Select the target before collecting or interpreting evidence. Product-specific
 metrics are not portable.
 
+## Shared saturation analysis
+
+Use `scripts/analyze_pipe_saturation.py` only with a validated model for the
+selected product. It classifies each phase as `saturated`, `unsaturated`, or
+`unknown` from capacity numerator and denominator metrics. Pipe activity,
+timeline occupancy, and composition are useful localization evidence but are
+not capacity denominators and cannot establish saturation by themselves.
+
+Read [Pipe saturation contract](references/pipe-saturation-contract.md) before
+creating model or evidence JSON. No built-in A2/A3 or A5 capacity model is
+provided yet; return `unknown` rather than borrowing another product's model.
+
 ## A2/A3 Triton timing
 
 Use the repository's `$gz-a3` profile and its native `py311-torch` runtime.

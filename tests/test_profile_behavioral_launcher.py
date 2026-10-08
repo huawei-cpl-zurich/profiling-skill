@@ -363,6 +363,31 @@ def test_failure_classification_is_host_owned_and_fail_closed(document, expected
     assert launcher.classify_failure(document) == expected
 
 
+def test_counted_remote_failure_cannot_be_hidden_by_later_success():
+    failed = {"target": "bz-a3-1", "handle": "remote:bz-a3-1:job:bad",
+              "state": "failed", "result": {"returncode": 1, "state": "failed",
+              "failure_type": None, "stdout": "", "stderr": ""}}
+    succeeded = {"target": "bz-a3-1", "handle": "remote:bz-a3-1:job:good",
+                 "state": "completed", "result": {"returncode": 0,
+                 "state": "completed", "failure_type": None, "stdout": "", "stderr": ""}}
+    journal = {"dispatches": [failed, succeeded], "calls": [{
+        "handle": failed["handle"], "target": "bz-a3-1",
+        "result": {"returncode": 0, "state": "completed", "failure_type": None,
+                   "stdout": 'REMOTE_CONTENT={"status":"failure","phase":"missing_row"}',
+                   "stderr": ""}}]}
+
+    assert launcher.counted_dispatch_failure(journal, (0, 0), "bz-a3-1") == failed
+
+
+def test_evidenced_infrastructure_dispatch_may_be_replaced():
+    failed = {"target": "bz-a5", "handle": "remote:bz-a5:job:busy",
+              "state": "failed", "result": {"returncode": 1, "state": "device-busy",
+              "failure_type": "device_busy", "stdout": "", "stderr": ""}}
+    journal = {"dispatches": [failed], "calls": []}
+
+    assert launcher.counted_dispatch_failure(journal, (0, 0), "bz-a5") is None
+
+
 @pytest.mark.parametrize("operation,stdout,returncode,expected", [
     ("preflight", "REMOTE_STATE=failed\n", 1, "target_unavailable"),
     ("preflight", "REMOTE_STATE=failed\nREMOTE_FAILURE_TYPE=device_busy\n", 1,

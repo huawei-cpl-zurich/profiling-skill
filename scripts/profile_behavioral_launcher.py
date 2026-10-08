@@ -142,6 +142,36 @@ def classify_failure(document: dict) -> tuple[str, str, str]:
     return "counted_failure", "runtime", "runtime"
 
 
+def counted_dispatch_failure(journal: dict, journal_start: tuple[int, int],
+                             target: str) -> dict | None:
+    """Return the first current-turn counted remote failure, even after a retry."""
+    dispatches = journal.get("dispatches", [])[journal_start[0]:]
+    calls = journal.get("calls", [])[journal_start[1]:]
+    for dispatch in dispatches:
+        result = dispatch.get("result")
+        if dispatch.get("target") != target or not isinstance(result, dict) \
+                or (dispatch.get("state") not in {"failed", "cancelled"}
+                    and result.get("returncode") in (None, 0)):
+            continue
+        related = [entry.get("result") for entry in calls
+                   if entry.get("handle") == dispatch.get("handle")]
+        related = [entry for entry in related if isinstance(entry, dict)]
+        structured = next((entry.get("failure_type") for entry in [result, *related]
+                           if entry.get("failure_type")), None)
+        evidence = {
+            "returncode": result.get("returncode"),
+            "state": result.get("state") or dispatch.get("state"),
+            "failure_type": structured,
+            "stdout": "\n".join(str(entry.get("stdout", ""))
+                                  for entry in [result, *related]),
+            "stderr": "\n".join(str(entry.get("stderr", ""))
+                                  for entry in [result, *related]),
+        }
+        if classify_failure(evidence)[0] == "counted_failure":
+            return dispatch
+    return None
+
+
 def failure_record(*, store: ArtifactStore, session_id: str, kind: str, arm: str | None,
                    classification: str, failure_type: str, stage: str,
                    product: str | None, target: str | None, handle: str | None,
@@ -754,7 +784,8 @@ class BehavioralLauncher(ProductionLauncher):
                         active_unit: dict | None, error: object, *, codex_command: str = "",
                         codex_stdout: str = "", codex_stderr: str = "",
                         codex_returncode: int | None = None,
-                        journal_start: tuple[int, int] = (0, 0)) -> dict:
+                        journal_start: tuple[int, int] = (0, 0),
+                        failed_handle: str | None = None) -> dict:
         journal = json.loads(paths.journal.read_text())
         acquisition = request["kind"] == "acquisition" and isinstance(active_unit, dict)
         target = active_unit.get("target") if acquisition else None
@@ -768,7 +799,9 @@ class BehavioralLauncher(ProductionLauncher):
         results = [entry.get("result") for entry in dispatches]
         results += [entry.get("result") for entry in calls]
         results = [result for result in results if isinstance(result, dict)]
-        dispatch = dispatches[-1] if dispatches else {}
+        dispatch = (next((entry for entry in dispatches
+                          if entry.get("handle") == failed_handle), {})
+                    if failed_handle else dispatches[-1] if dispatches else {})
         handle = dispatch.get("handle")
         structured = next((result.get("failure_type") for result in results
                            if result.get("failure_type")), None)
@@ -869,6 +902,18 @@ class BehavioralLauncher(ProductionLauncher):
                         codex_command="codex exec" + (" resume" if planned["resume"] else ""),
                         codex_stdout=run.stdout, codex_stderr=run.stderr,
                         codex_returncode=run.returncode, journal_start=journal_start)
+                    _atomic_json(output, result)
+                    return result
+                journal = json.loads(paths.journal.read_text())
+                counted = counted_dispatch_failure(journal, journal_start,
+                                                   active_unit.get("target", ""))
+                if counted is not None:
+                    result = self._failure_result(
+                        request, paths, store, active_unit,
+                        "counted remote failure cannot be replaced within a launcher turn",
+                        codex_command="codex exec" + (" resume" if planned["resume"] else ""),
+                        codex_stdout=run.stdout, codex_stderr=run.stderr,
+                        journal_start=journal_start, failed_handle=counted.get("handle"))
                     _atomic_json(output, result)
                     return result
                 if not thread_id:

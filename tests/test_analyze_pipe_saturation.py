@@ -141,7 +141,7 @@ def test_cli_reports_phase_local_saturated_and_unsaturated_states(tmp_path: Path
     ]
     assert result["phases"][0]["saturated_resources"] == ["mte2"]
     assert result["phases"][1]["saturated_resources"] == ["cube"]
-    assert result["phases"][0]["interval_ns"] == {"start": 10.0, "end": 20.0}
+    assert result["phases"][0]["interval_ns"] == {"start": 10, "end": 20}
 
 
 def test_missing_and_na_metrics_are_unknown_not_zero(tmp_path: Path):
@@ -270,6 +270,13 @@ def test_cli_rejects_invalid_phase_boundaries(tmp_path: Path):
     assert run.returncode == 2
     assert "end_ns must be greater than start_ns" in run.stderr
 
+    captured = evidence(
+        phases=[phase("float-ns", {}, start_ns=10.0, end_ns=11)]
+    )
+    run = run_cli(tmp_path, model(), captured)
+    assert run.returncode == 2 and run.stdout == ""
+    assert "start_ns must be a non-negative integer" in run.stderr
+
 
 def test_cli_rejects_empty_provenance(tmp_path: Path):
     selected_model = model()
@@ -283,3 +290,74 @@ def test_cli_rejects_empty_provenance(tmp_path: Path):
     run = run_cli(tmp_path, model(), captured)
     assert run.returncode == 2
     assert "evidence.provenance must not be empty" in run.stderr
+
+
+def test_cli_rejects_malformed_provenance_and_boolean_schema(tmp_path: Path):
+    selected_model = model()
+    selected_model["provenance"] = {"source": "", "revision": "rev"}
+    run = run_cli(tmp_path, selected_model, evidence(phases=[phase("all", {})]))
+    assert run.returncode == 2 and run.stdout == ""
+    assert "model.provenance.source must be a non-empty string" in run.stderr
+
+    captured = evidence(phases=[phase("all", {})])
+    captured["provenance"]["capture_id"] = " "
+    run = run_cli(tmp_path, model(), captured)
+    assert run.returncode == 2 and run.stdout == ""
+    assert "evidence.provenance.capture_id must be a non-empty string" in run.stderr
+
+    captured = evidence(phases=[phase("all", {})])
+    captured["provenance"]["source_sha256"] = "not-a-sha256"
+    run = run_cli(tmp_path, model(), captured)
+    assert run.returncode == 2 and run.stdout == ""
+    assert "evidence.provenance.source_sha256" in run.stderr
+
+    selected_model = model()
+    selected_model["schema_version"] = True
+    run = run_cli(tmp_path, selected_model, evidence(phases=[phase("all", {})]))
+    assert run.returncode == 2 and run.stdout == ""
+    assert "model schema_version must be integer 1" in run.stderr
+
+    captured = evidence(phases=[phase("all", {})])
+    captured["schema_version"] = True
+    run = run_cli(tmp_path, model(), captured)
+    assert run.returncode == 2 and run.stdout == ""
+    assert "evidence schema_version must be integer 1" in run.stderr
+
+
+def test_cli_preserves_large_one_nanosecond_interval(tmp_path: Path):
+    start = 2**53 + 1
+    captured = evidence(
+        phases=[phase("one-ns", {}, start_ns=start, end_ns=start + 1)]
+    )
+
+    run = run_cli(tmp_path, model(), captured)
+
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout)["phases"][0]["interval_ns"] == {
+        "start": start,
+        "end": start + 1,
+    }
+
+
+def test_capacity_numerator_above_denominator_is_unknown(tmp_path: Path):
+    captured = evidence(
+        phases=[
+            phase(
+                "invalid-ratio",
+                {
+                    "cube_busy_cycles": 101,
+                    "cube_available_cycles": 100,
+                    "mte2_busy_cycles": 10,
+                    "mte2_available_cycles": 100,
+                },
+            )
+        ]
+    )
+
+    run = run_cli(tmp_path, model(), captured)
+
+    assert run.returncode == 0, run.stderr
+    cube = json.loads(run.stdout)["phases"][0]["resources"][0]
+    assert cube["state"] == "unknown"
+    assert cube["ratio"] is None
+    assert "cannot exceed" in cube["reason"]

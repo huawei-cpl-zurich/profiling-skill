@@ -41,7 +41,9 @@ document for a different product.
 }
 ```
 
-The example threshold is structural, not a product recommendation. A usable
+Model provenance requires non-empty `source` and immutable `revision` string
+identifiers. The example threshold is structural, not a product
+recommendation. A usable
 threshold must be greater than zero and at most one. Only
 `capacity_validation.state == "validated"` permits classification. Other
 states deliberately produce `unknown`, even when activity or composition is
@@ -73,13 +75,14 @@ high.
 }
 ```
 
-Phase identifiers must be unique. Each phase has a finite, non-negative
-`start_ns` and a strictly greater finite `end_ns`; the interval is preserved
-in the output. Model and evidence provenance objects must not be empty. Metric
-values may be numbers or numeric strings. Missing values and the markers `NA`,
-`N/A`, `NaN`, `null`, `none`, and `unknown` remain unavailable; they are never
-converted to zero. A missing, non-numeric, or non-positive denominator yields
-`unknown` for that resource.
+Evidence provenance requires a non-empty `capture_id` and a 64-hex-character
+`source_sha256`. Phase identifiers must be unique. Each phase has a
+non-negative integer `start_ns` and a strictly greater integer `end_ns`; the
+interval is preserved exactly in the output. Metric values may be numbers or
+numeric strings. Missing values and the markers `NA`, `N/A`, `NaN`, `null`,
+`none`, and `unknown` remain unavailable; they are never converted to zero. A
+missing or non-positive denominator, or a numerator outside the normalized
+range from zero through the denominator, yields `unknown` for that resource.
 
 ## Output semantics
 

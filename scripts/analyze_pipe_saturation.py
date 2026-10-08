@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,10 +25,14 @@ def require_mapping(value: Any, location: str) -> dict[str, Any]:
     return value
 
 
-def require_provenance(value: Any, location: str) -> dict[str, Any]:
+def require_provenance(
+    value: Any, location: str, required_fields: tuple[str, ...]
+) -> dict[str, Any]:
     provenance = require_mapping(value, location)
     if not provenance:
         raise InvalidSaturationInput(f"{location} must not be empty")
+    for field in required_fields:
+        require_string(provenance.get(field), f"{location}.{field}")
     return provenance
 
 
@@ -53,16 +58,28 @@ def available_number(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def require_schema_version(value: Any, location: str) -> None:
+    if type(value) is not int or value != 1:
+        raise InvalidSaturationInput(f"{location} schema_version must be integer 1")
+
+
+def require_nanoseconds(value: Any, location: str) -> int:
+    if type(value) is not int or value < 0:
+        raise InvalidSaturationInput(f"{location} must be a non-negative integer")
+    return value
+
+
 def validate_model(model: dict[str, Any], product: str) -> list[dict[str, Any]]:
-    if model.get("schema_version") != 1:
-        raise InvalidSaturationInput("model schema_version must be 1")
+    require_schema_version(model.get("schema_version"), "model")
     model_product = require_string(model.get("product"), "model.product")
     if model_product != product:
         raise InvalidSaturationInput(
             f"requested product {product!r} does not match model product {model_product!r}"
         )
     require_string(model.get("model_id"), "model.model_id")
-    require_provenance(model.get("provenance"), "model.provenance")
+    require_provenance(
+        model.get("provenance"), "model.provenance", ("source", "revision")
+    )
     resources = model.get("resources")
     if not isinstance(resources, list) or not resources:
         raise InvalidSaturationInput("model.resources must be a non-empty array")
@@ -135,6 +152,9 @@ def classify_resource(resource: dict[str, Any], metrics: dict[str, Any]) -> dict
     if numerator < 0:
         result["reason"] = "capacity numerator must be non-negative"
         return result
+    if numerator > denominator:
+        result["reason"] = "capacity numerator cannot exceed denominator"
+        return result
 
     ratio = numerator / denominator
     result["ratio"] = ratio
@@ -145,14 +165,21 @@ def classify_resource(resource: dict[str, Any], metrics: dict[str, Any]) -> dict
 
 def analyze(model: dict[str, Any], evidence: dict[str, Any], product: str) -> dict[str, Any]:
     resources = validate_model(model, product)
-    if evidence.get("schema_version") != 1:
-        raise InvalidSaturationInput("evidence schema_version must be 1")
+    require_schema_version(evidence.get("schema_version"), "evidence")
     evidence_product = require_string(evidence.get("product"), "evidence.product")
     if evidence_product != product:
         raise InvalidSaturationInput(
             f"requested product {product!r} does not match evidence product {evidence_product!r}"
         )
-    provenance = require_provenance(evidence.get("provenance"), "evidence.provenance")
+    provenance = require_provenance(
+        evidence.get("provenance"),
+        "evidence.provenance",
+        ("capture_id", "source_sha256"),
+    )
+    if re.fullmatch(r"[0-9a-fA-F]{64}", provenance["source_sha256"]) is None:
+        raise InvalidSaturationInput(
+            "evidence.provenance.source_sha256 must be 64 hexadecimal characters"
+        )
     phases = evidence.get("phases")
     if not isinstance(phases, list) or not phases:
         raise InvalidSaturationInput("evidence.phases must be a non-empty array")
@@ -165,13 +192,13 @@ def analyze(model: dict[str, Any], evidence: dict[str, Any], product: str) -> di
         if phase_id in seen_phases:
             raise InvalidSaturationInput(f"duplicate evidence phase_id {phase_id!r}")
         seen_phases.add(phase_id)
-        start = available_number(phase.get("start_ns"))
-        end = available_number(phase.get("end_ns"))
-        if start is None or start < 0:
-            raise InvalidSaturationInput(
-                f"evidence phase {phase_id!r} start_ns must be finite and non-negative"
-            )
-        if end is None or end <= start:
+        start = require_nanoseconds(
+            phase.get("start_ns"), f"evidence phase {phase_id!r} start_ns"
+        )
+        end = require_nanoseconds(
+            phase.get("end_ns"), f"evidence phase {phase_id!r} end_ns"
+        )
+        if end <= start:
             raise InvalidSaturationInput(
                 f"evidence phase {phase_id!r} end_ns must be greater than start_ns"
             )

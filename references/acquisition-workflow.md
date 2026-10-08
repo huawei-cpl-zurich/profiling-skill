@@ -83,6 +83,13 @@ schema name, exact product/target provenance, and the successful normal
 workload exit plus compact stdout/stderr byte counts and digests. The workload
 success remains the correctness authority; profiler success alone is not.
 
+Each accepted remote job retains its full report under a fresh per-job
+directory. Reusing the same nominal acquisition key in another independent
+session cannot collide with an earlier retained report; broker dispatch
+receipts, not shared report-directory names, own duplicate suppression. The
+fresh directory path is normalized out of transcript/output digests and is
+rejected if it would leak into compact evidence.
+
 The helper uses the approved `cpl-remote` executable on `PATH` when an isolated
 launcher brokers it there. On ordinary hosts it falls back to the user-wide
 remote-access skill client. It fails closed if neither approved client exists;

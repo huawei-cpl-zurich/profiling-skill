@@ -250,7 +250,7 @@ def _remote_program(mode, product, target, dispatch_key, spec, kernel_name, laun
         "__LAUNCHES__": str(launches),
     }
     program = r'''#!/usr/bin/env python3
-import base64, csv, hashlib, json, os, pathlib, shlex, subprocess, sys
+import base64, csv, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile
 
 MODE=__MODE__; PRODUCT=__PRODUCT__; TARGET=__TARGET__; RUNTIME=__RUNTIME__
 DISPATCH_KEY=base64.b64decode(__KEY__).decode()
@@ -341,9 +341,8 @@ def materialize(root):
 
 physical,env=pick_device()
 retention=hashlib.sha256((DISPATCH_KEY+"\0"+MODE).encode()).hexdigest()[:20]
-root=pathlib.Path.cwd()/".cpl-profile-evidence"/retention
-try: root.mkdir(parents=True,exist_ok=False)
-except FileExistsError: fail("retention","host_environment","dispatch key already retained")
+retained_parent=pathlib.Path.cwd()/".cpl-profile-evidence"; retained_parent.mkdir(parents=True,exist_ok=True)
+root=pathlib.Path(tempfile.mkdtemp(prefix=retention+"-",dir=retained_parent))
 try:
     bundle=materialize(root); entry=bundle/pathlib.PurePosixPath(IDENTITY["entrypoint"])
     argv=([sys.executable,str(entry)] if entry.suffix==".py" else [str(entry)])+IDENTITY["arguments"]
@@ -366,8 +365,10 @@ try:
     selected=[] if MODE=="basic" else [row for name,row in rows if name==KERNEL_NAME]
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
     if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
+    def normalized(value):
+        return value.replace(str(root),"$RETAINED_ROOT")
     def stream_digest(value):
-        raw=value.encode(); return {"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+        raw=normalized(value).encode(); return {"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
     evidence={"schema_version":2,"schema":"cpl.profile-acquisition.v2","status":"success","phase":MODE,"product":PRODUCT,"target":TARGET,
       "runtime":RUNTIME,"dispatch_key":DISPATCH_KEY,"device":{"physical_id":physical,"logical_id":0},
       "provenance":{"product":PRODUCT,"target":TARGET},"workload":IDENTITY,
@@ -376,9 +377,10 @@ try:
       "inventory_scope":{"launch_bound":LAUNCH_COUNT,"complete":False,
       "reason":"msprof exports observed names but no total application launch count"},
       "selected_kernel":KERNEL_NAME,"rows":selected,"sources":sources,
-      "log_sha256":hashlib.sha256(transcript.encode()).hexdigest()},
+      "log_sha256":hashlib.sha256(normalized(transcript).encode()).hexdigest()},
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
     raw=(json.dumps(evidence,sort_keys=True,separators=(",",":"))+"\n").encode()
+    if str(root).encode() in raw: fail("evidence","evidence_failure","retained report path leaked into compact evidence")
     digest=hashlib.sha256(raw).hexdigest()
     print("ACQUIRE_EVIDENCE_SHA256="+digest,flush=True)
     print("REMOTE_CONTENT_SHA256="+digest,flush=True)

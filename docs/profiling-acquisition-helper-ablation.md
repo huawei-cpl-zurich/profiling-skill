@@ -62,6 +62,7 @@
 | F9 | Use one action-first transport form and parse JSON or stable `REMOTE_*` receipts | Broker rejects global-only `--json`; alternate dispatch probes could duplicate jobs | full text-receipt lifecycle, failure, and resume tests | CLI |
 | F10 | Bind retained-broker dispatch keys and stage payloads beside evidence | Broker requires stable key; isolated launcher rejects `/tmp` payloads | exact broker/global argv and workspace cleanup tests | CLI |
 | F11 | Accept only consistent repeated receipt fields | Broker can repeat stable fields while conflicting values are ambiguous | identical/conflicting duplicate tests | CLI |
+| F12 | Allocate a fresh retained report directory per remote job | Independent sessions can reuse nominal dispatch keys after broker acceptance | two same-key payload executions with retained trees and identical path-free evidence | CLI |
 
 ## Final Validation
 

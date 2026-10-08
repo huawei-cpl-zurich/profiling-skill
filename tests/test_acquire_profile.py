@@ -421,6 +421,9 @@ def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):
     assert payload.count('print("ACQUIRE_EVIDENCE_B64="') == 1
     assert payload.count('print("ACQUIRE_EVIDENCE_SHA256="') == 1
     assert payload.count('print("REMOTE_CONTENT_SHA256="') == 1
+    assert "tempfile.mkdtemp" in payload
+    assert "dispatch key already retained" not in payload
+    assert "retained report path leaked into compact evidence" in payload
 
 
 def test_pipe_requires_agent_selected_exact_exported_name_and_same_workload(tmp_path):
@@ -661,7 +664,7 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
         "(output/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\nexact.kernel/7,3.5\\n')\n"
         "if '--aic-metrics=PipeUtilization' in sys.argv:\n"
         " (output/'PipeUtilization.csv').write_text('block_id,sub_block_id,aic_cube_ratio\\n0,cube0,0.75\\n')\n"
-        "print('Profiling running finished. All task success.')\n"
+        "print('Profiling running finished. All task success. output='+str(output))\n"
     )
     msprof.chmod(0o755)
     payload = module.render_remote_payload(
@@ -675,28 +678,43 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     )
     payload_path = tmp_path / "payload.py"
     payload_path.write_text(payload)
-    result = subprocess.run(
-        ["python3", str(payload_path)],
-        cwd=tmp_path,
-        text=True,
-        capture_output=True,
-        env={
-            **os.environ,
-            "PATH": f"{tmp_path}:{os.environ['PATH']}",
-            "PYTHONPATH": str(modules),
-        },
-    )
-    assert result.returncode == 0, result.stderr
-    encoded = next(
-        line.split("=", 1)[1]
-        for line in result.stdout.splitlines()
-        if line.startswith("ACQUIRE_EVIDENCE_B64=")
-    )
-    raw = base64.b64decode(encoded)
+    results = [
+        subprocess.run(
+            ["python3", str(payload_path)],
+            cwd=tmp_path,
+            text=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "PATH": f"{tmp_path}:{os.environ['PATH']}",
+                "PYTHONPATH": str(modules),
+            },
+        )
+        for _ in range(2)
+    ]
+    assert all(result.returncode == 0 for result in results), [
+        result.stderr for result in results
+    ]
+    raw_values = [
+        base64.b64decode(
+            next(
+                line.split("=", 1)[1]
+                for line in result.stdout.splitlines()
+                if line.startswith("ACQUIRE_EVIDENCE_B64=")
+            )
+        )
+        for result in results
+    ]
+    assert raw_values[0] == raw_values[1]
+    raw = raw_values[0]
+    retained = list((tmp_path / ".cpl-profile-evidence").iterdir())
+    assert len(retained) == 2
+    assert all(path.is_dir() for path in retained)
+    assert all(str(path).encode() not in raw for path in retained)
     digest = hashlib.sha256(raw).hexdigest()
     markers = {
         line.split("=", 1)[0]: line.split("=", 1)[1]
-        for line in result.stdout.splitlines()
+        for line in results[0].stdout.splitlines()
         if line.startswith(("ACQUIRE_EVIDENCE_SHA256=", "REMOTE_CONTENT_SHA256="))
     }
     assert markers == {

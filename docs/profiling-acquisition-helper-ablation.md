@@ -19,7 +19,7 @@
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `PYTHONPATH=. pytest -q` | 1107 passed | Full post-integration suite |
+| `PYTHONPATH=. pytest -q` | 1111 passed | Full post-transport suite |
 | focused tests, quick validation, Ruff, diff check | passed | No failures |
 
 ## Complexity Inventory
@@ -59,13 +59,14 @@
 | F6 | Preserve remote failure phase and classification | Distinguish infrastructure from workload and profiler failures | functional classification matrix | CLI |
 | F7 | Resolve the approved broker client from `PATH` before the user-wide fallback | Isolated launchers mount `cpl-remote` at `/tools` | resolver and no-hidden-override subprocess tests | CLI |
 | F8 | Add launcher-compatible schema, provenance, normal-run digest, and remote-content marker | Let the trusted launcher bind and consume the same compact bytes | generated-payload marker/evidence tests | CLI |
+| F9 | Use one action-first transport form and parse JSON or stable `REMOTE_*` receipts | Broker rejects global-only `--json`; alternate dispatch probes could duplicate jobs | full text-receipt lifecycle, failure, and resume tests | CLI |
 
 ## Final Validation
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `pytest -q tests/test_acquire_profile.py` | 31 passed | Includes bundle, restart/resume, late selector, failure classes, broker resolution, and launcher metadata |
-| `PYTHONPATH=. pytest -q` | 1107 passed | Full suite |
+| `pytest -q tests/test_acquire_profile.py` | 35 passed | Includes JSON/text transport, multiline logs, bundle, restart/resume, failure classes, and launcher metadata |
+| `PYTHONPATH=. pytest -q` | 1111 passed | Full suite |
 | `quick_validate.py .` | passed | Skill package valid |
 | Ruff and `git diff --check` | passed | Clean |
 | A3 BasicInfo + PipeUtilization | passed | Three-file bundle; interrupted controller resumed same BasicInfo handle; exact selector and 24 pipe rows |

@@ -118,7 +118,9 @@ def evidence_bytes(
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
-def fake_cpl_remote(tmp_path: Path, evidence: bytes, scenario: str = "ok") -> Path:
+def fake_cpl_remote(
+    tmp_path: Path, evidence: bytes, scenario: str = "ok", receipt_format: str = "json"
+) -> Path:
     path = tmp_path / "cpl-remote"
     path.write_text(
         f"""#!/usr/bin/env python3
@@ -131,8 +133,17 @@ target = "bz-a5" if "bz-a5" in joined else ("bz-a3-2" if "bz-a3-2" in joined els
 handle = "remote:" + target + ":job:job-7"
 action = next(x for x in args if x in ("run", "observe", "result", "logs"))
 scenario = {scenario!r}
+receipt_format = {receipt_format!r}
+def emit(value):
+    if receipt_format == "json":
+        print(json.dumps(value))
+        return
+    order = ("target", "backend", "operation", "state", "handle", "exit", "next", "stream", "content")
+    for key in order:
+        if value.get(key) is not None:
+            print("REMOTE_" + key.upper() + "=" + str(value[key]))
 if action == "run":
-    print(json.dumps({{"target": target, "state": "running", "handle": handle}}))
+    emit({{"target": target, "backend": "broker", "operation": "run", "state": "running", "handle": handle}})
 elif action == "observe":
     marker = log.with_suffix(".observe")
     if scenario == "interrupt-always" or (scenario == "interrupt-once" and not marker.exists()):
@@ -141,10 +152,10 @@ elif action == "observe":
         raise SystemExit(9)
     if scenario == "nonterminal-once" and not marker.exists():
         marker.write_text("1")
-        print(json.dumps({{"target": target, "state": "running", "handle": handle}}))
+        emit({{"target": target, "backend": "broker", "operation": "observe", "state": "running", "handle": handle}})
         raise SystemExit(0)
     state = "failed" if scenario.startswith("terminal-") else "completed"
-    print(json.dumps({{"target": target, "state": state, "handle": handle, "exit": 17 if state == "failed" else 0}}))
+    emit({{"target": target, "backend": "broker", "operation": "observe", "state": state, "handle": handle, "exit": 17 if state == "failed" else 0}})
     if state == "failed": raise SystemExit(1)
 elif action == "result":
     marker = log.with_suffix(".result")
@@ -152,7 +163,7 @@ elif action == "result":
         marker.write_text("1")
         raise SystemExit(9)
     state = "failed" if scenario.startswith("terminal-") else "completed"
-    print(json.dumps({{"target": target, "state": state, "handle": handle, "exit": 17 if state == "failed" else 0}}))
+    emit({{"target": target, "backend": "broker", "operation": "result", "state": state, "handle": handle, "exit": 17 if state == "failed" else 0}})
     if state == "failed": raise SystemExit(1)
 else:
     stream = args[args.index("--stream") + 1]
@@ -176,7 +187,7 @@ else:
         content = "ACQUIRE_EVIDENCE_SHA256=" + digest + "\\n"
         content += "REMOTE_CONTENT_SHA256=" + digest + "\\n"
         content += "ACQUIRE_EVIDENCE_B64=" + base64.b64encode(raw).decode() + "\\n"
-    print(json.dumps({{"target": target, "state": "completed", "handle": handle, "content": content}}))
+    emit({{"target": target, "backend": "broker", "operation": "logs", "state": "completed", "handle": handle, "stream": stream, "content": content}})
 """
     )
     path.chmod(0o755)
@@ -195,6 +206,7 @@ def run_cli(
     resume: str | None = None,
     attempts: int = 2,
     cpl_override: bool = True,
+    receipt_format: str = "json",
 ):
     workload = tmp_path / "user workload.py"
     if not workload.exists():
@@ -203,7 +215,7 @@ def run_cli(
     raw = evidence_bytes(
         product, target, phase, identity(workload, args), selector=selector
     )
-    cpl = fake_cpl_remote(tmp_path, raw, scenario)
+    cpl = fake_cpl_remote(tmp_path, raw, scenario, receipt_format)
     output = tmp_path / f"{phase}.json"
     log = tmp_path / "calls.jsonl"
     command = [
@@ -256,6 +268,51 @@ def test_cli_uses_broker_client_on_path_without_hidden_override(tmp_path):
     assert result.returncode == 0, result.stderr
     assert output.read_bytes() == expected
     assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_text_receipts_use_one_action_first_dispatch_and_decode_evidence(tmp_path):
+    result, output, expected, calls, _ = run_cli(
+        tmp_path, "basic", receipt_format="text", cpl_override=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.read_bytes() == expected
+    assert [call[0] for call in calls] == [
+        "run",
+        "observe",
+        "result",
+        "logs",
+    ]
+    assert all("--json" not in call for call in calls)
+    assert len([call for call in calls if call[0] == "run"]) == 1
+
+
+def test_text_receipt_parser_preserves_metadata_and_multiline_content():
+    module = load_module()
+    result = subprocess.CompletedProcess(
+        [],
+        0,
+        stdout=(
+            "REMOTE_TARGET=bz-a3-1\n"
+            "REMOTE_OPERATION=logs\n"
+            "REMOTE_STATE=completed\n"
+            "REMOTE_HANDLE=remote:bz-a3-1:job:7\n"
+            "REMOTE_EXIT=0\n"
+            "REMOTE_STREAM=stdout\n"
+            'REMOTE_CONTENT=first\n{"message":"inside"}\n'
+            "REMOTE_NOT_METADATA=inside\n"
+        ),
+        stderr="",
+    )
+    receipt = module._receipt(result, "logs")
+    assert receipt == {
+        "target": "bz-a3-1",
+        "operation": "logs",
+        "state": "completed",
+        "handle": "remote:bz-a3-1:job:7",
+        "exit": 0,
+        "stream": "stdout",
+        "content": 'first\n{"message":"inside"}\nREMOTE_NOT_METADATA=inside\n',
+    }
 
 
 @pytest.mark.parametrize(
@@ -396,6 +453,29 @@ def test_process_restart_resumes_persisted_handle_without_redispatch(tmp_path):
     assert len([call for call in calls if "run" in call]) == 1
 
 
+def test_text_receipt_restart_resumes_same_handle_without_redispatch(tmp_path):
+    first, output, _, _, _ = run_cli(
+        tmp_path,
+        "basic",
+        scenario="interrupt-always",
+        attempts=1,
+        receipt_format="text",
+    )
+    assert first.returncode == 1
+    saved = json.loads(Path(str(output) + ".dispatch.json").read_text())
+
+    second, output, expected, calls, _ = run_cli(
+        tmp_path,
+        "basic",
+        resume=saved["handle"],
+        scenario="ok",
+        receipt_format="text",
+    )
+    assert second.returncode == 0, second.stderr
+    assert output.read_bytes() == expected
+    assert len([call for call in calls if call[0] == "run"]) == 1
+
+
 def test_resume_rejects_corrupted_receipt_metadata_hash(tmp_path):
     first, output, _, _, _ = run_cli(
         tmp_path, "basic", scenario="interrupt-always", attempts=1
@@ -435,6 +515,20 @@ def test_terminal_failure_includes_handle_phase_and_log_excerpt(tmp_path):
     assert "compile failed in user workload" in result.stderr
     assert not output.exists()
     assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_text_terminal_failure_preserves_remote_classification(tmp_path):
+    result, output, _, calls, _ = run_cli(
+        tmp_path,
+        "basic",
+        scenario="terminal-profiler",
+        receipt_format="text",
+    )
+    assert result.returncode == 1
+    assert "classification=profiler_failure phase=profiler" in result.stderr
+    assert "profiler rejected metric" in result.stderr
+    assert not output.exists()
+    assert len([call for call in calls if call[0] == "run"]) == 1
 
 
 @pytest.mark.parametrize(

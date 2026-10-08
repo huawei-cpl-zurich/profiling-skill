@@ -411,30 +411,64 @@ def render_remote_payload(
 
 
 def _receipt(result, phase, handle=None):
-    objects = []
-    for line in result.stdout.splitlines():
-        try:
-            value = json.loads(line)
-        except json.JSONDecodeError:
+    content_match = re.search(r"(?m)^REMOTE_CONTENT=", result.stdout)
+    text_receipt = re.search(
+        r"(?m)^REMOTE_(?:TARGET|OPERATION|STATE|HANDLE)=", result.stdout
+    )
+    if text_receipt is None and content_match is None:
+        objects = []
+        for line in result.stdout.splitlines():
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                objects.append(value)
+        if len(objects) == 1:
+            return objects[0]
+        return _invalid_receipt(result, phase, handle)
+
+    metadata = (
+        result.stdout
+        if content_match is None
+        else result.stdout[: content_match.start()]
+    )
+    fields = {}
+    for stripped in metadata.splitlines():
+        match = re.fullmatch(r"REMOTE_([A-Z_]+)=(.*)", stripped)
+        if not match:
             continue
-        if isinstance(value, dict):
-            objects.append(value)
-    if len(objects) != 1:
-        excerpt = (result.stderr or result.stdout)[-1000:]
-        raise AcquisitionError(
-            "cpl-remote returned no unambiguous receipt",
-            phase=phase,
-            classification="transport_error",
-            handle=handle,
-            excerpt=excerpt,
-        )
-    return objects[0]
+        key = match.group(1).lower()
+        if key in fields:
+            return _invalid_receipt(result, phase, handle)
+        fields[key] = match.group(2)
+    if content_match is not None:
+        fields["content"] = result.stdout[content_match.end() :]
+    if not fields:
+        return _invalid_receipt(result, phase, handle)
+    if "exit" in fields:
+        try:
+            fields["exit"] = int(fields["exit"])
+        except ValueError:
+            return _invalid_receipt(result, phase, handle)
+    return fields
+
+
+def _invalid_receipt(result, phase, handle):
+    excerpt = (result.stderr or result.stdout)[-1000:]
+    raise AcquisitionError(
+        "cpl-remote returned no unambiguous receipt",
+        phase=phase,
+        classification="transport_error",
+        handle=handle,
+        excerpt=excerpt,
+    )
 
 
 def _invoke(cpl, argv, phase, handle=None, timeout=660):
     try:
         result = subprocess.run(
-            [str(cpl), "--json", *argv], text=True, capture_output=True, timeout=timeout
+            [str(cpl), *argv], text=True, capture_output=True, timeout=timeout
         )
     except subprocess.TimeoutExpired as exc:
         raise AcquisitionError(

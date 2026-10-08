@@ -88,6 +88,12 @@ launcher brokers it there. On ordinary hosts it falls back to the user-wide
 remote-access skill client. It fails closed if neither approved client exists;
 agent prompts do not need the hidden client-path override.
 
+The helper sends one action-first command and accepts either the user-wide
+client's canonical JSON receipt or the broker's stable `REMOTE_*` text
+receipt. It does not probe alternate dispatch forms after `run`. Text log
+content is preserved verbatim from `REMOTE_CONTENT=` through end of output so
+multiline evidence markers and base64 remain intact.
+
 ## Failure receipts
 
 Failures preserve the durable handle, remote phase, classification, and a

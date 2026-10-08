@@ -41,7 +41,7 @@ but those tests exercised a fake executor rather than the live trust boundary.
 | A2 | Removed executor, workspaces, runtime inputs, scheduling and state | Avoid a weaker parallel launcher | No lifecycle code remains |
 | A3 | Bound A3+A5 acquisition to one attested session | Enforce persistent pairing | Pair/session test |
 | A4 | Required exact four-case answer set and 24 score slots | Prevent dropped cases/cherry-picking | Aggregate test |
-| A5 | Added exact launcher/model/skill/prompt/evidence identity checks | Reject input drift | Identity tests |
+| A5 | Added exact launcher/model/skill/prompt/evidence identity checks and retained prompt artifact | Reject input drift and preserve the evaluated prompt bytes | Identity/prompt tests |
 | A6 | Added strict bounded regular-file refs and JSON metadata/provenance | Reject missing, escaped, symlinked, changed, or malformed evidence | Artifact tests |
 | A7 | Added envelope-only failure receipts and replacement counts | Preserve infra and counted failures without agent control | Failure tests |
 | A8 | Added pinned trusted review for every successful acquisition and interpretation reasoning log | Keep acceptance dependent on inspected reasoning | Review tests |
@@ -56,17 +56,17 @@ but those tests exercised a fake executor rather than the live trust boundary.
 
 ## Test changes
 
-The 25 focused tests cover treatment-blind agent payloads, paired persistent
+The 27 focused tests cover treatment-blind agent payloads, paired persistent
 sessions, trusted-vs-agent failure classification, evidence/hash/JSON/symlink/
 escape checks, exact contradictory rubrics, identity drift, duplicates,
 infrastructure replacements, counted failures, all-log manual review, text
-artifacts, GZ handles, 12/12 comparison, and atomic output. They do not assert
+artifacts, prompt retention/hash/content, GZ handles, 12/12 comparison, and atomic output. They do not assert
 documentation wording.
 
 ## PR review assessment
 
-The result is reviewable as one PR: 348 source and 270 functional-test lines
-(618 source/test lines) with one pure validation/aggregation story. The live
+The result is reviewable as one PR: 352 source and 287 functional-test lines
+(639 source/test lines) with one pure validation/aggregation story. The live
 launcher remains a separate security/runtime PR. The principal review risk is
 keeping that launcher's emitted trusted-record schema exactly aligned with this
 validator.
@@ -75,8 +75,8 @@ validator.
 
 | Command | Result |
 | --- | --- |
-| `pytest -q tests/test_profile_behavioral_gate.py` | 25 passed |
-| `PYTHONPATH=. pytest -q` | 1061 passed |
+| `pytest -q tests/test_profile_behavioral_gate.py` | 27 passed |
+| `PYTHONPATH=. pytest -q` | 1063 passed |
 | `git diff --check` | passed |
 
 ## Suggested PR order

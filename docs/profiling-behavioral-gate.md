@@ -20,7 +20,8 @@ The command reads its three inputs and atomically writes only the report.
 
 ## Trust boundary
 
-The manifest pins the prompt, both skill trees, audited launcher, model/config,
+The manifest pins a nonempty bounded text prompt artifact and its SHA-256, both
+skill trees, audited launcher, model/config,
 manual reviewer/config, allowed product targets, and four evidence cases (two A3 and two A5). Each case
 contains a byte-pinned compact JSON evidence reference and an exact rubric:
 the complete conclusion list and complete structured saturation-claim list.
@@ -60,6 +61,6 @@ Acceptance requires three acquisition pairs, candidate 12/12, candidate score
 strictly above current, and a trusted positive manual review with the pinned
 reviewer and nonempty notes for every successful acquisition and interpretation
 reasoning log in both arms. The report lists an attempt summary plus the exact
-evidence, command, log, reasoning, receipt, and manual-note references/hashes
+prompt, evidence, command, log, reasoning, receipt, and manual-note references/hashes
 needed for audit. Live acceptance remains blocked until the audited launcher,
 product stack, and supported A5 profiling runtime are available.

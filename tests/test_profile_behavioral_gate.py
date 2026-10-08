@@ -28,6 +28,7 @@ def artifact(root: Path, name: str, value, **metadata) -> dict:
 
 def fixture(tmp_path: Path):
     root = tmp_path / "artifacts"; root.mkdir()
+    prompt = artifact(root, "prompt.md", "Interpret the supplied evidence.\n")
     cases = []
     for number, product in enumerate(("a3", "a3", "a5", "a5"), 1):
         provenance = {"product": product, "handle": f"frozen:{product}:{number}"}
@@ -41,7 +42,7 @@ def fixture(tmp_path: Path):
                       "rubric": {"conclusions": [f"fact-{number}"],
                                  "saturation_claims": claims}})
     manifest = {
-        "schema": gate.MANIFEST_SCHEMA, "prompt_sha256": "1" * 64,
+        "schema": gate.MANIFEST_SCHEMA, "prompt": prompt, "prompt_sha256": prompt["sha256"],
         "skills": {"current": "2" * 64, "candidate": "3" * 64},
         "launcher": {"identity": "audited-launcher/v1", "sha256": "4" * 64},
         "model": {"identity": "test-model", "config_sha256": "5" * 64},
@@ -120,6 +121,22 @@ def test_accepts_12_of_12_candidate_and_blinded_payload(tmp_path: Path):
     assert len(report["attempts"]) == 9
     payloads = [a["agent_payload"] for row in records["interpretation"] for a in row["answers"]]
     assert all("arm" not in p and "workspace" not in p for p in payloads)
+    assert report["artifacts"][0] == {"prompt": json.loads(manifest.read_text())["prompt"]}
+
+
+@pytest.mark.parametrize("damage", ["hash", "empty"])
+def test_prompt_artifact_is_retained_and_byte_pinned(tmp_path: Path, damage: str):
+    manifest, path, root, document, _ = fixture(tmp_path)
+    if damage == "hash":
+        document["prompt"]["sha256"] = "0" * 64
+    else:
+        prompt = root / document["prompt"]["path"]
+        prompt.write_text(" \n")
+        document["prompt"]["sha256"] = sha(prompt)
+        document["prompt_sha256"] = sha(prompt)
+    manifest.write_text(json.dumps(document))
+    with pytest.raises(gate.GateError, match="prompt"):
+        gate.evaluate(manifest, path, root)
 
 
 def test_acquisition_requires_paired_attested_session(tmp_path: Path):

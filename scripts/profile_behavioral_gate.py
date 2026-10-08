@@ -103,11 +103,14 @@ def _claim(claim) -> dict:
 
 
 def _manifest(path: Path, root: Path) -> tuple[dict, dict[str, dict], str]:
-    value = _exact(_json(path), {"schema", "prompt_sha256", "skills", "launcher", "model",
-                                 "reviewer", "allowed_targets", "cases"}, "manifest")
+    value = _exact(_json(path), {"schema", "prompt", "prompt_sha256", "skills", "launcher",
+                                 "model", "reviewer", "allowed_targets", "cases"}, "manifest")
     if value["schema"] != MANIFEST_SCHEMA:
         raise GateError("unsupported manifest schema")
     _hex(value["prompt_sha256"], "prompt")
+    _artifact(value["prompt"], root, "prompt", text=True)
+    if value["prompt"]["sha256"] != value["prompt_sha256"]:
+        raise GateError("prompt identity mismatch")
     skills = _exact(value["skills"], {"current", "candidate"}, "skills")
     for arm in skills: _hex(skills[arm], f"{arm} skill")
     _identity(value["launcher"], "sha256", "launcher")
@@ -225,7 +228,8 @@ def evaluate(manifest_path: Path, records_path: Path, artifact_root: Path) -> di
     if records["schema"] != RECORDS_SCHEMA or not all(
             isinstance(records[key], list) for key in ("acquisition", "interpretation")):
         raise GateError("invalid records schema")
-    sessions: set[str] = set(); artifacts = []; scores = []; attempts = []
+    sessions: set[str] = set(); artifacts = [{"prompt": manifest["prompt"]}]
+    scores = []; attempts = []
     counts = Counter(); acquisition_success = 0; manual_ok = True
     base = {"kind", "session_id", "classification", "manifest_sha256", "launcher", "model",
             "skill_sha256"}

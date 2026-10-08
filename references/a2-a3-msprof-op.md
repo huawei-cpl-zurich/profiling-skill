@@ -125,7 +125,8 @@ preserves activity ratios
 separately from metrics, and retains raw memory-path values. The
 shipped A3 model marks every capacity denominator unavailable, so saturation
 is `unknown`. This is deliberate: the ratios can identify a compute-heavy or
-movement-heavy phase, but cannot prove a saturated bottleneck.
+movement-heavy block/sub-block observation, but cannot prove a saturated
+bottleneck or locate a temporal phase.
 
 `TimelineDetail` flow events describe mapping relationships, not capacity.
 Sampled usage is based on task cycles divided by frequency times elapsed

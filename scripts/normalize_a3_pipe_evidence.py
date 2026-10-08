@@ -15,7 +15,6 @@ from typing import Any
 
 
 NAME_FIELDS = ("Op Name", "OpName", "Kernel Name", "kernel_name")
-DURATION_FIELDS = ("Task Duration(us)", "Task Duration (us)", "task_duration_us")
 PIPE_FIELDS = {
     "aic_cube": "aic_cube_ratio",
     "aic_mte1": "aic_mte1_ratio",

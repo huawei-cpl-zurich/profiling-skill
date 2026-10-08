@@ -42,7 +42,12 @@ and download are not exposed to agents; `run --file` and compact stdout
 evidence are the supported surface. The retained terminal output must include
 `REMOTE_CONTENT_SHA256=<hex>` for the exact compact evidence file bytes, and
 the launcher recomputes that digest before retaining those same bytes without
-JSON reserialization. The complete journal, bound result/log
+JSON reserialization. Producer-supplied evidence provenance contains exactly
+the assigned product and target, not a durable handle that only becomes known
+after broker dispatch. The trusted launcher separately binds the final
+answer's handle and target to the selected terminal-successful dispatch, and
+records that handle in the outcome beside the matching remote SHA-256. The
+complete journal, bound result/log
 calls, and bounded redacted Codex logs are retained on success and failure.
 
 An acquisition agent uses one Codex thread for its A3 turn and resumed A5

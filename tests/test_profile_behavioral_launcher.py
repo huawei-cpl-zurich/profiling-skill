@@ -564,7 +564,7 @@ def test_acquisition_draft_binds_actual_thread_handle_target_and_remote_command(
     journal_calls = []
     for index, unit in enumerate(request["units"], 1):
         handle = f"remote:{unit['target']}:job:job-{index}"
-        provenance = {"product": unit["product"], "target": unit["target"], "handle": handle}
+        provenance = {"product": unit["product"], "target": unit["target"]}
         evidence = paths.workspace / f"profile-{index}.json"
         evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
         evidence_sha256 = digest(evidence)
@@ -611,8 +611,7 @@ def test_acquisition_retains_exact_noncanonical_remote_evidence_bytes(tmp_path: 
     expected = {}
     for index, unit in enumerate(request["units"], 1):
         handle = f"remote:{unit['target']}:job:exact-{index}"
-        provenance = {"product": unit["product"], "target": unit["target"],
-                      "handle": handle}
+        provenance = {"product": unit["product"], "target": unit["target"]}
         evidence = paths.workspace / f"exact-{index}.json"
         evidence.write_text(
             '{\n  "provenance": ' + json.dumps(provenance, separators=(", ", ": "))
@@ -643,6 +642,47 @@ def test_acquisition_retains_exact_noncanonical_remote_evidence_bytes(tmp_path: 
         assert retained.read_bytes() == content
         assert outcome["evidence"]["sha256"] == emitted_hash
         assert outcome["evidence"]["remote_sha256"] == emitted_hash
+        assert outcome["evidence"]["provenance"] == {
+            "product": outcome["product"], "target": outcome["target"]}
+
+
+@pytest.mark.parametrize("invalid_provenance", [
+    {"product": "a3", "target": "bz-a3-1", "handle": "remote:bz-a3-1:job:job-1"},
+    {"product": "a5", "target": "bz-a3-1"},
+    {"product": "a3", "target": "bz-a3-2"},
+])
+def test_acquisition_draft_requires_exact_producer_provenance(
+        tmp_path: Path, invalid_provenance: dict):
+    instance, request = fixture(tmp_path)
+    paths = instance.prepare(tmp_path / "run", instance.validate_request(request))
+    store = launcher.ArtifactStore(tmp_path / "artifacts")
+    turns = []
+    dispatches = []
+    for index, unit in enumerate(request["units"], 1):
+        handle = f"remote:{unit['target']}:job:job-{index}"
+        provenance = (invalid_provenance if index == 1 else
+                      {"product": unit["product"], "target": unit["target"]})
+        evidence = paths.workspace / f"profile-{index}.json"
+        evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
+        evidence_sha256 = digest(evidence)
+        turns.append({"payload": {"product": unit["product"], "target": unit["target"],
+                                  "prompt_sha256": request["prompt_sha256"]},
+                      "answer": {"product": unit["product"], "target": unit["target"],
+                                 "handle": handle, "evidence": evidence.name,
+                                 "reasoning": "producer provenance is bounded"},
+                      "command": store.text(f"command-{index}.txt", "codex\n"),
+                      "log": store.text(f"log-{index}.txt", "agent\n")})
+        dispatches.append({"request_sha256": str(index) * 64, "target": unit["target"],
+                           "arguments": ["run", unit["target"], "--file", "/workspace/job.sh"],
+                           "state": "completed", "handle": handle,
+                           "result": {"returncode": 0, "state": "completed",
+                                      "stdout": f"REMOTE_CONTENT_SHA256={evidence_sha256}\n",
+                                      "stderr": ""}})
+    paths.journal.write_text(json.dumps({"schema": "profiling-skill/remote-journal/v1",
+                                         "dispatches": dispatches, "calls": []}))
+
+    with pytest.raises(launcher.LaunchError, match="exact provenance"):
+        instance._success_draft(request, turns, paths, store, "actual-thread")
 
 
 @pytest.mark.parametrize("state,returncode", [("running", 0), ("failed", 1),
@@ -656,7 +696,7 @@ def test_acquisition_draft_rejects_nonterminal_or_failed_dispatch(
     dispatches = []
     for index, unit in enumerate(request["units"], 1):
         handle = f"remote:{unit['target']}:job:job-{index}"
-        provenance = {"product": unit["product"], "target": unit["target"], "handle": handle}
+        provenance = {"product": unit["product"], "target": unit["target"]}
         evidence = paths.workspace / f"profile-{index}.json"
         evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
         evidence_sha256 = digest(evidence)
@@ -690,8 +730,7 @@ def test_acquisition_draft_rejects_agent_evidence_not_bound_to_remote_bytes(tmp_
     journal_calls = []
     for index, unit in enumerate(request["units"], 1):
         handle = f"remote:{unit['target']}:job:job-{index}"
-        provenance = {"product": unit["product"], "target": unit["target"],
-                      "handle": handle}
+        provenance = {"product": unit["product"], "target": unit["target"]}
         evidence = paths.workspace / f"profile-{index}.json"
         evidence.write_text(json.dumps({"schema": "compact/v1", "provenance": provenance}))
         turns.append({"payload": {"product": unit["product"], "target": unit["target"],
@@ -820,6 +859,8 @@ def test_paired_a5_process_failure_ignores_prior_a3_remote_history_and_is_gate_c
     failure_log = (artifact_root / record["log"]["path"]).read_text()
     assert "old triton compile error" not in failure_log
     assert "REMOTE_CONTENT_SHA256=<hex>" in prompts[0]
+    assert "provenance containing exactly the assigned `product` and `target`" in prompts[0]
+    assert "do not put a durable handle" in prompts[0]
     assert '"target": "bz-a3-1"' in prompts[0]
     retained = json.loads((artifact_root / result["remote_journal"]["path"]).read_text())
     assert retained["dispatches"][0]["handle"] == "remote:bz-a3-1:job:a3-completed"

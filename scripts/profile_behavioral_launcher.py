@@ -789,8 +789,7 @@ class BehavioralLauncher(ProductionLauncher):
                     raise LaunchError("acquisition answer does not match retained remote evidence")
                 source = self._agent_file(paths.workspace, answer["evidence"])
                 evidence = json.loads(source.read_text())
-                provenance = {"product": unit["product"], "target": unit["target"],
-                              "handle": answer["handle"]}
+                provenance = {"product": unit["product"], "target": unit["target"]}
                 if not isinstance(evidence, dict) or not isinstance(evidence.get("schema"), str) \
                         or evidence.get("provenance") != provenance:
                     raise LaunchError("acquisition evidence lacks exact provenance")
@@ -949,6 +948,9 @@ class BehavioralLauncher(ProductionLauncher):
                      "Return exactly one JSON object as the final answer.\n")
                 if request["kind"] == "acquisition":
                     prompt += (
+                        "The compact evidence JSON must have provenance containing exactly "
+                        "the assigned `product` and `target`; do not put a durable handle in "
+                        "that provenance because the broker assigns it after dispatch. "
                         "The retained terminal remote output must include "
                         "`REMOTE_CONTENT_SHA256=<hex>` containing the SHA-256 of the exact "
                         "evidence file bytes named in your final answer.\n")

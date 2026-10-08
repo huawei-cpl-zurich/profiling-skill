@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -13,11 +14,17 @@ ANALYZER = ROOT / "scripts" / "analyze_pipe_saturation.py"
 MODEL = ROOT / "references" / "a5-pipe-capacity-model.json"
 
 
-def write_trace(path: Path, rows: list[dict], *, truncated: bool = False) -> None:
+def write_trace(
+    path: Path,
+    rows: list[dict],
+    *,
+    truncated: bool = False,
+    display_time_unit: str = "us",
+) -> None:
     path.write_text(
         json.dumps(
             {
-                "displayTimeUnit": "us",
+                "displayTimeUnit": display_time_unit,
                 "metadata": {"truncated": truncated},
                 "traceEvents": rows,
             }
@@ -126,13 +133,77 @@ def test_profiler_fractional_nanoseconds_are_quantized_deterministically(tmp_pat
     assert run.returncode == 0, run.stderr
     result = json.loads((output / "phase-evidence.json").read_text())
     assert result["time_quantization"] == (
-        "nearest-nanosecond-half-up; positive events minimum 1ns"
+        "microseconds-to-nearest-nanosecond-half-up; positive events minimum 1ns"
     )
     assert [(phase["start_ns"], phase["end_ns"]) for phase in result["phases"]] == [
         (1_892, 2_280),
         (2_280, 2_281),
         (2_281, 3_621),
     ]
+
+
+def test_msprof_display_unit_is_a_viewer_hint_not_timestamp_scaling(tmp_path: Path):
+    trace = tmp_path / "real-shape.json"
+    output = tmp_path / "out"
+    write_trace(
+        trace,
+        [
+            event("scalar", 1.8915151357650757, 1.7296969890594482),
+            event("cube", 2.2799999713897705, 0.001212121220305562),
+        ],
+        display_time_unit="ns",
+    )
+
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(SUMMARIZER),
+            "--pipe-timeline",
+            str(trace),
+            "--output",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert run.returncode == 0, run.stderr
+    result = json.loads((output / "phase-evidence.json").read_text())
+    assert result["source_timestamp_unit"] == "microseconds"
+    assert [(phase["start_ns"], phase["end_ns"]) for phase in result["phases"]] == [
+        (1_892, 2_280),
+        (2_280, 2_281),
+        (2_281, 3_621),
+    ]
+
+
+def test_common_clock_sweep_is_linear_after_sorting_at_realistic_scale():
+    spec = importlib.util.spec_from_file_location("timeline_summary", SUMMARIZER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class CountingRow(dict):
+        reads = 0
+
+        def __getitem__(self, key):
+            type(self).reads += 1
+            return super().__getitem__(key)
+
+    size = 2_048
+    rows = [
+        CountingRow(start_ns=index * 2, end_ns=index * 2 + 1, pipe="mte2")
+        for index in range(size)
+    ]
+
+    phases = module.common_clock_phases(rows)
+
+    assert len(phases) == size * 2 - 1
+    assert phases[0]["activity"]["pipes"] == ["mte2"]
+    assert phases[1]["activity"]["pipes"] == []
+    assert phases[-1]["activity"]["pipes"] == ["mte2"]
+    assert CountingRow.reads <= size * 10
 
 
 def test_only_exact_common_clock_capacity_windows_are_joined(tmp_path: Path):

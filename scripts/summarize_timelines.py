@@ -19,7 +19,7 @@ class InvalidTimeline(ValueError):
     pass
 
 
-TIME_UNITS_NS = {"ns": Decimal(1), "us": Decimal(1000), "ms": Decimal(1_000_000)}
+MICROSECONDS_TO_NS = Decimal(1000)
 
 
 def trace_payload(path: Path) -> tuple[list[Any], dict[str, Any]]:
@@ -34,9 +34,9 @@ def trace_payload(path: Path) -> tuple[list[Any], dict[str, Any]]:
     return raw, metadata
 
 
-def decimal_ns(value: Any, unit: str, location: str) -> Decimal:
+def decimal_ns(value: Any, location: str) -> Decimal:
     try:
-        converted = Decimal(str(value)) * TIME_UNITS_NS[unit]
+        converted = Decimal(str(value)) * MICROSECONDS_TO_NS
     except (InvalidOperation, ValueError) as error:
         raise InvalidTimeline(f"invalid {location}: {value!r}") from error
     if not converted.is_finite() or converted < 0:
@@ -50,10 +50,7 @@ def quantized_ns(value: Decimal) -> int:
 
 
 def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict]:
-    raw, metadata = trace_payload(path)
-    unit = str(metadata.get("displayTimeUnit", "us")).lower()
-    if unit not in TIME_UNITS_NS:
-        raise InvalidTimeline(f"unsupported displayTimeUnit {unit!r} in {path}")
+    raw, _ = trace_payload(path)
     out = []
     for event in raw:
         if not isinstance(event, dict) or event.get("ph") not in (None, "X"):
@@ -71,12 +68,10 @@ def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict
                 or "unknown"
             ).lower()
         )
-        start_value_ns = decimal_ns(
-            event["ts"], unit, f"event timestamp in {path}"
-        )
-        duration_value_ns = decimal_ns(
-            event["dur"], unit, f"event duration in {path}"
-        )
+        # msprof follows the trace-event convention: ts/dur are microseconds.
+        # displayTimeUnit is only a viewer rendering hint and does not scale them.
+        start_value_ns = decimal_ns(event["ts"], f"event timestamp in {path}")
+        duration_value_ns = decimal_ns(event["dur"], f"event duration in {path}")
         if duration_value_ns == 0:
             continue
         start_ns = quantized_ns(start_value_ns)
@@ -102,27 +97,28 @@ def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict
 
 def common_clock_phases(rows: list[dict]) -> list[dict[str, Any]]:
     """Partition the observed window whenever its active-pipe set changes."""
-    boundaries = sorted(
-        {point for row in rows for point in (row["start_ns"], row["end_ns"])}
-    )
+    changes: dict[int, Counter[str]] = defaultdict(Counter)
+    for row in rows:
+        pipe = row["pipe"]
+        changes[row["start_ns"]][pipe] += 1
+        changes[row["end_ns"]][pipe] -= 1
+    boundaries = sorted(changes)
+    active: Counter[str] = Counter()
     phases = []
     for start, end in zip(boundaries, boundaries[1:]):
+        for pipe, delta in changes[start].items():
+            active[pipe] += delta
+            if active[pipe] <= 0:
+                del active[pipe]
         if end <= start:
             continue
-        active = sorted(
-            {
-                row["pipe"]
-                for row in rows
-                if row["start_ns"] < end and row["end_ns"] > start
-            }
-        )
         phases.append(
             {
                 "phase_id": f"phase-{len(phases):04d}",
                 "start_ns": start,
                 "end_ns": end,
                 "metrics": {},
-                "activity": {"pipes": active},
+                "activity": {"pipes": sorted(active)},
                 "capacity_join": {
                     "state": "unavailable",
                     "reason": "no exact-window capacity evidence",
@@ -213,7 +209,8 @@ def phase_evidence(path: Path, rows: list[dict], capacity_path: Path | None) -> 
         "product": "a5",
         "target_product": "Ascend950/V6",
         "clock": "pipe-timeline-common-clock-ns",
-        "time_quantization": "nearest-nanosecond-half-up; positive events minimum 1ns",
+        "source_timestamp_unit": "microseconds",
+        "time_quantization": "microseconds-to-nearest-nanosecond-half-up; positive events minimum 1ns",
         "timeline_complete": not truncated,
         "provenance": {"capture_id": capture_id, "source_sha256": trace_hash},
         "capacity_provenance": capacity_provenance,

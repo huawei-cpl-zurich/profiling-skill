@@ -19,7 +19,7 @@
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `PYTHONPATH=. pytest -q` | 1091 passed | Full pre-ablation suite |
+| `PYTHONPATH=. pytest -q` | 1103 passed | Full post-review suite |
 | focused tests, quick validation, Ruff, diff check | passed | No failures |
 
 ## Complexity Inventory
@@ -30,6 +30,8 @@
 | C2 | Kernel-name inference | speculative | Relevant operator is workload-dependent | Require agent-selected exact export | ablated |
 | C3 | Embedded controller plus local controller | essential | Remote report must be analyzed in place | Keep boundary explicit | kept |
 | C4 | Product runtime map | essential | A3 and A5 require different named runtimes | Keep closed map | kept |
+| C5 | Bundle manifest and remote materializer | essential | Real workloads use sibling modules and data | Keep one content-addressed implementation | kept |
+| C6 | Receipt and resume lifecycle | essential | Controller interruption must never redispatch a retained job | Keep one lifecycle shared by both passes | kept |
 
 ## Unsupported Capabilities
 
@@ -51,17 +53,21 @@
 | --- | --- | --- | --- | --- |
 | F1 | Accept nonzero terminal receipts | `cpl-remote` mirrors failed remote exit | terminal-failure test | CLI |
 | F2 | Use deployed flags and selector-binding BasicInfo | Match real A3/A5 exports | four successful live handles | CLI |
+| F3 | Persist and flush the dispatch receipt before observation | Survive controller termination after dispatch | deliberate live A3 interruption and resume | CLI |
+| F4 | Bind both passes to a complete deterministic bundle manifest | Prevent silent sibling/data drift | multi-file execution and mutation tests | CLI |
+| F5 | Make discovery bounded and explicit rather than complete | Deployed msprof exposes a bounded launch count, not application completeness | late-after-20 test and live CLI help | CLI and reference |
+| F6 | Preserve remote failure phase and classification | Distinguish infrastructure from workload and profiler failures | functional classification matrix | CLI |
 
 ## Final Validation
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `pytest -q tests/test_acquire_profile.py` | 15 passed | Includes generated-payload execution |
-| `PYTHONPATH=. pytest -q` | 1091 passed | Full suite |
+| `pytest -q tests/test_acquire_profile.py` | 27 passed | Includes bundle, restart/resume, late selector, and failure classes |
+| `PYTHONPATH=. pytest -q` | 1103 passed | Full suite |
 | `quick_validate.py .` | passed | Skill package valid |
 | Ruff and `git diff --check` | passed | Clean |
-| A3 BasicInfo + PipeUtilization | passed | Exact selector, 24 pipe rows |
-| A5 BasicInfo + PipeUtilization | passed | Exact selector, 24 pipe rows |
+| A3 BasicInfo + PipeUtilization | passed | Three-file bundle; interrupted controller resumed same BasicInfo handle; exact selector and 24 pipe rows |
+| A5 BasicInfo + PipeUtilization | passed | Same three-file bundle identity; exact selector and 24 pipe rows |
 
 ## PR Review Assessment
 
@@ -71,7 +77,7 @@
 | Main review risks | Embedded remote controller and deployed CSV schema variance |
 | Distinct review stories | One: prevent agents from synthesizing fragile profiler commands |
 | Backend/compiler/runtime/frontend mix | Transport orchestration plus remote evidence parsing are inseparable here |
-| Human reviewer notes | Review same-handle recovery, exact workload identity, and selector binding together |
+| Human reviewer notes | Review same-handle recovery, complete bundle identity, bounded discovery, failure classes, and selector binding together |
 
 ## Suggested PR Split
 
@@ -83,7 +89,8 @@ either half without a functional public acquisition interface.
 | Risk | Impact | Follow-up |
 | --- | --- | --- |
 | Future profiler CSV renames | Fail-closed acquisition | Add a real fixture when a new deployed schema appears |
+| Bounded BasicInfo capture can miss a later launch | Agent cannot select that kernel from this pass | Increase `--launch-count` within the deployed 1-5000 limit or narrow the workload; never claim the inventory is complete |
 
 ## Next Action
 
-Commit and open the PR against `codex/triton-pipe-attribution`.
+Commit and update PR #76 against `codex/triton-pipe-attribution`.

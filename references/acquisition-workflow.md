@@ -1,57 +1,101 @@
 # Two-pass live profile acquisition
 
-Use this workflow for a self-contained Python workload or executable script
-whose success exit proves compilation, runtime, and correctness. The helper
-supports `a3` on `bz-a3-1` or `bz-a3-2`, and `a5` on `bz-a5`. It selects the
-target's named runtime and a bounded functional device probe; the workload
-always addresses logical device 0 through the environment.
+Use this workflow for a Torch/Triton workload whose success exit proves its
+compilation, runtime, and correctness. It supports A3 on `bz-a3-1` or
+`bz-a3-2`, and A5 on `bz-a5`. The helper selects the named runtime and a
+bounded functional device probe; the workload addresses logical device 0.
 
-## 1. Enumerate exported kernels
+Prefer a bundle so sibling imports, data, generated modules, and the selected
+entrypoint are all content-addressed:
 
 ```bash
 python scripts/acquire_profile.py basic \
   --product a3 --target bz-a3-1 \
   --dispatch-key '<unique-basic-key>' \
-  --workload workload.py \
+  --bundle workload-bundle --entrypoint run_case.py \
   --workload-arg=--case --workload-arg=47 \
   --evidence basic-info.json
 ```
 
-The helper runs the supplied workload under the deployed
-`--aic-metrics=BasicInfo` capture and returns all exact exported kernel names.
-Inspect `capture.exported_kernel_names` together with the workload's intended
-operation. Framework setup, layout conversion, and the target kernel may all
-appear. The helper intentionally does not infer which one is relevant.
+`--workload workload.py` is shorthand for a one-file bundle. Symlinks are
+rejected. The deterministic manifest binds every regular file's relative
+path, mode, size, and SHA-256, plus the entrypoint and arguments. The pipe pass
+fails locally if any bundled file, argument, or entrypoint changes.
 
-## 2. Select and replay one exact kernel
+## Select and replay one exact name
 
-Choose one complete exported name without globbing, shortening, or rewriting
-it, then run:
+The BasicInfo pass returns `capture.observed_kernel_names`. Inspect those
+names alongside the intended operation, then select one complete name without
+globbing, shortening, or rewriting it:
 
 ```bash
 python scripts/acquire_profile.py pipe \
   --product a3 --target bz-a3-1 \
   --dispatch-key '<unique-pipe-key>' \
-  --workload workload.py \
+  --bundle workload-bundle --entrypoint run_case.py \
   --workload-arg=--case --workload-arg=47 \
   --basic-evidence basic-info.json \
-  --kernel-name '<exact exported name>' \
+  --kernel-name '<exact observed name>' \
   --evidence pipe-utilization.json
 ```
 
-The pipe pass fails before dispatch if the workload bytes or arguments differ
-from the BasicInfo pass, or if the selector is not an exact exported name. It
-profiles with `--aic-metrics=PipeUtilization` and filters the compact result to
-that selector. The helper never passes `--metrics` or an `msprof --device`
-flag; physical selection is expressed only through the workload environment.
+The helper intentionally does not infer which operator matters. It uses the
+deployed `--aic-metrics` syntax, never `--metrics` or an `msprof --device`
+flag, and binds unnamed pipe rows through the adjacent exact-selector
+BasicInfo export.
 
-Both passes retain full report trees on the target and return exact compact
-JSON bytes plus their SHA-256. Record the two durable handles. If observation
-is interrupted, rerun observation of the printed handle rather than starting
-another acquisition. Compilation, runtime, correctness, profiler, missing-row,
-and evidence failures are counted outcomes; only proven transport or host
-failures are discardable infrastructure.
+## Bounded discovery
 
-`PipeUtilization` is activity evidence. Both A3 and A5 outputs therefore mark
-saturation `unknown`; a saturated or unsaturated claim requires a separately
-reviewed product-valid capacity denominator.
+Both deployed profilers support `--launch-count` from 1 through 5000 and
+`--kill=off`. The helper defaults to 5000 so kernels launched after an early
+setup sequence are observable. Override it with `--launch-count N` only for a
+known smaller workload.
+
+The profiler does not export the application's total launch count. Evidence
+therefore reports the bound and `complete: false`; the names are exactly those
+observed within the bounded capture, never a claim that every application
+kernel was enumerated. If the expected kernel is absent, confirm workload
+success and use a larger bound up to 5000. If it remains absent at 5000, report
+the bounded miss rather than inventing a selector.
+
+## Durable dispatch and resume
+
+Immediately after dispatch, the helper prints and fsyncs a JSON receipt at
+`EVIDENCE.dispatch.json` by default. It binds the validated handle to the
+product, target, mode, runtime, dispatch key, complete bundle identity,
+selector, and launch bound. Preserve both the printed handle and receipt.
+
+After controller interruption, repeat the identical command with:
+
+```bash
+--resume-handle 'remote:TARGET:job:ID'
+```
+
+Resume validates all original acquisition metadata against the receipt and
+only observes that handle. It never submits another job. Result and log
+retrieval also retry the same handle after transport interruption. An existing
+receipt blocks an ordinary fresh dispatch.
+
+The full profiler report remains remote. The successful local evidence is the
+exact compact JSON bytes printed remotely and verified by SHA-256.
+
+## Failure receipts
+
+Failures preserve the durable handle, remote phase, classification, and a
+bounded excerpt:
+
+- `device_unavailable` and `host_environment` identify device or host setup;
+- `transport_error` identifies controller/observer transport and is resumed;
+- `workload_failure` covers compilation, launch, runtime, correctness, and
+  workload timeout detected by the normal pre-profile run;
+- `profiler_failure` covers profiler timeout, exit, or missing success marker;
+- `evidence_failure` covers selector binding, missing rows, malformed compact
+  output, and digest/schema failures.
+
+Do not discard workload, profiler, or evidence failures as infrastructure.
+Only retained evidence may justify classifying host or transport failure as a
+discardable attempt.
+
+`PipeUtilization` is activity evidence. Both A3 and A5 outputs mark saturation
+`unknown`; a saturated or unsaturated claim requires a separately reviewed
+product-valid capacity denominator.

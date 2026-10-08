@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -25,6 +26,7 @@ TERMINAL = {"completed", "failed", "cancelled"}
 ACTIVE = {"queued", "dispatching", "running", "reconnecting", "observation-unavailable"}
 B64_MARKER = "ACQUIRE_EVIDENCE_B64="
 SHA_MARKER = "ACQUIRE_EVIDENCE_SHA256="
+REMOTE_SHA_MARKER = "REMOTE_CONTENT_SHA256="
 FAILURE_MARKER = "ACQUIRE_FAILURE_JSON="
 
 
@@ -52,6 +54,23 @@ class BundleSpec(NamedTuple):
 
 def canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def resolve_cpl_remote(explicit: Path | None, *, home: Path | None = None) -> Path:
+    candidates = []
+    if explicit is not None:
+        candidates.append(explicit)
+    else:
+        path_client = shutil.which("cpl-remote")
+        if path_client:
+            candidates.append(Path(path_client))
+        candidates.append(
+            (home or Path.home()) / ".agents/skills/remote-access/scripts/cpl-remote"
+        )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+    raise AcquisitionError("approved cpl-remote client is unavailable")
 
 
 def launch_count(value: str) -> int:
@@ -131,6 +150,7 @@ def validate_evidence(value, mode, product, target, dispatch_key, identity):
         raise AcquisitionError("evidence must be a JSON object", phase="evidence")
     expected = {
         "schema_version": 2,
+        "schema": "cpl.profile-acquisition.v2",
         "status": "success",
         "phase": mode,
         "product": product,
@@ -138,6 +158,7 @@ def validate_evidence(value, mode, product, target, dispatch_key, identity):
         "runtime": TARGETS[product][target],
         "dispatch_key": dispatch_key,
         "workload": identity,
+        "provenance": {"product": product, "target": target},
     }
     for key, wanted in expected.items():
         if value.get(key) != wanted:
@@ -148,6 +169,25 @@ def validate_evidence(value, mode, product, target, dispatch_key, identity):
             )
             raise AcquisitionError(
                 message, phase="evidence", classification="evidence_failure"
+            )
+    normal_run = value.get("normal_run")
+    if not isinstance(normal_run, dict) or normal_run.get("exit_code") != 0:
+        raise AcquisitionError(
+            "evidence lacks successful normal workload run",
+            phase="evidence",
+            classification="evidence_failure",
+        )
+    for stream in ("stdout", "stderr"):
+        digest = normal_run.get(stream)
+        if (
+            not isinstance(digest, dict)
+            or not isinstance(digest.get("bytes"), int)
+            or not re.fullmatch(r"[0-9a-f]{64}", str(digest.get("sha256", "")))
+        ):
+            raise AcquisitionError(
+                f"evidence normal-run {stream} digest is invalid",
+                phase="evidence",
+                classification="evidence_failure",
             )
     capture = value.get("capture")
     if not isinstance(capture, dict) or not isinstance(
@@ -326,16 +366,22 @@ try:
     selected=[] if MODE=="basic" else [row for name,row in rows if name==KERNEL_NAME]
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
     if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
-    evidence={"schema_version":2,"status":"success","phase":MODE,"product":PRODUCT,"target":TARGET,
+    def stream_digest(value):
+        raw=value.encode(); return {"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+    evidence={"schema_version":2,"schema":"cpl.profile-acquisition.v2","status":"success","phase":MODE,"product":PRODUCT,"target":TARGET,
       "runtime":RUNTIME,"dispatch_key":DISPATCH_KEY,"device":{"physical_id":physical,"logical_id":0},
-      "workload":IDENTITY,"capture":{"metric":metric,"observed_kernel_names":names,
+      "provenance":{"product":PRODUCT,"target":TARGET},"workload":IDENTITY,
+      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr)},
+      "capture":{"metric":metric,"observed_kernel_names":names,
       "inventory_scope":{"launch_bound":LAUNCH_COUNT,"complete":False,
       "reason":"msprof exports observed names but no total application launch count"},
       "selected_kernel":KERNEL_NAME,"rows":selected,"sources":sources,
       "log_sha256":hashlib.sha256(transcript.encode()).hexdigest()},
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
     raw=(json.dumps(evidence,sort_keys=True,separators=(",",":"))+"\n").encode()
-    print("ACQUIRE_EVIDENCE_SHA256="+hashlib.sha256(raw).hexdigest(),flush=True)
+    digest=hashlib.sha256(raw).hexdigest()
+    print("ACQUIRE_EVIDENCE_SHA256="+digest,flush=True)
+    print("REMOTE_CONTENT_SHA256="+digest,flush=True)
     print("ACQUIRE_EVIDENCE_B64="+base64.b64encode(raw).decode(),flush=True)
 except SystemExit: raise
 except Exception as exc: fail("controller","host_environment",repr(exc))
@@ -504,7 +550,12 @@ def _decode(stdout, mode, product, target, key, identity):
         for line in stdout.splitlines()
         if line.startswith(SHA_MARKER)
     ]
-    if len(encoded) != 1 or len(digests) != 1:
+    remote_digests = [
+        line.removeprefix(REMOTE_SHA_MARKER)
+        for line in stdout.splitlines()
+        if line.startswith(REMOTE_SHA_MARKER)
+    ]
+    if len(encoded) != 1 or len(digests) != 1 or len(remote_digests) != 1:
         raise AcquisitionError(
             "remote evidence markers missing or ambiguous",
             phase="evidence",
@@ -519,7 +570,8 @@ def _decode(stdout, mode, product, target, key, identity):
             phase="evidence",
             classification="evidence_failure",
         ) from exc
-    if hashlib.sha256(raw).hexdigest() != digests[0]:
+    actual_digest = hashlib.sha256(raw).hexdigest()
+    if actual_digest != digests[0] or actual_digest != remote_digests[0]:
         raise AcquisitionError(
             "remote evidence SHA-256 mismatch",
             phase="evidence",
@@ -625,7 +677,6 @@ def parse_args(argv=None):
     parser.add_argument(
         "--cpl-remote",
         type=Path,
-        default=Path.home() / ".agents/skills/remote-access/scripts/cpl-remote",
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
@@ -656,8 +707,7 @@ def main(argv=None):
             )
         if args.evidence.exists():
             raise AcquisitionError("evidence output already exists")
-        if not args.cpl_remote.is_file() or not os.access(args.cpl_remote, os.X_OK):
-            raise AcquisitionError("global cpl-remote is unavailable")
+        args.cpl_remote = resolve_cpl_remote(args.cpl_remote)
         spec = build_bundle(
             workload=args.workload,
             bundle=args.bundle,

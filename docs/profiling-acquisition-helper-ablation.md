@@ -19,7 +19,7 @@
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `PYTHONPATH=. pytest -q` | 1103 passed | Full post-review suite |
+| `PYTHONPATH=. pytest -q` | 1107 passed | Full post-integration suite |
 | focused tests, quick validation, Ruff, diff check | passed | No failures |
 
 ## Complexity Inventory
@@ -57,13 +57,15 @@
 | F4 | Bind both passes to a complete deterministic bundle manifest | Prevent silent sibling/data drift | multi-file execution and mutation tests | CLI |
 | F5 | Make discovery bounded and explicit rather than complete | Deployed msprof exposes a bounded launch count, not application completeness | late-after-20 test and live CLI help | CLI and reference |
 | F6 | Preserve remote failure phase and classification | Distinguish infrastructure from workload and profiler failures | functional classification matrix | CLI |
+| F7 | Resolve the approved broker client from `PATH` before the user-wide fallback | Isolated launchers mount `cpl-remote` at `/tools` | resolver and no-hidden-override subprocess tests | CLI |
+| F8 | Add launcher-compatible schema, provenance, normal-run digest, and remote-content marker | Let the trusted launcher bind and consume the same compact bytes | generated-payload marker/evidence tests | CLI |
 
 ## Final Validation
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `pytest -q tests/test_acquire_profile.py` | 27 passed | Includes bundle, restart/resume, late selector, and failure classes |
-| `PYTHONPATH=. pytest -q` | 1103 passed | Full suite |
+| `pytest -q tests/test_acquire_profile.py` | 31 passed | Includes bundle, restart/resume, late selector, failure classes, broker resolution, and launcher metadata |
+| `PYTHONPATH=. pytest -q` | 1107 passed | Full suite |
 | `quick_validate.py .` | passed | Skill package valid |
 | Ruff and `git diff --check` | passed | Clean |
 | A3 BasicInfo + PipeUtilization | passed | Three-file bundle; interrupted controller resumed same BasicInfo handle; exact selector and 24 pipe rows |

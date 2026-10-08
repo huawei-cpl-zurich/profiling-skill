@@ -77,7 +77,16 @@ retrieval also retry the same handle after transport interruption. An existing
 receipt blocks an ordinary fresh dispatch.
 
 The full profiler report remains remote. The successful local evidence is the
-exact compact JSON bytes printed remotely and verified by SHA-256.
+exact compact JSON bytes printed remotely and verified by both the acquisition
+and broker `REMOTE_CONTENT_SHA256` markers. Evidence includes its nonempty
+schema name, exact product/target provenance, and the successful normal
+workload exit plus compact stdout/stderr byte counts and digests. The workload
+success remains the correctness authority; profiler success alone is not.
+
+The helper uses the approved `cpl-remote` executable on `PATH` when an isolated
+launcher brokers it there. On ordinary hosts it falls back to the user-wide
+remote-access skill client. It fails closed if neither approved client exists;
+agent prompts do not need the hidden client-path override.
 
 ## Failure receipts
 

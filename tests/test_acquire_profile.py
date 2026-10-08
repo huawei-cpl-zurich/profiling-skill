@@ -24,6 +24,40 @@ def load_module():
     return module
 
 
+def test_cpl_remote_resolution_prefers_path_client(tmp_path, monkeypatch):
+    module = load_module()
+    path_client = tmp_path / "path" / "cpl-remote"
+    path_client.parent.mkdir()
+    path_client.write_text("#!/bin/sh\n")
+    path_client.chmod(0o755)
+    fallback = tmp_path / "home" / ".agents/skills/remote-access/scripts/cpl-remote"
+    fallback.parent.mkdir(parents=True)
+    fallback.write_text("#!/bin/sh\n")
+    fallback.chmod(0o755)
+    monkeypatch.setattr(module.shutil, "which", lambda name: str(path_client))
+
+    assert module.resolve_cpl_remote(None, home=tmp_path / "home") == path_client
+
+
+def test_cpl_remote_resolution_uses_user_wide_fallback(tmp_path, monkeypatch):
+    module = load_module()
+    fallback = tmp_path / "home" / ".agents/skills/remote-access/scripts/cpl-remote"
+    fallback.parent.mkdir(parents=True)
+    fallback.write_text("#!/bin/sh\n")
+    fallback.chmod(0o755)
+    monkeypatch.setattr(module.shutil, "which", lambda name: None)
+
+    assert module.resolve_cpl_remote(None, home=tmp_path / "home") == fallback
+
+
+def test_cpl_remote_resolution_fails_when_no_approved_client(tmp_path, monkeypatch):
+    module = load_module()
+    monkeypatch.setattr(module.shutil, "which", lambda name: None)
+
+    with pytest.raises(module.AcquisitionError, match="approved cpl-remote"):
+        module.resolve_cpl_remote(None, home=tmp_path / "empty-home")
+
+
 def identity(workload: Path, arguments: list[str]) -> dict:
     raw = workload.read_bytes()
     item = {
@@ -53,6 +87,7 @@ def evidence_bytes(
 ) -> bytes:
     value = {
         "schema_version": 2,
+        "schema": "cpl.profile-acquisition.v2",
         "status": "success",
         "product": product,
         "target": target,
@@ -60,7 +95,13 @@ def evidence_bytes(
         "dispatch_key": "test-key",
         "phase": phase,
         "device": {"physical_id": 2, "logical_id": 0},
+        "provenance": {"product": product, "target": target},
         "workload": workload_identity,
+        "normal_run": {
+            "exit_code": 0,
+            "stdout": {"bytes": 0, "sha256": hashlib.sha256(b"").hexdigest()},
+            "stderr": {"bytes": 0, "sha256": hashlib.sha256(b"").hexdigest()},
+        },
         "capture": {
             "metric": "BasicInfo" if phase == "basic" else "PipeUtilization",
             "observed_kernel_names": ["setup", "kernel.alpha/v1", "kernel beta"],
@@ -131,7 +172,9 @@ else:
         content = "ACQUIRE_FAILURE_JSON=" + json.dumps({{"classification": classification, "phase": phase, "message": message}})
     if stream == "stdout" and not scenario.startswith("terminal-"):
         raw = {evidence!r}
-        content = "ACQUIRE_EVIDENCE_SHA256=" + hashlib.sha256(raw).hexdigest() + "\\n"
+        digest = hashlib.sha256(raw).hexdigest()
+        content = "ACQUIRE_EVIDENCE_SHA256=" + digest + "\\n"
+        content += "REMOTE_CONTENT_SHA256=" + digest + "\\n"
         content += "ACQUIRE_EVIDENCE_B64=" + base64.b64encode(raw).decode() + "\\n"
     print(json.dumps({{"target": target, "state": "completed", "handle": handle, "content": content}}))
 """
@@ -151,6 +194,7 @@ def run_cli(
     scenario="ok",
     resume: str | None = None,
     attempts: int = 2,
+    cpl_override: bool = True,
 ):
     workload = tmp_path / "user workload.py"
     if not workload.exists():
@@ -176,11 +220,11 @@ def run_cli(
         str(workload),
         "--evidence",
         str(output),
-        "--cpl-remote",
-        str(cpl),
         "--transport-attempts",
         str(attempts),
     ]
+    if cpl_override:
+        command += ["--cpl-remote", str(cpl)]
     for argument in args:
         command += ["--workload-arg", argument]
     if basic:
@@ -193,7 +237,11 @@ def run_cli(
         command,
         text=True,
         capture_output=True,
-        env={**os.environ, "CPL_TEST_LOG": str(log)},
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "CPL_TEST_LOG": str(log),
+        },
     )
     calls = (
         [json.loads(line) for line in log.read_text().splitlines()]
@@ -201,6 +249,13 @@ def run_cli(
         else []
     )
     return result, output, raw, calls, workload
+
+
+def test_cli_uses_broker_client_on_path_without_hidden_override(tmp_path):
+    result, output, expected, calls, _ = run_cli(tmp_path, "basic", cpl_override=False)
+    assert result.returncode == 0, result.stderr
+    assert output.read_bytes() == expected
+    assert len([call for call in calls if "run" in call]) == 1
 
 
 @pytest.mark.parametrize(
@@ -244,6 +299,7 @@ def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):
     assert "FILES=json.loads(base64.b64decode(" in payload
     assert payload.count('print("ACQUIRE_EVIDENCE_B64="') == 1
     assert payload.count('print("ACQUIRE_EVIDENCE_SHA256="') == 1
+    assert payload.count('print("REMOTE_CONTENT_SHA256="') == 1
 
 
 def test_pipe_requires_agent_selected_exact_exported_name_and_same_workload(tmp_path):
@@ -474,7 +530,22 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
         for line in result.stdout.splitlines()
         if line.startswith("ACQUIRE_EVIDENCE_B64=")
     )
-    evidence = json.loads(base64.b64decode(encoded))
+    raw = base64.b64decode(encoded)
+    digest = hashlib.sha256(raw).hexdigest()
+    markers = {
+        line.split("=", 1)[0]: line.split("=", 1)[1]
+        for line in result.stdout.splitlines()
+        if line.startswith(("ACQUIRE_EVIDENCE_SHA256=", "REMOTE_CONTENT_SHA256="))
+    }
+    assert markers == {
+        "ACQUIRE_EVIDENCE_SHA256": digest,
+        "REMOTE_CONTENT_SHA256": digest,
+    }
+    evidence = json.loads(raw)
+    assert evidence["schema"] == "cpl.profile-acquisition.v2"
+    assert evidence["provenance"] == {"product": "a3", "target": "bz-a3-1"}
+    assert evidence["normal_run"]["exit_code"] == 0
+    assert set(evidence["normal_run"]) == {"exit_code", "stdout", "stderr"}
     assert evidence["capture"]["observed_kernel_names"] == ["exact.kernel/7"]
     assert len(evidence["capture"]["rows"]) == (1 if mode == "pipe" else 0)
     if mode == "pipe":
@@ -618,6 +689,8 @@ def test_bundle_payload_runs_sibling_import_and_discovers_kernel_after_twenty(tm
         if line.startswith("ACQUIRE_EVIDENCE_B64=")
     )
     evidence = json.loads(base64.b64decode(encoded))
+    assert evidence["schema"] == "cpl.profile-acquisition.v2"
+    assert evidence["provenance"] == {"product": "a3", "target": "bz-a3-1"}
     assert evidence["capture"]["observed_kernel_names"] == ["late.kernel"]
     assert evidence["capture"]["inventory_scope"] == {
         "launch_bound": 5000,

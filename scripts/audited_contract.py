@@ -21,6 +21,7 @@ MAX_EXCERPT = 512
 MAX_REPORT_FIELD = 8192
 CONTROLLER_POLICY_SCHEMA = "profiling-skill/controller-policy/v1"
 OBSERVE_TRANSITION_SCHEMA = "profiling-skill/controller-observe-transition/v1"
+REMEASURE_TRANSITION_SCHEMA = "profiling-skill/controller-remeasure-transition/v1"
 REPORT_FIELDS = (
     "hypothesis", "expected_result", "change", "evidence", "observed_result",
     "decision", "postmortem", "next_experiment",
@@ -442,6 +443,96 @@ def validate_observe_transition(receipt: dict, requested_handle: str,
             or pending["request_sha256"] == history[observed_index]["request_sha256"]):
         raise AuditError("controller observe transition proof is invalid")
     return receipt
+
+
+def validate_remeasure_transition(receipt: object, pending_receipt: object,
+                                  candidate_hash: str, manifest_hash: str,
+                                  experiment: int) -> dict:
+    """Authenticate one pending measurement's replacement measurement chain."""
+    try:
+        previous = validate_controller_receipt(
+            pending_receipt, candidate_hash, manifest_hash,
+        )
+        current = validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+    except AuditError as failure:
+        raise AuditError("controller remeasure transition proof is invalid") from failure
+    if (previous.get("status") != "measurement_pending"
+            or previous.get("experiment") != experiment
+            or current.get("experiment") != experiment):
+        raise AuditError("controller remeasure transition proof is invalid")
+    prior_policy, policy = previous["policy"], current["policy"]
+    prior_generation = prior_policy.get("measurement_generation")
+    generation = policy.get("measurement_generation")
+    prior_history = prior_policy.get("operation_history")
+    history = policy.get("operation_history")
+    transition = current.get("remeasure_transition")
+    required = {
+        "schema", "pending_receipt_sha256", "pending_handle",
+        "candidate_sha256", "manifest_sha256", "experiment",
+        "from_measurement_generation", "to_measurement_generation",
+        "profile_handle", "post_control_handle", "operation_history_sha256",
+    }
+    if (type(prior_generation) is not int or type(generation) is not int
+            or generation != prior_generation + 1
+            or not isinstance(prior_history, list) or not isinstance(history, list)
+            or history[:len(prior_history)] != prior_history
+            or len(history) <= len(prior_history)
+            or not isinstance(transition, dict) or set(transition) != required):
+        raise AuditError("controller remeasure transition proof is invalid")
+    suffix = history[len(prior_history):]
+    pending_payload = {
+        key: value for key, value in previous.items()
+        if key != "controller_exit_code"
+    }
+    expected = {
+        "schema": REMEASURE_TRANSITION_SCHEMA,
+        "pending_receipt_sha256": sha256_json(pending_payload),
+        "pending_handle": previous["handle"],
+        "candidate_sha256": candidate_hash,
+        "manifest_sha256": manifest_hash,
+        "experiment": experiment,
+        "from_measurement_generation": prior_generation,
+        "to_measurement_generation": generation,
+        "profile_handle": current["handle"],
+        # The exact post-control handle is independently checked against the
+        # authenticated operation-history tail below.  It need not rely on
+        # optional expanded calibration evidence.
+        "post_control_handle": transition.get("post_control_handle"),
+        "operation_history_sha256": sha256_json(history),
+    }
+    if transition != expected or current["handle"] == previous["handle"]:
+        raise AuditError("controller remeasure transition proof is invalid")
+    prefix = f"experiment-{experiment}-measurement-{generation}-"
+    profile_records = [record for record in suffix if (
+        record.get("action") == "profile"
+        and record.get("attempt_id") in {prefix + "primary", prefix + "confirmation"}
+    )]
+    terminal_profiles = [record for record in profile_records if (
+        record.get("terminal") is True and record.get("handle") == current["handle"]
+    )]
+    if (not profile_records or len(terminal_profiles) != 1
+            or any(record.get("action") not in {"profile", "calibrate"}
+                   for record in suffix)):
+        raise AuditError("controller remeasure transition proof is invalid")
+    terminal_profile_index = history.index(terminal_profiles[0], len(prior_history))
+    if current["status"] == "candidate_error":
+        if (expected["post_control_handle"] is not None
+                or terminal_profile_index != len(history) - 1):
+            raise AuditError("controller remeasure transition proof is invalid")
+        return current
+    after = [record for record in suffix if (
+        record.get("action") == "calibrate"
+        and record.get("attempt_id") == prefix + "after"
+        and record.get("terminal") is True
+        and record.get("status") == "ok"
+    )]
+    if (len(after) != 1 or not isinstance(expected["post_control_handle"], str)
+            or not expected["post_control_handle"]
+            or after[0].get("handle") != expected["post_control_handle"]
+            or history.index(after[0], len(prior_history)) <= terminal_profile_index
+            or after[0] is not history[-1]):
+        raise AuditError("controller remeasure transition proof is invalid")
+    return current
 
 
 def validate_controller_receipt(receipt: object, candidate_hash: str,

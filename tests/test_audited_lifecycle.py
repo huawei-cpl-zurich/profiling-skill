@@ -12,6 +12,7 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import audited_contract as contract  # noqa: E402
 import audited_lifecycle as lifecycle  # noqa: E402
+import audited_runtime as runtime  # noqa: E402
 import audited_verifier as verifier  # noqa: E402
 
 
@@ -1535,8 +1536,10 @@ def test_measurement_pending_remeasures_without_consuming_experiment(tmp_path: P
                 document["status"] = "measurement_pending"
             return document
 
-        def remeasure(self, number, candidate, manifest, handle):
-            self.remeasurements.append((number, candidate, manifest, handle))
+        def remeasure(self, number, candidate, manifest, handle, pending_receipt):
+            self.remeasurements.append(
+                (number, candidate, manifest, handle, pending_receipt)
+            )
             return receipt(candidate, manifest, number)
 
     controller = Controller()
@@ -1555,7 +1558,98 @@ def test_measurement_pending_remeasures_without_consuming_experiment(tmp_path: P
     assert controller.remeasurements[0][1:3] == (
         state["candidate_sha256"], state["manifest_sha256"],
     )
+    assert controller.remeasurements[0][4] == state["receipt"]
     assert controller.submissions == 3
+
+
+def test_real_lifecycle_remeasure_accepts_authenticated_new_handles(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text(f"VALUE = {number}\n")
+            return events("thread-real", {"prepared": True})
+        encoded = instruction.split(
+            "receipt:\n", 1,
+        )[1].split("\nThe frozen candidate", 1)[0]
+        controller_receipt = json.loads(encoded)
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        document = report(number, candidate, manifest)
+        document["controller_handle"] = controller_receipt["handle"]
+        document["controller_receipt_sha256"] = contract.sha256_json(
+            controller_receipt
+        )
+        return events("thread-real", document, command=False)
+    backend = tmp_path / "backend.py"
+    backend.write_text(
+        """import hashlib, json, statistics, sys
+request=json.load(sys.stdin)
+attempt=request.get('attempt_id') or request['action']
+handle='job:'+hashlib.sha256(attempt.encode()).hexdigest()[:12]
+if request['action'] == 'calibrate':
+ result={'status':'ok','handle':handle,'latency_us':10.0,
+         'samples_us':[9.0,10.0,11.0],'median_us':10.0}
+elif request['action'] == 'check':
+ result={'status':'ok','handle':handle,'passed':True}
+else:
+ samples=([1.0,10.0,100.0] if 'measurement-0' in attempt else [5.0,5.0,5.0])
+ result={'status':'ok','handle':handle,'kernel_name':'kernel',
+         'cases':[{'case':case,'samples_us':samples,
+                   'median_us':statistics.median(samples)}
+                  for case in request['cases']]}
+print(json.dumps(result))
+"""
+    )
+    baseline = {
+        "schema": "profiling-skill/baseline-timing/v1", "benchmark": "matmul",
+        "case_medians_us": [
+            {"case": case, "median_us": value}
+            for case, value in zip([7, 8, 9], [30.0, 33.0, 36.0])
+        ],
+        "control_median_us": 10.0,
+    }
+    baseline["sha256"] = contract.sha256_json(baseline)
+    config = tmp_path / "controller.json"
+    config.write_text(json.dumps({
+        "schema": "profiling-skill/audited-bz-controller-config/v1",
+        "benchmark": "matmul", "round_count": 1, "request_budget": 24,
+        "profile_repeats": 3, "variability_threshold": 0.1,
+        "control_drift_threshold": 0.2, "baseline": baseline,
+        "devices": [{"id": "local/device-0", "device": 0}],
+        "development_cases": [7, 8, 9], "all_cases": list(range(10)),
+        "backend_command": [sys.executable, str(backend)],
+    }))
+    state = tmp_path / "controller-state"
+    state.mkdir()
+    command = [
+        sys.executable, str(ROOT / "scripts/audited_bz_controller.py"),
+        "--config", str(config), "--state-dir", str(state),
+    ]
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke,
+        runtime.CommandController(command, repo, timeout=30), round_count=1,
+    )
+
+    with pytest.raises(contract.AuditError, match="measurement pending"):
+        runner.run("real-remeasure", "agent")
+    blocked = json.loads((repo / ".experiment/blocked.json").read_text())
+    pending = blocked["receipt"]
+    assert blocked["stage"] == "measurement"
+
+    result = runner.run("real-remeasure", "agent", resume=True)
+
+    assert result.status == "complete" and len(result.commits) == 1
+    controller_state = json.loads(next(state.glob("*/state.json")).read_text())
+    terminal = controller_state["terminal"]
+    contract.validate_remeasure_transition(
+        terminal, pending, blocked["candidate_sha256"], blocked["manifest_sha256"], 1,
+    )
+    assert terminal["status"] == "ok"
+    assert terminal["handle"] != pending["handle"]
+    assert terminal["remeasure_transition"]["post_control_handle"] == \
+        terminal["calibration"]["after"]["handle"]
 
 
 @pytest.mark.parametrize("helper_name,tracked", [("helper.py", True), ("scratch.py", False)])

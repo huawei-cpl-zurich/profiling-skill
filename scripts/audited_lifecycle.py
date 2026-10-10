@@ -595,7 +595,9 @@ class AuditedExperimentRunner:
             handle = previous.get("handle") if isinstance(previous, dict) else None
             measurements += 1
             try:
-                receipt = remeasure(number, candidate_hash, manifest_hash, handle)
+                receipt = remeasure(
+                    number, candidate_hash, manifest_hash, handle, previous,
+                )
             except Exception as failure:
                 self._measurement_checkpoint(
                     number, session, f"controller remeasurement failed: {failure}",

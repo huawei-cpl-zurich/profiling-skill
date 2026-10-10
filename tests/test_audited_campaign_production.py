@@ -2467,7 +2467,9 @@ state = json.loads(state_path.read_text()) if state_path.is_file() else {}
 key = f"{cell}:{a.experiment}"
 state[key] = state.get(key, 0) + 1
 state_path.write_text(json.dumps(state))
-handle = a.observe_handle or a.remeasure_handle or f"remote:bz-a3-1:job:{cell}-{a.experiment}"
+handle = (a.observe_handle
+          or (f"{a.remeasure_handle}:remeasured" if a.remeasure_handle else None)
+          or f"remote:bz-a3-1:job:{cell}-{a.experiment}")
 
 def policy(post="stable", samples=True):
     request_sha = hashlib.sha256(
@@ -2505,9 +2507,55 @@ if cell.startswith("matmul-") and a.experiment == 1 and not a.observe_handle:
                       "terminal": False,
                       "reason": "observer disconnected"}))
 elif cell.startswith("matmul-") and a.experiment == 2 and not a.remeasure_handle:
-    print(json.dumps({**base, "status": "measurement_pending",
+    request_sha = hashlib.sha256(f"{key}:measurement-0".encode()).hexdigest()
+    history = [{"request_sha256": request_sha, "mode": "submit",
+        "status": "ok", "terminal": True, "handle": handle,
+        "action": "profile", "attempt_id": "experiment-2-measurement-0-primary"}]
+    pending_policy = policy()
+    pending_policy.update({"measurement_generation": 0,
+        "operation_history": history, "submitted_handles": [handle],
+        "observed_handles": [handle], "variability_ratio": 1.0})
+    pending = {**base, "status": "measurement_pending", "experiment": 2,
         "samples_us": [1.0, 2.0, 3.0], "median_us": 2.0,
-        "policy": {**policy(), "variability_ratio": 1.0}}))
+        "policy": pending_policy}
+    state[key + ":pending"] = pending
+    state_path.write_text(json.dumps(state))
+    print(json.dumps(pending))
+elif cell.startswith("matmul-") and a.experiment == 2 and a.remeasure_handle:
+    pending = state[key + ":pending"]
+    profile_sha = hashlib.sha256(f"{key}:measurement-1".encode()).hexdigest()
+    control_sha = hashlib.sha256(f"{key}:measurement-1-after".encode()).hexdigest()
+    post_handle = handle + ":post-control"
+    history = pending["policy"]["operation_history"] + [
+        {"request_sha256": profile_sha, "mode": "submit", "status": "ok",
+         "terminal": True, "handle": handle, "action": "profile",
+         "attempt_id": "experiment-2-measurement-1-primary"},
+        {"request_sha256": control_sha, "mode": "submit", "status": "ok",
+         "terminal": True, "handle": post_handle, "action": "calibrate",
+         "attempt_id": "experiment-2-measurement-1-after"},
+    ]
+    current_policy = policy()
+    current_policy.update({"measurement_generation": 1,
+        "operation_history": history,
+        "submitted_handles": [a.remeasure_handle, handle, post_handle],
+        "observed_handles": [a.remeasure_handle, handle, post_handle],
+        "variability_ratio": 0.2 / 12.1})
+    samples = [12.0, 12.1, 12.2]
+    current = {**base, "status": "ok", "experiment": 2,
+        "samples_us": samples, "median_us": samples[1], "policy": current_policy}
+    canonical = lambda value: hashlib.sha256(json.dumps(
+        value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    current["remeasure_transition"] = {
+        "schema": "profiling-skill/controller-remeasure-transition/v1",
+        "pending_receipt_sha256": canonical(pending),
+        "pending_handle": a.remeasure_handle,
+        "candidate_sha256": a.candidate_sha256,
+        "manifest_sha256": a.manifest_sha256, "experiment": 2,
+        "from_measurement_generation": 0, "to_measurement_generation": 1,
+        "profile_handle": handle, "post_control_handle": post_handle,
+        "operation_history_sha256": canonical(history),
+    }
+    print(json.dumps(current))
 elif cell.startswith("gdn-") and a.experiment == 2:
     print(json.dumps({**base, "status": "candidate_error",
         "reason": "Triton compilation failed", "policy": policy("not_run", False)}))

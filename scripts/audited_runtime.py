@@ -628,21 +628,34 @@ class CommandController:
         )
 
     def remeasure(self, number: int, candidate_hash: str, manifest_hash: str,
-                  handle: str) -> dict:
+                  handle: str, pending_receipt: dict) -> dict:
         """Remeasure a pending receipt without preparing another candidate."""
         if not isinstance(handle, str) or not handle:
             raise AuditError("controller remeasure requires a durable handle")
+        try:
+            evidence_contract.validate_controller_receipt(
+                pending_receipt, candidate_hash, manifest_hash,
+            )
+        except AuditError as failure:
+            raise AuditError("controller remeasure requires an authenticated pending receipt") \
+                from failure
+        if (pending_receipt.get("status") != "measurement_pending"
+                or pending_receipt.get("handle") != handle
+                or pending_receipt.get("experiment") != number):
+            raise AuditError("controller remeasure requires an authenticated pending receipt")
         command = [
             *self.command, "--remeasure-handle", handle, "--experiment", str(number),
             "--candidate-sha256", candidate_hash, "--manifest-sha256", manifest_hash,
         ]
         return self._execute(
             command, number, candidate_hash, manifest_hash, expected_handle=handle,
+            remeasure_source=pending_receipt,
         )
 
     def _execute(self, command: Sequence[str], number: int, candidate_hash: str,
                  manifest_hash: str, *, expected_handle: str | None = None,
-                 allow_observe_transaction: bool = False) -> dict:
+                 allow_observe_transaction: bool = False,
+                 remeasure_source: dict | None = None) -> dict:
         try:
             result = subprocess.run(
                 command, cwd=self.repo, text=True, capture_output=True,
@@ -712,7 +725,8 @@ class CommandController:
                 ),
             }
         observed_transaction = (expected_handle is None or (
-            not allow_observe_transaction and receipt.get("handle") == expected_handle
+            not allow_observe_transaction and remeasure_source is None
+            and receipt.get("handle") == expected_handle
         ))
         if allow_observe_transaction and expected_handle is not None:
             try:
@@ -731,14 +745,31 @@ class CommandController:
                 observed_transaction = True
             except AuditError:
                 pass
+        if remeasure_source is not None and expected_handle is not None:
+            try:
+                if receipt.get("status") in {
+                        "ok", "candidate_error", "measurement_pending"}:
+                    evidence_contract.validate_remeasure_transition(
+                        receipt, remeasure_source, candidate_hash, manifest_hash, number,
+                    )
+                    observed_transaction = True
+                elif (receipt.get("status") == "infrastructure_error"
+                      and receipt.get("handle") == expected_handle):
+                    observed_transaction = True
+            except AuditError:
+                pass
         if expected_handle is not None and not observed_transaction:
             return {
                 "status": "infrastructure_error",
                 "terminal": False,
                 "handle": expected_handle,
-                "reason": ("controller observation lacks valid transaction proof"
-                           if allow_observe_transaction else
-                           "controller observation returned a different handle"),
+                "reason": (
+                    "controller observation lacks valid transaction proof"
+                    if allow_observe_transaction else
+                    "controller remeasurement lacks valid transition proof"
+                    if remeasure_source is not None else
+                    "controller observation returned a different handle"
+                ),
                 "experiment": number,
                 "candidate_sha256": candidate_hash,
                 "manifest_sha256": manifest_hash,

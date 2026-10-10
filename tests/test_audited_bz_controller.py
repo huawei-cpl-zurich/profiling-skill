@@ -482,6 +482,33 @@ def test_measurement_pending_can_remeasure_without_rechecking_candidate(tmp_path
     assert receipt["policy"]["operations_consumed"] == 7
 
 
+def test_remeasure_transition_can_end_in_new_measurement_pending_handles(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    backend = FakeBackend()
+    adapter = make_controller(repo, backend, variability_threshold=0.01)
+    pending = adapter.run(1, candidate_hash, manifest_hash)
+    backend.overrides.extend([
+        {"status": "ok", "handle": "bz-a3-1:profile-fresh",
+         "kernel_name": "kernel", "cases": [
+             {"case": case, "samples_us": [10.0, 10.0, 10.0], "median_us": 10.0}
+             for case in [7, 8, 9]
+         ]},
+        {"status": "ok", "handle": "bz-a3-1:post-drift", "latency_us": 20.0,
+         "samples_us": [19.0, 20.0, 21.0], "median_us": 20.0},
+    ])
+
+    remeasured = adapter.run(
+        1, candidate_hash, manifest_hash, remeasure_handle=pending["handle"],
+    )
+
+    assert remeasured["status"] == "measurement_pending"
+    assert remeasured["handle"] == "bz-a3-1:profile-fresh"
+    assert remeasured["calibration"]["after"]["handle"] == "bz-a3-1:post-drift"
+    contract.validate_remeasure_transition(
+        remeasured, pending, candidate_hash, manifest_hash, 1,
+    )
+
+
 def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path: Path):
     repo, candidate_hash, manifest_hash = repository(tmp_path)
 
@@ -519,7 +546,18 @@ def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path:
 
     assert pending["status"] == "measurement_pending"
     assert receipt["status"] == "ok"
+    assert receipt["handle"] != pending["handle"]
+    assert receipt["calibration"]["after"]["handle"] not in {
+        pending["handle"], receipt["handle"],
+    }
     assert receipt["policy"]["measurement_generation"] == 1
+    contract.validate_remeasure_transition(
+        receipt, pending, candidate_hash, manifest_hash, 1,
+    )
+    transition = receipt["remeasure_transition"]
+    assert transition["pending_handle"] == pending["handle"]
+    assert transition["profile_handle"] == receipt["handle"]
+    assert transition["post_control_handle"] == receipt["calibration"]["after"]["handle"]
     assert receipt["samples_us"] == pytest.approx([5.0, 5.0, 5.0])
     measurement_requests = [request for request in backend.requests
                             if request["action"] in {"profile", "calibrate"}
@@ -528,6 +566,30 @@ def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path:
         "experiment-1-measurement-1-primary",
         "experiment-1-measurement-1-after",
     ]
+
+    for mutation in ("pending", "profile", "control", "generation", "history"):
+        tampered = json.loads(json.dumps(receipt))
+        if mutation == "pending":
+            tampered["remeasure_transition"]["pending_handle"] = "bz-a3-1:unrelated"
+        elif mutation == "profile":
+            tampered["remeasure_transition"]["profile_handle"] = pending["handle"]
+        elif mutation == "control":
+            tampered["remeasure_transition"]["post_control_handle"] = pending["handle"]
+        elif mutation == "generation":
+            tampered["remeasure_transition"]["to_measurement_generation"] = 2
+        else:
+            tampered["policy"]["operation_history"] = \
+                tampered["policy"]["operation_history"][1:]
+        with pytest.raises(contract.AuditError, match="remeasure transition"):
+            contract.validate_remeasure_transition(
+                tampered, pending, candidate_hash, manifest_hash, 1,
+            )
+    unrelated_pending = json.loads(json.dumps(pending))
+    unrelated_pending["candidate_sha256"] = "0" * 64
+    with pytest.raises(contract.AuditError, match="remeasure transition"):
+        contract.validate_remeasure_transition(
+            receipt, unrelated_pending, candidate_hash, manifest_hash, 1,
+        )
 
 
 def test_backend_operation_budget_is_shared_across_branch_rounds(tmp_path: Path):

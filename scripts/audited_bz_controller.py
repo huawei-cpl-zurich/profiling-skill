@@ -23,6 +23,7 @@ from typing import Callable
 
 CONFIG_SCHEMA = "profiling-skill/audited-bz-controller-config/v1"
 POLICY_SCHEMA = "profiling-skill/controller-policy/v1"
+REMEASURE_TRANSITION_SCHEMA = "profiling-skill/controller-remeasure-transition/v1"
 CANDIDATE_FAILURES = {
     "candidate_error", "submission_error", "compile_error", "compilation_error",
     "runtime_error", "correctness_error",
@@ -256,6 +257,7 @@ class AuditedBzController:
                 return self._infrastructure("controller baseline changed during the experiment")
             state["operations_consumed"] = budget["operations_consumed"]
             terminal = state.get("terminal")
+            remeasure_source = None
             if terminal:
                 if remeasure_handle is None:
                     return terminal
@@ -265,6 +267,11 @@ class AuditedBzController:
                         "remeasure handle does not match a pending measurement",
                         handle=remeasure_handle,
                     )
+                remeasure_source = {
+                    "receipt_sha256": _json_sha(terminal),
+                    "handle": terminal["handle"],
+                    "measurement_generation": state["measurement_generation"],
+                }
                 state.pop("terminal")
                 state.pop("profile", None)
                 state.pop("confirmation", None)
@@ -293,6 +300,27 @@ class AuditedBzController:
                     handle=pending["handle"],
                 )
             receipt = self._advance(state, state_path, budget, budget_path)
+            if (remeasure_source is not None
+                    and receipt.get("status") in {
+                        "ok", "candidate_error", "measurement_pending",
+                    }):
+                history = receipt.get("policy", {}).get("operation_history")
+                post_control = receipt.get("calibration", {}).get("after", {}).get("handle")
+                receipt["remeasure_transition"] = {
+                    "schema": REMEASURE_TRANSITION_SCHEMA,
+                    "pending_receipt_sha256": remeasure_source["receipt_sha256"],
+                    "pending_handle": remeasure_source["handle"],
+                    "candidate_sha256": candidate_hash,
+                    "manifest_sha256": manifest_hash,
+                    "experiment": experiment,
+                    "from_measurement_generation": remeasure_source[
+                        "measurement_generation"
+                    ],
+                    "to_measurement_generation": state["measurement_generation"],
+                    "profile_handle": receipt.get("handle"),
+                    "post_control_handle": post_control,
+                    "operation_history_sha256": _json_sha(history),
+                }
             if (observe_handle is not None
                     and receipt.get("status") == "infrastructure_error"
                     and isinstance(receipt.get("handle"), str)

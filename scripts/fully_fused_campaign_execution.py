@@ -31,6 +31,7 @@ MATMUL_FULL_CASES = tuple(range(10))
 ARCHIVE_SCHEMA = "profiling-skill/pre-campaign-archive/v1"
 PREPARED_SCHEMA = "profiling-skill/fully-fused-campaign-prepared/v1"
 GATE_SCHEMA = "profiling-skill/fully-fused-matmul-gates/v1"
+ADMISSION_SCHEMA = "profiling-skill/fully-fused-campaign-admission/v1"
 REPORT_SCHEMA = "profiling-skill/fully-fused-campaign-report/v1"
 RECEIPT_DIGEST_FIELDS = {
     ARCHIVE_SCHEMA: "seal_sha256", PREPARED_SCHEMA: "prepared_sha256",
@@ -324,6 +325,32 @@ def verify_gate_receipt(value: object, rankings: dict, *, prepared_sha256: str) 
             "status": "ok", "product": product, "task": "matmul", **row,
         })
     return receipt
+
+
+def campaign_admission_identity(archive: object, prepared: object,
+                                gates: object) -> dict:
+    """Build the terminal identity in the one-way campaign hash chain.
+
+    Admission is deliberately not manifest provenance: the prepared receipt
+    authenticates the already-frozen manifest and the gate receipt
+    authenticates preparation.  The pinned runtime config is created last and
+    authenticates this terminal identity, so no hash depends on itself.
+    """
+    archive_result = verify_archive_seal(archive)
+    prepared_receipt = verify_prepared_receipt(prepared)
+    gate_receipt = verify_gate_receipt(
+        gates, prepared_receipt["ranked_cases"],
+        prepared_sha256=prepared_receipt["prepared_sha256"],
+    )
+    if prepared_receipt["archive_attestation"] != archive_result["seal_sha256"]:
+        raise ExecutionError("prepared campaign is not bound to the archive seal")
+    return {
+        "schema": ADMISSION_SCHEMA,
+        "manifest_sha256": prepared_receipt["manifest_sha256"],
+        "archive_seal_sha256": archive_result["seal_sha256"],
+        "prepared_sha256": prepared_receipt["prepared_sha256"],
+        "gate_sha256": gate_receipt["gate_sha256"],
+    }
 
 
 def _failure_outcome(row: dict) -> str:

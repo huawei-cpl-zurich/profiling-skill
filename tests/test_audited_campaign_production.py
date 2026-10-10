@@ -304,27 +304,26 @@ def attach_campaign_admission(config: dict) -> dict:
         product: {task: list(cases) for task, cases in production.DEVELOPMENT_CASES.items()}
         for product in campaign.PRODUCTS
     }
-    config["manifest_sha256"] = "9" * 64
     config["ranked_cases"] = rankings
     config["provenance"]["ranked_cases_sha256"] = production.document_sha256({
         "ranked_cases": rankings,
     })
-    branches = [
-        f"experiment/{config['run_id']}/{product}-{task}-{treatment}"
-        for product in campaign.PRODUCTS for task in campaign.TASKS
-        for treatment in campaign.TREATMENTS
-    ]
-    prepared = {
-        "schema": campaign_execution.PREPARED_SCHEMA,
-        "run_id": config["run_id"], "archive_attestation": seal["seal_sha256"],
-        "manifest_sha256": config["manifest_sha256"], "cell_count": 24,
-        "rounds_per_cell": 4, "expected_round_commits": 96,
-        "branches": branches, "ranked_cases": rankings,
-        "ranked_cases_sha256": campaign_execution.document_sha256({
-            "ranked_cases": rankings,
-        }),
+    product_tasks = {
+        product: {
+            task: Path(config["product_tasks"][product][task]["path"])
+            for task in campaign.TASKS
+        }
+        for product in campaign.PRODUCTS
     }
-    prepared["prepared_sha256"] = campaign_execution.receipt_sha256(prepared)
+    manifest = campaign.build_manifest(
+        config["run_id"], Path(config["prompt"]["path"]), {},
+        config["provenance"], "admission-integration", products=campaign.PRODUCTS,
+        product_task_files=product_tasks,
+    )
+    config["manifest_sha256"] = manifest["manifest_sha256"]
+    prepared = campaign_execution.prepare_campaign(
+        manifest, rankings, archive_attestation=seal["seal_sha256"],
+    )
 
     def gate(product, ranked):
         return {
@@ -346,11 +345,9 @@ def attach_campaign_admission(config: dict) -> dict:
         config["campaign_admission"][name] = {
             "path": str(path.resolve()), "sha256": sha(path),
         }
-    config["provenance"]["campaign_admission"] = {
-        "archive_seal_sha256": seal["seal_sha256"],
-        "prepared_sha256": prepared["prepared_sha256"],
-        "gate_sha256": gates["gate_sha256"],
-    }
+    config["campaign_admission_identity"] = campaign_execution.campaign_admission_identity(
+        seal, prepared, gates,
+    )
     return config
 
 
@@ -1597,7 +1594,77 @@ def test_dual_product_launch_requires_and_authenticates_campaign_admission(tmp_p
                "target": "bz-a3-1", "device": 0},
     )
     assert receipt["status"] == "complete"
-    assert launcher._campaign_admission == config["provenance"]["campaign_admission"]
+    assert launcher._campaign_admission == config["campaign_admission_identity"]
+    assert "campaign_admission" not in config["provenance"]
+    product_tasks = {
+        product: {task: Path(config["product_tasks"][product][task]["path"])
+                  for task in campaign.TASKS}
+        for product in campaign.PRODUCTS
+    }
+    rebuilt = campaign.build_manifest(
+        config["run_id"], Path(config["prompt"]["path"]), {},
+        config["provenance"], "admission-integration", products=campaign.PRODUCTS,
+        product_task_files=product_tasks,
+    )
+    assert rebuilt["provenance"] == config["provenance"]
+    assert rebuilt["manifest_sha256"] == config["manifest_sha256"]
+
+
+@pytest.mark.parametrize("mutation", ["manifest", "identity", "prepared-chain"])
+def test_real_manifest_admission_chain_rejects_mismatch_before_dispatch(
+    tmp_path: Path, mutation: str,
+):
+    cell = {
+        "cell_id": "a3-matmul-cannbot-all", "product": "a3",
+        "runtime": "py311-torch", "task": "matmul", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    if mutation == "manifest":
+        config["manifest_sha256"] = "0" * 64
+    elif mutation == "identity":
+        config["campaign_admission_identity"]["gate_sha256"] = "0" * 64
+    else:
+        prepared_path = Path(config["campaign_admission"]["prepared"]["path"])
+        prepared = json.loads(prepared_path.read_text())
+        prepared["manifest_sha256"] = "0" * 64
+        prepared["prepared_sha256"] = campaign_execution.receipt_sha256(prepared)
+        prepared_path.write_text(json.dumps(prepared) + "\n")
+        config["campaign_admission"]["prepared"]["sha256"] = sha(prepared_path)
+    dispatches = []
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda *args, **kwargs: dispatches.append("invoker"),
+        controller_factory=lambda *args, **kwargs: dispatches.append("controller"),
+        runner_factory=lambda *args, **kwargs: dispatches.append("runner"),
+    )
+
+    with pytest.raises(production.ProductionError, match="campaign admission"):
+        launcher.launch(
+            cell, {"product": "a3", "runtime": "py311-torch",
+                   "target": "bz-a3-1", "device": 0},
+        )
+    assert dispatches == []
+
+
+def test_retained_legacy_admission_provenance_remains_resumable(tmp_path: Path):
+    cell = {
+        "cell_id": "a3-matmul-cannbot-all", "product": "a3",
+        "runtime": "py311-torch", "task": "matmul", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    identity = config.pop("campaign_admission_identity")
+    config["provenance"]["campaign_admission"] = {
+        key: identity[key] for key in (
+            "archive_seal_sha256", "prepared_sha256", "gate_sha256",
+        )
+    }
+    launcher = production_launcher(config)
+
+    assert launcher._validate_campaign_admission() == identity
 
 
 @pytest.mark.parametrize("mutation,message", [

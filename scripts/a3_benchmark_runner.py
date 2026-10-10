@@ -15,6 +15,9 @@ from pathlib import Path
 from types import ModuleType
 
 
+_MISSING = object()
+
+
 def load(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -86,15 +89,21 @@ class _KernelProxy:
         return getattr(self._wrapped, name)
 
     def run(self, *args, **kwargs):
-        self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
-        return self._wrapped.run(*args, **kwargs)
+        before = len(self._audit.launches)
+        result = self._wrapped.run(*args, **kwargs)
+        if len(self._audit.launches) == before:
+            self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
+        return result
 
     def __getitem__(self, grid):
         launch = self._wrapped[grid]
 
         def observed(*args, **kwargs):
-            self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
-            return launch(*args, **kwargs)
+            before = len(self._audit.launches)
+            result = launch(*args, **kwargs)
+            if len(self._audit.launches) == before:
+                self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
+            return result
 
         return observed
 
@@ -106,6 +115,7 @@ class FusionRuntimeAudit:
         self.declaration = declaration
         self.launches: list[tuple[str, set[tuple]]] = []
         self.framework_ops: list[tuple[str, str]] = []
+        self._run_hooks: list[tuple[object, object]] = []
 
     def instrument(self, candidate: ModuleType) -> None:
         kernels = {}
@@ -121,6 +131,17 @@ class FusionRuntimeAudit:
         for identity, (kernel, names) in kernels.items():
             observed_name = (self.declaration["entrypoint"]
                              if self.declaration["entrypoint"] in names else names[0])
+            original_run = getattr(kernel, "run", None)
+            if callable(original_run):
+                previous = getattr(kernel, "__dict__", {}).get("run", _MISSING)
+
+                def observed_run(*args, _name=observed_name,
+                                 _run=original_run, **kwargs):
+                    self.launches.append((_name, _tensor_keys((args, kwargs))))
+                    return _run(*args, **kwargs)
+
+                setattr(kernel, "run", observed_run)
+                self._run_hooks.append((kernel, previous))
             proxy = _KernelProxy(observed_name, kernel, self)
             proxies[identity] = proxy
             for name in names:
@@ -133,6 +154,14 @@ class FusionRuntimeAudit:
                 proxy = proxies.get(id(kernel))
                 if proxy is not None:
                     setattr(model, name, proxy)
+
+    def _restore_run_hooks(self) -> None:
+        for kernel, previous in reversed(self._run_hooks):
+            if previous is _MISSING:
+                delattr(kernel, "run")
+            else:
+                setattr(kernel, "run", previous)
+        self._run_hooks.clear()
 
     def dispatch_mode(self):
         from torch.utils._python_dispatch import TorchDispatchMode
@@ -157,6 +186,7 @@ class FusionRuntimeAudit:
         return AuditMode()
 
     def finish(self, case: int, output) -> dict:
+        self._restore_run_hooks()
         operators = []
         component = "aic" if self.declaration["kernel_name"].endswith("_mix_aic") else "aiv"
         for index, (entrypoint, _arguments) in enumerate(self.launches):

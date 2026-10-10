@@ -300,8 +300,8 @@ def _fusion_authorization(value: dict, label: str) -> tuple[dict, str] | None:
             or not isinstance(gate.get("entrypoint"), str) or not gate["entrypoint"]
             or not isinstance(gate.get("kernel_name"), str) or not gate["kernel_name"]
             or not isinstance(gate.get("cases"), list) or not gate["cases"]
-            or len(set(gate["cases"])) != len(gate["cases"])
             or any(type(case) is not int or case < 0 for case in gate["cases"])
+            or len(set(gate["cases"])) != len(gate["cases"])
             or gate.get("logical_launches_per_case") != 1):
         raise AuditError(f"{label} fusion authorization is invalid")
     return gate, handle

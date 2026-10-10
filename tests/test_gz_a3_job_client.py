@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import functools
 import os
 import shutil
 import subprocess
@@ -198,6 +199,49 @@ def test_runner_observes_direct_jit_run_launch_without_changing_arguments():
 
     assert candidate.complete_kernel.run("input", "output", grid=(1,)) == "launched"
     assert calls == [(('input', 'output'), {"grid": (1,)})]
+    evidence = audit.finish(0, "output")
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+
+@pytest.mark.parametrize("retention", ["closure", "default", "partial"])
+def test_runner_observes_entrypoint_captured_before_audit(retention):
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Kernel:
+        def run(self, *args, **kwargs):
+            return args[-1]
+
+        def __getitem__(self, grid):
+            return lambda *args, **kwargs: self.run(*args, grid=grid, **kwargs)
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    captured = candidate.complete_kernel
+    if retention == "closure":
+        def invoke(source, output):
+            return captured[(1,)](source, output)
+    elif retention == "default":
+        def invoke(source, output, kernel=captured):
+            return kernel[(1,)](source, output)
+    else:
+        def launch(kernel, source, output):
+            return kernel[(1,)](source, output)
+        invoke = functools.partial(launch, captured)
+
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    assert invoke("input", "output") == "output"
     evidence = audit.finish(0, "output")
     assert evidence["operators"] == [{
         "name": "complete_kernel_mix_aiv", "origin": "triton",

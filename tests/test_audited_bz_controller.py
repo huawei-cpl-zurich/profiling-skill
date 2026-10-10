@@ -160,6 +160,13 @@ def test_success_runs_controls_full_final_check_and_three_profile_repetitions(tm
             missing_history, candidate_hash, manifest_hash,
         )
 
+    unhashable_cases = json.loads(json.dumps(receipt))
+    unhashable_cases["fusion_gate"]["cases"] = [[0]]
+    with pytest.raises(contract.AuditError, match="fusion authorization"):
+        contract.validate_controller_receipt(
+            unhashable_cases, candidate_hash, manifest_hash,
+        )
+
 
 def test_compile_error_is_counted_without_profile_or_post_control(tmp_path: Path):
     repo, candidate_hash, manifest_hash = repository(tmp_path)

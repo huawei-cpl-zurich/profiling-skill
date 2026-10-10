@@ -10,11 +10,25 @@ no SSH, container, or device-discovery fallback.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+_FUSION_SPEC = importlib.util.spec_from_file_location(
+    "_profiling_skill_fully_fused_contract",
+    Path(__file__).resolve().with_name("fully_fused_contract.py"),
+)
+if _FUSION_SPEC is None or _FUSION_SPEC.loader is None:
+    raise ImportError("cannot load the sibling fully fused contract")
+_fusion = importlib.util.module_from_spec(_FUSION_SPEC)
+_FUSION_SPEC.loader.exec_module(_fusion)
+FusionContractError = _fusion.FusionContractError
+FUSED_MANIFEST_SCHEMA = _fusion.MANIFEST_SCHEMA
+validate_fusion_evidence = _fusion.validate_fusion_evidence
+validate_fused_manifest = _fusion.validate_manifest
 
 
 PINNED_REVISION = "a42c54b916189500e2f7cb47640980f230f2eb65"
@@ -136,9 +150,36 @@ def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]
     return kernel_name, None
 
 
+def load_candidate_contract(
+    path: Path, *, allow_legacy_v1: bool = False,
+) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Load a legacy selector or a fully-fused v2 declaration."""
+    try:
+        manifest = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        return None, None, response(
+            "submission_error", f"cannot load candidate kernel manifest {path}: {error}"
+        )
+    if isinstance(manifest, dict) and manifest.get("schema") == FUSED_MANIFEST_SCHEMA:
+        try:
+            declaration = validate_fused_manifest(manifest)
+        except FusionContractError as error:
+            return None, None, response("submission_error", str(error))
+        return declaration["kernel_name"], declaration, None
+    if not allow_legacy_v1:
+        return None, None, response(
+            "submission_error",
+            f"new profiling requires schema {FUSED_MANIFEST_SCHEMA}; "
+            "legacy v1 replay must be explicitly enabled",
+        )
+    kernel, failure = load_kernel_selector(path)
+    return kernel, None, failure
+
+
 def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Path,
              kernel_name: str | None = None, *, product: str = "a3",
-             runtime: str = "py311-torch") -> dict[str, Any]:
+             runtime: str = "py311-torch",
+             fusion_contract: dict[str, Any] | None = None) -> dict[str, Any]:
     spec = BENCHMARKS[benchmark]
     action = request["action"]
     job = {
@@ -181,6 +222,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             "kernel_name": kernel_name,
             "driver_arguments": ["--kernel-name", kernel_name],
         }
+    if fusion_contract is not None:
+        job["fusion_contract"] = fusion_contract
     return job
 
 
@@ -236,6 +279,18 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
             handle=result.get("handle"),
             evidence=result,
         )
+    if status == "ok" and "fusion_contract" in job:
+        try:
+            fusion = validate_fusion_evidence(
+                job["fusion_contract"], result.get("fusion_evidence"),
+                expected_cases=job["cases"],
+            )
+        except FusionContractError as error:
+            return response(
+                "submission_error", f"fully fused runtime gate failed: {error}",
+                handle=result.get("handle"), **identity_fields(job),
+            )
+        result["fusion_gate"] = fusion
     if job["action"] == "profile" and status == "ok":
         result["cases"] = result.pop("profile_cases", None)
     return result
@@ -252,6 +307,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--job-client-json", required=True,
                         help="JSON string array containing the executable and exact arguments")
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--allow-legacy-v1", action="store_true",
+                        help="replay an explicitly historical v1 candidate")
     return parser.parse_args()
 
 
@@ -311,16 +368,43 @@ def main() -> int:
                 result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:
                 kernel_name = None
+                fusion_contract = None
                 if request["action"] == "profile":
                     manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
-                    kernel_name, result = load_kernel_selector(manifest)
-                if kernel_name is not None or request["action"] != "profile":
-                    result = invoke(
-                        command,
-                        make_job(request, args.benchmark, args.candidate, root, kernel_name,
-                                 product=args.product, runtime=args.runtime),
-                        args.timeout,
+                    kernel_name, fusion_contract, result = load_candidate_contract(
+                        manifest, allow_legacy_v1=args.allow_legacy_v1,
                     )
+                if kernel_name is not None or request["action"] != "profile":
+                    fusion_result = None
+                    if fusion_contract is not None:
+                        full_check = {
+                            "action": "check", "device": request["device"],
+                            "cases": BENCHMARKS[args.benchmark]["all_cases"],
+                            "scope": "full", "round": request["round"],
+                        }
+                        fusion_result = invoke(
+                            command,
+                            make_job(
+                                full_check, args.benchmark, args.candidate, root,
+                                product=args.product, runtime=args.runtime,
+                                fusion_contract=fusion_contract,
+                            ),
+                            args.timeout,
+                        )
+                        result = fusion_result
+                    if fusion_contract is None or result.get("status") == "ok":
+                        result = invoke(
+                            command,
+                            make_job(
+                                request, args.benchmark, args.candidate, root,
+                                kernel_name,
+                                product=args.product, runtime=args.runtime,
+                            ),
+                            args.timeout,
+                        )
+                        if result.get("status") == "ok" and fusion_result is not None:
+                            result["fusion_gate"] = fusion_result["fusion_gate"]
+                            result["fusion_handle"] = fusion_result.get("handle")
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

@@ -38,8 +38,9 @@ def _inputs(root: Path):
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "skills": {
             "cannbot": "c" * 64,
-            "ascend-profiling": "d" * 64,
-            "triton-guarded-kernel": "e" * 64,
+            "profiler-new": "d" * 64,
+            "profiler-old": "e" * 64,
+            "guarded": "f" * 64,
         },
         "products": {},
     }
@@ -91,8 +92,8 @@ def test_dual_product_manifest_pins_independent_inputs_and_runtime(tmp_path: Pat
 
     assert document["schema_version"] == 4
     assert document["dimensions"]["products"] == ["a3", "a5"]
-    assert len(document["cells"]) == 18
-    assert len({cell["branch"] for cell in document["cells"]}) == 18
+    assert len(document["cells"]) == 24
+    assert len({cell["branch"] for cell in document["cells"]}) == 24
     assert {(cell["product"], cell["task"], cell["treatment"])
             for cell in document["cells"]} == {
         (product, task, treatment)
@@ -137,13 +138,28 @@ def test_schema_v4_explicit_cannbot_treatment_uses_product_rules(tmp_path: Path)
     document = campaign.build_manifest(
         "explicit-cannbot", prompt, {}, provenance, "seed",
         products=campaign.PRODUCTS, product_task_files=tasks,
-        treatments=("cannbot",), request_budget=24,
+        treatments=("cannbot-all",), request_budget=24,
     )
 
     assert document["schema_version"] == 4
-    assert document["dimensions"]["treatments"] == ["cannbot"]
+    assert document["dimensions"]["treatments"] == ["cannbot-all"]
     assert len(document["cells"]) == 6
     campaign.verify_manifest(document)
+
+
+def test_dual_product_manifest_rejects_legacy_treatment_provenance(tmp_path: Path):
+    prompt, tasks, provenance = _inputs(tmp_path)
+    provenance["skills"] = {
+        "cannbot": "c" * 64,
+        "ascend-profiling": "d" * 64,
+        "triton-guarded-kernel": "e" * 64,
+    }
+
+    with pytest.raises(campaign.CampaignError, match="skill freezes"):
+        campaign.build_manifest(
+            "legacy-provenance", prompt, {}, provenance, "seed",
+            products=campaign.PRODUCTS, product_task_files=tasks,
+        )
 
 
 def test_schema_v4_cli_simulation_uses_compatible_product_slots(tmp_path: Path):
@@ -257,7 +273,7 @@ def test_scheduler_fills_mixed_products_and_refills_without_cross_placement(
         release.set()
         assert future.result(timeout=10)["status"] == "complete"
 
-    assert len(calls) == 18
+    assert len(calls) == 24
     assert all(
         (product == "a3" and slot["target"].startswith("bz-a3-"))
         or (product == "a5" and slot["target"] == "bz-a5")
@@ -282,7 +298,7 @@ def test_scheduler_does_not_let_unavailable_product_block_runnable_cells(tmp_pat
         campaign.run_campaign(
             document, tmp_path / "ledger.json", only_a5, Launcher()
         )
-    assert calls == ["a5"] * 9
+    assert calls == ["a5"] * 12
     ledger = json.loads((tmp_path / "ledger.json").read_text())
     assert all(
         state["status"] == ("complete" if cell["product"] == "a5" else "queued")

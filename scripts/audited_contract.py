@@ -249,10 +249,16 @@ def _validate_handles(receipt: dict, policy: dict) -> None:
     expected_submitted = []
     expected_observed = []
     retry_count = 0
+    base_fields = {"request_sha256", "mode", "status", "terminal",
+                   "handle", "action", "attempt_id"}
     for record in history:
+        fields = set(record) if isinstance(record, dict) else set()
+        has_fusion = fields == base_fields | {"fusion_gate", "fusion_handle"}
         if (not isinstance(record, dict)
-                or set(record) != {"request_sha256", "mode", "status", "terminal",
-                                   "handle", "action", "attempt_id"}
+                or frozenset(fields) not in {frozenset(base_fields),
+                                             frozenset(base_fields | {
+                                                 "fusion_gate", "fusion_handle"
+                                             })}
                 or not _valid_hash(record["request_sha256"])
                 or record["mode"] not in {"submit", "retry_submit", "observe"}
                 or not isinstance(record["status"], str)
@@ -263,6 +269,11 @@ def _validate_handles(receipt: dict, policy: dict) -> None:
                 or (record["handle"] is not None
                     and not isinstance(record["handle"], str))):
             raise AuditError("controller operation history record is invalid")
+        if has_fusion and (
+                record["action"] != "profile" or record["status"] != "ok"
+                or record["terminal"] is not True
+                or _fusion_authorization(record, "operation") is None):
+            raise AuditError("controller operation fusion proof is invalid")
         retained = record["handle"]
         if record["mode"] != "submit":
             retry_count += 1
@@ -274,6 +285,26 @@ def _validate_handles(receipt: dict, policy: dict) -> None:
     if (submitted != expected_submitted or observed != expected_observed
             or policy.get("infra_retries") != retry_count):
         raise AuditError("controller operation history does not bind handle or retry proof")
+
+
+def _fusion_authorization(value: dict, label: str) -> tuple[dict, str] | None:
+    has_gate, has_handle = "fusion_gate" in value, "fusion_handle" in value
+    if not has_gate and not has_handle:
+        return None
+    gate, handle = value.get("fusion_gate"), value.get("fusion_handle")
+    if (not has_gate or not has_handle or not isinstance(handle, str) or not handle
+            or not isinstance(gate, dict)
+            or set(gate) != {
+                "entrypoint", "kernel_name", "cases", "logical_launches_per_case"
+            }
+            or not isinstance(gate.get("entrypoint"), str) or not gate["entrypoint"]
+            or not isinstance(gate.get("kernel_name"), str) or not gate["kernel_name"]
+            or not isinstance(gate.get("cases"), list) or not gate["cases"]
+            or any(type(case) is not int or case < 0 for case in gate["cases"])
+            or len(set(gate["cases"])) != len(gate["cases"])
+            or gate.get("logical_launches_per_case") != 1):
+        raise AuditError(f"{label} fusion authorization is invalid")
+    return gate, handle
 
 
 def validate_observe_transaction(receipt: dict, requested_handle: str) -> dict:
@@ -371,9 +402,15 @@ def validate_observe_transition(receipt: dict, requested_handle: str,
     history = proof["operation_history"]
     # Validate the common operation record shape before interpreting the chain.
     for record in history:
+        base_fields = {"request_sha256", "mode", "status", "terminal",
+                       "handle", "action", "attempt_id"}
+        fields = set(record) if isinstance(record, dict) else set()
+        has_fusion = fields == base_fields | {"fusion_gate", "fusion_handle"}
         if (not isinstance(record, dict)
-                or set(record) != {"request_sha256", "mode", "status", "terminal",
-                                   "handle", "action", "attempt_id"}
+                or frozenset(fields) not in {frozenset(base_fields),
+                                             frozenset(base_fields | {
+                                                 "fusion_gate", "fusion_handle"
+                                             })}
                 or not _valid_hash(record["request_sha256"])
                 or record["mode"] not in {"submit", "retry_submit", "observe"}
                 or not isinstance(record["status"], str)
@@ -383,6 +420,11 @@ def validate_observe_transition(receipt: dict, requested_handle: str,
                     and not isinstance(record["attempt_id"], str))
                 or (record["handle"] is not None
                     and not isinstance(record["handle"], str))):
+            raise AuditError("controller observe transition proof is invalid")
+        if has_fusion and (
+                record["action"] != "profile" or record["status"] != "ok"
+                or record["terminal"] is not True
+                or _fusion_authorization(record, "operation") is None):
             raise AuditError("controller observe transition proof is invalid")
     validate_observe_transaction(
         {"policy": {"operation_history": history}}, requested_handle,
@@ -514,6 +556,7 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
             raise AuditError("accepted timing selection is invalid")
         proofs = {"primary": primary, "confirmation": confirmation}
         selector_identities = {}
+        fusion_authorizations = {}
         for name, proof in proofs.items():
             if proof is None:
                 continue
@@ -526,12 +569,14 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
                     or not isinstance(proof.get("compact_artifacts"), list)):
                 raise AuditError(f"{name} timing identity is invalid")
             selector_identities[name] = _selector_identity(proof, name)
+            fusion_authorizations[name] = _fusion_authorization(proof, name)
             _timing_summary(
                 proof.get("samples_us"), proof.get("sample_count"), proof.get("median_us"),
                 policy["variability_threshold"], proof.get("variability_ratio"), name,
             )
         selected = proofs.get(accepted)
         published_identity = _selector_identity(receipt, "published")
+        published_fusion = _fusion_authorization(receipt, "published")
         if (selected is None or receipt.get("handle") != selected["handle"]
                 or receipt.get("kernel_name") != selected["kernel_name"]
                 or published_identity != selector_identities[accepted]
@@ -540,6 +585,18 @@ def validate_controller_receipt(receipt: object, candidate_hash: str,
                 or receipt.get("case_results") != selected["case_results"]
                 or receipt.get("compact_artifacts") != selected["compact_artifacts"]):
             raise AuditError("published timing does not match the accepted capture")
+        selected_fusion = fusion_authorizations[accepted]
+        if published_fusion != selected_fusion:
+            raise AuditError("published fusion authorization does not match timing")
+        if selected_fusion is not None:
+            history = policy.get("operation_history")
+            matches = [record for record in history if (
+                record.get("action") == "profile"
+                and record.get("handle") == selected["handle"]
+                and _fusion_authorization(record, "operation") == selected_fusion
+            )] if isinstance(history, list) else []
+            if len(matches) != 1:
+                raise AuditError("fusion authorization is absent from operation history")
         if accepted == "confirmation":
             if (count != 1 or confirmation is None
                     or selector_identities["primary"] != selector_identities["confirmation"]

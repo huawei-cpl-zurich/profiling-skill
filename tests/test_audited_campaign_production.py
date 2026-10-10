@@ -62,6 +62,16 @@ def isolated_global_remote(tmp_path: Path, monkeypatch):
     remote.chmod(0o755)
     remote.with_name("cpl_remote.py").write_text("# pinned implementation\n")
     monkeypatch.setattr(Path, "home", lambda: home)
+    trusted = {}
+    for source, revision in (
+        ("profiler-new", production.NEW_PROFILER_REVISION),
+        ("profiler-old", production.OLD_PROFILER_REVISION),
+    ):
+        tree = tmp_path / "trusted" / source
+        tree.mkdir(parents=True)
+        (tree / "SKILL.md").write_text(source)
+        trusted[revision] = production.digest_tree(tree)
+    monkeypatch.setattr(production, "PROFILER_TREE_SHA256", trusted)
 
 
 def sha(path: Path) -> str:
@@ -90,7 +100,12 @@ def git_repo(path: Path) -> tuple[Path, str]:
                    check=True)
     (path / "candidate.py").write_text("VALUE = 1\n")
     (path / "candidate.manifest.json").write_text(
-        '{"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"kernel"}\n'
+        json.dumps({
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": "kernel", "entrypoint": "kernel",
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
+        }) + "\n"
     )
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-qm", "baseline"], cwd=path, check=True)
@@ -99,18 +114,39 @@ def git_repo(path: Path) -> tuple[Path, str]:
     return path, revision
 
 
-def runtime_fixture(tmp_path: Path, cell: dict):
-    repo, revision = git_repo(tmp_path / "source")
-    skills = {}
-    for name in {skill for names in production.TREATMENT_SKILLS.values() for skill in names}:
-        skill = tmp_path / "skills" / name
+def frozen_skill_sources(root: Path) -> dict[str, dict]:
+    cannbot = root / "cannbot"
+    for name in production.CANNBOT_SKILLS:
+        skill = cannbot / "skills" / name
         skill.mkdir(parents=True)
         (skill / "SKILL.md").write_text(name)
-        skills[name] = {"path": str(skill), "sha256": production.digest_tree(skill)}
+    (cannbot / "COMMIT").write_text("c" * 40 + "\n")
+    sources = {"cannbot": {
+        "path": str(cannbot), "sha256": production.digest_tree(cannbot),
+        "revision": "c" * 40,
+    }}
+    for name, revision in (
+        ("profiler-new", production.NEW_PROFILER_REVISION),
+        ("profiler-old", production.OLD_PROFILER_REVISION),
+        ("guarded", None),
+    ):
+        skill = root / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(name)
+        sources[name] = {"path": str(skill), "sha256": production.digest_tree(skill)}
+        if revision:
+            sources[name]["revision"] = revision
+    return sources
+
+
+def runtime_fixture(tmp_path: Path, cell: dict):
+    repo, revision = git_repo(tmp_path / "source")
+    skills = frozen_skill_sources(tmp_path / "skills")
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
                  "bz_a3_job_client.py", "bz_a5_job_client.py",
+                 "fully_fused_contract.py",
                  "validate_audited_experiment.py", "audited_verifier.py",
                  "audited_contract.py", "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -132,8 +168,10 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         manifest = starter / "candidate.manifest.json"
         candidate.write_text(f"TASK = {task_name!r}\nVALUE = 0\n")
         manifest.write_text(json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1",
-            "kernel_name": task_name,
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": task_name, "entrypoint": task_name,
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
         }) + "\n")
         starters[task_name] = {
             "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
@@ -149,10 +187,6 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "invariant_sha256": sha(prompt), "task_sha256": sha(task),
     }
     runtime_digest = production.digest_tree(scripts)
-    cannbot_names = sorted({
-        name for names in production.TREATMENT_SKILLS.values() for name in names
-        if name not in {"ascend-profiling", "triton-guarded-kernel"}
-    })
     provenance = {
         "source_revision": revision,
         "controller_sha256": runtime_digest,
@@ -160,13 +194,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "baselines": {name: binding["sha256"] for name, binding in baselines.items()},
         "starters": starters,
-        "skills": {
-            "cannbot": production.digest_skill_bundle(skills, cannbot_names),
-            **({"ascend-profiling": skills["ascend-profiling"]["sha256"]}
-               if "ascend-profiling" in skills else {}),
-            **({"triton-guarded-kernel": skills["triton-guarded-kernel"]["sha256"]}
-               if "triton-guarded-kernel" in skills else {}),
-        },
+        "skills": {name: binding["sha256"] for name, binding in skills.items()},
     }
     resource_module = ROOT / "scripts" / "audited_resource_admission.py"
     provenance["resource_admission_sha256"] = sha(resource_module)
@@ -203,7 +231,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "model": "gpt-5.6-sol", "reasoning_effort": "low",
         "runtime_mode": "docker", "runtime_image_digest": provenance["runtime_image_digest"],
         "agent_turn_timeout": 20,
-        "controller_transaction_timeout": 15,
+        "controller_transaction_timeout": 25,
         "verifier_timeout": 20,
         "backend_job_timeout": 10,
         "timeout_grace": 2,
@@ -220,13 +248,77 @@ def production_launcher(config: dict, **kwargs):
     )
 
 
-def test_production_runtime_uses_starter_bound_v2_schema(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
-            "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+def test_exact_four_treatments_have_unambiguous_source_bindings():
+    assert tuple(production.TREATMENT_SKILLS) == (
+        "cannbot-all", "cannbot-new-profiler",
+        "guarded-new-profiler", "guarded-old-profiler",
+    )
+    assert campaign.TREATMENTS == tuple(production.TREATMENT_SKILLS)
+    assert campaign.TREATMENT_SKILLS == production.TREATMENT_SKILLS
+    assert production.TREATMENT_SOURCE_BINDINGS["guarded-new-profiler"][0] == (
+        "ascend-profiling", "profiler-new"
+    )
+    assert production.TREATMENT_SOURCE_BINDINGS["guarded-old-profiler"][0] == (
+        "ascend-profiling", "profiler-old"
+    )
+
+
+@pytest.mark.parametrize("treatment", production.TREATMENT_SKILLS)
+def test_materialization_exposes_only_selected_treatment(
+        tmp_path: Path, treatment: str):
+    cell = {"task": "matmul", "treatment": treatment}
     config = runtime_fixture(tmp_path, cell)
-    assert production.RUNTIME_SCHEMA == "profiling-skill/audited-campaign-runtime/v2"
-    config["schema"] = "profiling-skill/audited-campaign-runtime/v1"
+    workspace = tmp_path / "workspace"
+
+    receipt = production.materialize_treatment(
+        workspace, treatment, config["skill_sources"]
+    )
+
+    visible = {path.name for path in (workspace / ".agents/skills").iterdir()}
+    assert visible == set(production.TREATMENT_SKILLS[treatment])
+    assert receipt["skills"] == {
+        name: production.digest_tree(workspace / ".agents/skills" / name)
+        for name in production.TREATMENT_SKILLS[treatment]
+    }
+    assert not (workspace / ".agents/treatment.json").exists()
+    assert "Do not inspect host or global skills" in (workspace / "AGENTS.md").read_text()
+
+
+def test_materialization_rejects_swapped_revision_and_cross_treatment_skill(
+        tmp_path: Path):
+    cell = {"task": "matmul", "treatment": "guarded-old-profiler"}
+    config = runtime_fixture(tmp_path, cell)
+    sources = config["skill_sources"]
+    sources["profiler-old"]["revision"] = production.NEW_PROFILER_REVISION
+    with pytest.raises(production.ProductionError, match="old profiler revision"):
+        production.validate_skill_freezes(sources)
+    sources["profiler-old"]["revision"] = production.OLD_PROFILER_REVISION
+    workspace = tmp_path / "workspace"
+    production.materialize_treatment(workspace, cell["treatment"], sources)
+    (workspace / ".agents/skills/ops-profiling").mkdir()
+    with pytest.raises(production.ProductionError, match="exact allowlist"):
+        production.validate_materialized_treatment(workspace, cell["treatment"], sources)
+
+
+def test_profiler_revisions_cannot_authenticate_identical_exported_trees(tmp_path: Path):
+    config = runtime_fixture(tmp_path, {"task": "matmul", "treatment": "cannbot-all"})
+    sources = config["skill_sources"]
+    old = Path(sources["profiler-old"]["path"])
+    new = Path(sources["profiler-new"]["path"])
+    (old / "SKILL.md").write_bytes((new / "SKILL.md").read_bytes())
+    sources["profiler-old"]["sha256"] = production.digest_tree(old)
+
+    with pytest.raises(production.ProductionError, match="old profiler tree"):
+        production.validate_skill_freezes(sources)
+
+
+def test_production_runtime_uses_four_treatment_v3_schema(tmp_path: Path):
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
+            "round_count": 4, "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
+    config = runtime_fixture(tmp_path, cell)
+    assert production.RUNTIME_SCHEMA == "profiling-skill/audited-campaign-runtime/v3"
+    config["schema"] = "profiling-skill/audited-campaign-runtime/v2"
     with pytest.raises(production.ProductionError, match="runtime config requires schema"):
         production_launcher(config)
 
@@ -238,20 +330,23 @@ def canary_gate_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, Path, 
         "max_candidate_repairs_per_round": 2,
         "placement": "dynamic-bz-a3-admission",
         "canaries": [
-            {"id": "matmul-cannbot-repair", "treatment": "cannbot",
+            {"id": "matmul-cannbot-repair", "treatment": "cannbot-all",
              "required_evidence": ["candidate-repair", "offline-verifier",
                                    "msprof-op-timing"]},
-            {"id": "matmul-project-cannbot-resume", "treatment": "project-cannbot",
+            {"id": "matmul-cannbot-new-profiler-resume", "treatment": "cannbot-new-profiler",
              "required_evidence": ["checkpoint-resume", "same-session",
                                    "offline-verifier", "msprof-op-timing"]},
-            {"id": "matmul-project-guarded-repair", "treatment": "project-guarded",
+            {"id": "matmul-guarded-new-profiler-repair", "treatment": "guarded-new-profiler",
+             "required_evidence": ["candidate-repair", "offline-verifier",
+                                   "msprof-op-timing"]},
+            {"id": "matmul-guarded-old-profiler-repair", "treatment": "guarded-old-profiler",
              "required_evidence": ["candidate-repair", "offline-verifier",
                                    "msprof-op-timing"]},
         ],
         "gate": {"all_canaries_terminal_ok": True,
                  "all_branches_offline_valid": True,
                  "all_final_timings_positive": True,
-                 "minimum_repaired_canaries": 2,
+                 "minimum_repaired_canaries": 3,
                  "resume_canary_required": True},
     }
     definition_path = tmp_path / "canaries.json"
@@ -356,9 +451,9 @@ def canary_gate_fixture(tmp_path: Path, config: dict) -> tuple[Path, str, Path, 
 
 
 def test_repair_campaign_requires_pinned_successful_canary_gate(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     definition, definition_sha, results, results_sha = canary_gate_fixture(
         tmp_path, config
@@ -378,15 +473,15 @@ def test_repair_campaign_requires_pinned_successful_canary_gate(tmp_path: Path):
 
 
 def test_v2_canary_gate_exactly_matches_selected_profile_treatments(tmp_path: Path):
-    cell = {"cell_id": "matmul-project-cannbot", "task": "matmul",
-            "treatment": "project-cannbot", "round_count": 4,
+    cell = {"cell_id": "matmul-cannbot-new-profiler", "task": "matmul",
+            "treatment": "cannbot-new-profiler", "round_count": 4,
             "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["project-cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     definition_path, _definition_sha, results_path, _results_sha = (
         canary_gate_fixture(tmp_path, config)
     )
-    selected = ("project-cannbot", "project-guarded")
+    selected = ("cannbot-new-profiler", "guarded-new-profiler")
     definition = json.loads(definition_path.read_text())
     definition["schema"] = "profiling-skill/audited-repair-canaries/v2"
     definition["treatments"] = list(selected)
@@ -411,15 +506,15 @@ def test_v2_canary_gate_exactly_matches_selected_profile_treatments(tmp_path: Pa
     with pytest.raises(production.ProductionError, match="selected treatments"):
         production.validate_canary_gate(
             config, results_path, sha(results_path),
-            selected_treatments=("project-cannbot",),
+            selected_treatments=("cannbot-new-profiler",),
         )
 
 
 def test_v2_guarded_only_gate_does_not_require_resume_evidence(tmp_path: Path):
-    cell = {"cell_id": "matmul-project-guarded", "task": "matmul",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "matmul-guarded-new-profiler", "task": "matmul",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     definition_path, _definition_sha, results_path, _results_sha = (
         canary_gate_fixture(tmp_path, config)
@@ -427,7 +522,7 @@ def test_v2_guarded_only_gate_does_not_require_resume_evidence(tmp_path: Path):
     definition = json.loads(definition_path.read_text())
     definition.update(
         schema="profiling-skill/audited-repair-canaries/v2",
-        treatments=["project-guarded"],
+        treatments=["guarded-new-profiler"],
     )
     definition["canaries"] = [definition["canaries"][2]]
     definition["gate"].update(
@@ -445,7 +540,7 @@ def test_v2_guarded_only_gate_does_not_require_resume_evidence(tmp_path: Path):
 
     assert production.validate_canary_gate(
         config, results_path, sha(results_path),
-        selected_treatments=("project-guarded",),
+        selected_treatments=("guarded-new-profiler",),
     )["resumed_canaries"] == []
 
     results["results"][0]["resume_receipt"] = {
@@ -455,14 +550,14 @@ def test_v2_guarded_only_gate_does_not_require_resume_evidence(tmp_path: Path):
     with pytest.raises(production.ProductionError, match="undeclared canary resume"):
         production.validate_canary_gate(
             config, results_path, sha(results_path),
-            selected_treatments=("project-guarded",),
+            selected_treatments=("guarded-new-profiler",),
         )
 
 
 def test_v1_gate_preserves_reordered_complete_declarations(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     definition_path, _definition_sha, results_path, _results_sha = (
         canary_gate_fixture(tmp_path, config)
@@ -487,9 +582,9 @@ def test_v1_gate_preserves_reordered_complete_declarations(tmp_path: Path):
 @pytest.mark.parametrize("mutation", ["missing", "malformed", "failed", "artifact-drift"])
 def test_repair_campaign_rejects_unsatisfied_canary_gate(
         tmp_path: Path, mutation: str):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     definition, definition_sha, results, _ = canary_gate_fixture(tmp_path, config)
     config["canary_definition"] = {
@@ -519,15 +614,15 @@ def test_repair_campaign_rejects_unsatisfied_canary_gate(
 ])
 def test_canary_gate_authenticates_resume_proof_artifacts(
         tmp_path: Path, mutation: str):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     definition, definition_sha, results, _ = canary_gate_fixture(tmp_path, config)
     config["canary_definition"] = {"path": str(definition), "sha256": definition_sha}
     document = json.loads(results.read_text())
     record = next(item for item in document["results"]
-                  if item["id"] == "matmul-project-cannbot-resume")
+                  if item["id"] == "matmul-cannbot-new-profiler-resume")
     resume_path = Path(record["resume_receipt"]["path"])
     resume = json.loads(resume_path.read_text())
 
@@ -555,9 +650,9 @@ def test_canary_gate_authenticates_resume_proof_artifacts(
 
 def test_production_entrypoint_gates_dispatch_on_pinned_canary_results(
         tmp_path: Path, monkeypatch):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     definition, definition_sha, results, results_sha = canary_gate_fixture(
         tmp_path, config
@@ -604,12 +699,12 @@ def test_production_entrypoint_gates_dispatch_on_pinned_canary_results(
 
 
 def test_production_entrypoint_accepts_schema_v3_subset(tmp_path: Path, monkeypatch):
-    cell = {"cell_id": "matmul-project-cannbot", "task": "matmul",
-            "treatment": "project-cannbot", "round_count": 4,
+    cell = {"cell_id": "matmul-cannbot-new-profiler", "task": "matmul",
+            "treatment": "cannbot-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
-    selected = ("project-cannbot", "project-guarded")
+    selected = ("cannbot-new-profiler", "guarded-new-profiler")
     manifest = campaign.build_manifest(
         config["run_id"], Path(config["prompt"]["path"]),
         {name: Path(binding["path"]) for name, binding in config["tasks"].items()},
@@ -638,6 +733,67 @@ def test_production_entrypoint_accepts_schema_v3_subset(tmp_path: Path, monkeypa
     assert dispatched[0]["dimensions"]["treatments"] == list(selected)
 
 
+def test_a3_production_entrypoint_rejects_dual_product_manifest_cleanly(
+        tmp_path: Path, monkeypatch, capsys):
+    config = runtime_fixture(tmp_path, {
+        "cell_id": "matmul-cannbot", "task": "matmul",
+        "treatment": "cannbot-all", "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    })
+    product_tasks = {
+        product: {
+            task: Path(config["tasks"][task]["path"])
+            for task in campaign.TASKS
+        }
+        for product in campaign.PRODUCTS
+    }
+    shared = config["provenance"]
+    provenance = {
+        "source_revision": shared["source_revision"],
+        "controller_sha256": shared["controller_sha256"],
+        "model": shared["model"],
+        "skills": shared["skills"],
+        "products": {
+            product: {
+                "runtime": campaign.PRODUCT_RUNTIMES[product],
+                "runtime_image_digest": shared["runtime_image_digest"],
+                "baselines": shared["baselines"],
+                "starters": shared["starters"],
+            }
+            for product in campaign.PRODUCTS
+        },
+    }
+    manifest = campaign.build_manifest(
+        config["run_id"], Path(config["prompt"]["path"]), {}, provenance,
+        "dual-product-rejection", request_budget=24,
+        products=campaign.PRODUCTS, product_task_files=product_tasks,
+    )
+    manifest_path = tmp_path / "dual-manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    config_path = tmp_path / "runtime.json"
+    config_path.write_text(json.dumps(config))
+    admission = tmp_path / "admission.json"
+    admission.write_text("{}")
+    monkeypatch.setattr(
+        production, "ProductionCellLauncher",
+        lambda *args, **kwargs: pytest.fail("dual-product manifest dispatched"),
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        production.main([
+            "--manifest", str(manifest_path),
+            "--runtime-config", str(config_path),
+            "--runtime-config-sha256", sha(config_path),
+            "--admission", str(admission),
+            "--admission-sha256", sha(admission),
+            "--ledger", str(tmp_path / "ledger.json"),
+        ])
+
+    assert failure.value.code == 2
+    assert "A3-only production entrypoint does not support product manifests" \
+        in capsys.readouterr().err
+
+
 def test_migration_trust_cli_requires_resume(capsys):
     with pytest.raises(SystemExit) as failure:
         production.main([
@@ -657,9 +813,9 @@ def test_migration_trust_cli_requires_resume(capsys):
 
 
 def test_three_task_starters_share_revision_and_materialize_distinct_pairs(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     assert len({binding["revision"] for binding in
                 config["source_repositories"].values()}) == 1
@@ -682,10 +838,10 @@ def test_three_task_starters_share_revision_and_materialize_distinct_pairs(tmp_p
 
 @pytest.mark.parametrize("mutation", ["missing", "hash-drift"])
 def test_starter_failure_precedes_invoker(tmp_path: Path, mutation: str):
-    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "gdn-guarded-new-profiler", "task": "gdn",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     invocations = []
     candidate = Path(config["starter_sources"]["gdn"]["candidate"]["path"])
@@ -703,10 +859,10 @@ def test_starter_failure_precedes_invoker(tmp_path: Path, mutation: str):
 
 
 def test_seed_contains_pinned_starter_and_resume_does_not_overwrite_work(tmp_path: Path):
-    cell = {"cell_id": "bsa-project-guarded", "task": "bsa",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "bsa-guarded-new-profiler", "task": "bsa",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config, invoker_factory=lambda *args, **kwargs: object(),
@@ -741,10 +897,10 @@ def test_seed_contains_pinned_starter_and_resume_does_not_overwrite_work(tmp_pat
 
 
 def test_launcher_recovers_exact_seed_only_branch_without_verifier_shortcut(tmp_path: Path):
-    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "gdn-guarded-new-profiler", "task": "gdn",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     FakeRunner.calls.clear()
     launcher = production_launcher(
@@ -771,9 +927,9 @@ def test_launcher_recovers_exact_seed_only_branch_without_verifier_shortcut(tmp_
 
 
 def test_starter_manifest_contract_is_validated_before_materialization(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     binding = config["starter_sources"]["matmul"]["manifest"]
     path = Path(binding["path"])
@@ -791,9 +947,10 @@ class FakeRunner:
     calls = []
 
     def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
-                 max_candidate_repairs):
+                 max_candidate_repairs, required_manifest_schema):
         assert round_count == 4
         assert max_candidate_repairs == 2
+        assert required_manifest_schema == "profiling-skill/candidate-kernel/v2"
         self.repo = repo
 
     def run(self, run_id, agent_id, *, resume=False):
@@ -872,19 +1029,20 @@ class TrustRecordingRunner(FakeRunner):
     trusted = None
 
     def __init__(self, *args, round_count, max_candidate_repairs,
-                 trusted_runtime_migration):
+                 required_manifest_schema, trusted_runtime_migration):
         super().__init__(
             *args, round_count=round_count,
             max_candidate_repairs=max_candidate_repairs,
+            required_manifest_schema=required_manifest_schema,
         )
         type(self).trusted = trusted_runtime_migration
 
 
 def test_launcher_authenticates_and_forwards_external_migration_trust(tmp_path: Path):
-    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "gdn-guarded-new-profiler", "task": "gdn",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     config_path, config_sha256, trusted = migration_trust_fixture(tmp_path, config)
     attestation_path = Path(trusted["attestation_path"])
@@ -925,10 +1083,10 @@ def test_launcher_authenticates_and_forwards_external_migration_trust(tmp_path: 
 
 
 def test_launcher_forwards_ordered_sequential_migration_proofs(tmp_path: Path):
-    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "gdn-guarded-new-profiler", "task": "gdn",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     config_path, config_sha256, second = migration_trust_fixture(tmp_path, config)
     second_path = Path(second["attestation_path"])
@@ -994,10 +1152,10 @@ def test_launcher_forwards_ordered_sequential_migration_proofs(tmp_path: Path):
 ])
 def test_launcher_rejects_untrusted_mixed_runtime_before_invoker(
         tmp_path: Path, defect: str):
-    cell = {"cell_id": "bsa-project-guarded", "task": "bsa",
-            "treatment": "project-guarded", "round_count": 4,
+    cell = {"cell_id": "bsa-guarded-new-profiler", "task": "bsa",
+            "treatment": "guarded-new-profiler", "round_count": 4,
             "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["project-guarded"])}
+            "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
     config = runtime_fixture(tmp_path, cell)
     config_path, config_sha256, trusted = migration_trust_fixture(tmp_path, config)
     kwargs = {"runtime_config_path": config_path,
@@ -1043,8 +1201,8 @@ def test_launcher_rejects_untrusted_mixed_runtime_before_invoker(
 
 
 def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Path):
-    cell = {"cell_id": "gdn-project-guarded", "task": "gdn",
-            "treatment": "project-guarded", "round_count": 4, "request_budget": 24,
+    cell = {"cell_id": "gdn-guarded-new-profiler", "task": "gdn",
+            "treatment": "guarded-new-profiler", "round_count": 4, "request_budget": 24,
             "skills": ["ascend-profiling", "triton-guarded-kernel"]}
     config = runtime_fixture(tmp_path, cell)
     created = {}
@@ -1065,7 +1223,7 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         return SimpleNamespace(
             returncode=0, stdout=json.dumps({
                 "status": "valid",
-                "branch": "experiment/production-e2e/gdn-project-guarded",
+                "branch": "experiment/production-e2e/gdn-guarded-new-profiler",
                 "seed_commit": "seed", "session_id": "thread",
                 "experiments": [{"commit": str(number)} for number in range(1, 5)],
             }), stderr="",
@@ -1096,12 +1254,15 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         Path(config["baseline_sources"]["gdn"]["path"]).read_text()
     )
     assert controller_config["devices"] == [{"id": "bz-a3-2/device-6", "device": 0}]
-    assert controller_config["timeout_seconds"] == 12
+    # A v2 profile composes a full-domain gate and a timing job. Each retains
+    # the full per-job budget, while the enclosing backend covers both plus
+    # one shutdown grace interval.
+    assert controller_config["timeout_seconds"] == 22
     nested = json.loads(controller_config["backend_command"][-1])
     assert "--device" not in nested
     assert nested[nested.index("--timeout") + 1] == "10"
     assert created["controller"][0][1].endswith("audited_bz_controller.py")
-    assert created["controller"][2]["timeout"] == 15
+    assert created["controller"][2]["timeout"] == 25
     assert created["invoker"][1]["agent_id"] == cell["cell_id"]
     assert created["invoker"][1]["timeout"] == 20
     assert created["verifier"][1]["timeout"] == 20
@@ -1113,9 +1274,9 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
 
 
 def test_completed_cell_rejects_same_run_manifest_budget_change(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     config["manifest_sha256"] = "1" * 64
     launcher = production_launcher(
@@ -1142,9 +1303,9 @@ def test_completed_cell_rejects_same_run_manifest_budget_change(tmp_path: Path):
 
 
 def test_same_manifest_identity_accepts_normal_existing_cell(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     config["manifest_sha256"] = "3" * 64
     launcher = production_launcher(
@@ -1162,9 +1323,9 @@ def test_same_manifest_identity_accepts_normal_existing_cell(tmp_path: Path):
 
 
 def test_legacy_identity_upgrades_only_with_matching_seed_and_controller(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config, invoker_factory=lambda *args, **kwargs: object(),
@@ -1191,8 +1352,8 @@ def test_legacy_identity_upgrades_only_with_matching_seed_and_controller(tmp_pat
 
 
 def test_repair_runtime_uses_48_operations_and_two_candidate_repairs(tmp_path: Path):
-    cell = {"cell_id": "matmul-project-guarded", "task": "matmul",
-            "treatment": "project-guarded", "round_count": 4, "request_budget": 48,
+    cell = {"cell_id": "matmul-guarded-new-profiler", "task": "matmul",
+            "treatment": "guarded-new-profiler", "round_count": 4, "request_budget": 48,
             "skills": ["ascend-profiling", "triton-guarded-kernel"]}
     config = runtime_fixture(tmp_path, cell)
     config["max_candidate_repairs_per_round"] = 2
@@ -1212,14 +1373,16 @@ def test_repair_runtime_uses_48_operations_and_two_candidate_repairs(tmp_path: P
 
 def test_declared_resume_canary_routes_only_job_client_observation_fault(tmp_path: Path):
     cell = {
-        "cell_id": "matmul-project-cannbot-resume", "task": "matmul",
-        "treatment": "project-cannbot", "round_count": 4, "request_budget": 48,
-        "skills": list(production.TREATMENT_SKILLS["project-cannbot"]),
+        "cell_id": "matmul-cannbot-new-profiler-resume", "task": "matmul",
+        "treatment": "cannbot-new-profiler", "round_count": 4, "request_budget": 48,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-new-profiler"]),
         "canary_fault": "interrupt-after-dispatch-once",
     }
     config = runtime_fixture(tmp_path, cell)
     definition = tmp_path / "canaries.json"
-    definition.write_bytes((ROOT / "experiments/audited-repair-canaries.json").read_bytes())
+    definition.write_text((ROOT / "experiments/audited-repair-canaries.json").read_text().replace(
+        "project-cannbot", "cannbot-new-profiler"
+    ))
     config["canary_definition"] = {"path": str(definition), "sha256": sha(definition)}
     captured = {}
 
@@ -1245,9 +1408,9 @@ def test_declared_resume_canary_routes_only_job_client_observation_fault(tmp_pat
 
 def test_a5_controller_selects_self_contained_named_runtime_client(tmp_path: Path):
     cell = {
-        "cell_id": "a5-matmul-cannbot", "product": "a5", "runtime": "cann91",
-        "task": "matmul", "treatment": "cannbot", "round_count": 4,
-        "request_budget": 24, "skills": list(production.TREATMENT_SKILLS["cannbot"]),
+        "cell_id": "a5-matmul-cannbot-all", "product": "a5", "runtime": "cann91",
+        "task": "matmul", "treatment": "cannbot-all", "round_count": 4,
+        "request_budget": 24, "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
     }
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
@@ -1272,8 +1435,9 @@ def test_a5_controller_selects_self_contained_named_runtime_client(tmp_path: Pat
 
 def test_controller_rejects_cross_product_placement(tmp_path: Path):
     cell = {"cell_id": "a5-matmul", "product": "a5", "runtime": "cann91",
-            "task": "matmul", "treatment": "cannbot", "round_count": 4,
-            "request_budget": 24, "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "task": "matmul", "treatment": "cannbot-all", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config, invoker_factory=lambda *args, **kwargs: object(),
@@ -1289,9 +1453,9 @@ def test_controller_rejects_cross_product_placement(tmp_path: Path):
 @pytest.mark.parametrize("value", [-1, 0, 1, 3, True])
 def test_production_rejects_nonstandard_candidate_repair_limit(
         tmp_path: Path, value):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 48,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     config["max_candidate_repairs_per_round"] = value
     with pytest.raises(production.ProductionError, match="exactly two"):
@@ -1299,9 +1463,9 @@ def test_production_rejects_nonstandard_candidate_repair_limit(
 
 
 def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     Path(config["runtime_scripts"]["path"], "benchmark_backend.py").write_text("drift")
     with pytest.raises(production.ProductionError, match="runtime scripts hash"):
@@ -1311,9 +1475,9 @@ def test_launcher_rejects_skill_or_runtime_hash_drift(tmp_path: Path):
 @pytest.mark.parametrize("failure", ["clone", "copy"])
 def test_cell_bootstrap_recovers_only_owned_interrupted_staging(
         tmp_path: Path, monkeypatch, failure: str):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config, invoker_factory=lambda *args, **kwargs: object(),
@@ -1351,9 +1515,9 @@ def test_cell_bootstrap_recovers_only_owned_interrupted_staging(
 
 
 def test_cell_bootstrap_rejects_unowned_partial_staging(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     staging = Path(config["run_root"]) / f".{cell['cell_id']}.initializing"
     (staging / "state").mkdir(parents=True)
@@ -1370,9 +1534,9 @@ def test_cell_bootstrap_rejects_unowned_partial_staging(tmp_path: Path):
 @pytest.mark.parametrize("mutation", ["drift", "extra"])
 def test_resume_rejects_treatment_skill_tree_drift_or_extras(
         tmp_path: Path, mutation: str):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config, invoker_factory=lambda *args, **kwargs: object(),
@@ -1395,9 +1559,9 @@ def test_resume_rejects_treatment_skill_tree_drift_or_extras(
 ])
 def test_launcher_rejects_invalid_or_overlapping_timeout_contract(
         tmp_path: Path, key: str, value: object):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     config[key] = value
     with pytest.raises(production.ProductionError, match="timeout"):
@@ -1405,9 +1569,9 @@ def test_launcher_rejects_invalid_or_overlapping_timeout_contract(
 
 
 def test_launcher_rejects_direct_runtime_and_arbitrary_adapter(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     config["runtime_mode"] = "direct"
     config["adapter_command"] = ["untrusted-adapter"]
@@ -1417,9 +1581,9 @@ def test_launcher_rejects_direct_runtime_and_arbitrary_adapter(tmp_path: Path):
 
 @pytest.mark.parametrize("pin", ["source_revision", "controller_sha256", "baseline", "skill"])
 def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pin: str):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     if pin == "source_revision":
         config["provenance"][pin] = "a" * 40
@@ -1428,7 +1592,7 @@ def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pi
     elif pin == "baseline":
         config["provenance"]["baselines"]["matmul"] = "a" * 64
     else:
-        config["provenance"]["skills"]["cannbot"] = "a" * 64
+        config["provenance"]["skills"]["cannbot-all"] = "a" * 64
     with pytest.raises(production.ProductionError, match="provenance"):
         production_launcher(config)
 
@@ -1436,9 +1600,9 @@ def test_launcher_binds_manifest_provenance_to_runtime_inputs(tmp_path: Path, pi
 @pytest.mark.parametrize("pin", ["resource", "client"])
 def test_launcher_binds_resource_module_and_client_to_manifest_provenance(
         tmp_path: Path, pin: str):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     key = ("resource_admission_sha256" if pin == "resource"
            else "cpl_remote_closure_sha256")
@@ -1496,8 +1660,8 @@ def test_expired_admission_pauses_without_launch_or_evidence(tmp_path: Path):
                              "sha256": "3" * 64},
             } for name in production.DEVELOPMENT_CASES
         },
-        "skills": {"cannbot": "e" * 64, "ascend-profiling": "f" * 64,
-                   "triton-guarded-kernel": "1" * 64},
+        "skills": {"cannbot": "e" * 64, "profiler-new": "f" * 64,
+                   "profiler-old": "1" * 64, "guarded": "2" * 64},
     }
     prompt.write_text("prompt")
     for name in production.DEVELOPMENT_CASES:
@@ -1523,9 +1687,9 @@ def test_expired_admission_pauses_without_launch_or_evidence(tmp_path: Path):
 
 
 def test_launcher_rejects_global_client_implementation_drift(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     client = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     client.with_name("cpl_remote.py").write_text("# implementation drift\n")
@@ -1534,9 +1698,9 @@ def test_launcher_rejects_global_client_implementation_drift(tmp_path: Path):
 
 
 def test_launcher_rejects_invalid_timing_baseline_contract(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     baseline = Path(config["baseline_sources"]["matmul"]["path"])
     document = json.loads(baseline.read_text())
@@ -1551,9 +1715,9 @@ def test_launcher_rejects_invalid_timing_baseline_contract(tmp_path: Path):
 
 
 def test_launcher_rejects_nonfinite_timing_baseline_value(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     baseline = Path(config["baseline_sources"]["matmul"]["path"])
     document = json.loads(baseline.read_text())
@@ -1571,9 +1735,9 @@ def test_launcher_rejects_nonfinite_timing_baseline_value(tmp_path: Path):
 
 
 def test_controller_uses_pinned_global_boundary_without_adapter_argv(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     created = {}
     launcher = production_launcher(
@@ -1599,9 +1763,9 @@ def test_controller_uses_pinned_global_boundary_without_adapter_argv(tmp_path: P
 
 
 def test_runner_crash_is_infrastructure_not_candidate_failure(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
 
     class CrashingRunner(FakeRunner):
@@ -1622,9 +1786,9 @@ def test_runner_crash_is_infrastructure_not_candidate_failure(tmp_path: Path):
 
 def test_infrastructure_exception_identity_is_injected_not_looked_up_late(
         tmp_path: Path, monkeypatch):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
 
     class CrashingRunner(FakeRunner):
@@ -1649,9 +1813,9 @@ def test_infrastructure_exception_identity_is_injected_not_looked_up_late(
 
 
 def test_existing_nonseed_incomplete_branch_requires_valid_blocked_checkpoint(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config,
@@ -1678,9 +1842,9 @@ def test_existing_nonseed_incomplete_branch_requires_valid_blocked_checkpoint(tm
 ])
 def test_four_round_campaign_accepts_only_v2_four_round_checkpoint(
         tmp_path: Path, schema: str, round_count: int | None, accepted: bool):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     launcher = production_launcher(
         config,
@@ -1704,9 +1868,9 @@ def test_four_round_campaign_accepts_only_v2_four_round_checkpoint(
 
 
 def test_complete_branch_is_verified_and_reconstructed_with_full_receipts(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     verifier_calls = []
 
@@ -1752,9 +1916,9 @@ def test_complete_branch_is_verified_and_reconstructed_with_full_receipts(tmp_pa
 
 
 def test_real_command_controller_preserves_genuine_candidate_failure(tmp_path: Path):
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     controller_script = Path(config["runtime_scripts"]["path"]) / "audited_bz_controller.py"
     controller_script.write_text("""\
@@ -1789,10 +1953,11 @@ print(json.dumps({
 
     class ControllerRunner(FakeRunner):
         def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
-                     max_candidate_repairs):
+                     max_candidate_repairs, required_manifest_schema):
             super().__init__(
                 repo, prompt, task, invoker, controller, round_count=round_count,
                 max_candidate_repairs=max_candidate_repairs,
+                required_manifest_schema=required_manifest_schema,
             )
             self.controller = controller
 
@@ -1828,9 +1993,9 @@ def test_real_four_round_composition_resumes_verifies_and_reconstructs(
             "requires stacked audited-configurable-rounds prerequisite; "
             "this test runs unskipped once that PR is integrated"
         )
-    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot",
+    cell = {"cell_id": "matmul-cannbot", "task": "matmul", "treatment": "cannbot-all",
             "round_count": 4, "request_budget": 24,
-            "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
     config = runtime_fixture(tmp_path, cell)
     runtime_root = Path(config["runtime_scripts"]["path"])
     for name in production.RUNTIME_FILES - {"audited_bz_controller.py"}:
@@ -2031,7 +2196,7 @@ def test_production_case_contracts_cover_all_tasks(task, development, count):
     assert production.ALL_CASES[task] == list(range(count))
 
 
-def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path):
+def test_fake_production_launcher_runs_all_twelve_isolated_branches(tmp_path: Path):
     source, revision = git_repo(tmp_path / "source")
     prompt = tmp_path / "prompt.md"
     prompt.write_text("prompt")
@@ -2039,16 +2204,12 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     for task in production.DEVELOPMENT_CASES:
         tasks[task] = tmp_path / f"{task}.md"
         tasks[task].write_text(task)
-    skills = {}
-    for name in {skill for names in production.TREATMENT_SKILLS.values() for skill in names}:
-        path = tmp_path / "skills" / name
-        path.mkdir(parents=True)
-        (path / "SKILL.md").write_text(name)
-        skills[name] = {"path": str(path), "sha256": production.digest_tree(path)}
+    skills = frozen_skill_sources(tmp_path / "skills")
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
                  "bz_a3_job_client.py", "bz_a5_job_client.py",
+                 "fully_fused_contract.py",
                  "validate_audited_experiment.py",
                  "audited_verifier.py", "audited_contract.py",
                  "audited_lifecycle.py", "audited_runtime.py"):
@@ -2071,7 +2232,10 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         candidate.write_text(f"TASK = {task!r}\nVALUE = 0\n")
         candidate_manifest = starter / "candidate.manifest.json"
         candidate_manifest.write_text(json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": task,
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": task, "entrypoint": task,
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
         }) + "\n")
         starters[task] = {
             "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
@@ -2085,11 +2249,7 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "model": {"name": "gpt-5.6-sol", "reasoning_effort": "low"},
         "baselines": {task: binding["sha256"] for task, binding in baselines.items()},
         "starters": starters,
-        "skills": {
-            "cannbot": production.digest_skill_bundle(skills, production.CANNBOT_SKILLS),
-            "ascend-profiling": skills["ascend-profiling"]["sha256"],
-            "triton-guarded-kernel": skills["triton-guarded-kernel"]["sha256"],
-        },
+        "skills": {name: binding["sha256"] for name, binding in skills.items()},
     }
     cpl_remote = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
     resource_module = ROOT / "scripts" / "audited_resource_admission.py"
@@ -2127,7 +2287,7 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "reasoning_effort": "low", "runtime_mode": "docker",
         "runtime_image_digest": provenance["runtime_image_digest"],
         "agent_turn_timeout": 20,
-        "controller_transaction_timeout": 15,
+        "controller_transaction_timeout": 25,
         "verifier_timeout": 20,
         "backend_job_timeout": 10,
         "timeout_grace": 2,
@@ -2148,7 +2308,7 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         manifest, tmp_path / "ledger.json", pool, launcher
     )
     assert ledger["status"] == "complete"
-    assert len(list((tmp_path / "runs").glob("*/repo/.git"))) == 9
+    assert len(list((tmp_path / "runs").glob("*/repo/.git"))) == 12
     assert all(state["status"] == "complete" for state in ledger["cells"].values())
     for cell in manifest["cells"]:
         controller_config = json.loads((

@@ -6,18 +6,23 @@
   "placement": "dynamic-bz-a3-admission",
   "canaries": [
     {
-      "id": "matmul-cannbot-repair",
-      "treatment": "cannbot",
+      "id": "matmul-cannbot-all-repair",
+      "treatment": "cannbot-all",
       "required_evidence": ["candidate-repair", "offline-verifier", "msprof-op-timing"]
     },
     {
-      "id": "matmul-project-cannbot-resume",
-      "treatment": "project-cannbot",
+      "id": "matmul-cannbot-new-profiler-resume",
+      "treatment": "cannbot-new-profiler",
       "required_evidence": ["checkpoint-resume", "same-session", "offline-verifier", "msprof-op-timing"]
     },
     {
-      "id": "matmul-project-guarded-repair",
-      "treatment": "project-guarded",
+      "id": "matmul-guarded-new-profiler-repair",
+      "treatment": "guarded-new-profiler",
+      "required_evidence": ["candidate-repair", "offline-verifier", "msprof-op-timing"]
+    },
+    {
+      "id": "matmul-guarded-old-profiler-repair",
+      "treatment": "guarded-old-profiler",
       "required_evidence": ["candidate-repair", "offline-verifier", "msprof-op-timing"]
     }
   ],
@@ -25,7 +30,7 @@
     "all_canaries_terminal_ok": true,
     "all_branches_offline_valid": true,
     "all_final_timings_positive": true,
-    "minimum_repaired_canaries": 2,
+    "minimum_repaired_canaries": 3,
     "resume_canary_required": true
   }
 }

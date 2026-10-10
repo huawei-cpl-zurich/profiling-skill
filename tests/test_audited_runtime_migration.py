@@ -745,7 +745,7 @@ def applied_production_launcher(campaign, tmp_path: Path, monkeypatch):
             "controller_sha256": campaign["document"]["old_runtime"]["closure_sha256"],
         },
         "runtime_mode": "docker", "runtime_image_digest": "sha256:" + "e" * 64,
-        "agent_turn_timeout": 20, "controller_transaction_timeout": 15,
+        "agent_turn_timeout": 20, "controller_transaction_timeout": 25,
         "verifier_timeout": 20, "backend_job_timeout": 10, "timeout_grace": 2,
         "auth_home": str(tmp_path / "auth"), "model": "model",
         "reasoning_effort": "low",
@@ -791,8 +791,8 @@ def applied_production_launcher(campaign, tmp_path: Path, monkeypatch):
     monkeypatch.setattr(launcher, "_receipt", lambda *args: {"status": "complete"})
     cell = {
         "cell_id": cell_plan["cell_id"], "task": "bsa",
-        "treatment": "project-guarded", "round_count": 4, "request_budget": 24,
-        "skills": list(production.TREATMENT_SKILLS["project-guarded"]),
+        "treatment": "guarded-new-profiler", "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"]),
         "task_sha256": sha(repo / "TASK.md"),
         "prompt_contract": {
             "task_sha256": sha(repo / "TASK.md"),

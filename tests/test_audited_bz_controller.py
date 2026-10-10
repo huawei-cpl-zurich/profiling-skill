@@ -67,6 +67,11 @@ class FakeBackend:
         ]
         return {"status": "ok", "handle": handle, "cases": rows,
                 "kernel_name": "kernel",
+                "fusion_gate": {
+                    "entrypoint": "kernel", "kernel_name": "kernel",
+                    "cases": list(range(10)), "logical_launches_per_case": 1,
+                },
+                "fusion_handle": f"{handle}:full-domain-gate",
                 "artifacts": {"remote_profile_evidence": "/remote/evidence.json"}}
 
 
@@ -117,6 +122,15 @@ def test_success_runs_controls_full_final_check_and_three_profile_repetitions(tm
     assert receipt["resolved_kernel_name"] == "kernel"
     assert receipt["policy"]["primary"]["declared_kernel_name"] == "kernel"
     assert receipt["policy"]["primary"]["resolved_kernel_name"] == "kernel"
+    assert receipt["fusion_handle"] == "bz-a3-1:job-3:full-domain-gate"
+    assert receipt["fusion_gate"]["cases"] == list(range(10))
+    assert receipt["policy"]["primary"]["fusion_handle"] == receipt["fusion_handle"]
+    profile_operation = next(
+        row for row in receipt["policy"]["operation_history"]
+        if row["action"] == "profile"
+    )
+    assert profile_operation["fusion_handle"] == receipt["fusion_handle"]
+    assert profile_operation["fusion_gate"] == receipt["fusion_gate"]
     expected = [
         math.exp(sum(math.log(value) for value in sample) / 3)
         for sample in zip([10.0, 20.0, 40.0], [11.0, 21.0, 41.0], [12.0, 22.0, 42.0])
@@ -133,6 +147,25 @@ def test_success_runs_controls_full_final_check_and_three_profile_repetitions(tm
     assert receipt["speedup_vs_baseline"] == (
         receipt["baseline_median_us"] / receipt["normalized_median_us"]
     )
+
+    missing_history = json.loads(json.dumps(receipt))
+    operation = next(
+        row for row in missing_history["policy"]["operation_history"]
+        if row["action"] == "profile"
+    )
+    operation.pop("fusion_gate")
+    operation.pop("fusion_handle")
+    with pytest.raises(contract.AuditError, match="operation history"):
+        contract.validate_controller_receipt(
+            missing_history, candidate_hash, manifest_hash,
+        )
+
+    unhashable_cases = json.loads(json.dumps(receipt))
+    unhashable_cases["fusion_gate"]["cases"] = [[0]]
+    with pytest.raises(contract.AuditError, match="fusion authorization"):
+        contract.validate_controller_receipt(
+            unhashable_cases, candidate_hash, manifest_hash,
+        )
 
 
 def test_compile_error_is_counted_without_profile_or_post_control(tmp_path: Path):

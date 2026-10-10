@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Callable, Mapping, Sequence
 
 from audited_contract import AuditError
-from audited_lifecycle import AuditedExperimentRunner, RunResult
+from audited_lifecycle import (
+    FUSED_MANIFEST_SCHEMA,
+    MANIFEST_SCHEMA,
+    AuditedExperimentRunner,
+    RunResult,
+)
 from audited_runtime import CodexInvoker, CommandController
 from audited_verifier import validate_branch
 
@@ -78,6 +83,10 @@ def _parser() -> argparse.ArgumentParser:
                         help="immutable number of host-directed experiment rounds")
     parser.add_argument("--max-candidate-repairs", type=int, choices=range(3), default=2,
                         help="repairs allowed inside one round after candidate failure")
+    parser.add_argument(
+        "--allow-legacy-v1", action="store_true",
+        help="explicitly replay a historical v1 candidate instead of requiring v2 fusion",
+    )
     parser.add_argument("--resume", action="store_true")
     return parser
 
@@ -101,6 +110,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.repo, args.prompt, args.task, invoker, controller,
             round_count=args.rounds,
             max_candidate_repairs=args.max_candidate_repairs,
+            required_manifest_schema=(
+                MANIFEST_SCHEMA if args.allow_legacy_v1 else FUSED_MANIFEST_SCHEMA
+            ),
         ).run(args.run_id, args.agent_id, resume=args.resume)
     except AuditError as error:
         parser.error(str(error))

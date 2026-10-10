@@ -36,18 +36,18 @@ legacy top-level runtime, baselines, and starters with this exact shape:
 ```
 
 Each starter retains the existing pinned `candidate` and `manifest` bindings.
-The remaining source, controller, model, and skills provenance is shared and
-immutable. Legacy schema-v1 through schema-v3 manifests remain valid.
+The remaining source, controller, model, and exact four-source skills
+provenance is shared and immutable. Legacy schema-v1 through schema-v3
+manifests remain verification-only inputs.
 Schema-v4 prompt and per-product task bindings must each contain an absolute
 path and lowercase 64-hex SHA-256; matching malformed values across a cell and
 manifest do not satisfy verification.
 The CLI equivalent repeats `--product a3 --product a5` and supplies
 `--a3-matmul-task`, `--a3-gdn-task`, `--a3-bsa-task`, plus the corresponding
-three `--a5-...-task` arguments. Legacy generation continues to use the three
-unprefixed task arguments.
-Explicit schema-v4 treatment subsets use product-campaign rules, so a product
-campaign may explicitly select `cannbot`; schema-v3's profiler-only restriction
-continues to apply only to legacy product-neutral treatment subsets.
+three `--a5-...-task` arguments. Product-neutral schema-v4 generation uses the
+three unprefixed task arguments. Explicit schema-v4 treatment subsets use the
+same exact four-treatment policy, so a product campaign may explicitly select
+`cannbot-all`.
 
 ## Admission and scheduling
 
@@ -81,7 +81,7 @@ pytest -q tests/test_dual_product_campaign.py
 ```
 
 It blocks an A3 and an A5 launch concurrently, verifies both leases are filled,
-then checks all 18 cells finish without cross-product placement. It separately
+then checks all 24 cells finish without cross-product placement. It separately
 proves that unavailable A3 capacity cannot prevent all runnable A5 cells from
 finishing.
 

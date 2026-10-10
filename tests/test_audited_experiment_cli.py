@@ -89,9 +89,10 @@ def test_cli_passes_agent_identity_and_always_scrubs_auth(tmp_path: Path, monkey
 
     class Lifecycle:
         def __init__(self, repo, prompt, task, invoke, controller, *, round_count,
-                     max_candidate_repairs):
+                     max_candidate_repairs, required_manifest_schema):
             seen["round_count"] = round_count
             seen["max_candidate_repairs"] = max_candidate_repairs
+            seen["required_manifest_schema"] = required_manifest_schema
 
         def run(self, *args, **kwargs):
             raise contract.AuditError("synthetic failure")
@@ -103,6 +104,7 @@ def test_cli_passes_agent_identity_and_always_scrubs_auth(tmp_path: Path, monkey
                   "--run-id", "run", "--agent-id", "agent-7", "--controller", "true"])
     assert seen["agent_id"] == "agent-7"
     assert seen["max_candidate_repairs"] == 2
+    assert seen["required_manifest_schema"] == "profiling-skill/candidate-kernel/v2"
     assert seen["invoker"].scrubbed is True
     assert "synthetic failure" in capsys.readouterr().err
 
@@ -124,9 +126,10 @@ def test_cli_passes_declared_round_count_to_lifecycle(tmp_path: Path, monkeypatc
 
     class Lifecycle:
         def __init__(self, repo, prompt, task, invoke, controller, *, round_count,
-                     max_candidate_repairs):
+                     max_candidate_repairs, required_manifest_schema):
             seen["round_count"] = round_count
             seen["max_candidate_repairs"] = max_candidate_repairs
+            seen["required_manifest_schema"] = required_manifest_schema
 
         def run(self, *args, **kwargs):
             return cli.RunResult("complete", "branch", "session", "seed", tuple("1234"))
@@ -141,6 +144,14 @@ def test_cli_passes_declared_round_count_to_lifecycle(tmp_path: Path, monkeypatc
     ]) == 0
     assert seen["round_count"] == 4
     assert seen["max_candidate_repairs"] == 1
+    assert seen["required_manifest_schema"] == "profiling-skill/candidate-kernel/v2"
+
+    assert cli.main([
+        "--repo", str(repo), "--prompt", str(prompt), "--task", str(task),
+        "--run-id", "replay", "--agent-id", "agent", "--controller", "true",
+        "--rounds", "4", "--allow-legacy-v1",
+    ]) == 0
+    assert seen["required_manifest_schema"] == "profiling-skill/candidate-kernel/v1"
 
 
 def test_toy_controller_receipt_is_deterministic_and_policy_valid():
@@ -157,11 +168,56 @@ def test_toy_repo_initialization_is_reproducible(tmp_path: Path):
     repo = tmp_path / "repo"
     toy.initialize_repo(repo)
     assert (repo / "candidate.py").read_text() == "VALUE = 0\n"
+    assert json.loads((repo / "candidate.manifest.json").read_text()) == {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "toy_kernel", "entrypoint": "toy_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
     assert subprocess.check_output(
         ["git", "log", "-1", "--format=%s"], cwd=repo, text=True,
     ).strip() == "toy baseline"
     with pytest.raises(contract.AuditError, match="must not already exist"):
         toy.initialize_repo(repo)
+
+
+def test_toy_cli_binds_v2_by_default_and_v1_only_for_explicit_replay(
+        tmp_path: Path, monkeypatch):
+    schemas = []
+
+    class Invoker:
+        def __init__(self, *args, **kwargs): pass
+        def scrub_auth(self): pass
+
+    class Lifecycle:
+        def __init__(self, repo, prompt, task, invoke, controller, *,
+                     required_manifest_schema):
+            self.repo = repo
+            schemas.append(required_manifest_schema)
+
+    def battery(_run_id, runners):
+        return {agent: cli.RunResult(
+            "complete", "branch", f"thread-{agent}", "seed", ("1", "2", "3"),
+        ) for agent in runners}
+
+    monkeypatch.setattr(toy, "CodexInvoker", Invoker)
+    monkeypatch.setattr(toy, "AuditedExperimentRunner", Lifecycle)
+    monkeypatch.setattr(toy, "run_acceptance_battery", battery)
+
+    assert toy.main([str(tmp_path / "current")]) == 0
+    assert schemas == ["profiling-skill/candidate-kernel/v2"] * 3
+    assert {json.loads(path.read_text())["schema"] for path in
+            (tmp_path / "current").glob("agent-*/candidate.manifest.json")} == {
+                "profiling-skill/candidate-kernel/v2"
+            }
+
+    schemas.clear()
+    assert toy.main([str(tmp_path / "historical"), "--allow-legacy-v1"]) == 0
+    assert schemas == ["profiling-skill/candidate-kernel/v1"] * 3
+    assert {json.loads(path.read_text())["schema"] for path in
+            (tmp_path / "historical").glob("agent-*/candidate.manifest.json")} == {
+                "profiling-skill/candidate-kernel/v1"
+            }
 
 
 def test_real_composition_creates_three_verified_isolated_histories(tmp_path: Path):
@@ -211,6 +267,7 @@ def test_real_composition_creates_three_verified_isolated_histories(tmp_path: Pa
 
         runners[agent_id] = cli.AuditedExperimentRunner(
             repo, prompt, task, invoke, controller,
+            required_manifest_schema="profiling-skill/candidate-kernel/v2",
         )
 
     results = cli.run_acceptance_battery("composition", runners)

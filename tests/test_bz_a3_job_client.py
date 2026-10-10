@@ -82,6 +82,7 @@ class FakeTransport:
             "profile_cases": rows,
             "profile": {
                 "schema_version": 1, "status": "success", "profiler": "msprof-op",
+                "target_family": "Ascend-A2-A3",
                 "kernel_name": "gdn_kernel", "repeats": 3,
                 "cases": rows, "captures": captures,
                 "geomean_us": math.sqrt(99.0),

@@ -742,9 +742,17 @@ class ProductionCellLauncher:
         missing = sorted(name for name in RUNTIME_FILES if not (self.scripts / name).is_file())
         if missing:
             raise ProductionError(f"runtime controller closure is incomplete: {', '.join(missing)}")
+        task_bindings = self.config.get("product_tasks")
+        if task_bindings is None:
+            task_items = self.config.get("tasks", {}).items()
+        elif isinstance(task_bindings, dict):
+            task_items = ((f"{product}/{name}", value)
+                          for product, tasks in task_bindings.items()
+                          for name, value in tasks.items())
+        else:
+            task_items = ()
         for label, binding in [("prompt", self.config.get("prompt", {})),
-                               *[(f"task {name}", value)
-                                 for name, value in self.config.get("tasks", {}).items()]]:
+                               *[(f"task {name}", value) for name, value in task_items]]:
             path = Path(binding.get("path", ""))
             if not path.is_file() or file_sha256(path) != binding.get("sha256"):
                 raise ProductionError(f"{label} hash does not match pinned input")
@@ -764,7 +772,17 @@ class ProductionCellLauncher:
             raise ProductionError("runtime manifest identity is invalid")
         sources = self.config.get("source_repositories", {})
         expected_tasks = set(DEVELOPMENT_CASES)
-        if (set(sources) != expected_tasks or set(self.config.get("tasks", {})) != expected_tasks):
+        product_configs = self.config.get("products")
+        product_tasks = self.config.get("product_tasks")
+        dual_product = isinstance(product_configs, dict)
+        selected_products = set(product_configs) if dual_product else set()
+        tasks_complete = (
+            isinstance(product_tasks, dict)
+            and set(product_tasks) == selected_products
+            and all(isinstance(tasks, dict) and set(tasks) == expected_tasks
+                    for tasks in product_tasks.values())
+        ) if dual_product else set(self.config.get("tasks", {})) == expected_tasks
+        if set(sources) != expected_tasks or not tasks_complete:
             raise ProductionError("source/task provenance must cover the complete campaign")
         revisions = {binding.get("revision") for binding in sources.values()
                      if isinstance(binding, dict)}
@@ -774,7 +792,26 @@ class ProductionCellLauncher:
         if (runtime.get("sha256") != provenance.get("controller_sha256")
                 and not self._migration_attestations):
             raise ProductionError("controller provenance does not match runtime closure")
-        if self.config.get("runtime_image_digest") != provenance.get("runtime_image_digest"):
+        if dual_product:
+            pins = provenance.get("products")
+            if (not selected_products
+                    or not selected_products <= set(PRODUCT_RUNTIMES)
+                    or not isinstance(pins, dict)
+                    or set(pins) != selected_products):
+                raise ProductionError("product provenance does not match runtime inputs")
+            for product in selected_products:
+                expected_runtime = PRODUCT_RUNTIMES[product]
+                config = product_configs[product]
+                pin = pins[product]
+                if (not isinstance(config, dict) or not isinstance(pin, dict)
+                        or config.get("runtime") != expected_runtime
+                        or pin.get("runtime") != expected_runtime
+                        or config.get("runtime_image_digest") !=
+                        pin.get("runtime_image_digest")):
+                    raise ProductionError(
+                        f"product provenance does not match runtime input: {product}"
+                    )
+        elif self.config.get("runtime_image_digest") != provenance.get("runtime_image_digest"):
             raise ProductionError("runtime image provenance does not match Docker input")
         if provenance.get("model") != {
             "name": self.config.get("model"),
@@ -799,30 +836,39 @@ class ProductionCellLauncher:
             raise ProductionError(
                 "resource admission provenance does not match runtime inputs"
             )
-        baseline_sources = self.config.get("baseline_sources")
-        baseline_pins = provenance.get("baselines")
-        if (not isinstance(baseline_sources, dict) or not isinstance(baseline_pins, dict)
-                or set(baseline_sources) != expected_tasks
-                or set(baseline_pins) != expected_tasks):
-            raise ProductionError("baseline provenance does not match runtime inputs")
-        for task, binding in baseline_sources.items():
-            path = Path(binding.get("path", "")) if isinstance(binding, dict) else Path("")
-            actual = file_sha256(path) if path.is_file() else None
-            if actual != binding.get("sha256") or actual != baseline_pins[task]:
-                raise ProductionError(f"baseline provenance does not match runtime input: {task}")
-            self._baseline(task)
-        starter_sources = self.config.get("starter_sources")
-        starter_pins = provenance.get("starters")
-        if (not isinstance(starter_sources, dict) or not isinstance(starter_pins, dict)
-                or set(starter_sources) != expected_tasks
-                or set(starter_pins) != expected_tasks):
-            raise ProductionError("starter provenance does not match runtime inputs")
-        for task in expected_tasks:
-            if starter_sources[task] != starter_pins[task]:
-                raise ProductionError(
-                    f"starter provenance does not match runtime input: {task}"
-                )
-            self._starter(task)
+        products = selected_products if dual_product else (None,)
+        for product in products:
+            config = product_configs[product] if product else self.config
+            pin = provenance["products"][product] if product else provenance
+            baseline_sources = config.get("baseline_sources")
+            baseline_pins = pin.get("baselines")
+            if (not isinstance(baseline_sources, dict)
+                    or not isinstance(baseline_pins, dict)
+                    or set(baseline_sources) != expected_tasks
+                    or set(baseline_pins) != expected_tasks):
+                raise ProductionError("baseline provenance does not match runtime inputs")
+            for task, binding in baseline_sources.items():
+                path = (Path(binding.get("path", ""))
+                        if isinstance(binding, dict) else Path(""))
+                actual = file_sha256(path) if path.is_file() else None
+                if actual != binding.get("sha256") or actual != baseline_pins[task]:
+                    raise ProductionError(
+                        f"baseline provenance does not match runtime input: {task}"
+                    )
+                self._baseline(task, product)
+            starter_sources = config.get("starter_sources")
+            starter_pins = pin.get("starters")
+            if (not isinstance(starter_sources, dict)
+                    or not isinstance(starter_pins, dict)
+                    or set(starter_sources) != expected_tasks
+                    or set(starter_pins) != expected_tasks):
+                raise ProductionError("starter provenance does not match runtime inputs")
+            for task in expected_tasks:
+                if starter_sources[task] != starter_pins[task]:
+                    raise ProductionError(
+                        f"starter provenance does not match runtime input: {task}"
+                    )
+                self._starter(task, product)
         skill_pins = provenance.get("skills")
         skill_sources = self.config.get("skill_sources", {})
         if not isinstance(skill_pins, dict):
@@ -833,8 +879,34 @@ class ProductionCellLauncher:
         if skill_pins != expected_skill_pins:
             raise ProductionError("skill provenance does not match frozen runtime trees")
 
-    def _baseline(self, task: str) -> dict:
-        path = Path(self.config["baseline_sources"][task]["path"])
+    def _product_config(self, product: str | None) -> dict:
+        products = self.config.get("products")
+        if products is None:
+            if product not in (None, "a3"):
+                raise ProductionError("legacy runtime config supports only A3")
+            return self.config
+        if not isinstance(products, dict) or product not in products:
+            raise ProductionError("runtime product configuration is missing")
+        return products[product]
+
+    def _tasks(self, product: str | None) -> dict:
+        tasks = self.config.get("product_tasks")
+        return tasks[product] if tasks is not None else self.config["tasks"]
+
+    def _remote_root(self, product: str, target: str) -> str:
+        roots = self.config.get("remote_roots")
+        if roots is None:
+            if product != "a3":
+                raise ProductionError("A5 requires a product-specific remote root")
+            root = self.config.get("remote_root")
+        else:
+            root = roots.get(product, {}).get(target) if isinstance(roots, dict) else None
+        if not isinstance(root, str) or not root.startswith("/") or root == "/":
+            raise ProductionError("remote root is missing or unsafe for admitted placement")
+        return root
+
+    def _baseline(self, task: str, product: str | None = None) -> dict:
+        path = Path(self._product_config(product)["baseline_sources"][task]["path"])
         try:
             document = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError) as error:
@@ -856,8 +928,8 @@ class ProductionCellLauncher:
             raise ProductionError(f"timing baseline contract is invalid: {task}")
         return document
 
-    def _starter(self, task: str) -> dict[str, bytes]:
-        binding = self.config["starter_sources"].get(task)
+    def _starter(self, task: str, product: str | None = None) -> dict[str, bytes]:
+        binding = self._product_config(product)["starter_sources"].get(task)
         if not isinstance(binding, dict) or set(binding) != {"candidate", "manifest"}:
             raise ProductionError(f"starter binding is invalid: {task}")
         contents = {}
@@ -912,8 +984,9 @@ class ProductionCellLauncher:
         if (not isinstance(revision, str) or len(revision) != 40
                 or any(character not in "0123456789abcdef" for character in revision)):
             raise ProductionError("source repository revision must be a pinned commit")
-        starter = self._starter(cell["task"])
-        starter_binding = self.config["starter_sources"][cell["task"]]
+        product = cell.get("product", "a3")
+        starter = self._starter(cell["task"], product)
+        starter_binding = self._product_config(product)["starter_sources"][cell["task"]]
         legacy_identity = {
             "cell_id": cell["cell_id"], "task": cell["task"],
             "treatment": cell["treatment"], "source_revision": revision,
@@ -921,6 +994,7 @@ class ProductionCellLauncher:
         }
         identity = {
             "schema": "profiling-skill/cell-identity/v2", **legacy_identity,
+            **({"product": product} if "product" in cell else {}),
             "run_id": self.config["run_id"],
             "branch": f"experiment/{self.config['run_id']}/{cell['cell_id']}",
             "round_count": cell.get("round_count"),
@@ -941,7 +1015,7 @@ class ProductionCellLauncher:
                 raise ProductionError(
                     "existing isolated repository has an unreadable identity"
                 ) from error
-            if retained_identity == legacy_identity:
+            if retained_identity == legacy_identity and "product" not in cell:
                 controller_path = root / "state" / "controller.json"
                 seed_commit = _git(
                     repo, "log", "-1", "--format=%H", "--", ".experiment/seed.json"
@@ -968,7 +1042,7 @@ class ProductionCellLauncher:
                         or seed.get("prompt_sha256") !=
                         self.config["prompt"]["sha256"]
                         or seed.get("task_sha256") !=
-                        self.config["tasks"][cell["task"]]["sha256"]):
+                        self._tasks(product)[cell["task"]]["sha256"]):
                     raise ProductionError(
                         "legacy cell identity does not match immutable campaign evidence"
                     )
@@ -1054,7 +1128,7 @@ class ProductionCellLauncher:
                 "bz_a5_job_client.py" if product == "a5" else "bz_a3_job_client.py"
             )),
             "--state-dir", str(state / "jobs"), "--placements-json", str(placements),
-            "--remote-root", self.config["remote_root"],
+            "--remote-root", self._remote_root(product, slot["target"]),
             "--cpl-remote-sha256", file_sha256(Path(self.cpl_remote)),
             "--timeout", str(self.config["backend_job_timeout"]),
         ]
@@ -1097,7 +1171,7 @@ class ProductionCellLauncher:
             "devices": [{"id": f"{slot['target']}/device-{slot['device']}", "device": 0}],
             "development_cases": DEVELOPMENT_CASES[cell["task"]],
             "all_cases": ALL_CASES[cell["task"]],
-            "baseline": self._baseline(cell["task"]), "backend_command": backend,
+            "baseline": self._baseline(cell["task"], product), "backend_command": backend,
         }
         controller_config = state / "controller.json"
         controller_config.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
@@ -1250,7 +1324,8 @@ class ProductionCellLauncher:
             raise ProductionError(
                 "production cells require four rounds and a 24 or 48-operation budget"
             )
-        task_binding = self.config["tasks"].get(cell.get("task"), {})
+        product = cell.get("product", "a3")
+        task_binding = self._tasks(product).get(cell.get("task"), {})
         prompt_contract = cell.get("prompt_contract", {})
         if (cell.get("task_sha256") != task_binding.get("sha256")
                 or prompt_contract.get("task_sha256") != task_binding.get("sha256")
@@ -1281,7 +1356,7 @@ class ProductionCellLauncher:
             node_runtime=(Path(self.config["node_runtime"])
                           if self.config.get("node_runtime") else None),
         )
-        expected_image = self.config.get("runtime_image_digest")
+        expected_image = self._product_config(product).get("runtime_image_digest")
         actual_image = getattr(invoker, "docker_image_id", None)
         if (self.config["runtime_mode"] == "docker"
                 and actual_image != expected_image):
@@ -1298,7 +1373,7 @@ class ProductionCellLauncher:
                 runner_options["trusted_runtime_migration"] = self.trusted_runtime_migration
             runner = self.runner_factory(
                 repo, Path(self.config["prompt"]["path"]),
-                Path(self.config["tasks"][cell["task"]]["path"]),
+                Path(task_binding["path"]),
                 invoker, controller, **runner_options,
             )
             try:
@@ -1391,10 +1466,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(error))
     if manifest.get("schema_version") != 4:
         parser.error("production campaign requires four-treatment manifest schema_version 4")
-    if manifest.get("dimensions", {}).get("products"):
-        parser.error(
-            "A3-only production entrypoint does not support product manifests"
-        )
+    products = tuple(manifest.get("dimensions", {}).get("products", ()))
     config["run_id"] = manifest["run_id"]
     config["manifest_sha256"] = manifest["manifest_sha256"]
     if config.get("provenance") != manifest.get("provenance"):
@@ -1403,7 +1475,25 @@ def main(argv: list[str] | None = None) -> int:
     if (config.get("model"), config.get("reasoning_effort")) != (
             model["name"], model["reasoning_effort"]):
         parser.error("runtime model does not match manifest provenance")
-    if config.get("runtime_image_digest") != manifest["provenance"]["runtime_image_digest"]:
+    if products:
+        configured_products = config.get("products")
+        if (not isinstance(configured_products, dict)
+                or set(configured_products) != set(products)):
+            parser.error("runtime products do not match manifest products")
+        configured_tasks = config.get("product_tasks")
+        if configured_tasks is not None and configured_tasks != manifest["tasks"]:
+            parser.error("runtime product tasks do not match manifest tasks")
+        config["product_tasks"] = manifest["tasks"]
+        for product in products:
+            binding = configured_products[product]
+            pin = manifest["provenance"]["products"][product]
+            if (binding.get("runtime") != PRODUCT_RUNTIMES[product]
+                    or binding.get("runtime_image_digest") !=
+                    pin["runtime_image_digest"]):
+                parser.error(
+                    f"runtime product {product} does not match manifest provenance"
+                )
+    elif config.get("runtime_image_digest") != manifest["provenance"]["runtime_image_digest"]:
         parser.error("runtime image does not match manifest provenance")
     if manifest.get("request_budget") == 48:
         gate = validate_canary_gate(

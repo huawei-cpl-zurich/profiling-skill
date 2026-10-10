@@ -51,7 +51,8 @@ def _invoke(argv: list[str], timeout: int) -> CommandResult:
                                 check=False)
     except subprocess.TimeoutExpired as exc:
         output = _text(exc.stdout) + _text(exc.stderr)
-        match = re.search(r"\b(remote:bz-a3-[12]:job:[A-Za-z0-9_.-]+)\b", output)
+        match = re.search(
+            r"\b(remote:[A-Za-z0-9_.-]+:job:[A-Za-z0-9_.-]+)\b", output)
         handle = match.group(1) if match else None
         raise JobError("observer_error" if handle else "transport_error",
                        f"transport timed out after {timeout}s", handle,
@@ -137,6 +138,17 @@ class GlobalCplRemoteTransport:
         try:
             result = self.invoke([str(self.executable), "--json", *arguments], timeout)
         except JobError as exc:
+            if exc.handle is not None:
+                target = (arguments[1] if arguments[:1] == ["run"]
+                          and len(arguments) > 1 else None)
+                if handle is not None:
+                    target = handle.split(":", 3)[1]
+                if target not in self.targets:
+                    raise JobError(
+                        "transport_error", "cpl-remote timeout returned a handle for "
+                        "an unsupported target", dispatch_uncertain=True,
+                    ) from exc
+                self._validate_handle(target, exc.handle)
             if handle is None:
                 raise
             raise JobError("observer_error", str(exc), handle) from exc
@@ -333,6 +345,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     rows = result.get("profile_cases")
     declared = job["profiling"]["kernel_name"]
     repeats = job["repeats"]
+    target_family = "Ascend-A5" if job.get("product") == "a5" else "Ascend-A2-A3"
     explicit_names = (isinstance(evidence, dict)
                       and ("declared_kernel_name" in evidence
                            or "resolved_kernel_name" in evidence))
@@ -340,6 +353,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
     if (not isinstance(evidence, dict) or evidence.get("status") != "success"
             or evidence.get("profiler") != "msprof-op"
+            or evidence.get("target_family", "Ascend-A2-A3") != target_family
             or evidence.get("kernel_name") != declared
             or evidence_declared != declared
             or not _valid_selector_mapping(declared, resolved)

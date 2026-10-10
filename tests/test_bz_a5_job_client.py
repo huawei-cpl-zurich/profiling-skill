@@ -3,8 +3,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +67,7 @@ class FakeTransport:
         if self.status == "ok":
             result.update(profile_cases=rows, geomean_us=6.0, profile={
                 "schema_version": 1, "status": "success", "profiler": "msprof-op",
+                "target_family": "Ascend-A5",
                 "kernel_name": "fused_kernel", "repeats": 3, "cases": rows,
                 "captures": captures, "geomean_us": math.prod([6.0]),
             })
@@ -108,6 +112,7 @@ def test_a5_dispatch_is_self_contained_and_returns_product_provenance(tmp_path: 
 
     assert result["status"] == "ok"
     assert result["product"] == "a5"
+    assert result["profile"]["target_family"] == "Ascend-A5"
     assert result["placement"] == {"target": "bz-a5", "device": 4}
     assert result["artifacts"]["execution_provenance"]["runtime"] == "cann91"
     assert result["artifacts"]["execution_provenance"]["product"] == "a5"
@@ -189,6 +194,31 @@ def test_global_transport_uses_named_runtime_file_and_never_transfer(tmp_path: P
     assert script is None  # the exact temporary script is removed after dispatch
 
 
+def test_a5_dispatch_timeout_preserves_emitted_handle(monkeypatch, tmp_path: Path):
+    module = load()
+    base = sys.modules["bz_a3_job_client"]
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    handle = "remote:bz-a5:job:20261010T170000Z-retained"
+
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(
+            [str(executable)], 60, output=(handle + "\n").encode())
+
+    monkeypatch.setattr(base.subprocess, "run", timeout)
+    transport = module.A5GlobalCplRemoteTransport(
+        module._sha(executable), "/remote", executable=executable)
+    try:
+        transport.dispatch("bz-a5", 2, "cann91", "operation", "true", 60)
+    except module.JobError as error:
+        assert error.failure_type == "observer_error"
+        assert error.handle == handle
+        assert error.dispatch_uncertain is False
+    else:
+        raise AssertionError("timeout after dispatch did not preserve the A5 handle")
+
+
 def test_backend_builds_product_specific_a5_job(tmp_path: Path):
     backend = load_backend()
     candidate = tmp_path / "candidate.py"
@@ -202,3 +232,26 @@ def test_backend_builds_product_specific_a5_job(tmp_path: Path):
     assert value["product"] == "a5"
     assert value["runtime"] == "cann91"
     assert value["logical_device"] == 0
+
+
+def test_backend_cli_defaults_a5_to_cann91(monkeypatch):
+    backend = load_backend()
+    monkeypatch.setattr(sys, "argv", [
+        "benchmark_backend.py", "--product", "a5", "--benchmark", "matmul",
+        "--job-client-json", '["client"]',
+    ])
+    assert backend.parse_args().runtime == "cann91"
+
+
+@pytest.mark.parametrize("product,runtime", [
+    ("a3", "cann91"), ("a5", "py311-torch"),
+])
+def test_backend_cli_rejects_crossed_product_runtime(monkeypatch, product, runtime):
+    backend = load_backend()
+    monkeypatch.setattr(sys, "argv", [
+        "benchmark_backend.py", "--product", product, "--runtime", runtime,
+        "--benchmark", "matmul", "--job-client-json", '["client"]',
+    ])
+    with pytest.raises(SystemExit) as failure:
+        backend.parse_args()
+    assert failure.value.code == 2

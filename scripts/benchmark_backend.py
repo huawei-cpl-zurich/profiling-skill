@@ -300,8 +300,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", choices=sorted(BENCHMARKS), required=True)
     parser.add_argument("--product", choices=("a3", "a5"), default="a3")
-    parser.add_argument("--runtime", choices=("py311-torch", "cann91"),
-                        default="py311-torch")
+    parser.add_argument("--runtime", choices=("py311-torch", "cann91"))
     parser.add_argument("--candidate", type=Path, default=Path("candidate.py"))
     parser.add_argument("--candidate-manifest", type=Path)
     parser.add_argument("--job-client-json", required=True,
@@ -309,7 +308,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--allow-legacy-v1", action="store_true",
                         help="replay an explicitly historical v1 candidate")
-    return parser.parse_args()
+    args = parser.parse_args()
+    expected_runtime = {"a3": "py311-torch", "a5": "cann91"}[args.product]
+    if args.runtime is None:
+        args.runtime = expected_runtime
+    elif args.runtime != expected_runtime:
+        parser.error(f"product {args.product} requires runtime {expected_runtime}")
+    return args
 
 
 def parse_command(value: str) -> list[str]:

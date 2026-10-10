@@ -132,6 +132,36 @@ def test_generate_cli_accepts_product_specific_task_inputs(tmp_path: Path):
     assert document["dimensions"]["products"] == ["a3", "a5"]
 
 
+def test_schema_v4_explicit_cannbot_treatment_uses_product_rules(tmp_path: Path):
+    prompt, tasks, provenance = _inputs(tmp_path)
+    document = campaign.build_manifest(
+        "explicit-cannbot", prompt, {}, provenance, "seed",
+        products=campaign.PRODUCTS, product_task_files=tasks,
+        treatments=("cannbot",), request_budget=24,
+    )
+
+    assert document["schema_version"] == 4
+    assert document["dimensions"]["treatments"] == ["cannbot"]
+    assert len(document["cells"]) == 6
+    campaign.verify_manifest(document)
+
+
+def test_schema_v4_cli_simulation_uses_compatible_product_slots(tmp_path: Path):
+    document = _manifest(tmp_path / "inputs")
+    manifest_path = tmp_path / "manifest.json"
+    ledger_path = tmp_path / "ledger.json"
+    manifest_path.write_text(json.dumps(document))
+
+    assert campaign.main([
+        "simulate", "--manifest", str(manifest_path),
+        "--ledger", str(ledger_path), "--slots", "4",
+    ]) == 0
+    ledger = json.loads(ledger_path.read_text())
+    assert ledger["status"] == "complete"
+    assert {state["attempts"][0].get("product")
+            for state in ledger["cells"].values()} == {"a3", "a5"}
+
+
 @pytest.mark.parametrize("field,value,message", [
     ("product", "a5", "cell identity"),
     ("runtime", "cann91", "runtime"),

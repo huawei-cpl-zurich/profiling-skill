@@ -22,7 +22,10 @@ TARGETS = tuple(target for targets in PRODUCT_TARGETS.values() for target in tar
 ADMISSION_SCHEMA = "profiling-skill/bz-a3-admission/v2"
 DUAL_PRODUCT_ADMISSION_SCHEMA = "profiling-skill/dual-product-admission/v3"
 GLOBAL_CPL_REMOTE = Path(".agents/skills/remote-access/scripts/cpl-remote")
-REQUIRED_CAPABILITIES = ("run", "observe", "logs", "upload")
+PRODUCT_REQUIRED_CAPABILITIES = {
+    "a3": ("run", "observe", "logs", "upload"),
+    "a5": ("run", "observe", "logs"),
+}
 MAX_ADMISSION_AGE = timedelta(minutes=5)
 MAX_CLOCK_SKEW = timedelta(seconds=30)
 
@@ -270,10 +273,14 @@ class CplRemoteResourcePool:
             raise AdmissionError("global cpl-remote receipt identity mismatch")
         if operation == "capabilities":
             capabilities = payload.get("capabilities")
+            product = next((name for name, targets in PRODUCT_TARGETS.items()
+                            if target in targets), None)
+            required = PRODUCT_REQUIRED_CAPABILITIES.get(product, ())
             return (payload.get("state") == "available"
                     and isinstance(capabilities, dict)
+                    and bool(required)
                     and all(capabilities.get(name) is True
-                            for name in REQUIRED_CAPABILITIES))
+                            for name in required))
         return payload.get("state") == "completed"
 
     def admit_snapshot(self) -> AdmissionReceipt:

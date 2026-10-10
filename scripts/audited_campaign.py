@@ -209,6 +209,15 @@ def _validate_treatment_subset(treatments: tuple[str, ...]) -> None:
         )
 
 
+def _validate_product_treatment_subset(treatments: tuple[str, ...]) -> None:
+    if not treatments:
+        raise CampaignError("treatment subset must be nonempty")
+    if len(treatments) != len(set(treatments)):
+        raise CampaignError("treatment subset must contain unique names")
+    if any(treatment not in TREATMENT_SKILLS for treatment in treatments):
+        raise CampaignError("treatment subset must contain only known treatments")
+
+
 def build_manifest(
     run_id: str,
     prompt: Path,
@@ -232,7 +241,8 @@ def build_manifest(
         raise CampaignError("prompt must be a regular file")
     selected = TREATMENTS if treatments is None else tuple(treatments)
     if treatments is not None:
-        _validate_treatment_subset(selected)
+        (_validate_treatment_subset(selected) if products is None
+         else _validate_product_treatment_subset(selected))
     prompt_digest = _sha256(prompt)
     if products is None:
         if product_task_files is not None:
@@ -956,10 +966,26 @@ def build_report(manifest: dict, ledger: dict) -> dict:
 
 
 class _FakePool:
-    def __init__(self, slots: int):
+    def __init__(self, slots: int, products: tuple[str, ...] = ()):
         self._slots = slots
+        self._products = products
 
     def admit(self) -> list[dict]:
+        if self._products:
+            if self._slots < len(self._products):
+                raise CampaignError(
+                    "schema-v4 simulation needs at least one slot per product"
+                )
+            result = []
+            for index in range(self._slots):
+                product = self._products[index % len(self._products)]
+                targets = PRODUCT_TARGETS[product]
+                result.append({
+                    "product": product, "runtime": PRODUCT_RUNTIMES[product],
+                    "target": targets[index % len(targets)], "device": index,
+                    "healthy": True, "idle": True,
+                })
+            return result
         return [{"target": f"fake-bz-{index % 2 + 1}", "device": index,
                  "healthy": True, "idle": True} for index in range(self._slots)]
 
@@ -1037,7 +1063,8 @@ def main(argv: list[str] | None = None) -> int:
         _atomic_json(args.output, document)
     elif args.command == "simulate":
         document = json.loads(args.manifest.read_text())
-        run_campaign(document, args.ledger, _FakePool(args.slots), _FakeLauncher(),
+        products = tuple(document.get("dimensions", {}).get("products", ()))
+        run_campaign(document, args.ledger, _FakePool(args.slots, products), _FakeLauncher(),
                      resume=args.resume)
     else:
         document = json.loads(args.manifest.read_text())

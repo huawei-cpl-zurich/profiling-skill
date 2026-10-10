@@ -51,6 +51,19 @@ def admission(path: Path, slots: list[dict], *, now: datetime | None = None,
     return sha256(path), allowlist
 
 
+def dual_admission(path: Path, slots: list[dict]) -> tuple[str, str]:
+    now = datetime.now(UTC)
+    allowlist = allowlist_sha256(slots)
+    path.write_text(json.dumps({
+        "schema": "profiling-skill/dual-product-admission/v3",
+        "provider": {"id": "operator-snapshot", "allowlist_sha256": allowlist},
+        "generated_at": (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
+        "expires_at": (now + timedelta(minutes=2)).isoformat().replace("+00:00", "Z"),
+        "slots": slots,
+    }))
+    return sha256(path), allowlist
+
+
 def install_fake_client(home: Path) -> tuple[Path, Path, Path]:
     executable = home / ".agents/skills/remote-access/scripts/cpl-remote"
     executable.parent.mkdir(parents=True)
@@ -324,6 +337,82 @@ def test_dual_product_admission_pins_product_runtime_and_target(tmp_path: Path):
 
     receipt = module.load_admission(path, sha256(path))
     assert receipt.as_slots() == slots
+
+
+def test_pool_uses_product_specific_capabilities_without_weakening_a3(
+    monkeypatch, tmp_path: Path,
+):
+    module = load()
+    executable, _implementation, _calls = install_fake_client(tmp_path)
+    monkeypatch.setattr(module, "_user_home", lambda: tmp_path)
+    slots = [
+        {"product": "a3", "runtime": "py311-torch", "target": "bz-a3-1",
+         "device": 3, "healthy": True, "idle": True},
+        {"product": "a5", "runtime": "cann91", "target": "bz-a5",
+         "device": 6, "healthy": True, "idle": True},
+    ]
+    path = tmp_path / "product-capabilities.json"
+    receipt_sha, allowlist = dual_admission(path, slots)
+    calls = []
+
+    def invoke(arguments, **_kwargs):
+        operation, target = arguments[-2:]
+        calls.append((operation, target))
+        payload = {"target": target, "operation": operation}
+        if operation == "capabilities":
+            payload.update({
+                "state": "available",
+                "capabilities": {
+                    "run": True, "observe": True, "logs": True, "upload": False,
+                },
+            })
+        else:
+            payload["state"] = "completed"
+        return subprocess.CompletedProcess(arguments, 0, json.dumps(payload), "")
+
+    pool = module.CplRemoteResourcePool(
+        path, receipt_sha, provider_id="operator-snapshot",
+        allowlist_sha256=allowlist,
+        cpl_remote_closure_sha256=module.cpl_remote_closure_sha256(executable),
+        invoke=invoke,
+    )
+
+    assert pool.admit() == [slots[1]]
+    assert calls == [
+        ("capabilities", "bz-a3-1"),
+        ("capabilities", "bz-a5"),
+        ("preflight", "bz-a5"),
+    ]
+
+
+@pytest.mark.parametrize("missing", ["run", "observe", "logs"])
+def test_a5_missing_required_capability_fails_closed(
+    monkeypatch, tmp_path: Path, missing: str,
+):
+    module = load()
+    executable, _implementation, _calls = install_fake_client(tmp_path)
+    monkeypatch.setattr(module, "_user_home", lambda: tmp_path)
+    slots = [{"product": "a5", "runtime": "cann91", "target": "bz-a5",
+              "device": 2, "healthy": True, "idle": True}]
+    path = tmp_path / f"a5-missing-{missing}.json"
+    receipt_sha, allowlist = dual_admission(path, slots)
+
+    def invoke(arguments, **_kwargs):
+        operation, target = arguments[-2:]
+        capabilities = {"run": True, "observe": True, "logs": True,
+                        "upload": False}
+        capabilities[missing] = False
+        payload = {"target": target, "operation": operation,
+                   "state": "available", "capabilities": capabilities}
+        return subprocess.CompletedProcess(arguments, 0, json.dumps(payload), "")
+
+    pool = module.CplRemoteResourcePool(
+        path, receipt_sha, provider_id="operator-snapshot",
+        allowlist_sha256=allowlist,
+        cpl_remote_closure_sha256=module.cpl_remote_closure_sha256(executable),
+        invoke=invoke,
+    )
+    assert pool.admit() == []
 
 
 @pytest.mark.parametrize("field,value", [

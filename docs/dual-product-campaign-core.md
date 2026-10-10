@@ -42,6 +42,9 @@ The CLI equivalent repeats `--product a3 --product a5` and supplies
 `--a3-matmul-task`, `--a3-gdn-task`, `--a3-bsa-task`, plus the corresponding
 three `--a5-...-task` arguments. Legacy generation continues to use the three
 unprefixed task arguments.
+Explicit schema-v4 treatment subsets use product-campaign rules, so a product
+campaign may explicitly select `cannbot`; schema-v3's profiler-only restriction
+continues to apply only to legacy product-neutral treatment subsets.
 
 ## Admission and scheduling
 
@@ -50,6 +53,12 @@ Dual-product providers use
 `runtime`, `target`, `device`, `healthy`, and `idle`; the loader rejects a
 target or runtime inconsistent with the product adapter. Legacy A3 admission
 v2 remains supported.
+
+Capability admission is adapter-specific. A3 requires `run`, `observe`,
+`logs`, and standalone `upload`. A5 requires `run`, `observe`, and `logs`;
+`upload` may be false because its complete bundle is carried by the approved
+`run --runtime cann91 --file` route. A missing required capability, unknown
+target, or failed preflight excludes that target.
 
 The scheduler refreshes admission before every assignment, leases every
 unique compatible healthy idle target/device, and skips queued cells whose
@@ -69,3 +78,8 @@ It blocks an A3 and an A5 launch concurrently, verifies both leases are filled,
 then checks all 18 cells finish without cross-product placement. It separately
 proves that unavailable A3 capacity cannot prevent all runnable A5 cells from
 finishing.
+
+The `simulate` command derives fake product/runtime/target adapters from a
+schema-v4 manifest. Supply at least one simulated slot per declared product;
+those slots exercise the same compatibility scheduler without contacting a
+remote target.

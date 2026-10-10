@@ -18,10 +18,19 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CLIENT = ROOT / "scripts/gz_a3_job_client.py"
 RUNNER = ROOT / "scripts/a3_benchmark_runner.py"
+FUSION_CONTRACT = ROOT / "scripts/fully_fused_contract.py"
 
 
 def load_runner():
     spec = importlib.util.spec_from_file_location("a3_benchmark_runner", RUNNER)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_fusion_contract():
+    spec = importlib.util.spec_from_file_location("fully_fused_contract_test", FUSION_CONTRACT)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader
     spec.loader.exec_module(module)
@@ -93,6 +102,89 @@ def test_runner_acquires_trusted_launch_output_and_framework_evidence():
     assert audit.finish(7, output)["operators"][-1]["origin"] == "torch"
 
 
+def test_runner_captures_auxiliary_triton_global_and_gate_rejects_two_launches():
+    runner = load_runner()
+    contract = load_fusion_contract()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "main_kernel_mix_aiv", "entrypoint": "main_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Storage:
+        def __init__(self, pointer): self.pointer = pointer
+        def data_ptr(self): return self.pointer
+
+    class Tensor:
+        device = "npu:0"
+        def __init__(self, pointer): self.pointer = pointer
+        def untyped_storage(self): return Storage(self.pointer)
+
+    class Kernel:
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.main_kernel = Kernel()
+    candidate.helper_kernel = Kernel()
+    source, temporary, output = Tensor(1), Tensor(2), Tensor(3)
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    candidate.main_kernel[(1,)](source, temporary)
+    candidate.helper_kernel[(1,)](temporary, output)
+    evidence = audit.finish(4, output)
+    assert [(op["entrypoint"], op["launch_id"]) for op in evidence["operators"]] == [
+        ("main_kernel", "launch-0"), ("helper_kernel", "launch-1"),
+    ]
+    with pytest.raises(contract.FusionContractError, match="exactly one logical"):
+        contract.validate_fusion_evidence(declaration, [evidence], expected_cases=[4])
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "aten.slice.Tensor", "aten.select.int", "aten.expand.default",
+        "aten.permute.default", "aten.transpose.int", "aten.view.default",
+    ],
+)
+def test_fusion_dispatch_allows_exact_metadata_operator_overloads(name):
+    runner = load_runner()
+    declaration = {
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    }
+    audit = runner.FusionRuntimeAudit(declaration)
+
+    class Operator:
+        def __str__(self): return name
+        def __call__(self, *_args, **_kwargs): return "result"
+
+    assert audit.dispatch_mode().__torch_dispatch__(Operator(), (), (), {}) == "result"
+    assert audit.framework_ops == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "aten.slice_scatter.default", "aten.select_scatter.default",
+        "aten.expand_copy.default", "aten.permute_copy.default",
+        "aten.transpose_copy.int",
+    ],
+)
+def test_fusion_dispatch_rejects_compute_ops_with_metadata_prefixes(name):
+    runner = load_runner()
+    audit = runner.FusionRuntimeAudit({
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    })
+
+    class Operator:
+        def __str__(self): return name
+        def __call__(self, *_args, **_kwargs): return "result"
+
+    assert audit.dispatch_mode().__torch_dispatch__(Operator(), (), (), {}) == "result"
+    assert audit.framework_ops == [(name, "torch")]
+
+
 def test_runner_check_emits_fusion_evidence_from_the_real_candidate_forward(
     monkeypatch, tmp_path: Path,
 ):
@@ -115,9 +207,11 @@ def test_runner_check_emits_fusion_evidence_from_the_real_candidate_forward(
     candidate.torch = torch
     exec(
         "class Model:\n"
+        " def __init__(self):\n"
+        "  self.kernel = complete_kernel\n"
         " def __call__(self, value):\n"
         "  output = torch.empty_like(value)\n"
-        "  complete_kernel[(1,)](value, output)\n"
+        "  self.kernel[(1,)](value, output)\n"
         "  return output\n",
         candidate.__dict__,
     )

@@ -21,6 +21,10 @@ try:
         TARGETS, AdmissionError, CplRemoteResourcePool,
         cpl_remote_closure_sha256, file_sha256,
     )
+    from fully_fused_contract import (
+        FusionContractError,
+        validate_manifest as validate_fused_manifest,
+    )
 finally:
     sys.path.pop(0)
 
@@ -62,7 +66,8 @@ CANNBOT_SKILLS = tuple(sorted({
 RUNTIME_FILES = {
     "audited_bz_controller.py", "audited_contract.py", "audited_lifecycle.py",
     "audited_runtime.py", "audited_verifier.py", "benchmark_backend.py",
-    "bz_a3_job_client.py", "validate_audited_experiment.py",
+    "bz_a3_job_client.py", "fully_fused_contract.py",
+    "validate_audited_experiment.py",
 }
 
 
@@ -766,11 +771,9 @@ class ProductionCellLauncher:
             manifest = json.loads(contents["manifest"])
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ProductionError(f"starter manifest is invalid JSON: {task}") from error
-        if (not isinstance(manifest, dict)
-                or manifest.get("schema") != "profiling-skill/candidate-kernel/v1"
-                or not isinstance(manifest.get("kernel_name"), str)
-                or not manifest["kernel_name"].strip()
-                or manifest["kernel_name"] != manifest["kernel_name"].strip()):
+        try:
+            validate_fused_manifest(manifest)
+        except FusionContractError:
             raise ProductionError(f"starter manifest contract is invalid: {task}")
         return contents
 
@@ -1196,6 +1199,7 @@ class ProductionCellLauncher:
             runner_options = {
                 "round_count": 4,
                 "max_candidate_repairs": self.max_candidate_repairs,
+                "required_manifest_schema": "profiling-skill/candidate-kernel/v2",
             }
             if self.trusted_runtime_migration is not None:
                 runner_options["trusted_runtime_migration"] = self.trusted_runtime_migration

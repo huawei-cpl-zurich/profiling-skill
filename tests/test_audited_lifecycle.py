@@ -536,6 +536,7 @@ def test_candidate_validation_accepts_and_checks_mandatory_v2_manifest(tmp_path:
     (repo / "candidate.manifest.json").write_text(json.dumps(manifest))
     runner = lifecycle.AuditedExperimentRunner(
         repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=4,
+        required_manifest_schema="profiling-skill/candidate-kernel/v2",
     )
     candidate_hash, selected = runner._validate_candidate(prior)
     assert candidate_hash == sha((repo / "candidate.py").read_bytes())
@@ -544,6 +545,12 @@ def test_candidate_validation_accepts_and_checks_mandatory_v2_manifest(tmp_path:
     manifest["fusion"]["complete_operator"] = False
     (repo / "candidate.manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(contract.AuditError, match="fusion"):
+        runner._validate_candidate(prior)
+
+    (repo / "candidate.manifest.json").write_text(json.dumps({
+        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "legacy",
+    }))
+    with pytest.raises(contract.AuditError, match="candidate-kernel/v2"):
         runner._validate_candidate(prior)
 
 

@@ -45,13 +45,21 @@ def clone(value):
     return value
 
 
-_METADATA_OPS = (
+_METADATA_OPS = frozenset({
     "aten.alias", "aten.as_strided", "aten.detach", "aten.empty",
     "aten.empty_like", "aten.expand", "aten.lift_fresh", "aten.new_empty",
     "aten.permute", "aten.reshape", "aten.select", "aten.slice",
-    "aten.squeeze", "aten.t.", "aten.transpose", "aten.unsqueeze",
+    "aten.squeeze", "aten.t", "aten.transpose", "aten.unsqueeze",
     "aten.view", "aten._unsafe_view",
-)
+})
+
+
+def _operator_base(func) -> str:
+    schema_name = getattr(getattr(func, "_schema", None), "name", None)
+    if isinstance(schema_name, str) and schema_name:
+        return schema_name.replace("::", ".", 1)
+    fields = str(func).replace("::", ".", 1).split(".")
+    return ".".join(fields[:2]) if len(fields) >= 2 else fields[0]
 
 
 def _tensor_keys(value) -> set[tuple]:
@@ -71,8 +79,8 @@ def _tensor_keys(value) -> set[tuple]:
 
 
 class _KernelProxy:
-    def __init__(self, wrapped, audit):
-        self._wrapped, self._audit = wrapped, audit
+    def __init__(self, name, wrapped, audit):
+        self._name, self._wrapped, self._audit = name, wrapped, audit
 
     def __getattr__(self, name):
         return getattr(self._wrapped, name)
@@ -81,7 +89,7 @@ class _KernelProxy:
         launch = self._wrapped[grid]
 
         def observed(*args, **kwargs):
-            self._audit.launches.append(_tensor_keys((args, kwargs)))
+            self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
             return launch(*args, **kwargs)
 
         return observed
@@ -92,18 +100,17 @@ class FusionRuntimeAudit:
 
     def __init__(self, declaration: dict):
         self.declaration = declaration
-        self.launches: list[set[tuple]] = []
+        self.launches: list[tuple[str, set[tuple]]] = []
         self.framework_ops: list[tuple[str, str]] = []
 
     def instrument(self, candidate: ModuleType) -> None:
-        entrypoint = self.declaration["entrypoint"]
-        kernel = getattr(candidate, entrypoint, None)
-        if isinstance(kernel, _KernelProxy):
-            kernel = kernel._wrapped
-        module = type(kernel).__module__ if kernel is not None else ""
-        if kernel is None or not module.startswith("triton.") or not hasattr(kernel, "__getitem__"):
-            return
-        setattr(candidate, entrypoint, _KernelProxy(kernel, self))
+        for name, candidate_global in tuple(vars(candidate).items()):
+            kernel = (candidate_global._wrapped
+                      if isinstance(candidate_global, _KernelProxy)
+                      else candidate_global)
+            module = type(kernel).__module__
+            if module.startswith("triton.") and hasattr(kernel, "__getitem__"):
+                setattr(candidate, name, _KernelProxy(name, kernel, self))
 
     def dispatch_mode(self):
         from torch.utils._python_dispatch import TorchDispatchMode
@@ -112,7 +119,7 @@ class FusionRuntimeAudit:
         class AuditMode(TorchDispatchMode):
             def __torch_dispatch__(self, func, types, args=(), kwargs=None):
                 name = str(func)
-                if not name.startswith(_METADATA_OPS):
+                if _operator_base(func) not in _METADATA_OPS:
                     origin = "acl" if name.startswith(("npu::", "aclnn")) else "torch"
                     audit.framework_ops.append((name, origin))
                 return func(*args, **(kwargs or {}))
@@ -122,17 +129,18 @@ class FusionRuntimeAudit:
     def finish(self, case: int, output) -> dict:
         operators = []
         component = "aic" if self.declaration["kernel_name"].endswith("_mix_aic") else "aiv"
-        for index, _arguments in enumerate(self.launches):
+        for index, (entrypoint, _arguments) in enumerate(self.launches):
+            declared = entrypoint == self.declaration["entrypoint"]
             operators.append({
-                "name": self.declaration["kernel_name"], "origin": "triton",
-                "entrypoint": self.declaration["entrypoint"],
+                "name": self.declaration["kernel_name"] if declared else entrypoint,
+                "origin": "triton", "entrypoint": entrypoint,
                 "launch_id": f"launch-{index}", "component": component,
             })
         operators.extend({"name": name, "origin": origin,
                           "launch_id": f"framework-{index}"}
                          for index, (name, origin) in enumerate(self.framework_ops))
         output_keys = _tensor_keys(output)
-        producers = [index for index, arguments in enumerate(self.launches)
+        producers = [index for index, (_entrypoint, arguments) in enumerate(self.launches)
                      if output_keys and output_keys.issubset(arguments)]
         return {
             "schema": "profiling-skill/fusion-evidence/v1", "case": case,
@@ -250,11 +258,11 @@ def execute(job: dict) -> dict:
                     "case_evidence": evidence}
         try:
             candidate_inputs = clone(inputs)
-            candidate_model = candidate.Model()
             audit = None
             if "fusion_contract" in job:
                 audit = FusionRuntimeAudit(job["fusion_contract"])
                 audit.instrument(candidate)
+            candidate_model = candidate.Model()
             with torch.no_grad():
                 torch.npu.synchronize()
                 started = time.perf_counter_ns()

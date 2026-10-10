@@ -151,7 +151,7 @@ def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]
 
 
 def load_candidate_contract(
-    path: Path,
+    path: Path, *, allow_legacy_v1: bool = False,
 ) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
     """Load a legacy selector or a fully-fused v2 declaration."""
     try:
@@ -166,6 +166,12 @@ def load_candidate_contract(
         except FusionContractError as error:
             return None, None, response("submission_error", str(error))
         return declaration["kernel_name"], declaration, None
+    if not allow_legacy_v1:
+        return None, None, response(
+            "submission_error",
+            f"new profiling requires schema {FUSED_MANIFEST_SCHEMA}; "
+            "legacy v1 replay must be explicitly enabled",
+        )
     kernel, failure = load_kernel_selector(path)
     return kernel, None, failure
 
@@ -296,6 +302,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--job-client-json", required=True,
                         help="JSON string array containing the executable and exact arguments")
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--allow-legacy-v1", action="store_true",
+                        help="replay an explicitly historical v1 candidate")
     return parser.parse_args()
 
 
@@ -357,7 +365,9 @@ def main() -> int:
                 fusion_contract = None
                 if request["action"] == "profile":
                     manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
-                    kernel_name, fusion_contract, result = load_candidate_contract(manifest)
+                    kernel_name, fusion_contract, result = load_candidate_contract(
+                        manifest, allow_legacy_v1=args.allow_legacy_v1,
+                    )
                 if kernel_name is not None or request["action"] != "profile":
                     fusion_result = None
                     if fusion_contract is not None:

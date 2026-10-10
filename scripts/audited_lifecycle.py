@@ -299,12 +299,15 @@ class AuditedExperimentRunner:
                  max_candidate_repairs: int = 2,
                  max_controller_resubmits: int = 2, max_remeasurements: int = 1,
                  round_count: int = 3,
+                 required_manifest_schema: str = MANIFEST_SCHEMA,
                  trusted_runtime_migration: dict | list[dict] | None = None):
         if type(round_count) is not int or round_count < 1:
             raise AuditError("round count must be a positive integer")
         if (type(max_candidate_repairs) is not int
                 or not 0 <= max_candidate_repairs <= 2):
             raise AuditError("candidate repair count must be an integer from zero to two")
+        if required_manifest_schema not in {MANIFEST_SCHEMA, FUSED_MANIFEST_SCHEMA}:
+            raise AuditError("required candidate manifest schema is unsupported")
         self.repo = repo.resolve()
         self.prompt_bytes = prompt.resolve().read_bytes()
         self.task_bytes = task.resolve().read_bytes()
@@ -317,6 +320,7 @@ class AuditedExperimentRunner:
         self.max_controller_resubmits = max_controller_resubmits
         self.max_remeasurements = max_remeasurements
         self.round_count = round_count
+        self.required_manifest_schema = required_manifest_schema
         self.trusted_runtime_migration = trusted_runtime_migration
         self.runtime_migration: dict | None = None
         self.agent_retry_evidence: tuple[dict, ...] = ()
@@ -792,16 +796,16 @@ class AuditedExperimentRunner:
         if not isinstance(document, dict):
             raise AuditError("candidate manifest must be a JSON object")
         kernel_name = document.get("kernel_name")
-        if document.get("schema") == FUSED_MANIFEST_SCHEMA:
+        if document.get("schema") != self.required_manifest_schema:
+            raise AuditError(
+                f"candidate manifest requires schema {self.required_manifest_schema}"
+            )
+        if self.required_manifest_schema == FUSED_MANIFEST_SCHEMA:
             try:
                 document = validate_fused_manifest(document)
             except FusionContractError as failure:
                 raise AuditError(f"candidate manifest fusion contract is invalid: {failure}") from failure
             kernel_name = document["kernel_name"]
-        elif document.get("schema") != MANIFEST_SCHEMA:
-            raise AuditError(
-                f"candidate manifest requires schema {MANIFEST_SCHEMA} or {FUSED_MANIFEST_SCHEMA}"
-            )
         if (not isinstance(kernel_name, str) or not kernel_name.strip()
                 or kernel_name != kernel_name.strip()):
             raise AuditError("candidate manifest requires a nonempty exact kernel selector")

@@ -112,7 +112,7 @@ def request(benchmark="gdn", action="profile", **extra):
 
 
 def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
-                fully_fused=False, log: Path | None = None):
+                fully_fused=False, log: Path | None = None, allow_legacy=True):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
     manifest = {"schema": "profiling-skill/candidate-kernel/v1",
@@ -127,12 +127,24 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
         }
     candidate.with_suffix(".manifest.json").write_text(json.dumps(manifest))
     client = fake_client(tmp_path)
+    argv = [sys.executable, str(BACKEND), "--benchmark", benchmark,
+            "--candidate", str(candidate), "--job-client-json",
+            json.dumps([str(client), "--profile", "gz-a3"])]
+    if allow_legacy and not fully_fused:
+        argv.append("--allow-legacy-v1")
     return subprocess.run(
-        [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
-         "--job-client-json", json.dumps([str(client), "--profile", "gz-a3"])], input=json.dumps(payload), text=True,
+        argv, input=json.dumps(payload), text=True,
         capture_output=True,
         env={**__import__("os").environ, "FAKE_MODE": mode,
              **({"FAKE_LOG": str(log)} if log else {})}, check=False)
+
+
+def test_new_profile_rejects_v1_without_explicit_historical_replay(tmp_path: Path):
+    result = json.loads(run_backend(
+        tmp_path, request("matmul"), "matmul", allow_legacy=False,
+    ).stdout)
+    assert result["status"] == "submission_error"
+    assert "legacy v1 replay must be explicitly enabled" in result["diagnostics"]
 
 
 def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: Path):
@@ -487,7 +499,7 @@ def test_missing_or_invalid_kernel_manifest_is_submission_failure(tmp_path: Path
     candidate.with_suffix(".manifest.json").write_text(json.dumps({"schema": "wrong", "kernel_name": "x"}))
     invalid = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
     assert json.loads(invalid.stdout)["status"] == "submission_error"
-    assert MANIFEST_SCHEMA_TEXT in json.loads(invalid.stdout)["diagnostics"]
+    assert "profiling-skill/candidate-kernel/v2" in json.loads(invalid.stdout)["diagnostics"]
 
 
 def test_generator_emits_exact_controller_cells(tmp_path: Path):

@@ -90,7 +90,12 @@ def git_repo(path: Path) -> tuple[Path, str]:
                    check=True)
     (path / "candidate.py").write_text("VALUE = 1\n")
     (path / "candidate.manifest.json").write_text(
-        '{"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"kernel"}\n'
+        json.dumps({
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": "kernel", "entrypoint": "kernel",
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
+        }) + "\n"
     )
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-qm", "baseline"], cwd=path, check=True)
@@ -110,7 +115,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py",
+                 "bz_a3_job_client.py", "fully_fused_contract.py",
                  "validate_audited_experiment.py", "audited_verifier.py",
                  "audited_contract.py", "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -132,8 +137,10 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         manifest = starter / "candidate.manifest.json"
         candidate.write_text(f"TASK = {task_name!r}\nVALUE = 0\n")
         manifest.write_text(json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1",
-            "kernel_name": task_name,
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": task_name, "entrypoint": task_name,
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
         }) + "\n")
         starters[task_name] = {
             "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
@@ -791,9 +798,10 @@ class FakeRunner:
     calls = []
 
     def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
-                 max_candidate_repairs):
+                 max_candidate_repairs, required_manifest_schema):
         assert round_count == 4
         assert max_candidate_repairs == 2
+        assert required_manifest_schema == "profiling-skill/candidate-kernel/v2"
         self.repo = repo
 
     def run(self, run_id, agent_id, *, resume=False):
@@ -872,10 +880,11 @@ class TrustRecordingRunner(FakeRunner):
     trusted = None
 
     def __init__(self, *args, round_count, max_candidate_repairs,
-                 trusted_runtime_migration):
+                 required_manifest_schema, trusted_runtime_migration):
         super().__init__(
             *args, round_count=round_count,
             max_candidate_repairs=max_candidate_repairs,
+            required_manifest_schema=required_manifest_schema,
         )
         type(self).trusted = trusted_runtime_migration
 
@@ -1746,10 +1755,11 @@ print(json.dumps({
 
     class ControllerRunner(FakeRunner):
         def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
-                     max_candidate_repairs):
+                     max_candidate_repairs, required_manifest_schema):
             super().__init__(
                 repo, prompt, task, invoker, controller, round_count=round_count,
                 max_candidate_repairs=max_candidate_repairs,
+                required_manifest_schema=required_manifest_schema,
             )
             self.controller = controller
 
@@ -2005,7 +2015,8 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py", "validate_audited_experiment.py",
+                 "bz_a3_job_client.py", "fully_fused_contract.py",
+                 "validate_audited_experiment.py",
                  "audited_verifier.py", "audited_contract.py",
                  "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -2027,7 +2038,10 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         candidate.write_text(f"TASK = {task!r}\nVALUE = 0\n")
         candidate_manifest = starter / "candidate.manifest.json"
         candidate_manifest.write_text(json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": task,
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": task, "entrypoint": task,
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
         }) + "\n")
         starters[task] = {
             "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},

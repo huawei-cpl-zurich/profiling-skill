@@ -48,7 +48,7 @@ def clone(value):
 _METADATA_OPS = frozenset({
     "aten.alias", "aten.as_strided", "aten.detach", "aten.empty",
     "aten.empty_like", "aten.expand", "aten.lift_fresh", "aten.new_empty",
-    "aten.permute", "aten.reshape", "aten.select", "aten.slice",
+    "aten.permute", "aten.select", "aten.slice",
     "aten.squeeze", "aten.t", "aten.transpose", "aten.unsqueeze",
     "aten.view", "aten._unsafe_view",
 })
@@ -137,10 +137,18 @@ class FusionRuntimeAudit:
         class AuditMode(TorchDispatchMode):
             def __torch_dispatch__(self, func, types, args=(), kwargs=None):
                 name = str(func)
-                if _operator_base(func) not in _METADATA_OPS:
+                result = func(*args, **(kwargs or {}))
+                operator = _operator_base(func)
+                metadata_only = operator in _METADATA_OPS
+                if operator == "aten.reshape":
+                    output_keys = _tensor_keys(result)
+                    metadata_only = bool(
+                        output_keys and output_keys.issubset(_tensor_keys(args))
+                    )
+                if not metadata_only:
                     origin = "acl" if name.startswith(("npu::", "aclnn")) else "torch"
                     audit.framework_ops.append((name, origin))
-                return func(*args, **(kwargs or {}))
+                return result
 
         return AuditMode()
 

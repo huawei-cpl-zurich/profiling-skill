@@ -217,6 +217,41 @@ def test_fusion_dispatch_rejects_compute_ops_with_metadata_prefixes(name):
     assert audit.framework_ops == [(name, "torch")]
 
 
+def test_fusion_dispatch_allows_aliasing_reshape_but_rejects_copying_reshape():
+    import torch
+
+    runner = load_runner()
+
+    class Reshape:
+        _schema = SimpleNamespace(name="aten::reshape")
+
+        def __init__(self, result): self.result = result
+        def __str__(self): return "aten.reshape.default"
+        def __call__(self, *_args, **_kwargs): return self.result
+
+    source = torch.arange(12).reshape(3, 4)
+    alias = source.reshape(2, 6)
+    copied = source.t().reshape(12)
+    assert alias.untyped_storage().data_ptr() == source.untyped_storage().data_ptr()
+    assert copied.untyped_storage().data_ptr() != source.untyped_storage().data_ptr()
+
+    alias_audit = runner.FusionRuntimeAudit({
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    })
+    assert alias_audit.dispatch_mode().__torch_dispatch__(
+        Reshape(alias), (), (source, [2, 6]), {},
+    ) is alias
+    assert alias_audit.framework_ops == []
+
+    copy_audit = runner.FusionRuntimeAudit({
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    })
+    assert copy_audit.dispatch_mode().__torch_dispatch__(
+        Reshape(copied), (), (source.t(), [12]), {},
+    ) is copied
+    assert copy_audit.framework_ops == [("aten.reshape.default", "torch")]
+
+
 def test_runner_check_emits_fusion_evidence_from_the_real_candidate_forward(
     monkeypatch, tmp_path: Path,
 ):

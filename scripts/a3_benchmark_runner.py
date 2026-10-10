@@ -38,6 +38,15 @@ def classify(exc: BaseException) -> str:
     return "compile_error" if isinstance(exc, compile_types) or any(item in text for item in compile_markers) else "runtime_error"
 
 
+def candidate_import_status(exc: BaseException) -> str:
+    """Keep runtime-owned dependency absence out of candidate failure counts."""
+    missing = getattr(exc, "name", None)
+    if isinstance(exc, ModuleNotFoundError) and missing in {
+            "torch", "torch_npu", "triton"}:
+        return "infrastructure_error"
+    return "compile_error"
+
+
 def clone(value):
     if hasattr(value, "clone"):
         return value.clone()
@@ -302,7 +311,8 @@ def execute(job: dict) -> dict:
     try:
         candidate = load(Path(job["candidate"]), "mutable_candidate")
     except BaseException as exc:
-        return {"status": "compile_error", "diagnostics": diagnostic(exc), **bound}
+        return {"status": candidate_import_status(exc),
+                "diagnostics": diagnostic(exc), **bound}
     cases = job["cases"] if job["action"] == "check" else [job["case"]]
     evidence = []
     fusion_evidence = []

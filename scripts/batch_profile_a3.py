@@ -155,7 +155,9 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                 capture_dir = work / f"{capture_id}{suffix}"
                 command = [
                     sys.executable, str(profiler), "--output", str(capture_dir),
-                    "--kernel-name", selector, "--", sys.executable, str(runner),
+                    "--kernel-name", selector, "--target-family",
+                    ("Ascend-A5" if job.get("product") == "a5" else "Ascend-A2-A3"),
+                    "--", sys.executable, str(runner),
                     "--job", str(item_job_path), "--output", str(item_response),
                 ]
                 run = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -209,6 +211,8 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
     evidence = {
         "schema_version": 1,
         "status": "success",
+        "target_family": ("Ascend-A5" if job.get("product") == "a5"
+                          else "Ascend-A2-A3"),
         "profiler": "msprof-op",
         "timing_scope": "device-task",
         "kernel_name": declared_kernel_name,

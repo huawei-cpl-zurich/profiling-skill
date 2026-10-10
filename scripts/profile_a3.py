@@ -62,6 +62,7 @@ def summarize(
     *,
     warm_up: int,
     launch_count: int,
+    target_family: str = "Ascend-A2-A3",
 ) -> dict:
     files = sorted(root.rglob("OpBasicInfo*.csv"))
     if not files:
@@ -130,7 +131,7 @@ def summarize(
         )
     return {
         "schema_version": 1,
-        "target_family": "Ascend-A2-A3",
+        "target_family": target_family,
         "profiler": "msprof-op",
         "metric": "BasicInfo",
         "timing_scope": "device-task",
@@ -159,6 +160,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--kernel-name")
     parser.add_argument("--warm-up", type=int, default=3)
     parser.add_argument("--launch-count", type=positive_int, default=1)
+    parser.add_argument("--target-family", choices=("Ascend-A2-A3", "Ascend-A5"),
+                        default="Ascend-A2-A3")
     parser.add_argument("--timeout", type=positive_int, default=600)
     parser.add_argument("--msprof", default="msprof", help=argparse.SUPPRESS)
     parser.add_argument("application", nargs=argparse.REMAINDER)
@@ -247,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
             args.kernel_name,
             warm_up=args.warm_up,
             launch_count=args.launch_count,
+            target_family=args.target_family,
         )
         evidence["status"] = "success"
         evidence["application"] = args.application
@@ -260,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
             reason = "invalid_capture"
         evidence = {
             "schema_version": 1,
-            "target_family": "Ascend-A2-A3",
+            "target_family": args.target_family,
             "profiler": "msprof-op",
             "status": "failure",
             "failure": {

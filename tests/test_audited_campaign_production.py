@@ -145,7 +145,8 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py", "fully_fused_contract.py",
+                 "bz_a3_job_client.py", "bz_a5_job_client.py",
+                 "fully_fused_contract.py",
                  "validate_audited_experiment.py", "audited_verifier.py",
                  "audited_contract.py", "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -245,6 +246,41 @@ def production_launcher(config: dict, **kwargs):
         infrastructure_failure_type=runtime_campaign.InfrastructureFailure,
         **kwargs,
     )
+
+
+def product_runtime_fixture(config: dict) -> dict:
+    """Upgrade a local fixture to the production dual-product config shape."""
+    legacy = config["provenance"]
+    config["product_tasks"] = {
+        product: config["tasks"] for product in campaign.PRODUCTS
+    }
+    config["products"] = {
+        product: {
+            "runtime": campaign.PRODUCT_RUNTIMES[product],
+            "runtime_image_digest": legacy["runtime_image_digest"],
+            "baseline_sources": config["baseline_sources"],
+            "starter_sources": config["starter_sources"],
+        }
+        for product in campaign.PRODUCTS
+    }
+    config["remote_roots"] = {
+        "a3": {"bz-a3-1": "/remote/a3-1", "bz-a3-2": "/remote/a3-2"},
+        "a5": {"bz-a5": "/remote/a5"},
+    }
+    config["provenance"] = {
+        key: value for key, value in legacy.items()
+        if key not in {"runtime_image_digest", "baselines", "starters"}
+    }
+    config["provenance"]["products"] = {
+        product: {
+            "runtime": campaign.PRODUCT_RUNTIMES[product],
+            "runtime_image_digest": legacy["runtime_image_digest"],
+            "baselines": legacy["baselines"],
+            "starters": legacy["starters"],
+        }
+        for product in campaign.PRODUCTS
+    }
+    return config
 
 
 def test_exact_four_treatments_have_unambiguous_source_bindings():
@@ -732,8 +768,8 @@ def test_production_entrypoint_accepts_schema_v3_subset(tmp_path: Path, monkeypa
     assert dispatched[0]["dimensions"]["treatments"] == list(selected)
 
 
-def test_a3_production_entrypoint_rejects_dual_product_manifest_cleanly(
-        tmp_path: Path, monkeypatch, capsys):
+def test_production_entrypoint_dispatches_dual_product_manifest(
+        tmp_path: Path, monkeypatch):
     config = runtime_fixture(tmp_path, {
         "cell_id": "matmul-cannbot", "task": "matmul",
         "treatment": "cannbot-all", "round_count": 4, "request_budget": 24,
@@ -769,28 +805,47 @@ def test_a3_production_entrypoint_rejects_dual_product_manifest_cleanly(
     )
     manifest_path = tmp_path / "dual-manifest.json"
     manifest_path.write_text(json.dumps(manifest))
+    config["provenance"] = provenance
+    config["products"] = {
+        product: {
+            "runtime": campaign.PRODUCT_RUNTIMES[product],
+            "runtime_image_digest": shared["runtime_image_digest"],
+            "baseline_sources": config["baseline_sources"],
+            "starter_sources": config["starter_sources"],
+        }
+        for product in campaign.PRODUCTS
+    }
+    config["remote_roots"] = {
+        "a3": {"bz-a3-1": "/remote/a3-1", "bz-a3-2": "/remote/a3-2"},
+        "a5": {"bz-a5": "/remote/a5"},
+    }
     config_path = tmp_path / "runtime.json"
     config_path.write_text(json.dumps(config))
     admission = tmp_path / "admission.json"
     admission.write_text("{}")
+    dispatched = []
+    launcher_configs = []
+    monkeypatch.setattr(production, "CplRemoteResourcePool", lambda *args, **kwargs: object())
     monkeypatch.setattr(
         production, "ProductionCellLauncher",
-        lambda *args, **kwargs: pytest.fail("dual-product manifest dispatched"),
+        lambda config, **kwargs: launcher_configs.append(config) or object(),
     )
+    monkeypatch.setattr(sys.modules["audited_campaign"], "run_campaign",
+                        lambda manifest, *args, **kwargs: (
+        dispatched.append(manifest) or {"status": "complete"}
+    ))
 
-    with pytest.raises(SystemExit) as failure:
-        production.main([
-            "--manifest", str(manifest_path),
-            "--runtime-config", str(config_path),
-            "--runtime-config-sha256", sha(config_path),
-            "--admission", str(admission),
-            "--admission-sha256", sha(admission),
-            "--ledger", str(tmp_path / "ledger.json"),
-        ])
-
-    assert failure.value.code == 2
-    assert "A3-only production entrypoint does not support product manifests" \
-        in capsys.readouterr().err
+    assert production.main([
+        "--manifest", str(manifest_path),
+        "--runtime-config", str(config_path),
+        "--runtime-config-sha256", sha(config_path),
+        "--admission", str(admission),
+        "--admission-sha256", sha(admission),
+        "--ledger", str(tmp_path / "ledger.json"),
+    ]) == 0
+    assert dispatched == [manifest]
+    assert launcher_configs[0]["product_tasks"] == manifest["tasks"]
+    assert launcher_configs[0]["remote_roots"]["a5"]["bz-a5"] == "/remote/a5"
 
 
 def test_migration_trust_cli_requires_resume(capsys):
@@ -1403,6 +1458,52 @@ def test_declared_resume_canary_routes_only_job_client_observation_fault(tmp_pat
     assert Path(client[flag + 1]) == (
         repo.parent / "state/canary-observer-interrupt.json"
     ).resolve()
+
+
+def test_a5_controller_selects_self_contained_named_runtime_client(tmp_path: Path):
+    cell = {
+        "cell_id": "a5-matmul-cannbot-all", "product": "a5", "runtime": "cann91",
+        "task": "matmul", "treatment": "cannbot-all", "round_count": 4,
+        "request_budget": 24, "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+
+    launcher._controller(
+        cell, {"product": "a5", "runtime": "cann91", "target": "bz-a5", "device": 2},
+        repo.parent, repo,
+    )
+
+    controller = json.loads((repo.parent / "state/controller.json").read_text())
+    assert controller["product"] == "a5" and controller["runtime"] == "cann91"
+    backend = controller["backend_command"]
+    assert backend[backend.index("--product") + 1] == "a5"
+    assert backend[backend.index("--runtime") + 1] == "cann91"
+    client = json.loads(backend[backend.index("--job-client-json") + 1])
+    assert Path(client[1]).name == "bz_a5_job_client.py"
+    assert client[client.index("--remote-root") + 1] == "/remote/a5"
+    assert launcher._remote_root("a3", "bz-a3-2") == "/remote/a3-2"
+
+
+def test_controller_rejects_cross_product_placement(tmp_path: Path):
+    cell = {"cell_id": "a5-matmul", "product": "a5", "runtime": "cann91",
+            "task": "matmul", "treatment": "cannbot-all", "round_count": 4,
+            "request_budget": 24,
+            "skills": list(production.TREATMENT_SKILLS["cannbot-all"])}
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    with pytest.raises(production.ProductionError, match="admitted product"):
+        launcher._controller(
+            cell, {"product": "a3", "runtime": "py311-torch",
+                   "target": "bz-a3-1", "device": 0}, repo.parent, repo)
 
 
 @pytest.mark.parametrize("value", [-1, 0, 1, 3, True])
@@ -2163,7 +2264,8 @@ def test_fake_production_launcher_runs_all_twelve_isolated_branches(tmp_path: Pa
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py", "fully_fused_contract.py",
+                 "bz_a3_job_client.py", "bz_a5_job_client.py",
+                 "fully_fused_contract.py",
                  "validate_audited_experiment.py",
                  "audited_verifier.py", "audited_contract.py",
                  "audited_lifecycle.py", "audited_runtime.py"):

@@ -25,6 +25,10 @@ try:
         FusionContractError,
         validate_manifest as validate_fused_manifest,
     )
+    from fully_fused_campaign_execution import (
+        ExecutionError as CampaignExecutionError,
+        verify_archive_seal, verify_gate_receipt, verify_prepared_receipt,
+    )
 finally:
     sys.path.pop(0)
 
@@ -100,6 +104,26 @@ def document_sha256(document: dict) -> str:
 def _positive_number(value: object) -> bool:
     return (isinstance(value, (int, float)) and not isinstance(value, bool)
             and math.isfinite(value) and value > 0)
+
+
+def validate_ranked_cases(value: object, products: tuple[str, ...],
+                          expected_sha256: object) -> dict[str, dict[str, list[int]]]:
+    """Validate independently ranked development cases for each product."""
+    if (not isinstance(value, dict) or set(value) != set(products)
+            or not isinstance(expected_sha256, str)
+            or document_sha256({"ranked_cases": value}) != expected_sha256):
+        raise ProductionError("product-ranked cases are incomplete or not hash-bound")
+    for product in products:
+        tasks = value[product]
+        if not isinstance(tasks, dict) or set(tasks) != set(DEVELOPMENT_CASES):
+            raise ProductionError("product-ranked cases must cover all tasks")
+        for task, cases in tasks.items():
+            if (not isinstance(cases, list) or not cases
+                    or len(cases) != len(set(cases))
+                    or any(type(case) is not int or case not in ALL_CASES[task]
+                           for case in cases)):
+                raise ProductionError(f"product-ranked cases are invalid: {product}/{task}")
+    return value
 
 
 def digest_tree(root: Path) -> str:
@@ -630,6 +654,7 @@ class ProductionCellLauncher:
             raise ProductionError("runtime config cannot supply an adapter or remote command")
         self._validate_timeouts()
         self.max_candidate_repairs = config.get("max_candidate_repairs_per_round", 2)
+        self._campaign_admission: dict | None = None
         if self.max_candidate_repairs != 2 or type(self.max_candidate_repairs) is not int:
             raise ProductionError(
                 "production max_candidate_repairs_per_round must be exactly two"
@@ -811,6 +836,12 @@ class ProductionCellLauncher:
                     raise ProductionError(
                         f"product provenance does not match runtime input: {product}"
                     )
+            ranked = self.config.get("ranked_cases")
+            if ranked is not None:
+                validate_ranked_cases(
+                    ranked, tuple(sorted(selected_products)),
+                    provenance.get("ranked_cases_sha256"),
+                )
         elif self.config.get("runtime_image_digest") != provenance.get("runtime_image_digest"):
             raise ProductionError("runtime image provenance does not match Docker input")
         if provenance.get("model") != {
@@ -889,6 +920,46 @@ class ProductionCellLauncher:
             raise ProductionError("runtime product configuration is missing")
         return products[product]
 
+    def _validate_campaign_admission(self) -> dict:
+        """Authenticate archive, preparation, and both product gates together."""
+        binding = self.config.get("campaign_admission")
+        if not isinstance(binding, dict) or set(binding) != {"archive", "prepared", "gates"}:
+            raise ProductionError("dual-product launch requires sealed campaign admission")
+        try:
+            archive = _read_pinned(
+                Path(binding["archive"]["path"]), binding["archive"]["sha256"],
+                "campaign archive seal",
+            )
+            prepared = _read_pinned(
+                Path(binding["prepared"]["path"]), binding["prepared"]["sha256"],
+                "prepared campaign receipt",
+            )
+            gates = _read_pinned(
+                Path(binding["gates"]["path"]), binding["gates"]["sha256"],
+                "campaign gate receipt",
+            )
+            archive_result = verify_archive_seal(archive)
+            verify_prepared_receipt(prepared)
+            verify_gate_receipt(
+                gates, prepared["ranked_cases"],
+                prepared_sha256=prepared["prepared_sha256"],
+            )
+        except (KeyError, TypeError, CampaignExecutionError) as error:
+            raise ProductionError(f"campaign admission is invalid: {error}") from error
+        if (prepared.get("run_id") != self.config.get("run_id")
+                or prepared.get("manifest_sha256") != self.config.get("manifest_sha256")
+                or prepared.get("archive_attestation") != archive_result["seal_sha256"]
+                or prepared.get("ranked_cases") != self.config.get("ranked_cases")):
+            raise ProductionError("campaign admission does not match runtime inputs")
+        expected = {
+            "archive_seal_sha256": archive_result["seal_sha256"],
+            "prepared_sha256": prepared["prepared_sha256"],
+            "gate_sha256": gates["gate_sha256"],
+        }
+        if self.config.get("provenance", {}).get("campaign_admission") != expected:
+            raise ProductionError("campaign admission provenance does not match receipts")
+        return expected
+
     def _tasks(self, product: str | None) -> dict:
         tasks = self.config.get("product_tasks")
         return tasks[product] if tasks is not None else self.config["tasks"]
@@ -905,6 +976,12 @@ class ProductionCellLauncher:
             raise ProductionError("remote root is missing or unsafe for admitted placement")
         return root
 
+    def _development_cases(self, task: str, product: str | None = None) -> list[int]:
+        ranked = self.config.get("ranked_cases")
+        if ranked is None:
+            return DEVELOPMENT_CASES[task]
+        return ranked[product or "a3"][task]
+
     def _baseline(self, task: str, product: str | None = None) -> dict:
         path = Path(self._product_config(product)["baseline_sources"][task]["path"])
         try:
@@ -918,7 +995,7 @@ class ProductionCellLauncher:
                 or document.get("schema") != "profiling-skill/baseline-timing/v1"
                 or document.get("benchmark") != task or not isinstance(rows, list)
                 or [row.get("case") if isinstance(row, dict) else None for row in rows]
-                != DEVELOPMENT_CASES[task]
+                != self._development_cases(task, product)
                 or any(set(row) != {"case", "median_us"}
                        or not _positive_number(row["median_us"]) for row in rows)
                 or not _positive_number(document.get("control_median_us"))
@@ -1169,7 +1246,7 @@ class ProductionCellLauncher:
                 2 * self.config["backend_job_timeout"] + self.config["timeout_grace"]
             ),
             "devices": [{"id": f"{slot['target']}/device-{slot['device']}", "device": 0}],
-            "development_cases": DEVELOPMENT_CASES[cell["task"]],
+            "development_cases": self._development_cases(cell["task"], product),
             "all_cases": ALL_CASES[cell["task"]],
             "baseline": self._baseline(cell["task"], product), "backend_command": backend,
         }
@@ -1324,6 +1401,8 @@ class ProductionCellLauncher:
             raise ProductionError(
                 "production cells require four rounds and a 24 or 48-operation budget"
             )
+        if self.config.get("products") is not None and self._campaign_admission is None:
+            self._campaign_admission = self._validate_campaign_admission()
         product = cell.get("product", "a3")
         task_binding = self._tasks(product).get(cell.get("task"), {})
         prompt_contract = cell.get("prompt_contract", {})

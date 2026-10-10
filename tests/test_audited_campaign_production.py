@@ -283,6 +283,20 @@ def product_runtime_fixture(config: dict) -> dict:
     return config
 
 
+def test_product_ranked_cases_are_independent_and_hash_bound():
+    rankings = {
+        "a3": {task: list(range(5)) for task in production.DEVELOPMENT_CASES},
+        "a5": {task: list(reversed(range(5))) for task in production.DEVELOPMENT_CASES},
+    }
+    digest = production.document_sha256({"ranked_cases": rankings})
+
+    assert production.validate_ranked_cases(rankings, ("a3", "a5"), digest) == rankings
+    wrong = json.loads(json.dumps(rankings))
+    wrong["a5"]["bsa"] = [0, 1, 2, 2, 4]
+    with pytest.raises(production.ProductionError, match="ranked cases"):
+        production.validate_ranked_cases(wrong, ("a3", "a5"), digest)
+
+
 def test_exact_four_treatments_have_unambiguous_source_bindings():
     assert tuple(production.TREATMENT_SKILLS) == (
         "cannbot-all", "cannbot-new-profiler",

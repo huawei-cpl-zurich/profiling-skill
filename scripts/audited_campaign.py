@@ -955,6 +955,20 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "baseline": baseline,
             "baseline_median_us": baseline_us,
             "speedup_vs_baseline": speedup,
+            # Keep the authenticated lineage and compact profiler/fusion
+            # authorization at the reporting boundary.  Large vendor report
+            # trees remain on the remote target; only controller-approved
+            # compact artifact paths are published here.
+            "commits": terminal.get("commits", []),
+            "variability_ratio": (
+                best.get("policy", {}).get("variability_ratio")
+                if best and isinstance(best.get("policy"), dict) else None
+            ),
+            "fusion_gate": best.get("fusion_gate") if best else None,
+            "profiler_evidence": (
+                best.get("compact_artifacts", []) if best else []
+            ),
+            "bottleneck": best.get("bottleneck") if best else None,
             "candidate_errors": candidate_errors,
             "attempt_summary": attempt_summary,
             "failure": candidate_errors or (

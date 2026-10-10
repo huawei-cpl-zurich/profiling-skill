@@ -102,6 +102,26 @@ def _positive_number(value: object) -> bool:
             and math.isfinite(value) and value > 0)
 
 
+def validate_ranked_cases(value: object, products: tuple[str, ...],
+                          expected_sha256: object) -> dict[str, dict[str, list[int]]]:
+    """Validate independently ranked development cases for each product."""
+    if (not isinstance(value, dict) or set(value) != set(products)
+            or not isinstance(expected_sha256, str)
+            or document_sha256({"ranked_cases": value}) != expected_sha256):
+        raise ProductionError("product-ranked cases are incomplete or not hash-bound")
+    for product in products:
+        tasks = value[product]
+        if not isinstance(tasks, dict) or set(tasks) != set(DEVELOPMENT_CASES):
+            raise ProductionError("product-ranked cases must cover all tasks")
+        for task, cases in tasks.items():
+            if (not isinstance(cases, list) or not cases
+                    or len(cases) != len(set(cases))
+                    or any(type(case) is not int or case not in ALL_CASES[task]
+                           for case in cases)):
+                raise ProductionError(f"product-ranked cases are invalid: {product}/{task}")
+    return value
+
+
 def digest_tree(root: Path) -> str:
     if not root.is_dir() or root.is_symlink():
         raise ProductionError(f"pinned tree is unavailable: {root}")
@@ -811,6 +831,12 @@ class ProductionCellLauncher:
                     raise ProductionError(
                         f"product provenance does not match runtime input: {product}"
                     )
+            ranked = self.config.get("ranked_cases")
+            if ranked is not None:
+                validate_ranked_cases(
+                    ranked, tuple(sorted(selected_products)),
+                    provenance.get("ranked_cases_sha256"),
+                )
         elif self.config.get("runtime_image_digest") != provenance.get("runtime_image_digest"):
             raise ProductionError("runtime image provenance does not match Docker input")
         if provenance.get("model") != {
@@ -905,6 +931,12 @@ class ProductionCellLauncher:
             raise ProductionError("remote root is missing or unsafe for admitted placement")
         return root
 
+    def _development_cases(self, task: str, product: str | None = None) -> list[int]:
+        ranked = self.config.get("ranked_cases")
+        if ranked is None:
+            return DEVELOPMENT_CASES[task]
+        return ranked[product or "a3"][task]
+
     def _baseline(self, task: str, product: str | None = None) -> dict:
         path = Path(self._product_config(product)["baseline_sources"][task]["path"])
         try:
@@ -918,7 +950,7 @@ class ProductionCellLauncher:
                 or document.get("schema") != "profiling-skill/baseline-timing/v1"
                 or document.get("benchmark") != task or not isinstance(rows, list)
                 or [row.get("case") if isinstance(row, dict) else None for row in rows]
-                != DEVELOPMENT_CASES[task]
+                != self._development_cases(task, product)
                 or any(set(row) != {"case", "median_us"}
                        or not _positive_number(row["median_us"]) for row in rows)
                 or not _positive_number(document.get("control_median_us"))
@@ -1169,7 +1201,7 @@ class ProductionCellLauncher:
                 2 * self.config["backend_job_timeout"] + self.config["timeout_grace"]
             ),
             "devices": [{"id": f"{slot['target']}/device-{slot['device']}", "device": 0}],
-            "development_cases": DEVELOPMENT_CASES[cell["task"]],
+            "development_cases": self._development_cases(cell["task"], product),
             "all_cases": ALL_CASES[cell["task"]],
             "baseline": self._baseline(cell["task"], product), "backend_command": backend,
         }

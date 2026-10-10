@@ -27,6 +27,7 @@ from audited_contract import (
     validate_observe_transaction,
     validate_observe_transition,
     validate_remeasure_redirect,
+    validate_remeasure_recovered_terminal,
     validate_remeasure_transition,
 )
 from fully_fused_contract import (
@@ -656,7 +657,13 @@ class AuditedExperimentRunner:
                     receipt, previous, candidate_hash, manifest_hash, number,
                 )
             if continuing and stage == "controller" and isinstance(handle, str):
-                validate_observe_transaction(receipt, handle)
+                if (receipt.get("remeasure_transition") is not None
+                        and receipt.get("handle") == handle):
+                    validate_remeasure_recovered_terminal(
+                        receipt, handle, candidate_hash, manifest_hash, number,
+                    )
+                else:
+                    validate_observe_transaction(receipt, handle)
         except AuditError as failure:
             self._controller_checkpoint(
                 number, session, str(failure), branch, seed_commit, seed_hash,

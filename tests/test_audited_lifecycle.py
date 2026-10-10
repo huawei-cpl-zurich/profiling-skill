@@ -1685,7 +1685,6 @@ def test_real_lifecycle_remeasure_accepts_authenticated_new_handles(tmp_path: Pa
     backend = tmp_path / "backend.py"
     backend.write_text(
         """import hashlib, json, statistics, sys
-from pathlib import Path
 request=json.load(sys.stdin)
 attempt=request.get('attempt_id') or request['action']
 handle='job:'+hashlib.sha256(attempt.encode()).hexdigest()[:12]
@@ -1696,16 +1695,10 @@ elif request['action'] == 'check':
  result={'status':'ok','handle':handle,'passed':True}
 else:
  samples=([1.0,10.0,100.0] if 'measurement-0' in attempt else [5.0,5.0,5.0])
- marker=Path(__file__).with_suffix('.measurement-1-seen')
- if 'measurement-1' in attempt and not marker.exists():
-  marker.write_text('seen')
-  result={'status':'infrastructure_error','handle':handle,
-          'failure_type':'transport','diagnostics':'observer disconnected'}
- else:
-  result={'status':'ok','handle':handle,'kernel_name':'kernel',
-          'cases':[{'case':case,'samples_us':samples,
-                    'median_us':statistics.median(samples)}
-                   for case in request['cases']]}
+ result={'status':'ok','handle':handle,'kernel_name':'kernel',
+         'cases':[{'case':case,'samples_us':samples,
+                   'median_us':statistics.median(samples)}
+                  for case in request['cases']]}
 print(json.dumps(result))
 """
     )
@@ -1730,13 +1723,27 @@ print(json.dumps(result))
     }))
     state = tmp_path / "controller-state"
     state.mkdir()
+    wrapper = tmp_path / "controller-wrapper.py"
+    wrapper.write_text(
+        """import subprocess, sys, time
+command=[sys.executable, sys.argv[1], *sys.argv[2:]]
+result=subprocess.run(command, text=True, capture_output=True)
+sys.stdout.write(result.stdout)
+sys.stdout.flush()
+sys.stderr.write(result.stderr)
+sys.stderr.flush()
+if '--remeasure-handle' in sys.argv:
+ time.sleep(2)
+raise SystemExit(result.returncode)
+"""
+    )
     command = [
-        sys.executable, str(ROOT / "scripts/audited_bz_controller.py"),
+        sys.executable, str(wrapper), str(ROOT / "scripts/audited_bz_controller.py"),
         "--config", str(config), "--state-dir", str(state),
     ]
     runner = lifecycle.AuditedExperimentRunner(
         repo, prompt, task, invoke,
-        runtime.CommandController(command, repo, timeout=30), round_count=1,
+        runtime.CommandController(command, repo, timeout=0.5), round_count=1,
     )
 
     with pytest.raises(contract.AuditError, match="measurement pending"):
@@ -1747,6 +1754,12 @@ print(json.dumps(result))
 
     with pytest.raises(contract.AuditError, match="infrastructure"):
         runner.run("real-remeasure", "agent", resume=True)
+    timed_out = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert timed_out["stage"] == "controller"
+    assert timed_out["receipt"]["handle"] == pending["handle"]
+
+    with pytest.raises(contract.AuditError, match="infrastructure"):
+        runner.run("real-remeasure", "agent", resume=True)
     redirected = json.loads((repo / ".experiment/blocked.json").read_text())
     assert redirected["stage"] == "controller"
     assert redirected["receipt"]["handle"] != pending["handle"]
@@ -1754,6 +1767,7 @@ print(json.dumps(result))
         redirected["receipt"], pending["handle"], blocked["candidate_sha256"],
         blocked["manifest_sha256"], 1, pending,
     )
+    assert redirected["receipt"]["remeasure_redirect"]["replacement_terminal"] is True
 
     result = runner.run("real-remeasure", "agent", resume=True)
 

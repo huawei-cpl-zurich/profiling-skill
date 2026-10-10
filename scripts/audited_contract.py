@@ -650,6 +650,85 @@ def validate_remeasure_redirect(receipt: object, requested_handle: str,
     return receipt
 
 
+def validate_remeasure_recovered_terminal(receipt: object, requested_handle: str,
+                                          candidate_hash: str,
+                                          manifest_hash: str,
+                                          experiment: int) -> dict:
+    """Validate a terminal reached through an authenticated remeasure redirect."""
+    try:
+        current = validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+    except AuditError as failure:
+        raise AuditError("controller remeasure recovery proof is invalid") from failure
+    transition = current.get("remeasure_transition")
+    policy = current["policy"]
+    history = policy.get("operation_history")
+    required = {
+        "schema", "pending_receipt_sha256", "pending_handle",
+        "candidate_sha256", "manifest_sha256", "experiment",
+        "from_measurement_generation", "to_measurement_generation",
+        "profile_handle", "post_control_handle", "operation_history_sha256",
+    }
+    generation = policy.get("measurement_generation")
+    if (current.get("handle") != requested_handle
+            or current.get("experiment") != experiment
+            or not isinstance(transition, dict) or set(transition) != required
+            or transition.get("schema") != REMEASURE_TRANSITION_SCHEMA
+            or not _valid_hash(transition.get("pending_receipt_sha256"))
+            or not isinstance(transition.get("pending_handle"), str)
+            or not transition["pending_handle"]
+            or transition["pending_handle"] == requested_handle
+            or transition.get("candidate_sha256") != candidate_hash
+            or transition.get("manifest_sha256") != manifest_hash
+            or transition.get("experiment") != experiment
+            or type(transition.get("from_measurement_generation")) is not int
+            or transition.get("to_measurement_generation") != generation
+            or generation != transition["from_measurement_generation"] + 1
+            or transition.get("profile_handle") != requested_handle
+            or not isinstance(history, list)
+            or transition.get("operation_history_sha256") != sha256_json(history)):
+        raise AuditError("controller remeasure recovery proof is invalid")
+    prefix = f"experiment-{experiment}-measurement-{generation}-"
+    generation_indexes = [index for index, record in enumerate(history) if (
+        isinstance(record.get("attempt_id"), str)
+        and record["attempt_id"].startswith(prefix)
+    )]
+    if not generation_indexes:
+        raise AuditError("controller remeasure recovery proof is invalid")
+    prior_handles = {
+        record.get("handle") for record in history[:generation_indexes[0]]
+        if isinstance(record.get("handle"), str) and record["handle"]
+    }
+    post_handle = transition.get("post_control_handle")
+    if (requested_handle in prior_handles or post_handle in prior_handles
+            or post_handle == requested_handle):
+        raise AuditError("controller remeasure recovery proof is invalid")
+    suffix = history[generation_indexes[0]:]
+    profiles = [record for record in suffix if (
+        record.get("action") == "profile"
+        and record.get("attempt_id") in {prefix + "primary", prefix + "confirmation"}
+        and record.get("terminal") is True
+        and record.get("handle") == requested_handle
+    )]
+    if len(profiles) != 1:
+        raise AuditError("controller remeasure recovery proof is invalid")
+    profile_index = history.index(profiles[0], generation_indexes[0])
+    if current["status"] == "candidate_error":
+        if post_handle is not None or profile_index != len(history) - 1:
+            raise AuditError("controller remeasure recovery proof is invalid")
+        return current
+    controls = [record for record in suffix if (
+        record.get("action") == "calibrate"
+        and record.get("attempt_id") == prefix + "after"
+        and record.get("terminal") is True and record.get("status") == "ok"
+        and record.get("handle") == post_handle
+    )]
+    if (len(controls) != 1 or not isinstance(post_handle, str) or not post_handle
+            or history.index(controls[0], generation_indexes[0]) <= profile_index
+            or controls[0] is not history[-1]):
+        raise AuditError("controller remeasure recovery proof is invalid")
+    return current
+
+
 def validate_controller_receipt(receipt: object, candidate_hash: str,
                                 manifest_hash: str | None = None) -> dict:
     """Validate a compact policy-v1 controller receipt."""

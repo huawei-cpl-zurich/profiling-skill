@@ -558,10 +558,14 @@ def test_remeasure_interruption_redirects_and_resumes_fresh_handle(tmp_path: Pat
         timeout_recovery, pending["handle"], candidate_hash, manifest_hash, 1,
     )
     assert timeout_recovery["remeasure_redirect"]["replacement_terminal"] is True
-    assert adapter.run(
+    recovered = adapter.run(
         1, candidate_hash, manifest_hash,
         observe_handle=timeout_recovery["handle"],
-    ) == terminal
+    )
+    assert recovered == terminal
+    contract.validate_remeasure_recovered_terminal(
+        recovered, timeout_recovery["handle"], candidate_hash, manifest_hash, 1,
+    )
 
 
 def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path: Path):

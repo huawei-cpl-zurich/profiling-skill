@@ -734,6 +734,11 @@ class CommandController:
                     evidence_contract.validate_remeasure_redirect(
                         receipt, expected_handle, candidate_hash, manifest_hash, number,
                     )
+                elif (receipt.get("remeasure_transition") is not None
+                      and receipt.get("handle") == expected_handle):
+                    evidence_contract.validate_remeasure_recovered_terminal(
+                        receipt, expected_handle, candidate_hash, manifest_hash, number,
+                    )
                 elif receipt.get("status") in {
                         "ok", "candidate_error", "measurement_pending"}:
                     evidence_contract.validate_controller_receipt(

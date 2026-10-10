@@ -355,6 +355,8 @@ class AuditedBzController:
         record = {"request": request, "request_sha256": _json_sha(request),
                   "mode": mode, "status": status, "terminal": terminal,
                   "handle": result.get("handle"),
+                  "fusion_gate": result.get("fusion_gate"),
+                  "fusion_handle": result.get("fusion_handle"),
                   "failure_type": result.get("failure_type"),
                   "diagnostics": _bounded(result.get("diagnostics"))}
         if status == "infrastructure_error" or status not in ({"ok"} | CANDIDATE_FAILURES):
@@ -501,10 +503,25 @@ class AuditedBzController:
         aggregate = [math.exp(sum(math.log(value) for value in repetition) / len(repetition))
                      for repetition in zip(*samples_by_case)]
         median = statistics.median(aggregate)
-        return {"kernel_name": declared, "declared_kernel_name": declared,
-                "resolved_kernel_name": resolved, "case_results": normalized,
-                "samples_us": aggregate, "median_us": median,
-                "variability_ratio": (max(aggregate) - min(aggregate)) / median}
+        timing = {"kernel_name": declared, "declared_kernel_name": declared,
+                  "resolved_kernel_name": resolved, "case_results": normalized,
+                  "samples_us": aggregate, "median_us": median,
+                  "variability_ratio": (max(aggregate) - min(aggregate)) / median}
+        fusion_gate, fusion_handle = result.get("fusion_gate"), result.get("fusion_handle")
+        if fusion_gate is not None or fusion_handle is not None:
+            if (not isinstance(fusion_handle, str) or not fusion_handle
+                    or not isinstance(fusion_gate, dict)
+                    or set(fusion_gate) != {
+                        "entrypoint", "kernel_name", "cases", "logical_launches_per_case"
+                    }
+                    or not isinstance(fusion_gate["entrypoint"], str)
+                    or not fusion_gate["entrypoint"]
+                    or fusion_gate["kernel_name"] != declared
+                    or fusion_gate["cases"] != self.all_cases
+                    or fusion_gate["logical_launches_per_case"] != 1):
+                raise ControllerError("profile response has invalid fusion authorization")
+            timing.update(fusion_gate=fusion_gate, fusion_handle=fusion_handle)
+        return timing
 
     def _calibration(self, result: dict) -> dict:
         samples = result.get("samples_us")
@@ -527,12 +544,21 @@ class AuditedBzController:
 
     @staticmethod
     def _operation_history(state: dict) -> list[dict]:
-        return [{key: record.get(key) for key in (
-            "request_sha256", "mode", "status", "terminal", "handle"
-        )} | {
-            "action": record["request"].get("action"),
-            "attempt_id": record["request"].get("attempt_id"),
-        } for record in state["operations"]]
+        history = []
+        for record in state["operations"]:
+            retained = {key: record.get(key) for key in (
+                "request_sha256", "mode", "status", "terminal", "handle"
+            )} | {
+                "action": record["request"].get("action"),
+                "attempt_id": record["request"].get("attempt_id"),
+            }
+            if record.get("fusion_gate") is not None or record.get("fusion_handle") is not None:
+                retained.update(
+                    fusion_gate=record.get("fusion_gate"),
+                    fusion_handle=record.get("fusion_handle"),
+                )
+            history.append(retained)
+        return history
 
     def _policy(self, state: dict, handle: str, post_control: str) -> dict:
         history = self._operation_history(state)
@@ -608,7 +634,7 @@ class AuditedBzController:
         factor = self.baseline["control_median_us"] / local_reference
         normalized_samples = [value * factor for value in profile["samples_us"]]
         normalized_median = statistics.median(normalized_samples)
-        return {
+        receipt = {
             "status": status, "experiment": state["experiment"],
             "candidate_sha256": state["candidate_sha256"],
             "manifest_sha256": state["manifest_sha256"],
@@ -630,9 +656,15 @@ class AuditedBzController:
             "case_results": profile["case_results"],
             "compact_artifacts": profile["compact_artifacts"], "policy": policy,
         }
+        if "fusion_gate" in profile:
+            receipt.update(
+                fusion_gate=profile["fusion_gate"],
+                fusion_handle=profile["fusion_handle"],
+            )
+        return receipt
 
     def _timing_proof(self, state: dict, timing: dict) -> dict:
-        return {
+        proof = {
             "candidate_sha256": state["candidate_sha256"],
             "kernel_name": timing["kernel_name"], "handle": timing["handle"],
             "declared_kernel_name": timing.get(
@@ -645,6 +677,12 @@ class AuditedBzController:
             "case_results": timing["case_results"],
             "compact_artifacts": timing["compact_artifacts"],
         }
+        if "fusion_gate" in timing:
+            proof.update(
+                fusion_gate=timing["fusion_gate"],
+                fusion_handle=timing["fusion_handle"],
+            )
+        return proof
 
     @staticmethod
     def _infrastructure(reason: str, handle: str | None = None) -> dict:

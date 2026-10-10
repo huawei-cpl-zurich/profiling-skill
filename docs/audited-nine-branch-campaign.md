@@ -288,11 +288,12 @@ Additional history or unrelated worktree changes fail closed.
 The runtime has five separate positive-integer timeout settings:
 `agent_turn_timeout`, `controller_transaction_timeout`, `verifier_timeout`,
 `backend_job_timeout`, and `timeout_grace`. The BZ job client receives
-`backend_job_timeout`; the controller backend receives that value plus one
-grace interval; and `controller_transaction_timeout` must exceed the backend
-job timeout plus two grace intervals. Agent and verifier budgets are
-independent. The ambiguous legacy `timeout` setting is rejected, so changing
-one boundary cannot silently shorten a different subprocess or remote job.
+`backend_job_timeout`; a fully-fused profile composes a full-domain gate and a
+timing job, so the controller backend receives twice that value plus one grace
+interval. `controller_transaction_timeout` must exceed both job budgets plus
+two grace intervals. Agent and verifier budgets are independent. The
+ambiguous legacy `timeout` setting is rejected, so changing one boundary
+cannot silently shorten a different subprocess or remote job.
 
 The BZ job client is part of that pinned controller closure. It accepts only
 the fixed global `remote-access/scripts/cpl-remote` boundary and its required

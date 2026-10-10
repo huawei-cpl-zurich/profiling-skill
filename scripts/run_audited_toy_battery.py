@@ -11,7 +11,12 @@ from typing import Sequence
 
 from audited_contract import AuditError
 from audited_experiment import run_acceptance_battery
-from audited_lifecycle import AuditedExperimentRunner
+from audited_lifecycle import (
+    FUSED_MANIFEST_SCHEMA,
+    MANIFEST_SCHEMA,
+    AuditedExperimentRunner,
+)
+from fully_fused_contract import FUSION_DECLARATION
 from audited_runtime import CodexInvoker
 
 TASK = """# Toy task
@@ -23,7 +28,7 @@ target, device, or hardware is needed.
 """
 
 
-def initialize_repo(repo: Path) -> None:
+def initialize_repo(repo: Path, *, manifest_schema: str = FUSED_MANIFEST_SCHEMA) -> None:
     """Create one isolated immutable-baseline repository."""
     if repo.exists():
         raise AuditError(f"toy repository must not already exist: {repo}")
@@ -36,11 +41,13 @@ def initialize_repo(repo: Path) -> None:
     for command in commands:
         subprocess.run(command, cwd=repo, check=True)
     (repo / "candidate.py").write_text("VALUE = 0\n")
+    manifest = {"schema": manifest_schema, "kernel_name": "toy_kernel"}
+    if manifest_schema == FUSED_MANIFEST_SCHEMA:
+        manifest.update(entrypoint="toy_kernel", fusion=dict(FUSION_DECLARATION))
+    elif manifest_schema != MANIFEST_SCHEMA:
+        raise AuditError("toy manifest schema is unsupported")
     (repo / "candidate.manifest.json").write_text(
-        json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1",
-            "kernel_name": "toy_kernel",
-        }, sort_keys=True) + "\n"
+        json.dumps(manifest, sort_keys=True) + "\n"
     )
     subprocess.run(("git", "add", "."), cwd=repo, check=True)
     subprocess.run(("git", "commit", "-qm", "toy baseline"), cwd=repo, check=True)
@@ -89,6 +96,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--node-runtime", type=Path)
     parser.add_argument("--auth-home", type=Path)
     parser.add_argument("--timeout", type=int, default=900)
+    parser.add_argument(
+        "--allow-legacy-v1", action="store_true",
+        help="explicitly replay the historical v1 toy contract",
+    )
     args = parser.parse_args(argv)
     if args.root.exists():
         parser.error(f"battery root must not already exist: {args.root}")
@@ -100,7 +111,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         for agent_id in ("agent-1", "agent-2", "agent-3"):
             repo = args.root / agent_id
-            initialize_repo(repo)
+            required_schema = (
+                MANIFEST_SCHEMA if args.allow_legacy_v1 else FUSED_MANIFEST_SCHEMA
+            )
+            initialize_repo(repo, manifest_schema=required_schema)
             invoker = CodexInvoker(
                 repo, codex=args.codex, timeout=args.timeout,
                 auth_home=args.auth_home,
@@ -114,6 +128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return local_receipt(agent_id, number, candidate, manifest)
             runners[agent_id] = AuditedExperimentRunner(
                 repo, args.prompt, task, invoker, controller,
+                required_manifest_schema=required_schema,
             )
         results = run_acceptance_battery("toy-acceptance", runners)
     except AuditError as error:

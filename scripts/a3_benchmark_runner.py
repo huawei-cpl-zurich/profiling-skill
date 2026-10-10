@@ -12,6 +12,10 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from types import ModuleType
+
+
+_MISSING = object()
 
 
 def load(path: Path, name: str):
@@ -42,6 +46,167 @@ def clone(value):
     if isinstance(value, tuple):
         return tuple(clone(item) for item in value)
     return value
+
+
+_METADATA_OPS = frozenset({
+    "aten.alias", "aten.as_strided", "aten.detach", "aten.empty",
+    "aten.empty_like", "aten.expand", "aten.lift_fresh", "aten.new_empty",
+    "aten.permute", "aten.select", "aten.slice",
+    "aten.squeeze", "aten.t", "aten.transpose", "aten.unsqueeze",
+    "aten.view", "aten._unsafe_view",
+})
+
+
+def _operator_base(func) -> str:
+    schema_name = getattr(getattr(func, "_schema", None), "name", None)
+    if isinstance(schema_name, str) and schema_name:
+        return schema_name.replace("::", ".", 1)
+    fields = str(func).replace("::", ".", 1).split(".")
+    return ".".join(fields[:2]) if len(fields) >= 2 else fields[0]
+
+
+def _tensor_keys(value) -> set[tuple]:
+    values = value if isinstance(value, (list, tuple)) else (value,)
+    result = set()
+    for item in values:
+        if isinstance(item, dict):
+            result.update(_tensor_keys(tuple(item.values())))
+        elif isinstance(item, (list, tuple)):
+            result.update(_tensor_keys(item))
+        elif hasattr(item, "untyped_storage"):
+            try:
+                result.add((str(item.device), item.untyped_storage().data_ptr()))
+            except (AttributeError, RuntimeError):
+                result.add(("object", id(item)))
+    return result
+
+
+class _KernelProxy:
+    def __init__(self, name, wrapped, audit):
+        self._name, self._wrapped, self._audit = name, wrapped, audit
+
+    def __getattr__(self, name):
+        return getattr(self._wrapped, name)
+
+    def run(self, *args, **kwargs):
+        before = len(self._audit.launches)
+        result = self._wrapped.run(*args, **kwargs)
+        if len(self._audit.launches) == before:
+            self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
+        return result
+
+    def __getitem__(self, grid):
+        launch = self._wrapped[grid]
+
+        def observed(*args, **kwargs):
+            before = len(self._audit.launches)
+            result = launch(*args, **kwargs)
+            if len(self._audit.launches) == before:
+                self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
+            return result
+
+        return observed
+
+
+class FusionRuntimeAudit:
+    """Trusted one-forward audit for framework compute and Triton launches."""
+
+    def __init__(self, declaration: dict):
+        self.declaration = declaration
+        self.launches: list[tuple[str, set[tuple]]] = []
+        self.framework_ops: list[tuple[str, str]] = []
+        self._run_hooks: list[tuple[object, object]] = []
+
+    def instrument(self, candidate: ModuleType) -> None:
+        kernels = {}
+        for name, candidate_global in tuple(vars(candidate).items()):
+            kernel = (candidate_global._wrapped
+                      if isinstance(candidate_global, _KernelProxy)
+                      else candidate_global)
+            module = type(kernel).__module__
+            if module.startswith("triton.") and hasattr(kernel, "__getitem__"):
+                retained = kernels.setdefault(id(kernel), [kernel, []])
+                retained[1].append(name)
+        proxies = {}
+        for identity, (kernel, names) in kernels.items():
+            observed_name = (self.declaration["entrypoint"]
+                             if self.declaration["entrypoint"] in names else names[0])
+            original_run = getattr(kernel, "run", None)
+            if callable(original_run):
+                previous = getattr(kernel, "__dict__", {}).get("run", _MISSING)
+
+                def observed_run(*args, _name=observed_name,
+                                 _run=original_run, **kwargs):
+                    self.launches.append((_name, _tensor_keys((args, kwargs))))
+                    return _run(*args, **kwargs)
+
+                setattr(kernel, "run", observed_run)
+                self._run_hooks.append((kernel, previous))
+            proxy = _KernelProxy(observed_name, kernel, self)
+            proxies[identity] = proxy
+            for name in names:
+                setattr(candidate, name, proxy)
+
+        model = getattr(candidate, "Model", None)
+        if isinstance(model, type):
+            for name, retained in tuple(vars(model).items()):
+                kernel = retained._wrapped if isinstance(retained, _KernelProxy) else retained
+                proxy = proxies.get(id(kernel))
+                if proxy is not None:
+                    setattr(model, name, proxy)
+
+    def _restore_run_hooks(self) -> None:
+        for kernel, previous in reversed(self._run_hooks):
+            if previous is _MISSING:
+                delattr(kernel, "run")
+            else:
+                setattr(kernel, "run", previous)
+        self._run_hooks.clear()
+
+    def dispatch_mode(self):
+        from torch.utils._python_dispatch import TorchDispatchMode
+        audit = self
+
+        class AuditMode(TorchDispatchMode):
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                name = str(func)
+                result = func(*args, **(kwargs or {}))
+                operator = _operator_base(func)
+                metadata_only = operator in _METADATA_OPS
+                if operator == "aten.reshape":
+                    output_keys = _tensor_keys(result)
+                    metadata_only = bool(
+                        output_keys and output_keys.issubset(_tensor_keys(args))
+                    )
+                if not metadata_only:
+                    origin = "acl" if name.startswith(("npu::", "aclnn")) else "torch"
+                    audit.framework_ops.append((name, origin))
+                return result
+
+        return AuditMode()
+
+    def finish(self, case: int, output) -> dict:
+        self._restore_run_hooks()
+        operators = []
+        component = "aic" if self.declaration["kernel_name"].endswith("_mix_aic") else "aiv"
+        for index, (entrypoint, _arguments) in enumerate(self.launches):
+            declared = entrypoint == self.declaration["entrypoint"]
+            operators.append({
+                "name": self.declaration["kernel_name"] if declared else entrypoint,
+                "origin": "triton", "entrypoint": entrypoint,
+                "launch_id": f"launch-{index}", "component": component,
+            })
+        operators.extend({"name": name, "origin": origin,
+                          "launch_id": f"framework-{index}"}
+                         for index, (name, origin) in enumerate(self.framework_ops))
+        output_keys = _tensor_keys(output)
+        producers = [index for index, (_entrypoint, arguments) in enumerate(self.launches)
+                     if output_keys and output_keys.issubset(arguments)]
+        return {
+            "schema": "profiling-skill/fusion-evidence/v1", "case": case,
+            "output_launch_id": f"launch-{producers[-1]}" if producers else None,
+            "operators": operators,
+        }
 
 
 def to_npu(value):
@@ -140,6 +305,7 @@ def execute(job: dict) -> dict:
         return {"status": "compile_error", "diagnostics": diagnostic(exc), **bound}
     cases = job["cases"] if job["action"] == "check" else [job["case"]]
     evidence = []
+    fusion_evidence = []
     for case in cases:
         try:
             inputs = selected_inputs(baseline, Path(job["case_spec"]), case)
@@ -152,13 +318,23 @@ def execute(job: dict) -> dict:
                     "case_evidence": evidence}
         try:
             candidate_inputs = clone(inputs)
+            audit = None
+            if "fusion_contract" in job:
+                audit = FusionRuntimeAudit(job["fusion_contract"])
+                audit.instrument(candidate)
             candidate_model = candidate.Model()
             with torch.no_grad():
                 torch.npu.synchronize()
                 started = time.perf_counter_ns()
-                actual = candidate_model(*candidate_inputs)
+                if audit is None:
+                    actual = candidate_model(*candidate_inputs)
+                else:
+                    with audit.dispatch_mode():
+                        actual = candidate_model(*candidate_inputs)
                 torch.npu.synchronize()
                 elapsed_us = (time.perf_counter_ns() - started) / 1000.0
+            if audit is not None:
+                fusion_evidence.append(audit.finish(case, actual))
         except BaseException as exc:
             return {"status": classify(exc), "diagnostics": diagnostic(exc), **bound,
                     "case_evidence": evidence}
@@ -174,6 +350,8 @@ def execute(job: dict) -> dict:
                     **bound, "passed": False, "case_evidence": evidence}
     result = {"status": "ok", "diagnostics": "", **bound, "passed": True,
               "case_evidence": evidence}
+    if "fusion_contract" in job:
+        result["fusion_evidence"] = fusion_evidence
     if job["action"] == "measure":
         result["latency_us"] = evidence[0]["host_elapsed_us"]
     return result

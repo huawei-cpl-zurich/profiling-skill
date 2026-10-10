@@ -100,7 +100,12 @@ def git_repo(path: Path) -> tuple[Path, str]:
                    check=True)
     (path / "candidate.py").write_text("VALUE = 1\n")
     (path / "candidate.manifest.json").write_text(
-        '{"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"kernel"}\n'
+        json.dumps({
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": "kernel", "entrypoint": "kernel",
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
+        }) + "\n"
     )
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-qm", "baseline"], cwd=path, check=True)
@@ -140,7 +145,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py",
+                 "bz_a3_job_client.py", "fully_fused_contract.py",
                  "validate_audited_experiment.py", "audited_verifier.py",
                  "audited_contract.py", "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -162,8 +167,10 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         manifest = starter / "candidate.manifest.json"
         candidate.write_text(f"TASK = {task_name!r}\nVALUE = 0\n")
         manifest.write_text(json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1",
-            "kernel_name": task_name,
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": task_name, "entrypoint": task_name,
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
         }) + "\n")
         starters[task_name] = {
             "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
@@ -223,7 +230,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "model": "gpt-5.6-sol", "reasoning_effort": "low",
         "runtime_mode": "docker", "runtime_image_digest": provenance["runtime_image_digest"],
         "agent_turn_timeout": 20,
-        "controller_transaction_timeout": 15,
+        "controller_transaction_timeout": 25,
         "verifier_timeout": 20,
         "backend_job_timeout": 10,
         "timeout_grace": 2,
@@ -939,9 +946,10 @@ class FakeRunner:
     calls = []
 
     def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
-                 max_candidate_repairs):
+                 max_candidate_repairs, required_manifest_schema):
         assert round_count == 4
         assert max_candidate_repairs == 2
+        assert required_manifest_schema == "profiling-skill/candidate-kernel/v2"
         self.repo = repo
 
     def run(self, run_id, agent_id, *, resume=False):
@@ -1020,10 +1028,11 @@ class TrustRecordingRunner(FakeRunner):
     trusted = None
 
     def __init__(self, *args, round_count, max_candidate_repairs,
-                 trusted_runtime_migration):
+                 required_manifest_schema, trusted_runtime_migration):
         super().__init__(
             *args, round_count=round_count,
             max_candidate_repairs=max_candidate_repairs,
+            required_manifest_schema=required_manifest_schema,
         )
         type(self).trusted = trusted_runtime_migration
 
@@ -1244,12 +1253,15 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         Path(config["baseline_sources"]["gdn"]["path"]).read_text()
     )
     assert controller_config["devices"] == [{"id": "bz-a3-2/device-6", "device": 0}]
-    assert controller_config["timeout_seconds"] == 12
+    # A v2 profile composes a full-domain gate and a timing job. Each retains
+    # the full per-job budget, while the enclosing backend covers both plus
+    # one shutdown grace interval.
+    assert controller_config["timeout_seconds"] == 22
     nested = json.loads(controller_config["backend_command"][-1])
     assert "--device" not in nested
     assert nested[nested.index("--timeout") + 1] == "10"
     assert created["controller"][0][1].endswith("audited_bz_controller.py")
-    assert created["controller"][2]["timeout"] == 15
+    assert created["controller"][2]["timeout"] == 25
     assert created["invoker"][1]["agent_id"] == cell["cell_id"]
     assert created["invoker"][1]["timeout"] == 20
     assert created["verifier"][1]["timeout"] == 20
@@ -1896,10 +1908,11 @@ print(json.dumps({
 
     class ControllerRunner(FakeRunner):
         def __init__(self, repo, prompt, task, invoker, controller, *, round_count,
-                     max_candidate_repairs):
+                     max_candidate_repairs, required_manifest_schema):
             super().__init__(
                 repo, prompt, task, invoker, controller, round_count=round_count,
                 max_candidate_repairs=max_candidate_repairs,
+                required_manifest_schema=required_manifest_schema,
             )
             self.controller = controller
 
@@ -2150,7 +2163,8 @@ def test_fake_production_launcher_runs_all_twelve_isolated_branches(tmp_path: Pa
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py", "validate_audited_experiment.py",
+                 "bz_a3_job_client.py", "fully_fused_contract.py",
+                 "validate_audited_experiment.py",
                  "audited_verifier.py", "audited_contract.py",
                  "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -2172,7 +2186,10 @@ def test_fake_production_launcher_runs_all_twelve_isolated_branches(tmp_path: Pa
         candidate.write_text(f"TASK = {task!r}\nVALUE = 0\n")
         candidate_manifest = starter / "candidate.manifest.json"
         candidate_manifest.write_text(json.dumps({
-            "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": task,
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": task, "entrypoint": task,
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
         }) + "\n")
         starters[task] = {
             "candidate": {"path": str(candidate.resolve()), "sha256": sha(candidate)},
@@ -2224,7 +2241,7 @@ def test_fake_production_launcher_runs_all_twelve_isolated_branches(tmp_path: Pa
         "reasoning_effort": "low", "runtime_mode": "docker",
         "runtime_image_digest": provenance["runtime_image_digest"],
         "agent_turn_timeout": 20,
-        "controller_transaction_timeout": 15,
+        "controller_transaction_timeout": 25,
         "verifier_timeout": 20,
         "backend_job_timeout": 10,
         "timeout_grace": 2,

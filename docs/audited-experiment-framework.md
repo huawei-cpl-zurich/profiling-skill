@@ -124,6 +124,9 @@ python scripts/audited_experiment.py \
 
 Resume a blocked run by repeating the command with `--resume`. The controller
 must recover or re-observe retained handles from its own durable state.
+Current standalone runs require the fully-fused v2 candidate manifest used by
+the prompt. Use `--allow-legacy-v1` only when explicitly replaying a historical
+v1 experiment; it is not a compatibility fallback for a new run.
 
 Run the real three-agent no-NPU acceptance battery:
 
@@ -136,7 +139,8 @@ It creates three isolated repositories, launches three agents concurrently,
 and requires three experiment commits from each. It deliberately uses a local
 deterministic controller so it tests agent/session/evidence integration without
 remote or device noise. It does invoke real agents and is therefore separate
-from the fast test suite.
+from the fast test suite. The toy battery also requires v2 by default; its
+`--allow-legacy-v1` option exists only for explicit historical replay.
 
 Validate a completed branch offline:
 

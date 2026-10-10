@@ -173,6 +173,39 @@ def test_runner_instruments_entrypoint_retained_on_model_class():
     }]
 
 
+def test_runner_observes_direct_jit_run_launch_without_changing_arguments():
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+    calls = []
+
+    class Kernel:
+        def run(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return "launched"
+
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+
+    assert candidate.complete_kernel.run("input", "output", grid=(1,)) == "launched"
+    assert calls == [(('input', 'output'), {"grid": (1,)})]
+    evidence = audit.finish(0, "output")
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+
 @pytest.mark.parametrize(
     "name",
     [

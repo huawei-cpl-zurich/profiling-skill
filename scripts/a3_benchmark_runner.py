@@ -85,6 +85,10 @@ class _KernelProxy:
     def __getattr__(self, name):
         return getattr(self._wrapped, name)
 
+    def run(self, *args, **kwargs):
+        self._audit.launches.append((self._name, _tensor_keys((args, kwargs))))
+        return self._wrapped.run(*args, **kwargs)
+
     def __getitem__(self, grid):
         launch = self._wrapped[grid]
 

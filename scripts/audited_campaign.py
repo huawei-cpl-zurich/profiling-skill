@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build, schedule, resume, and report an audited nine-branch campaign."""
+"""Build, schedule, resume, and report an audited treatment campaign."""
 
 from __future__ import annotations
 
@@ -18,7 +18,11 @@ from typing import Protocol
 
 
 TASKS = ("matmul", "gdn", "bsa")
-TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+TREATMENTS = (
+    "cannbot-all", "cannbot-new-profiler",
+    "guarded-new-profiler", "guarded-old-profiler",
+)
+LEGACY_TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
 PRODUCTS = ("a3", "a5")
 PRODUCT_RUNTIMES = {"a3": "py311-torch", "a5": "cann91"}
 PRODUCT_TARGETS = {"a3": ("bz-a3-1", "bz-a3-2"), "a5": ("bz-a5",)}
@@ -26,17 +30,23 @@ LEGACY_REQUEST_BUDGET = 24
 REPAIR_REQUEST_BUDGET = 48
 SUPPORTED_REQUEST_BUDGETS = {LEGACY_REQUEST_BUDGET, REPAIR_REQUEST_BUDGET}
 TREATMENT_SKILLS = {
-    "cannbot": (
+    "cannbot-all": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
         "triton-op-verifier", "triton-latency-optimizer",
         "triton-simulator-optimizer", "npu-arch", "ops-profiling",
     ),
-    "project-cannbot": (
+    "cannbot-new-profiler": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
         "triton-op-verifier", "triton-latency-optimizer",
         "triton-simulator-optimizer", "npu-arch", "ascend-profiling",
     ),
-    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
+    "guarded-new-profiler": ("ascend-profiling", "triton-guarded-kernel"),
+    "guarded-old-profiler": ("ascend-profiling", "triton-guarded-kernel"),
+}
+LEGACY_TREATMENT_SKILLS = {
+    "cannbot": TREATMENT_SKILLS["cannbot-all"],
+    "project-cannbot": TREATMENT_SKILLS["cannbot-new-profiler"],
+    "project-guarded": TREATMENT_SKILLS["guarded-new-profiler"],
 }
 
 
@@ -88,7 +98,8 @@ def _validate_artifact_binding(binding: object, label: str) -> None:
         raise CampaignError(f"{label} artifact binding sha256 is invalid") from error
 
 
-def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> None:
+def _validate_provenance(provenance: dict, *, require_starters: bool = True,
+                         legacy_skills: bool = False) -> None:
     if not isinstance(provenance, dict):
         raise CampaignError("provenance must be an object")
     _require_hex(provenance.get("source_revision"), 40, "source_revision")
@@ -119,9 +130,11 @@ def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> 
             _validate_artifact_binding(starter[kind], f"starter.{task}.{kind}")
     skills = provenance.get("skills")
     # Composite upstream bundles may pin their internal skills with one digest.
-    accepted = {"cannbot", "ascend-profiling", "triton-guarded-kernel"}
-    if not isinstance(skills, dict) or not accepted.issubset(skills):
-        raise CampaignError("cannbot and project skill bundles must be pinned")
+    required_skills = ({"cannbot", "ascend-profiling", "triton-guarded-kernel"}
+                       if legacy_skills else
+                       {"cannbot", "profiler-new", "profiler-old", "guarded"})
+    if not isinstance(skills, dict) or set(skills) != required_skills:
+        raise CampaignError("all treatment skill freezes must be pinned")
     for name, digest in skills.items():
         _require_hex(digest, 64, f"skills.{name}")
 
@@ -137,9 +150,9 @@ def _validate_product_provenance(provenance: dict, products: tuple[str, ...]) ->
     ):
         raise CampaignError("model name and reasoning_effort must be pinned")
     skills = provenance.get("skills")
-    accepted = {"cannbot", "ascend-profiling", "triton-guarded-kernel"}
-    if not isinstance(skills, dict) or not accepted.issubset(skills):
-        raise CampaignError("cannbot and project skill bundles must be pinned")
+    required_skills = {"cannbot", "profiler-new", "profiler-old", "guarded"}
+    if not isinstance(skills, dict) or set(skills) != required_skills:
+        raise CampaignError("all treatment skill freezes must be pinned")
     for name, digest in skills.items():
         _require_hex(digest, 64, f"skills.{name}")
     bindings = provenance.get("products")
@@ -200,22 +213,6 @@ def _validate_treatment_subset(treatments: tuple[str, ...]) -> None:
         raise CampaignError("treatment subset must contain unique names")
     if any(treatment not in TREATMENT_SKILLS for treatment in treatments):
         raise CampaignError("treatment subset must contain only known treatments")
-    missing = [name for name in treatments
-               if "ascend-profiling" not in TREATMENT_SKILLS[name]]
-    if missing:
-        raise CampaignError(
-            "schema v3 treatment profiles must include ascend-profiling: "
-            + ", ".join(missing)
-        )
-
-
-def _validate_product_treatment_subset(treatments: tuple[str, ...]) -> None:
-    if not treatments:
-        raise CampaignError("treatment subset must be nonempty")
-    if len(treatments) != len(set(treatments)):
-        raise CampaignError("treatment subset must contain unique names")
-    if any(treatment not in TREATMENT_SKILLS for treatment in treatments):
-        raise CampaignError("treatment subset must contain only known treatments")
 
 
 def build_manifest(
@@ -240,9 +237,7 @@ def build_manifest(
     if not prompt.is_file():
         raise CampaignError("prompt must be a regular file")
     selected = TREATMENTS if treatments is None else tuple(treatments)
-    if treatments is not None:
-        (_validate_treatment_subset(selected) if products is None
-         else _validate_product_treatment_subset(selected))
+    _validate_treatment_subset(selected)
     prompt_digest = _sha256(prompt)
     if products is None:
         if product_task_files is not None:
@@ -315,8 +310,7 @@ def build_manifest(
         cells.append(cell)
     order_ids = [cell["cell_id"] for cell in cells]
     document = {
-        "schema_version": (4 if products is not None
-                           else 2 if treatments is None else 3),
+        "schema_version": 4,
         "run_id": run_id,
         "dimensions": {"tasks": list(TASKS), "treatments": list(selected),
                        "round_count": rounds},
@@ -365,16 +359,17 @@ def verify_manifest(document: dict) -> None:
     dimensions = document.get("dimensions")
     selected = tuple(dimensions.get("treatments", [])) if isinstance(dimensions, dict) else ()
     if version in {1, 2}:
-        if selected != TREATMENTS:
+        if selected != LEGACY_TREATMENTS:
             raise CampaignError("legacy manifests require all three treatments")
     elif version == 3:
+        if (not selected or len(selected) != len(set(selected))
+                or any(name not in LEGACY_TREATMENT_SKILLS for name in selected)):
+            raise CampaignError("schema v3 contains an unknown legacy treatment")
+    else:
         _validate_treatment_subset(selected)
-    elif (not selected or len(selected) != len(set(selected))
-          or any(treatment not in TREATMENT_SKILLS for treatment in selected)):
-        raise CampaignError("manifest treatments must be unique and supported")
     products = (tuple(dimensions.get("products", []))
                 if version == 4 and isinstance(dimensions, dict) else ())
-    if version == 4:
+    if version == 4 and products:
         if (not products or len(products) != len(set(products))
                 or any(product not in PRODUCTS for product in products)):
             raise CampaignError("manifest products must be unique and supported")
@@ -397,10 +392,18 @@ def verify_manifest(document: dict) -> None:
             for task in TASKS:
                 _validate_artifact_binding(tasks[product][task],
                                            f"tasks.{product}.{task}")
-    multiplier = len(products) if version == 4 else 1
+    elif version == 4:
+        _validate_provenance(document["provenance"])
+        tasks = document.get("tasks")
+        if (not isinstance(tasks, dict) or set(tasks) != set(TASKS)):
+            raise CampaignError("manifest task bindings are incomplete")
+        _validate_artifact_binding(document.get("prompt"), "prompt")
+        for task in TASKS:
+            _validate_artifact_binding(tasks[task], f"tasks.{task}")
+    multiplier = len(products) if products else 1
     if len(document["cells"]) != len(TASKS) * len(selected) * multiplier:
         raise CampaignError("manifest cell count does not match its treatment matrix")
-    if version == 4 and any(
+    if products and any(
         cell.get("cell_id")
         != f"{cell.get('product')}-{cell.get('task')}-{cell.get('treatment')}"
         for cell in document["cells"]
@@ -408,13 +411,13 @@ def verify_manifest(document: dict) -> None:
         raise CampaignError("cell identity does not match product task treatment")
     actual = {
         ((cell.get("product"), cell["task"], cell["treatment"])
-         if version == 4 else (cell["task"], cell["treatment"]))
+         if products else (cell["task"], cell["treatment"]))
         for cell in document["cells"]
     }
     expected = (
         {(product, task, treatment) for product in products
          for task in TASKS for treatment in selected}
-        if version == 4 else
+        if products else
         {(task, treatment) for task in TASKS for treatment in selected}
     )
     if actual != expected:
@@ -427,11 +430,24 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(
                 "every cell requires four rounds and the campaign request budget"
             )
-        if cell["skills"] != list(TREATMENT_SKILLS[cell["treatment"]]):
+        policies = TREATMENT_SKILLS if version == 4 else LEGACY_TREATMENT_SKILLS
+        if cell["skills"] != list(policies[cell["treatment"]]):
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
         if version == 4:
+            task_binding = (document["tasks"][cell["product"]][cell["task"]]
+                            if products else document["tasks"][cell["task"]])
+            prompt_contract = cell.get("prompt_contract")
+            if (cell.get("task_sha256") != task_binding["sha256"]
+                    or not isinstance(prompt_contract, dict)
+                    or prompt_contract.get("task_sha256") != task_binding["sha256"]
+                    or prompt_contract.get("invariant_sha256")
+                    != document["prompt"]["sha256"]):
+                raise CampaignError("cell task or prompt binding mismatch")
+            if cell.get("branch") != f"experiment/{document['run_id']}/{cell['cell_id']}":
+                raise CampaignError("cell branch identity mismatch")
+        if products:
             product = cell.get("product")
             expected_id = f"{product}-{cell['task']}-{cell['treatment']}"
             if cell["cell_id"] != expected_id:
@@ -442,20 +458,11 @@ def verify_manifest(document: dict) -> None:
             if (cell.get("baseline_sha256") != product_binding["baselines"][cell["task"]]
                     or cell.get("starter") != product_binding["starters"][cell["task"]]):
                 raise CampaignError("cell product provenance binding mismatch")
-            task_binding = document["tasks"][product][cell["task"]]
-            prompt_contract = cell.get("prompt_contract")
-            if (not isinstance(task_binding, dict)
-                    or set(task_binding) != {"path", "sha256"}
-                    or cell.get("task_sha256") != task_binding["sha256"]
-                    or not isinstance(prompt_contract, dict)
-                    or prompt_contract.get("task_sha256") != task_binding["sha256"]
-                    or prompt_contract.get("invariant_sha256")
-                    != document.get("prompt", {}).get("sha256")):
-                raise CampaignError("cell task or prompt binding mismatch")
-            if cell.get("branch") != f"experiment/{document['run_id']}/{cell['cell_id']}":
-                raise CampaignError("cell branch identity mismatch")
-    if version != 4:
-        _validate_provenance(document["provenance"], require_starters=version in {2, 3})
+    if version in {1, 2, 3}:
+        _validate_provenance(
+            document["provenance"], require_starters=version in {2, 3},
+            legacy_skills=True,
+        )
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -1029,7 +1036,7 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--request-budget", type=int, choices=(24, 48), default=48)
     generate.add_argument(
         "--treatment", action="append", choices=TREATMENTS,
-        help="repeat to select a schema-v3 treatment subset; defaults to all treatments",
+        help="repeat to select a schema-v4 treatment subset; defaults to all treatments",
     )
     generate.add_argument(
         "--product", action="append", choices=PRODUCTS,

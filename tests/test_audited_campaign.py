@@ -346,6 +346,22 @@ def test_scheduler_refills_each_free_slot_without_waiting_for_batch(tmp_path: Pa
     assert pool.calls >= 3
 
 
+def test_legacy_scheduler_never_dispatches_product_neutral_cells_to_a5(tmp_path: Path):
+    document = manifest(tmp_path)
+    pool = StaticPool([
+        {"target": "bz-a5", "device": 4, "healthy": True, "idle": True},
+        {"target": "bz-a3-1", "device": 7, "healthy": True, "idle": True},
+    ])
+    launcher = RecordingLauncher()
+
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json", pool, launcher,
+    )
+
+    assert ledger["status"] == "complete"
+    assert {slot["target"] for _cell, slot in launcher.calls} == {"bz-a3-1"}
+
+
 def test_resume_preserves_completed_and_retries_only_infrastructure_failure(
     tmp_path: Path,
 ):

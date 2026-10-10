@@ -38,6 +38,9 @@ legacy top-level runtime, baselines, and starters with this exact shape:
 Each starter retains the existing pinned `candidate` and `manifest` bindings.
 The remaining source, controller, model, and skills provenance is shared and
 immutable. Legacy schema-v1 through schema-v3 manifests remain valid.
+Schema-v4 prompt and per-product task bindings must each contain an absolute
+path and lowercase 64-hex SHA-256; matching malformed values across a cell and
+manifest do not satisfy verification.
 The CLI equivalent repeats `--product a3 --product a5` and supplies
 `--a3-matmul-task`, `--a3-gdn-task`, `--a3-bsa-task`, plus the corresponding
 three `--a5-...-task` arguments. Legacy generation continues to use the three
@@ -67,6 +70,9 @@ refills its slot without a wave barrier. Placement is recorded in the durable
 ledger, and a retained handle is observed only with its original compatible
 placement. Infrastructure attempts do not change the controller's four-round
 receipt contract and do not relaunch a retained handle.
+Product-neutral schema-v1 through schema-v3 cells remain A3-only: they accept
+legacy unidentified simulator slots and recognized A3 slots, but never a
+recognized A5 slot.
 
 The focused mixed-product runtime proof is:
 

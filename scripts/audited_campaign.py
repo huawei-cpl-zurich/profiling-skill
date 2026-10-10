@@ -77,6 +77,17 @@ def _require_hex(value: object, length: int, field: str) -> None:
         raise CampaignError(f"{field} must be hexadecimal") from error
 
 
+def _validate_artifact_binding(binding: object, label: str) -> None:
+    if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+        raise CampaignError(f"{label} artifact binding must pin path and sha256")
+    if not isinstance(binding["path"], str) or not Path(binding["path"]).is_absolute():
+        raise CampaignError(f"{label} artifact binding path must be absolute")
+    try:
+        _require_hex(binding["sha256"], 64, f"{label}.sha256")
+    except CampaignError as error:
+        raise CampaignError(f"{label} artifact binding sha256 is invalid") from error
+
+
 def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> None:
     if not isinstance(provenance, dict):
         raise CampaignError("provenance must be an object")
@@ -105,12 +116,7 @@ def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> 
         if not isinstance(starter, dict) or set(starter) != {"candidate", "manifest"}:
             raise CampaignError(f"starter.{task} must pin candidate and manifest")
         for kind in ("candidate", "manifest"):
-            binding = starter[kind]
-            path = Path(binding.get("path", "")) if isinstance(binding, dict) else Path("")
-            if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
-                    or not path.is_absolute()):
-                raise CampaignError(f"starter.{task}.{kind} must pin an absolute path")
-            _require_hex(binding.get("sha256"), 64, f"starter.{task}.{kind}.sha256")
+            _validate_artifact_binding(starter[kind], f"starter.{task}.{kind}")
     skills = provenance.get("skills")
     # Composite upstream bundles may pin their internal skills with one digest.
     accepted = {"cannbot", "ascend-profiling", "triton-guarded-kernel"}
@@ -165,15 +171,9 @@ def _validate_product_provenance(provenance: dict, products: tuple[str, ...]) ->
             if not isinstance(starter, dict) or set(starter) != {"candidate", "manifest"}:
                 raise CampaignError(f"product {product} starter.{task} is invalid")
             for kind in ("candidate", "manifest"):
-                item = starter[kind]
-                path = Path(item.get("path", "")) if isinstance(item, dict) else Path("")
-                if (not isinstance(item, dict) or set(item) != {"path", "sha256"}
-                        or not path.is_absolute()):
-                    raise CampaignError(
-                        f"product {product} starter.{task}.{kind} must be pinned"
-                    )
-                _require_hex(item["sha256"], 64,
-                             f"products.{product}.starters.{task}.{kind}.sha256")
+                _validate_artifact_binding(
+                    starter[kind], f"product {product} starter.{task}.{kind}"
+                )
 
 
 def _balanced_order(
@@ -392,6 +392,11 @@ def verify_manifest(document: dict) -> None:
                        or set(tasks[product]) != set(TASKS)
                        for product in products)):
             raise CampaignError("manifest product task bindings are incomplete")
+        _validate_artifact_binding(document.get("prompt"), "prompt")
+        for product in products:
+            for task in TASKS:
+                _validate_artifact_binding(tasks[product][task],
+                                           f"tasks.{product}.{task}")
     multiplier = len(products) if version == 4 else 1
     if len(document["cells"]) != len(TASKS) * len(selected) * multiplier:
         raise CampaignError("manifest cell count does not match its treatment matrix")
@@ -545,7 +550,7 @@ def _admitted_slots(pool: ResourcePool) -> list[dict]:
 def _slot_compatible(cell: dict, slot: dict) -> bool:
     product = cell.get("product")
     if product is None:
-        return True
+        return slot.get("product") in {None, "a3"}
     return (slot.get("product") == product
             and slot.get("runtime") == cell.get("runtime"))
 

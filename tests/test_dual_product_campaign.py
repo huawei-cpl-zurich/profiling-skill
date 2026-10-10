@@ -188,6 +188,36 @@ def test_dual_product_manifest_rejects_cross_product_task_binding(tmp_path: Path
         campaign.verify_manifest(document)
 
 
+@pytest.mark.parametrize("artifact,malformation", [
+    ("prompt", "relative-path"),
+    ("prompt", "invalid-sha"),
+    ("task", "relative-path"),
+    ("task", "invalid-sha"),
+])
+def test_schema_v4_rejects_malformed_artifact_bindings(
+    tmp_path: Path, artifact: str, malformation: str,
+):
+    document = _manifest(tmp_path)
+    binding = (document["prompt"] if artifact == "prompt"
+               else document["tasks"]["a3"]["matmul"])
+    if malformation == "relative-path":
+        binding["path"] = "relative/input.md"
+    else:
+        binding["sha256"] = "not-a-sha256"
+        if artifact == "prompt":
+            for cell in document["cells"]:
+                cell["prompt_contract"]["invariant_sha256"] = "not-a-sha256"
+        else:
+            for cell in document["cells"]:
+                if cell["product"] == "a3" and cell["task"] == "matmul":
+                    cell["task_sha256"] = "not-a-sha256"
+                    cell["prompt_contract"]["task_sha256"] = "not-a-sha256"
+    document["manifest_sha256"] = campaign._document_digest(document)
+
+    with pytest.raises(campaign.CampaignError, match="artifact binding"):
+        campaign.verify_manifest(document)
+
+
 class Pool:
     def __init__(self, slots):
         self.slots = slots

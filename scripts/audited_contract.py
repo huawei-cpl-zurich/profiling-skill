@@ -501,7 +501,13 @@ def validate_remeasure_transition(receipt: object, pending_receipt: object,
         "post_control_handle": transition.get("post_control_handle"),
         "operation_history_sha256": sha256_json(history),
     }
-    if transition != expected or current["handle"] == previous["handle"]:
+    prior_handles = {
+        record.get("handle") for record in prior_history
+        if isinstance(record.get("handle"), str) and record["handle"]
+    }
+    if (transition != expected or current["handle"] in prior_handles
+            or expected["post_control_handle"] in prior_handles
+            or expected["post_control_handle"] == current["handle"]):
         raise AuditError("controller remeasure transition proof is invalid")
     prefix = f"experiment-{experiment}-measurement-{generation}-"
     profile_records = [record for record in suffix if (
@@ -574,6 +580,7 @@ def validate_remeasure_redirect(receipt: object, requested_handle: str,
                 sha256_json(proof["operation_history"])):
         raise AuditError("controller remeasure redirect proof is invalid")
     history = proof["operation_history"]
+    prior_history = None
     if pending_receipt is not None:
         try:
             previous = validate_controller_receipt(
@@ -599,6 +606,22 @@ def validate_remeasure_redirect(receipt: object, requested_handle: str,
         raise AuditError("controller remeasure redirect proof is invalid")
     prefix = (f"experiment-{experiment}-measurement-"
               f"{proof['to_measurement_generation']}-")
+    if prior_history is None:
+        generation_indexes = [index for index, record in enumerate(history) if (
+            isinstance(record, dict)
+            and isinstance(record.get("attempt_id"), str)
+            and record["attempt_id"].startswith(prefix)
+        )]
+        if not generation_indexes:
+            raise AuditError("controller remeasure redirect proof is invalid")
+        prior_history = history[:generation_indexes[0]]
+    prior_handles = {
+        record.get("handle") for record in prior_history
+        if isinstance(record, dict) and isinstance(record.get("handle"), str)
+        and record["handle"]
+    }
+    if replacement in prior_handles:
+        raise AuditError("controller remeasure redirect proof is invalid")
     if proof["replacement_terminal"]:
         matches = [record for record in history if (
             isinstance(record, dict) and record.get("action") == "profile"

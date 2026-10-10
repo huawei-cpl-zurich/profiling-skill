@@ -639,6 +639,40 @@ def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path:
             contract.validate_remeasure_transition(
                 tampered, pending, candidate_hash, manifest_hash, 1,
             )
+    prior_handles = [
+        record["handle"] for record in pending["policy"]["operation_history"]
+        if record["action"] == "profile" and record["handle"] != pending["handle"]
+    ]
+    assert prior_handles
+    for field, fresh in (
+        ("profile_handle", receipt["handle"]),
+        ("post_control_handle", receipt["remeasure_transition"]["post_control_handle"]),
+    ):
+        stale = prior_handles[0]
+        replayed = json.loads(json.dumps(receipt))
+        replayed["remeasure_transition"][field] = stale
+        if field == "profile_handle":
+            replayed["handle"] = stale
+            selected = replayed["policy"][replayed["policy"]["accepted_timing"]]
+            selected["handle"] = stale
+            action = "profile"
+        else:
+            replayed["calibration"]["after"]["handle"] = stale
+            action = "calibrate"
+        for record in replayed["policy"]["operation_history"]:
+            if record["action"] == action and record["handle"] == fresh:
+                record["handle"] = stale
+        for name in ("submitted_handles", "observed_handles"):
+            replayed["policy"][name] = list(dict.fromkeys(
+                stale if value == fresh else value
+                for value in replayed["policy"][name]
+            ))
+        replayed["remeasure_transition"]["operation_history_sha256"] = \
+            contract.sha256_json(replayed["policy"]["operation_history"])
+        with pytest.raises(contract.AuditError, match="remeasure transition"):
+            contract.validate_remeasure_transition(
+                replayed, pending, candidate_hash, manifest_hash, 1,
+            )
     unrelated_pending = json.loads(json.dumps(pending))
     unrelated_pending["candidate_sha256"] = "0" * 64
     with pytest.raises(contract.AuditError, match="remeasure transition"):

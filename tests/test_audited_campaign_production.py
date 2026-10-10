@@ -62,6 +62,16 @@ def isolated_global_remote(tmp_path: Path, monkeypatch):
     remote.chmod(0o755)
     remote.with_name("cpl_remote.py").write_text("# pinned implementation\n")
     monkeypatch.setattr(Path, "home", lambda: home)
+    trusted = {}
+    for source, revision in (
+        ("profiler-new", production.NEW_PROFILER_REVISION),
+        ("profiler-old", production.OLD_PROFILER_REVISION),
+    ):
+        tree = tmp_path / "trusted" / source
+        tree.mkdir(parents=True)
+        (tree / "SKILL.md").write_text(source)
+        trusted[revision] = production.digest_tree(tree)
+    monkeypatch.setattr(production, "PROFILER_TREE_SHA256", trusted)
 
 
 def sha(path: Path) -> str:
@@ -280,6 +290,18 @@ def test_materialization_rejects_swapped_revision_and_cross_treatment_skill(
     (workspace / ".agents/skills/ops-profiling").mkdir()
     with pytest.raises(production.ProductionError, match="exact allowlist"):
         production.validate_materialized_treatment(workspace, cell["treatment"], sources)
+
+
+def test_profiler_revisions_cannot_authenticate_identical_exported_trees(tmp_path: Path):
+    config = runtime_fixture(tmp_path, {"task": "matmul", "treatment": "cannbot-all"})
+    sources = config["skill_sources"]
+    old = Path(sources["profiler-old"]["path"])
+    new = Path(sources["profiler-new"]["path"])
+    (old / "SKILL.md").write_bytes((new / "SKILL.md").read_bytes())
+    sources["profiler-old"]["sha256"] = production.digest_tree(old)
+
+    with pytest.raises(production.ProductionError, match="old profiler tree"):
+        production.validate_skill_freezes(sources)
 
 
 def test_production_runtime_uses_four_treatment_v3_schema(tmp_path: Path):

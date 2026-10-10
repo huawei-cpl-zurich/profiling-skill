@@ -55,6 +55,8 @@ None discovered.
 | T1 | Exact treatment/source matrix | No profile ambiguity | focused suite |
 | T2 | Freeze revision failures | Old/new commits cannot be swapped | focused suite |
 | T3 | Materialized allowlist and drift | No global/cross-treatment skill visibility | focused suite |
+| T4 | Commit-to-tree identity | Old/new revision labels cannot authenticate identical exports | focused suite |
+| T5 | Schema-specific provenance | Schema 4 cannot accept the legacy three-source provenance set | focused suite |
 
 ## PR Review Assessment
 
@@ -70,8 +72,8 @@ None discovered.
 
 | Command | Result | Notes |
 | --- | --- | --- |
-| `PYTHONPATH=. pytest -q` | PASS, 1279 | Full local suite |
-| BZ-A3 retained job `remote:bz-a3-1:job:20261010T141958Z-52d8cf42b953` | PASS, 206 | `py311-torch`; campaign, production, canary, migration suites |
+| `PYTHONPATH=. pytest -q` | PASS, 1281 | Full local suite after review fixes |
+| BZ-A3 retained job `remote:bz-a3-1:job:20261010T142959Z-4c4f23371281` | PASS, 208 | `py311-torch`; campaign, production, canary, migration suites after review fixes |
 
 ## Residual Risks
 

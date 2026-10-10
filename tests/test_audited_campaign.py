@@ -112,6 +112,17 @@ def test_new_manifest_defaults_to_repair_aware_operation_budget(tmp_path: Path):
     audited_campaign.verify_manifest(document)
 
 
+def test_v4_manifest_rejects_legacy_skill_provenance(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path)
+    provenance["skills"] = {
+        "cannbot": "e" * 64,
+        "ascend-profiling": "f" * 64,
+        "triton-guarded-kernel": "1" * 64,
+    }
+    with pytest.raises(audited_campaign.CampaignError, match="skill freezes"):
+        audited_campaign.build_manifest("legacy-skills", prompt, tasks, provenance, "seed")
+
+
 def test_manifest_supports_deterministic_profile_skill_subset(tmp_path: Path):
     prompt, tasks, provenance = inputs(tmp_path)
     selected = ("cannbot-new-profiler", "guarded-new-profiler")
@@ -818,6 +829,11 @@ def test_legacy_v1_manifest_without_starters_still_verifies_and_reports(tmp_path
         ])
     document["dimensions"]["treatments"] = list(audited_campaign.LEGACY_TREATMENTS)
     document["order"] = [cell["cell_id"] for cell in document["cells"]]
+    document["provenance"]["skills"] = {
+        "cannbot": "e" * 64,
+        "ascend-profiling": "f" * 64,
+        "triton-guarded-kernel": "1" * 64,
+    }
     document["schema_version"] = 1
     del document["provenance"]["starters"]
     document["manifest_sha256"] = audited_campaign._document_digest(document)

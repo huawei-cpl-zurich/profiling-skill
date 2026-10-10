@@ -84,7 +84,8 @@ def _require_hex(value: object, length: int, field: str) -> None:
         raise CampaignError(f"{field} must be hexadecimal") from error
 
 
-def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> None:
+def _validate_provenance(provenance: dict, *, require_starters: bool = True,
+                         legacy_skills: bool = False) -> None:
     if not isinstance(provenance, dict):
         raise CampaignError("provenance must be an object")
     _require_hex(provenance.get("source_revision"), 40, "source_revision")
@@ -120,12 +121,10 @@ def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> 
             _require_hex(binding.get("sha256"), 64, f"starter.{task}.{kind}.sha256")
     skills = provenance.get("skills")
     # Composite upstream bundles may pin their internal skills with one digest.
-    accepted = (
-        {"cannbot", "profiler-new", "profiler-old", "guarded"},
-        {"cannbot", "ascend-profiling", "triton-guarded-kernel"},
-    )
-    if (not isinstance(skills, dict)
-            or not any(required.issubset(skills) for required in accepted)):
+    required_skills = ({"cannbot", "ascend-profiling", "triton-guarded-kernel"}
+                       if legacy_skills else
+                       {"cannbot", "profiler-new", "profiler-old", "guarded"})
+    if not isinstance(skills, dict) or set(skills) != required_skills:
         raise CampaignError("all treatment skill freezes must be pinned")
     for name, digest in skills.items():
         _require_hex(digest, 64, f"skills.{name}")
@@ -264,7 +263,10 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
-    _validate_provenance(document["provenance"], require_starters=version in {2, 3, 4})
+    _validate_provenance(
+        document["provenance"], require_starters=version in {2, 3, 4},
+        legacy_skills=version in {1, 2, 3},
+    )
 
 
 def _atomic_json(path: Path, document: dict) -> None:

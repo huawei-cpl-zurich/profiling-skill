@@ -37,6 +37,10 @@ ALL_CASES = {"matmul": list(range(10)), "gdn": list(range(50)),
              "bsa": list(range(50))}
 OLD_PROFILER_REVISION = "d6cc328144df17d09979c1d154366f52a55f5454"
 NEW_PROFILER_REVISION = "1b9ae02303b3838f683c37a9a2fe15ce740ca56e"
+PROFILER_TREE_SHA256 = {
+    OLD_PROFILER_REVISION: "4bfba796dadcc65cc50ea30782367089685159f1ea4b58e34130135278f704bb",
+    NEW_PROFILER_REVISION: "220ff700e9f80dbaa97b4eb0845628f77af2977ff18dc79310d7ed4f5e7daf02",
+}
 CANNBOT_CODING_SKILLS = (
     "triton-task-extractor", "triton-op-designer", "triton-op-coding",
     "triton-op-verifier", "triton-latency-optimizer",
@@ -134,12 +138,14 @@ def validate_skill_freezes(sources: dict) -> dict:
         if not (Path(cannbot["path"]) / "skills" / name).is_dir():
             raise ProductionError(f"CANNBot freeze is missing skill: {name}")
     expected = {
-        "profiler-new": (NEW_PROFILER_REVISION, "new profiler revision"),
-        "profiler-old": (OLD_PROFILER_REVISION, "old profiler revision"),
+        "profiler-new": (NEW_PROFILER_REVISION, "new profiler"),
+        "profiler-old": (OLD_PROFILER_REVISION, "old profiler"),
     }
     for source, (pinned, label) in expected.items():
         if sources[source].get("revision") != pinned:
-            raise ProductionError(f"{label} does not match the campaign pin")
+            raise ProductionError(f"{label} revision does not match the campaign pin")
+        if sources[source]["sha256"] != PROFILER_TREE_SHA256[pinned]:
+            raise ProductionError(f"{label} tree does not match its pinned revision")
     return {
         "cannbot_revision": revision,
         "cannbot_sha256": cannbot["sha256"],

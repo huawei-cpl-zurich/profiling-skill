@@ -34,6 +34,7 @@ try:
     import audited_runtime
     import audited_campaign as runtime_campaign
     import audited_lifecycle
+    import audited_repair_canaries as repair_canaries
     import fully_fused_campaign_execution as campaign_execution
 finally:
     sys.path.pop(0)
@@ -1608,6 +1609,98 @@ def test_dual_product_launch_requires_and_authenticates_campaign_admission(tmp_p
     )
     assert rebuilt["provenance"] == config["provenance"]
     assert rebuilt["manifest_sha256"] == config["manifest_sha256"]
+
+
+def test_dual_product_canary_cell_crosses_real_production_admission(tmp_path: Path):
+    cell = {
+        "cell_id": "matmul-cannbot-all-repair", "product": "a3",
+        "runtime": "py311-torch", "task": "matmul", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 48,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    definition = tmp_path / "canaries.json"
+    definition.write_bytes((ROOT / "experiments/audited-repair-canaries.json").read_bytes())
+    runner = repair_canaries.CanaryRunner(
+        config, definition, sha(definition), tmp_path / "canary-run",
+        SimpleNamespace(admit=lambda: []),
+    )
+    canary_cell = runner._cell(runner.definition["canaries"][0])
+    launcher = production_launcher(
+        runner.config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None,
+            docker_image_id=config["products"]["a3"]["runtime_image_digest"],
+        ),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+
+    receipt = launcher.launch(
+        canary_cell, {"product": "a3", "runtime": "py311-torch",
+                      "target": "bz-a3-1", "device": 0},
+    )
+
+    assert receipt["status"] == "complete"
+    assert runner.config["run_id"] == config["run_id"]
+
+
+def test_admission_receipts_are_revalidated_once_per_cell_and_drift_blocks_dispatch(
+    tmp_path: Path, monkeypatch,
+):
+    first = {
+        "cell_id": "a3-matmul-cannbot-all", "product": "a3",
+        "runtime": "py311-torch", "task": "matmul", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, first))
+    second = {**first, "cell_id": "a3-matmul-cannbot-new-profiler",
+              "treatment": "cannbot-new-profiler",
+              "skills": list(production.TREATMENT_SKILLS["cannbot-new-profiler"])}
+    third = {**first, "cell_id": "a3-matmul-guarded-new-profiler",
+             "treatment": "guarded-new-profiler",
+             "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"])}
+    archive_validations = 0
+    original = production.verify_archive_seal
+
+    def counted(document):
+        nonlocal archive_validations
+        archive_validations += 1
+        return original(document)
+
+    monkeypatch.setattr(production, "verify_archive_seal", counted)
+    dispatches = []
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: (
+            dispatches.append(repo),
+            SimpleNamespace(scrub_auth=lambda: None,
+                            docker_image_id=config["products"]["a3"]["runtime_image_digest"]),
+        )[1],
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+    assert launcher.launch(
+        first, {"product": "a3", "runtime": "py311-torch",
+                "target": "bz-a3-1", "device": 0},
+    )["status"] == "complete"
+    assert archive_validations == 1
+    assert launcher.launch(
+        second, {"product": "a3", "runtime": "py311-torch",
+                 "target": "bz-a3-1", "device": 1},
+    )["status"] == "complete"
+    assert archive_validations == 2
+    gate_path = Path(config["campaign_admission"]["gates"]["path"])
+    gate_path.write_text(gate_path.read_text() + "\n")
+
+    with pytest.raises(production.ProductionError, match="campaign.*receipt"):
+        launcher.launch(
+            third, {"product": "a3", "runtime": "py311-torch",
+                    "target": "bz-a3-1", "device": 2},
+        )
+    assert len(dispatches) == 2
+    assert archive_validations == 2
 
 
 @pytest.mark.parametrize("mutation", ["manifest", "identity", "prepared-chain"])

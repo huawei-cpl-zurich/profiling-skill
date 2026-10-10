@@ -382,6 +382,11 @@ four treatments before the measured campaign. Together they must demonstrate
 an in-round compile/smoke repair, exact checkpoint/session resume, independent
 offline verification, and a positive `msprof op` timing. Dynamic admission
 chooses the physical BZ-A3 devices; canary definitions never encode devices.
+For a dual-product runtime, all repair canaries are explicit A3 cells and bind
+the A3 matmul task/runtime while preserving the authenticated campaign run ID.
+The runner authenticates one fresh inventory snapshot and reuses its eligible
+A3 placements across the four sequential canaries, so a short inventory TTL
+cannot invalidate later canaries in the same preflight run.
 
 Freeze runtime scripts and benchmark assets from the reviewed merge commit,
 pin the unchanged prompt, tasks, starters, baselines, treatment skills, model,

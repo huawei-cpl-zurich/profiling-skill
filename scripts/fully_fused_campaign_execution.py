@@ -342,6 +342,15 @@ def campaign_admission_identity(archive: object, prepared: object,
         gates, prepared_receipt["ranked_cases"],
         prepared_sha256=prepared_receipt["prepared_sha256"],
     )
+    return validated_campaign_admission_identity(
+        archive_result, prepared_receipt, gate_receipt,
+    )
+
+
+def validated_campaign_admission_identity(archive_result: dict,
+                                           prepared_receipt: dict,
+                                           gate_receipt: dict) -> dict:
+    """Derive identity from receipts already validated in the same operation."""
     if prepared_receipt["archive_attestation"] != archive_result["seal_sha256"]:
         raise ExecutionError("prepared campaign is not bound to the archive seal")
     return {

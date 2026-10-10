@@ -27,8 +27,8 @@ try:
     )
     from fully_fused_campaign_execution import (
         ExecutionError as CampaignExecutionError,
-        campaign_admission_identity, verify_archive_seal, verify_gate_receipt,
-        verify_prepared_receipt,
+        validated_campaign_admission_identity, verify_archive_seal,
+        verify_gate_receipt, verify_prepared_receipt,
     )
 finally:
     sys.path.pop(0)
@@ -940,12 +940,14 @@ class ProductionCellLauncher:
                 "campaign gate receipt",
             )
             archive_result = verify_archive_seal(archive)
-            verify_prepared_receipt(prepared)
-            verify_gate_receipt(
+            prepared = verify_prepared_receipt(prepared)
+            gates = verify_gate_receipt(
                 gates, prepared["ranked_cases"],
                 prepared_sha256=prepared["prepared_sha256"],
             )
-            expected = campaign_admission_identity(archive, prepared, gates)
+            expected = validated_campaign_admission_identity(
+                archive_result, prepared, gates,
+            )
         except (KeyError, TypeError, CampaignExecutionError) as error:
             raise ProductionError(f"campaign admission is invalid: {error}") from error
         if (prepared.get("run_id") != self.config.get("run_id")
@@ -1413,7 +1415,7 @@ class ProductionCellLauncher:
             raise ProductionError(
                 "production cells require four rounds and a 24 or 48-operation budget"
             )
-        if self.config.get("products") is not None and self._campaign_admission is None:
+        if self.config.get("products") is not None:
             self._campaign_admission = self._validate_campaign_admission()
         product = cell.get("product", "a3")
         task_binding = self._tasks(product).get(cell.get("task"), {})

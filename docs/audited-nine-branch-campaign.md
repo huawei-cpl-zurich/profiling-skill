@@ -159,6 +159,77 @@ manifest provenance object exactly, and every pin is checked against the
 source revision, complete controller closure, baseline files, composite
 CANNBot skill bundle, project skill trees, model, and resolved Docker image.
 
+The runtime-v3 `skill_sources` object has exactly four keys. Use absolute paths
+to immutable, locally exported directories on the operator host; the launcher
+copies from these paths before starting an agent, so relative paths would bind
+the configuration to the caller's working directory. This is the complete
+minimal shape (replace the local freeze root, CANNBot commit, and the CANNBot
+and guarded tree-digest placeholders):
+
+```json
+{
+  "skill_sources": {
+    "cannbot": {
+      "path": "/absolute/frozen/cannbot",
+      "sha256": "<digest_tree of /absolute/frozen/cannbot>",
+      "revision": "<40-character lowercase CANNBot commit>"
+    },
+    "profiler-new": {
+      "path": "/absolute/frozen/profiler-new",
+      "sha256": "220ff700e9f80dbaa97b4eb0845628f77af2977ff18dc79310d7ed4f5e7daf02",
+      "revision": "1b9ae02303b3838f683c37a9a2fe15ce740ca56e"
+    },
+    "profiler-old": {
+      "path": "/absolute/frozen/profiler-old",
+      "sha256": "4bfba796dadcc65cc50ea30782367089685159f1ea4b58e34130135278f704bb",
+      "revision": "d6cc328144df17d09979c1d154366f52a55f5454"
+    },
+    "guarded": {
+      "path": "/absolute/frozen/triton-guarded-kernel",
+      "sha256": "<digest_tree of /absolute/frozen/triton-guarded-kernel>"
+    }
+  }
+}
+```
+
+`cannbot` is one frozen tree shared by both CANNBot treatments. Its root must
+contain a `COMMIT` file whose only value is the same revision and a `skills/`
+directory containing `triton-task-extractor`, `triton-op-designer`,
+`triton-op-coding`, `triton-op-verifier`, `triton-latency-optimizer`,
+`triton-simulator-optimizer`, `npu-arch`, and `ops-profiling`. Each profiler
+path is the repository tree exported from its exact pinned commit, with
+`SKILL.md` at its root. The guarded path is the root of the frozen
+`triton-guarded-kernel` skill and has no revision field in runtime v3. Trees
+must contain only ordinary directories and regular files: symlinks and special
+entries fail validation. Bytecode caches are ignored by the digest and should
+not be included in a freeze.
+
+Export the two profiler commits from a trusted local clone, without embedding
+the clone path or credentials in the runtime JSON:
+
+```bash
+mkdir -p "$FREEZE_ROOT/profiler-old" "$FREEZE_ROOT/profiler-new"
+git -C "$PROFILING_REPO" archive d6cc328144df17d09979c1d154366f52a55f5454 \
+  | tar -x -C "$FREEZE_ROOT/profiler-old"
+git -C "$PROFILING_REPO" archive 1b9ae02303b3838f683c37a9a2fe15ce740ca56e \
+  | tar -x -C "$FREEZE_ROOT/profiler-new"
+
+PYTHONPATH=scripts python -c \
+  'from pathlib import Path; from audited_campaign_production import digest_tree; import sys; print(digest_tree(Path(sys.argv[1])))' \
+  "$FREEZE_ROOT/profiler-old"
+PYTHONPATH=scripts python -c \
+  'from pathlib import Path; from audited_campaign_production import digest_tree; import sys; print(digest_tree(Path(sys.argv[1])))' \
+  "$FREEZE_ROOT/profiler-new"
+```
+
+The commands must print the old and new digests shown in the JSON above.
+Compute the CANNBot and guarded digests through the same `digest_tree`
+interface. `provenance.skills` must repeat these four resulting digests under
+the same exact keys. Production re-hashes every tree, checks the profiler
+digests against their trusted commits, checks CANNBot's `COMMIT` and required
+directories, then copies only the treatment allowlist into the isolated agent
+workspace. No credentials or source repository locations enter that workspace.
+
 `starter_sources` and `provenance.starters` must be identical maps covering
 `matmul`, `gdn`, and `bsa`. Each task maps `candidate` and `manifest` to an
 absolute frozen `path` and its 64-character `sha256`, for example:

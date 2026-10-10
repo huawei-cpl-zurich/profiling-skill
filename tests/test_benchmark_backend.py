@@ -112,7 +112,8 @@ def request(benchmark="gdn", action="profile", **extra):
 
 
 def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
-                fully_fused=False, log: Path | None = None, allow_legacy=True):
+                fully_fused=False, log: Path | None = None, allow_legacy=True,
+                product="a3"):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
     manifest = {"schema": "profiling-skill/candidate-kernel/v1",
@@ -128,6 +129,7 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
     candidate.with_suffix(".manifest.json").write_text(json.dumps(manifest))
     client = fake_client(tmp_path)
     argv = [sys.executable, str(BACKEND), "--benchmark", benchmark,
+            "--product", product,
             "--candidate", str(candidate), "--job-client-json",
             json.dumps([str(client), "--profile", "gz-a3"])]
     if allow_legacy and not fully_fused:
@@ -447,6 +449,71 @@ def test_adapter_rejects_controller_drift(tmp_path: Path, change: dict, message:
     result = json.loads(run_backend(tmp_path, payload).stdout)
     assert result["status"] == "infrastructure_error"
     assert message in result["diagnostics"]
+
+
+@pytest.mark.parametrize(("benchmark", "cases"), [
+    ("matmul", [7, 8, 9]),
+    ("gdn", [40, 49, 47, 46, 45]),
+    ("bsa", [47, 46, 44, 49, 43]),
+])
+@pytest.mark.parametrize("action", ["profile", "check"])
+def test_a5_accepts_authenticated_product_ranked_development_requests(
+        tmp_path: Path, benchmark: str, cases: list[int], action: str):
+    payload = request(benchmark, action=action)
+    payload.update(cases=cases, scope="development", round=1)
+    if action == "profile":
+        payload["repeats"] = 3
+    result = json.loads(run_backend(
+        tmp_path, payload, benchmark=benchmark, mode="echo", product="a5",
+    ).stdout)
+    assert result["status"] == "ok"
+    assert result["job"]["product"] == "a5"
+    assert result["job"]["runtime"] == "cann91"
+    assert result["job"]["cases"] == cases
+
+
+@pytest.mark.parametrize(("benchmark", "cases"), [
+    ("matmul", [9, 8]),
+    ("matmul", [9, 8, 8]),
+    ("matmul", [9, 8, 10]),
+    ("gdn", [40, 49, 47, 46]),
+    ("gdn", [40, 49, 47, 46, 50]),
+    ("bsa", [47, 46, 44, 49, 49]),
+])
+@pytest.mark.parametrize("action", ["profile", "check"])
+def test_ranked_development_requests_reject_invalid_case_sets(
+        tmp_path: Path, benchmark: str, cases: list[int], action: str):
+    payload = request(benchmark, action=action)
+    payload.update(cases=cases, scope="development", round=1)
+    if action == "profile":
+        payload["repeats"] = 3
+    result = json.loads(run_backend(
+        tmp_path, payload, benchmark=benchmark, mode="echo", product="a5",
+    ).stdout)
+    assert result["status"] == "infrastructure_error"
+    assert "development cases" in result["diagnostics"]
+
+
+def test_full_check_still_requires_the_exact_ordered_domain(tmp_path: Path):
+    for cases in ([9, 8, 0], list(reversed(range(10))), list(range(9))):
+        payload = request("matmul", action="check", cases=cases, scope="full")
+        result = json.loads(run_backend(
+            tmp_path, payload, benchmark="matmul", mode="echo", product="a5",
+        ).stdout)
+        assert result["status"] == "infrastructure_error"
+        assert "full check cases" in result["diagnostics"]
+
+
+def test_a3_configured_rankings_remain_accepted(tmp_path: Path):
+    for benchmark in ("matmul", "gdn", "bsa"):
+        payload = request(benchmark, action="profile")
+        result = json.loads(run_backend(
+            tmp_path, payload, benchmark=benchmark, mode="echo", product="a3",
+        ).stdout)
+        assert result["status"] == "ok"
+        assert result["job"]["cases"] == load_backend().BENCHMARKS[benchmark][
+            "development_cases"
+        ]
 
 
 def test_full_check_requires_ordered_all_fifty_and_forwards_it(tmp_path: Path):

@@ -88,6 +88,16 @@ def response(status: str, diagnostics: str, **values: Any) -> dict[str, Any]:
     return {"status": status, "diagnostics": diagnostics, **values}
 
 
+def _valid_development_cases(cases: object, spec: dict[str, Any]) -> bool:
+    """Accept a controller-ranked development sequence, not an arbitrary set."""
+    return (
+        isinstance(cases, list)
+        and len(cases) == len(spec["development_cases"])
+        and all(type(case) is int and case in spec["all_cases"] for case in cases)
+        and len(cases) == len(set(cases))
+    )
+
+
 def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     spec = BENCHMARKS[benchmark]
     if not isinstance(raw, dict):
@@ -113,8 +123,11 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
             )
         return raw, None
     if action == "profile":
-        if raw.get("cases") != spec["development_cases"]:
-            return None, response("infrastructure_error", "profile cases are not the exact configured sequence")
+        if not _valid_development_cases(raw.get("cases"), spec):
+            return None, response(
+                "infrastructure_error",
+                "profile cases must be valid development cases: unique, in-domain, and the configured length",
+            )
         repeats = raw.get("repeats")
         if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
             return None, response("infrastructure_error", "profile repeats must be a positive integer")
@@ -131,9 +144,22 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         if raw.get("phase") not in {"warmup", "sample"}:
             return None, response("infrastructure_error", "measure phase must be warmup or sample")
     else:
-        expected = spec["all_cases"] if raw.get("scope") == "full" else spec["development_cases"]
-        if raw.get("cases") != expected:
-            return None, response("infrastructure_error", "check cases are not the exact configured sequence")
+        scope = raw.get("scope")
+        if scope == "full":
+            if raw.get("cases") != spec["all_cases"]:
+                return None, response(
+                    "infrastructure_error", "full check cases must be the exact configured domain",
+                )
+        elif scope == "development":
+            if not _valid_development_cases(raw.get("cases"), spec):
+                return None, response(
+                    "infrastructure_error",
+                    "check development cases must be unique, in-domain, and the configured length",
+                )
+        else:
+            return None, response(
+                "infrastructure_error", "check scope must be development or full",
+            )
     return raw, None
 
 

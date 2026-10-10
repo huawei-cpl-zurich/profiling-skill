@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build, schedule, resume, and report an audited nine-branch campaign."""
+"""Build, schedule, resume, and report an audited treatment campaign."""
 
 from __future__ import annotations
 
@@ -18,22 +18,35 @@ from typing import Protocol
 
 
 TASKS = ("matmul", "gdn", "bsa")
-TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+TREATMENTS = (
+    "cannbot-all", "cannbot-new-profiler",
+    "guarded-new-profiler", "guarded-old-profiler",
+)
+LEGACY_TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+PRODUCTS = ("a3", "a5")
+PRODUCT_RUNTIMES = {"a3": "py311-torch", "a5": "cann91"}
+PRODUCT_TARGETS = {"a3": ("bz-a3-1", "bz-a3-2"), "a5": ("bz-a5",)}
 LEGACY_REQUEST_BUDGET = 24
 REPAIR_REQUEST_BUDGET = 48
 SUPPORTED_REQUEST_BUDGETS = {LEGACY_REQUEST_BUDGET, REPAIR_REQUEST_BUDGET}
 TREATMENT_SKILLS = {
-    "cannbot": (
+    "cannbot-all": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
         "triton-op-verifier", "triton-latency-optimizer",
         "triton-simulator-optimizer", "npu-arch", "ops-profiling",
     ),
-    "project-cannbot": (
+    "cannbot-new-profiler": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
         "triton-op-verifier", "triton-latency-optimizer",
         "triton-simulator-optimizer", "npu-arch", "ascend-profiling",
     ),
-    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
+    "guarded-new-profiler": ("ascend-profiling", "triton-guarded-kernel"),
+    "guarded-old-profiler": ("ascend-profiling", "triton-guarded-kernel"),
+}
+LEGACY_TREATMENT_SKILLS = {
+    "cannbot": TREATMENT_SKILLS["cannbot-all"],
+    "project-cannbot": TREATMENT_SKILLS["cannbot-new-profiler"],
+    "project-guarded": TREATMENT_SKILLS["guarded-new-profiler"],
 }
 
 
@@ -74,7 +87,19 @@ def _require_hex(value: object, length: int, field: str) -> None:
         raise CampaignError(f"{field} must be hexadecimal") from error
 
 
-def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> None:
+def _validate_artifact_binding(binding: object, label: str) -> None:
+    if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+        raise CampaignError(f"{label} artifact binding must pin path and sha256")
+    if not isinstance(binding["path"], str) or not Path(binding["path"]).is_absolute():
+        raise CampaignError(f"{label} artifact binding path must be absolute")
+    try:
+        _require_hex(binding["sha256"], 64, f"{label}.sha256")
+    except CampaignError as error:
+        raise CampaignError(f"{label} artifact binding sha256 is invalid") from error
+
+
+def _validate_provenance(provenance: dict, *, require_starters: bool = True,
+                         legacy_skills: bool = False) -> None:
     if not isinstance(provenance, dict):
         raise CampaignError("provenance must be an object")
     _require_hex(provenance.get("source_revision"), 40, "source_revision")
@@ -102,19 +127,66 @@ def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> 
         if not isinstance(starter, dict) or set(starter) != {"candidate", "manifest"}:
             raise CampaignError(f"starter.{task} must pin candidate and manifest")
         for kind in ("candidate", "manifest"):
-            binding = starter[kind]
-            path = Path(binding.get("path", "")) if isinstance(binding, dict) else Path("")
-            if (not isinstance(binding, dict) or set(binding) != {"path", "sha256"}
-                    or not path.is_absolute()):
-                raise CampaignError(f"starter.{task}.{kind} must pin an absolute path")
-            _require_hex(binding.get("sha256"), 64, f"starter.{task}.{kind}.sha256")
+            _validate_artifact_binding(starter[kind], f"starter.{task}.{kind}")
     skills = provenance.get("skills")
     # Composite upstream bundles may pin their internal skills with one digest.
-    accepted = {"cannbot", "ascend-profiling", "triton-guarded-kernel"}
-    if not isinstance(skills, dict) or not accepted.issubset(skills):
-        raise CampaignError("cannbot and project skill bundles must be pinned")
+    required_skills = ({"cannbot", "ascend-profiling", "triton-guarded-kernel"}
+                       if legacy_skills else
+                       {"cannbot", "profiler-new", "profiler-old", "guarded"})
+    if not isinstance(skills, dict) or set(skills) != required_skills:
+        raise CampaignError("all treatment skill freezes must be pinned")
     for name, digest in skills.items():
         _require_hex(digest, 64, f"skills.{name}")
+
+
+def _validate_product_provenance(provenance: dict, products: tuple[str, ...]) -> None:
+    if not isinstance(provenance, dict):
+        raise CampaignError("provenance must be an object")
+    _require_hex(provenance.get("source_revision"), 40, "source_revision")
+    _require_hex(provenance.get("controller_sha256"), 64, "controller_sha256")
+    model = provenance.get("model")
+    if not isinstance(model, dict) or not all(
+        model.get(key) for key in ("name", "reasoning_effort")
+    ):
+        raise CampaignError("model name and reasoning_effort must be pinned")
+    skills = provenance.get("skills")
+    required_skills = {"cannbot", "profiler-new", "profiler-old", "guarded"}
+    if not isinstance(skills, dict) or set(skills) != required_skills:
+        raise CampaignError("all treatment skill freezes must be pinned")
+    for name, digest in skills.items():
+        _require_hex(digest, 64, f"skills.{name}")
+    bindings = provenance.get("products")
+    if not isinstance(bindings, dict) or set(bindings) != set(products):
+        raise CampaignError("provenance products must match the campaign products")
+    for product in products:
+        binding = bindings[product]
+        if not isinstance(binding, dict) or set(binding) != {
+            "runtime", "runtime_image_digest", "baselines", "starters"
+        }:
+            raise CampaignError(f"provenance product {product} has an invalid shape")
+        if binding["runtime"] != PRODUCT_RUNTIMES[product]:
+            raise CampaignError(f"provenance product {product} runtime mismatch")
+        image = binding["runtime_image_digest"]
+        if not isinstance(image, str) or not image.startswith("sha256:"):
+            raise CampaignError(f"product {product} runtime image must be pinned")
+        _require_hex(image.removeprefix("sha256:"), 64,
+                     f"products.{product}.runtime_image_digest")
+        if (not isinstance(binding["baselines"], dict)
+                or set(binding["baselines"]) != set(TASKS)):
+            raise CampaignError(f"product {product} baselines must cover all tasks")
+        if (not isinstance(binding["starters"], dict)
+                or set(binding["starters"]) != set(TASKS)):
+            raise CampaignError(f"product {product} starters must cover all tasks")
+        for task in TASKS:
+            _require_hex(binding["baselines"][task], 64,
+                         f"products.{product}.baselines.{task}")
+            starter = binding["starters"][task]
+            if not isinstance(starter, dict) or set(starter) != {"candidate", "manifest"}:
+                raise CampaignError(f"product {product} starter.{task} is invalid")
+            for kind in ("candidate", "manifest"):
+                _validate_artifact_binding(
+                    starter[kind], f"product {product} starter.{task}.{kind}"
+                )
 
 
 def _balanced_order(
@@ -141,13 +213,6 @@ def _validate_treatment_subset(treatments: tuple[str, ...]) -> None:
         raise CampaignError("treatment subset must contain unique names")
     if any(treatment not in TREATMENT_SKILLS for treatment in treatments):
         raise CampaignError("treatment subset must contain only known treatments")
-    missing = [name for name in treatments
-               if "ascend-profiling" not in TREATMENT_SKILLS[name]]
-    if missing:
-        raise CampaignError(
-            "schema v3 treatment profiles must include ascend-profiling: "
-            + ", ".join(missing)
-        )
 
 
 def build_manifest(
@@ -160,6 +225,8 @@ def build_manifest(
     rounds: int = 4,
     request_budget: int = REPAIR_REQUEST_BUDGET,
     treatments: tuple[str, ...] | None = None,
+    products: tuple[str, ...] | None = None,
+    product_task_files: dict[str, dict[str, Path]] | None = None,
 ) -> dict:
     if not run_id or "/" in run_id:
         raise CampaignError("run_id must be a nonempty branch-safe component")
@@ -167,48 +234,109 @@ def build_manifest(
         raise CampaignError("this campaign requires exactly four rounds")
     if request_budget not in SUPPORTED_REQUEST_BUDGETS:
         raise CampaignError("this campaign requires a 24 or 48-request budget")
-    if set(task_files) != set(TASKS):
-        raise CampaignError("task files must cover exactly matmul, gdn, and bsa")
-    if not prompt.is_file() or any(not task_files[name].is_file() for name in TASKS):
-        raise CampaignError("prompt and task files must be regular files")
-    _validate_provenance(provenance)
+    if not prompt.is_file():
+        raise CampaignError("prompt must be a regular file")
     selected = TREATMENTS if treatments is None else tuple(treatments)
-    if treatments is not None:
-        _validate_treatment_subset(selected)
-    order = _balanced_order(ordering_seed, selected)
+    _validate_treatment_subset(selected)
     prompt_digest = _sha256(prompt)
-    task_digests = {name: _sha256(task_files[name]) for name in TASKS}
+    if products is None:
+        if product_task_files is not None:
+            raise CampaignError("product task files require declared products")
+        if set(task_files) != set(TASKS):
+            raise CampaignError("task files must cover exactly matmul, gdn, and bsa")
+        if any(not isinstance(task_files[name], Path)
+               or not task_files[name].is_file() for name in TASKS):
+            raise CampaignError("task files must be regular files")
+        _validate_provenance(provenance)
+        order = _balanced_order(ordering_seed, selected)
+        task_digests = {name: _sha256(task_files[name]) for name in TASKS}
+        product_order: list[tuple[str | None, str, str]] = [
+            (None, task, treatment) for task, treatment in order
+        ]
+    else:
+        products = tuple(products)
+        if (not products or len(products) != len(set(products))
+                or any(product not in PRODUCTS for product in products)):
+            raise CampaignError("products must be unique supported product names")
+        if (not isinstance(product_task_files, dict)
+                or set(product_task_files) != set(products)
+                or any(not isinstance(product_task_files[product], dict)
+                       or set(product_task_files[product]) != set(TASKS)
+                       for product in products)):
+            raise CampaignError("product task files must cover every product and task")
+        if any(not isinstance(product_task_files[product][task], Path)
+               or not product_task_files[product][task].is_file()
+               for product in products for task in TASKS):
+            raise CampaignError("product task files must be regular files")
+        _validate_product_provenance(provenance, products)
+        task_digests = {
+            product: {task: _sha256(product_task_files[product][task])
+                      for task in TASKS}
+            for product in products
+        }
+        orders = {product: _balanced_order(f"{ordering_seed}:{product}", selected)
+                  for product in products}
+        product_order = [
+            (product, *orders[product][index])
+            for index in range(len(TASKS) * len(selected))
+            for product in products
+        ]
     cells = []
-    for task, treatment in order:
-        cell_id = f"{task}-{treatment}"
-        cells.append({
+    for product, task, treatment in product_order:
+        cell_id = (f"{product}-{task}-{treatment}" if product
+                   else f"{task}-{treatment}")
+        task_digest = task_digests[product][task] if product else task_digests[task]
+        cell = {
             "cell_id": cell_id,
             "task": task,
             "treatment": treatment,
             "branch": f"experiment/{run_id}/{cell_id}",
             "round_count": rounds,
             "request_budget": request_budget,
-            "task_sha256": task_digests[task],
+            "task_sha256": task_digest,
             "skills": list(TREATMENT_SKILLS[treatment]),
             "prompt_contract": {
                 "invariant_sha256": prompt_digest,
-                "task_sha256": task_digests[task],
+                "task_sha256": task_digest,
             },
-        })
+        }
+        if product:
+            cell.update({
+                "product": product,
+                "runtime": PRODUCT_RUNTIMES[product],
+                "baseline_sha256": provenance["products"][product]["baselines"][task],
+                "starter": provenance["products"][product]["starters"][task],
+            })
+        cells.append(cell)
+    order_ids = [cell["cell_id"] for cell in cells]
     document = {
-        "schema_version": 2 if treatments is None else 3,
+        "schema_version": 4,
         "run_id": run_id,
         "dimensions": {"tasks": list(TASKS), "treatments": list(selected),
                        "round_count": rounds},
         "request_budget": request_budget,
         "prompt": {"path": str(prompt.resolve()), "sha256": prompt_digest},
-        "tasks": {name: {"path": str(task_files[name].resolve()),
-                         "sha256": task_digests[name]} for name in TASKS},
+        "tasks": ({name: {"path": str(task_files[name].resolve()),
+                           "sha256": task_digests[name]} for name in TASKS}
+                  if products is None else {
+                      product: {
+                          task: {"path": str(product_task_files[product][task].resolve()),
+                                 "sha256": task_digests[product][task]}
+                          for task in TASKS
+                      } for product in products
+                  }),
         "provenance": provenance,
         "ordering": {"algorithm": "balanced-latin-v1", "seed": ordering_seed},
-        "order": [f"{task}-{treatment}" for task, treatment in order],
+        "order": order_ids,
         "cells": cells,
     }
+    if products is not None:
+        document["dimensions"]["products"] = list(products)
+        document["product_adapters"] = {
+            product: {"runtime": PRODUCT_RUNTIMES[product],
+                      "targets": list(PRODUCT_TARGETS[product])}
+            for product in products
+        }
     document["manifest_sha256"] = _document_digest(document)
     return document
 
@@ -222,8 +350,8 @@ def _document_digest(document: dict) -> str:
 
 def verify_manifest(document: dict) -> None:
     version = document.get("schema_version")
-    if version not in {1, 2, 3}:
-        raise CampaignError("manifest schema_version must be 1, 2, or 3")
+    if version not in {1, 2, 3, 4}:
+        raise CampaignError("manifest schema_version must be 1, 2, 3, or 4")
     if document.get("manifest_sha256") != _document_digest(document):
         raise CampaignError("manifest hash mismatch")
     if document.get("order") != [cell.get("cell_id") for cell in document.get("cells", [])]:
@@ -231,14 +359,67 @@ def verify_manifest(document: dict) -> None:
     dimensions = document.get("dimensions")
     selected = tuple(dimensions.get("treatments", [])) if isinstance(dimensions, dict) else ()
     if version in {1, 2}:
-        if selected != TREATMENTS:
+        if selected != LEGACY_TREATMENTS:
             raise CampaignError("legacy manifests require all three treatments")
+    elif version == 3:
+        if (not selected or len(selected) != len(set(selected))
+                or any(name not in LEGACY_TREATMENT_SKILLS for name in selected)):
+            raise CampaignError("schema v3 contains an unknown legacy treatment")
     else:
         _validate_treatment_subset(selected)
-    if len(document["cells"]) != len(TASKS) * len(selected):
+    products = (tuple(dimensions.get("products", []))
+                if version == 4 and isinstance(dimensions, dict) else ())
+    if version == 4 and products:
+        if (not products or len(products) != len(set(products))
+                or any(product not in PRODUCTS for product in products)):
+            raise CampaignError("manifest products must be unique and supported")
+        expected_adapters = {
+            product: {"runtime": PRODUCT_RUNTIMES[product],
+                      "targets": list(PRODUCT_TARGETS[product])}
+            for product in products
+        }
+        if document.get("product_adapters") != expected_adapters:
+            raise CampaignError("manifest product adapters do not match policy")
+        _validate_product_provenance(document["provenance"], products)
+        tasks = document.get("tasks")
+        if (not isinstance(tasks, dict) or set(tasks) != set(products)
+                or any(not isinstance(tasks[product], dict)
+                       or set(tasks[product]) != set(TASKS)
+                       for product in products)):
+            raise CampaignError("manifest product task bindings are incomplete")
+        _validate_artifact_binding(document.get("prompt"), "prompt")
+        for product in products:
+            for task in TASKS:
+                _validate_artifact_binding(tasks[product][task],
+                                           f"tasks.{product}.{task}")
+    elif version == 4:
+        _validate_provenance(document["provenance"])
+        tasks = document.get("tasks")
+        if (not isinstance(tasks, dict) or set(tasks) != set(TASKS)):
+            raise CampaignError("manifest task bindings are incomplete")
+        _validate_artifact_binding(document.get("prompt"), "prompt")
+        for task in TASKS:
+            _validate_artifact_binding(tasks[task], f"tasks.{task}")
+    multiplier = len(products) if products else 1
+    if len(document["cells"]) != len(TASKS) * len(selected) * multiplier:
         raise CampaignError("manifest cell count does not match its treatment matrix")
-    actual = {(cell["task"], cell["treatment"]) for cell in document["cells"]}
-    expected = {(task, treatment) for task in TASKS for treatment in selected}
+    if products and any(
+        cell.get("cell_id")
+        != f"{cell.get('product')}-{cell.get('task')}-{cell.get('treatment')}"
+        for cell in document["cells"]
+    ):
+        raise CampaignError("cell identity does not match product task treatment")
+    actual = {
+        ((cell.get("product"), cell["task"], cell["treatment"])
+         if products else (cell["task"], cell["treatment"]))
+        for cell in document["cells"]
+    }
+    expected = (
+        {(product, task, treatment) for product in products
+         for task in TASKS for treatment in selected}
+        if products else
+        {(task, treatment) for task in TASKS for treatment in selected}
+    )
     if actual != expected:
         raise CampaignError("manifest must contain the exact declared treatment matrix")
     budget = document.get("request_budget")
@@ -249,11 +430,39 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(
                 "every cell requires four rounds and the campaign request budget"
             )
-        if cell["skills"] != list(TREATMENT_SKILLS[cell["treatment"]]):
+        policies = TREATMENT_SKILLS if version == 4 else LEGACY_TREATMENT_SKILLS
+        if cell["skills"] != list(policies[cell["treatment"]]):
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
-    _validate_provenance(document["provenance"], require_starters=version in {2, 3})
+        if version == 4:
+            task_binding = (document["tasks"][cell["product"]][cell["task"]]
+                            if products else document["tasks"][cell["task"]])
+            prompt_contract = cell.get("prompt_contract")
+            if (cell.get("task_sha256") != task_binding["sha256"]
+                    or not isinstance(prompt_contract, dict)
+                    or prompt_contract.get("task_sha256") != task_binding["sha256"]
+                    or prompt_contract.get("invariant_sha256")
+                    != document["prompt"]["sha256"]):
+                raise CampaignError("cell task or prompt binding mismatch")
+            if cell.get("branch") != f"experiment/{document['run_id']}/{cell['cell_id']}":
+                raise CampaignError("cell branch identity mismatch")
+        if products:
+            product = cell.get("product")
+            expected_id = f"{product}-{cell['task']}-{cell['treatment']}"
+            if cell["cell_id"] != expected_id:
+                raise CampaignError("cell identity does not match product task treatment")
+            if cell.get("runtime") != PRODUCT_RUNTIMES.get(product):
+                raise CampaignError("cell runtime does not match product")
+            product_binding = document["provenance"]["products"][product]
+            if (cell.get("baseline_sha256") != product_binding["baselines"][cell["task"]]
+                    or cell.get("starter") != product_binding["starters"][cell["task"]]):
+                raise CampaignError("cell product provenance binding mismatch")
+    if version in {1, 2, 3}:
+        _validate_provenance(
+            document["provenance"], require_starters=version in {2, 3},
+            legacy_skills=True,
+        )
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -326,8 +535,31 @@ def _admitted_slots(pool: ResourcePool) -> list[dict]:
         if not isinstance(identity[0], str) or identity[1] is None or identity in seen:
             continue
         seen.add(identity)
-        admitted.append({"target": identity[0], "device": identity[1]})
+        inferred = next((product for product, targets in PRODUCT_TARGETS.items()
+                         if identity[0] in targets), None)
+        declared_product = slot.get("product", inferred)
+        if declared_product is not None and declared_product != inferred:
+            continue
+        declared_runtime = slot.get(
+            "runtime", PRODUCT_RUNTIMES.get(declared_product)
+        )
+        if (declared_product is not None
+                and declared_runtime != PRODUCT_RUNTIMES[declared_product]):
+            continue
+        admitted_slot = {"target": identity[0], "device": identity[1]}
+        if declared_product is not None:
+            admitted_slot.update({"product": declared_product,
+                                  "runtime": declared_runtime})
+        admitted.append(admitted_slot)
     return admitted
+
+
+def _slot_compatible(cell: dict, slot: dict) -> bool:
+    product = cell.get("product")
+    if product is None:
+        return slot.get("product") in {None, "a3"}
+    return (slot.get("product") == product
+            and slot.get("runtime") == cell.get("runtime"))
 
 
 def _validate_receipt(cell: dict, receipt: dict) -> None:
@@ -466,12 +698,20 @@ def _run_campaign_locked(
                 attempt["error"] = "launcher cannot observe its retained handle"
                 deferred.add(cell_id)
                 continue
-            slot = {"target": attempt["target"], "device": attempt["device"]}
+            slot = {key: attempt[key] for key in
+                    ("target", "device", "product", "runtime") if key in attempt}
+            if not _slot_compatible(cell_by_id[cell_id], slot):
+                attempt["error"] = "retained placement is incompatible with cell product"
+                deferred.add(cell_id)
+                continue
             observation = {
                 "target": slot["target"], "device": slot["device"],
                 "status": "running", "durable_handle": handle,
                 "kind": "observe",
             }
+            for key in ("product", "runtime"):
+                if key in slot:
+                    observation[key] = slot[key]
             state["attempts"].append(observation)
             occupied.add((slot["target"], slot["device"]))
             state["status"] = "running"
@@ -485,10 +725,10 @@ def _run_campaign_locked(
             # Refresh admission for every assignment. This continuously fills
             # newly free slots rather than waiting for an earlier batch.
             while True:
-                cell_id = next((candidate for candidate in manifest["order"]
-                                if ledger["cells"][candidate]["status"] == "queued"
-                                and candidate not in deferred), None)
-                if cell_id is None:
+                queued = [candidate for candidate in manifest["order"]
+                          if ledger["cells"][candidate]["status"] == "queued"
+                          and candidate not in deferred]
+                if not queued:
                     break
                 try:
                     slots = [slot for slot in _admitted_slots(pool)
@@ -499,11 +739,18 @@ def _run_campaign_locked(
                     admission_error = str(error)
                 if not slots:
                     break
-                slot = slots[0]
+                assignment = next(
+                    ((candidate, slot) for candidate in queued for slot in slots
+                     if _slot_compatible(cell_by_id[candidate], slot)), None
+                )
+                if assignment is None:
+                    break
+                cell_id, slot = assignment
+                if cell_by_id[cell_id].get("product") is None:
+                    slot = {key: slot[key] for key in ("target", "device")}
                 state = ledger["cells"][cell_id]
                 state["status"] = "running"
-                attempt = {"target": slot["target"], "device": slot["device"],
-                           "status": "running"}
+                attempt = {**slot, "status": "running"}
                 state["attempts"].append(attempt)
                 occupied.add((slot["target"], slot["device"]))
                 future = executor.submit(
@@ -528,7 +775,7 @@ def _run_campaign_locked(
                 _atomic_json(ledger_path, ledger)
                 reason = ("infrastructure failed; independent cells completed"
                           if pending_infra else admission_error
-                          or "no healthy idle BZ-A3 devices were admitted")
+                          or "no compatible healthy idle devices were admitted")
                 raise CampaignPaused(reason)
             break
     ledger["status"] = "complete"
@@ -674,6 +921,7 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         rows.append({
             "cell_id": cell_id, "task": cell["task"],
             "treatment": cell["treatment"], "branch": cell["branch"],
+            "product": cell.get("product"), "runtime": cell.get("runtime"),
             "status": status, "attempt_count": len(state["attempts"]),
             "raw_evolution": evolution,
             "attempt_history": attempt_history,
@@ -730,10 +978,26 @@ def build_report(manifest: dict, ledger: dict) -> dict:
 
 
 class _FakePool:
-    def __init__(self, slots: int):
+    def __init__(self, slots: int, products: tuple[str, ...] = ()):
         self._slots = slots
+        self._products = products
 
     def admit(self) -> list[dict]:
+        if self._products:
+            if self._slots < len(self._products):
+                raise CampaignError(
+                    "schema-v4 simulation needs at least one slot per product"
+                )
+            result = []
+            for index in range(self._slots):
+                product = self._products[index % len(self._products)]
+                targets = PRODUCT_TARGETS[product]
+                result.append({
+                    "product": product, "runtime": PRODUCT_RUNTIMES[product],
+                    "target": targets[index % len(targets)], "device": index,
+                    "healthy": True, "idle": True,
+                })
+            return result
         return [{"target": f"fake-bz-{index % 2 + 1}", "device": index,
                  "healthy": True, "idle": True} for index in range(self._slots)]
 
@@ -763,13 +1027,20 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--run-id", required=True)
     generate.add_argument("--prompt", type=Path, required=True)
     for task in TASKS:
-        generate.add_argument(f"--{task}-task", type=Path, required=True)
+        generate.add_argument(f"--{task}-task", type=Path)
+    for product in PRODUCTS:
+        for task in TASKS:
+            generate.add_argument(f"--{product}-{task}-task", type=Path)
     generate.add_argument("--provenance", type=Path, required=True)
     generate.add_argument("--ordering-seed", required=True)
     generate.add_argument("--request-budget", type=int, choices=(24, 48), default=48)
     generate.add_argument(
         "--treatment", action="append", choices=TREATMENTS,
-        help="repeat to select a schema-v3 treatment subset; defaults to all treatments",
+        help="repeat to select a schema-v4 treatment subset; defaults to all treatments",
+    )
+    generate.add_argument(
+        "--product", action="append", choices=PRODUCTS,
+        help="repeat for schema-v4 product cells with product-specific task inputs",
     )
     generate.add_argument("--output", type=Path, required=True)
     simulate = subparsers.add_parser("simulate")
@@ -787,17 +1058,25 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.command == "generate":
+        products = tuple(args.product) if args.product is not None else None
         document = build_manifest(
             args.run_id, args.prompt,
             {task: getattr(args, f"{task}_task") for task in TASKS},
             json.loads(args.provenance.read_text()), args.ordering_seed,
             request_budget=args.request_budget,
             treatments=(tuple(args.treatment) if args.treatment is not None else None),
+            products=products,
+            product_task_files=(
+                {product: {task: getattr(args, f"{product}_{task}_task")
+                           for task in TASKS} for product in products}
+                if products is not None else None
+            ),
         )
         _atomic_json(args.output, document)
     elif args.command == "simulate":
         document = json.loads(args.manifest.read_text())
-        run_campaign(document, args.ledger, _FakePool(args.slots), _FakeLauncher(),
+        products = tuple(document.get("dimensions", {}).get("products", ()))
+        run_campaign(document, args.ledger, _FakePool(args.slots, products), _FakeLauncher(),
                      resume=args.resume)
     else:
         document = json.loads(args.manifest.read_text())

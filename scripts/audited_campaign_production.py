@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production resource and cell adapters for the audited nine-cell campaign."""
+"""Production resource and cell adapters for the audited treatment campaign."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ try:
 finally:
     sys.path.pop(0)
 
-RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v2"
+RUNTIME_SCHEMA = "profiling-skill/audited-campaign-runtime/v3"
 SUPPORTED_REQUEST_BUDGETS = {24, 48}
 MIGRATION_ATTESTATION_SCHEMA = "profiling-skill/audited-runtime-preflight/v1"
 MIGRATION_TRUST_SCHEMA = "profiling-skill/audited-runtime-migration-trust/v1"
@@ -39,30 +39,46 @@ DEVELOPMENT_CASES = {
 }
 ALL_CASES = {"matmul": list(range(10)), "gdn": list(range(50)),
              "bsa": list(range(50))}
+OLD_PROFILER_REVISION = "d6cc328144df17d09979c1d154366f52a55f5454"
+NEW_PROFILER_REVISION = "1b9ae02303b3838f683c37a9a2fe15ce740ca56e"
+PROFILER_TREE_SHA256 = {
+    OLD_PROFILER_REVISION: "4bfba796dadcc65cc50ea30782367089685159f1ea4b58e34130135278f704bb",
+    NEW_PROFILER_REVISION: "220ff700e9f80dbaa97b4eb0845628f77af2977ff18dc79310d7ed4f5e7daf02",
+}
+CANNBOT_CODING_SKILLS = (
+    "triton-task-extractor", "triton-op-designer", "triton-op-coding",
+    "triton-op-verifier", "triton-latency-optimizer",
+    "triton-simulator-optimizer", "npu-arch",
+)
+CANNBOT_SKILLS = (*CANNBOT_CODING_SKILLS, "ops-profiling")
+TREATMENT_SOURCE_BINDINGS = {
+    "cannbot-all": tuple((name, "cannbot") for name in CANNBOT_SKILLS),
+    "cannbot-new-profiler": (
+        *tuple((name, "cannbot") for name in CANNBOT_CODING_SKILLS),
+        ("ascend-profiling", "profiler-new"),
+    ),
+    "guarded-new-profiler": (
+        ("ascend-profiling", "profiler-new"),
+        ("triton-guarded-kernel", "guarded"),
+    ),
+    "guarded-old-profiler": (
+        ("ascend-profiling", "profiler-old"),
+        ("triton-guarded-kernel", "guarded"),
+    ),
+}
 TREATMENT_SKILLS = {
-    "cannbot": (
-        "triton-task-extractor", "triton-op-designer", "triton-op-coding",
-        "triton-op-verifier", "triton-latency-optimizer",
-        "triton-simulator-optimizer", "npu-arch", "ops-profiling",
-    ),
-    "project-cannbot": (
-        "triton-task-extractor", "triton-op-designer", "triton-op-coding",
-        "triton-op-verifier", "triton-latency-optimizer",
-        "triton-simulator-optimizer", "npu-arch", "ascend-profiling",
-    ),
-    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
+    treatment: tuple(name for name, _source in bindings)
+    for treatment, bindings in TREATMENT_SOURCE_BINDINGS.items()
 }
 CANARY_EVIDENCE = {
-    "cannbot": ["candidate-repair", "offline-verifier", "msprof-op-timing"],
-    "project-cannbot": ["checkpoint-resume", "same-session", "offline-verifier",
-                        "msprof-op-timing"],
-    "project-guarded": ["candidate-repair", "offline-verifier", "msprof-op-timing"],
+    "cannbot-all": ["candidate-repair", "offline-verifier", "msprof-op-timing"],
+    "cannbot-new-profiler": ["checkpoint-resume", "same-session",
+                              "offline-verifier", "msprof-op-timing"],
+    "guarded-new-profiler": ["candidate-repair", "offline-verifier",
+                              "msprof-op-timing"],
+    "guarded-old-profiler": ["candidate-repair", "offline-verifier",
+                              "msprof-op-timing"],
 }
-CANNBOT_SKILLS = tuple(sorted({
-    skill for treatment in ("cannbot", "project-cannbot")
-    for skill in TREATMENT_SKILLS[treatment]
-    if skill not in {"ascend-profiling", "triton-guarded-kernel"}
-}))
 RUNTIME_FILES = {
     "audited_bz_controller.py", "audited_contract.py", "audited_lifecycle.py",
     "audited_runtime.py", "audited_verifier.py", "benchmark_backend.py",
@@ -104,19 +120,109 @@ def digest_tree(root: Path) -> str:
     return digest.hexdigest()
 
 
-def digest_skill_bundle(bindings: dict, names: list[str] | tuple[str, ...]) -> str:
-    """Bind a composite manifest skill pin to each exact constituent tree."""
-    digest = hashlib.sha256()
-    for name in sorted(names):
-        binding = bindings.get(name)
-        if not isinstance(binding, dict):
-            raise ProductionError(f"skill bundle source is missing: {name}")
-        tree = Path(binding.get("path", ""))
-        actual = digest_tree(tree)
-        if binding.get("sha256") != actual:
-            raise ProductionError(f"skill {name} hash does not match pinned input")
-        digest.update(name.encode() + b"\0" + actual.encode() + b"\0")
-    return digest.hexdigest()
+def validate_skill_freezes(sources: dict) -> dict:
+    """Authenticate the one CANNBot freeze and the two profiler snapshots."""
+    if not isinstance(sources, dict) or set(sources) != {
+            "cannbot", "profiler-new", "profiler-old", "guarded"}:
+        raise ProductionError("skill freezes must contain the exact source allowlist")
+    for name, binding in sources.items():
+        if (not isinstance(binding, dict)
+                or not isinstance(binding.get("path"), str)
+                or not isinstance(binding.get("sha256"), str)
+                or digest_tree(Path(binding["path"])) != binding["sha256"]):
+            raise ProductionError(f"{name} skill freeze does not match its pinned tree")
+    cannbot = sources["cannbot"]
+    revision = cannbot.get("revision")
+    if (not isinstance(revision, str) or len(revision) != 40
+            or any(character not in "0123456789abcdef" for character in revision)):
+        raise ProductionError("CANNBot freeze revision must be a pinned commit")
+    commit_file = Path(cannbot["path"]) / "COMMIT"
+    if not commit_file.is_file() or commit_file.read_text().strip() != revision:
+        raise ProductionError("CANNBot freeze record does not match its pinned commit")
+    for name in CANNBOT_SKILLS:
+        if not (Path(cannbot["path"]) / "skills" / name).is_dir():
+            raise ProductionError(f"CANNBot freeze is missing skill: {name}")
+    expected = {
+        "profiler-new": (NEW_PROFILER_REVISION, "new profiler"),
+        "profiler-old": (OLD_PROFILER_REVISION, "old profiler"),
+    }
+    for source, (pinned, label) in expected.items():
+        if sources[source].get("revision") != pinned:
+            raise ProductionError(f"{label} revision does not match the campaign pin")
+        if sources[source]["sha256"] != PROFILER_TREE_SHA256[pinned]:
+            raise ProductionError(f"{label} tree does not match its pinned revision")
+    return {
+        "cannbot_revision": revision,
+        "cannbot_sha256": cannbot["sha256"],
+        "profiler_revisions": {
+            "new": NEW_PROFILER_REVISION, "old": OLD_PROFILER_REVISION,
+        },
+    }
+
+
+def _treatment_source_tree(sources: dict, install_name: str,
+                           source_name: str) -> Path:
+    root = Path(sources[source_name]["path"])
+    return root / "skills" / install_name if source_name == "cannbot" else root
+
+
+def validate_materialized_treatment(workspace: Path, treatment: str,
+                                    sources: dict) -> dict:
+    validate_skill_freezes(sources)
+    if treatment not in TREATMENT_SOURCE_BINDINGS:
+        raise ProductionError(f"unknown treatment: {treatment}")
+    root = workspace / ".agents" / "skills"
+    try:
+        entries = list(root.iterdir())
+    except OSError as error:
+        raise ProductionError("isolated treatment skills are unavailable") from error
+    expected = TREATMENT_SOURCE_BINDINGS[treatment]
+    if ({entry.name for entry in entries} != {name for name, _source in expected}
+            or any(entry.is_symlink() or not entry.is_dir() for entry in entries)):
+        raise ProductionError("isolated treatment skills do not match the exact allowlist")
+    hashes = {}
+    for install_name, source_name in expected:
+        expected_hash = digest_tree(_treatment_source_tree(
+            sources, install_name, source_name
+        ))
+        actual_hash = digest_tree(root / install_name)
+        if actual_hash != expected_hash:
+            raise ProductionError(
+                f"isolated treatment skills have drifted: {install_name}"
+            )
+        hashes[install_name] = actual_hash
+    used_sources = {source for _name, source in expected}
+    return {
+        "schema": "profiling-skill/treatment-materialization/v1",
+        "treatment": treatment,
+        "skills": hashes,
+        "source_revisions": {
+            name: sources[name].get("revision") for name in sorted(used_sources)
+            if sources[name].get("revision") is not None
+        },
+    }
+
+
+def materialize_treatment(workspace: Path, treatment: str, sources: dict) -> dict:
+    """Copy exactly one treatment into a workspace and retain its provenance."""
+    validate_skill_freezes(sources)
+    if treatment not in TREATMENT_SOURCE_BINDINGS:
+        raise ProductionError(f"unknown treatment: {treatment}")
+    skills = workspace / ".agents" / "skills"
+    skills.mkdir(parents=True, exist_ok=False)
+    for install_name, source_name in TREATMENT_SOURCE_BINDINGS[treatment]:
+        _copy_tree(
+            _treatment_source_tree(sources, install_name, source_name),
+            skills / install_name,
+        )
+    agents = workspace / "AGENTS.md"
+    agents.write_text(
+        "# Isolated experiment workspace\n\n"
+        "Use only the repository-local skills under `.agents/skills`. "
+        "Do not inspect host or global skills. Do not traverse outside this "
+        "workspace for skills or profiling guidance.\n"
+    )
+    return validate_materialized_treatment(workspace, treatment, sources)
 
 
 def _read_pinned(path: Path, expected: str, label: str) -> dict:
@@ -642,10 +748,7 @@ class ProductionCellLauncher:
             path = Path(binding.get("path", ""))
             if not path.is_file() or file_sha256(path) != binding.get("sha256"):
                 raise ProductionError(f"{label} hash does not match pinned input")
-        for name, binding in self.config.get("skill_sources", {}).items():
-            path = Path(binding.get("path", ""))
-            if digest_tree(path) != binding.get("sha256"):
-                raise ProductionError(f"skill {name} hash does not match pinned input")
+        validate_skill_freezes(self.config.get("skill_sources"))
         self._validate_provenance()
 
     def _validate_provenance(self) -> None:
@@ -724,13 +827,11 @@ class ProductionCellLauncher:
         skill_sources = self.config.get("skill_sources", {})
         if not isinstance(skill_pins, dict):
             raise ProductionError("skill provenance does not match runtime inputs")
-        if skill_pins.get("cannbot") != digest_skill_bundle(skill_sources, CANNBOT_SKILLS):
-            raise ProductionError("cannbot skill provenance does not match runtime trees")
-        for name in ("ascend-profiling", "triton-guarded-kernel"):
-            binding = skill_sources.get(name)
-            if (not isinstance(binding, dict)
-                    or skill_pins.get(name) != binding.get("sha256")):
-                raise ProductionError(f"{name} skill provenance does not match runtime tree")
+        expected_skill_pins = {
+            name: binding["sha256"] for name, binding in skill_sources.items()
+        }
+        if skill_pins != expected_skill_pins:
+            raise ProductionError("skill provenance does not match frozen runtime trees")
 
     def _baseline(self, task: str) -> dict:
         path = Path(self.config["baseline_sources"][task]["path"])
@@ -874,7 +975,7 @@ class ProductionCellLauncher:
                 _write_json_atomic(identity_path, identity)
             elif retained_identity != identity:
                 raise ProductionError("existing isolated repository has a different identity")
-            self._validate_isolated_skills(repo, expected)
+            self._validate_isolated_skills(repo, cell["treatment"])
             self._validate_materialized_starter(repo, cell["task"], starter)
             return repo, (repo / ".experiment" / "seed.json").is_file()
         if root.exists():
@@ -913,37 +1014,18 @@ class ProductionCellLauncher:
         exclusions = staging_repo / ".git" / "info" / "exclude"
         with exclusions.open("a") as stream:
             stream.write("\n.agents/\nAGENTS.md\n")
-        skills = staging_repo / ".agents" / "skills"
-        skills.mkdir(parents=True)
-        for name in expected:
-            binding = self.config["skill_sources"].get(name)
-            if not isinstance(binding, dict):
-                raise ProductionError(f"pinned skill source is missing: {name}")
-            _copy_tree(Path(binding["path"]), skills / name)
-        (staging_repo / "AGENTS.md").write_text(
-            "Use only the repository-local skills under .agents/skills. "
-            "Do not inspect host or global skills.\n"
+        treatment_receipt = materialize_treatment(
+            staging_repo, cell["treatment"], self.config["skill_sources"]
         )
-        self._validate_isolated_skills(staging_repo, expected)
+        _write_json_atomic(staging / "state" / "treatment.json", treatment_receipt)
+        self._validate_isolated_skills(staging_repo, cell["treatment"])
         self._validate_materialized_starter(staging_repo, cell["task"], starter)
         _write_json_atomic(staging / "state" / "cell.json", identity)
         staging.rename(root)
         return repo, False
 
-    def _validate_isolated_skills(self, repo: Path, expected: tuple[str, ...]) -> None:
-        skills = repo / ".agents" / "skills"
-        try:
-            entries = list(skills.iterdir())
-        except OSError as error:
-            raise ProductionError("isolated treatment skills are unavailable") from error
-        if ({entry.name for entry in entries} != set(expected)
-                or any(not entry.is_dir() or entry.is_symlink() for entry in entries)):
-            raise ProductionError("isolated treatment skills do not match the exact allowlist")
-        for name in expected:
-            binding = self.config["skill_sources"].get(name)
-            if (not isinstance(binding, dict)
-                    or digest_tree(skills / name) != binding.get("sha256")):
-                raise ProductionError(f"isolated treatment skills have drifted: {name}")
+    def _validate_isolated_skills(self, repo: Path, treatment: str) -> None:
+        validate_materialized_treatment(repo, treatment, self.config["skill_sources"])
 
     def _controller(self, cell: dict, slot: dict, root: Path, repo: Path):
         state = root / "state"
@@ -1298,8 +1380,12 @@ def main(argv: list[str] | None = None) -> int:
         verify_manifest(manifest)
     except (KeyError, TypeError, ValueError, RuntimeError) as error:
         parser.error(str(error))
-    if manifest.get("schema_version") not in {2, 3}:
-        parser.error("production campaign requires starter-bound manifest schema_version 2 or 3")
+    if manifest.get("schema_version") != 4:
+        parser.error("production campaign requires four-treatment manifest schema_version 4")
+    if manifest.get("dimensions", {}).get("products"):
+        parser.error(
+            "A3-only production entrypoint does not support product manifests"
+        )
     config["run_id"] = manifest["run_id"]
     config["manifest_sha256"] = manifest["manifest_sha256"]
     if config.get("provenance") != manifest.get("provenance"):

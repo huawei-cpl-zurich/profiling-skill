@@ -791,8 +791,8 @@ def applied_production_launcher(campaign, tmp_path: Path, monkeypatch):
     monkeypatch.setattr(launcher, "_receipt", lambda *args: {"status": "complete"})
     cell = {
         "cell_id": cell_plan["cell_id"], "task": "bsa",
-        "treatment": "project-guarded", "round_count": 4, "request_budget": 24,
-        "skills": list(production.TREATMENT_SKILLS["project-guarded"]),
+        "treatment": "guarded-new-profiler", "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["guarded-new-profiler"]),
         "task_sha256": sha(repo / "TASK.md"),
         "prompt_contract": {
             "task_sha256": sha(repo / "TASK.md"),

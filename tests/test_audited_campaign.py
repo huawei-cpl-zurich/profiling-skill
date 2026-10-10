@@ -65,8 +65,9 @@ def inputs(tmp_path: Path) -> tuple[Path, dict[str, Path], dict]:
         },
         "skills": {
             "cannbot": "e" * 64,
-            "ascend-profiling": "f" * 64,
-            "triton-guarded-kernel": "1" * 64,
+            "profiler-new": "f" * 64,
+            "profiler-old": "1" * 64,
+            "guarded": "2" * 64,
         },
     }
     return prompt, tasks, provenance
@@ -85,11 +86,11 @@ def manifest(tmp_path: Path, seed: str = "campaign-1") -> dict:
     )
 
 
-def test_manifest_is_exact_three_by_three_with_four_rounds(tmp_path: Path):
+def test_manifest_is_exact_three_by_four_with_four_rounds(tmp_path: Path):
     document = manifest(tmp_path)
-    assert document["schema_version"] == 2
+    assert document["schema_version"] == 4
     cells = document["cells"]
-    assert len(cells) == 9
+    assert len(cells) == 12
     assert {(cell["task"], cell["treatment"]) for cell in cells} == {
         (task, treatment)
         for task in audited_campaign.TASKS
@@ -97,7 +98,7 @@ def test_manifest_is_exact_three_by_three_with_four_rounds(tmp_path: Path):
     }
     assert {cell["round_count"] for cell in cells} == {4}
     assert {cell["request_budget"] for cell in cells} == {24}
-    assert len({cell["branch"] for cell in cells}) == 9
+    assert len({cell["branch"] for cell in cells}) == 12
     assert all("device" not in cell and "target" not in cell for cell in cells)
 
 
@@ -111,9 +112,42 @@ def test_new_manifest_defaults_to_repair_aware_operation_budget(tmp_path: Path):
     audited_campaign.verify_manifest(document)
 
 
+def test_v4_manifest_rejects_legacy_skill_provenance(tmp_path: Path):
+    prompt, tasks, provenance = inputs(tmp_path)
+    provenance["skills"] = {
+        "cannbot": "e" * 64,
+        "ascend-profiling": "f" * 64,
+        "triton-guarded-kernel": "1" * 64,
+    }
+    with pytest.raises(audited_campaign.CampaignError, match="skill freezes"):
+        audited_campaign.build_manifest("legacy-skills", prompt, tasks, provenance, "seed")
+
+
+@pytest.mark.parametrize("mutation, message", [
+    ("task", "task or prompt binding"),
+    ("prompt", "task or prompt binding"),
+    ("branch", "branch identity"),
+])
+def test_product_neutral_v4_rejects_cell_binding_drift(
+    tmp_path: Path, mutation: str, message: str,
+):
+    document = manifest(tmp_path)
+    cell = document["cells"][0]
+    if mutation == "task":
+        cell["task_sha256"] = "0" * 64
+    elif mutation == "prompt":
+        cell["prompt_contract"]["invariant_sha256"] = "0" * 64
+    else:
+        cell["branch"] = "experiment/wrong/branch"
+    document["manifest_sha256"] = audited_campaign._document_digest(document)
+
+    with pytest.raises(audited_campaign.CampaignError, match=message):
+        audited_campaign.verify_manifest(document)
+
+
 def test_manifest_supports_deterministic_profile_skill_subset(tmp_path: Path):
     prompt, tasks, provenance = inputs(tmp_path)
-    selected = ("project-cannbot", "project-guarded")
+    selected = ("cannbot-new-profiler", "guarded-new-profiler")
     first = audited_campaign.build_manifest(
         "profile-only", prompt, tasks, provenance, "seed",
         treatments=selected,
@@ -123,7 +157,7 @@ def test_manifest_supports_deterministic_profile_skill_subset(tmp_path: Path):
         treatments=selected,
     )
 
-    assert first["schema_version"] == 3
+    assert first["schema_version"] == 4
     assert first["dimensions"]["treatments"] == list(selected)
     assert first["order"] == second["order"]
     assert len(first["cells"]) == 6
@@ -143,9 +177,8 @@ def test_manifest_supports_deterministic_profile_skill_subset(tmp_path: Path):
     "selected, message",
     [
         ((), "nonempty"),
-        (("project-cannbot", "project-cannbot"), "unique"),
+        (("cannbot-new-profiler", "cannbot-new-profiler"), "unique"),
         (("unknown",), "known"),
-        (("cannbot",), "ascend-profiling"),
     ],
 )
 def test_subset_manifest_rejects_invalid_or_leaky_treatments(
@@ -169,12 +202,12 @@ def test_generate_cli_accepts_repeatable_treatment_selection(tmp_path: Path):
         "--matmul-task", str(tasks["matmul"]), "--gdn-task", str(tasks["gdn"]),
         "--bsa-task", str(tasks["bsa"]), "--provenance", str(provenance_path),
         "--ordering-seed", "seed", "--output", str(output),
-        "--treatment", "project-cannbot",
-        "--treatment", "project-guarded",
+        "--treatment", "cannbot-new-profiler",
+        "--treatment", "guarded-new-profiler",
     ]
     assert audited_campaign.main(arguments) == 0
     assert json.loads(output.read_text())["dimensions"]["treatments"] == [
-        "project-cannbot", "project-guarded",
+        "cannbot-new-profiler", "guarded-new-profiler",
     ]
 
 
@@ -192,15 +225,15 @@ def test_order_is_deterministic_fair_and_recorded(tmp_path: Path):
     second = manifest(tmp_path / "b")
     assert first["order"] == second["order"]
     assert first["ordering"]["algorithm"] == "balanced-latin-v1"
-    for start in range(0, 9, 3):
+    for start in range(0, 12, 3):
         block = [
             next(cell for cell in first["cells"] if cell["cell_id"] == cell_id)
             for cell_id in first["order"][start : start + 3]
         ]
         assert {cell["task"] for cell in block} == set(audited_campaign.TASKS)
-        assert {cell["treatment"] for cell in block} == set(
-            audited_campaign.TREATMENTS
-        )
+    assert {cell["treatment"] for cell in first["cells"]} == set(
+        audited_campaign.TREATMENTS
+    )
 
 
 def test_treatment_visibility_is_exact_and_task_prompt_is_treatment_independent(
@@ -303,7 +336,7 @@ def test_dynamic_admission_uses_all_unique_healthy_idle_devices(tmp_path: Path):
         document, tmp_path / "ledger.json", pool, launcher
     )
     assert ledger["status"] == "complete"
-    assert len(launcher.calls) == 9
+    assert len(launcher.calls) == 12
     assert {call[1]["target"] for call in launcher.calls} == {
         "bz-a3-1", "bz-a3-2"
     }
@@ -346,6 +379,22 @@ def test_scheduler_refills_each_free_slot_without_waiting_for_batch(tmp_path: Pa
     assert pool.calls >= 3
 
 
+def test_legacy_scheduler_never_dispatches_product_neutral_cells_to_a5(tmp_path: Path):
+    document = manifest(tmp_path)
+    pool = StaticPool([
+        {"target": "bz-a5", "device": 4, "healthy": True, "idle": True},
+        {"target": "bz-a3-1", "device": 7, "healthy": True, "idle": True},
+    ])
+    launcher = RecordingLauncher()
+
+    ledger = audited_campaign.run_campaign(
+        document, tmp_path / "ledger.json", pool, launcher,
+    )
+
+    assert ledger["status"] == "complete"
+    assert {slot["target"] for _cell, slot in launcher.calls} == {"bz-a3-1"}
+
+
 def test_resume_preserves_completed_and_retries_only_infrastructure_failure(
     tmp_path: Path,
 ):
@@ -364,7 +413,7 @@ def test_resume_preserves_completed_and_retries_only_infrastructure_failure(
         cell_id for cell_id, state in json.loads(ledger_path.read_text())["cells"].items()
         if state["status"] == "complete"
     }
-    assert len(completed) == 8
+    assert len(completed) == 11
     assert checkpoint["cells"][failed_cell]["status"] == "infrastructure_pending"
     resumed = RecordingLauncher()
     ledger = audited_campaign.run_campaign(
@@ -412,9 +461,9 @@ def test_report_contains_evolution_best_round_and_failures(tmp_path: Path):
     )
     report = audited_campaign.build_report(document, ledger)
     assert report["schema_version"] == 2
-    assert report["summary"] == {"complete": 9, "candidate_failed": 0,
+    assert report["summary"] == {"complete": 12, "candidate_failed": 0,
                                   "infrastructure_pending": 0}
-    assert len(report["cells"]) == 9
+    assert len(report["cells"]) == 12
     assert all(row["best_round"] == 4 and row["best_median_us"] == 6.0
                for row in report["cells"])
     assert all(row["speedup_vs_baseline"] == 12.0 / 5.0 for row in report["cells"])
@@ -469,8 +518,8 @@ def test_report_separates_raw_attempt_and_repaired_round_success(tmp_path: Path)
         "final_timing": {"round": 4, "median_us": 6.0,
                          "normalized_median_us": None},
     }
-    assert report["attempt_summary"]["attempts"] == 63
-    assert report["attempt_summary"]["repaired_rounds"] == 18
+    assert report["attempt_summary"]["attempts"] == 84
+    assert report["attempt_summary"]["repaired_rounds"] == 24
 
 
 def test_legacy_report_keeps_raw_receipts_and_synthesizes_attempt_history(tmp_path: Path):
@@ -659,7 +708,7 @@ def test_resume_does_not_skip_running_dispatch_without_retained_handle(tmp_path:
     assert checkpoint["cells"][target]["attempts"][0]["retryable"] is False
     assert target not in {cell_id for cell_id, _ in launcher.calls}
     assert sum(state["status"] == "complete"
-               for state in checkpoint["cells"].values()) == 8
+               for state in checkpoint["cells"].values()) == 11
 
 
 def test_report_aggregates_all_candidate_error_rounds(tmp_path: Path):
@@ -688,7 +737,7 @@ def test_report_aggregates_all_candidate_error_rounds(tmp_path: Path):
         CandidateFailureLauncher(),
     )
     report = audited_campaign.build_report(document, ledger)
-    assert report["summary"]["candidate_failed"] == 9
+    assert report["summary"]["candidate_failed"] == 12
     assert report["cells"][0]["candidate_errors"] == [
         {"round": 1, "failure_type": "compile_error", "reason": "bad tl.load"},
         {"round": 3, "failure_type": "correctness_error", "reason": "mismatch"},
@@ -699,6 +748,8 @@ def test_report_rejects_ledger_from_another_run_before_consuming_cells(tmp_path:
     first = manifest(tmp_path / "first")
     second = manifest(tmp_path / "second", seed="campaign-2")
     second["run_id"] = "different-run"
+    for cell in second["cells"]:
+        cell["branch"] = f"experiment/different-run/{cell['cell_id']}"
     second["manifest_sha256"] = audited_campaign._document_digest(second)
     ledger = audited_campaign._new_ledger(first)
 
@@ -802,6 +853,27 @@ def test_manifest_rejects_unpinned_task_starters(tmp_path: Path, mutation: str):
 
 def test_legacy_v1_manifest_without_starters_still_verifies_and_reports(tmp_path: Path):
     document = manifest(tmp_path)
+    names = {
+        "cannbot-all": "cannbot",
+        "cannbot-new-profiler": "project-cannbot",
+        "guarded-new-profiler": "project-guarded",
+    }
+    document["cells"] = [cell for cell in document["cells"]
+                         if cell["treatment"] != "guarded-old-profiler"]
+    for cell in document["cells"]:
+        cell["treatment"] = names[cell["treatment"]]
+        cell["cell_id"] = f"{cell['task']}-{cell['treatment']}"
+        cell["branch"] = f"experiment/{document['run_id']}/{cell['cell_id']}"
+        cell["skills"] = list(audited_campaign.LEGACY_TREATMENT_SKILLS[
+            cell["treatment"]
+        ])
+    document["dimensions"]["treatments"] = list(audited_campaign.LEGACY_TREATMENTS)
+    document["order"] = [cell["cell_id"] for cell in document["cells"]]
+    document["provenance"]["skills"] = {
+        "cannbot": "e" * 64,
+        "ascend-profiling": "f" * 64,
+        "triton-guarded-kernel": "1" * 64,
+    }
     document["schema_version"] = 1
     del document["provenance"]["starters"]
     document["manifest_sha256"] = audited_campaign._document_digest(document)
@@ -843,4 +915,4 @@ def test_cli_fake_controller_end_to_end(tmp_path: Path):
         "--ledger", str(ledger_path), "--output", str(report_path),
     ], check=True)
     assert json.loads(ledger_path.read_text())["status"] == "complete"
-    assert json.loads(report_path.read_text())["summary"]["complete"] == 9
+    assert json.loads(report_path.read_text())["summary"]["complete"] == 12

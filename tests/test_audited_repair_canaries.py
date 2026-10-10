@@ -193,7 +193,7 @@ def test_runner_emits_gate_accepted_artifacts_and_exact_resume(tmp_path: Path):
     result = runner.run(output)
 
     assert result["schema"] == "profiling-skill/audited-repair-canary-results/v1"
-    assert len(result["results"]) == 3
+    assert len(result["results"]) == 4
     assert production.validate_canary_gate(config, output, sha(output))["status"] == "passed"
     assert sum(action == "observe" for _, action in FakeLauncher.calls) == 1
     assert not Path(config["run_root"]).exists()
@@ -204,7 +204,7 @@ def test_runner_emits_gate_accepted_artifacts_and_exact_resume(tmp_path: Path):
 def test_runner_accepts_v2_exact_profile_treatment_subset(tmp_path: Path):
     definition, config, output = inputs(tmp_path)
     document = json.loads(definition.read_text())
-    selected = ["project-cannbot", "project-guarded"]
+    selected = ["cannbot-new-profiler", "guarded-new-profiler"]
     document["schema"] = "profiling-skill/audited-repair-canaries/v2"
     document["treatments"] = selected
     document["canaries"] = [item for item in document["canaries"]
@@ -245,7 +245,8 @@ def test_runner_preserves_reordered_complete_v1_definition(tmp_path: Path):
     result = runner.run(output)
 
     assert [item["treatment"] for item in result["results"]] == [
-        "project-guarded", "project-cannbot", "cannbot",
+        "guarded-old-profiler", "guarded-new-profiler",
+        "cannbot-new-profiler", "cannbot-all",
     ]
     assert production.validate_canary_gate(config, output, sha(output))["status"] == "passed"
 
@@ -620,7 +621,7 @@ def test_forced_repair_crash_boundaries_resume_without_duplicate_dispatch(
 def test_fresh_process_recovers_persisted_resume_checkpoint(tmp_path: Path):
     definition, config, output = inputs(tmp_path)
     run_root = tmp_path / "canary-run"
-    cell = "matmul-project-cannbot-resume"
+    cell = "matmul-cannbot-new-profiler-resume"
     repo = run_root / "cells" / cell / "repo"
     blocked = repo / ".experiment" / "blocked.json"
     blocked.parent.mkdir(parents=True)
@@ -656,7 +657,7 @@ def test_fresh_process_recovers_persisted_resume_checkpoint(tmp_path: Path):
 
 def test_later_infrastructure_resume_preserves_original_resume_proof(tmp_path: Path):
     definition, config, output = inputs(tmp_path)
-    run_root, cell = tmp_path / "canary-run", "matmul-project-cannbot-resume"
+    run_root, cell = tmp_path / "canary-run", "matmul-cannbot-new-profiler-resume"
     repo = run_root / "cells" / cell / "repo"
     blocked = repo / ".experiment" / "blocked.json"
     blocked.parent.mkdir(parents=True)

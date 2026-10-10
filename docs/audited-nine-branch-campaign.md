@@ -1,12 +1,15 @@
-# Audited nine-branch campaign
+# Audited campaign
 
 This campaign crosses three benchmark tasks (`matmul`, `gdn`, and `bsa`) with
-three isolated skill treatments (`cannbot`, `project-cannbot`, and
-`project-guarded`). Each of the nine unmerged branches performs four audited
+four isolated skill treatments (`cannbot-all`, `cannbot-new-profiler`,
+`guarded-new-profiler`, and `guarded-old-profiler`). Each of the twelve
+unmerged branches performs four audited
 experiments with a 48-operation controller budget and up to two in-round
 candidate repairs. Frozen legacy campaigns retain their 24-operation budget.
 The seed plus four experiment commits therefore produces five commits per
-branch and 45 commits in the complete run, regardless of repair count.
+branch and 60 commits in the complete run, regardless of repair count. The
+filename is retained for links to historical nine-branch campaign evidence;
+the instructions below describe the current four-treatment flow.
 
 ## Frozen manifest
 
@@ -29,8 +32,9 @@ shape is:
   "baselines": {"matmul": "<sha256>", "gdn": "<sha256>", "bsa": "<sha256>"},
   "skills": {
     "cannbot": "<sha256>",
-    "ascend-profiling": "<sha256>",
-    "triton-guarded-kernel": "<sha256>"
+    "profiler-new": "<sha256>",
+    "profiler-old": "<sha256>",
+    "guarded": "<sha256>"
   }
 }
 ```
@@ -52,27 +56,29 @@ python scripts/audited_campaign.py generate \
   --output /absolute/campaign/manifest.json
 ```
 
-Omit `--treatment` to retain the legacy full 3×3 schema-v2 campaign. Repeat
-`--treatment` to generate a schema-v3 subset; the order remains a deterministic,
-balanced task/treatment cross product. Profile-skill-only campaigns use:
+Omit `--treatment` for the full 3×4 schema-v4 campaign. Repeat `--treatment`
+to generate a schema-v4 subset; the order remains a deterministic, balanced
+task/treatment cross product. For example, the new-profiler comparison uses:
 
 ```bash
 python scripts/audited_campaign.py generate \
   --run-id "$RUN_ID" --prompt "$PROMPT" \
   --matmul-task "$MATMUL_TASK" --gdn-task "$GDN_TASK" --bsa-task "$BSA_TASK" \
   --provenance "$PROVENANCE" --ordering-seed "$RUN_ID" \
-  --treatment project-cannbot --treatment project-guarded \
+  --treatment cannbot-new-profiler --treatment guarded-new-profiler \
   --output "$MANIFEST"
 ```
 
-Schema v3 rejects duplicate, unknown, empty, or non-`ascend-profiling`
-treatments. For its 2×3 repair-aware production run, pin
-`experiments/audited-profile-skill-canaries.json`; canary schema v2 requires
-exactly one canary for each selected treatment and production cross-checks the
-canary treatment list against the manifest before dispatch.
+Schema v4 rejects duplicate, unknown, or empty treatments. The full
+four-treatment production run pins `experiments/audited-repair-canaries.json`.
+A subset needs a separately frozen canary schema-v2 definition containing
+exactly one canary for each selected treatment; production cross-checks its
+treatment list against the manifest before dispatch. The existing
+`experiments/audited-profile-skill-canaries.json` retains historical treatment
+identities and is not an input to the current schema-v4 flow.
 
 The manifest intentionally contains no target or device number. Every task
-uses one byte-identical task document across its three treatments, and every
+uses one byte-identical task document across its four treatments, and every
 cell carries the exact treatment skill allowlist. The runtime must prepare the
 isolated branches/workspaces from those declarations; agents must never merge
 or push their experiment branches.
@@ -126,11 +132,12 @@ python scripts/audited_campaign.py report \
   --output /absolute/campaign/report.json
 ```
 
-Newly generated manifests use `schema_version: 2`, which requires starter
-provenance. Verification and reporting continue to accept historical
-`schema_version: 1` manifests without starter bindings. Production launch is
-v2-only: create a hash-pinned runtime configuration with schema
-`profiling-skill/audited-campaign-runtime/v2`. It declares the run root, a
+Newly generated manifests use `schema_version: 4`, which requires starter
+provenance and the exact four-source treatment freeze. Verification and
+reporting continue to accept historical schema versions 1–3 with their legacy
+provenance contracts. Production launch requires manifest schema 4 and a
+hash-pinned runtime configuration with schema
+`profiling-skill/audited-campaign-runtime/v3`. It declares the run root, a
 pinned source repository and commit for each task, exact per-skill source trees
 and hashes, the pinned runtime scripts closure containing
 `audited_bz_controller.py`, its sibling benchmark-assets tree and hash, the
@@ -151,6 +158,82 @@ median, and includes the SHA-256 of the canonical JSON for those four fields.
 manifest provenance object exactly, and every pin is checked against the
 source revision, complete controller closure, baseline files, composite
 CANNBot skill bundle, project skill trees, model, and resolved Docker image.
+This production entrypoint is currently A3-only and accepts only the
+product-neutral schema-4 shape; a manifest with `dimensions.products` fails
+closed before runtime provenance is read or any cell is dispatched. The
+dual-product scheduler contract remains available for the product-aware
+launcher integration.
+
+The runtime-v3 `skill_sources` object has exactly four keys. Use absolute paths
+to immutable, locally exported directories on the operator host; the launcher
+copies from these paths before starting an agent, so relative paths would bind
+the configuration to the caller's working directory. This is the complete
+minimal shape (replace the local freeze root, CANNBot commit, and the CANNBot
+and guarded tree-digest placeholders):
+
+```json
+{
+  "skill_sources": {
+    "cannbot": {
+      "path": "/absolute/frozen/cannbot",
+      "sha256": "<digest_tree of /absolute/frozen/cannbot>",
+      "revision": "<40-character lowercase CANNBot commit>"
+    },
+    "profiler-new": {
+      "path": "/absolute/frozen/profiler-new",
+      "sha256": "220ff700e9f80dbaa97b4eb0845628f77af2977ff18dc79310d7ed4f5e7daf02",
+      "revision": "1b9ae02303b3838f683c37a9a2fe15ce740ca56e"
+    },
+    "profiler-old": {
+      "path": "/absolute/frozen/profiler-old",
+      "sha256": "4bfba796dadcc65cc50ea30782367089685159f1ea4b58e34130135278f704bb",
+      "revision": "d6cc328144df17d09979c1d154366f52a55f5454"
+    },
+    "guarded": {
+      "path": "/absolute/frozen/triton-guarded-kernel",
+      "sha256": "<digest_tree of /absolute/frozen/triton-guarded-kernel>"
+    }
+  }
+}
+```
+
+`cannbot` is one frozen tree shared by both CANNBot treatments. Its root must
+contain a `COMMIT` file whose only value is the same revision and a `skills/`
+directory containing `triton-task-extractor`, `triton-op-designer`,
+`triton-op-coding`, `triton-op-verifier`, `triton-latency-optimizer`,
+`triton-simulator-optimizer`, `npu-arch`, and `ops-profiling`. Each profiler
+path is the repository tree exported from its exact pinned commit, with
+`SKILL.md` at its root. The guarded path is the root of the frozen
+`triton-guarded-kernel` skill and has no revision field in runtime v3. Trees
+must contain only ordinary directories and regular files: symlinks and special
+entries fail validation. Bytecode caches are ignored by the digest and should
+not be included in a freeze.
+
+Export the two profiler commits from a trusted local clone, without embedding
+the clone path or credentials in the runtime JSON:
+
+```bash
+mkdir -p "$FREEZE_ROOT/profiler-old" "$FREEZE_ROOT/profiler-new"
+git -C "$PROFILING_REPO" archive d6cc328144df17d09979c1d154366f52a55f5454 \
+  | tar -x -C "$FREEZE_ROOT/profiler-old"
+git -C "$PROFILING_REPO" archive 1b9ae02303b3838f683c37a9a2fe15ce740ca56e \
+  | tar -x -C "$FREEZE_ROOT/profiler-new"
+
+PYTHONPATH=scripts python -c \
+  'from pathlib import Path; from audited_campaign_production import digest_tree; import sys; print(digest_tree(Path(sys.argv[1])))' \
+  "$FREEZE_ROOT/profiler-old"
+PYTHONPATH=scripts python -c \
+  'from pathlib import Path; from audited_campaign_production import digest_tree; import sys; print(digest_tree(Path(sys.argv[1])))' \
+  "$FREEZE_ROOT/profiler-new"
+```
+
+The commands must print the old and new digests shown in the JSON above.
+Compute the CANNBot and guarded digests through the same `digest_tree`
+interface. `provenance.skills` must repeat these four resulting digests under
+the same exact keys. Production re-hashes every tree, checks the profiler
+digests against their trusted commits, checks CANNBot's `COMMIT` and required
+directories, then copies only the treatment allowlist into the isolated agent
+workspace. No credentials or source repository locations enter that workspace.
 
 `starter_sources` and `provenance.starters` must be identical maps covering
 `matmul`, `gdn`, and `bsa`. Each task maps `candidate` and `manifest` to an
@@ -295,7 +378,7 @@ New manifests default to 48 controller operations per cell; frozen legacy
 manifests with 24 operations remain valid. Production runtime configuration
 sets `max_candidate_repairs_per_round` to `2` (omission means the same value
 for legacy configuration compatibility). Run one matmul canary for each of the
-three treatments before the measured campaign. Together they must demonstrate
+four treatments before the measured campaign. Together they must demonstrate
 an in-round compile/smoke repair, exact checkpoint/session resume, independent
 offline verification, and a positive `msprof op` timing. Dynamic admission
 chooses the physical BZ-A3 devices; canary definitions never encode devices.
@@ -305,10 +388,10 @@ pin the unchanged prompt, tasks, starters, baselines, treatment skills, model,
 image, and source revision, then generate a new run ID and 48-operation
 manifest. Validate all hashes with `ProductionCellLauncher` before producing
 an admission receipt. Do not copy a prior ledger or cell worktree into the new
-run root, and do not launch the nine cells until all three canaries pass.
+run root, and do not launch the twelve cells until all four canaries pass.
 Pin `experiments/audited-repair-canaries.json` in runtime configuration as
 `canary_definition`, then supply the hash-pinned compact canary results to the
-production command. The entrypoint checks all three treatment identities,
+production command. The entrypoint checks all four treatment identities,
 required evidence, at least two repaired canaries, and the declared
 checkpoint-resume canary before it calls `run_campaign`. Each result pins its
 experiment commit, independent verifier JSON, terminal cell receipt, and—when
@@ -336,10 +419,10 @@ python scripts/audited_repair_canaries.py \
   --run-root /absolute/repair-canary-run
 ```
 
-The runner dispatches only the three declared matmul cells. It reuses the
+The runner dispatches only the four declared matmul cells. It reuses the
 production cell launcher, isolated treatment allowlists, dynamic BZ-A3
 admission, real controller, and independent verifier, but never calls the
-nine-cell campaign scheduler. Each repair canary transforms exactly one
+twelve-cell campaign scheduler. Each repair canary transforms exactly one
 completed real controller transaction into a declared compile diagnostic; the
 agent must change the candidate in the same numbered round and the repaired
 attempt obtains its own real `msprof op` evidence. For the resume canary, the

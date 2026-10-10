@@ -165,8 +165,11 @@ class InjectedController:
     def observe(self, number: int, candidate: str, manifest: str, handle: str) -> dict:
         return self.controller.observe(number, candidate, manifest, handle)
 
-    def remeasure(self, number: int, candidate: str, manifest: str, handle: str) -> dict:
-        return self.controller.remeasure(number, candidate, manifest, handle)
+    def remeasure(self, number: int, candidate: str, manifest: str, handle: str,
+                  pending_receipt: dict) -> dict:
+        return self.controller.remeasure(
+            number, candidate, manifest, handle, pending_receipt,
+        )
 
 
 class LiveLauncher:

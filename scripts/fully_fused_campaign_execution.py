@@ -28,6 +28,8 @@ TREATMENTS = (
     "guarded-new-profiler", "guarded-old-profiler",
 )
 MATMUL_FULL_CASES = tuple(range(10))
+DEVELOPMENT_CASE_COUNTS = {"matmul": 3, "gdn": 5, "bsa": 5}
+FULL_CASE_COUNTS = {"matmul": 10, "gdn": 50, "bsa": 50}
 ARCHIVE_SCHEMA = "profiling-skill/pre-campaign-archive/v1"
 PREPARED_SCHEMA = "profiling-skill/fully-fused-campaign-prepared/v1"
 GATE_SCHEMA = "profiling-skill/fully-fused-matmul-gates/v1"
@@ -193,9 +195,12 @@ def _validate_rankings(rankings: dict) -> dict:
         normalized[product] = {}
         for task in TASKS:
             cases = rankings[product][task]
-            if (not isinstance(cases, list) or not cases
+            if (not isinstance(cases, list)
+                    or len(cases) != DEVELOPMENT_CASE_COUNTS[task]
                     or len(cases) != len(set(cases))
-                    or any(type(case) is not int or case < 0 for case in cases)):
+                    or any(type(case) is not int
+                           or case not in range(FULL_CASE_COUNTS[task])
+                           for case in cases)):
                 raise ExecutionError(f"rankings for {product}/{task} are invalid")
             normalized[product][task] = list(cases)
     return normalized

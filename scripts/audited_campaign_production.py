@@ -119,7 +119,8 @@ def validate_ranked_cases(value: object, products: tuple[str, ...],
         if not isinstance(tasks, dict) or set(tasks) != set(DEVELOPMENT_CASES):
             raise ProductionError("product-ranked cases must cover all tasks")
         for task, cases in tasks.items():
-            if (not isinstance(cases, list) or not cases
+            if (not isinstance(cases, list)
+                    or len(cases) != len(DEVELOPMENT_CASES[task])
                     or len(cases) != len(set(cases))
                     or any(type(case) is not int or case not in ALL_CASES[task]
                            for case in cases)):

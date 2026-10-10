@@ -27,10 +27,15 @@ TREATMENTS = (
     "cannbot-all", "cannbot-new-profiler",
     "guarded-new-profiler", "guarded-old-profiler",
 )
+MATMUL_FULL_CASES = tuple(range(10))
 ARCHIVE_SCHEMA = "profiling-skill/pre-campaign-archive/v1"
 PREPARED_SCHEMA = "profiling-skill/fully-fused-campaign-prepared/v1"
 GATE_SCHEMA = "profiling-skill/fully-fused-matmul-gates/v1"
 REPORT_SCHEMA = "profiling-skill/fully-fused-campaign-report/v1"
+RECEIPT_DIGEST_FIELDS = {
+    ARCHIVE_SCHEMA: "seal_sha256", PREPARED_SCHEMA: "prepared_sha256",
+    GATE_SCHEMA: "gate_sha256", REPORT_SCHEMA: "report_sha256",
+}
 VALIDATION_BUNDLE_PATHS = (
     "scripts", "tests", "docs", "benchmarks", "prompts", "references",
     "experiments", "SKILL.md",
@@ -42,10 +47,30 @@ class ExecutionError(RuntimeError):
 
 
 def document_sha256(document: dict) -> str:
-    payload = {key: value for key, value in document.items() if key != "seal_sha256"}
     return hashlib.sha256(json.dumps(
-        payload, sort_keys=True, separators=(",", ":"),
+        document, sort_keys=True, separators=(",", ":"),
     ).encode()).hexdigest()
+
+
+def receipt_sha256(document: dict, digest_field: str | None = None) -> str:
+    expected = RECEIPT_DIGEST_FIELDS.get(document.get("schema"))
+    if expected is None or digest_field not in {None, expected}:
+        raise ExecutionError("receipt schema or digest field is unsupported")
+    return document_sha256({key: value for key, value in document.items()
+                            if key != expected})
+
+
+def _verify_receipt_digest(document: object, schema: str) -> dict:
+    field = RECEIPT_DIGEST_FIELDS[schema]
+    if (not isinstance(document, dict) or document.get("schema") != schema
+            or not _digest(document.get(field))
+            or document[field] != receipt_sha256(document)):
+        label = {
+            ARCHIVE_SCHEMA: "archive seal", PREPARED_SCHEMA: "prepared",
+            GATE_SCHEMA: "gate", REPORT_SCHEMA: "report",
+        }[schema]
+        raise ExecutionError(f"{label} receipt digest is invalid")
+    return document
 
 
 def _sha256(path: Path) -> str:
@@ -121,8 +146,11 @@ def build_validation_bundle(repository: Path, destination: Path) -> Path:
 
 def verify_archive_seal(seal: dict) -> dict:
     """Recompute every zero-copy root and completion-file binding."""
-    if (not isinstance(seal, dict) or seal.get("schema") != ARCHIVE_SCHEMA
-            or seal.get("seal_sha256") != document_sha256(seal)):
+    try:
+        _verify_receipt_digest(seal, ARCHIVE_SCHEMA)
+    except ExecutionError as error:
+        raise ExecutionError("archive seal is malformed or unauthenticated") from error
+    if not isinstance(seal, dict):
         raise ExecutionError("archive seal is malformed or unauthenticated")
     roots, completions = seal.get("roots"), seal.get("completion_files")
     if not isinstance(roots, list) or not roots:
@@ -206,8 +234,30 @@ def prepare_campaign(manifest: dict, rankings: dict, *, archive_attestation: str
         "ranked_cases": ranked,
         "ranked_cases_sha256": document_sha256({"ranked_cases": ranked}),
     }
-    prepared["prepared_sha256"] = document_sha256(prepared)
+    prepared["prepared_sha256"] = receipt_sha256(prepared)
     return prepared
+
+
+def verify_prepared_receipt(value: object) -> dict:
+    receipt = _verify_receipt_digest(value, PREPARED_SCHEMA)
+    branches = receipt.get("branches")
+    if (receipt.get("cell_count") != 24 or receipt.get("rounds_per_cell") != 4
+            or receipt.get("expected_round_commits") != 96
+            or not _digest(receipt.get("archive_attestation"))
+            or not _digest(receipt.get("manifest_sha256"))
+            or not isinstance(receipt.get("run_id"), str) or not receipt["run_id"]
+            or not isinstance(branches, list) or len(branches) != 24
+            or len(set(branches)) != 24
+            or any(not isinstance(branch, str)
+                   or not branch.startswith(f"experiment/{receipt.get('run_id')}/")
+                   for branch in branches)):
+        raise ExecutionError("prepared campaign receipt contract is invalid")
+    _validate_rankings(receipt.get("ranked_cases"))
+    if receipt.get("ranked_cases_sha256") != document_sha256({
+        "ranked_cases": receipt["ranked_cases"],
+    }):
+        raise ExecutionError("prepared campaign ranked cases digest is invalid")
+    return receipt
 
 
 def validate_matmul_gate(product: str, ranked_cases: list[int], receipt: dict) -> dict:
@@ -228,7 +278,9 @@ def validate_matmul_gate(product: str, ranked_cases: list[int], receipt: dict) -
             or not math.isclose(statistics.median(samples), median, rel_tol=1e-12)):
         raise ExecutionError(f"{product} known-good gate lacks deterministic timing")
     fusion = receipt.get("fusion_gate")
-    if (not isinstance(fusion, dict) or fusion.get("cases") != ranked_cases
+    cases = fusion.get("cases") if isinstance(fusion, dict) else None
+    if (not isinstance(fusion, dict) or cases != list(MATMUL_FULL_CASES)
+            or any(case not in cases for case in ranked_cases)
             or fusion.get("logical_launches_per_case") != 1
             or not fusion.get("entrypoint") or not fusion.get("kernel_name")):
         raise ExecutionError(f"{product} known-good matmul is not fully fused")
@@ -240,13 +292,37 @@ def validate_matmul_gate(product: str, ranked_cases: list[int], receipt: dict) -
     }
 
 
-def run_matmul_gates(rankings: dict, probe: Callable[[str, list[int]], dict]) -> dict:
+def run_matmul_gates(rankings: dict, probe: Callable[[str, list[int]], dict], *,
+                     prepared_sha256: str) -> dict:
     ranked = _validate_rankings(rankings)
+    if not _digest(prepared_sha256):
+        raise ExecutionError("matmul gates require a prepared receipt digest")
     results = [validate_matmul_gate(
         product, ranked[product]["matmul"], probe(product, ranked[product]["matmul"]),
     ) for product in PRODUCTS]
-    receipt = {"schema": GATE_SCHEMA, "status": "passed", "products": results}
-    receipt["gate_sha256"] = document_sha256(receipt)
+    receipt = {"schema": GATE_SCHEMA, "status": "passed",
+               "prepared_sha256": prepared_sha256, "products": results}
+    receipt["gate_sha256"] = receipt_sha256(receipt)
+    return receipt
+
+
+def verify_gate_receipt(value: object, rankings: dict, *, prepared_sha256: str) -> dict:
+    receipt = _verify_receipt_digest(value, GATE_SCHEMA)
+    if (receipt.get("status") != "passed"
+            or receipt.get("prepared_sha256") != prepared_sha256
+            or not isinstance(receipt.get("products"), list)
+            or len(receipt["products"]) != len(PRODUCTS)):
+        raise ExecutionError("matmul gate receipt is not bound to the prepared campaign")
+    ranked = _validate_rankings(rankings)
+    by_product = {row.get("product"): row for row in receipt["products"]
+                  if isinstance(row, dict)}
+    if set(by_product) != set(PRODUCTS):
+        raise ExecutionError("matmul gate receipt does not cover both products")
+    for product in PRODUCTS:
+        row = by_product[product]
+        validate_matmul_gate(product, ranked[product]["matmul"], {
+            "status": "ok", "product": product, "task": "matmul", **row,
+        })
     return receipt
 
 
@@ -265,6 +341,12 @@ def _failure_outcome(row: dict) -> str:
 def compact_report(manifest: dict, report: dict) -> dict:
     """Validate terminal lineage and construct product-specific review tables."""
     cells = report.get("cells") if isinstance(report, dict) else None
+    if not isinstance(report, dict) or report.get("schema_version") != 2:
+        raise ExecutionError("terminal report schema is unsupported")
+    if report.get("run_id") != manifest.get("run_id"):
+        raise ExecutionError("terminal report run identity does not match the manifest")
+    if report.get("manifest_sha256") != manifest.get("manifest_sha256"):
+        raise ExecutionError("terminal report manifest identity does not match")
     if not isinstance(cells, list) or len(cells) != 24:
         raise ExecutionError("terminal report must contain all 24 cells")
     expected = {cell["cell_id"]: cell for cell in manifest["cells"]}
@@ -280,12 +362,20 @@ def compact_report(manifest: dict, report: dict) -> dict:
         commits = row.get("commits")
         if (not isinstance(commits, list) or len(commits) != 4
                 or len(set(commits)) != 4
-                or any(not isinstance(commit, str) or not commit for commit in commits)):
+                or any(not isinstance(commit, str) or len(commit) != 40
+                       or any(character not in "0123456789abcdef" for character in commit)
+                       for commit in commits)):
             raise ExecutionError(f"{row['cell_id']} lacks four unique round commits")
         commit_count += len(commits)
         fusion = row.get("fusion_gate")
         fusion_text = ("1 logical launch/case" if isinstance(fusion, dict)
                        and fusion.get("logical_launches_per_case") == 1 else None)
+        if (row.get("status") == "complete"
+                and isinstance(row.get("comparison_median_us"), (int, float))
+                and fusion_text is None):
+            raise ExecutionError(
+                f"{row['cell_id']} has timing without a successful fusion proof"
+            )
         tables[row["product"]].append({
             "task": row["task"], "treatment": row["treatment"],
             "outcome": _failure_outcome(row),
@@ -301,12 +391,44 @@ def compact_report(manifest: dict, report: dict) -> dict:
         raise ExecutionError("terminal report does not contain exactly 96 round commits")
     result = {
         "schema": REPORT_SCHEMA, "run_id": report.get("run_id"),
+        "manifest_sha256": report.get("manifest_sha256"),
         "summary": report.get("summary"), "round_commit_count": commit_count,
         "infrastructure_exclusions": len(report.get("discarded_infrastructure_attempts", [])),
         "tables": tables,
     }
-    result["report_sha256"] = document_sha256(result)
+    result["report_sha256"] = receipt_sha256(result)
     return result
+
+
+def verify_compact_report(value: object) -> dict:
+    receipt = _verify_receipt_digest(value, REPORT_SCHEMA)
+    tables = receipt.get("tables")
+    if (not isinstance(receipt.get("run_id"), str) or not receipt["run_id"]
+            or not _digest(receipt.get("manifest_sha256"))
+            or receipt.get("round_commit_count") != 96
+            or not isinstance(receipt.get("infrastructure_exclusions"), int)
+            or not isinstance(tables, dict) or set(tables) != set(PRODUCTS)
+            or any(not isinstance(tables[product], list)
+                   or len(tables[product]) != 12 for product in PRODUCTS)):
+        raise ExecutionError("compact report receipt contract is invalid")
+    commits = []
+    for product in PRODUCTS:
+        for row in tables[product]:
+            row_commits = row.get("commits") if isinstance(row, dict) else None
+            if (not isinstance(row_commits, list) or len(row_commits) != 4
+                    or len(set(row_commits)) != 4
+                    or any(not isinstance(commit, str) or len(commit) != 40
+                           or any(character not in "0123456789abcdef"
+                                  for character in commit)
+                           for commit in row_commits)
+                    or (row.get("outcome") == "complete"
+                        and isinstance(row.get("raw_candidate_us"), (int, float))
+                        and row.get("fusion") != "1 logical launch/case")):
+                raise ExecutionError("compact report row contract is invalid")
+            commits.extend(row_commits)
+    if len(commits) != 96:
+        raise ExecutionError("compact report lineage is incomplete")
+    return receipt
 
 
 def render_markdown(report: dict) -> str:
@@ -314,8 +436,10 @@ def render_markdown(report: dict) -> str:
     for product in PRODUCTS:
         lines += [f"## {product.upper()}", "", (
             "| Product | Task | Treatment | Outcome | Baseline us | Candidate us | "
-            "Speedup | Variability | Fusion | Bottleneck | Branch |"
-        ), "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |"]
+            "Speedup | Variability | Fusion | Bottleneck | Best round | "
+            "Profiler evidence | Branch | Round commits |"
+        ), ("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | "
+             "---: | --- | --- | --- |")]
         for row in report["tables"][product]:
             def value(name: str) -> str:
                 item = row.get(name)
@@ -324,7 +448,9 @@ def render_markdown(report: dict) -> str:
                 f"| {product} | {row['task']} | {row['treatment']} | {row['outcome']} | "
                 f"{value('raw_baseline_us')} | {value('raw_candidate_us')} | "
                 f"{value('speedup')} | {value('variability_ratio')} | "
-                f"{value('fusion')} | {value('bottleneck')} | `{row['branch']}` |"
+                f"{value('fusion')} | {value('bottleneck')} | {value('best_round')} | "
+                f"{', '.join(row['profiler_evidence']) or '-'} | `{row['branch']}` | "
+                f"{', '.join(f'`{commit}`' for commit in row['commits'])} |"
             )
         lines.append("")
     lines.append(
@@ -356,6 +482,7 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--output", type=Path, required=True)
     gate = commands.add_parser("gate")
     gate.add_argument("--rankings", type=Path, required=True)
+    gate.add_argument("--prepared", type=Path, required=True)
     gate.add_argument("--a3-receipt", type=Path, required=True)
     gate.add_argument("--a5-receipt", type=Path, required=True)
     gate.add_argument("--output", type=Path, required=True)
@@ -387,8 +514,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "gate":
             receipts = {"a3": _load(args.a3_receipt), "a5": _load(args.a5_receipt)}
+            prepared = verify_prepared_receipt(_load(args.prepared))
             result = run_matmul_gates(
                 _load(args.rankings), lambda product, _: receipts[product],
+                prepared_sha256=prepared["prepared_sha256"],
             )
         else:
             result = compact_report(_load(args.manifest), _load(args.campaign_report))

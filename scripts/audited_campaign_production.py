@@ -25,6 +25,10 @@ try:
         FusionContractError,
         validate_manifest as validate_fused_manifest,
     )
+    from fully_fused_campaign_execution import (
+        ExecutionError as CampaignExecutionError,
+        verify_archive_seal, verify_gate_receipt, verify_prepared_receipt,
+    )
 finally:
     sys.path.pop(0)
 
@@ -650,6 +654,7 @@ class ProductionCellLauncher:
             raise ProductionError("runtime config cannot supply an adapter or remote command")
         self._validate_timeouts()
         self.max_candidate_repairs = config.get("max_candidate_repairs_per_round", 2)
+        self._campaign_admission: dict | None = None
         if self.max_candidate_repairs != 2 or type(self.max_candidate_repairs) is not int:
             raise ProductionError(
                 "production max_candidate_repairs_per_round must be exactly two"
@@ -914,6 +919,46 @@ class ProductionCellLauncher:
         if not isinstance(products, dict) or product not in products:
             raise ProductionError("runtime product configuration is missing")
         return products[product]
+
+    def _validate_campaign_admission(self) -> dict:
+        """Authenticate archive, preparation, and both product gates together."""
+        binding = self.config.get("campaign_admission")
+        if not isinstance(binding, dict) or set(binding) != {"archive", "prepared", "gates"}:
+            raise ProductionError("dual-product launch requires sealed campaign admission")
+        try:
+            archive = _read_pinned(
+                Path(binding["archive"]["path"]), binding["archive"]["sha256"],
+                "campaign archive seal",
+            )
+            prepared = _read_pinned(
+                Path(binding["prepared"]["path"]), binding["prepared"]["sha256"],
+                "prepared campaign receipt",
+            )
+            gates = _read_pinned(
+                Path(binding["gates"]["path"]), binding["gates"]["sha256"],
+                "campaign gate receipt",
+            )
+            archive_result = verify_archive_seal(archive)
+            verify_prepared_receipt(prepared)
+            verify_gate_receipt(
+                gates, prepared["ranked_cases"],
+                prepared_sha256=prepared["prepared_sha256"],
+            )
+        except (KeyError, TypeError, CampaignExecutionError) as error:
+            raise ProductionError(f"campaign admission is invalid: {error}") from error
+        if (prepared.get("run_id") != self.config.get("run_id")
+                or prepared.get("manifest_sha256") != self.config.get("manifest_sha256")
+                or prepared.get("archive_attestation") != archive_result["seal_sha256"]
+                or prepared.get("ranked_cases") != self.config.get("ranked_cases")):
+            raise ProductionError("campaign admission does not match runtime inputs")
+        expected = {
+            "archive_seal_sha256": archive_result["seal_sha256"],
+            "prepared_sha256": prepared["prepared_sha256"],
+            "gate_sha256": gates["gate_sha256"],
+        }
+        if self.config.get("provenance", {}).get("campaign_admission") != expected:
+            raise ProductionError("campaign admission provenance does not match receipts")
+        return expected
 
     def _tasks(self, product: str | None) -> dict:
         tasks = self.config.get("product_tasks")
@@ -1356,6 +1401,8 @@ class ProductionCellLauncher:
             raise ProductionError(
                 "production cells require four rounds and a 24 or 48-operation budget"
             )
+        if self.config.get("products") is not None and self._campaign_admission is None:
+            self._campaign_admission = self._validate_campaign_admission()
         product = cell.get("product", "a3")
         task_binding = self._tasks(product).get(cell.get("task"), {})
         prompt_contract = cell.get("prompt_contract", {})

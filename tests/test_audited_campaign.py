@@ -287,6 +287,7 @@ class RecordingLauncher:
                     "case_results": [{"case": 7, "median_us": 10.0 - round_number}],
                     "controls": {"before_us": 10.0, "after_us": 10.1},
                     "policy": {"post_control": "pass"},
+                    "compact_artifacts": ["remote:/profile/evidence.json"],
                 }
                 for round_number in range(1, 5)
             ],
@@ -786,6 +787,7 @@ def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: P
                         "normalization_factor": normalized / raw,
                     },
                     "policy": {"post_control": "pass"},
+                    "compact_artifacts": ["remote:/profile/evidence.json"],
                     "case_results": [{"case": 7, "median_us": raw}],
                 })
             return {
@@ -808,6 +810,11 @@ def test_report_prefers_controller_normalized_receipt_for_comparison(tmp_path: P
     assert row["comparison_median_us"] == 8.0
     assert row["speedup_vs_baseline"] == 2.0
     assert row["baseline"] == baseline
+    assert row["profiler_evidence"] == ["remote:/profile/evidence.json"]
+    assert row["bottleneck"] == {
+        "status": "not-collected",
+        "reason": "msprof-op timing evidence does not include pipe metrics",
+    }
     expected_calibration = {
         "before": {"median_us": 10.0}, "after": {"median_us": 10.0},
         "normalization_factor": 8.0 / 6.0,

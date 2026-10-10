@@ -34,6 +34,7 @@ try:
     import audited_runtime
     import audited_campaign as runtime_campaign
     import audited_lifecycle
+    import fully_fused_campaign_execution as campaign_execution
 finally:
     sys.path.pop(0)
 
@@ -279,6 +280,76 @@ def product_runtime_fixture(config: dict) -> dict:
             "starters": legacy["starters"],
         }
         for product in campaign.PRODUCTS
+    }
+    return attach_campaign_admission(config)
+
+
+def attach_campaign_admission(config: dict) -> dict:
+    root = Path(config["run_root"]).parent / "campaign-admission"
+    root.mkdir(exist_ok=True)
+    frozen = root / "frozen-old-campaign"
+    frozen.mkdir(exist_ok=True)
+    (frozen / "result.json").write_text("{}\n")
+    completion = root / "completion.json"
+    completion.write_text("{}\n")
+    seal = {
+        "schema": campaign_execution.ARCHIVE_SCHEMA,
+        "roots": [{"path": str(frozen.resolve()),
+                   "sha256": campaign_execution.deterministic_tree_digest(frozen)}],
+        "completion_files": [{"path": str(completion.resolve()),
+                              "sha256": sha(completion)}],
+    }
+    seal["seal_sha256"] = campaign_execution.receipt_sha256(seal)
+    rankings = {
+        product: {task: list(cases) for task, cases in production.DEVELOPMENT_CASES.items()}
+        for product in campaign.PRODUCTS
+    }
+    config["manifest_sha256"] = "9" * 64
+    config["ranked_cases"] = rankings
+    config["provenance"]["ranked_cases_sha256"] = production.document_sha256({
+        "ranked_cases": rankings,
+    })
+    branches = [
+        f"experiment/{config['run_id']}/{product}-{task}-{treatment}"
+        for product in campaign.PRODUCTS for task in campaign.TASKS
+        for treatment in campaign.TREATMENTS
+    ]
+    prepared = {
+        "schema": campaign_execution.PREPARED_SCHEMA,
+        "run_id": config["run_id"], "archive_attestation": seal["seal_sha256"],
+        "manifest_sha256": config["manifest_sha256"], "cell_count": 24,
+        "rounds_per_cell": 4, "expected_round_commits": 96,
+        "branches": branches, "ranked_cases": rankings,
+        "ranked_cases_sha256": campaign_execution.document_sha256({
+            "ranked_cases": rankings,
+        }),
+    }
+    prepared["prepared_sha256"] = campaign_execution.receipt_sha256(prepared)
+
+    def gate(product, ranked):
+        return {
+            "status": "ok", "product": product, "task": "matmul",
+            "handle": f"remote:{product}:gate", "samples_us": [9.0, 10.0, 11.0],
+            "median_us": 10.0, "variability_ratio": 0.2,
+            "fusion_gate": {"cases": production.ALL_CASES["matmul"],
+                            "logical_launches_per_case": 1,
+                            "entrypoint": "matmul", "kernel_name": "matmul"},
+        }
+    gates = campaign_execution.run_matmul_gates(
+        rankings, gate, prepared_sha256=prepared["prepared_sha256"],
+    )
+    documents = {"archive": seal, "prepared": prepared, "gates": gates}
+    config["campaign_admission"] = {}
+    for name, document in documents.items():
+        path = root / f"{name}.json"
+        path.write_text(json.dumps(document, sort_keys=True) + "\n")
+        config["campaign_admission"][name] = {
+            "path": str(path.resolve()), "sha256": sha(path),
+        }
+    config["provenance"]["campaign_admission"] = {
+        "archive_seal_sha256": seal["seal_sha256"],
+        "prepared_sha256": prepared["prepared_sha256"],
+        "gate_sha256": gates["gate_sha256"],
     }
     return config
 
@@ -1501,6 +1572,65 @@ def test_a5_controller_selects_self_contained_named_runtime_client(tmp_path: Pat
     assert Path(client[1]).name == "bz_a5_job_client.py"
     assert client[client.index("--remote-root") + 1] == "/remote/a5"
     assert launcher._remote_root("a3", "bz-a3-2") == "/remote/a3-2"
+
+
+def test_dual_product_launch_requires_and_authenticates_campaign_admission(tmp_path: Path):
+    cell = {
+        "cell_id": "a3-matmul-cannbot-all", "product": "a3",
+        "runtime": "py311-torch", "task": "matmul", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    launcher = production_launcher(
+        config,
+        invoker_factory=lambda repo, **kwargs: SimpleNamespace(
+            scrub_auth=lambda: None,
+            docker_image_id=config["products"]["a3"]["runtime_image_digest"],
+        ),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+        verifier_invoke=valid_verifier,
+    )
+
+    receipt = launcher.launch(
+        cell, {"product": "a3", "runtime": "py311-torch",
+               "target": "bz-a3-1", "device": 0},
+    )
+    assert receipt["status"] == "complete"
+    assert launcher._campaign_admission == config["provenance"]["campaign_admission"]
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("missing", "requires sealed campaign admission"),
+    ("tampered-gate", "campaign admission is invalid"),
+])
+def test_dual_product_launch_rejects_missing_or_tampered_admission(
+    tmp_path: Path, mutation: str, message: str,
+):
+    cell = {
+        "cell_id": "a3-matmul-cannbot-all", "product": "a3",
+        "runtime": "py311-torch", "task": "matmul", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    if mutation == "missing":
+        del config["campaign_admission"]
+    else:
+        gate = Path(config["campaign_admission"]["gates"]["path"])
+        document = json.loads(gate.read_text())
+        document["products"][0]["median_us"] = 999.0
+        gate.write_text(json.dumps(document) + "\n")
+        config["campaign_admission"]["gates"]["sha256"] = sha(gate)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    with pytest.raises(production.ProductionError, match=message):
+        launcher.launch(
+            cell, {"product": "a3", "runtime": "py311-torch",
+                   "target": "bz-a3-1", "device": 0},
+        )
 
 
 def test_controller_rejects_cross_product_placement(tmp_path: Path):

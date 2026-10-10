@@ -42,17 +42,30 @@ candidate failure and does not consume a round.
 
 ```text
 python scripts/fully_fused_campaign_execution.py gate \
-  --rankings RANKINGS.json --a3-receipt A3_GATE.json \
+  --rankings RANKINGS.json --prepared PREPARED.json \
+  --a3-receipt A3_GATE.json \
   --a5-receipt A5_GATE.json --output GATES.json
 ```
 
-Only after `GATES.json` says `passed` should the existing production campaign
-launcher run. Its resource pool continuously refills every compatible healthy,
-idle A3 or A5 slot, so the campaign uses maximal safe product-compatible
-concurrency. Lost observers resume exact retained handles. Handleless proven
-transport failures may be retried with the identical candidate; an uncertain
-dispatch remains pending. Compile, runtime, correctness, and fusion failures
-are counted candidate outcomes. A non-fused candidate gets no timing.
+The runtime config must bind `archive`, `prepared`, and `gates` JSON files under
+`campaign_admission` using absolute paths and file SHA-256 values. Provenance
+must independently bind their `archive_seal_sha256`, `prepared_sha256`, and
+`gate_sha256`, plus the product-ranked cases digest. The production launcher
+fails before materializing or dispatching a dual-product cell if any receipt,
+cross-receipt identity, full-domain fusion proof, runtime identity, or
+provenance binding is missing or has drifted.
+
+Only after `GATES.json` says `passed` can the existing production campaign
+launcher run. A controller's fusion evidence covers the complete valid case
+domain; gate validation requires that full-domain proof to contain every
+ranked development case rather than incorrectly requiring the two case lists
+to be identical. The resource pool continuously refills every compatible
+healthy, idle A3 or A5 slot, so the campaign uses maximal safe
+product-compatible concurrency. Lost observers resume exact retained handles.
+Handleless proven transport failures may be retried with the identical
+candidate; an uncertain dispatch remains pending. Compile, runtime,
+correctness, and fusion failures are counted candidate outcomes. A non-fused
+candidate gets no timing.
 
 Every round commit is independently verified and retains candidate code,
 manifest, structured command events, compact controller and profiler evidence,
@@ -74,4 +87,6 @@ and branch identity and each has four distinct round commits. A3 and A5 tables
 show raw baseline and candidate latency, speedup, variability, fusion proof,
 compact profiler evidence, bottleneck, best round, and full branch lineage.
 Discarded infrastructure attempts are counted separately from candidate
-failures.
+failures. Timing-only `msprof op` receipts do not contain pipe metrics, so their
+bottleneck field explicitly says `not-collected` instead of inventing a pipe;
+pipe attribution requires a separate compact PMU/timeline summary.

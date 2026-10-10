@@ -848,6 +848,16 @@ def build_report(manifest: dict, ledger: dict) -> dict:
         best_raw = min(raw, key=lambda item: item["median_us"]) if raw else None
         best_normalized = min(normalized, key=lambda pair: pair[1]) if normalized else None
         best = best_normalized[0] if best_normalized else best_raw
+        if best and best.get("compact_artifacts"):
+            bottleneck = {
+                "status": "not-collected",
+                "reason": "msprof-op timing evidence does not include pipe metrics",
+            }
+        else:
+            bottleneck = {
+                "status": "unavailable",
+                "reason": "no successful compact profiler evidence",
+            }
         baseline = terminal.get("baseline") or (best.get("baseline") if best else None)
         baseline_us = terminal.get("baseline_median_us")
         if baseline_us is None and best:
@@ -968,7 +978,7 @@ def build_report(manifest: dict, ledger: dict) -> dict:
             "profiler_evidence": (
                 best.get("compact_artifacts", []) if best else []
             ),
-            "bottleneck": best.get("bottleneck") if best else None,
+            "bottleneck": bottleneck,
             "candidate_errors": candidate_errors,
             "attempt_summary": attempt_summary,
             "failure": candidate_errors or (

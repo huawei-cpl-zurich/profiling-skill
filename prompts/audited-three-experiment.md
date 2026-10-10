@@ -8,10 +8,27 @@ commits and will resume this same session.
 
 For each experiment, first make one material candidate change, run relevant
 local checks, summarize readiness, and stop. Do not begin the next experiment.
-Before reporting readiness, update `candidate.manifest.json` to schema
-`profiling-skill/candidate-kernel/v1` with a nonempty `kernel_name` equal to the
-exact exported kernel selector used by `msprof op`. Never submit the initial
-`REPLACE_WITH_EXACT_EXPORTED_KERNEL` sentinel to the controller.
+Every candidate must implement the complete reference operation as one logical
+Triton entry-point launch for every supplied case. Do not call PyTorch or ACL
+compute from `forward`, import or call the reference implementation, dispatch
+to a reference or shape-specific fallback, submit a partial output-only
+kernel, or launch an auxiliary Triton kernel. Compiler-generated AIC and AIV
+components belonging to the same entry point and logical launch are allowed.
+The host independently checks the complete case inventory and profiles one
+isolated forward per case; correctness alone does not satisfy this contract.
+
+Before reporting readiness, update `candidate.manifest.json` to exactly this
+versioned shape (substituting the two names):
+
+```json
+{"schema":"profiling-skill/candidate-kernel/v2","kernel_name":"<exact msprof exported kernel>","entrypoint":"<Triton entrypoint>","fusion":{"schema_version":1,"mode":"single-logical-launch","complete_operator":true}}
+```
+
+`kernel_name` must equal `entrypoint` or its compiler-generated `_mix_aic` or
+`_mix_aiv` component. Never submit the initial
+`REPLACE_WITH_EXACT_EXPORTED_KERNEL` sentinel to the controller. A candidate
+that fails the fusion gate is a candidate failure, receives no performance
+result, and must be repaired within the current round's repair allowance.
 The host freezes the candidate and manifest hashes and invokes the controller.
 When the host asks you to finalize, do not edit either frozen file. Return only
 the requested JSON report. Describe concise evidence and conclusions, never

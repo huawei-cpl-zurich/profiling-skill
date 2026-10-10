@@ -16,6 +16,21 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    from fully_fused_contract import (
+        FusionContractError,
+        MANIFEST_SCHEMA as FUSED_MANIFEST_SCHEMA,
+        validate_fusion_evidence,
+        validate_manifest as validate_fused_manifest,
+    )
+except ModuleNotFoundError:  # Imported as scripts.benchmark_backend in host tests.
+    from scripts.fully_fused_contract import (
+        FusionContractError,
+        MANIFEST_SCHEMA as FUSED_MANIFEST_SCHEMA,
+        validate_fusion_evidence,
+        validate_manifest as validate_fused_manifest,
+    )
+
 
 PINNED_REVISION = "a42c54b916189500e2f7cb47640980f230f2eb65"
 MATMUL_REVISION = "9e39c8d3ee94ebd657ad4a9ee031718665b43efa"
@@ -136,8 +151,29 @@ def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]
     return kernel_name, None
 
 
+def load_candidate_contract(
+    path: Path,
+) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Load a legacy selector or a fully-fused v2 declaration."""
+    try:
+        manifest = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        return None, None, response(
+            "submission_error", f"cannot load candidate kernel manifest {path}: {error}"
+        )
+    if isinstance(manifest, dict) and manifest.get("schema") == FUSED_MANIFEST_SCHEMA:
+        try:
+            declaration = validate_fused_manifest(manifest)
+        except FusionContractError as error:
+            return None, None, response("submission_error", str(error))
+        return declaration["kernel_name"], declaration, None
+    kernel, failure = load_kernel_selector(path)
+    return kernel, None, failure
+
+
 def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Path,
-             kernel_name: str | None = None) -> dict[str, Any]:
+             kernel_name: str | None = None,
+             fusion_contract: dict[str, Any] | None = None) -> dict[str, Any]:
     spec = BENCHMARKS[benchmark]
     action = request["action"]
     job = {
@@ -179,6 +215,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             "kernel_name": kernel_name,
             "driver_arguments": ["--kernel-name", kernel_name],
         }
+        if fusion_contract is not None:
+            job["fusion_contract"] = fusion_contract
     return job
 
 
@@ -235,6 +273,18 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
             evidence=result,
         )
     if job["action"] == "profile" and status == "ok":
+        if "fusion_contract" in job:
+            try:
+                fusion = validate_fusion_evidence(
+                    job["fusion_contract"], result.get("fusion_evidence"),
+                    expected_cases=job["cases"],
+                )
+            except FusionContractError as error:
+                return response(
+                    "submission_error", f"fully fused runtime gate failed: {error}",
+                    handle=result.get("handle"), **identity_fields(job),
+                )
+            result["fusion_gate"] = fusion
         result["cases"] = result.pop("profile_cases", None)
     return result
 
@@ -305,13 +355,17 @@ def main() -> int:
                 result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:
                 kernel_name = None
+                fusion_contract = None
                 if request["action"] == "profile":
                     manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
-                    kernel_name, result = load_kernel_selector(manifest)
+                    kernel_name, fusion_contract, result = load_candidate_contract(manifest)
                 if kernel_name is not None or request["action"] != "profile":
                     result = invoke(
                         command,
-                        make_job(request, args.benchmark, args.candidate, root, kernel_name),
+                        make_job(
+                            request, args.benchmark, args.candidate, root,
+                            kernel_name, fusion_contract,
+                        ),
                         args.timeout,
                     )
     print(json.dumps(result, sort_keys=True))

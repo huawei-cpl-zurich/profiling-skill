@@ -41,10 +41,22 @@ if job["action"] == "measure": identity["phase"] = job["phase"]
 if job["action"] == "profile":
     identity["round"] = job["round"]
     identity["kernel_name"] = job["profiling"]["kernel_name"]
+    if "fusion_contract" in job:
+        entrypoint = job["fusion_contract"]["entrypoint"]
+        selector = job["fusion_contract"]["kernel_name"]
+        identity["fusion_evidence"] = [{
+            "schema": "profiling-skill/fusion-evidence/v1", "case": case,
+            "output_launch_id": "launch-0", "operators": [{
+                "name": selector, "origin": "triton", "entrypoint": entrypoint,
+                "launch_id": "launch-0", "component": "aiv"}]
+        } for case in job["cases"]]
+        if mode == "fusion_fallback":
+            identity["fusion_evidence"][0]["operators"].append(
+                {"name": "aclnnMatmul", "origin": "acl", "launch_id": "acl-0"})
 if mode == "wrong_identity": identity["cases"] = list(reversed(identity["cases"]))
 if mode == "wrong_check": identity["scope"] = "development"
 if mode == "wrong_round": identity["round"] = 2
-if mode == "echo":
+if mode in {"echo", "fusion_fallback"}:
     print(json.dumps({"status": "ok", "diagnostics": "", "job": job,
                       "latency_us": 12.5, "passed": True,
                       "profile_cases": [{"case": case, "samples_us": [12.5] * job.get("repeats", 1),
@@ -79,12 +91,21 @@ def request(benchmark="gdn", action="profile", **extra):
     return default
 
 
-def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
+def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
+                fully_fused=False):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
-    candidate.with_suffix(".manifest.json").write_text(json.dumps({
-        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "candidate_kernel"
-    }))
+    manifest = {"schema": "profiling-skill/candidate-kernel/v1",
+                "kernel_name": "candidate_kernel"}
+    if fully_fused:
+        manifest = {
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": "candidate_kernel_mix_aiv",
+            "entrypoint": "candidate_kernel",
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
+        }
+    candidate.with_suffix(".manifest.json").write_text(json.dumps(manifest))
     client = fake_client(tmp_path)
     return subprocess.run(
         [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
@@ -153,6 +174,32 @@ def test_profile_attempt_identity_changes_managed_job(tmp_path: Path):
     assert first["job"]["profile_attempt_id"] == "experiment-1-primary"
     assert second["job"]["profile_attempt_id"] == "experiment-1-confirmation"
     assert first["job"] != second["job"]
+
+
+def test_fully_fused_profile_passes_runtime_gate_before_exposing_timing(tmp_path: Path):
+    result = json.loads(run_backend(
+        tmp_path, request("matmul"), "matmul", fully_fused=True
+    ).stdout)
+    assert result["status"] == "ok"
+    assert result["fusion_gate"] == {
+        "entrypoint": "candidate_kernel",
+        "kernel_name": "candidate_kernel_mix_aiv",
+        "cases": [7, 8, 9],
+        "logical_launches_per_case": 1,
+    }
+    assert result["cases"][0]["median_us"] == 12.5
+
+
+def test_fully_fused_profile_rejects_framework_fallback_without_timing(tmp_path: Path):
+    result = json.loads(run_backend(
+        tmp_path, request("matmul"), "matmul", mode="fusion_fallback",
+        fully_fused=True,
+    ).stdout)
+    assert result["status"] == "submission_error"
+    assert "Torch/ACL compute" in result["diagnostics"]
+    assert result["cases"] == [7, 8, 9]
+    assert "profile_cases" not in result
+    assert "fusion_gate" not in result
 
 
 def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(

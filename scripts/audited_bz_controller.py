@@ -24,6 +24,7 @@ from typing import Callable
 CONFIG_SCHEMA = "profiling-skill/audited-bz-controller-config/v1"
 POLICY_SCHEMA = "profiling-skill/controller-policy/v1"
 REMEASURE_TRANSITION_SCHEMA = "profiling-skill/controller-remeasure-transition/v1"
+REMEASURE_REDIRECT_SCHEMA = "profiling-skill/controller-remeasure-redirect/v1"
 CANDIDATE_FAILURES = {
     "candidate_error", "submission_error", "compile_error", "compilation_error",
     "runtime_error", "correctness_error",
@@ -257,9 +258,29 @@ class AuditedBzController:
                 return self._infrastructure("controller baseline changed during the experiment")
             state["operations_consumed"] = budget["operations_consumed"]
             terminal = state.get("terminal")
-            remeasure_source = None
+            remeasure_source = state.get("remeasure_source")
             if terminal:
+                transition = terminal.get("remeasure_transition", {})
+                if (not isinstance(remeasure_source, dict)
+                        and transition.get("schema") == REMEASURE_TRANSITION_SCHEMA):
+                    remeasure_source = {
+                        "receipt_sha256": transition.get("pending_receipt_sha256"),
+                        "handle": transition.get("pending_handle"),
+                        "measurement_generation": transition.get(
+                            "from_measurement_generation"
+                        ),
+                    }
+                if (observe_handle is not None
+                        and transition.get("pending_handle") == observe_handle
+                        and terminal.get("handle") != observe_handle):
+                    return self._remeasure_redirect(
+                        terminal["handle"], state, remeasure_source,
+                        candidate_hash, manifest_hash, experiment, terminal=True,
+                    )
                 if remeasure_handle is None:
+                    return terminal
+                if (transition.get("pending_handle") == remeasure_handle
+                        and terminal.get("handle") != remeasure_handle):
                     return terminal
                 if (terminal.get("status") != "measurement_pending"
                         or terminal.get("handle") != remeasure_handle):
@@ -272,6 +293,7 @@ class AuditedBzController:
                     "handle": terminal["handle"],
                     "measurement_generation": state["measurement_generation"],
                 }
+                state["remeasure_source"] = remeasure_source
                 state.pop("terminal")
                 state.pop("profile", None)
                 state.pop("confirmation", None)
@@ -281,13 +303,20 @@ class AuditedBzController:
                 state["confirmation_count"] = 0
                 state["stage"] = "profile"
                 _atomic_json(state_path, state)
-            elif remeasure_handle is not None:
+            elif (remeasure_handle is not None
+                  and (not isinstance(remeasure_source, dict)
+                       or remeasure_source.get("handle") != remeasure_handle)):
                 return self._infrastructure(
                     "remeasure requires a completed measurement_pending receipt",
                     handle=remeasure_handle,
                 )
             pending = state.get("pending")
-            if observe_handle is not None and (
+            recovery_observe = (
+                observe_handle is not None
+                and isinstance(remeasure_source, dict)
+                and remeasure_source.get("handle") == observe_handle
+            )
+            if observe_handle is not None and not recovery_observe and (
                     not isinstance(pending, dict)
                     or pending.get("handle") != observe_handle):
                 return self._infrastructure(
@@ -321,6 +350,21 @@ class AuditedBzController:
                     "post_control_handle": post_control,
                     "operation_history_sha256": _json_sha(history),
                 }
+            redirected = None
+            if (remeasure_source is not None
+                    and receipt.get("status") == "infrastructure_error"
+                    and isinstance(receipt.get("handle"), str)
+                    and receipt["handle"] != remeasure_source["handle"]):
+                redirected = self._remeasure_redirect(
+                    receipt["handle"], state, remeasure_source,
+                    candidate_hash, manifest_hash, experiment, terminal=False,
+                )
+            elif recovery_observe and receipt.get("status") in {
+                    "ok", "candidate_error", "measurement_pending"}:
+                redirected = self._remeasure_redirect(
+                    receipt["handle"], state, remeasure_source,
+                    candidate_hash, manifest_hash, experiment, terminal=True,
+                )
             if (observe_handle is not None
                     and receipt.get("status") == "infrastructure_error"
                     and isinstance(receipt.get("handle"), str)
@@ -340,7 +384,33 @@ class AuditedBzController:
                 state["terminal"] = receipt
                 state["pending"] = None
                 _atomic_json(state_path, state)
-            return receipt
+            return redirected or receipt
+
+    def _remeasure_redirect(self, handle: str, state: dict, source: dict,
+                            candidate_hash: str, manifest_hash: str,
+                            experiment: int, *, terminal: bool) -> dict:
+        history = self._operation_history(state)
+        return {
+            "status": "infrastructure_error", "terminal": False,
+            "reason": "remeasurement advanced to a fresh durable handle",
+            "handle": handle, "experiment": experiment,
+            "candidate_sha256": candidate_hash,
+            "manifest_sha256": manifest_hash,
+            "remeasure_redirect": {
+                "schema": REMEASURE_REDIRECT_SCHEMA,
+                "pending_receipt_sha256": source["receipt_sha256"],
+                "pending_handle": source["handle"],
+                "candidate_sha256": candidate_hash,
+                "manifest_sha256": manifest_hash,
+                "experiment": experiment,
+                "from_measurement_generation": source["measurement_generation"],
+                "to_measurement_generation": state["measurement_generation"],
+                "replacement_handle": handle,
+                "replacement_terminal": terminal,
+                "operation_history": history,
+                "operation_history_sha256": _json_sha(history),
+            },
+        }
 
     def _new_state(self, experiment: int, candidate_hash: str, manifest_hash: str) -> dict:
         selected = self.devices[(experiment - 1) % len(self.devices)]

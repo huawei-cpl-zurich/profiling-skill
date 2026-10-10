@@ -730,7 +730,11 @@ class CommandController:
         ))
         if allow_observe_transaction and expected_handle is not None:
             try:
-                if receipt.get("status") in {
+                if receipt.get("remeasure_redirect") is not None:
+                    evidence_contract.validate_remeasure_redirect(
+                        receipt, expected_handle, candidate_hash, manifest_hash, number,
+                    )
+                elif receipt.get("status") in {
                         "ok", "candidate_error", "measurement_pending"}:
                     evidence_contract.validate_controller_receipt(
                         receipt, candidate_hash, manifest_hash,
@@ -751,6 +755,12 @@ class CommandController:
                         "ok", "candidate_error", "measurement_pending"}:
                     evidence_contract.validate_remeasure_transition(
                         receipt, remeasure_source, candidate_hash, manifest_hash, number,
+                    )
+                    observed_transaction = True
+                elif receipt.get("remeasure_redirect") is not None:
+                    evidence_contract.validate_remeasure_redirect(
+                        receipt, expected_handle, candidate_hash, manifest_hash, number,
+                        remeasure_source,
                     )
                     observed_transaction = True
                 elif (receipt.get("status") == "infrastructure_error"

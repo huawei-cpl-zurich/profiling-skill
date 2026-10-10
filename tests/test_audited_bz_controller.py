@@ -509,6 +509,61 @@ def test_remeasure_transition_can_end_in_new_measurement_pending_handles(tmp_pat
     )
 
 
+def test_remeasure_interruption_redirects_and_resumes_fresh_handle(tmp_path: Path):
+    repo, candidate_hash, manifest_hash = repository(tmp_path)
+    backend = FakeBackend()
+    adapter = make_controller(repo, backend, variability_threshold=0.01)
+    pending = adapter.run(1, candidate_hash, manifest_hash)
+    backend.overrides.append({
+        "status": "infrastructure_error", "handle": "bz-a3-1:profile-fresh",
+        "failure_type": "transport", "diagnostics": "observer disconnected",
+    })
+
+    redirected = adapter.run(
+        1, candidate_hash, manifest_hash, remeasure_handle=pending["handle"],
+    )
+
+    assert redirected["handle"] == "bz-a3-1:profile-fresh"
+    contract.validate_remeasure_redirect(
+        redirected, pending["handle"], candidate_hash, manifest_hash, 1, pending,
+    )
+    backend.overrides.extend([
+        {"status": "ok", "handle": "bz-a3-1:profile-fresh",
+         "kernel_name": "kernel", "cases": [
+             {"case": case, "samples_us": [5.0, 5.0, 5.0], "median_us": 5.0}
+             for case in [7, 8, 9]
+         ]},
+        {"status": "ok", "handle": "bz-a3-1:post-stable", "latency_us": 10.0,
+         "samples_us": [9.0, 10.0, 11.0], "median_us": 10.0},
+    ])
+    terminal = adapter.run(
+        1, candidate_hash, manifest_hash,
+        observe_handle=redirected["handle"],
+    )
+    contract.validate_remeasure_transition(
+        terminal, pending, candidate_hash, manifest_hash, 1,
+    )
+    assert terminal["status"] == "ok"
+
+    # If the controller persisted the terminal but stdout was lost, observing
+    # the old pending handle redirects to the fresh terminal handle exactly once.
+    state_path = next((repo.parent / "state").glob("*/state.json"))
+    persisted = json.loads(state_path.read_text())
+    persisted.pop("remeasure_source")
+    state_path.write_text(json.dumps(persisted))
+    timeout_recovery = adapter.run(
+        1, candidate_hash, manifest_hash, observe_handle=pending["handle"],
+    )
+    contract.validate_remeasure_redirect(
+        timeout_recovery, pending["handle"], candidate_hash, manifest_hash, 1,
+    )
+    assert timeout_recovery["remeasure_redirect"]["replacement_terminal"] is True
+    assert adapter.run(
+        1, candidate_hash, manifest_hash,
+        observe_handle=timeout_recovery["handle"],
+    ) == terminal
+
+
 def test_measurement_remeasure_generation_forces_fresh_cached_captures(tmp_path: Path):
     repo, candidate_hash, manifest_hash = repository(tmp_path)
 

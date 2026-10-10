@@ -22,6 +22,7 @@ MAX_REPORT_FIELD = 8192
 CONTROLLER_POLICY_SCHEMA = "profiling-skill/controller-policy/v1"
 OBSERVE_TRANSITION_SCHEMA = "profiling-skill/controller-observe-transition/v1"
 REMEASURE_TRANSITION_SCHEMA = "profiling-skill/controller-remeasure-transition/v1"
+REMEASURE_REDIRECT_SCHEMA = "profiling-skill/controller-remeasure-redirect/v1"
 REPORT_FIELDS = (
     "hypothesis", "expected_result", "change", "evidence", "observed_result",
     "decision", "postmortem", "next_experiment",
@@ -533,6 +534,97 @@ def validate_remeasure_transition(receipt: object, pending_receipt: object,
             or after[0] is not history[-1]):
         raise AuditError("controller remeasure transition proof is invalid")
     return current
+
+
+def validate_remeasure_redirect(receipt: object, requested_handle: str,
+                                candidate_hash: str, manifest_hash: str,
+                                experiment: int,
+                                pending_receipt: object | None = None) -> dict:
+    """Authenticate recovery from an old measurement to its fresh handle."""
+    proof = receipt.get("remeasure_redirect") if isinstance(receipt, dict) else None
+    required = {
+        "schema", "pending_receipt_sha256", "pending_handle",
+        "candidate_sha256", "manifest_sha256", "experiment",
+        "from_measurement_generation", "to_measurement_generation",
+        "replacement_handle", "replacement_terminal", "operation_history",
+        "operation_history_sha256",
+    }
+    replacement = receipt.get("handle") if isinstance(receipt, dict) else None
+    if (not isinstance(receipt, dict)
+            or receipt.get("status") != "infrastructure_error"
+            or receipt.get("terminal") is not False
+            or receipt.get("candidate_sha256") != candidate_hash
+            or receipt.get("manifest_sha256") != manifest_hash
+            or receipt.get("experiment") != experiment
+            or not isinstance(replacement, str) or not replacement
+            or replacement == requested_handle
+            or not isinstance(proof, dict) or set(proof) != required
+            or proof.get("schema") != REMEASURE_REDIRECT_SCHEMA
+            or proof.get("pending_handle") != requested_handle
+            or proof.get("replacement_handle") != replacement
+            or proof.get("candidate_sha256") != candidate_hash
+            or proof.get("manifest_sha256") != manifest_hash
+            or proof.get("experiment") != experiment
+            or type(proof.get("from_measurement_generation")) is not int
+            or proof.get("to_measurement_generation") !=
+                proof["from_measurement_generation"] + 1
+            or type(proof.get("replacement_terminal")) is not bool
+            or not isinstance(proof.get("operation_history"), list)
+            or proof.get("operation_history_sha256") !=
+                sha256_json(proof["operation_history"])):
+        raise AuditError("controller remeasure redirect proof is invalid")
+    history = proof["operation_history"]
+    if pending_receipt is not None:
+        try:
+            previous = validate_controller_receipt(
+                pending_receipt, candidate_hash, manifest_hash,
+            )
+        except AuditError as failure:
+            raise AuditError("controller remeasure redirect proof is invalid") from failure
+        pending_payload = {
+            key: value for key, value in previous.items()
+            if key != "controller_exit_code"
+        }
+        prior_history = previous["policy"].get("operation_history")
+        if (previous.get("status") != "measurement_pending"
+                or previous.get("handle") != requested_handle
+                or previous.get("experiment") != experiment
+                or proof["pending_receipt_sha256"] != sha256_json(pending_payload)
+                or proof["from_measurement_generation"] !=
+                    previous["policy"].get("measurement_generation")
+                or not isinstance(prior_history, list)
+                or history[:len(prior_history)] != prior_history):
+            raise AuditError("controller remeasure redirect proof is invalid")
+    elif not _valid_hash(proof.get("pending_receipt_sha256")):
+        raise AuditError("controller remeasure redirect proof is invalid")
+    prefix = (f"experiment-{experiment}-measurement-"
+              f"{proof['to_measurement_generation']}-")
+    if proof["replacement_terminal"]:
+        matches = [record for record in history if (
+            isinstance(record, dict) and record.get("action") == "profile"
+            and record.get("attempt_id") in {
+                prefix + "primary", prefix + "confirmation",
+            }
+            and record.get("terminal") is True
+            and record.get("handle") == replacement
+        )]
+        if len(matches) != 1:
+            raise AuditError("controller remeasure redirect proof is invalid")
+    else:
+        latest = history[-1] if history else None
+        if (not isinstance(latest, dict)
+                or latest.get("terminal") is not False
+                or latest.get("status") != "infrastructure_error"
+                or latest.get("handle") != replacement
+                or latest.get("action") not in {"profile", "calibrate"}
+                or (latest.get("action") == "profile"
+                    and latest.get("attempt_id") not in {
+                        prefix + "primary", prefix + "confirmation",
+                    })
+                or (latest.get("action") == "calibrate"
+                    and latest.get("attempt_id") != prefix + "after")):
+            raise AuditError("controller remeasure redirect proof is invalid")
+    return receipt
 
 
 def validate_controller_receipt(receipt: object, candidate_hash: str,

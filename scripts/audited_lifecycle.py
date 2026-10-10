@@ -26,6 +26,8 @@ from audited_contract import (
     validate_controller_receipt,
     validate_observe_transaction,
     validate_observe_transition,
+    validate_remeasure_redirect,
+    validate_remeasure_transition,
 )
 from fully_fused_contract import (
     FusionContractError,
@@ -548,9 +550,14 @@ class AuditedExperimentRunner:
                 if (receipt.get("status") == "infrastructure_error"
                         and receipt.get("handle") != handle):
                     try:
-                        validate_observe_transition(
-                            receipt, handle, candidate_hash, manifest_hash, number,
-                        )
+                        if receipt.get("remeasure_redirect") is not None:
+                            validate_remeasure_redirect(
+                                receipt, handle, candidate_hash, manifest_hash, number,
+                            )
+                        else:
+                            validate_observe_transition(
+                                receipt, handle, candidate_hash, manifest_hash, number,
+                            )
                     except AuditError as failure:
                         self._controller_checkpoint(
                             number, session, str(failure), branch, seed_commit,
@@ -619,6 +626,21 @@ class AuditedExperimentRunner:
 
         terminal = {"ok", "candidate_error", "measurement_pending"}
         if not isinstance(receipt, dict) or receipt.get("status") not in terminal:
+            if (continuing and stage == "measurement"
+                    and isinstance(receipt, dict)
+                    and receipt.get("status") == "infrastructure_error"
+                    and receipt.get("handle") != handle):
+                try:
+                    validate_remeasure_redirect(
+                        receipt, handle, candidate_hash, manifest_hash, number, previous,
+                    )
+                except AuditError as failure:
+                    self._controller_checkpoint(
+                        number, session, str(failure), branch, seed_commit,
+                        seed_hash, prior_hash, commands, receipt, submissions,
+                        measurements,
+                    )
+                    raise
             reason = receipt.get("reason", receipt) if isinstance(receipt, dict) else receipt
             self._controller_checkpoint(
                 number, session, str(reason), branch, seed_commit, seed_hash, prior_hash,
@@ -629,6 +651,10 @@ class AuditedExperimentRunner:
             raise AuditError(f"experiment {number} blocked by controller status {status!r}")
         try:
             receipt = validate_controller_receipt(receipt, candidate_hash, manifest_hash)
+            if continuing and stage == "measurement":
+                validate_remeasure_transition(
+                    receipt, previous, candidate_hash, manifest_hash, number,
+                )
             if continuing and stage == "controller" and isinstance(handle, str):
                 validate_observe_transaction(receipt, handle)
         except AuditError as failure:

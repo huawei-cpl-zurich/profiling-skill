@@ -1522,7 +1522,22 @@ def test_measurement_pending_remeasures_without_consuming_experiment(tmp_path: P
     repo = tmp_path / "repo"
     init_repo(repo)
     prompt, task = inputs(tmp_path)
-    invoke, _ = updating_invoker(repo)
+    def invoke(number, session, instruction):
+        if instruction is None:
+            (repo / "candidate.py").write_text(f"VALUE = {number}\n")
+            return events("thread-fixed", {"prepared": True})
+        encoded = instruction.split("receipt:\n", 1)[1].split(
+            "\nThe frozen candidate", 1,
+        )[0]
+        controller_receipt = json.loads(encoded)
+        candidate = sha((repo / "candidate.py").read_bytes())
+        manifest = sha((repo / "candidate.manifest.json").read_bytes())
+        document = report(number, candidate, manifest)
+        document["controller_handle"] = controller_receipt["handle"]
+        document["controller_receipt_sha256"] = contract.sha256_json(
+            controller_receipt
+        )
+        return events("thread-fixed", document, command=False)
 
     class Controller:
         def __init__(self):
@@ -1534,13 +1549,54 @@ def test_measurement_pending_remeasures_without_consuming_experiment(tmp_path: P
             document = receipt(candidate, manifest, number)
             if number == 1:
                 document["status"] = "measurement_pending"
+                document["experiment"] = number
+                document["handle"] = "local:1:old"
+                document["policy"].update(
+                    submitted_handles=[document["handle"]],
+                    observed_handles=[document["handle"]],
+                    measurement_generation=0,
+                    operation_history=[{
+                        "request_sha256": sha("measurement-0"), "mode": "submit",
+                        "status": "ok", "terminal": True,
+                        "handle": document["handle"], "action": "profile",
+                        "attempt_id": "experiment-1-measurement-0-primary",
+                    }],
+                )
             return document
 
         def remeasure(self, number, candidate, manifest, handle, pending_receipt):
             self.remeasurements.append(
                 (number, candidate, manifest, handle, pending_receipt)
             )
-            return receipt(candidate, manifest, number)
+            document = receipt(candidate, manifest, number)
+            document["experiment"] = number
+            history = pending_receipt["policy"]["operation_history"] + [
+                {"request_sha256": sha("measurement-1"), "mode": "submit",
+                 "status": "ok", "terminal": True, "handle": document["handle"],
+                 "action": "profile",
+                 "attempt_id": "experiment-1-measurement-1-primary"},
+                {"request_sha256": sha("measurement-1-after"), "mode": "submit",
+                 "status": "ok", "terminal": True, "handle": "local:1:after",
+                 "action": "calibrate",
+                 "attempt_id": "experiment-1-measurement-1-after"},
+            ]
+            document["policy"].update(
+                submitted_handles=[handle, document["handle"], "local:1:after"],
+                observed_handles=[handle, document["handle"], "local:1:after"],
+                measurement_generation=1, operation_history=history,
+            )
+            document["remeasure_transition"] = {
+                "schema": contract.REMEASURE_TRANSITION_SCHEMA,
+                "pending_receipt_sha256": contract.sha256_json(pending_receipt),
+                "pending_handle": handle, "candidate_sha256": candidate,
+                "manifest_sha256": manifest, "experiment": number,
+                "from_measurement_generation": 0,
+                "to_measurement_generation": 1,
+                "profile_handle": document["handle"],
+                "post_control_handle": "local:1:after",
+                "operation_history_sha256": contract.sha256_json(history),
+            }
+            return document
 
     controller = Controller()
     runner = lifecycle.AuditedExperimentRunner(repo, prompt, task, invoke, controller)
@@ -1560,6 +1616,50 @@ def test_measurement_pending_remeasures_without_consuming_experiment(tmp_path: P
     )
     assert controller.remeasurements[0][4] == state["receipt"]
     assert controller.submissions == 3
+
+
+def test_measurement_resume_rejects_unproved_custom_controller_transition(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    invoke, _ = updating_invoker(repo)
+
+    class Controller:
+        def __call__(self, number, candidate, manifest):
+            document = receipt(candidate, manifest, number)
+            if number == 1:
+                document.update(status="measurement_pending", experiment=number)
+                document["policy"].update(
+                    measurement_generation=0,
+                    operation_history=[{
+                        "request_sha256": sha("measurement-0"), "mode": "submit",
+                        "status": "ok", "terminal": True,
+                        "handle": document["handle"], "action": "profile",
+                        "attempt_id": "experiment-1-measurement-0-primary",
+                    }],
+                )
+            return document
+
+        def remeasure(self, number, candidate, manifest, handle, pending_receipt):
+            document = receipt(candidate, manifest, number)
+            document["handle"] = "local:1:unproved-fresh"
+            document["policy"].update(
+                submitted_handles=[document["handle"]],
+                observed_handles=[document["handle"]],
+            )
+            return document
+
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, invoke, Controller(),
+    )
+    with pytest.raises(contract.AuditError, match="measurement pending"):
+        runner.run("unproved-remeasure", "agent")
+
+    with pytest.raises(contract.AuditError, match="remeasure transition"):
+        runner.run("unproved-remeasure", "agent", resume=True)
+    blocked = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert blocked["stage"] == "controller"
+    assert blocked["reason"] == "controller remeasure transition proof is invalid"
 
 
 def test_real_lifecycle_remeasure_accepts_authenticated_new_handles(tmp_path: Path):
@@ -1585,6 +1685,7 @@ def test_real_lifecycle_remeasure_accepts_authenticated_new_handles(tmp_path: Pa
     backend = tmp_path / "backend.py"
     backend.write_text(
         """import hashlib, json, statistics, sys
+from pathlib import Path
 request=json.load(sys.stdin)
 attempt=request.get('attempt_id') or request['action']
 handle='job:'+hashlib.sha256(attempt.encode()).hexdigest()[:12]
@@ -1595,10 +1696,16 @@ elif request['action'] == 'check':
  result={'status':'ok','handle':handle,'passed':True}
 else:
  samples=([1.0,10.0,100.0] if 'measurement-0' in attempt else [5.0,5.0,5.0])
- result={'status':'ok','handle':handle,'kernel_name':'kernel',
-         'cases':[{'case':case,'samples_us':samples,
-                   'median_us':statistics.median(samples)}
-                  for case in request['cases']]}
+ marker=Path(__file__).with_suffix('.measurement-1-seen')
+ if 'measurement-1' in attempt and not marker.exists():
+  marker.write_text('seen')
+  result={'status':'infrastructure_error','handle':handle,
+          'failure_type':'transport','diagnostics':'observer disconnected'}
+ else:
+  result={'status':'ok','handle':handle,'kernel_name':'kernel',
+          'cases':[{'case':case,'samples_us':samples,
+                    'median_us':statistics.median(samples)}
+                   for case in request['cases']]}
 print(json.dumps(result))
 """
     )
@@ -1637,6 +1744,16 @@ print(json.dumps(result))
     blocked = json.loads((repo / ".experiment/blocked.json").read_text())
     pending = blocked["receipt"]
     assert blocked["stage"] == "measurement"
+
+    with pytest.raises(contract.AuditError, match="infrastructure"):
+        runner.run("real-remeasure", "agent", resume=True)
+    redirected = json.loads((repo / ".experiment/blocked.json").read_text())
+    assert redirected["stage"] == "controller"
+    assert redirected["receipt"]["handle"] != pending["handle"]
+    contract.validate_remeasure_redirect(
+        redirected["receipt"], pending["handle"], blocked["candidate_sha256"],
+        blocked["manifest_sha256"], 1, pending,
+    )
 
     result = runner.run("real-remeasure", "agent", resume=True)
 

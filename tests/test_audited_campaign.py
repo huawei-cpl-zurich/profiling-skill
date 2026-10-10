@@ -123,6 +123,28 @@ def test_v4_manifest_rejects_legacy_skill_provenance(tmp_path: Path):
         audited_campaign.build_manifest("legacy-skills", prompt, tasks, provenance, "seed")
 
 
+@pytest.mark.parametrize("mutation, message", [
+    ("task", "task or prompt binding"),
+    ("prompt", "task or prompt binding"),
+    ("branch", "branch identity"),
+])
+def test_product_neutral_v4_rejects_cell_binding_drift(
+    tmp_path: Path, mutation: str, message: str,
+):
+    document = manifest(tmp_path)
+    cell = document["cells"][0]
+    if mutation == "task":
+        cell["task_sha256"] = "0" * 64
+    elif mutation == "prompt":
+        cell["prompt_contract"]["invariant_sha256"] = "0" * 64
+    else:
+        cell["branch"] = "experiment/wrong/branch"
+    document["manifest_sha256"] = audited_campaign._document_digest(document)
+
+    with pytest.raises(audited_campaign.CampaignError, match=message):
+        audited_campaign.verify_manifest(document)
+
+
 def test_manifest_supports_deterministic_profile_skill_subset(tmp_path: Path):
     prompt, tasks, provenance = inputs(tmp_path)
     selected = ("cannbot-new-profiler", "guarded-new-profiler")
@@ -726,6 +748,8 @@ def test_report_rejects_ledger_from_another_run_before_consuming_cells(tmp_path:
     first = manifest(tmp_path / "first")
     second = manifest(tmp_path / "second", seed="campaign-2")
     second["run_id"] = "different-run"
+    for cell in second["cells"]:
+        cell["branch"] = f"experiment/different-run/{cell['cell_id']}"
     second["manifest_sha256"] = audited_campaign._document_digest(second)
     ledger = audited_campaign._new_ledger(first)
 

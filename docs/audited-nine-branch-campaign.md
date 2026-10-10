@@ -158,6 +158,11 @@ median, and includes the SHA-256 of the canonical JSON for those four fields.
 manifest provenance object exactly, and every pin is checked against the
 source revision, complete controller closure, baseline files, composite
 CANNBot skill bundle, project skill trees, model, and resolved Docker image.
+This production entrypoint is currently A3-only and accepts only the
+product-neutral schema-4 shape; a manifest with `dimensions.products` fails
+closed before runtime provenance is read or any cell is dispatched. The
+dual-product scheduler contract remains available for the product-aware
+launcher integration.
 
 The runtime-v3 `skill_sources` object has exactly four keys. Use absolute paths
 to immutable, locally exported directories on the operator host; the launcher

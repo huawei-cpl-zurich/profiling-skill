@@ -725,6 +725,67 @@ def test_production_entrypoint_accepts_schema_v3_subset(tmp_path: Path, monkeypa
     assert dispatched[0]["dimensions"]["treatments"] == list(selected)
 
 
+def test_a3_production_entrypoint_rejects_dual_product_manifest_cleanly(
+        tmp_path: Path, monkeypatch, capsys):
+    config = runtime_fixture(tmp_path, {
+        "cell_id": "matmul-cannbot", "task": "matmul",
+        "treatment": "cannbot-all", "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    })
+    product_tasks = {
+        product: {
+            task: Path(config["tasks"][task]["path"])
+            for task in campaign.TASKS
+        }
+        for product in campaign.PRODUCTS
+    }
+    shared = config["provenance"]
+    provenance = {
+        "source_revision": shared["source_revision"],
+        "controller_sha256": shared["controller_sha256"],
+        "model": shared["model"],
+        "skills": shared["skills"],
+        "products": {
+            product: {
+                "runtime": campaign.PRODUCT_RUNTIMES[product],
+                "runtime_image_digest": shared["runtime_image_digest"],
+                "baselines": shared["baselines"],
+                "starters": shared["starters"],
+            }
+            for product in campaign.PRODUCTS
+        },
+    }
+    manifest = campaign.build_manifest(
+        config["run_id"], Path(config["prompt"]["path"]), {}, provenance,
+        "dual-product-rejection", request_budget=24,
+        products=campaign.PRODUCTS, product_task_files=product_tasks,
+    )
+    manifest_path = tmp_path / "dual-manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    config_path = tmp_path / "runtime.json"
+    config_path.write_text(json.dumps(config))
+    admission = tmp_path / "admission.json"
+    admission.write_text("{}")
+    monkeypatch.setattr(
+        production, "ProductionCellLauncher",
+        lambda *args, **kwargs: pytest.fail("dual-product manifest dispatched"),
+    )
+
+    with pytest.raises(SystemExit) as failure:
+        production.main([
+            "--manifest", str(manifest_path),
+            "--runtime-config", str(config_path),
+            "--runtime-config-sha256", sha(config_path),
+            "--admission", str(admission),
+            "--admission-sha256", sha(admission),
+            "--ledger", str(tmp_path / "ledger.json"),
+        ])
+
+    assert failure.value.code == 2
+    assert "A3-only production entrypoint does not support product manifests" \
+        in capsys.readouterr().err
+
+
 def test_migration_trust_cli_requires_resume(capsys):
     with pytest.raises(SystemExit) as failure:
         production.main([

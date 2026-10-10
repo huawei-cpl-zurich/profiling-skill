@@ -1376,6 +1376,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(error))
     if manifest.get("schema_version") != 4:
         parser.error("production campaign requires four-treatment manifest schema_version 4")
+    if manifest.get("dimensions", {}).get("products"):
+        parser.error(
+            "A3-only production entrypoint does not support product manifests"
+        )
     config["run_id"] = manifest["run_id"]
     config["manifest_sha256"] = manifest["manifest_sha256"]
     if config.get("provenance") != manifest.get("provenance"):

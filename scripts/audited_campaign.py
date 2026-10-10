@@ -435,6 +435,18 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
+        if version == 4:
+            task_binding = (document["tasks"][cell["product"]][cell["task"]]
+                            if products else document["tasks"][cell["task"]])
+            prompt_contract = cell.get("prompt_contract")
+            if (cell.get("task_sha256") != task_binding["sha256"]
+                    or not isinstance(prompt_contract, dict)
+                    or prompt_contract.get("task_sha256") != task_binding["sha256"]
+                    or prompt_contract.get("invariant_sha256")
+                    != document["prompt"]["sha256"]):
+                raise CampaignError("cell task or prompt binding mismatch")
+            if cell.get("branch") != f"experiment/{document['run_id']}/{cell['cell_id']}":
+                raise CampaignError("cell branch identity mismatch")
         if products:
             product = cell.get("product")
             expected_id = f"{product}-{cell['task']}-{cell['treatment']}"
@@ -446,18 +458,6 @@ def verify_manifest(document: dict) -> None:
             if (cell.get("baseline_sha256") != product_binding["baselines"][cell["task"]]
                     or cell.get("starter") != product_binding["starters"][cell["task"]]):
                 raise CampaignError("cell product provenance binding mismatch")
-            task_binding = document["tasks"][product][cell["task"]]
-            prompt_contract = cell.get("prompt_contract")
-            if (not isinstance(task_binding, dict)
-                    or set(task_binding) != {"path", "sha256"}
-                    or cell.get("task_sha256") != task_binding["sha256"]
-                    or not isinstance(prompt_contract, dict)
-                    or prompt_contract.get("task_sha256") != task_binding["sha256"]
-                    or prompt_contract.get("invariant_sha256")
-                    != document.get("prompt", {}).get("sha256")):
-                raise CampaignError("cell task or prompt binding mismatch")
-            if cell.get("branch") != f"experiment/{document['run_id']}/{cell['cell_id']}":
-                raise CampaignError("cell branch identity mismatch")
     if version in {1, 2, 3}:
         _validate_provenance(
             document["provenance"], require_starters=version in {2, 3},

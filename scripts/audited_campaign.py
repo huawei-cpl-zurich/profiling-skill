@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build, schedule, resume, and report an audited nine-branch campaign."""
+"""Build, schedule, resume, and report an audited treatment campaign."""
 
 from __future__ import annotations
 
@@ -18,22 +18,32 @@ from typing import Protocol
 
 
 TASKS = ("matmul", "gdn", "bsa")
-TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
+TREATMENTS = (
+    "cannbot-all", "cannbot-new-profiler",
+    "guarded-new-profiler", "guarded-old-profiler",
+)
+LEGACY_TREATMENTS = ("cannbot", "project-cannbot", "project-guarded")
 LEGACY_REQUEST_BUDGET = 24
 REPAIR_REQUEST_BUDGET = 48
 SUPPORTED_REQUEST_BUDGETS = {LEGACY_REQUEST_BUDGET, REPAIR_REQUEST_BUDGET}
 TREATMENT_SKILLS = {
-    "cannbot": (
+    "cannbot-all": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
         "triton-op-verifier", "triton-latency-optimizer",
         "triton-simulator-optimizer", "npu-arch", "ops-profiling",
     ),
-    "project-cannbot": (
+    "cannbot-new-profiler": (
         "triton-task-extractor", "triton-op-designer", "triton-op-coding",
         "triton-op-verifier", "triton-latency-optimizer",
         "triton-simulator-optimizer", "npu-arch", "ascend-profiling",
     ),
-    "project-guarded": ("ascend-profiling", "triton-guarded-kernel"),
+    "guarded-new-profiler": ("ascend-profiling", "triton-guarded-kernel"),
+    "guarded-old-profiler": ("ascend-profiling", "triton-guarded-kernel"),
+}
+LEGACY_TREATMENT_SKILLS = {
+    "cannbot": TREATMENT_SKILLS["cannbot-all"],
+    "project-cannbot": TREATMENT_SKILLS["cannbot-new-profiler"],
+    "project-guarded": TREATMENT_SKILLS["guarded-new-profiler"],
 }
 
 
@@ -110,9 +120,13 @@ def _validate_provenance(provenance: dict, *, require_starters: bool = True) -> 
             _require_hex(binding.get("sha256"), 64, f"starter.{task}.{kind}.sha256")
     skills = provenance.get("skills")
     # Composite upstream bundles may pin their internal skills with one digest.
-    accepted = {"cannbot", "ascend-profiling", "triton-guarded-kernel"}
-    if not isinstance(skills, dict) or not accepted.issubset(skills):
-        raise CampaignError("cannbot and project skill bundles must be pinned")
+    accepted = (
+        {"cannbot", "profiler-new", "profiler-old", "guarded"},
+        {"cannbot", "ascend-profiling", "triton-guarded-kernel"},
+    )
+    if (not isinstance(skills, dict)
+            or not any(required.issubset(skills) for required in accepted)):
+        raise CampaignError("all treatment skill freezes must be pinned")
     for name, digest in skills.items():
         _require_hex(digest, 64, f"skills.{name}")
 
@@ -141,13 +155,6 @@ def _validate_treatment_subset(treatments: tuple[str, ...]) -> None:
         raise CampaignError("treatment subset must contain unique names")
     if any(treatment not in TREATMENT_SKILLS for treatment in treatments):
         raise CampaignError("treatment subset must contain only known treatments")
-    missing = [name for name in treatments
-               if "ascend-profiling" not in TREATMENT_SKILLS[name]]
-    if missing:
-        raise CampaignError(
-            "schema v3 treatment profiles must include ascend-profiling: "
-            + ", ".join(missing)
-        )
 
 
 def build_manifest(
@@ -173,8 +180,7 @@ def build_manifest(
         raise CampaignError("prompt and task files must be regular files")
     _validate_provenance(provenance)
     selected = TREATMENTS if treatments is None else tuple(treatments)
-    if treatments is not None:
-        _validate_treatment_subset(selected)
+    _validate_treatment_subset(selected)
     order = _balanced_order(ordering_seed, selected)
     prompt_digest = _sha256(prompt)
     task_digests = {name: _sha256(task_files[name]) for name in TASKS}
@@ -196,7 +202,7 @@ def build_manifest(
             },
         })
     document = {
-        "schema_version": 2 if treatments is None else 3,
+        "schema_version": 4,
         "run_id": run_id,
         "dimensions": {"tasks": list(TASKS), "treatments": list(selected),
                        "round_count": rounds},
@@ -222,8 +228,8 @@ def _document_digest(document: dict) -> str:
 
 def verify_manifest(document: dict) -> None:
     version = document.get("schema_version")
-    if version not in {1, 2, 3}:
-        raise CampaignError("manifest schema_version must be 1, 2, or 3")
+    if version not in {1, 2, 3, 4}:
+        raise CampaignError("manifest schema_version must be 1, 2, 3, or 4")
     if document.get("manifest_sha256") != _document_digest(document):
         raise CampaignError("manifest hash mismatch")
     if document.get("order") != [cell.get("cell_id") for cell in document.get("cells", [])]:
@@ -231,8 +237,12 @@ def verify_manifest(document: dict) -> None:
     dimensions = document.get("dimensions")
     selected = tuple(dimensions.get("treatments", [])) if isinstance(dimensions, dict) else ()
     if version in {1, 2}:
-        if selected != TREATMENTS:
+        if selected != LEGACY_TREATMENTS:
             raise CampaignError("legacy manifests require all three treatments")
+    elif version == 3:
+        if (not selected or len(selected) != len(set(selected))
+                or any(name not in LEGACY_TREATMENT_SKILLS for name in selected)):
+            raise CampaignError("schema v3 contains an unknown legacy treatment")
     else:
         _validate_treatment_subset(selected)
     if len(document["cells"]) != len(TASKS) * len(selected):
@@ -249,11 +259,12 @@ def verify_manifest(document: dict) -> None:
             raise CampaignError(
                 "every cell requires four rounds and the campaign request budget"
             )
-        if cell["skills"] != list(TREATMENT_SKILLS[cell["treatment"]]):
+        policies = TREATMENT_SKILLS if version == 4 else LEGACY_TREATMENT_SKILLS
+        if cell["skills"] != list(policies[cell["treatment"]]):
             raise CampaignError(f"treatment skill isolation mismatch: {cell['cell_id']}")
         if "device" in cell or "target" in cell:
             raise CampaignError("device placement belongs only in the runtime ledger")
-    _validate_provenance(document["provenance"], require_starters=version in {2, 3})
+    _validate_provenance(document["provenance"], require_starters=version in {2, 3, 4})
 
 
 def _atomic_json(path: Path, document: dict) -> None:
@@ -769,7 +780,7 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--request-budget", type=int, choices=(24, 48), default=48)
     generate.add_argument(
         "--treatment", action="append", choices=TREATMENTS,
-        help="repeat to select a schema-v3 treatment subset; defaults to all treatments",
+        help="repeat to select a schema-v4 treatment subset; defaults to all treatments",
     )
     generate.add_argument("--output", type=Path, required=True)
     simulate = subparsers.add_parser("simulate")

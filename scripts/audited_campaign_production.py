@@ -617,11 +617,13 @@ class ProductionCellLauncher:
             value = self.config.get(name)
             if type(value) is not int or value <= 0:
                 raise ProductionError(f"{name} must be a positive integer")
-        backend_outer = self.config["backend_job_timeout"] + self.config["timeout_grace"]
+        backend_outer = (
+            2 * self.config["backend_job_timeout"] + self.config["timeout_grace"]
+        )
         if self.config["controller_transaction_timeout"] <= (
                 backend_outer + self.config["timeout_grace"]):
             raise ProductionError(
-                "controller transaction timeout must exceed the backend job timeout "
+                "controller transaction timeout must exceed both backend job budgets "
                 "and both timeout grace intervals"
             )
 
@@ -999,7 +1001,7 @@ class ProductionCellLauncher:
             "profile_repeats": 3, "variability_threshold": 0.25,
             "control_drift_threshold": 0.2, "infrastructure_retry_budget": 3,
             "timeout_seconds": (
-                self.config["backend_job_timeout"] + self.config["timeout_grace"]
+                2 * self.config["backend_job_timeout"] + self.config["timeout_grace"]
             ),
             "devices": [{"id": f"{slot['target']}/device-{slot['device']}", "device": 0}],
             "development_cases": DEVELOPMENT_CASES[cell["task"]],

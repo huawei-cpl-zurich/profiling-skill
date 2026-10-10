@@ -104,13 +104,31 @@ class FusionRuntimeAudit:
         self.framework_ops: list[tuple[str, str]] = []
 
     def instrument(self, candidate: ModuleType) -> None:
+        kernels = {}
         for name, candidate_global in tuple(vars(candidate).items()):
             kernel = (candidate_global._wrapped
                       if isinstance(candidate_global, _KernelProxy)
                       else candidate_global)
             module = type(kernel).__module__
             if module.startswith("triton.") and hasattr(kernel, "__getitem__"):
-                setattr(candidate, name, _KernelProxy(name, kernel, self))
+                retained = kernels.setdefault(id(kernel), [kernel, []])
+                retained[1].append(name)
+        proxies = {}
+        for identity, (kernel, names) in kernels.items():
+            observed_name = (self.declaration["entrypoint"]
+                             if self.declaration["entrypoint"] in names else names[0])
+            proxy = _KernelProxy(observed_name, kernel, self)
+            proxies[identity] = proxy
+            for name in names:
+                setattr(candidate, name, proxy)
+
+        model = getattr(candidate, "Model", None)
+        if isinstance(model, type):
+            for name, retained in tuple(vars(model).items()):
+                kernel = retained._wrapped if isinstance(retained, _KernelProxy) else retained
+                proxy = proxies.get(id(kernel))
+                if proxy is not None:
+                    setattr(model, name, proxy)
 
     def dispatch_mode(self):
         from torch.utils._python_dispatch import TorchDispatchMode

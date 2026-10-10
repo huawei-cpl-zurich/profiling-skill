@@ -141,6 +141,38 @@ def test_runner_captures_auxiliary_triton_global_and_gate_rejects_two_launches()
         contract.validate_fusion_evidence(declaration, [evidence], expected_cases=[4])
 
 
+def test_runner_instruments_entrypoint_retained_on_model_class():
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Kernel:
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+
+    class Model:
+        kernel = candidate.complete_kernel
+
+    candidate.Model = Model
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    model = candidate.Model()
+    model.kernel[(1,)]("input", "output")
+    evidence = audit.finish(0, "output")
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+
 @pytest.mark.parametrize(
     "name",
     [

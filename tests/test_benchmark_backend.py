@@ -524,6 +524,7 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]
     assert command[command.index("--job-client-json") + 1] == encoded_client
+    assert cells["gdn-cannbot"]["backend"]["timeout_seconds"] == 7300
 
 
 @pytest.mark.parametrize("benchmark", ["gdn", "bsa", "matmul"])

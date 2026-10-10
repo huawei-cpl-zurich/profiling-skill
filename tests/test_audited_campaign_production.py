@@ -210,7 +210,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
         "model": "gpt-5.6-sol", "reasoning_effort": "low",
         "runtime_mode": "docker", "runtime_image_digest": provenance["runtime_image_digest"],
         "agent_turn_timeout": 20,
-        "controller_transaction_timeout": 15,
+        "controller_transaction_timeout": 25,
         "verifier_timeout": 20,
         "backend_job_timeout": 10,
         "timeout_grace": 2,
@@ -1105,12 +1105,15 @@ def test_cell_launcher_materializes_isolation_controller_and_resume(tmp_path: Pa
         Path(config["baseline_sources"]["gdn"]["path"]).read_text()
     )
     assert controller_config["devices"] == [{"id": "bz-a3-2/device-6", "device": 0}]
-    assert controller_config["timeout_seconds"] == 12
+    # A v2 profile composes a full-domain gate and a timing job. Each retains
+    # the full per-job budget, while the enclosing backend covers both plus
+    # one shutdown grace interval.
+    assert controller_config["timeout_seconds"] == 22
     nested = json.loads(controller_config["backend_command"][-1])
     assert "--device" not in nested
     assert nested[nested.index("--timeout") + 1] == "10"
     assert created["controller"][0][1].endswith("audited_bz_controller.py")
-    assert created["controller"][2]["timeout"] == 15
+    assert created["controller"][2]["timeout"] == 25
     assert created["invoker"][1]["agent_id"] == cell["cell_id"]
     assert created["invoker"][1]["timeout"] == 20
     assert created["verifier"][1]["timeout"] == 20
@@ -2097,7 +2100,7 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
         "reasoning_effort": "low", "runtime_mode": "docker",
         "runtime_image_digest": provenance["runtime_image_digest"],
         "agent_turn_timeout": 20,
-        "controller_transaction_timeout": 15,
+        "controller_transaction_timeout": 25,
         "verifier_timeout": 20,
         "backend_job_timeout": 10,
         "timeout_grace": 2,

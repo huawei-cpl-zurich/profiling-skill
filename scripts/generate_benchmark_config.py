@@ -55,7 +55,9 @@ def main() -> int:
                                 "--candidate", args.candidate,
                                 "--candidate-manifest", args.candidate_manifest,
                                 "--job-client-json", args.job_client_json],
-                    "timeout_seconds": 3700,
+                    # Fully-fused profiling composes a full-domain gate and a
+                    # timing job, each with the backend's 3600-second budget.
+                    "timeout_seconds": 7300,
                 },
             }
     rendered = json.dumps({"schema_version": 1, "cells": cells}, indent=2, sort_keys=True) + "\n"

@@ -354,16 +354,24 @@ def attach_campaign_admission(config: dict) -> dict:
 
 def test_product_ranked_cases_are_independent_and_hash_bound():
     rankings = {
-        "a3": {task: list(range(5)) for task in production.DEVELOPMENT_CASES},
-        "a5": {task: list(reversed(range(5))) for task in production.DEVELOPMENT_CASES},
+        "a3": {
+            "matmul": [7, 8, 9], "gdn": [40, 49, 47, 46, 45],
+            "bsa": [47, 46, 49, 44, 43],
+        },
+        "a5": {
+            "matmul": [7, 8, 9], "gdn": [40, 49, 47, 46, 45],
+            "bsa": [47, 46, 44, 49, 43],
+        },
     }
     digest = production.document_sha256({"ranked_cases": rankings})
 
     assert production.validate_ranked_cases(rankings, ("a3", "a5"), digest) == rankings
-    wrong = json.loads(json.dumps(rankings))
-    wrong["a5"]["bsa"] = [0, 1, 2, 2, 4]
-    with pytest.raises(production.ProductionError, match="ranked cases"):
-        production.validate_ranked_cases(wrong, ("a3", "a5"), digest)
+    for invalid_cases in ([0, 1, 2, 2, 4], [0, 1, 2, 3], [0, 1, 2, 3, 50]):
+        wrong = json.loads(json.dumps(rankings))
+        wrong["a5"]["bsa"] = invalid_cases
+        wrong_digest = production.document_sha256({"ranked_cases": wrong})
+        with pytest.raises(production.ProductionError, match="ranked cases"):
+            production.validate_ranked_cases(wrong, ("a3", "a5"), wrong_digest)
 
 
 def test_exact_four_treatments_have_unambiguous_source_bindings():
@@ -1609,6 +1617,34 @@ def test_dual_product_launch_requires_and_authenticates_campaign_admission(tmp_p
     )
     assert rebuilt["provenance"] == config["provenance"]
     assert rebuilt["manifest_sha256"] == config["manifest_sha256"]
+
+
+def test_unadmitted_alternate_development_ranking_is_rejected_before_dispatch(
+    tmp_path: Path,
+):
+    cell = {
+        "cell_id": "a5-bsa-cannbot-all", "product": "a5",
+        "runtime": "cann91", "task": "bsa", "treatment": "cannbot-all",
+        "round_count": 4, "request_budget": 24,
+        "skills": list(production.TREATMENT_SKILLS["cannbot-all"]),
+    }
+    config = product_runtime_fixture(runtime_fixture(tmp_path, cell))
+    assert config["ranked_cases"]["a3"]["matmul"] == [7, 8, 9]
+    assert config["ranked_cases"]["a5"]["matmul"] == [7, 8, 9]
+    # Structurally valid to the backend, but not admitted by the campaign's
+    # authenticated ranked-cases digest.
+    config["ranked_cases"]["a5"]["bsa"] = [0, 1, 2, 3, 4]
+    dispatches = []
+
+    with pytest.raises(production.ProductionError, match="ranked cases"):
+        production_launcher(
+            config,
+            invoker_factory=lambda *args, **kwargs: dispatches.append("invoker"),
+            controller_factory=lambda *args, **kwargs: dispatches.append("controller"),
+            runner_factory=lambda *args, **kwargs: dispatches.append("runner"),
+        )
+
+    assert dispatches == []
 
 
 def test_dual_product_canary_cell_crosses_real_production_admission(tmp_path: Path):

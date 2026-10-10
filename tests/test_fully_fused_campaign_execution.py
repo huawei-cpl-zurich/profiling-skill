@@ -46,7 +46,9 @@ def _manifest() -> dict:
 
 def _rankings() -> dict:
     return {
-        product: {task: list(range(offset, offset + 5))
+        product: {task: list(range(
+            offset, offset + execution.DEVELOPMENT_CASE_COUNTS[task],
+        ))
                   for offset, task in enumerate(execution.TASKS)}
         for product in execution.PRODUCTS
     }
@@ -121,6 +123,8 @@ def test_receipt_hashes_are_self_verifying_and_reject_tampering():
     ("duplicate-branch", "unique unmerged branch"),
     ("wrong-rounds", "four rounds"),
     ("missing-ranking", "rankings"),
+    ("wrong-ranking-length", "rankings"),
+    ("out-of-domain-ranking", "rankings"),
 ])
 def test_prepare_fails_closed_on_matrix_or_ranking_drift(mutation: str, message: str):
     manifest, rankings = _manifest(), _rankings()
@@ -130,8 +134,12 @@ def test_prepare_fails_closed_on_matrix_or_ranking_drift(mutation: str, message:
         manifest["cells"][1]["branch"] = manifest["cells"][0]["branch"]
     elif mutation == "wrong-rounds":
         manifest["cells"][0]["round_count"] = 3
-    else:
+    elif mutation == "missing-ranking":
         rankings["a5"].pop("bsa")
+    elif mutation == "wrong-ranking-length":
+        rankings["a5"]["matmul"].append(9)
+    else:
+        rankings["a5"]["bsa"][-1] = execution.FULL_CASE_COUNTS["bsa"]
     with pytest.raises(execution.ExecutionError, match=message):
         execution.prepare_campaign(manifest, rankings, archive_attestation="a" * 64)
 

@@ -47,13 +47,19 @@ python scripts/fully_fused_campaign_execution.py gate \
   --a5-receipt A5_GATE.json --output GATES.json
 ```
 
-The runtime config must bind `archive`, `prepared`, and `gates` JSON files under
-`campaign_admission` using absolute paths and file SHA-256 values. Provenance
-must independently bind their `archive_seal_sha256`, `prepared_sha256`, and
-`gate_sha256`, plus the product-ranked cases digest. The production launcher
+Construct identities in one direction: manifest → prepared receipt → gate
+receipt → admission identity → pinned runtime config. Manifest provenance
+binds the product-ranked cases digest, but never contains an admission or gate
+hash. The runtime config must bind `archive`, `prepared`, and `gates` JSON files
+under `campaign_admission` using absolute paths and file SHA-256 values. It
+must also contain top-level `campaign_admission_identity` with schema
+`profiling-skill/fully-fused-campaign-admission/v1` and the manifest, archive,
+prepared, and gate hashes derived from those receipts. The production launcher
 fails before materializing or dispatching a dual-product cell if any receipt,
 cross-receipt identity, full-domain fusion proof, runtime identity, or
-provenance binding is missing or has drifted.
+binding is missing or has drifted. Because the runtime config is created and
+pinned last, no authenticated document contains a digest that transitively
+depends on itself.
 
 Only after `GATES.json` says `passed` can the existing production campaign
 launcher run. A controller's fusion evidence covers the complete valid case

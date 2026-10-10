@@ -201,6 +201,72 @@ def test_runner_emits_gate_accepted_artifacts_and_exact_resume(tmp_path: Path):
     assert retained["status"] == "complete" and retained["production_campaign_launched"] is False
 
 
+def test_four_canaries_share_one_authenticated_admission_snapshot(tmp_path: Path):
+    definition, config, output = inputs(tmp_path)
+
+    class ExpiringPool(FakePool):
+        def admit(self):
+            if self.calls:
+                raise canaries.AdmissionError("immutable inventory snapshot expired")
+            return super().admit()
+
+    pool = ExpiringPool()
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), tmp_path / "canary-run", pool,
+        launcher_factory=lambda cfg, mode: FakeLauncher(cfg, mode),
+    )
+
+    result = runner.run(output)
+
+    assert len(result["results"]) == 4
+    assert pool.calls == 1
+
+
+def test_dual_product_runner_emits_a3_cells_and_binds_exact_runtime_config(
+    tmp_path: Path,
+):
+    definition, config, output = inputs(tmp_path)
+    a3_task = {"path": "/inputs/a3-matmul.md", "sha256": "2" * 64}
+    config["product_tasks"] = {
+        "a3": {"matmul": a3_task},
+        "a5": {"matmul": {"path": "/inputs/a5-matmul.md", "sha256": "3" * 64}},
+    }
+    config["products"] = {
+        "a3": {"runtime": "py311-torch"}, "a5": {"runtime": "cann91"},
+    }
+    exact_runtime_sha256 = production.document_sha256(config)
+    seen = []
+
+    class DualLauncher(FakeLauncher):
+        def launch(self, cell: dict, slot: dict) -> dict:
+            seen.append((dict(cell), dict(slot), self.config))
+            return super().launch(cell, slot)
+
+        def observe(self, cell: dict, slot: dict, handle: str) -> dict:
+            seen.append((dict(cell), dict(slot), self.config))
+            return super().observe(cell, slot, handle)
+
+    runner = canaries.CanaryRunner(
+        config, definition, sha(definition), tmp_path / "canary-run", FakePool(),
+        launcher_factory=lambda cfg, mode: DualLauncher(cfg, mode),
+    )
+
+    result = runner.run(output)
+
+    assert result["runtime_config_sha256"] == exact_runtime_sha256
+    assert runner.config["run_id"] == config["run_id"]
+    assert seen
+    assert all(cell["product"] == "a3" and cell["runtime"] == "py311-torch"
+               and cell["task_sha256"] == a3_task["sha256"]
+               for cell, _slot, _config in seen)
+    assert all(slot["target"] == "bz-a3-1" for _cell, slot, _config in seen)
+    assert all(runtime["product_tasks"]["a3"]["matmul"] == a3_task
+               for _cell, _slot, runtime in seen)
+    assert production.validate_canary_gate(
+        config, output, sha(output), exact_runtime_sha256,
+    )["status"] == "passed"
+
+
 def test_runner_accepts_v2_exact_profile_treatment_subset(tmp_path: Path):
     definition, config, output = inputs(tmp_path)
     document = json.loads(definition.read_text())

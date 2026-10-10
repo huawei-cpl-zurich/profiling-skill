@@ -214,11 +214,13 @@ class CanaryRunner:
         self._validate_definition()
         self.runtime_config_sha256 = production.document_sha256(config)
         self.config = copy.deepcopy(config)
-        self.config["run_id"] = f"repair-canaries-{definition_sha256[:12]}"
+        if not isinstance(self.config.get("product_tasks"), dict):
+            self.config["run_id"] = f"repair-canaries-{definition_sha256[:12]}"
         self.config["run_root"] = str(self.run_root / "cells")
         self.config["canary_definition"] = {
             "path": str(self.definition_path), "sha256": definition_sha256,
         }
+        self._admitted_slots: list[dict] | None = None
 
     def _validate_definition(self) -> None:
         rows = self.definition.get("canaries")
@@ -266,9 +268,12 @@ class CanaryRunner:
             raise CanaryError("canary definition is not the declared treatment contract")
 
     def _cell(self, declaration: dict) -> dict:
-        task = self.config.get("tasks", {}).get("matmul", {})
+        product_tasks = self.config.get("product_tasks")
+        dual_product = isinstance(product_tasks, dict)
+        task = (product_tasks.get("a3", {}).get("matmul", {}) if dual_product
+                else self.config.get("tasks", {}).get("matmul", {}))
         prompt = self.config.get("prompt", {})
-        return {
+        cell = {
             "cell_id": declaration["id"], "task": "matmul",
             "treatment": declaration["treatment"], "round_count": 4,
             "request_budget": 48,
@@ -279,18 +284,36 @@ class CanaryRunner:
             **({"canary_fault": "interrupt-after-dispatch-once"}
                if "checkpoint-resume" in declaration["required_evidence"] else {}),
         }
+        if dual_product:
+            cell.update({"product": "a3", "runtime": production.PRODUCT_RUNTIMES["a3"]})
+        return cell
+
+    @staticmethod
+    def _slot_compatible(cell: dict, slot: dict) -> bool:
+        product = cell.get("product")
+        if product is None:
+            return True
+        return (slot.get("target") in production.PRODUCT_TARGETS[product]
+                and slot.get("product", product) == product
+                and slot.get("runtime", cell["runtime"]) == cell["runtime"])
 
     def _slot(self, cell: dict) -> dict:
         retained = (Path(self.config["run_root"]) / cell["cell_id"]
                     / "state" / "placement.json")
         if retained.is_file():
             try:
-                return json.loads(retained.read_text())
+                slot = json.loads(retained.read_text())
             except json.JSONDecodeError as error:
                 raise CanaryError("retained canary placement is invalid") from error
-        slots = [slot for slot in self.pool.admit()
+            if not isinstance(slot, dict) or not self._slot_compatible(cell, slot):
+                raise CanaryError("retained canary placement is incompatible with A3")
+            return slot
+        if self._admitted_slots is None:
+            self._admitted_slots = list(self.pool.admit())
+        slots = [slot for slot in self._admitted_slots
                  if isinstance(slot, dict)
-                 and slot.get("healthy") is True and slot.get("idle") is True]
+                 and slot.get("healthy") is True and slot.get("idle") is True
+                 and self._slot_compatible(cell, slot)]
         if not slots:
             raise CanaryError("no healthy idle BZ-A3 device was admitted")
         return sorted(slots, key=lambda item: (item["target"], item["device"]))[0]

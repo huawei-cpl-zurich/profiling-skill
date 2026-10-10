@@ -27,7 +27,8 @@ try:
     )
     from fully_fused_campaign_execution import (
         ExecutionError as CampaignExecutionError,
-        verify_archive_seal, verify_gate_receipt, verify_prepared_receipt,
+        validated_campaign_admission_identity, verify_archive_seal,
+        verify_gate_receipt, verify_prepared_receipt,
     )
 finally:
     sys.path.pop(0)
@@ -939,10 +940,13 @@ class ProductionCellLauncher:
                 "campaign gate receipt",
             )
             archive_result = verify_archive_seal(archive)
-            verify_prepared_receipt(prepared)
-            verify_gate_receipt(
+            prepared = verify_prepared_receipt(prepared)
+            gates = verify_gate_receipt(
                 gates, prepared["ranked_cases"],
                 prepared_sha256=prepared["prepared_sha256"],
+            )
+            expected = validated_campaign_admission_identity(
+                archive_result, prepared, gates,
             )
         except (KeyError, TypeError, CampaignExecutionError) as error:
             raise ProductionError(f"campaign admission is invalid: {error}") from error
@@ -951,13 +955,23 @@ class ProductionCellLauncher:
                 or prepared.get("archive_attestation") != archive_result["seal_sha256"]
                 or prepared.get("ranked_cases") != self.config.get("ranked_cases")):
             raise ProductionError("campaign admission does not match runtime inputs")
-        expected = {
-            "archive_seal_sha256": archive_result["seal_sha256"],
-            "prepared_sha256": prepared["prepared_sha256"],
-            "gate_sha256": gates["gate_sha256"],
-        }
-        if self.config.get("provenance", {}).get("campaign_admission") != expected:
-            raise ProductionError("campaign admission provenance does not match receipts")
+        configured_identity = self.config.get("campaign_admission_identity")
+        if configured_identity is None:
+            # Retained configs produced by the first admission implementation
+            # carried only these three receipt digests in provenance.  They
+            # remain safe to resume because every receipt and its manifest
+            # link is independently revalidated above.  New construction must
+            # use the non-cyclic top-level identity.
+            legacy = self.config.get("provenance", {}).get("campaign_admission")
+            legacy_expected = {
+                key: expected[key] for key in (
+                    "archive_seal_sha256", "prepared_sha256", "gate_sha256",
+                )
+            }
+            if legacy != legacy_expected:
+                raise ProductionError("campaign admission identity does not match receipts")
+        elif configured_identity != expected:
+            raise ProductionError("campaign admission identity does not match receipts")
         return expected
 
     def _tasks(self, product: str | None) -> dict:
@@ -1401,7 +1415,7 @@ class ProductionCellLauncher:
             raise ProductionError(
                 "production cells require four rounds and a 24 or 48-operation budget"
             )
-        if self.config.get("products") is not None and self._campaign_admission is None:
+        if self.config.get("products") is not None:
             self._campaign_admission = self._validate_campaign_admission()
         product = cell.get("product", "a3")
         task_binding = self._tasks(product).get(cell.get("task"), {})

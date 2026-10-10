@@ -301,3 +301,53 @@ def test_load_admission_hashes_and_parses_one_atomic_byte_read(
     assert receipt.as_slots()[0]["target"] == "bz-a3-1"
     with pytest.raises(module.AdmissionError, match="hash"):
         module.load_admission(path, first_sha)
+
+
+def test_dual_product_admission_pins_product_runtime_and_target(tmp_path: Path):
+    module = load()
+    now = datetime.now(UTC)
+    slots = [
+        {"product": "a3", "runtime": "py311-torch", "target": "bz-a3-2",
+         "device": 5, "healthy": True, "idle": True},
+        {"product": "a5", "runtime": "cann91", "target": "bz-a5",
+         "device": 1, "healthy": True, "idle": True},
+    ]
+    path = tmp_path / "dual-admission.json"
+    path.write_text(json.dumps({
+        "schema": "profiling-skill/dual-product-admission/v3",
+        "provider": {"id": "operator-snapshot",
+                     "allowlist_sha256": allowlist_sha256(slots)},
+        "generated_at": (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
+        "expires_at": (now + timedelta(minutes=2)).isoformat().replace("+00:00", "Z"),
+        "slots": slots,
+    }))
+
+    receipt = module.load_admission(path, sha256(path))
+    assert receipt.as_slots() == slots
+
+
+@pytest.mark.parametrize("field,value", [
+    ("product", "a5"),
+    ("runtime", "cann91"),
+    ("target", "bz-a5"),
+])
+def test_dual_product_admission_rejects_inconsistent_adapter_identity(
+    tmp_path: Path, field: str, value: str,
+):
+    module = load()
+    now = datetime.now(UTC)
+    slot = {"product": "a3", "runtime": "py311-torch", "target": "bz-a3-1",
+            "device": 0, "healthy": True, "idle": True}
+    slot[field] = value
+    path = tmp_path / "bad-dual-admission.json"
+    path.write_text(json.dumps({
+        "schema": "profiling-skill/dual-product-admission/v3",
+        "provider": {"id": "operator-snapshot",
+                     "allowlist_sha256": allowlist_sha256([slot])},
+        "generated_at": (now - timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
+        "expires_at": (now + timedelta(minutes=2)).isoformat().replace("+00:00", "Z"),
+        "slots": [slot],
+    }))
+
+    with pytest.raises(module.AdmissionError, match="product adapter"):
+        module.load_admission(path, sha256(path))

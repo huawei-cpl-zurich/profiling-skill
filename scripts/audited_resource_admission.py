@@ -15,8 +15,12 @@ from pathlib import Path
 from typing import Callable
 
 
-TARGETS = ("bz-a3-1", "bz-a3-2")
+A3_TARGETS = ("bz-a3-1", "bz-a3-2")
+PRODUCT_TARGETS = {"a3": A3_TARGETS, "a5": ("bz-a5",)}
+PRODUCT_RUNTIMES = {"a3": "py311-torch", "a5": "cann91"}
+TARGETS = tuple(target for targets in PRODUCT_TARGETS.values() for target in targets)
 ADMISSION_SCHEMA = "profiling-skill/bz-a3-admission/v2"
+DUAL_PRODUCT_ADMISSION_SCHEMA = "profiling-skill/dual-product-admission/v3"
 GLOBAL_CPL_REMOTE = Path(".agents/skills/remote-access/scripts/cpl-remote")
 REQUIRED_CAPABILITIES = ("run", "observe", "logs", "upload")
 MAX_ADMISSION_AGE = timedelta(minutes=5)
@@ -51,10 +55,15 @@ class AdmissionSlot:
     device: int
     healthy: bool
     idle: bool
+    product: str | None = None
+    runtime: str | None = None
 
     def as_dict(self) -> dict:
-        return {"target": self.target, "device": self.device,
-                "healthy": self.healthy, "idle": self.idle}
+        result = {"target": self.target, "device": self.device,
+                  "healthy": self.healthy, "idle": self.idle}
+        if self.product is not None:
+            result.update({"product": self.product, "runtime": self.runtime})
+        return result
 
 
 @dataclass(frozen=True)
@@ -132,12 +141,13 @@ def load_admission(path: Path, expected_sha256: str, *,
     except json.JSONDecodeError as error:
         raise AdmissionError(f"admission input is invalid JSON: {error}") from error
     required = {"schema", "provider", "generated_at", "expires_at", "slots"}
+    schema = document.get("schema") if isinstance(document, dict) else None
     if (not isinstance(document, dict) or set(document) != required
-            or document.get("schema") != ADMISSION_SCHEMA
+            or schema not in {ADMISSION_SCHEMA, DUAL_PRODUCT_ADMISSION_SCHEMA}
             or not isinstance(document.get("provider"), dict)
             or set(document["provider"]) != {"id", "allowlist_sha256"}
             or not isinstance(document.get("slots"), list)):
-        raise AdmissionError(f"admission input requires exact schema {ADMISSION_SCHEMA}")
+        raise AdmissionError("admission input requires a supported exact schema")
     provider_id = document["provider"]["id"]
     if (not isinstance(provider_id, str)
             or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", provider_id)):
@@ -147,16 +157,26 @@ def load_admission(path: Path, expected_sha256: str, *,
     admitted: list[AdmissionSlot] = []
     seen = set()
     for slot in document["slots"]:
+        expected_fields = ({"target", "device", "healthy", "idle"}
+                           if schema == ADMISSION_SCHEMA else
+                           {"product", "runtime", "target", "device", "healthy", "idle"})
         if (not isinstance(slot, dict)
-                or set(slot) != {"target", "device", "healthy", "idle"}):
+                or set(slot) != expected_fields):
             raise AdmissionError("admission slot has an invalid shape")
         identity = (slot["target"], slot["device"])
-        if (slot["target"] not in TARGETS
+        allowed_targets = A3_TARGETS if schema == ADMISSION_SCHEMA else TARGETS
+        if (slot["target"] not in allowed_targets
                 or type(slot["device"]) is not int or slot["device"] < 0
                 or type(slot["healthy"]) is not bool
                 or type(slot["idle"]) is not bool
                 or identity in seen):
             raise AdmissionError("admission slot identity is invalid or duplicated")
+        if schema == DUAL_PRODUCT_ADMISSION_SCHEMA:
+            product = slot["product"]
+            if (product not in PRODUCT_TARGETS
+                    or slot["target"] not in PRODUCT_TARGETS[product]
+                    or slot["runtime"] != PRODUCT_RUNTIMES[product]):
+                raise AdmissionError("admission slot product adapter is inconsistent")
         seen.add(identity)
         admitted.append(AdmissionSlot(**slot))
     if slot_allowlist_sha256(tuple(admitted)) != declared_allowlist:
@@ -259,6 +279,7 @@ class CplRemoteResourcePool:
     def admit_snapshot(self) -> AdmissionReceipt:
         """Return fresh provider evidence intersected with approved remote health."""
         self.last_receipt = None
+        self._validate_client()
         receipt = load_admission(
             self.admission, self.admission_sha256, now=self.clock())
         if receipt.provider_id != self.provider_id:
@@ -266,7 +287,7 @@ class CplRemoteResourcePool:
         if receipt.allowlist_sha256 != self.allowlist_sha256:
             raise AdmissionError("admission allowlist identity does not match pinned input")
         available = {
-            target for target in TARGETS
+            target for target in sorted({slot.target for slot in receipt.slots})
             if self._probe(target, "capabilities")
             and self._probe(target, "preflight")
         }

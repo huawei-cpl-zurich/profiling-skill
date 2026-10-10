@@ -18,7 +18,7 @@ _SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIRECTORY))
 try:
     from audited_resource_admission import (
-        TARGETS, AdmissionError, CplRemoteResourcePool,
+        PRODUCT_RUNTIMES, PRODUCT_TARGETS, TARGETS, AdmissionError, CplRemoteResourcePool,
         cpl_remote_closure_sha256, file_sha256,
     )
 finally:
@@ -62,7 +62,7 @@ CANNBOT_SKILLS = tuple(sorted({
 RUNTIME_FILES = {
     "audited_bz_controller.py", "audited_contract.py", "audited_lifecycle.py",
     "audited_runtime.py", "audited_verifier.py", "benchmark_backend.py",
-    "bz_a3_job_client.py", "validate_audited_experiment.py",
+    "bz_a3_job_client.py", "bz_a5_job_client.py", "validate_audited_experiment.py",
 }
 
 
@@ -943,9 +943,14 @@ class ProductionCellLauncher:
     def _controller(self, cell: dict, slot: dict, root: Path, repo: Path):
         state = root / "state"
         state.mkdir(parents=True, exist_ok=True)
-        if (slot.get("target") not in TARGETS or type(slot.get("device")) is not int
+        product = cell.get("product", "a3")
+        if product not in PRODUCT_TARGETS:
+            raise ProductionError("cell product is unsupported")
+        if (slot.get("target") not in PRODUCT_TARGETS[product]
+                or slot.get("runtime", PRODUCT_RUNTIMES[product]) != PRODUCT_RUNTIMES[product]
+                or type(slot.get("device")) is not int
                 or slot["device"] < 0):
-            raise ProductionError("cell placement is not an admitted BZ-A3 device")
+            raise ProductionError("cell placement does not match its admitted product")
         placement_binding = state / "placement.json"
         placement = {"target": slot["target"], "device": slot["device"]}
         if placement_binding.is_file():
@@ -958,7 +963,9 @@ class ProductionCellLauncher:
             "0": {"target": slot["target"], "device": slot["device"]}
         }, sort_keys=True) + "\n")
         job_client = [
-            sys.executable, str(self.scripts / "bz_a3_job_client.py"),
+            sys.executable, str(self.scripts / (
+                "bz_a5_job_client.py" if product == "a5" else "bz_a3_job_client.py"
+            )),
             "--state-dir", str(state / "jobs"), "--placements-json", str(placements),
             "--remote-root", self.config["remote_root"],
             "--cpl-remote-sha256", file_sha256(Path(self.cpl_remote)),
@@ -987,11 +994,13 @@ class ProductionCellLauncher:
             ])
         backend = [
             sys.executable, str(self.scripts / "benchmark_backend.py"),
+            "--product", product, "--runtime", PRODUCT_RUNTIMES[product],
             "--benchmark", cell["task"], "--job-client-json", json.dumps(job_client),
         ]
         document = {
             "schema": "profiling-skill/audited-bz-controller-config/v1",
-            "benchmark": cell["task"], "round_count": 4,
+            "benchmark": cell["task"], "product": product,
+            "runtime": PRODUCT_RUNTIMES[product], "round_count": 4,
             "request_budget": cell["request_budget"],
             "profile_repeats": 3, "variability_threshold": 0.25,
             "control_drift_threshold": 0.2, "infrastructure_retry_budget": 3,

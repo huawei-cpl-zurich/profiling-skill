@@ -109,11 +109,12 @@ class GlobalCplRemoteTransport:
     """Hash-pinned access to the installed global remote-access client."""
 
     def __init__(self, expected_sha256: str, remote_root: str,
-                 invoke: Callable = _invoke):
+                 invoke: Callable = _invoke, *, targets: set[str] | None = None,
+                 executable: Path | None = None):
         if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
             raise JobError("request_error",
                            "cpl-remote digest must be 64 lowercase hexadecimal characters")
-        self.executable = _user_home() / GLOBAL_CPL_REMOTE
+        self.executable = executable or (_user_home() / GLOBAL_CPL_REMOTE)
         try:
             actual = _sha(self.executable)
         except OSError as exc:
@@ -126,6 +127,7 @@ class GlobalCplRemoteTransport:
         self.expected_sha256 = expected_sha256
         self.remote_root = validate_remote_root(remote_root)
         self.invoke = invoke
+        self.targets = set(TARGETS if targets is None else targets)
 
     def _call(self, arguments: list[str], timeout: int,
               *, handle: str | None = None) -> dict:
@@ -144,7 +146,7 @@ class GlobalCplRemoteTransport:
     def _validate_handle(target: str, handle: object) -> str:
         prefix = f"remote:{target}:job:"
         if (not isinstance(handle, str) or not handle.startswith(prefix)
-                or not re.fullmatch(r"remote:bz-a3-[12]:job:[A-Za-z0-9_.-]+", handle)):
+                or not re.fullmatch(r"remote:[A-Za-z0-9_.-]+:job:[A-Za-z0-9_.-]+", handle)):
             raise JobError("transport_error", "cpl-remote returned an invalid job handle")
         return handle
 
@@ -250,7 +252,7 @@ def _write_json(path: Path, value: dict) -> None:
         os.close(directory)
 
 
-def validate_placements(value: object) -> dict[int, dict]:
+def validate_placements(value: object, targets: set[str] = TARGETS) -> dict[int, dict]:
     if not isinstance(value, dict) or not value:
         raise JobError("request_error", "placements must be a non-empty JSON object")
     result = {}
@@ -262,7 +264,7 @@ def validate_placements(value: object) -> dict[int, dict]:
         if (str(logical_id) != str(logical) or logical_id < 0
                 or not isinstance(placement, dict)
                 or set(placement) != {"target", "device"}
-                or placement.get("target") not in TARGETS
+                or placement.get("target") not in targets
                 or isinstance(placement.get("device"), bool)
                 or not isinstance(placement.get("device"), int)
                 or placement["device"] < 0):
@@ -387,13 +389,17 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
 
 
 class BzA3JobClient:
+    PRODUCT = "a3"
+    RUNTIME = "py311-torch"
+    TARGETS = TARGETS
+
     def __init__(self, transport: GlobalCplRemoteTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
                  batch_profiler: Path, remote_root: str,
                  interrupt_after_dispatch: Path | None = None):
         self.transport = transport
         self.state_dir = state_dir
-        self.placements = validate_placements(placements)
+        self.placements = validate_placements(placements, self.TARGETS)
         self.placements_sha256 = _json_sha(self.placements)
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler
@@ -482,13 +488,11 @@ class BzA3JobClient:
                 # parents. The configured root is therefore a pre-provisioned
                 # writable staging directory, while the content-addressed
                 # filename keeps concurrent requests collision-free.
-                remote_archive = f"{self.remote_root}/payload-{request_sha}.tar"
-                self.transport.upload(placement["target"], archive, remote_archive,
-                                      self._remaining(deadline))
                 run_root = f"{self.remote_root}/runs/{request_sha}"
-                script = self._remote_script(
-                    remote_archive, _sha(archive), run_root,
+                script = self._prepare_remote_script(
+                    placement["target"], archive, request_sha, run_root,
                     self._workload_timeout(self._remaining(deadline)), job,
+                    self._remaining(deadline),
                 )
                 try:
                     handle = self.transport.dispatch(
@@ -615,13 +619,16 @@ class BzA3JobClient:
             raise JobError("transport_error", "insufficient workload response grace")
         return remaining - 25
 
-    @staticmethod
-    def _validate_job(job: dict) -> None:
+    @classmethod
+    def _validate_job(cls, job: dict) -> None:
         if job.get("protocol_version") != 1 or job.get("action") not in {
                 "check", "measure", "profile"}:
             raise JobError("request_error", "unsupported job protocol or action")
-        if job.get("runtime") != "py311-torch":
-            raise JobError("request_error", "runtime must be py311-torch")
+        if job.get("runtime") != cls.RUNTIME:
+            raise JobError("request_error", f"runtime must be {cls.RUNTIME}")
+        product = job.get("product", cls.PRODUCT)
+        if product != cls.PRODUCT:
+            raise JobError("request_error", f"product must be {cls.PRODUCT}")
         device = job.get("device")
         if isinstance(device, bool) or not isinstance(device, int) or device < 0:
             raise JobError("request_error", "device must be a non-negative logical ID")
@@ -728,6 +735,15 @@ test "$rc" -ne 124 && test "$rc" -ne 137 || exit 124
 test -f response.json || exit "$rc"
 {merge}
 exit 0'''
+
+    def _prepare_remote_script(self, target: str, archive: Path, request_sha: str,
+                               run_root: str, workload_timeout: int, job: dict,
+                               transport_timeout: int) -> str:
+        remote_archive = f"{self.remote_root}/payload-{request_sha}.tar"
+        self.transport.upload(target, archive, remote_archive, transport_timeout)
+        return self._remote_script(
+            remote_archive, _sha(archive), run_root, workload_timeout, job,
+        )
 
     @staticmethod
     def _complete(response: CommandResult, handle: str | None, identity: dict,

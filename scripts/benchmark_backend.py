@@ -137,13 +137,15 @@ def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]
 
 
 def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Path,
-             kernel_name: str | None = None) -> dict[str, Any]:
+             kernel_name: str | None = None, *, product: str = "a3",
+             runtime: str = "py311-torch") -> dict[str, Any]:
     spec = BENCHMARKS[benchmark]
     action = request["action"]
     job = {
         "protocol_version": 1,
-        "profile": "gz-a3",
-        "runtime": "py311-torch",
+        "profile": "gz-a3" if product == "a3" else "bz-a5",
+        "product": product,
+        "runtime": runtime,
         "benchmark": benchmark,
         "device": request["device"],
         "logical_device": 0,
@@ -242,6 +244,9 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", choices=sorted(BENCHMARKS), required=True)
+    parser.add_argument("--product", choices=("a3", "a5"), default="a3")
+    parser.add_argument("--runtime", choices=("py311-torch", "cann91"),
+                        default="py311-torch")
     parser.add_argument("--candidate", type=Path, default=Path("candidate.py"))
     parser.add_argument("--candidate-manifest", type=Path)
     parser.add_argument("--job-client-json", required=True,
@@ -283,7 +288,8 @@ def main() -> int:
                 }
                 calibration = root / "benchmarks/matmul/calibration.py"
                 job = make_job(calibration_request, "matmul", calibration, root,
-                               "streaming_matmul_add_kernel_mix_aic")
+                               "streaming_matmul_add_kernel_mix_aic",
+                               product=args.product, runtime=args.runtime)
                 # This opaque field deliberately participates in the managed
                 # request digest without changing the runner's profile schema.
                 job["calibration_phase"] = request["phase"]
@@ -311,7 +317,8 @@ def main() -> int:
                 if kernel_name is not None or request["action"] != "profile":
                     result = invoke(
                         command,
-                        make_job(request, args.benchmark, args.candidate, root, kernel_name),
+                        make_job(request, args.benchmark, args.candidate, root, kernel_name,
+                                 product=args.product, runtime=args.runtime),
                         args.timeout,
                     )
     print(json.dumps(result, sort_keys=True))

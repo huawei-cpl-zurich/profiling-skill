@@ -110,7 +110,7 @@ def runtime_fixture(tmp_path: Path, cell: dict):
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py",
+                 "bz_a3_job_client.py", "bz_a5_job_client.py",
                  "validate_audited_experiment.py", "audited_verifier.py",
                  "audited_contract.py", "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")
@@ -1243,6 +1243,49 @@ def test_declared_resume_canary_routes_only_job_client_observation_fault(tmp_pat
     ).resolve()
 
 
+def test_a5_controller_selects_self_contained_named_runtime_client(tmp_path: Path):
+    cell = {
+        "cell_id": "a5-matmul-cannbot", "product": "a5", "runtime": "cann91",
+        "task": "matmul", "treatment": "cannbot", "round_count": 4,
+        "request_budget": 24, "skills": list(production.TREATMENT_SKILLS["cannbot"]),
+    }
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+
+    launcher._controller(
+        cell, {"product": "a5", "runtime": "cann91", "target": "bz-a5", "device": 2},
+        repo.parent, repo,
+    )
+
+    controller = json.loads((repo.parent / "state/controller.json").read_text())
+    assert controller["product"] == "a5" and controller["runtime"] == "cann91"
+    backend = controller["backend_command"]
+    assert backend[backend.index("--product") + 1] == "a5"
+    assert backend[backend.index("--runtime") + 1] == "cann91"
+    client = json.loads(backend[backend.index("--job-client-json") + 1])
+    assert Path(client[1]).name == "bz_a5_job_client.py"
+
+
+def test_controller_rejects_cross_product_placement(tmp_path: Path):
+    cell = {"cell_id": "a5-matmul", "product": "a5", "runtime": "cann91",
+            "task": "matmul", "treatment": "cannbot", "round_count": 4,
+            "request_budget": 24, "skills": list(production.TREATMENT_SKILLS["cannbot"])}
+    config = runtime_fixture(tmp_path, cell)
+    launcher = production_launcher(
+        config, invoker_factory=lambda *args, **kwargs: object(),
+        controller_factory=lambda *args, **kwargs: object(), runner_factory=FakeRunner,
+    )
+    repo, _ = launcher._prepare_repo(cell)
+    with pytest.raises(production.ProductionError, match="admitted product"):
+        launcher._controller(
+            cell, {"product": "a3", "runtime": "py311-torch",
+                   "target": "bz-a3-1", "device": 0}, repo.parent, repo)
+
+
 @pytest.mark.parametrize("value", [-1, 0, 1, 3, True])
 def test_production_rejects_nonstandard_candidate_repair_limit(
         tmp_path: Path, value):
@@ -2005,7 +2048,8 @@ def test_fake_production_launcher_runs_all_nine_isolated_branches(tmp_path: Path
     scripts = tmp_path / "runtime"
     scripts.mkdir()
     for name in ("audited_bz_controller.py", "benchmark_backend.py",
-                 "bz_a3_job_client.py", "validate_audited_experiment.py",
+                 "bz_a3_job_client.py", "bz_a5_job_client.py",
+                 "validate_audited_experiment.py",
                  "audited_verifier.py", "audited_contract.py",
                  "audited_lifecycle.py", "audited_runtime.py"):
         (scripts / name).write_text("# pinned\n")

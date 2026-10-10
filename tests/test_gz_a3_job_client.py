@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import types
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -50,6 +51,99 @@ def test_runner_applies_the_job_specific_tolerance_contract():
     actual = torch.tensor([1.015])
     assert runner.compare(actual, expected, rtol=1e-2, atol=0)[0] is False
     assert runner.compare(actual, expected, rtol=2e-2, atol=0)[0] is True
+
+
+def test_runner_acquires_trusted_launch_output_and_framework_evidence():
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Storage:
+        def __init__(self, pointer): self.pointer = pointer
+        def data_ptr(self): return self.pointer
+
+    class Tensor:
+        device = "npu:0"
+        def __init__(self, pointer): self.pointer = pointer
+        def untyped_storage(self): return Storage(self.pointer)
+
+    class Kernel:
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    source, output = Tensor(1), Tensor(2)
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    candidate.complete_kernel[(1,)](source, output)
+    evidence = audit.finish(7, output)
+    assert evidence["output_launch_id"] == "launch-0"
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+    audit.framework_ops.append(("aten.matmul.default", "torch"))
+    assert audit.finish(7, output)["operators"][-1]["origin"] == "torch"
+
+
+def test_runner_check_emits_fusion_evidence_from_the_real_candidate_forward(
+    monkeypatch, tmp_path: Path,
+):
+    import torch
+
+    runner = load_runner()
+
+    class Kernel:
+        def __getitem__(self, _grid):
+            def launch(source, output):
+                with torch._C._DisableTorchDispatch():
+                    output.copy_(source)
+            return launch
+
+    Kernel.__module__ = "triton.runtime.jit"
+    baseline = types.ModuleType("baseline")
+    baseline.Model = lambda: lambda value: value.clone()
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    candidate.torch = torch
+    exec(
+        "class Model:\n"
+        " def __call__(self, value):\n"
+        "  output = torch.empty_like(value)\n"
+        "  complete_kernel[(1,)](value, output)\n"
+        "  return output\n",
+        candidate.__dict__,
+    )
+    monkeypatch.setattr(
+        runner, "load",
+        lambda _path, name: baseline if name == "frozen_baseline" else candidate,
+    )
+    monkeypatch.setattr(runner, "selected_inputs", lambda *_args: (torch.tensor([2.0]),))
+    monkeypatch.setattr(torch, "npu", SimpleNamespace(synchronize=lambda: None), raising=False)
+    cases = tmp_path / "cases.jsonl"
+    cases.write_text("{}\n")
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+    result = runner.execute({
+        "benchmark": "matmul", "action": "check", "device": 0,
+        "cases": [0], "scope": "full", "baseline": "baseline.py",
+        "candidate": "candidate.py", "case_spec": str(cases),
+        "fusion_contract": declaration,
+    })
+    assert result["status"] == "ok", result.get("diagnostics")
+    assert result["fusion_evidence"][0]["output_launch_id"] == "launch-0"
+    assert result["fusion_evidence"][0]["operators"][0]["origin"] == "triton"
 
 
 class Marker:

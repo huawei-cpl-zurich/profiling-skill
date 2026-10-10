@@ -27,6 +27,11 @@ from audited_contract import (
     validate_observe_transaction,
     validate_observe_transition,
 )
+from fully_fused_contract import (
+    FusionContractError,
+    MANIFEST_SCHEMA as FUSED_MANIFEST_SCHEMA,
+    validate_manifest as validate_fused_manifest,
+)
 
 MAX_PARTIAL_OUTPUT = 65536
 MAX_REASONING_OUTPUT = 8192
@@ -787,8 +792,16 @@ class AuditedExperimentRunner:
         if not isinstance(document, dict):
             raise AuditError("candidate manifest must be a JSON object")
         kernel_name = document.get("kernel_name")
-        if document.get("schema") != MANIFEST_SCHEMA:
-            raise AuditError(f"candidate manifest requires schema {MANIFEST_SCHEMA}")
+        if document.get("schema") == FUSED_MANIFEST_SCHEMA:
+            try:
+                document = validate_fused_manifest(document)
+            except FusionContractError as failure:
+                raise AuditError(f"candidate manifest fusion contract is invalid: {failure}") from failure
+            kernel_name = document["kernel_name"]
+        elif document.get("schema") != MANIFEST_SCHEMA:
+            raise AuditError(
+                f"candidate manifest requires schema {MANIFEST_SCHEMA} or {FUSED_MANIFEST_SCHEMA}"
+            )
         if (not isinstance(kernel_name, str) or not kernel_name.strip()
                 or kernel_name != kernel_name.strip()):
             raise AuditError("candidate manifest requires a nonempty exact kernel selector")

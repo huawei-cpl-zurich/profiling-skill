@@ -520,6 +520,33 @@ def test_unresolved_selector_is_repaired_before_controller_submission(tmp_path: 
     assert controller_calls == [(1, "actual_exported_kernel")]
 
 
+def test_candidate_validation_accepts_and_checks_mandatory_v2_manifest(tmp_path: Path):
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    prompt, task = inputs(tmp_path)
+    prior = sha((repo / "candidate.py").read_bytes())
+    (repo / "candidate.py").write_text("VALUE = 1\n")
+    manifest = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv",
+        "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+    (repo / "candidate.manifest.json").write_text(json.dumps(manifest))
+    runner = lifecycle.AuditedExperimentRunner(
+        repo, prompt, task, lambda *args: "", lambda *args: {}, round_count=4,
+    )
+    candidate_hash, selected = runner._validate_candidate(prior)
+    assert candidate_hash == sha((repo / "candidate.py").read_bytes())
+    assert selected.name == "candidate.manifest.json"
+
+    manifest["fusion"]["complete_operator"] = False
+    (repo / "candidate.manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(contract.AuditError, match="fusion"):
+        runner._validate_candidate(prior)
+
+
 @pytest.mark.parametrize("failed_attempts", [1, 2])
 def test_candidate_errors_are_repaired_inside_one_experiment(
     tmp_path: Path, failed_attempts: int,

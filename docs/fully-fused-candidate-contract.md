@@ -21,9 +21,13 @@ assign the same `launch_id` to compiler-generated components of one logical
 Triton invocation, identify their entry point, and bind the returned output to
 its producing launch with `output_launch_id`.
 
-The benchmark backend recognizes v2 manifests, binds the declaration into the
-managed profile job, and requires the job client to return this evidence. It
-invokes `scripts/fully_fused_contract.py` before exposing any profile timing.
+The benchmark backend recognizes v2 manifests and runs a full-case correctness
+job before every profile request. The trusted benchmark runner wraps the
+declared Triton entry point, records each launch and its tensor arguments,
+observes Torch/ACL tensor dispatch, and binds returned output storage to the
+launch that received it. Both production A3 clients propagate this evidence.
+The backend invokes `scripts/fully_fused_contract.py` over every configured
+case before dispatching the timing job or exposing any profile timing.
 The gate
 accepts exactly one logical Triton launch per case, including a mixed AIC/AIV
 family. It rejects zero or multiple launches, Torch/ACL compute, another

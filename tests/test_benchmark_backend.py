@@ -26,33 +26,53 @@ def load_backend():
     return module
 
 
+def test_file_based_backend_load_does_not_depend_on_repository_sys_path(tmp_path: Path):
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "import importlib.util, sys\n"
+        f"path={str(BACKEND)!r}\n"
+        "sys.path=[item for item in sys.path if 'profiling-skill' not in item]\n"
+        "spec=importlib.util.spec_from_file_location('detached_backend', path)\n"
+        "module=importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(module)\n"
+        "assert module.FUSED_MANIFEST_SCHEMA.endswith('/v2')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, str(probe)], cwd=tmp_path, text=True, capture_output=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def fake_client(tmp_path: Path) -> Path:
     path = tmp_path / "client.py"
     path.write_text("""#!/usr/bin/env python3
 import json, os, sys
 job = json.load(sys.stdin)
 mode = os.environ.get("FAKE_MODE", "ok")
+if os.environ.get("FAKE_LOG"):
+    with open(os.environ["FAKE_LOG"], "a") as stream:
+        stream.write(json.dumps(job, sort_keys=True) + "\\n")
 print("client diagnostic", file=sys.stderr)
 identity = {k: job[k] for k in ("benchmark", "action", "device")}
 if job["action"] == "check": identity.update(cases=job["cases"], scope=job["scope"])
 elif job["action"] == "profile": identity.update(cases=job["cases"], repeats=job["repeats"])
 else: identity["case"] = job["case"]
 if job["action"] == "measure": identity["phase"] = job["phase"]
+if "fusion_contract" in job:
+    entrypoint = job["fusion_contract"]["entrypoint"]
+    selector = job["fusion_contract"]["kernel_name"]
+    identity["fusion_evidence"] = [{
+        "schema": "profiling-skill/fusion-evidence/v1", "case": case,
+        "output_launch_id": "launch-0", "operators": [{
+            "name": selector, "origin": "triton", "entrypoint": entrypoint,
+            "launch_id": "launch-0", "component": "aiv"}]
+    } for case in job["cases"]]
+    if mode == "fusion_fallback":
+        identity["fusion_evidence"][0]["operators"].append(
+            {"name": "aclnnMatmul", "origin": "acl", "launch_id": "acl-0"})
 if job["action"] == "profile":
     identity["round"] = job["round"]
     identity["kernel_name"] = job["profiling"]["kernel_name"]
-    if "fusion_contract" in job:
-        entrypoint = job["fusion_contract"]["entrypoint"]
-        selector = job["fusion_contract"]["kernel_name"]
-        identity["fusion_evidence"] = [{
-            "schema": "profiling-skill/fusion-evidence/v1", "case": case,
-            "output_launch_id": "launch-0", "operators": [{
-                "name": selector, "origin": "triton", "entrypoint": entrypoint,
-                "launch_id": "launch-0", "component": "aiv"}]
-        } for case in job["cases"]]
-        if mode == "fusion_fallback":
-            identity["fusion_evidence"][0]["operators"].append(
-                {"name": "aclnnMatmul", "origin": "acl", "launch_id": "acl-0"})
 if mode == "wrong_identity": identity["cases"] = list(reversed(identity["cases"]))
 if mode == "wrong_check": identity["scope"] = "development"
 if mode == "wrong_round": identity["round"] = 2
@@ -92,7 +112,7 @@ def request(benchmark="gdn", action="profile", **extra):
 
 
 def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
-                fully_fused=False):
+                fully_fused=False, log: Path | None = None):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
     manifest = {"schema": "profiling-skill/candidate-kernel/v1",
@@ -110,7 +130,9 @@ def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
     return subprocess.run(
         [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
          "--job-client-json", json.dumps([str(client), "--profile", "gz-a3"])], input=json.dumps(payload), text=True,
-        capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
+        capture_output=True,
+        env={**__import__("os").environ, "FAKE_MODE": mode,
+             **({"FAKE_LOG": str(log)} if log else {})}, check=False)
 
 
 def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: Path):
@@ -177,29 +199,37 @@ def test_profile_attempt_identity_changes_managed_job(tmp_path: Path):
 
 
 def test_fully_fused_profile_passes_runtime_gate_before_exposing_timing(tmp_path: Path):
+    log = tmp_path / "jobs.jsonl"
     result = json.loads(run_backend(
-        tmp_path, request("matmul"), "matmul", fully_fused=True
+        tmp_path, request("matmul"), "matmul", fully_fused=True, log=log
     ).stdout)
     assert result["status"] == "ok"
     assert result["fusion_gate"] == {
         "entrypoint": "candidate_kernel",
         "kernel_name": "candidate_kernel_mix_aiv",
-        "cases": [7, 8, 9],
+        "cases": list(range(10)),
         "logical_launches_per_case": 1,
     }
     assert result["cases"][0]["median_us"] == 12.5
+    jobs = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [(job["action"], job.get("scope"), job.get("cases")) for job in jobs] == [
+        ("check", "full", list(range(10))),
+        ("profile", None, [7, 8, 9]),
+    ]
 
 
 def test_fully_fused_profile_rejects_framework_fallback_without_timing(tmp_path: Path):
+    log = tmp_path / "jobs.jsonl"
     result = json.loads(run_backend(
         tmp_path, request("matmul"), "matmul", mode="fusion_fallback",
-        fully_fused=True,
+        fully_fused=True, log=log,
     ).stdout)
     assert result["status"] == "submission_error"
     assert "Torch/ACL compute" in result["diagnostics"]
-    assert result["cases"] == [7, 8, 9]
+    assert result["cases"] == list(range(10))
     assert "profile_cases" not in result
     assert "fusion_gate" not in result
+    assert len(log.read_text().splitlines()) == 1
 
 
 def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(

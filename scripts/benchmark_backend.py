@@ -10,26 +10,25 @@ no SSH, container, or device-discovery fallback.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from fully_fused_contract import (
-        FusionContractError,
-        MANIFEST_SCHEMA as FUSED_MANIFEST_SCHEMA,
-        validate_fusion_evidence,
-        validate_manifest as validate_fused_manifest,
-    )
-except ModuleNotFoundError:  # Imported as scripts.benchmark_backend in host tests.
-    from scripts.fully_fused_contract import (
-        FusionContractError,
-        MANIFEST_SCHEMA as FUSED_MANIFEST_SCHEMA,
-        validate_fusion_evidence,
-        validate_manifest as validate_fused_manifest,
-    )
+_FUSION_SPEC = importlib.util.spec_from_file_location(
+    "_profiling_skill_fully_fused_contract",
+    Path(__file__).resolve().with_name("fully_fused_contract.py"),
+)
+if _FUSION_SPEC is None or _FUSION_SPEC.loader is None:
+    raise ImportError("cannot load the sibling fully fused contract")
+_fusion = importlib.util.module_from_spec(_FUSION_SPEC)
+_FUSION_SPEC.loader.exec_module(_fusion)
+FusionContractError = _fusion.FusionContractError
+FUSED_MANIFEST_SCHEMA = _fusion.MANIFEST_SCHEMA
+validate_fusion_evidence = _fusion.validate_fusion_evidence
+validate_fused_manifest = _fusion.validate_manifest
 
 
 PINNED_REVISION = "a42c54b916189500e2f7cb47640980f230f2eb65"
@@ -215,8 +214,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             "kernel_name": kernel_name,
             "driver_arguments": ["--kernel-name", kernel_name],
         }
-        if fusion_contract is not None:
-            job["fusion_contract"] = fusion_contract
+    if fusion_contract is not None:
+        job["fusion_contract"] = fusion_contract
     return job
 
 
@@ -272,19 +271,19 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
             handle=result.get("handle"),
             evidence=result,
         )
+    if status == "ok" and "fusion_contract" in job:
+        try:
+            fusion = validate_fusion_evidence(
+                job["fusion_contract"], result.get("fusion_evidence"),
+                expected_cases=job["cases"],
+            )
+        except FusionContractError as error:
+            return response(
+                "submission_error", f"fully fused runtime gate failed: {error}",
+                handle=result.get("handle"), **identity_fields(job),
+            )
+        result["fusion_gate"] = fusion
     if job["action"] == "profile" and status == "ok":
-        if "fusion_contract" in job:
-            try:
-                fusion = validate_fusion_evidence(
-                    job["fusion_contract"], result.get("fusion_evidence"),
-                    expected_cases=job["cases"],
-                )
-            except FusionContractError as error:
-                return response(
-                    "submission_error", f"fully fused runtime gate failed: {error}",
-                    handle=result.get("handle"), **identity_fields(job),
-                )
-            result["fusion_gate"] = fusion
         result["cases"] = result.pop("profile_cases", None)
     return result
 
@@ -360,14 +359,34 @@ def main() -> int:
                     manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
                     kernel_name, fusion_contract, result = load_candidate_contract(manifest)
                 if kernel_name is not None or request["action"] != "profile":
-                    result = invoke(
-                        command,
-                        make_job(
-                            request, args.benchmark, args.candidate, root,
-                            kernel_name, fusion_contract,
-                        ),
-                        args.timeout,
-                    )
+                    fusion_result = None
+                    if fusion_contract is not None:
+                        full_check = {
+                            "action": "check", "device": request["device"],
+                            "cases": BENCHMARKS[args.benchmark]["all_cases"],
+                            "scope": "full", "round": request["round"],
+                        }
+                        fusion_result = invoke(
+                            command,
+                            make_job(
+                                full_check, args.benchmark, args.candidate, root,
+                                fusion_contract=fusion_contract,
+                            ),
+                            args.timeout,
+                        )
+                        result = fusion_result
+                    if fusion_contract is None or result.get("status") == "ok":
+                        result = invoke(
+                            command,
+                            make_job(
+                                request, args.benchmark, args.candidate, root,
+                                kernel_name,
+                            ),
+                            args.timeout,
+                        )
+                        if result.get("status") == "ok" and fusion_result is not None:
+                            result["fusion_gate"] = fusion_result["fusion_gate"]
+                            result["fusion_handle"] = fusion_result.get("handle")
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

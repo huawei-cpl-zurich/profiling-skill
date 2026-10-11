@@ -5,13 +5,35 @@ Triton job boundary. It accepts the same JSON protocol as the A3 client, but
 requires `product=a5`, `runtime=cann91`, and a frozen placement whose target is
 `bz-a5`.
 
-The client does not require transfer capabilities. It creates a deterministic
-local payload archive, embeds that archive in a temporary shell script, and
-submits the script with the installed global remote-access client:
+The client creates a deterministic local payload archive, hashes it, and stages
+it under a content-addressed filename in the pinned writable A5 root using the
+installed global remote-access client:
+
+```text
+cpl-remote --json upload --timeout SECONDS bz-a5 PAYLOAD \
+  REMOTE_ROOT/payload-SHA256.tar
+```
+
+Only after that transfer completes does it submit a bounded run script:
 
 ```text
 cpl-remote --json run bz-a5 --runtime cann91 --file SCRIPT --cwd REMOTE_ROOT
 ```
+
+The script contains the expected digest and remote content-addressed path, not
+the payload bytes. It verifies the staged archive with `sha256sum` before
+creating the run work directory or extracting anything, and exits with a
+digest-mismatch failure if the remote bytes differ. Thus payload size cannot
+inflate the SSH command line, and a remote collision or corrupt transfer fails
+closed. A completed or dispatched request receipt is reused without uploading
+or dispatching again.
+
+For requests first dispatched by the former in-band transport, the client
+derives the legacy request identity from the same frozen inputs and recognizes
+only an exact receipt at that authenticated state path. It observes the
+retained legacy handle (or reuses its completed result) without staging or
+redispatching. If both current and legacy identities contain receipts, the
+request fails closed instead of choosing between them.
 
 The admitted physical device remains trusted placement metadata. The run-file
 wrapper exposes it through `ASCEND_RT_VISIBLE_DEVICES`; the benchmark process

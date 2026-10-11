@@ -41,7 +41,10 @@ class FakeTransport:
 
     def __init__(self, module, status="ok", fail_observe=False):
         self.module, self.status, self.fail_observe = module, status, fail_observe
-        self.executions, self.observations = [], []
+        self.uploads, self.executions, self.observations = [], [], []
+
+    def upload(self, target, source, destination, timeout):
+        self.uploads.append((target, source, destination, timeout))
 
     def dispatch(self, target, device, runtime, operation, script, timeout):
         self.executions.append((target, device, runtime, operation, script, timeout))
@@ -104,7 +107,8 @@ def client(tmp_path: Path, transport):
     )
 
 
-def test_a5_dispatch_is_self_contained_and_returns_product_provenance(tmp_path: Path):
+def test_a5_dispatch_stages_content_addressed_payload_and_returns_provenance(
+        tmp_path: Path):
     module = load()
     transport = FakeTransport(module)
 
@@ -116,12 +120,74 @@ def test_a5_dispatch_is_self_contained_and_returns_product_provenance(tmp_path: 
     assert result["placement"] == {"target": "bz-a5", "device": 4}
     assert result["artifacts"]["execution_provenance"]["runtime"] == "cann91"
     assert result["artifacts"]["execution_provenance"]["product"] == "a5"
+    assert result["artifacts"]["execution_provenance"]["staging"] == (
+        "content-addressed-upload")
     assert result["artifacts"]["remote_profile_evidence"].endswith("/profile/evidence.json")
+    assert len(transport.uploads) == 1
+    upload_target, archive, remote_archive, _upload_timeout = transport.uploads[0]
+    archive_sha = module._sha(archive)
+    assert upload_target == "bz-a5"
+    assert remote_archive.endswith(f"/payload-{archive_sha}.tar")
     target, device, runtime, _operation, script, _timeout = transport.executions[0]
     assert (target, device, runtime) == ("bz-a5", 4, "cann91")
-    assert "base64.b64decode" in script
+    assert remote_archive in script
+    assert archive_sha in script
+    assert "base64" not in script
+    assert len(script.encode()) < 8_192
     assert "ASCEND_RT_VISIBLE_DEVICES=4" not in script
     assert "vendor_report" not in json.dumps(result)
+
+
+def test_large_a5_payload_is_uploaded_and_does_not_expand_dispatch_script(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    request = job(tmp_path)
+    Path(request["candidate"]).write_bytes(b"# candidate\n" + b"x" * 2_000_000)
+
+    result = client(tmp_path, transport).run(request)
+
+    assert result["status"] == "ok"
+    assert transport.uploads[0][1].stat().st_size > 2_000_000
+    script = transport.executions[0][4]
+    assert len(script.encode()) < 8_192
+    assert "x" * 1_000 not in script
+
+
+def test_remote_script_rejects_corrupt_staged_archive_before_extraction(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    subject = client(tmp_path, transport)
+    archive = tmp_path / "expected.tar"
+    archive.write_bytes(b"expected immutable payload")
+    remote_archive = tmp_path / f"payload-{module._sha(archive)}.tar"
+    remote_archive.write_bytes(b"corrupt payload")
+
+    script = subject._remote_script(
+        str(remote_archive), module._sha(archive), str(tmp_path / "run"), 60,
+        job(tmp_path / "assets"),
+    )
+    result = subprocess.run(["bash", "-c", script], text=True,
+                            capture_output=True, check=False)
+
+    assert result.returncode == 91
+    assert "payload-digest-mismatch" in result.stderr
+    assert not (tmp_path / "run" / "work").exists()
+
+
+def test_completed_a5_request_reuses_receipt_without_reupload_or_redispatch(
+        tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    subject = client(tmp_path, transport)
+    request = job(tmp_path)
+
+    first = subject.run(request)
+    second = subject.run(request)
+
+    assert second == first
+    assert len(transport.uploads) == 1
+    assert len(transport.executions) == 1
+    assert len(transport.observations) == 1
 
 
 def test_a5_resume_observes_exact_handle_without_redispatch(tmp_path: Path):
@@ -137,7 +203,48 @@ def test_a5_resume_observes_exact_handle_without_redispatch(tmp_path: Path):
     second = subject.run(request)
 
     assert second["status"] == "ok"
+    assert len(transport.uploads) == 1
     assert len(transport.executions) == 1
+    assert transport.observations[-1][1] == "remote:bz-a5:job:retained"
+
+
+def test_a5_upgrade_observes_legacy_provenance_handle_without_restaging(
+        tmp_path: Path):
+    module = load()
+
+    class LegacyClient(module.BzA5JobClient):
+        def _execution_provenance(self, runtime):
+            value = super()._execution_provenance(runtime)
+            value["staging"] = "self-contained-run-file"
+            return value
+
+    transport = FakeTransport(module, fail_observe=True)
+    request = job(tmp_path)
+    kwargs = {
+        "runner": ROOT / "scripts/a3_benchmark_runner.py",
+        "profiler": ROOT / "scripts/profile_a3.py",
+        "batch_profiler": ROOT / "scripts/batch_profile_a3.py",
+        "remote_root": "/home/mariodrumond/.profiling-skill/production",
+    }
+    legacy = LegacyClient(
+        transport, tmp_path / "state", {"0": {"target": "bz-a5", "device": 4}},
+        **kwargs,
+    )
+    first = legacy.run(request)
+    assert first["handle"] == "remote:bz-a5:job:retained"
+    transport.uploads.clear()
+    transport.executions.clear()
+    transport.fail_observe = False
+
+    resumed = module.BzA5JobClient(
+        transport, tmp_path / "state", {"0": {"target": "bz-a5", "device": 4}},
+        **kwargs,
+    ).run(request)
+
+    assert resumed["status"] == "ok"
+    assert resumed["handle"] == "remote:bz-a5:job:retained"
+    assert transport.uploads == []
+    assert transport.executions == []
     assert transport.observations[-1][1] == "remote:bz-a5:job:retained"
 
 
@@ -165,8 +272,7 @@ def test_a5_rejects_wrong_product_runtime_and_target_before_dispatch(tmp_path: P
         raise AssertionError("A5 client accepted an A3 placement")
 
 
-def test_global_transport_uses_named_runtime_file_and_never_transfer(tmp_path: Path,
-                                                                    monkeypatch):
+def test_global_transport_uses_named_runtime_and_approved_upload(tmp_path: Path):
     module = load()
     executable = tmp_path / "cpl-remote"
     executable.write_text("#!/bin/sh\n")
@@ -175,17 +281,24 @@ def test_global_transport_uses_named_runtime_file_and_never_transfer(tmp_path: P
 
     def invoke(argv, _timeout):
         calls.append(argv)
-        return module.CommandResult(0, json.dumps({
-            "target": "bz-a5", "state": "running",
-            "handle": "remote:bz-a5:job:one",
-        }) + "\n", "")
+        state = "completed" if "upload" in argv else "running"
+        payload = {"target": "bz-a5", "state": state}
+        if state == "running":
+            payload["handle"] = "remote:bz-a5:job:one"
+        return module.CommandResult(0, json.dumps(payload) + "\n", "")
 
     transport = module.A5GlobalCplRemoteTransport(
         module._sha(executable), "/remote", invoke, executable=executable)
+    source = tmp_path / "payload.tar"
+    source.write_bytes(b"payload")
+    transport.upload("bz-a5", source, "/remote/payload.tar", 60)
     handle = transport.dispatch("bz-a5", 7, "cann91", "operation", "echo ok", 60)
 
     assert handle == "remote:bz-a5:job:one"
-    argv = calls[0]
+    upload = calls[0]
+    assert upload[1:4] == ["--json", "upload", "--timeout"]
+    assert upload[-3:] == ["bz-a5", str(source), "/remote/payload.tar"]
+    argv = calls[1]
     assert argv[1:4] == ["--json", "run", "bz-a5"]
     assert argv[argv.index("--runtime") + 1] == "cann91"
     assert "--file" in argv and "upload" not in argv and "download" not in argv

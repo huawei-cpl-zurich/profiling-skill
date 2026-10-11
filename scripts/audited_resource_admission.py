@@ -24,7 +24,7 @@ DUAL_PRODUCT_ADMISSION_SCHEMA = "profiling-skill/dual-product-admission/v3"
 GLOBAL_CPL_REMOTE = Path(".agents/skills/remote-access/scripts/cpl-remote")
 PRODUCT_REQUIRED_CAPABILITIES = {
     "a3": ("run", "observe", "logs", "upload"),
-    "a5": ("run", "observe", "logs"),
+    "a5": ("run", "observe", "logs", "upload"),
 }
 MAX_ADMISSION_AGE = timedelta(minutes=5)
 MAX_CLOCK_SKEW = timedelta(seconds=30)

@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
-import shlex
 from pathlib import Path
 
 from bz_a3_job_client import (
@@ -45,7 +43,7 @@ class A5GlobalCplRemoteTransport(GlobalCplRemoteTransport):
 
 
 class BzA5JobClient(BzA3JobClient):
-    """A5 specialization that embeds its payload in one `run --file` request."""
+    """A5 specialization with content-addressed staged payloads."""
 
     PRODUCT = "a5"
     RUNTIME = RUNTIME
@@ -53,26 +51,21 @@ class BzA5JobClient(BzA3JobClient):
 
     def _execution_provenance(self, runtime: str) -> dict[str, str]:
         return {**super()._execution_provenance(runtime), "product": self.PRODUCT,
-                "target": TARGET, "staging": "self-contained-run-file"}
+                "target": TARGET, "staging": "content-addressed-upload"}
+
+    def _legacy_execution_provenances(self, runtime: str) -> tuple[dict[str, str], ...]:
+        return ({**super()._execution_provenance(runtime), "product": self.PRODUCT,
+                 "target": TARGET, "staging": "self-contained-run-file"},)
 
     def _prepare_remote_script(self, target: str, archive: Path, request_sha: str,
                                run_root: str, workload_timeout: int, job: dict,
                                transport_timeout: int) -> str:
-        del target, request_sha, transport_timeout
-        encoded = base64.b64encode(archive.read_bytes()).decode("ascii")
-        qroot = shlex.quote(run_root)
-        extraction = f'''payload={qroot}/payload.tar
-mkdir -p {qroot}
-python - "$payload" <<'PY'
-import base64
-import pathlib
-import sys
-pathlib.Path(sys.argv[1]).write_bytes(base64.b64decode({encoded!r}, validate=True))
-PY
-'''
-        return extraction + self._remote_script(
-            f"{run_root}/payload.tar", _sha(archive), run_root,
-            workload_timeout, job,
+        del request_sha
+        archive_sha = _sha(archive)
+        remote_archive = f"{self.remote_root}/payload-{archive_sha}.tar"
+        self.transport.upload(target, archive, remote_archive, transport_timeout)
+        return self._remote_script(
+            remote_archive, archive_sha, run_root, workload_timeout, job,
         )
 
     @staticmethod

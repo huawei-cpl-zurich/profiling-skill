@@ -28,6 +28,13 @@ inflate the SSH command line, and a remote collision or corrupt transfer fails
 closed. A completed or dispatched request receipt is reused without uploading
 or dispatching again.
 
+For requests first dispatched by the former in-band transport, the client
+derives the legacy request identity from the same frozen inputs and recognizes
+only an exact receipt at that authenticated state path. It observes the
+retained legacy handle (or reuses its completed result) without staging or
+redispatching. If both current and legacy identities contain receipts, the
+request fails closed instead of choosing between them.
+
 The admitted physical device remains trusted placement metadata. The run-file
 wrapper exposes it through `ASCEND_RT_VISIBLE_DEVICES`; the benchmark process
 always addresses logical device zero. A dispatch receipt is persisted before

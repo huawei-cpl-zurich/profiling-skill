@@ -57,11 +57,10 @@ Dual-product providers use
 target or runtime inconsistent with the product adapter. Legacy A3 admission
 v2 remains supported.
 
-Capability admission is adapter-specific. A3 requires `run`, `observe`,
-`logs`, and standalone `upload`. A5 requires `run`, `observe`, and `logs`;
-`upload` may be false because its complete bundle is carried by the approved
-`run --runtime cann91 --file` route. A missing required capability, unknown
-target, or failed preflight excludes that target.
+Capability admission is adapter-specific. Both A3 and A5 require `run`,
+`observe`, `logs`, and standalone `upload`; A5 stages its content-addressed
+payload before the approved `run --runtime cann91 --file` dispatch. A missing
+required capability, unknown target, or failed preflight excludes that target.
 
 The scheduler refreshes admission before every assignment, leases every
 unique compatible healthy idle target/device, and skips queued cells whose

@@ -1551,7 +1551,7 @@ def test_declared_resume_canary_routes_only_job_client_observation_fault(tmp_pat
     ).resolve()
 
 
-def test_a5_controller_selects_self_contained_named_runtime_client(tmp_path: Path):
+def test_a5_controller_selects_staged_payload_named_runtime_client(tmp_path: Path):
     cell = {
         "cell_id": "a5-matmul-cannbot-all", "product": "a5", "runtime": "cann91",
         "task": "matmul", "treatment": "cannbot-all", "round_count": 4,

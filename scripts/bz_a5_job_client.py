@@ -53,6 +53,10 @@ class BzA5JobClient(BzA3JobClient):
         return {**super()._execution_provenance(runtime), "product": self.PRODUCT,
                 "target": TARGET, "staging": "content-addressed-upload"}
 
+    def _legacy_execution_provenances(self, runtime: str) -> tuple[dict[str, str], ...]:
+        return ({**super()._execution_provenance(runtime), "product": self.PRODUCT,
+                 "target": TARGET, "staging": "self-contained-run-file"},)
+
     def _prepare_remote_script(self, target: str, archive: Path, request_sha: str,
                                run_root: str, workload_timeout: int, job: dict,
                                transport_timeout: int) -> str:

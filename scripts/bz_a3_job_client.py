@@ -457,13 +457,32 @@ class BzA3JobClient:
                                f"no frozen placement for logical device {logical}")
             stage_files, remote_job = self._files_and_job(job)
             file_hashes = {name: _sha(path) for name, path in stage_files}
-            request_sha = _json_sha({"job": remote_job, "files": file_hashes,
-                                     "campaign_device": logical,
-                                     "placement": placement,
-                                     "placements_sha256": self.placements_sha256,
-                                     "remote_root": self.remote_root,
-                                     "execution_provenance": provenance,
-                                     "timeout_seconds": timeout})
+            request_identity = {"job": remote_job, "files": file_hashes,
+                                "campaign_device": logical,
+                                "placement": placement,
+                                "placements_sha256": self.placements_sha256,
+                                "remote_root": self.remote_root,
+                                "timeout_seconds": timeout}
+            candidates = []
+            for candidate_provenance in (
+                    provenance, *self._legacy_execution_provenances(job["runtime"])):
+                candidate_sha = _json_sha({
+                    **request_identity,
+                    "execution_provenance": candidate_provenance,
+                })
+                candidate_state = self.state_dir / candidate_sha
+                if ((candidate_state / "dispatch.json").is_file()
+                        or (candidate_state / "completed.json").is_file()):
+                    candidates.append((candidate_sha, candidate_provenance))
+            if len(candidates) > 1:
+                raise JobError(
+                    "request_error", "conflicting current and legacy request receipts")
+            if candidates:
+                request_sha, provenance = candidates[0]
+            else:
+                request_sha = _json_sha({
+                    **request_identity, "execution_provenance": provenance,
+                })
             state = self.state_dir / request_sha
             archive = state / "payload.tar"
             dispatch, completed = state / "dispatch.json", state / "completed.json"
@@ -599,6 +618,10 @@ class BzA3JobClient:
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise JobError("request_error", "transport cpl-remote digest is invalid")
         return {"cpl_remote_sha256": digest, "runtime": runtime}
+
+    def _legacy_execution_provenances(self, runtime: str) -> tuple[dict[str, str], ...]:
+        del runtime
+        return ()
 
     @staticmethod
     def _acquire_request_lock(path: Path, deadline: float):

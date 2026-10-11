@@ -339,7 +339,7 @@ def test_dual_product_admission_pins_product_runtime_and_target(tmp_path: Path):
     assert receipt.as_slots() == slots
 
 
-def test_pool_uses_product_specific_capabilities_without_weakening_a3(
+def test_pool_requires_upload_for_both_product_clients(
     monkeypatch, tmp_path: Path,
 ):
     module = load()
@@ -363,7 +363,8 @@ def test_pool_uses_product_specific_capabilities_without_weakening_a3(
             payload.update({
                 "state": "available",
                 "capabilities": {
-                    "run": True, "observe": True, "logs": True, "upload": False,
+                    "run": True, "observe": True, "logs": True,
+                    "upload": target == "bz-a5",
                 },
             })
         else:
@@ -385,7 +386,7 @@ def test_pool_uses_product_specific_capabilities_without_weakening_a3(
     ]
 
 
-@pytest.mark.parametrize("missing", ["run", "observe", "logs"])
+@pytest.mark.parametrize("missing", ["run", "observe", "logs", "upload"])
 def test_a5_missing_required_capability_fails_closed(
     monkeypatch, tmp_path: Path, missing: str,
 ):
@@ -400,7 +401,7 @@ def test_a5_missing_required_capability_fails_closed(
     def invoke(arguments, **_kwargs):
         operation, target = arguments[-2:]
         capabilities = {"run": True, "observe": True, "logs": True,
-                        "upload": False}
+                        "upload": True}
         capabilities[missing] = False
         payload = {"target": target, "operation": operation,
                    "state": "available", "capabilities": capabilities}

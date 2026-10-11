@@ -208,6 +208,46 @@ def test_a5_resume_observes_exact_handle_without_redispatch(tmp_path: Path):
     assert transport.observations[-1][1] == "remote:bz-a5:job:retained"
 
 
+def test_a5_upgrade_observes_legacy_provenance_handle_without_restaging(
+        tmp_path: Path):
+    module = load()
+
+    class LegacyClient(module.BzA5JobClient):
+        def _execution_provenance(self, runtime):
+            value = super()._execution_provenance(runtime)
+            value["staging"] = "self-contained-run-file"
+            return value
+
+    transport = FakeTransport(module, fail_observe=True)
+    request = job(tmp_path)
+    kwargs = {
+        "runner": ROOT / "scripts/a3_benchmark_runner.py",
+        "profiler": ROOT / "scripts/profile_a3.py",
+        "batch_profiler": ROOT / "scripts/batch_profile_a3.py",
+        "remote_root": "/home/mariodrumond/.profiling-skill/production",
+    }
+    legacy = LegacyClient(
+        transport, tmp_path / "state", {"0": {"target": "bz-a5", "device": 4}},
+        **kwargs,
+    )
+    first = legacy.run(request)
+    assert first["handle"] == "remote:bz-a5:job:retained"
+    transport.uploads.clear()
+    transport.executions.clear()
+    transport.fail_observe = False
+
+    resumed = module.BzA5JobClient(
+        transport, tmp_path / "state", {"0": {"target": "bz-a5", "device": 4}},
+        **kwargs,
+    ).run(request)
+
+    assert resumed["status"] == "ok"
+    assert resumed["handle"] == "remote:bz-a5:job:retained"
+    assert transport.uploads == []
+    assert transport.executions == []
+    assert transport.observations[-1][1] == "remote:bz-a5:job:retained"
+
+
 def test_a5_rejects_wrong_product_runtime_and_target_before_dispatch(tmp_path: Path):
     module = load()
     for mutation in ({"product": "a3"}, {"runtime": "py311-torch"}):

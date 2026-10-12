@@ -1,59 +1,21 @@
 # Simple experiment runner
 
 `scripts/simple_experiment_runner.py` runs one experiment cell without the
-audited campaign control plane. A cell is identified by four readable names:
-campaign, product, task, and treatment. It gets its own folder, Git clone, and
-branch. Git commits are the experiment history; remote handles only reconnect
-an interrupted observation.
+audited campaign control plane. A cell has one readable folder, isolated Git
+clone, branch, private agent home, and append-only attempt history. Git commits
+are the round history. A remote handle is only a pointer used to resume one
+retained job.
 
-## Cell layout
-
-For this configuration:
+## Configuration
 
 ```json
 {
   "campaign": "profiler-v2",
   "product": "a3",
   "task": "matmul",
-  "treatment": "guarded-new-profiler"
-}
-```
-
-the runner creates:
-
-```text
-runs/profiler-v2/a3-matmul-guarded-new-profiler/
-  repo/                         # isolated experiment branch
-    rounds/01/                  # evidence committed for round 1
-  state.json
-  attempts/1/
-    request.json
-    agent-result.json
-    run.sh
-    remote-job-id.txt
-    stdout.log
-    stderr.log
-    result.json
-```
-
-The branch is
-`experiment/profiler-v2/a3-matmul-guarded-new-profiler`. Each successful round
-adds exactly one commit containing:
-
-- the candidate;
-- every agent-reported command;
-- the compact profile summary and terminal result;
-- reasoning, post-mortem, and retrieved-knowledge citations.
-
-Large profiler report trees remain remote. Only compact evidence belongs in
-the round commit.
-
-## Configuration and agent contract
-
-A complete configuration adds the following fields:
-
-```json
-{
+  "treatment": "guarded-new-profiler",
+  "prompt": "The exact common experiment prompt.\n",
+  "skill_paths": ["/absolute/path/to/guarded", "/absolute/path/to/profiler"],
   "source_repo": "/absolute/path/to/source",
   "base_ref": "main",
   "target": "bz-a3-1",
@@ -66,62 +28,96 @@ A complete configuration adds the following fields:
 }
 ```
 
-The runner sends one JSON request to `agent_command` on stdin. The request
-includes the round, isolated repository, selected target/runtime, and the last
-candidate diagnostic when a repair is needed. The command returns one JSON
-object on stdout:
+`prompt` is required and is passed byte-for-byte to every agent phase.
+`skill_paths` is an explicit allowlist. At initialization those directories
+are copied, not linked, into the cell-private
+`agent-home/.agents/skills/<name>`. Every agent invocation uses the cell repo
+as its working directory and sets `HOME` to `agent-home` and `CODEX_HOME` to
+`agent-home/.codex`. This prevents accidental treatment crossover for normal
+agent workflows; it is not an adversarial filesystem sandbox.
+
+Initialization builds the clone, branch, prompt, private home, and skills in a
+temporary sibling directory and publishes the cell atomically. Any failure
+removes the temporary cell, so the same `init` command is retryable.
+
+## Two agent phases
+
+The runner sends one JSON object on stdin and reads one JSON object on stdout.
+The prepare request contains `phase=prepare`, exact prompt, treatment, allowed
+skill names, round, repo, target/runtime, and optional `session_id`. A
+same-round repair also contains the prior candidate, full terminal result,
+exact attempt path, and diagnostics.
+
+Prepare must return:
 
 ```json
 {
   "candidate": "complete candidate source",
-  "remote_script": "#!/bin/bash\n...self-contained check...",
+  "script_fragment": "python \"$CANDIDATE_PATH\"",
   "commands": ["python candidate.py"],
-  "reasoning": "why this candidate should work",
-  "postmortem": "expected result and interpretation",
-  "retrieved_knowledge": ["ref://stable-citation"]
+  "hypothesis": "why this candidate should work",
+  "retrieved_knowledge": ["ref://stable-citation"],
+  "session_id": "optional durable agent session"
 }
 ```
 
-`remote_script` must be self-contained for the selected remote workspace. It
-must print a final JSON line with one of these outcomes:
+Candidates are limited to 1 MiB. The runner, not the agent, creates the exact
+submitted `run.sh`. It embeds the candidate, materializes it as `candidate.py`
+in a private remote temporary directory, exports `CANDIDATE_PATH`, changes to
+that directory, and executes `script_fragment`. The exact candidate and exact
+generated wrapper are retained and committed.
+
+After a successful terminal result, the runner invokes the same agent command
+with `phase=analyze`, the session ID, candidate, exact attempt path, and full
+result. Analyze must return final `reasoning` and `postmortem`. Its output is
+persisted before finalization. If analysis or finalization is interrupted,
+`resume` reuses the terminal result, analysis, evidence directory, and existing
+commit without rerunning the remote workload or duplicating the round commit.
+
+## Remote result contract
+
+Before each new `run` invocation that may dispatch work, the runner records global `cpl-remote`
+`capabilities` and `preflight` receipts and requires `run`, `observe`, and
+`logs`. Production execution uses only the user-wide global client, a named
+runtime, and a file-backed script.
+
+The last nonblank stdout line must be a JSON envelope:
 
 ```json
-{"outcome":"success","profile_summary":{"duration_us":12.5}}
-{"outcome":"candidate_failure","diagnostics":"compiler output"}
-{"outcome":"infrastructure_failure","diagnostics":"device unavailable"}
+{"schema":"simple-experiment-result/v1","outcome":"success","profile_summary":{"duration_us":12.5}}
 ```
 
-Compilation, runtime, and correctness errors are candidate failures. Target
-reachability, runtime provisioning, device allocation, and transport failures
-are infrastructure failures. Do not label an ordinary kernel error as
-infrastructure.
+Success requires all three facts to agree: terminal state `completed`, exit
+code `0`, and that structured success envelope. Failed or cancelled jobs,
+missing envelopes, and contradictory success envelopes fail closed. A valid
+envelope may instead report `candidate_failure` or `infrastructure_failure`
+with diagnostics. Every stdout/stderr receipt must repeat the requested handle
+and matching target before its content is accepted.
 
-## Commands
+Known infrastructure failures retry the same prepared candidate twice without
+advancing the round. Candidate failures return all repair evidence to the
+agent and consume a same-round repair. Exhausted budgets are terminal and a
+later `run` does not dispatch again.
+
+## Recovery and evidence
 
 ```bash
-python scripts/simple_experiment_runner.py init \
-  --root /absolute/path/to/runs --config cell.json
-python scripts/simple_experiment_runner.py run \
-  --root /absolute/path/to/runs --config cell.json
-python scripts/simple_experiment_runner.py resume \
-  --root /absolute/path/to/runs --config cell.json
-python scripts/simple_experiment_runner.py report \
-  --root /absolute/path/to/runs --config cell.json
+python scripts/simple_experiment_runner.py init --root /path/to/runs --config cell.json
+python scripts/simple_experiment_runner.py run --root /path/to/runs --config cell.json
+python scripts/simple_experiment_runner.py resume --root /path/to/runs --config cell.json
+python scripts/simple_experiment_runner.py report --root /path/to/runs --config cell.json
 ```
 
-`run` automatically retries a known infrastructure failure twice without
-advancing the round or asking the agent to regenerate the candidate. A
-candidate failure sends its diagnostics back to the same agent and consumes a
-same-round repair, not a new round.
+After dispatch, the durable handle is the first persisted artifact. Any
+`observing`, `infrastructure_unknown`, `analyzing`, or `analysis_pending` cell
+blocks `run`; use `resume`. It observes the exact stored handle when the result
+is unknown, or resumes analysis/finalization when the terminal result is
+already present. An uncertain dispatch with no returned handle requires manual
+reconciliation because an automatic replacement could duplicate live work.
 
-If observation is interrupted or returns a nonterminal state, the cell becomes
-`infrastructure_unknown`. The runner has already written the durable job ID to
-`remote-job-id.txt`; use `resume`. It observes that exact ID and never submits
-a replacement. If dispatch itself becomes uncertain before an ID is returned,
-the runner stops for manual reconciliation because a safe automatic retry is
-impossible.
-
-The production adapter invokes only the user-wide global `cpl-remote` client,
-uses a named runtime and file-backed script, and collects compact stdout and
-stderr after terminal observation. It does not use admission hashes, receipt
-graphs, sealed manifests, migration attestations, or campaign identity hashes.
+Each successful round adds exactly one commit under `repo/rounds/NN/` with the
+candidate, generated wrapper, command log, compact profile and terminal result,
+prompt/treatment/skill inputs, hypothesis, retrieved knowledge, final
+reasoning, and post-mortem. Large profiler report trees remain remote. The
+runner has no campaign admission, receipt graph, runtime-closure hash, sealed
+manifest, migration attestation, or generalized plugin layer.

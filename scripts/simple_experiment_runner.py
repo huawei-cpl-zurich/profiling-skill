@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -241,20 +242,44 @@ class ExperimentCell:
             raise RunnerError("skill_paths must be existing, uniquely named directories")
         return sources
 
-    def _immutable_inputs(self) -> tuple[Path, int]:
+    def _immutable_inputs(self) -> tuple[Path, int, bytes | None]:
         gate = Path(self.config.get("terminal_gate_path", "")).resolve()
         if not gate.is_file():
             raise RunnerError("terminal_gate_path must name an existing file")
         billed = self.config.get("billed_checks")
         if isinstance(billed, bool) or not isinstance(billed, int) or billed <= 0:
             raise RunnerError("billed_checks must be a positive integer")
-        return gate, billed
+        configured_task = self.config.get("task_path")
+        if configured_task is None:
+            return gate, billed, None
+        if not isinstance(configured_task, str) or not configured_task:
+            raise RunnerError("task_path must name an existing UTF-8 file")
+        task = Path(configured_task).resolve()
+        if not task.is_file():
+            raise RunnerError("task_path must name an existing UTF-8 file")
+        task_content = task.read_bytes()
+        try:
+            task_content.decode()
+        except UnicodeDecodeError as exc:
+            raise RunnerError("task_path must name an existing UTF-8 file") from exc
+        return gate, billed, task_content
+
+    def _verify_task_snapshot(self, state: dict) -> None:
+        expected = state.get("task_sha256")
+        if expected is None:
+            return
+        task = self.repo / "TASK.md"
+        if task.is_symlink() or not task.is_file():
+            raise RunnerError("snapshotted TASK.md is missing or replaced")
+        actual = hashlib.sha256(task.read_bytes()).hexdigest()
+        if actual != expected:
+            raise RunnerError("snapshotted TASK.md changed after initialization")
 
     def init(self) -> dict:
         if self.path.exists():
             raise RunnerError(f"cell already exists: {self.path}")
         sources = self._skill_sources()
-        gate, billed_checks = self._immutable_inputs()
+        gate, billed_checks, task_content = self._immutable_inputs()
         gate_content = gate.read_bytes()
         if not gate_content:
             raise RunnerError("terminal gate must not be empty")
@@ -276,6 +301,10 @@ class ExperimentCell:
             _git(repo, "checkout", "-b", self.branch, self.config.get("base_ref", "main"))
             _git(repo, "config", "user.name", "Experiment Runner")
             _git(repo, "config", "user.email", "experiment-runner@example.invalid")
+            task_sha256 = None
+            if task_content is not None:
+                (repo / "TASK.md").write_bytes(task_content)
+                task_sha256 = hashlib.sha256(task_content).hexdigest()
             skill_root = temporary / "agent-home/.agents/skills"
             (temporary / "agent-home/.codex").mkdir(parents=True)
             for source in sources:
@@ -289,6 +318,7 @@ class ExperimentCell:
                 "status": "ready", "round": 1, "attempts": 0,
                 "infrastructure_failures": 0, "candidate_repairs": 0,
                 "billed_checks_limit": billed_checks, "billed_checks_used": 0,
+                "task_sha256": task_sha256,
             })
             temporary.replace(self.path)
         except BaseException:
@@ -444,6 +474,7 @@ class ExperimentCell:
                 state["status"] = "analysis_pending"
                 state["analysis_diagnostics"] = str(exc)
                 return self._save(state)
+            self._verify_task_snapshot(state)
             _write_json(analysis_path, analysis)
         self._finalize(state, attempt, prepared, result, analysis)
         state["round"] += 1
@@ -458,7 +489,8 @@ class ExperimentCell:
                   result: dict, analysis: dict) -> None:
         inputs = {"prompt": self.config["prompt"], "treatment": self.config["treatment"],
                   "allowed_skills": self.skill_names, "session_id": prepared.get("session_id"),
-                  "billed_checks": state["billed_checks_limit"]}
+                  "billed_checks": state["billed_checks_limit"],
+                  "task_sha256": state.get("task_sha256")}
         commands = "".join(json.dumps({"command": item}, sort_keys=True) + "\n"
                            for item in prepared["commands"])
         files = {
@@ -506,6 +538,7 @@ class ExperimentCell:
 
     def run(self) -> dict:
         state = self._state()
+        self._verify_task_snapshot(state)
         if state.get("pending_attempt"):
             raise RunnerError("cell has pending work; use resume")
         if state["status"] in {"complete", "billed_checks_exhausted"} or self._budget_exhausted(state):
@@ -527,6 +560,7 @@ class ExperimentCell:
                 return self._finish_billed_checks(state, state.get("last_outcome"))
             if prepared is None:
                 prepared = self.agent.prepare(self._request(state, "prepare"))
+                self._verify_task_snapshot(state)
             state = self._attempt(state, prepared)
             if state["status"] in {"ready", "complete", "billed_checks_exhausted",
                                    "infrastructure_unknown", "analysis_pending"}:
@@ -541,6 +575,7 @@ class ExperimentCell:
 
     def resume(self) -> dict:
         state = self._state()
+        self._verify_task_snapshot(state)
         pending = state.get("pending_attempt")
         if not pending:
             raise RunnerError("cell has no pending retained work to resume")

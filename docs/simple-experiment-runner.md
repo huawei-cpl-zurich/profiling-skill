@@ -15,6 +15,7 @@ job.
   "task": "matmul",
   "treatment": "guarded-new-profiler",
   "prompt": "The exact common experiment prompt.\n",
+  "task_path": "/absolute/path/to/benchmark-task.md",
   "skill_paths": ["/absolute/path/to/guarded", "/absolute/path/to/profiler"],
   "source_repo": "/absolute/path/to/source",
   "base_ref": "main",
@@ -33,6 +34,10 @@ job.
 Use `py311-torch` for BZ-A3 cells and `cann91` for BZ-A5 cells.
 
 `prompt` is required and is passed byte-for-byte to every agent phase.
+`task_path` is optional. Use it when the common prompt directs the agent to
+read `TASK.md`; initialization snapshots the exact UTF-8 file into the cell
+repository at that name. Prompts that contain their complete task need not set
+it, so generic cells remain unchanged.
 `skill_paths` is an explicit allowlist. At initialization those directories
 are copied, not linked, into the cell-private
 `agent-home/.agents/skills/<name>`. Every agent invocation uses the cell repo
@@ -45,8 +50,10 @@ temporary sibling directory and publishes the cell atomically. Any failure
 removes the temporary cell, so the same `init` command is retryable.
 `terminal_gate_path` must name a host-owned file and `billed_checks` must be a
 positive integer. Initialization snapshots both the exact gate content and the
-check limit inside the cell. Later edits to the source gate or configuration
-cannot change either snapshot.
+check limit inside the cell. When configured, it also records the task digest.
+Every `run` and `resume`, including the boundaries after agent prepare and
+analyze calls, rejects a missing, replaced, or changed cell `TASK.md`. Later
+edits to source inputs or configuration cannot change these snapshots.
 
 ## Two agent phases
 
@@ -142,8 +149,8 @@ reconciliation because an automatic replacement could duplicate live work.
 
 Each successful round adds exactly one commit under `repo/rounds/NN/` with the
 candidate, generated wrapper, command log, compact profile and terminal result,
-host terminal gate, prompt/treatment/skill inputs and billed-check limit,
-hypothesis, retrieved knowledge, final
-reasoning, and post-mortem. Large profiler report trees remain remote. The
+host terminal gate, prompt/treatment/skill inputs, billed-check limit, and the
+snapshotted task digest when configured, plus hypothesis, retrieved knowledge,
+final reasoning, and post-mortem. Large profiler report trees remain remote. The
 runner has no campaign admission, receipt graph, runtime-closure hash, sealed
 manifest, migration attestation, or generalized plugin layer.

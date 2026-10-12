@@ -1103,6 +1103,90 @@ class ExperimentCell:
         return value
 
     @staticmethod
+    def _validated_autotune_benchmark(request: dict) -> dict:
+        benchmark = request.get("benchmark")
+        contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark)
+        if (contract is None
+                or request.get("required_correctness_cases") != contract["correctness_cases"]
+                or request.get("expected_profile_cases") != contract["profile_cases"]
+                or request.get("expected_entrypoint") != contract["entrypoint"]
+                or request.get("expected_declared_kernel_name") != contract["kernel_name"]):
+            raise RunnerError("retained autotune benchmark contract is invalid")
+        return contract
+
+    @staticmethod
+    def _validate_official_timing(request: dict, timing: object, label: str) -> tuple[float, str]:
+        contract = ExperimentCell._validated_autotune_benchmark(request)
+        if not isinstance(timing, dict):
+            raise RunnerError(f"{label} lacks concrete official msprof timing")
+        repeats = timing.get("repeats")
+        geomean = timing.get("geomean_us")
+        declared = timing.get("declared_kernel_name")
+        resolved = timing.get("resolved_kernel_name")
+        timing_cases = timing.get("cases")
+        if (timing.get("profiler") != "msprof-op" or timing.get("metric") != "BasicInfo"
+                or timing.get("timing_scope") != "device-task"
+                or isinstance(repeats, bool) or not isinstance(repeats, int)
+                or repeats < MIN_AUTOTUNE_PROFILE_REPEATS
+                or isinstance(geomean, bool) or not isinstance(geomean, (int, float))
+                or not math.isfinite(geomean) or geomean <= 0
+                or not isinstance(declared, str) or not declared
+                or not isinstance(resolved, str) or not resolved
+                or timing.get("kernel_name") != resolved
+                or declared != contract["kernel_name"]
+                or not isinstance(timing_cases, list) or not timing_cases):
+            raise RunnerError(f"{label} lacks concrete official msprof timing")
+        case_ids = []
+        medians = []
+        for case in timing_cases:
+            samples = case.get("samples_us") if isinstance(case, dict) else None
+            case_id = case.get("case") if isinstance(case, dict) else None
+            median = case.get("median_us") if isinstance(case, dict) else None
+            if (isinstance(case_id, bool) or not isinstance(case_id, int)
+                    or not isinstance(samples, list) or len(samples) != repeats
+                    or any(isinstance(item, bool) or not isinstance(item, (int, float))
+                           or not math.isfinite(item) or item <= 0 for item in samples)
+                    or isinstance(median, bool) or not isinstance(median, (int, float))
+                    or not math.isfinite(median) or median <= 0
+                    or not math.isclose(median, statistics.median(samples),
+                                        rel_tol=1e-12, abs_tol=1e-12)):
+                raise RunnerError(f"{label} timing cases lack repeated samples")
+            case_ids.append(case_id)
+            medians.append(median)
+        if case_ids != contract["profile_cases"]:
+            raise RunnerError(f"{label} timing cases do not match ranked inventory")
+        expected_geomean = math.exp(sum(math.log(value) for value in medians) / len(medians))
+        if not math.isclose(geomean, expected_geomean, rel_tol=1e-12, abs_tol=1e-12):
+            raise RunnerError(f"{label} geomean does not match case medians")
+
+        captures = timing.get("captures")
+        expected_captures = [
+            (case["case"], iteration, sample)
+            for case in timing_cases
+            for iteration, sample in enumerate(case["samples_us"])
+        ]
+        digest_pattern = re.compile(r"^[0-9a-f]{64}$")
+        if (not isinstance(captures, list) or not captures
+                or len(captures) != len(expected_captures)):
+            raise RunnerError(f"{label} lacks complete msprof capture inventory")
+        for capture, (case_id, iteration, sample) in zip(captures, expected_captures):
+            duration = capture.get("duration_us") if isinstance(capture, dict) else None
+            if (not isinstance(capture, dict)
+                    or (capture.get("case"), capture.get("iteration")) != (case_id, iteration)
+                    or capture.get("kernel_name") != resolved
+                    or capture.get("declared_kernel_name") != contract["kernel_name"]
+                    or capture.get("resolved_kernel_name") != resolved
+                    or not isinstance(duration, (int, float)) or isinstance(duration, bool)
+                    or not math.isfinite(duration) or duration <= 0
+                    or not math.isclose(duration, sample, rel_tol=1e-12, abs_tol=1e-12)
+                    or not isinstance(capture.get("evidence_sha256"), str)
+                    or not digest_pattern.fullmatch(capture["evidence_sha256"])
+                    or not isinstance(capture.get("msprof_log_sha256"), str)
+                    or not digest_pattern.fullmatch(capture["msprof_log_sha256"])):
+                raise RunnerError(f"{label} has invalid msprof capture evidence")
+        return float(geomean), resolved
+
+    @staticmethod
     def _validate_winner_evidence(request: dict, result: dict, summary: dict,
                                   expected: dict, winner: str) -> None:
         profile = result.get("profile_summary")
@@ -1110,17 +1194,10 @@ class ExperimentCell:
                 or profile.get("schema") != "profiling-skill/a3-round-profile-summary/v1"):
             raise RunnerError("autotune winner lacks an A3 full-gate profile summary")
         benchmark = request.get("benchmark")
-        required_cases = request.get("required_correctness_cases")
-        expected_profile_cases = request.get("expected_profile_cases")
-        expected_entrypoint = request.get("expected_entrypoint")
-        expected_declared = request.get("expected_declared_kernel_name")
-        contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark)
-        if (contract is None
-                or required_cases != contract["correctness_cases"]
-                or expected_profile_cases != contract["profile_cases"]
-                or expected_entrypoint != contract["entrypoint"]
-                or expected_declared != contract["kernel_name"]):
-            raise RunnerError("retained autotune benchmark contract is invalid")
+        contract = ExperimentCell._validated_autotune_benchmark(request)
+        required_cases = contract["correctness_cases"]
+        expected_entrypoint = contract["entrypoint"]
+        expected_declared = contract["kernel_name"]
         if (profile.get("benchmark") != benchmark
                 or profile.get("correctness_cases") != required_cases):
             raise RunnerError("autotune winner correctness evidence is incomplete")
@@ -1153,74 +1230,9 @@ class ExperimentCell:
                 or fusion.get("kernel_name") != expected_declared):
             raise RunnerError("autotune winner lacks complete fusion evidence")
 
-        timing = profile.get("timing")
-        if not isinstance(timing, dict):
-            raise RunnerError("autotune winner lacks official full-gate timing")
-        repeats = timing.get("repeats")
-        geomean = timing.get("geomean_us")
-        declared = timing.get("declared_kernel_name")
-        resolved = timing.get("resolved_kernel_name")
-        timing_cases = timing.get("cases")
-        if (timing.get("profiler") != "msprof-op" or timing.get("metric") != "BasicInfo"
-                or isinstance(repeats, bool) or not isinstance(repeats, int)
-                or repeats < MIN_AUTOTUNE_PROFILE_REPEATS
-                or isinstance(geomean, bool) or not isinstance(geomean, (int, float))
-                or not math.isfinite(geomean) or geomean <= 0
-                or not isinstance(declared, str) or not declared
-                or not isinstance(resolved, str) or not resolved
-                or timing.get("kernel_name") != resolved
-                or declared != expected_declared
-                or not isinstance(timing_cases, list) or not timing_cases):
-            raise RunnerError("autotune winner lacks official full-gate timing")
-        case_ids = []
-        medians = []
-        for case in timing_cases:
-            samples = case.get("samples_us") if isinstance(case, dict) else None
-            case_id = case.get("case") if isinstance(case, dict) else None
-            median = case.get("median_us") if isinstance(case, dict) else None
-            if (isinstance(case_id, bool) or not isinstance(case_id, int)
-                    or not 0 <= case_id < required_cases
-                    or not isinstance(samples, list) or len(samples) != repeats
-                    or any(isinstance(item, bool) or not isinstance(item, (int, float))
-                           or not math.isfinite(item) or item <= 0 for item in samples)
-                    or isinstance(median, bool) or not isinstance(median, (int, float))
-                    or not math.isfinite(median) or median <= 0
-                    or not math.isclose(median, statistics.median(samples),
-                                        rel_tol=1e-12, abs_tol=1e-12)):
-                raise RunnerError("autotune winner timing cases lack repeated samples")
-            case_ids.append(case_id)
-            medians.append(median)
-        if case_ids != expected_profile_cases:
-            raise RunnerError("autotune winner timing cases do not match ranked inventory")
-        expected_geomean = math.exp(sum(math.log(value) for value in medians) / len(medians))
-        if not math.isclose(geomean, expected_geomean, rel_tol=1e-12, abs_tol=1e-12):
-            raise RunnerError("autotune winner full-gate geomean does not match case medians")
-
-        captures = timing.get("captures")
-        expected_captures = [
-            (case["case"], iteration, sample)
-            for case in timing_cases
-            for iteration, sample in enumerate(case["samples_us"])
-        ]
-        digest_pattern = re.compile(r"^[0-9a-f]{64}$")
-        if (not isinstance(captures, list) or not captures
-                or len(captures) != len(expected_captures)):
-            raise RunnerError("autotune winner lacks complete msprof capture inventory")
-        for capture, (case_id, iteration, sample) in zip(captures, expected_captures):
-            duration = capture.get("duration_us") if isinstance(capture, dict) else None
-            if (not isinstance(capture, dict)
-                    or (capture.get("case"), capture.get("iteration")) != (case_id, iteration)
-                    or capture.get("kernel_name") != resolved
-                    or capture.get("declared_kernel_name") != expected_declared
-                    or capture.get("resolved_kernel_name") != resolved
-                    or not isinstance(duration, (int, float)) or isinstance(duration, bool)
-                    or not math.isfinite(duration) or duration <= 0
-                    or not math.isclose(duration, sample, rel_tol=1e-12, abs_tol=1e-12)
-                    or not isinstance(capture.get("evidence_sha256"), str)
-                    or not digest_pattern.fullmatch(capture["evidence_sha256"])
-                    or not isinstance(capture.get("msprof_log_sha256"), str)
-                    or not digest_pattern.fullmatch(capture["msprof_log_sha256"])):
-                raise RunnerError("autotune winner has invalid msprof capture evidence")
+        _, resolved = ExperimentCell._validate_official_timing(
+            request, profile.get("timing"), "autotune winner full-gate",
+        )
 
         pipes = profile.get("pipe_activity")
         observations = pipes.get("observations") if isinstance(pipes, dict) else None
@@ -1299,18 +1311,15 @@ class ExperimentCell:
             raise RunnerError("autotune result must retain official evidence for every finalist")
         official_timings = {}
         for identifier, profile in profiles.items():
-            timing = profile.get("geomean_us") if isinstance(profile, dict) else None
-            if (isinstance(timing, bool) or not isinstance(timing, (int, float))
-                    or not math.isfinite(timing) or timing <= 0):
-                raise RunnerError(f"finalist {identifier} lacks valid msprof timing")
-            repeats = profile.get("repeats")
-            if (isinstance(repeats, bool) or not isinstance(repeats, int)
-                    or repeats < MIN_AUTOTUNE_PROFILE_REPEATS):
-                raise RunnerError(
-                    f"finalist {identifier} requires at least "
-                    f"{MIN_AUTOTUNE_PROFILE_REPEATS} msprof repeats"
-                )
-            official_timings[identifier] = timing
+            source_sha = expected[identifier]["source_sha256"]
+            if (not isinstance(profile, dict)
+                    or profile.get("option_id") != identifier
+                    or profile.get("source_sha256") != source_sha
+                    or profile.get("candidate_artifact_sha256") != source_sha):
+                raise RunnerError(f"finalist {identifier} evidence identity mismatch")
+            official_timings[identifier], _ = ExperimentCell._validate_official_timing(
+                request, profile.get("timing"), f"finalist {identifier}",
+            )
         winner = summary.get("winner_id")
         expected_winner = min(
             finalists, key=lambda identifier: (

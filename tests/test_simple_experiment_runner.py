@@ -177,19 +177,37 @@ def autotune_success(plan, winner="block-64", failed=()):
     selected = next(option for option in plan["options"] if option["id"] == winner)
     declared = "streaming_matmul_add_kernel_mix_aic"
     resolved = "streaming_matmul_add_kernel"
-    winner_timing = next(
-        value["geomean_us"] for identifier, value in {
-            identifier: {
-                "geomean_us": 9.0 if identifier == winner else 10.0 + index,
-                "repeats": 3,
+    official_values = {
+        identifier: 9.0 if identifier == winner else 10.0 + index
+        for index, identifier in enumerate(finalists)
+    }
+    winner_timing = official_values[winner]
+
+    def official_timing(value, evidence_label):
+        return {
+            "metric": "BasicInfo", "profiler": "msprof-op",
+            "timing_scope": "device-task", "kernel_name": resolved,
+            "declared_kernel_name": declared, "resolved_kernel_name": resolved,
+            "cases": [{
+                "case": case, "median_us": value, "samples_us": [value] * 3,
+            } for case in plan["expected_profile_cases"]],
+            "repeats": 3, "geomean_us": value,
+            "captures": [{
+                "case": case, "iteration": iteration, "duration_us": value,
+                "kernel_name": resolved, "declared_kernel_name": declared,
+                "resolved_kernel_name": resolved,
+                "evidence_sha256": hashlib.sha256(
+                    f"{evidence_label}:evidence:{case}:{iteration}".encode()
+                ).hexdigest(),
+                "msprof_log_sha256": hashlib.sha256(
+                    f"{evidence_label}:log:{case}:{iteration}".encode()
+                ).hexdigest(),
             }
-            for index, identifier in enumerate(finalists)
-        }.items() if identifier == winner
-    )
-    timing_cases = [{
-        "case": case, "median_us": winner_timing,
-        "samples_us": [winner_timing] * 3,
-    } for case in plan["expected_profile_cases"]]
+                for case in plan["expected_profile_cases"]
+                for iteration in range(3)
+            ],
+        }
+
     profile_summary = {
         "schema": "profiling-skill/a3-round-profile-summary/v1",
         "benchmark": plan["benchmark"],
@@ -200,23 +218,7 @@ def autotune_success(plan, winner="block-64", failed=()):
             "cases": list(range(plan["required_correctness_cases"])),
             "logical_launches_per_case": 1,
         },
-        "timing": {
-            "metric": "BasicInfo", "profiler": "msprof-op",
-            "timing_scope": "device-task", "kernel_name": resolved,
-            "declared_kernel_name": declared, "resolved_kernel_name": resolved,
-            "cases": timing_cases,
-            "repeats": 3, "geomean_us": winner_timing,
-            "captures": [{
-                "case": case, "iteration": iteration, "duration_us": winner_timing,
-                "kernel_name": resolved, "declared_kernel_name": declared,
-                "resolved_kernel_name": resolved,
-                "evidence_sha256": f"{case_index * 3 + iteration + 1:064x}",
-                "msprof_log_sha256": f"{case_index * 3 + iteration + 101:064x}",
-            }
-                for case_index, case in enumerate(plan["expected_profile_cases"])
-                for iteration in range(3)
-            ],
-        },
+        "timing": official_timing(winner_timing, "winner-full-gate"),
         "pipe_activity": {
             "schema_version": 1, "product": "a3",
             "evidence_kind": "per-block-pipe-activity",
@@ -251,10 +253,18 @@ def autotune_success(plan, winner="block-64", failed=()):
             "commands": ["compile all", "time survivors", "msprof finalists"],
             "finalist_profiles": {
                 identifier: {
-                    "geomean_us": 9.0 if identifier == winner else 10.0 + index,
-                    "repeats": 3,
+                    "option_id": identifier,
+                    "source_sha256": next(
+                        option["source_sha256"] for option in plan["options"]
+                        if option["id"] == identifier
+                    ),
+                    "candidate_artifact_sha256": next(
+                        option["source_sha256"] for option in plan["options"]
+                        if option["id"] == identifier
+                    ),
+                    "timing": official_timing(official_values[identifier], identifier),
                 }
-                for index, identifier in enumerate(finalists)
+                for identifier in finalists
             },
         },
     }
@@ -267,6 +277,16 @@ def rebind_winner_profile(result):
             profile, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode()).hexdigest()
     )
+
+
+def retime_official(profile, value):
+    timing = profile["timing"]
+    timing["geomean_us"] = value
+    for case in timing["cases"]:
+        case["samples_us"] = [value] * timing["repeats"]
+        case["median_us"] = value
+    for capture in timing["captures"]:
+        capture["duration_us"] = value
 
 
 def candidate_contract():
@@ -1044,6 +1064,13 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
     assert all("source" not in option for option in retained["options"])
     result = json.loads((folder / "autotune-result.json").read_text())
     assert result["winner_id"] == "option-000" and result["optimization_round"] == 1
+    assert len(result["finalist_profiles"]) == 3
+    assert all(
+        set(profile) >= {
+            "option_id", "source_sha256", "candidate_artifact_sha256", "timing",
+        } and [case["case"] for case in profile["timing"]["cases"]] == [7, 8, 9]
+        for profile in result["finalist_profiles"].values()
+    )
     assert completed["round"] == 2 and completed["attempts"] == 1
     assert (folder / "autotune-commands.jsonl").read_text().count("command") == 3
     assert "AUTOTUNE_REQUEST_PATH" in remote.submitted[0][1]
@@ -1407,16 +1434,13 @@ def test_autotune_success_rejects_nonfastest_finalists_and_winner():
 
     result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v2"]
     result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v2"]
-    result["autotune_summary"]["finalist_profiles"] = {
-        "incumbent": {"geomean_us": 11.0, "repeats": 3},
-        "v0": {"geomean_us": 9.0, "repeats": 3},
-        "v2": {"geomean_us": 12.0, "repeats": 3},
-    }
     with pytest.raises(runner.RunnerError, match="fastest successful"):
         runner.ExperimentCell._validate_autotune_success(plan, result)
 
     result = autotune_success(plan, winner="v0")
-    result["autotune_summary"]["finalist_profiles"]["incumbent"]["geomean_us"] = 8.0
+    retime_official(
+        result["autotune_summary"]["finalist_profiles"]["incumbent"], 8.0,
+    )
     with pytest.raises(runner.RunnerError, match="fastest official"):
         runner.ExperimentCell._validate_autotune_success(plan, result)
 
@@ -1432,10 +1456,8 @@ def test_autotune_selection_ties_follow_request_order():
         row["cheap_device_timing_us"] = 10.0
     result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v1"]
     result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v1"]
-    result["autotune_summary"]["finalist_profiles"] = {
-        identifier: {"geomean_us": 9.0, "repeats": 3}
-        for identifier in ("incumbent", "v0", "v1")
-    }
+    for profile in result["autotune_summary"]["finalist_profiles"].values():
+        retime_official(profile, 9.0)
 
     selected, _ = runner.ExperimentCell._validate_autotune_success(plan, result)
     assert selected == plan["options"][0]["source"]
@@ -1448,13 +1470,46 @@ def test_autotune_success_requires_three_integer_msprof_repeats(invalid_repeats)
     ])
     plan["optimization_round"] = 1
     result = autotune_success(plan, winner="v0")
-    profile = result["autotune_summary"]["finalist_profiles"]["incumbent"]
+    timing = result["autotune_summary"]["finalist_profiles"]["incumbent"]["timing"]
     if invalid_repeats is None:
-        profile.pop("repeats")
+        timing.pop("repeats")
     else:
-        profile["repeats"] = invalid_repeats
+        timing["repeats"] = invalid_repeats
 
-    with pytest.raises(runner.RunnerError, match="at least 3 msprof repeats"):
+    with pytest.raises(runner.RunnerError, match="official msprof timing"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("cheap-only", "official msprof timing"),
+    ("geomean-only", "official msprof timing"),
+    ("fabricated-geomean", "geomean"),
+    ("fabricated-capture", "capture evidence"),
+    ("source", "identity mismatch"),
+    ("artifact", "identity mismatch"),
+])
+def test_autotune_rejects_unbound_or_unsubstantiated_finalist_profiles(mutation, message):
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": "v0", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    profile = result["autotune_summary"]["finalist_profiles"]["incumbent"]
+    if mutation == "cheap-only":
+        profile.pop("timing")
+        profile["cheap_device_timing_us"] = 0.01
+    elif mutation == "geomean-only":
+        profile["timing"] = {"geomean_us": 1.0, "repeats": 3}
+    elif mutation == "fabricated-geomean":
+        profile["timing"]["geomean_us"] = 1.0
+    elif mutation == "fabricated-capture":
+        profile["timing"]["captures"][0]["duration_us"] = 1.0
+    elif mutation == "source":
+        profile["source_sha256"] = "0" * 64
+    else:
+        profile["candidate_artifact_sha256"] = "0" * 64
+
+    with pytest.raises(runner.RunnerError, match=message):
         runner.ExperimentCell._validate_autotune_success(plan, result)
 
 

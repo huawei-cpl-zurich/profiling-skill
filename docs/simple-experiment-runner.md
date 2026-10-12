@@ -145,13 +145,14 @@ A compatible host gate screens all options in that job across its ranked
 correctness and fusion cases using ordinary synchronized device timing.
 Candidate failures eliminate only their option. The three fastest successful
 options receive at least three repeated `msprof op` timings; every finalist
-profile reports an integer `repeats >= 3`, and equal cheap timings retain
+profile binds its option ID, requested source SHA-256, exact executed artifact
+SHA-256, and concrete official timing object. Equal cheap timings retain
 request order. The fastest official finalist then receives the complete
-correctness/fusion gate and diagnostic pipe capture; equal official geomeans
-retain finalist order. Duplicate materialized sources are rejected before
-dispatch. Observation loss reuses the same durable handle, and completed
-option screens are checkpointed inside the retained job. Tuning options do not
-increment the optimization round.
+correctness/fusion gate and diagnostic pipe capture; equal recomputed official
+geomeans retain finalist order. Duplicate materialized sources are rejected
+before dispatch. Observation loss reuses the same durable handle, and
+completed option screens are checkpointed inside the retained job. Tuning
+options do not increment the optimization round.
 
 The selected winner is accepted only with concrete full-gate evidence. The
 result retains the stable `profiling-skill/a3-round-profile-summary/v1`
@@ -177,7 +178,8 @@ pipe observations whose exact selector matches the resolved timing selector.
 This prevents a gate from presenting internally consistent evidence for a
 different kernel.
 
-Official timing uses `msprof-op`/`BasicInfo` with an integer repeat count of at
+Every finalist and the winner full gate use the same official timing contract:
+`msprof-op`/`BasicInfo`, `device-task` scope, and an integer repeat count of at
 least three. Timing cases must equal the pinned ranked inventory in order;
 every case contains exactly that many positive samples and its recomputable
 median. Its nonempty capture inventory is case-major and has

@@ -8,7 +8,9 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from collections import Counter
@@ -18,6 +20,11 @@ from typing import Callable
 GLOBAL_CPL_REMOTE = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
 RESULT_SCHEMA = "simple-experiment-result/v1"
 MAX_CANDIDATE_BYTES = 1_048_576
+SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+AGENT_ENV_ALLOWLIST = {
+    "PATH", "LANG", "LC_ALL", "LC_CTYPE", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+}
 
 
 class RunnerError(RuntimeError):
@@ -64,6 +71,24 @@ def _object(stdout: str, label: str) -> dict:
     if not isinstance(value, dict):
         raise RunnerError(f"{label} returned no JSON object")
     return value
+
+
+def _tree_sha256(root: Path) -> str:
+    if root.is_symlink() or not root.is_dir():
+        raise RunnerError(f"skill tree is unavailable: {root}")
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        mode = path.lstat().st_mode
+        if path.is_symlink() or not (path.is_dir() or stat.S_ISREG(mode)):
+            raise RunnerError(f"skill tree contains unsupported entry: {relative}")
+        if path.is_file():
+            digest.update(relative.encode() + b"\0")
+            digest.update(oct(stat.S_IMODE(mode)).encode() + b"\0")
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 class CplRemote:
@@ -175,7 +200,8 @@ class SubprocessAgent:
         self.command, self.cwd, self.home = command, Path(cwd), Path(home)
 
     def _invoke(self, request: dict) -> dict:
-        environment = os.environ.copy()
+        environment = {key: value for key, value in os.environ.items()
+                       if key in AGENT_ENV_ALLOWLIST}
         environment.update(HOME=str(self.home), CODEX_HOME=str(self.home / ".codex"))
         try:
             result = subprocess.run(
@@ -231,16 +257,59 @@ class ExperimentCell:
         _write_json(self.state_path, state)
         return state
 
-    def _skill_sources(self) -> list[Path]:
+    def _skill_sources(self) -> list[tuple[str, Path]]:
         if not isinstance(self.config.get("prompt"), str) or not self.config["prompt"]:
             raise RunnerError("configuration requires an exact non-empty prompt")
-        paths = self.config.get("skill_paths")
-        if not isinstance(paths, list):
-            raise RunnerError("configuration requires explicit skill_paths")
-        sources = [Path(value).resolve() for value in paths]
-        if any(not source.is_dir() for source in sources) or len({p.name for p in sources}) != len(sources):
-            raise RunnerError("skill_paths must be existing, uniquely named directories")
+        bindings = self.config.get("skill_bindings")
+        pinned = bindings is not None
+        if not pinned:
+            paths = self.config.get("skill_paths")
+            if not isinstance(paths, list):
+                raise RunnerError("configuration requires explicit skill bindings")
+            bindings = [{"name": Path(value).name, "path": value} for value in paths]
+        if not isinstance(bindings, list):
+            raise RunnerError("skill_bindings must be a list")
+        sources = []
+        for binding in bindings:
+            if not isinstance(binding, dict) or not SKILL_NAME.fullmatch(str(binding.get("name", ""))):
+                raise RunnerError("skill binding has an invalid canonical name")
+            configured_source = Path(str(binding.get("path", "")))
+            if configured_source.is_symlink():
+                raise RunnerError("skill binding source is unavailable")
+            source = configured_source.resolve()
+            if not source.is_dir():
+                raise RunnerError("skill binding source is unavailable")
+            actual = _tree_sha256(source)
+            expected = binding.get("sha256")
+            if pinned and not isinstance(expected, str):
+                raise RunnerError(f"skill binding requires sha256: {binding['name']}")
+            if expected is not None and actual != expected:
+                raise RunnerError(f"skill binding hash mismatch: {binding['name']}")
+            if pinned:
+                skill_file = source / "SKILL.md"
+                if not skill_file.is_file() or not re.search(
+                        rf"(?m)^name:\s*{re.escape(binding['name'])}\s*$",
+                        skill_file.read_text(errors="replace")):
+                    raise RunnerError(f"skill binding name mismatch: {binding['name']}")
+            sources.append((binding["name"], source))
+        if len({name for name, _ in sources}) != len(sources):
+            raise RunnerError("skill binding canonical names must be unique")
         return sources
+
+    def _auth_content(self) -> bytes | None:
+        configured = self.config.get("agent_auth_path")
+        if configured is None:
+            return None
+        configured_auth = Path(str(configured))
+        if configured_auth.is_symlink():
+            raise RunnerError("agent_auth_path must be a private regular file")
+        auth = configured_auth.resolve()
+        if not auth.is_file() or stat.S_IMODE(auth.stat().st_mode) & 0o077:
+            raise RunnerError("agent_auth_path must be a private regular file")
+        content = auth.read_bytes()
+        if not content:
+            raise RunnerError("agent_auth_path must not be empty")
+        return content
 
     def _immutable_inputs(self) -> tuple[Path, int, bytes | None]:
         gate = Path(self.config.get("terminal_gate_path", "")).resolve()
@@ -279,6 +348,7 @@ class ExperimentCell:
         if self.path.exists():
             raise RunnerError(f"cell already exists: {self.path}")
         sources = self._skill_sources()
+        auth_content = self._auth_content()
         gate, billed_checks, task_content = self._immutable_inputs()
         gate_content = gate.read_bytes()
         if not gate_content:
@@ -306,9 +376,14 @@ class ExperimentCell:
                 (repo / "TASK.md").write_bytes(task_content)
                 task_sha256 = hashlib.sha256(task_content).hexdigest()
             skill_root = temporary / "agent-home/.agents/skills"
-            (temporary / "agent-home/.codex").mkdir(parents=True)
-            for source in sources:
-                shutil.copytree(source, skill_root / source.name)
+            codex_home = temporary / "agent-home/.codex"
+            codex_home.mkdir(parents=True)
+            if auth_content is not None:
+                private_auth = codex_home / "auth.json"
+                private_auth.write_bytes(auth_content)
+                private_auth.chmod(0o600)
+            for name, source in sources:
+                shutil.copytree(source, skill_root / name)
             (temporary / "attempts").mkdir()
             (temporary / "prompt.txt").write_text(self.config["prompt"])
             retained_gate = temporary / "terminal-gate.sh"
@@ -319,6 +394,8 @@ class ExperimentCell:
                 "infrastructure_failures": 0, "candidate_repairs": 0,
                 "billed_checks_limit": billed_checks, "billed_checks_used": 0,
                 "task_sha256": task_sha256,
+                "skill_names": [name for name, _ in sources],
+                "skill_sha256": {name: _tree_sha256(source) for name, source in sources},
             })
             temporary.replace(self.path)
         except BaseException:
@@ -328,7 +405,11 @@ class ExperimentCell:
 
     @property
     def skill_names(self) -> list[str]:
-        return [Path(value).name for value in self.config["skill_paths"]]
+        if self.state_path.is_file():
+            names = self._state().get("skill_names")
+            if isinstance(names, list) and all(isinstance(name, str) for name in names):
+                return names
+        return [name for name, _ in self._skill_sources()]
 
     def _request(self, state: dict, phase: str) -> dict:
         request = {

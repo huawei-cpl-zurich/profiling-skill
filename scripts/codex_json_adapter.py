@@ -64,16 +64,27 @@ def validate_request(value: object) -> dict:
 
 
 def codex_prompt(request: dict) -> str:
+    candidate_contract = ""
+    if request.get("candidate_contract") is not None:
+        candidate_contract = (
+            " The candidate source must define and launch exactly "
+            "candidate_contract.entrypoint. Preserve candidate_contract.kernel_name as the "
+            "host profiling selector, and implement the complete operator as the declared "
+            "fully fused single logical launch. Apply these requirements to initial prepare "
+            "and every same-round repair; the exact task-specific names are data in "
+            "candidate_contract, not treatment guidance."
+        )
     contract = (
         "\n\nFollow the experiment prompt and the JSON phase request below. "
         "Return only the response object required by that phase. Do not access "
-        "hardware, remote transports, global skills, or files outside this Git repository.\n"
+        "hardware, remote transports, global skills, or files outside this Git repository."
+        + candidate_contract + "\n"
     )
     return request["prompt"] + contract + "REQUEST_JSON\n" + json.dumps(request, sort_keys=True)
 
 
 def invoke(args: argparse.Namespace, request: dict) -> dict:
-    private_codex_home()
+    home = private_codex_home()
     with tempfile.TemporaryDirectory(prefix="codex-json-adapter-") as temporary:
         schema = Path(temporary) / "schema.json"
         output = Path(temporary) / "last-message.json"
@@ -90,8 +101,13 @@ def invoke(args: argparse.Namespace, request: dict) -> dict:
             if not isinstance(session, str) or not session:
                 raise AdapterError("resumed phase requires session_id")
             command = [args.codex, "exec", "resume", *common, session, "-"]
-        result = subprocess.run(command, input=codex_prompt(request), text=True,
-                                capture_output=True, check=False)
+        try:
+            result = subprocess.run(command, input=codex_prompt(request), text=True,
+                                    capture_output=True, check=False)
+        finally:
+            generated_config = home / "config.toml"
+            if generated_config.is_file() and not generated_config.is_symlink():
+                generated_config.unlink()
         if result.returncode:
             raise AdapterError(result.stderr.strip() or "codex exec failed")
         thread = None

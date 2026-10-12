@@ -73,7 +73,14 @@ The runner sends one JSON object on stdin and reads one JSON object on stdout.
 The prepare request contains `phase=prepare`, exact prompt, treatment, allowed
 skill names, round, repo, target/runtime, and optional `session_id`. A
 same-round repair also contains the prior candidate, full terminal result,
-exact attempt path, and diagnostics.
+exact attempt path, and diagnostics. When a host-owned campaign gate has
+snapshotted a validated v2 candidate manifest, every initial and repair request
+also contains its exact normalized `candidate_contract`: `schema`,
+`entrypoint`, `kernel_name`, and `fusion`. The adapter's common instruction
+requires the agent to define and launch exactly `candidate_contract.entrypoint`,
+preserve `candidate_contract.kernel_name` as the host selector, and implement
+the declared complete operator as one fused logical launch. Task-specific names
+remain request data, so the instruction stays byte-identical across treatments.
 
 Prepare must return:
 
@@ -126,7 +133,7 @@ commit without rerunning the remote workload or duplicating the round commit.
 
 Before each new `run` invocation that may dispatch work, the runner records
 global `cpl-remote` `capabilities` and `preflight` receipts and requires `run`,
-`observe`, and `logs`. A failed probe is retained with its phase and diagnostics,
+`upload`, `observe`, and `logs`. A failed probe is retained with its phase and diagnostics,
 classified as infrastructure, and consumes neither a candidate attempt nor a
 round. Production execution uses only the user-wide global client, a named
 runtime, and a file-backed script.
@@ -153,13 +160,15 @@ advancing the round. Candidate failures return all repair evidence to the
 agent and consume a same-round repair. Exhausted budgets are terminal and a
 later `run` does not dispatch again.
 
-Every possible remote submission also consumes one billed check. The runner
-checks the snapshotted limit before preparing or dispatching replacement work
-and charges at the dispatch boundary, before asking `cpl-remote` to run. Thus a
-lost dispatch receipt is still charged and can never cause the cell to exceed
-its limit. Preflight-only failures and observation of an existing durable
-handle are not charged. Exhaustion is reported as `billed_checks_exhausted`;
-`report` includes both the immutable limit and used count.
+Every possible remote job submission also consumes one billed check. The
+runner first stages the content-addressed gate payload with `cpl-remote upload`,
+then submits a small launcher that verifies its hash. A proven upload failure
+cannot have created a job, so the runner preserves the candidate and evidence
+without charging a check. Once job dispatch begins, a lost receipt is charged
+because automatically replacing it could duplicate live work. Preflight-only
+failures and observation of an existing durable handle are also not charged.
+Exhaustion is reported as `billed_checks_exhausted`; `report` includes both the
+immutable limit and used count.
 
 ## Recovery and evidence
 
@@ -167,6 +176,7 @@ handle are not charged. Exhaustion is reported as `billed_checks_exhausted`;
 python scripts/simple_experiment_runner.py init --root /path/to/runs --config cell.json
 python scripts/simple_experiment_runner.py run --root /path/to/runs --config cell.json
 python scripts/simple_experiment_runner.py resume --root /path/to/runs --config cell.json
+python scripts/simple_experiment_runner.py recover --root /path/to/runs --config cell.json
 python scripts/simple_experiment_runner.py report --root /path/to/runs --config cell.json
 ```
 
@@ -176,6 +186,11 @@ blocks `run`; use `resume`. It observes the exact stored handle when the result
 is unknown, or resumes analysis/finalization when the terminal result is
 already present. An uncertain dispatch with no returned handle requires manual
 reconciliation because an automatic replacement could duplicate live work.
+`recover` is deliberately narrower: it only rolls back a checkpoint whose
+retained evidence proves dispatch never began (including the legacy local
+`E2BIG` process-start failure). It archives that evidence under
+`pre-dispatch/`, restores the attempt/check budget, and retains the exact
+prepared candidate for the next `run`.
 
 Each successful round adds exactly one commit under `repo/rounds/NN/` with the
 candidate, generated wrapper, command log, compact profile and terminal result,

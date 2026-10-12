@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -43,6 +45,23 @@ class PreflightFailure(ObservationLost):
     def __init__(self, phase: str, diagnostics: str):
         super().__init__(diagnostics)
         self.phase = phase
+
+
+class PreDispatchFailure(ObservationLost):
+    """Failure proven to have occurred before a remote job was submitted."""
+
+
+def _load_fusion_contract():
+    path = Path(__file__).with_name("fully_fused_contract.py")
+    spec = importlib.util.spec_from_file_location("simple_runner_fusion_contract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load fusion contract: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+FUSION_CONTRACT = _load_fusion_contract()
 
 
 def _write_json(path: Path, value: dict | list) -> None:
@@ -131,7 +150,7 @@ class CplRemote:
         if not isinstance(raw, dict):
             raise PreflightFailure("capabilities", "capabilities must be a JSON object")
         available = {key for key, enabled in raw.items() if enabled}
-        missing = {"run", "observe", "logs"} - available
+        missing = {"run", "observe", "logs", "upload"} - available
         if missing:
             raise PreflightFailure("capabilities", f"missing capabilities: {sorted(missing)}")
         try:
@@ -144,9 +163,44 @@ class CplRemote:
         return {"capabilities": capabilities, "preflight": preflight}
 
     def submit(self, request: dict, script: Path) -> str:
+        target = request["target"]
+        workspace = request["remote_workspace"]
+        if (not isinstance(workspace, str) or not workspace
+                or "\x00" in workspace or "\n" in workspace):
+            raise PreDispatchFailure("remote_workspace must be a safe non-empty path")
+        digest = hashlib.sha256(script.read_bytes()).hexdigest()
+        remote_name = f".simple-experiment-{digest}.sh"
+        remote_script = f"{workspace.rstrip('/')}/{remote_name}"
+        try:
+            uploaded = self._call(["upload", target, str(script), remote_script])
+        except ObservationLost as exc:
+            raise PreDispatchFailure(f"payload upload failed: {exc}") from exc
+        upload_exit = uploaded.get("exit")
+        if (uploaded.get("target") != target or uploaded.get("state") != "completed"
+                or upload_exit is not None and upload_exit not in {0, "0"}):
+            raise PreDispatchFailure(
+                f"payload upload was not confirmed: state={uploaded.get('state')}, "
+                f"exit={uploaded.get('exit')}"
+            )
+        launcher = script.with_name("dispatch.sh")
+        launcher_script = remote_script if workspace.startswith("/") else f"./{remote_name}"
+        quoted = shlex.quote(launcher_script)
+        launcher.write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            "infrastructure_failure() {\n"
+            "  printf '%s\\n' '{\"schema\":\"simple-experiment-result/v1\","
+            "\"outcome\":\"infrastructure_failure\","
+            "\"diagnostics\":\"staged payload verification failed\"}'\n"
+            "  exit 125\n"
+            "}\n"
+            f"actual_sha=$(sha256sum {quoted} 2>/dev/null | cut -d' ' -f1) || infrastructure_failure\n"
+            f"test \"$actual_sha\" = {digest} || infrastructure_failure\n"
+            f"exec bash {quoted}\n"
+        )
+        launcher.chmod(0o700)
         receipt = self._call([
             "run", request["target"], "--runtime", request["runtime"],
-            "--file", str(script), "--cwd", request["remote_workspace"],
+            "--file", str(launcher), "--cwd", workspace,
         ])
         handle = receipt.get("handle")
         if (receipt.get("target") != request["target"] or not isinstance(handle, str)
@@ -420,6 +474,13 @@ class ExperimentCell:
             "prompt": self.config["prompt"], "treatment": self.config["treatment"],
             "allowed_skills": self.skill_names, "session_id": state.get("session_id"),
         }
+        if state.get("candidate_manifest_sha256") is not None:
+            manifest = self.path / "candidate-manifest.json"
+            try:
+                value = json.loads(manifest.read_text())
+                request["candidate_contract"] = FUSION_CONTRACT.validate_manifest(value)
+            except (OSError, json.JSONDecodeError, FUSION_CONTRACT.FusionContractError) as exc:
+                raise RunnerError(f"snapshotted candidate manifest is invalid: {exc}") from exc
         if state.get("prior_result") is not None:
             request.update(
                 candidate_diagnostics=state.get("candidate_diagnostics"),
@@ -497,14 +558,38 @@ class ExperimentCell:
         self._save(state)
         try:
             handle = self.remote.submit(request, script)
+        except PreDispatchFailure as exc:
+            _write_json(attempt / "infrastructure.json", {
+                "diagnostics": str(exc), "phase": "stage",
+                "dispatch_state": "not_dispatched",
+            })
+            return self._rollback_pre_dispatch(state, attempt)
         except ObservationLost as exc:
             _write_json(attempt / "infrastructure.json", {"diagnostics": str(exc), "phase": "dispatch"})
             return self._save(state)
         (attempt / "remote-job-id.txt").write_text(handle + "\n")
+        state.pop("retry_prepared", None)
         state.update(status="observing", pending_attempt=number,
                      session_id=prepared.get("session_id", state.get("session_id")))
         self._save(state)
         return self._observe(state, attempt, handle, prepared)
+
+    def _rollback_pre_dispatch(self, state: dict, attempt: Path) -> dict:
+        archive_root = self.path / "pre-dispatch"
+        archive_root.mkdir(exist_ok=True)
+        sequence = 1
+        while (archive_root / str(sequence)).exists():
+            sequence += 1
+        archived = archive_root / str(sequence)
+        attempt.replace(archived)
+        state["attempts"] -= 1
+        state["billed_checks_used"] -= 1
+        state["infrastructure_failures"] += 1
+        state.update(status="infrastructure_failure",
+                     retry_prepared=str(archived / "agent-result.json"))
+        for key in ("pending_attempt", "session_id"):
+            state.pop(key, None)
+        return self._save(state)
 
     def _observe(self, state: dict, attempt: Path, handle: str, prepared: dict) -> dict:
         try:
@@ -644,7 +729,9 @@ class ExperimentCell:
             state["infrastructure_failures"] += 1
             state["status"] = "infrastructure_failure"
             return self._save(state)
-        last_agent = self.path / "attempts" / str(state["attempts"]) / "agent-result.json"
+        retained = state.get("retry_prepared")
+        last_agent = (Path(retained) if retained else
+                      self.path / "attempts" / str(state["attempts"]) / "agent-result.json")
         prepared = (json.loads(last_agent.read_text())
                     if state["status"] == "infrastructure_failure" and last_agent.is_file()
                     else None)
@@ -684,6 +771,28 @@ class ExperimentCell:
             raise RunnerError("dispatch outcome is unknown; no handle exists to observe")
         return self._observe(state, attempt, handle_path.read_text().strip(), prepared)
 
+    def recover(self) -> dict:
+        """Repair only a checkpoint proven to have failed before dispatch."""
+        state = self._state()
+        self._verify_task_snapshot(state)
+        pending = state.get("pending_attempt")
+        if state.get("status") != "infrastructure_unknown" or not pending:
+            raise RunnerError("cell has no unknown dispatch checkpoint to recover")
+        attempt = self.path / "attempts" / str(pending)
+        if (attempt / "remote-job-id.txt").exists():
+            raise RunnerError("retained handle exists; use resume")
+        evidence_path = attempt / "infrastructure.json"
+        if not evidence_path.is_file():
+            raise RunnerError("dispatch is not proven to be pre-dispatch")
+        evidence = json.loads(evidence_path.read_text())
+        proven = evidence.get("dispatch_state") == "not_dispatched"
+        legacy_e2big = (evidence.get("phase") == "dispatch"
+                        and "[Errno 7] Argument list too long: 'ssh'"
+                        in str(evidence.get("diagnostics", "")))
+        if not (proven or legacy_e2big):
+            raise RunnerError("dispatch is not proven to be pre-dispatch")
+        return self._rollback_pre_dispatch(state, attempt)
+
     def report(self) -> dict:
         state = self._state()
         outcomes = Counter()
@@ -698,7 +807,7 @@ class ExperimentCell:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("init", "run", "resume", "report"))
+    parser.add_argument("command", choices=("init", "run", "resume", "recover", "report"))
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--config", type=Path, required=True)
     args = parser.parse_args()

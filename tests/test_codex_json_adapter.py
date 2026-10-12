@@ -13,6 +13,7 @@ def fake_codex(tmp_path: Path) -> Path:
         "#!/usr/bin/env python3\n"
         "import json, os, pathlib, sys\n"
         "capture=pathlib.Path(os.environ['FAKE_CAPTURE'])\n"
+        "(pathlib.Path(os.environ['CODEX_HOME'])/'config.toml').write_text('generated = true\\n')\n"
         "prompt=sys.stdin.read()\n"
         "capture.write_text(json.dumps({'argv':sys.argv[1:],'prompt':prompt,'home':os.environ.get('HOME'),'codex_home':os.environ.get('CODEX_HOME')}))\n"
         "out=pathlib.Path(sys.argv[sys.argv.index('-o')+1])\n"
@@ -31,7 +32,7 @@ def fake_codex(tmp_path: Path) -> Path:
 def invoke(tmp_path: Path, request: dict):
     home = tmp_path / "home"
     codex_home = home / ".codex"
-    codex_home.mkdir(parents=True)
+    codex_home.mkdir(parents=True, exist_ok=True)
     (codex_home / "auth.json").write_text("{}")
     (codex_home / "auth.json").chmod(0o600)
     capture = tmp_path / "capture.json"
@@ -71,6 +72,37 @@ def test_prepare_invokes_isolated_codex_and_returns_thread(tmp_path):
     assert call["home"] == str(tmp_path / "home")
     assert call["codex_home"] == str(tmp_path / "home/.codex")
     assert "same prompt" in call["prompt"]
+    assert (tmp_path / "home/.codex/auth.json").is_file()
+    assert not (tmp_path / "home/.codex/config.toml").exists()
+
+
+def test_prepare_prompt_directs_exact_candidate_contract_without_treatment_guidance(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    contract = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "streaming_matmul_add_kernel_mix_aic",
+        "entrypoint": "streaming_matmul_add_kernel",
+        "fusion": {
+            "schema_version": 1, "mode": "single-logical-launch",
+            "complete_operator": True,
+        },
+    }
+    request = {
+        "phase": "prepare", "prompt": "identical common prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [], "treatment": "guarded",
+        "candidate_contract": contract,
+    }
+
+    result, call = invoke(tmp_path, request)
+
+    assert result.returncode == 0, result.stderr
+    assert "define and launch exactly candidate_contract.entrypoint" in call["prompt"]
+    assert "Preserve candidate_contract.kernel_name" in call["prompt"]
+    assert "initial prepare and every same-round repair" in call["prompt"]
+    forwarded = json.loads(call["prompt"].split("REQUEST_JSON\n", 1)[1])
+    assert forwarded["candidate_contract"] == contract
 
 
 def test_analyze_resumes_exact_thread(tmp_path):
@@ -88,6 +120,30 @@ def test_analyze_resumes_exact_thread(tmp_path):
     }
     assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
     assert "thread-old" in call["argv"]
+
+
+def test_generated_config_is_removed_between_prepare_and_analyze(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    prepare = {
+        "phase": "prepare", "prompt": "same prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [],
+    }
+    first, _ = invoke(tmp_path, prepare)
+    assert first.returncode == 0, first.stderr
+    assert not (tmp_path / "home/.codex/config.toml").exists()
+
+    analyze = {
+        "phase": "analyze", "prompt": "same prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [], "session_id": "thread-123",
+        "candidate": "VALUE=1", "terminal_result": {"outcome": "success"},
+    }
+    second, call = invoke(tmp_path, analyze)
+    assert second.returncode == 0, second.stderr
+    assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
+    assert (tmp_path / "home/.codex/auth.json").is_file()
+    assert not (tmp_path / "home/.codex/config.toml").exists()
 
 
 def test_adapter_rejects_missing_private_auth(tmp_path):

@@ -16,6 +16,7 @@ import re
 import shlex
 import shutil
 import stat
+import statistics
 import subprocess
 import tempfile
 from collections import Counter
@@ -30,7 +31,23 @@ MAX_MANIFEST_BYTES = 64 * 1024
 MAX_AUTOTUNE_CONFIGURATIONS = 128
 MAX_AUTOTUNE_FINALISTS = 3
 MIN_AUTOTUNE_PROFILE_REPEATS = 3
-AUTOTUNE_CORRECTNESS_CASES = {"matmul": 10, "gdn": 50, "bsa": 50}
+AUTOTUNE_BENCHMARK_CONTRACTS = {
+    "matmul": {
+        "correctness_cases": 10,
+        "entrypoint": "streaming_matmul_add_kernel",
+        "kernel_name": "streaming_matmul_add_kernel_mix_aic",
+    },
+    "gdn": {
+        "correctness_cases": 50,
+        "entrypoint": "chunk_gated_delta_rule_kernel",
+        "kernel_name": "chunk_gated_delta_rule_kernel",
+    },
+    "bsa": {
+        "correctness_cases": 50,
+        "entrypoint": "block_sparse_attention_kernel",
+        "kernel_name": "block_sparse_attention_kernel",
+    },
+}
 MAX_AUTOTUNE_BUNDLE_BYTES = 16 * 1_048_576
 AUTOTUNE_REQUEST_SCHEMA = "simple-experiment-autotune-request/v1"
 AUTOTUNE_RESULT_SCHEMA = "simple-experiment-autotune-result/v1"
@@ -780,12 +797,19 @@ class ExperimentCell:
         except RunnerError as exc:
             raise TuneRejected(str(exc)) from exc
         benchmark = self.config["task"]
-        required_cases = AUTOTUNE_CORRECTNESS_CASES.get(benchmark)
-        if required_cases is None:
+        benchmark_contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark)
+        if benchmark_contract is None:
             raise TuneRejected(f"autotune has no correctness contract for {benchmark}")
+        declared = request.get("candidate_contract")
+        if declared is not None and (
+                declared.get("entrypoint") != benchmark_contract["entrypoint"]
+                or declared.get("kernel_name") != benchmark_contract["kernel_name"]):
+            raise TuneRejected("candidate manifest does not match the benchmark contract")
         plan.update(
             optimization_round=state["round"], benchmark=benchmark,
-            required_correctness_cases=required_cases,
+            required_correctness_cases=benchmark_contract["correctness_cases"],
+            expected_entrypoint=benchmark_contract["entrypoint"],
+            expected_declared_kernel_name=benchmark_contract["kernel_name"],
         )
         raw = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         if len(gzip.compress(raw, mtime=0)) > MAX_AUTOTUNE_BUNDLE_BYTES:
@@ -839,9 +863,13 @@ class ExperimentCell:
             if isinstance(option, dict)
         ]
         expected = materialize_autotune(prepared["candidate"], proposed)
+        benchmark = self.config["task"]
+        benchmark_contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark, {})
         expected.update(
-            optimization_round=state["round"], benchmark=self.config["task"],
-            required_correctness_cases=AUTOTUNE_CORRECTNESS_CASES.get(self.config["task"]),
+            optimization_round=state["round"], benchmark=benchmark,
+            required_correctness_cases=benchmark_contract.get("correctness_cases"),
+            expected_entrypoint=benchmark_contract.get("entrypoint"),
+            expected_declared_kernel_name=benchmark_contract.get("kernel_name"),
         )
         if plan != expected:
             raise RunnerError("retained autotune plan does not match prepared source")
@@ -1078,6 +1106,13 @@ class ExperimentCell:
             raise RunnerError("autotune winner lacks an A3 full-gate profile summary")
         benchmark = request.get("benchmark")
         required_cases = request.get("required_correctness_cases")
+        expected_entrypoint = request.get("expected_entrypoint")
+        expected_declared = request.get("expected_declared_kernel_name")
+        if (isinstance(required_cases, bool) or not isinstance(required_cases, int)
+                or required_cases <= 0
+                or not isinstance(expected_entrypoint, str) or not expected_entrypoint
+                or not isinstance(expected_declared, str) or not expected_declared):
+            raise RunnerError("retained autotune benchmark contract is invalid")
         if (profile.get("benchmark") != benchmark
                 or profile.get("correctness_cases") != required_cases):
             raise RunnerError("autotune winner correctness evidence is incomplete")
@@ -1106,8 +1141,8 @@ class ExperimentCell:
                        for case in fusion_cases)
                 or set(fusion_cases) != set(range(required_cases))
                 or fusion.get("logical_launches_per_case") != 1
-                or not isinstance(fusion.get("entrypoint"), str) or not fusion["entrypoint"]
-                or not isinstance(fusion.get("kernel_name"), str) or not fusion["kernel_name"]):
+                or fusion.get("entrypoint") != expected_entrypoint
+                or fusion.get("kernel_name") != expected_declared):
             raise RunnerError("autotune winner lacks complete fusion evidence")
 
         timing = profile.get("timing")
@@ -1126,15 +1161,58 @@ class ExperimentCell:
                 or not isinstance(declared, str) or not declared
                 or not isinstance(resolved, str) or not resolved
                 or timing.get("kernel_name") != resolved
-                or declared != fusion["kernel_name"]
+                or declared != expected_declared
                 or not isinstance(timing_cases, list) or not timing_cases):
             raise RunnerError("autotune winner lacks official full-gate timing")
+        case_ids = []
+        medians = []
         for case in timing_cases:
             samples = case.get("samples_us") if isinstance(case, dict) else None
-            if (not isinstance(samples, list) or len(samples) < repeats
+            case_id = case.get("case") if isinstance(case, dict) else None
+            median = case.get("median_us") if isinstance(case, dict) else None
+            if (isinstance(case_id, bool) or not isinstance(case_id, int)
+                    or not 0 <= case_id < required_cases
+                    or not isinstance(samples, list) or len(samples) != repeats
                     or any(isinstance(item, bool) or not isinstance(item, (int, float))
-                           or not math.isfinite(item) or item <= 0 for item in samples)):
+                           or not math.isfinite(item) or item <= 0 for item in samples)
+                    or isinstance(median, bool) or not isinstance(median, (int, float))
+                    or not math.isfinite(median) or median <= 0
+                    or not math.isclose(median, statistics.median(samples),
+                                        rel_tol=1e-12, abs_tol=1e-12)):
                 raise RunnerError("autotune winner timing cases lack repeated samples")
+            case_ids.append(case_id)
+            medians.append(median)
+        if len(case_ids) != len(set(case_ids)):
+            raise RunnerError("autotune winner timing case inventory is duplicated")
+        expected_geomean = math.exp(sum(math.log(value) for value in medians) / len(medians))
+        if not math.isclose(geomean, expected_geomean, rel_tol=1e-12, abs_tol=1e-12):
+            raise RunnerError("autotune winner full-gate geomean does not match case medians")
+
+        captures = timing.get("captures")
+        expected_captures = [
+            (case["case"], iteration, sample)
+            for case in timing_cases
+            for iteration, sample in enumerate(case["samples_us"])
+        ]
+        digest_pattern = re.compile(r"^[0-9a-f]{64}$")
+        if (not isinstance(captures, list) or not captures
+                or len(captures) != len(expected_captures)):
+            raise RunnerError("autotune winner lacks complete msprof capture inventory")
+        for capture, (case_id, iteration, sample) in zip(captures, expected_captures):
+            duration = capture.get("duration_us") if isinstance(capture, dict) else None
+            if (not isinstance(capture, dict)
+                    or (capture.get("case"), capture.get("iteration")) != (case_id, iteration)
+                    or capture.get("kernel_name") != resolved
+                    or capture.get("declared_kernel_name") != expected_declared
+                    or capture.get("resolved_kernel_name") != resolved
+                    or not isinstance(duration, (int, float)) or isinstance(duration, bool)
+                    or not math.isfinite(duration) or duration <= 0
+                    or not math.isclose(duration, sample, rel_tol=1e-12, abs_tol=1e-12)
+                    or not isinstance(capture.get("evidence_sha256"), str)
+                    or not digest_pattern.fullmatch(capture["evidence_sha256"])
+                    or not isinstance(capture.get("msprof_log_sha256"), str)
+                    or not digest_pattern.fullmatch(capture["msprof_log_sha256"])):
+                raise RunnerError("autotune winner has invalid msprof capture evidence")
 
         pipes = profile.get("pipe_activity")
         observations = pipes.get("observations") if isinstance(pipes, dict) else None

@@ -153,6 +153,8 @@ def autotune_candidate():
 def autotune_success(plan, winner="block-64", failed=()):
     plan.setdefault("benchmark", "matmul")
     plan.setdefault("required_correctness_cases", 10)
+    plan.setdefault("expected_entrypoint", "streaming_matmul_add_kernel")
+    plan.setdefault("expected_declared_kernel_name", "streaming_matmul_add_kernel_mix_aic")
     rows = []
     for index, option in enumerate(plan["options"]):
         if option["id"] in failed:
@@ -199,7 +201,14 @@ def autotune_success(plan, winner="block-64", failed=()):
             "declared_kernel_name": declared, "resolved_kernel_name": resolved,
             "cases": [{"case": 7, "median_us": winner_timing,
                        "samples_us": [winner_timing] * 3}],
-            "repeats": 3, "geomean_us": winner_timing, "captures": [],
+            "repeats": 3, "geomean_us": winner_timing,
+            "captures": [{
+                "case": 7, "iteration": iteration, "duration_us": winner_timing,
+                "kernel_name": resolved, "declared_kernel_name": declared,
+                "resolved_kernel_name": resolved,
+                "evidence_sha256": f"{iteration + 1:064x}",
+                "msprof_log_sha256": f"{iteration + 11:064x}",
+            } for iteration in range(3)],
         },
         "pipe_activity": {
             "schema_version": 1, "product": "a3",
@@ -984,6 +993,11 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
     retained = json.loads((folder / "autotune-request.json").read_text())
     assert len(retained["options"]) == 101
     assert retained["optimization_round"] == 1
+    assert retained["required_correctness_cases"] == 10
+    assert retained["expected_entrypoint"] == "streaming_matmul_add_kernel"
+    assert retained["expected_declared_kernel_name"] == (
+        "streaming_matmul_add_kernel_mix_aic"
+    )
     assert all("source" not in option for option in retained["options"])
     result = json.loads((folder / "autotune-result.json").read_text())
     assert result["winner_id"] == "option-000" and result["optimization_round"] == 1
@@ -1405,7 +1419,11 @@ def winner_evidence_fixture():
     plan = runner.materialize_autotune(autotune_candidate(), [
         {"id": "block-64", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
     ])
-    plan.update(optimization_round=1, benchmark="matmul", required_correctness_cases=10)
+    plan.update(
+        optimization_round=1, benchmark="matmul", required_correctness_cases=10,
+        expected_entrypoint="streaming_matmul_add_kernel",
+        expected_declared_kernel_name="streaming_matmul_add_kernel_mix_aic",
+    )
     return plan, autotune_success(plan)
 
 
@@ -1456,6 +1474,61 @@ def test_autotune_rejects_incomplete_winner_full_gate_evidence(mutation, message
         profile["pipe_activity"]["observations"] = []
     else:
         profile["pipe_activity"]["provenance"]["kernel_selector"] = "other-kernel"
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def test_autotune_rejects_collectively_renamed_kernel_identity():
+    plan, result = winner_evidence_fixture()
+    profile = result["profile_summary"]
+    profile["fusion"].update(entrypoint="other_entrypoint", kernel_name="other_declared")
+    profile["timing"].update(
+        declared_kernel_name="other_declared", resolved_kernel_name="other_resolved",
+        kernel_name="other_resolved",
+    )
+    profile["pipe_activity"]["provenance"]["kernel_selector"] = "other_resolved"
+    for capture in profile["timing"]["captures"]:
+        capture.update(
+            kernel_name="other_resolved", declared_kernel_name="other_declared",
+            resolved_kernel_name="other_resolved",
+        )
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match="fusion evidence"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("empty-captures", "capture inventory"),
+    ("missing-capture", "capture inventory"),
+    ("capture-duration", "capture evidence"),
+    ("capture-digest", "capture evidence"),
+    ("capture-log-digest", "capture evidence"),
+    ("capture-selector", "capture evidence"),
+    ("median", "repeated samples"),
+    ("geomean", "geomean"),
+])
+def test_autotune_rejects_unsubstantiated_timing_aggregates(mutation, message):
+    plan, result = winner_evidence_fixture()
+    timing = result["profile_summary"]["timing"]
+    if mutation == "empty-captures":
+        timing["captures"] = []
+    elif mutation == "missing-capture":
+        timing["captures"].pop()
+    elif mutation == "capture-duration":
+        timing["captures"][0]["duration_us"] += 1
+    elif mutation == "capture-digest":
+        timing["captures"][0]["evidence_sha256"] = "not-a-digest"
+    elif mutation == "capture-log-digest":
+        timing["captures"][0]["msprof_log_sha256"] = "not-a-digest"
+    elif mutation == "capture-selector":
+        timing["captures"][0]["resolved_kernel_name"] = "other-kernel"
+    elif mutation == "median":
+        timing["cases"][0]["median_us"] += 1
+    else:
+        timing["geomean_us"] += 1
     rebind_winner_profile(result)
 
     with pytest.raises(runner.RunnerError, match=message):

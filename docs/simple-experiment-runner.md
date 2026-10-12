@@ -168,13 +168,23 @@ summary and binds it through `autotune_summary.winner_full_gate`:
 
 The source and executed artifact hashes must equal the selected option. The
 profile digest uses UTF-8 JSON with sorted keys and compact separators. The
-bound summary must name the requested benchmark, report its complete case
-count (10 Matmul or 50 GDN/BSA), prove one logical launch for every correctness
-case, retain at least three official `msprof-op`/`BasicInfo` samples, and carry
-nonempty normalized A3 pipe observations whose exact selector matches the
-resolved timing selector. A custom gate may implement this protocol. The
-runner does not claim a shipped A3 gate supports it until that gate itself adds
-the capability declaration and produces this evidence.
+retained request pins the benchmark, required correctness-case count,
+expected Python entrypoint, and expected declared kernel selector. The bound
+summary must equal those identities, prove one logical launch for every
+correctness case, and carry nonempty normalized A3 pipe observations whose
+exact selector matches the resolved timing selector. This prevents a gate from
+presenting internally consistent evidence for a different kernel.
+
+Official timing uses `msprof-op`/`BasicInfo` with an integer repeat count of at
+least three. Every timing case contains exactly that many positive samples and
+its recomputable median. Its nonempty capture inventory is case-major and has
+exactly one row for every `(case, iteration)`: each row retains the resolved
+and declared selectors, the matching duration, and lowercase SHA-256 digests
+for both compact evidence and the msprof log. The reported overall geomean is
+recomputed from case medians; aggregate comparisons use relative and absolute
+tolerances of `1e-12`. A custom gate may implement this protocol. The runner
+does not claim a shipped A3 gate supports it until that gate itself adds the
+capability declaration and produces this evidence.
 
 ## Reproducible seed repositories
 

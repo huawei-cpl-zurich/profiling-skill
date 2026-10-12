@@ -131,6 +131,10 @@ compressed, hash-bound request in the retained job.
 The prepare response, including its candidate and durable session, is
 atomically checkpointed before tune. If the agent turn is interrupted, `resume`
 reuses that exact checkpoint and thread; it does not prepare a replacement.
+Source/configuration checks that the controller can perform run before that
+checkpoint. Invalid tune output becomes an explicit same-round candidate
+repair and discards the checkpoint; input-integrity and gate-contract failures
+are terminal rather than misleadingly resumable.
 
 A compatible host gate screens all options in that job across its ranked
 correctness and fusion cases using ordinary synchronized device timing.

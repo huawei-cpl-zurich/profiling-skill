@@ -54,6 +54,10 @@ class AgentInterrupted(RunnerError):
     pass
 
 
+class TuneRejected(RunnerError):
+    pass
+
+
 class PreflightFailure(ObservationLost):
     def __init__(self, phase: str, diagnostics: str):
         super().__init__(diagnostics)
@@ -763,13 +767,33 @@ class ExperimentCell:
             "max_configurations": MAX_AUTOTUNE_CONFIGURATIONS,
             "max_profiled_finalists": MAX_AUTOTUNE_FINALISTS,
         }
-        tuned = self.agent.tune(request)
+        try:
+            tuned = self.agent.tune(request)
+        except AgentInterrupted:
+            raise
+        except RunnerError as exc:
+            raise TuneRejected(str(exc)) from exc
         self._verify_task_snapshot(state)
-        plan = materialize_autotune(prepared["candidate"], tuned.get("configurations"))
+        try:
+            plan = materialize_autotune(prepared["candidate"], tuned.get("configurations"))
+        except RunnerError as exc:
+            raise TuneRejected(str(exc)) from exc
         plan["optimization_round"] = state["round"]
+        raw = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        if len(gzip.compress(raw, mtime=0)) > MAX_AUTOTUNE_BUNDLE_BYTES:
+            raise TuneRejected("compressed autotune request is too large")
         return plan
 
     def _checkpoint_prepared(self, state: dict, prepared: dict) -> dict:
+        candidate = prepared.get("candidate")
+        if not isinstance(candidate, str):
+            raise RunnerError("autotune prepare result requires candidate source")
+        if len(candidate.encode()) > MAX_CANDIDATE_BYTES:
+            raise RunnerError(f"candidate is too large ({len(candidate.encode())} bytes)")
+        commands = prepared.get("commands")
+        if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
+            raise RunnerError("candidate commands must be a string list")
+        _autotune_assignment(candidate)
         session = prepared.get("session_id")
         if not isinstance(session, str) or not session:
             raise RunnerError("autotune prepare result requires a durable session_id")
@@ -801,6 +825,25 @@ class ExperimentCell:
             return state, plan
         except AgentInterrupted as exc:
             state.update(status="tune_pending", tune_diagnostics=str(exc))
+            return self._save(state), None
+        except TuneRejected as exc:
+            state["candidate_repairs"] += 1
+            state.update(
+                status="candidate_failure", candidate_diagnostics=str(exc),
+                prior_candidate=prepared["candidate"],
+                prior_result={
+                    "outcome": "candidate_failure", "phase": "tune",
+                    "diagnostics": str(exc),
+                },
+                prior_attempt=None,
+            )
+            state.pop("prepared_checkpoint", None)
+            state.pop("tune_diagnostics", None)
+            return self._save(state), None
+        except RunnerError as exc:
+            state.update(status="input_integrity_failure", diagnostics=str(exc))
+            state.pop("prepared_checkpoint", None)
+            state.pop("tune_diagnostics", None)
             return self._save(state), None
 
     def _preflight(self) -> None:
@@ -1085,7 +1128,16 @@ class ExperimentCell:
         if outcome == "success":
             autotune = self._attempt_autotune_request(attempt)
             if autotune is not None:
-                self._validate_autotune_success(autotune, result)
+                try:
+                    self._validate_autotune_success(autotune, result)
+                except RunnerError as exc:
+                    state.pop("pending_attempt", None)
+                    state.update(
+                        status="gate_contract_failure", last_outcome=outcome,
+                        gate_diagnostics=str(exc),
+                    )
+                    self._save(state)
+                    raise
             state["status"] = "analyzing"
             self._save(state)
             return self._analyze(state, attempt, prepared, result)
@@ -1234,7 +1286,9 @@ class ExperimentCell:
             raise RunnerError("cell has pending tune work; use resume")
         if state.get("pending_attempt"):
             raise RunnerError("cell has pending work; use resume")
-        if state["status"] in {"complete", "billed_checks_exhausted"} or self._budget_exhausted(state):
+        if state["status"] in {
+                "complete", "billed_checks_exhausted", "gate_contract_failure",
+                "input_integrity_failure"} or self._budget_exhausted(state):
             return state
         if self._checks_exhausted(state):
             return self._finish_billed_checks(state)
@@ -1267,6 +1321,13 @@ class ExperimentCell:
                     state, autotune_request = self._pending_tune(state, prepared)
                     if state["status"] == "tune_pending":
                         return state
+                    if state["status"] == "candidate_failure":
+                        if self._budget_exhausted(state):
+                            return state
+                        prepared = None
+                        continue
+                    if state["status"] == "input_integrity_failure":
+                        return state
                 else:
                     autotune_request = None
             state = self._attempt(state, prepared, autotune_request)
@@ -1297,6 +1358,10 @@ class ExperimentCell:
             prepared = self._load_prepared_checkpoint(state)
             state, autotune_request = self._pending_tune(state, prepared)
             if state["status"] == "tune_pending":
+                return state
+            if state["status"] == "candidate_failure":
+                return state
+            if state["status"] == "input_integrity_failure":
                 return state
             state.pop("tune_diagnostics", None)
             return self._attempt(state, prepared, autotune_request)

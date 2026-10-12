@@ -1044,6 +1044,77 @@ def test_autotune_restart_after_atomic_prepare_state_write_reuses_exact_session(
     assert len(remote.submitted) == 1
 
 
+@pytest.mark.parametrize("invalid_source", [
+    "KERNEL = 'missing config'\n",
+    "AUTOTUNE_CONFIG = dict(BLOCK=32)\n",
+])
+def test_invalid_prepared_autotune_source_stays_ready_for_replacement_prepare(
+        tmp_path, invalid_source):
+    rejected = evidence("rejected")
+    rejected.update(candidate=invalid_source, session_id="rejected-session")
+    repaired = evidence("repaired")
+    repaired.update(candidate=autotune_candidate(), session_id="repair-session")
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([rejected, repaired])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+
+    with pytest.raises(runner.RunnerError, match="AUTOTUNE_CONFIG"):
+        cell.run()
+    retained = cell._state()
+    assert retained["status"] == "ready" and "prepared_checkpoint" not in retained
+    assert not agent.tunes and not remote.submitted
+
+    assert cell.run()["status"] == "complete"
+    assert len(agent.requests) == 2 and len(agent.tunes) == 1
+    assert agent.tunes[0]["session_id"] == "repair-session"
+    assert len(remote.submitted) == 1
+
+
+def test_invalid_tune_output_becomes_same_round_candidate_repair(tmp_path):
+    first = evidence("first")
+    second = evidence("second")
+    first["candidate"] = second["candidate"] = autotune_candidate()
+
+    class RepairingAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            if len(self.tunes) == 1:
+                return {"configurations": [
+                    {"id": "invalid", "parameters": {"UNKNOWN": 1},
+                     "hypothesis": "invalid output"},
+                ]}
+            return {"configurations": [
+                {"id": "block-64", "parameters": {"BLOCK": 64},
+                 "hypothesis": "valid repair"},
+            ]}
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = RepairingAgent([first, second])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+
+    completed = cell.run()
+    assert completed["status"] == "complete" and completed["round"] == 2
+    assert len(agent.requests) == len(agent.tunes) == 2
+    assert "undeclared" in agent.requests[1]["candidate_diagnostics"]
+    assert agent.requests[1]["round"] == 1
+    assert len(remote.submitted) == 1
+
+
 def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
     prepared = evidence("structural")
     prepared["candidate"] = autotune_candidate()
@@ -1071,6 +1142,11 @@ def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
     )
     with pytest.raises(runner.RunnerError, match="one to three"):
         cell.run()
+    failed = cell._state()
+    assert failed["status"] == "gate_contract_failure"
+    assert "pending_attempt" not in failed
+    assert cell.run()["status"] == "gate_contract_failure"
+    assert len(cell.remote.submitted) == 1
 
 
 def test_autotune_success_rejects_a_result_from_another_round(tmp_path):

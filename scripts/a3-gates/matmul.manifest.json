@@ -1,0 +1,1 @@
+{"schema":"profiling-skill/candidate-kernel/v2","kernel_name":"streaming_matmul_add_kernel_mix_aic","entrypoint":"streaming_matmul_add_kernel","fusion":{"schema_version":1,"mode":"single-logical-launch","complete_operator":true}}

@@ -61,6 +61,23 @@ def config(tmp_path, **updates):
     return value
 
 
+def campaign_gate_config(tmp_path, **updates):
+    bundle = tmp_path / "a3-gate.tar"
+    bundle.write_bytes(b"host bundle")
+    manifest = tmp_path / "candidate.manifest.json"
+    manifest.write_text(json.dumps({
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "streaming_matmul_add_kernel_mix_aic",
+        "entrypoint": "streaming_matmul_add_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }))
+    return config(
+        tmp_path, terminal_gate_bundle_path=str(bundle),
+        candidate_manifest_path=str(manifest), **updates,
+    )
+
+
 def evidence(label="v1"):
     return {
         "candidate": f"KERNEL = {label!r}\n",
@@ -145,6 +162,105 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
     assert (cell.path / "terminal-gate.sh").read_text() == 'python "$CANDIDATE_PATH"\n'
     assert state["billed_checks_used"] == 0
     assert state["task_sha256"] is None and not (cell.repo / "TASK.md").exists()
+
+
+def test_campaign_gate_init_is_device_neutral_and_inputs_are_snapshotted(tmp_path):
+    cfg = campaign_gate_config(tmp_path)
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    state = cell.init()
+    source_bundle = Path(cfg["terminal_gate_bundle_path"])
+    source_manifest = Path(cfg["candidate_manifest_path"])
+    assert "physical_device" not in state
+    assert state["gate_bundle_sha256"] == hashlib.sha256(source_bundle.read_bytes()).hexdigest()
+    assert state["candidate_manifest_sha256"] == hashlib.sha256(
+        source_manifest.read_bytes()
+    ).hexdigest()
+
+    gate = (
+        'test "$ASCEND_RT_VISIBLE_DEVICES" = 3\n'
+        'test "$ASCEND_DEVICE_ID" = 0\n'
+        'test "$EXPERIMENT_ROUND" = 4\n'
+        'test "$(cat "$TERMINAL_GATE_BUNDLE_PATH")" = "host bundle"\n'
+        'python - "$CANDIDATE_MANIFEST_PATH" <<\'PY\'\n'
+        'import json,sys\n'
+        'assert json.load(open(sys.argv[1]))["entrypoint"] == "streaming_matmul_add_kernel"\n'
+        'PY\n'
+        'python "$CANDIDATE_PATH"\n'
+    )
+    script = tmp_path / "materialized.sh"
+    script.write_text(runner.ExperimentCell._script(
+        'print("materialized")\n', gate, bundle=source_bundle.read_bytes(),
+        manifest=source_manifest.read_bytes(), physical_device=3, round_number=4,
+    ))
+    result = subprocess.run(["bash", str(script)], text=True, capture_output=True, check=True)
+    assert result.stdout == "materialized\n"
+
+
+@pytest.mark.parametrize(
+    "updates,message",
+    [
+        ({"candidate_manifest_path": None}, "require terminal_gate_bundle_path"),
+        ({"terminal_gate_bundle_path": None}, "require terminal_gate_bundle_path"),
+    ],
+)
+def test_campaign_gate_inputs_fail_closed(tmp_path, updates, message):
+    cfg = campaign_gate_config(tmp_path)
+    cfg.update(updates)
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    with pytest.raises(runner.RunnerError, match=message):
+        cell.init()
+
+
+@pytest.mark.parametrize("physical_device", [None, -1, True, "2"])
+def test_campaign_run_requires_valid_launch_device_before_remote_work(
+        tmp_path, physical_device):
+    cfg = campaign_gate_config(tmp_path)
+    remote, agent = Remote([]), Agent()
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, agent, remote)
+    cell.init()
+    if physical_device is not None:
+        cell.config["physical_device"] = physical_device
+    with pytest.raises(runner.RunnerError, match="physical_device.*run time"):
+        cell.run()
+    assert not remote.preflights and not remote.submitted and not agent.requests
+
+
+def test_campaign_manifest_rejects_unrelated_selector(tmp_path):
+    cfg = campaign_gate_config(tmp_path)
+    path = Path(cfg["candidate_manifest_path"])
+    value = json.loads(path.read_text())
+    value["kernel_name"] = "unrelated_kernel"
+    path.write_text(json.dumps(value))
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    with pytest.raises(runner.RunnerError, match="declared entrypoint"):
+        cell.init()
+
+
+@pytest.mark.parametrize("filename", ["terminal-gate-bundle.tar", "candidate-manifest.json"])
+def test_campaign_gate_snapshot_drift_blocks_dispatch(tmp_path, filename):
+    cfg = campaign_gate_config(tmp_path)
+    remote = Remote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), remote)
+    cell.init()
+    (cell.path / filename).chmod(0o600)
+    (cell.path / filename).write_bytes(b"drift")
+    with pytest.raises(runner.RunnerError, match="changed after initialization"):
+        cell.run()
+    assert not remote.preflights and not remote.submitted
+
+
+def test_campaign_round_commit_retains_contract_and_bundle_digest(tmp_path):
+    cfg = campaign_gate_config(tmp_path, rounds=1)
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([success()]))
+    cell.init()
+    cell.config["physical_device"] = 3
+    assert cell.run()["status"] == "complete"
+    evidence_dir = cell.repo / "rounds/01"
+    assert json.loads((evidence_dir / "candidate-manifest.json").read_text())["schema"].endswith("/v2")
+    assert (evidence_dir / "terminal-gate-bundle.sha256").read_text().strip() == (
+        cell._state()["gate_bundle_sha256"]
+    )
+    assert json.loads((evidence_dir / "inputs.json").read_text())["physical_device"] == 3
 
 
 def test_init_copies_hash_bound_canonical_skill_alias_and_private_auth(tmp_path):
@@ -499,13 +615,13 @@ def test_proven_pre_dispatch_failure_preserves_candidate_without_billing(tmp_pat
 def test_initial_and_repair_requests_include_exact_candidate_contract(tmp_path):
     failed = {"outcome": "candidate_failure", "diagnostics": "compile failed"}
     agent = Agent([evidence("initial"), evidence("repair")])
-    cell = initialized(tmp_path, Remote([failed, success()]), agent, rounds=1)
+    cell = runner.ExperimentCell(
+        tmp_path / "runs", campaign_gate_config(tmp_path, rounds=1),
+        agent, Remote([failed, success()]),
+    )
+    cell.init()
+    cell.config["physical_device"] = 0
     contract = candidate_contract()
-    manifest = cell.path / "candidate-manifest.json"
-    manifest.write_text(json.dumps(contract))
-    state = cell._state()
-    state["candidate_manifest_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
-    cell._save(state)
 
     completed = cell.run()
 

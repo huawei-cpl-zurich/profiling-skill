@@ -1,4 +1,3 @@
-import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -84,7 +83,7 @@ def test_accepts_one_complete_mixed_core_launch_over_every_case():
         ),
         (
             lambda row: row["operators"][0].update(entrypoint="output_cast"),
-            "unrelated entrypoint",
+            "entrypoint mismatch",
         ),
         (
             lambda row: row.update(output_launch_id="reference-output"),
@@ -108,6 +107,18 @@ def test_rejects_missing_duplicate_or_unrequested_case_evidence():
         contract.validate_fusion_evidence(
             manifest(), [case_evidence(3), case_evidence(3)], expected_cases=[3]
         )
+
+
+def test_entrypoint_mismatch_names_expected_observed_and_selector():
+    evidence = case_evidence(3, components=("aiv",))
+    evidence["operators"][0]["entrypoint"] = "accidental_kernel"
+    with pytest.raises(contract.FusionContractError) as failure:
+        contract.validate_fusion_evidence(manifest(), [evidence], expected_cases=[3])
+    assert str(failure.value) == (
+        "Triton launch entrypoint mismatch: expected='complete_kernel'; "
+        "observed=['accidental_kernel']; "
+        "kernel_name selector='complete_kernel_mix_aiv'"
+    )
 
 
 @pytest.mark.parametrize(

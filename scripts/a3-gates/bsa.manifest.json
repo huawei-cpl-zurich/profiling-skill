@@ -1,0 +1,1 @@
+{"schema":"profiling-skill/candidate-kernel/v2","kernel_name":"block_sparse_attention_kernel","entrypoint":"block_sparse_attention_kernel","fusion":{"schema_version":1,"mode":"single-logical-launch","complete_operator":true}}

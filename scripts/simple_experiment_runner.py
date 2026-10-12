@@ -22,6 +22,8 @@ from typing import Callable
 GLOBAL_CPL_REMOTE = Path.home() / ".agents/skills/remote-access/scripts/cpl-remote"
 RESULT_SCHEMA = "simple-experiment-result/v1"
 MAX_CANDIDATE_BYTES = 1_048_576
+MAX_GATE_BUNDLE_BYTES = 8 * 1_048_576
+MAX_MANIFEST_BYTES = 64 * 1024
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AGENT_ENV_ALLOWLIST = {
     "PATH", "LANG", "LC_ALL", "LC_CTYPE", "SSL_CERT_FILE", "SSL_CERT_DIR",
@@ -62,6 +64,13 @@ def _load_fusion_contract():
 
 
 FUSION_CONTRACT = _load_fusion_contract()
+
+
+def _validate_candidate_manifest(value: object) -> None:
+    try:
+        FUSION_CONTRACT.validate_manifest(value)
+    except FUSION_CONTRACT.FusionContractError as exc:
+        raise RunnerError(f"candidate manifest is invalid: {exc}") from exc
 
 
 def _write_json(path: Path, value: dict | list) -> None:
@@ -365,16 +374,42 @@ class ExperimentCell:
             raise RunnerError("agent_auth_path must not be empty")
         return content
 
-    def _immutable_inputs(self) -> tuple[Path, int, bytes | None]:
+    def _immutable_inputs(
+        self,
+    ) -> tuple[Path, int, bytes | None, bytes | None, bytes | None]:
         gate = Path(self.config.get("terminal_gate_path", "")).resolve()
         if not gate.is_file():
             raise RunnerError("terminal_gate_path must name an existing file")
         billed = self.config.get("billed_checks")
         if isinstance(billed, bool) or not isinstance(billed, int) or billed <= 0:
             raise RunnerError("billed_checks must be a positive integer")
+        bundle_value = self.config.get("terminal_gate_bundle_path")
+        manifest_value = self.config.get("candidate_manifest_path")
+        campaign_gate = bundle_value is not None or manifest_value is not None
+        bundle_content = manifest_content = None
+        if campaign_gate:
+            if not isinstance(bundle_value, str) or not isinstance(manifest_value, str):
+                raise RunnerError(
+                    "campaign gates require terminal_gate_bundle_path and candidate_manifest_path"
+                )
+            bundle, manifest = Path(bundle_value).resolve(), Path(manifest_value).resolve()
+            if not bundle.is_file() or bundle.is_symlink():
+                raise RunnerError("terminal_gate_bundle_path must name a regular file")
+            if not manifest.is_file() or manifest.is_symlink():
+                raise RunnerError("candidate_manifest_path must name a regular file")
+            bundle_content, manifest_content = bundle.read_bytes(), manifest.read_bytes()
+            if not bundle_content or len(bundle_content) > MAX_GATE_BUNDLE_BYTES:
+                raise RunnerError("terminal gate bundle is empty or too large")
+            if not manifest_content or len(manifest_content) > MAX_MANIFEST_BYTES:
+                raise RunnerError("candidate manifest is empty or too large")
+            try:
+                candidate_manifest = json.loads(manifest_content)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise RunnerError("candidate manifest must be valid UTF-8 JSON") from exc
+            _validate_candidate_manifest(candidate_manifest)
         configured_task = self.config.get("task_path")
         if configured_task is None:
-            return gate, billed, None
+            return gate, billed, None, bundle_content, manifest_content
         if not isinstance(configured_task, str) or not configured_task:
             raise RunnerError("task_path must name an existing UTF-8 file")
         task = Path(configured_task).resolve()
@@ -385,11 +420,26 @@ class ExperimentCell:
             task_content.decode()
         except UnicodeDecodeError as exc:
             raise RunnerError("task_path must name an existing UTF-8 file") from exc
-        return gate, billed, task_content
+        return gate, billed, task_content, bundle_content, manifest_content
+
+    def _launch_device(self, state: dict) -> int | None:
+        has_campaign_gate = state.get("gate_bundle_sha256") is not None
+        physical_device = self.config.get("physical_device")
+        if not has_campaign_gate:
+            if physical_device is not None:
+                raise RunnerError("physical_device requires a snapshotted campaign gate")
+            return None
+        if (isinstance(physical_device, bool) or not isinstance(physical_device, int)
+                or physical_device < 0):
+            raise RunnerError(
+                "physical_device must be supplied at run time as a non-negative integer"
+            )
+        return physical_device
 
     def _verify_task_snapshot(self, state: dict) -> None:
         expected = state.get("task_sha256")
         if expected is None:
+            self._verify_gate_snapshots(state)
             return
         task = self.repo / "TASK.md"
         if task.is_symlink() or not task.is_file():
@@ -397,13 +447,29 @@ class ExperimentCell:
         actual = hashlib.sha256(task.read_bytes()).hexdigest()
         if actual != expected:
             raise RunnerError("snapshotted TASK.md changed after initialization")
+        self._verify_gate_snapshots(state)
+
+    def _verify_gate_snapshots(self, state: dict) -> None:
+        for state_name, filename in (
+            ("gate_bundle_sha256", "terminal-gate-bundle.tar"),
+            ("candidate_manifest_sha256", "candidate-manifest.json"),
+        ):
+            expected = state.get(state_name)
+            if expected is None:
+                continue
+            retained = self.path / filename
+            if retained.is_symlink() or not retained.is_file():
+                raise RunnerError(f"snapshotted {filename} is missing or replaced")
+            if hashlib.sha256(retained.read_bytes()).hexdigest() != expected:
+                raise RunnerError(f"snapshotted {filename} changed after initialization")
 
     def init(self) -> dict:
         if self.path.exists():
             raise RunnerError(f"cell already exists: {self.path}")
         sources = self._skill_sources()
         auth_content = self._auth_content()
-        gate, billed_checks, task_content = self._immutable_inputs()
+        (gate, billed_checks, task_content, bundle_content,
+         manifest_content) = self._immutable_inputs()
         gate_content = gate.read_bytes()
         if not gate_content:
             raise RunnerError("terminal gate must not be empty")
@@ -443,11 +509,23 @@ class ExperimentCell:
             retained_gate = temporary / "terminal-gate.sh"
             retained_gate.write_bytes(gate_content)
             retained_gate.chmod(0o500)
+            bundle_sha256 = manifest_sha256 = None
+            if bundle_content is not None and manifest_content is not None:
+                retained_bundle = temporary / "terminal-gate-bundle.tar"
+                retained_bundle.write_bytes(bundle_content)
+                retained_bundle.chmod(0o400)
+                retained_manifest = temporary / "candidate-manifest.json"
+                retained_manifest.write_bytes(manifest_content)
+                retained_manifest.chmod(0o400)
+                bundle_sha256 = hashlib.sha256(bundle_content).hexdigest()
+                manifest_sha256 = hashlib.sha256(manifest_content).hexdigest()
             _write_json(temporary / "state.json", {
                 "status": "ready", "round": 1, "attempts": 0,
                 "infrastructure_failures": 0, "candidate_repairs": 0,
                 "billed_checks_limit": billed_checks, "billed_checks_used": 0,
                 "task_sha256": task_sha256,
+                "gate_bundle_sha256": bundle_sha256,
+                "candidate_manifest_sha256": manifest_sha256,
                 "skill_names": [name for name, _ in sources],
                 "skill_sha256": {name: _tree_sha256(source) for name, source in sources},
             })
@@ -503,7 +581,9 @@ class ExperimentCell:
         _write_json(path, result)
 
     @staticmethod
-    def _script(candidate: str, terminal_gate: str) -> str:
+    def _script(candidate: str, terminal_gate: str, *, bundle: bytes | None = None,
+                manifest: bytes | None = None, physical_device: int | None = None,
+                round_number: int = 1) -> str:
         if not isinstance(candidate, str) or not isinstance(terminal_gate, str):
             raise RunnerError("candidate and terminal gate must be strings")
         encoded = candidate.encode()
@@ -511,6 +591,30 @@ class ExperimentCell:
             raise RunnerError(f"candidate is too large ({len(encoded)} bytes)")
         payload = base64.b64encode(encoded).decode()
         gate_suffix = terminal_gate if terminal_gate.endswith("\n") else terminal_gate + "\n"
+        materialize = ""
+        if bundle is not None or manifest is not None or physical_device is not None:
+            if bundle is None or manifest is None or physical_device is None:
+                raise RunnerError("campaign gate inputs must be complete")
+            if (isinstance(physical_device, bool) or not isinstance(physical_device, int)
+                    or physical_device < 0):
+                raise RunnerError("physical_device must be a non-negative integer")
+            bundle_payload = base64.b64encode(bundle).decode()
+            manifest_payload = base64.b64encode(manifest).decode()
+            bundle_sha = hashlib.sha256(bundle).hexdigest()
+            manifest_sha = hashlib.sha256(manifest).hexdigest()
+            materialize = (
+                "base64 -d >\"$experiment_dir/terminal-gate-bundle.tar\" <<'SIMPLE_GATE_BUNDLE'\n"
+                f"{bundle_payload}\nSIMPLE_GATE_BUNDLE\n"
+                "base64 -d >\"$experiment_dir/candidate-manifest.json\" <<'SIMPLE_MANIFEST'\n"
+                f"{manifest_payload}\nSIMPLE_MANIFEST\n"
+                f"test \"$(sha256sum \"$experiment_dir/terminal-gate-bundle.tar\" | cut -d' ' -f1)\" = {bundle_sha}\n"
+                f"test \"$(sha256sum \"$experiment_dir/candidate-manifest.json\" | cut -d' ' -f1)\" = {manifest_sha}\n"
+                "export TERMINAL_GATE_BUNDLE_PATH=\"$experiment_dir/terminal-gate-bundle.tar\"\n"
+                "export CANDIDATE_MANIFEST_PATH=\"$experiment_dir/candidate-manifest.json\"\n"
+                f"export ASCEND_RT_VISIBLE_DEVICES={physical_device}\n"
+                "export ASCEND_DEVICE_ID=0\n"
+                f"export EXPERIMENT_ROUND={round_number}\n"
+            )
         return (
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             "experiment_dir=$(mktemp -d \"${TMPDIR:-/tmp}/simple-experiment.XXXXXX\")\n"
@@ -518,7 +622,7 @@ class ExperimentCell:
             "base64 -d >\"$experiment_dir/candidate.py\" <<'SIMPLE_CANDIDATE'\n"
             f"{payload}\nSIMPLE_CANDIDATE\n"
             "export CANDIDATE_PATH=\"$experiment_dir/candidate.py\"\n"
-            "cd \"$experiment_dir\"\n" + gate_suffix
+            + materialize + "cd \"$experiment_dir\"\n" + gate_suffix
         )
 
     @staticmethod
@@ -538,7 +642,15 @@ class ExperimentCell:
         if self._checks_exhausted(state):
             return self._finish_billed_checks(state)
         terminal_gate = (self.path / "terminal-gate.sh").read_text()
-        script_text = self._script(prepared.get("candidate"), terminal_gate)
+        bundle_path = self.path / "terminal-gate-bundle.tar"
+        manifest_path = self.path / "candidate-manifest.json"
+        physical_device = self._launch_device(state)
+        script_text = self._script(
+            prepared.get("candidate"), terminal_gate,
+            bundle=bundle_path.read_bytes() if bundle_path.is_file() else None,
+            manifest=manifest_path.read_bytes() if manifest_path.is_file() else None,
+            physical_device=physical_device, round_number=state["round"],
+        )
         request = self._request(state, "prepare")
         try:
             json.dumps(prepared)
@@ -550,6 +662,7 @@ class ExperimentCell:
         attempt.mkdir()
         _write_json(attempt / "request.json", request)
         _write_json(attempt / "agent-result.json", prepared)
+        _write_json(attempt / "launch.json", {"physical_device": physical_device})
         script = attempt / "run.sh"
         script.write_text(script_text)
         script.chmod(0o700)
@@ -653,10 +766,16 @@ class ExperimentCell:
 
     def _finalize(self, state: dict, attempt: Path, prepared: dict,
                   result: dict, analysis: dict) -> None:
+        launch_path = attempt / "launch.json"
+        launch = (json.loads(launch_path.read_text()) if launch_path.is_file()
+                  else {"physical_device": state.get("physical_device")})
         inputs = {"prompt": self.config["prompt"], "treatment": self.config["treatment"],
                   "allowed_skills": self.skill_names, "session_id": prepared.get("session_id"),
                   "billed_checks": state["billed_checks_limit"],
-                  "task_sha256": state.get("task_sha256")}
+                  "task_sha256": state.get("task_sha256"),
+                  "gate_bundle_sha256": state.get("gate_bundle_sha256"),
+                  "candidate_manifest_sha256": state.get("candidate_manifest_sha256"),
+                  "physical_device": launch.get("physical_device")}
         commands = "".join(json.dumps({"command": item}, sort_keys=True) + "\n"
                            for item in prepared["commands"])
         files = {
@@ -673,6 +792,9 @@ class ExperimentCell:
         }
         if state.get("task_sha256") is not None:
             files["TASK.md"] = (self.repo / "TASK.md").read_bytes()
+        if state.get("candidate_manifest_sha256") is not None:
+            files["candidate-manifest.json"] = (self.path / "candidate-manifest.json").read_bytes()
+            files["terminal-gate-bundle.sha256"] = state["gate_bundle_sha256"] + "\n"
         folder = self.repo / "rounds" / f"{state['round']:02d}"
         if folder.exists():
             actual = {path.name for path in folder.iterdir() if path.is_file()}
@@ -723,6 +845,7 @@ class ExperimentCell:
             return state
         if self._checks_exhausted(state):
             return self._finish_billed_checks(state)
+        self._launch_device(state)
         try:
             self._preflight()
         except ObservationLost:

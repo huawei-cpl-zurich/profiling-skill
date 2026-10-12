@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -104,8 +103,14 @@ def validate_fusion_evidence(
         if len(operators) == 0 or len(launch_ids) != 1 or any(
                 op.get("launch_id") not in launch_ids for op in operators):
             raise FusionContractError("case must execute exactly one logical Triton launch")
-        if any(op.get("entrypoint") != declaration["entrypoint"] for op in operators):
-            raise FusionContractError("Triton launch uses an unrelated entrypoint")
+        observed_entrypoints = sorted({str(op.get("entrypoint")) for op in operators})
+        if observed_entrypoints != [declaration["entrypoint"]]:
+            raise FusionContractError(
+                "Triton launch entrypoint mismatch: "
+                f"expected={declaration['entrypoint']!r}; "
+                f"observed={observed_entrypoints!r}; "
+                f"kernel_name selector={declaration['kernel_name']!r}"
+            )
         if any(op.get("component") not in {"aic", "aiv"} for op in operators):
             raise FusionContractError("Triton launch has an invalid compiler component")
         names = [op.get("name") for op in operators]

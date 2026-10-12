@@ -533,6 +533,17 @@ def test_logs_receipt_must_match_handle_and_target():
         runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote")).observe(handle)
 
 
+def test_observation_receipt_requires_explicit_target():
+    handle = "remote:bz-a3-1:job:9"
+
+    def invoke(command, **kwargs):
+        value = {"handle": handle, "state": "completed", "exit": 0}
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    with pytest.raises(runner.ObservationLost, match="observation.*identity"):
+        runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote")).observe(handle)
+
+
 def test_preflight_requires_run_observe_logs_and_records_receipts(tmp_path):
     calls = []
 
@@ -581,6 +592,23 @@ def test_preflight_rejects_alternate_status_vocabulary():
     with pytest.raises(runner.PreflightFailure) as failure:
         remote.preflight({"target": "bz-a3-1"})
     assert failure.value.phase == "preflight"
+
+
+@pytest.mark.parametrize("phase", ["capabilities", "preflight"])
+def test_preflight_receipts_require_explicit_target(phase):
+    def invoke(command, **kwargs):
+        if "capabilities" in command:
+            value = {"capabilities": {"run": True, "observe": True, "logs": True}}
+            if phase != "capabilities":
+                value["target"] = "bz-a3-1"
+        else:
+            value = {"state": "completed"}
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    remote = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    with pytest.raises(runner.PreflightFailure) as failure:
+        remote.preflight({"target": "bz-a3-1"})
+    assert failure.value.phase == phase
 
 
 @pytest.mark.parametrize("phase", ["capabilities", "preflight"])

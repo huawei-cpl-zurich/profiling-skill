@@ -90,7 +90,7 @@ class CplRemote:
         target = handle.split(":", 3)[1] if handle.count(":") >= 3 else ""
         actual_handle = receipt.get("handle")
         actual_target = receipt.get("target")
-        if actual_handle != handle or (actual_target is not None and actual_target != target):
+        if actual_handle != handle or actual_target != target:
             raise ObservationLost(f"cpl-remote {operation} receipt identity mismatch")
 
     def preflight(self, request: dict) -> dict:
@@ -99,7 +99,7 @@ class CplRemote:
             capabilities = self._call(["capabilities", target])
         except ObservationLost as exc:
             raise PreflightFailure("capabilities", str(exc)) from exc
-        if capabilities.get("target", target) != target:
+        if capabilities.get("target") != target:
             raise PreflightFailure("capabilities", "cpl-remote capabilities target mismatch")
         raw = capabilities.get("capabilities")
         if not isinstance(raw, dict):
@@ -113,7 +113,7 @@ class CplRemote:
         except ObservationLost as exc:
             raise PreflightFailure("preflight", str(exc)) from exc
         state = preflight.get("state")
-        if preflight.get("target", target) != target or state != "completed":
+        if preflight.get("target") != target or state != "completed":
             raise PreflightFailure("preflight", f"remote preflight failed: state={state}")
         return {"capabilities": capabilities, "preflight": preflight}
 

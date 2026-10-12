@@ -580,6 +580,66 @@ def test_uncertain_dispatch_consumes_check_before_transport_returns(tmp_path):
         cell.resume()
 
 
+def test_proven_pre_dispatch_failure_preserves_candidate_without_billing(tmp_path):
+    class FailedUpload(Remote):
+        def submit(self, request, script):
+            self.submitted.append((request, script.read_text()))
+            if len(self.submitted) == 1:
+                raise runner.PreDispatchFailure("upload unavailable")
+            return f"remote:{request['target']}:job:2"
+
+    remote, agent = FailedUpload([success()]), Agent()
+    cell = initialized(tmp_path, remote, agent, rounds=1)
+    state = cell.run()
+    assert state["status"] == "complete"
+    assert state["attempts"] == state["billed_checks_used"] == 1
+    assert len(agent.requests) == 1 and len(remote.submitted) == 2
+    archived = cell.path / "pre-dispatch/1"
+    assert json.loads((archived / "infrastructure.json").read_text())["dispatch_state"] == "not_dispatched"
+    assert json.loads((archived / "agent-result.json").read_text()) == evidence()
+
+
+def test_recover_legacy_e2big_checkpoint_without_rebuilding_candidate(tmp_path):
+    remote, agent = Remote([success()]), Agent()
+    cell = initialized(tmp_path, remote, agent)
+    attempt = cell.path / "attempts/1"
+    attempt.mkdir()
+    _prepared = evidence("retained")
+    (attempt / "agent-result.json").write_text(json.dumps(_prepared))
+    (attempt / "infrastructure.json").write_text(json.dumps({
+        "phase": "dispatch", "diagnostics": "error: [Errno 7] Argument list too long: 'ssh'",
+    }))
+    state = cell._state()
+    state.update(status="infrastructure_unknown", pending_attempt=1, attempts=1,
+                 billed_checks_used=1)
+    cell._save(state)
+
+    repaired = cell.recover()
+    assert repaired["status"] == "infrastructure_failure"
+    assert repaired["attempts"] == repaired["billed_checks_used"] == 0
+    assert not (cell.path / "attempts/1").exists()
+    assert (cell.path / "pre-dispatch/1/agent-result.json").is_file()
+    completed = cell.run()
+    assert completed["status"] == "ready" and completed["round"] == 2
+    assert not agent.requests
+    assert json.loads((cell.path / "attempts/1/agent-result.json").read_text()) == _prepared
+
+
+def test_recover_refuses_unknown_dispatch_without_proof(tmp_path):
+    cell = initialized(tmp_path, Remote([]))
+    attempt = cell.path / "attempts/1"
+    attempt.mkdir()
+    (attempt / "infrastructure.json").write_text(json.dumps({
+        "phase": "dispatch", "diagnostics": "observer disconnected",
+    }))
+    state = cell._state()
+    state.update(status="infrastructure_unknown", pending_attempt=1, attempts=1,
+                 billed_checks_used=1)
+    cell._save(state)
+    with pytest.raises(runner.RunnerError, match="not proven"):
+        cell.recover()
+
+
 def test_larger_billed_budget_preserves_candidate_repair(tmp_path):
     failed = {"outcome": "candidate_failure", "diagnostics": "compile"}
     cell = initialized(
@@ -816,7 +876,9 @@ def test_cpl_remote_adapter_uses_file_and_exact_handle(tmp_path, monkeypatch):
     def invoke(command, **kwargs):
         calls.append(command)
         handle = "remote:bz-a3-1:job:77"
-        if "run" in command:
+        if "upload" in command:
+            payload = {"target": "bz-a3-1", "state": "completed", "exit": 0}
+        elif "run" in command:
             payload = {"handle": handle, "target": "bz-a3-1", "state": "running"}
         elif "observe" in command:
             payload = {"handle": handle, "target": "bz-a3-1", "state": "completed", "exit": 0}
@@ -831,32 +893,63 @@ def test_cpl_remote_adapter_uses_file_and_exact_handle(tmp_path, monkeypatch):
     request = {"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}
     handle = adapter.submit(request, script)
     assert handle == "remote:bz-a3-1:job:77"
-    assert calls[0] == ["/global/cpl-remote", "--json", "run", "bz-a3-1", "--runtime", "cann", "--file", str(script), "--cwd", "/work"]
+    digest = hashlib.sha256(script.read_bytes()).hexdigest()
+    assert calls[0] == ["/global/cpl-remote", "--json", "upload", "bz-a3-1", str(script),
+                        f"/work/.simple-experiment-{digest}.sh"]
+    launcher = script.with_name("dispatch.sh")
+    assert calls[1] == ["/global/cpl-remote", "--json", "run", "bz-a3-1", "--runtime", "cann",
+                        "--file", str(launcher), "--cwd", "/work"]
+    assert script.read_text() not in launcher.read_text()
+    assert digest in launcher.read_text()
     assert adapter.observe(handle)["outcome"] == "success"
-    assert calls[1] == ["/global/cpl-remote", "--json", "observe", handle, "--wait"]
+    assert calls[2] == ["/global/cpl-remote", "--json", "observe", handle, "--wait"]
 
 
-def test_uppercase_remote_receipt_is_not_accepted():
+def test_uppercase_remote_receipt_is_not_accepted(tmp_path):
     def invoke(command, **kwargs):
-        value = {"REMOTE_HANDLE": "remote:bz-a3-1:job:77", "REMOTE_STATE": "running"}
+        value = ({"target": "bz-a3-1", "state": "completed", "exit": 0}
+                 if "upload" in command else
+                 {"REMOTE_HANDLE": "remote:bz-a3-1:job:77", "REMOTE_STATE": "running"})
         return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
 
     adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    script = tmp_path / "run.sh"
+    script.write_text("true\n")
     with pytest.raises(runner.ObservationLost, match="durable handle"):
-        adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, Path("run.sh"))
+        adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, script)
 
 
 @pytest.mark.parametrize("receipt_target", [None, "bz-a3-2"])
-def test_submit_receipt_requires_explicit_matching_target(receipt_target):
+def test_submit_receipt_requires_explicit_matching_target(tmp_path, receipt_target):
     def invoke(command, **kwargs):
-        value = {"handle": "remote:bz-a3-1:job:77", "state": "running"}
-        if receipt_target is not None:
-            value["target"] = receipt_target
+        if "upload" in command:
+            value = {"target": "bz-a3-1", "state": "completed", "exit": 0}
+        else:
+            value = {"handle": "remote:bz-a3-1:job:77", "state": "running"}
+            if receipt_target is not None:
+                value["target"] = receipt_target
         return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
 
     adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    script = tmp_path / "run.sh"
+    script.write_text("true\n")
     with pytest.raises(runner.ObservationLost, match="matching durable handle"):
-        adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, Path("run.sh"))
+        adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, script)
+
+
+def test_upload_failure_is_proven_pre_dispatch(tmp_path):
+    def invoke(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command, 1, json.dumps({"target": "bz-a3-1", "state": "failed", "exit": 1}), ""
+        )
+
+    script = tmp_path / "run.sh"
+    script.write_text("true\n")
+    adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    with pytest.raises(runner.PreDispatchFailure, match="not confirmed"):
+        adapter.submit(
+            {"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, script
+        )
 
 
 def test_cpl_remote_returns_remote_compile_diagnostics(tmp_path):
@@ -965,14 +1058,18 @@ def test_preflight_requires_run_observe_logs_and_records_receipts(tmp_path):
     def invoke(command, **kwargs):
         calls.append(command)
         if "capabilities" in command:
-            value = {"target": "bz-a3-1", "capabilities": {"run": True, "observe": True, "logs": True}}
+            value = {"target": "bz-a3-1", "capabilities": {
+                "run": True, "observe": True, "logs": True, "upload": True,
+            }}
         else:
             value = {"target": "bz-a3-1", "state": "completed"}
         return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
 
     remote = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
     result = remote.preflight({"target": "bz-a3-1"})
-    assert result["capabilities"]["capabilities"] == {"run": True, "observe": True, "logs": True}
+    assert result["capabilities"]["capabilities"] == {
+        "run": True, "observe": True, "logs": True, "upload": True,
+    }
     assert calls == [
         ["/global/cpl-remote", "--json", "capabilities", "bz-a3-1"],
         ["/global/cpl-remote", "--json", "preflight", "bz-a3-1"],
@@ -985,7 +1082,7 @@ def test_cpl_remote_reports_failed_preflight_phase(phase):
         if "capabilities" in command:
             capabilities = ({"run": True, "observe": True}
                             if phase == "capabilities"
-                            else {"run": True, "observe": True, "logs": True})
+                            else {"run": True, "observe": True, "logs": True, "upload": True})
             value = {"target": "bz-a3-1", "state": "available", "capabilities": capabilities}
         else:
             value = {"target": "bz-a3-1", "state": "failed"}
@@ -999,7 +1096,9 @@ def test_cpl_remote_reports_failed_preflight_phase(phase):
 
 def test_preflight_rejects_alternate_status_vocabulary():
     def invoke(command, **kwargs):
-        value = ({"target": "bz-a3-1", "capabilities": {"run": True, "observe": True, "logs": True}}
+        value = ({"target": "bz-a3-1", "capabilities": {
+                    "run": True, "observe": True, "logs": True, "upload": True,
+                 }}
                  if "capabilities" in command else {"target": "bz-a3-1", "status": "ok"})
         return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
 
@@ -1013,7 +1112,9 @@ def test_preflight_rejects_alternate_status_vocabulary():
 def test_preflight_receipts_require_explicit_target(phase):
     def invoke(command, **kwargs):
         if "capabilities" in command:
-            value = {"capabilities": {"run": True, "observe": True, "logs": True}}
+            value = {"capabilities": {
+                "run": True, "observe": True, "logs": True, "upload": True,
+            }}
             if phase != "capabilities":
                 value["target"] = "bz-a3-1"
         else:
@@ -1070,10 +1171,11 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
     transport_state = tmp_path / "transport.json"
     client.write_text(
         "#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n"
-        f"p=Path({str(transport_state)!r}); s=json.loads(p.read_text()) if p.exists() else {{'observe':0,'run':0}}\n"
+        f"p=Path({str(transport_state)!r}); s=json.loads(p.read_text()) if p.exists() else {{'observe':0,'run':0,'upload':0}}\n"
         "a=sys.argv[2]; handle='remote:bz-a3-1:job:e2e'\n"
-        "if a=='capabilities': out={'target':'bz-a3-1','state':'available','capabilities':{'run':True,'observe':True,'logs':True}}\n"
+        "if a=='capabilities': out={'target':'bz-a3-1','state':'available','capabilities':{'run':True,'observe':True,'logs':True,'upload':True}}\n"
         "elif a=='preflight': out={'target':'bz-a3-1','state':'completed'}\n"
+        "elif a=='upload': s['upload']+=1; out={'target':'bz-a3-1','state':'completed','exit':0}\n"
         "elif a=='run': s['run']+=1; out={'target':'bz-a3-1','state':'running','handle':handle}\n"
         "elif a=='observe':\n"
         " s['observe']+=1; out={'target':'bz-a3-1','handle':handle,'state':'observation-unavailable' if s['observe']==1 else 'completed','exit':None if s['observe']==1 else 0}\n"
@@ -1119,4 +1221,4 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
     ).stdout
     assert retained_task == b"CLI task snapshot\n"
     assert cli("report")["rounds_completed"] == 1
-    assert json.loads(transport_state.read_text()) == {"observe": 2, "run": 1}
+    assert json.loads(transport_state.read_text()) == {"observe": 2, "run": 1, "upload": 1}

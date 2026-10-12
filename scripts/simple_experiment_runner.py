@@ -777,17 +777,14 @@ class ExperimentCell:
             json.dumps(prepared)
         except (TypeError, ValueError) as exc:
             raise RunnerError(f"prepared candidate is not JSON serializable: {exc}") from exc
-        _write_json(self.path / "prepared-checkpoint.json", {
-            "round": state["round"], "prepared": prepared,
-        })
-        state.update(status="tuning", session_id=session)
+        state.update(
+            status="tuning", session_id=session,
+            prepared_checkpoint={"round": state["round"], "prepared": prepared},
+        )
         return self._save(state)
 
     def _load_prepared_checkpoint(self, state: dict) -> dict:
-        path = self.path / "prepared-checkpoint.json"
-        if path.is_symlink() or not path.is_file():
-            raise RunnerError("retained prepared candidate is missing or replaced")
-        value = json.loads(path.read_text())
+        value = state.get("prepared_checkpoint")
         if (not isinstance(value, dict) or value.get("round") != state["round"]
                 or not isinstance(value.get("prepared"), dict)):
             raise RunnerError("retained prepared candidate is invalid")
@@ -928,8 +925,8 @@ class ExperimentCell:
         script.chmod(0o700)
         state.update(attempts=number, billed_checks_used=state["billed_checks_used"] + 1,
                      status="infrastructure_unknown", pending_attempt=number)
+        state.pop("prepared_checkpoint", None)
         self._save(state)
-        (self.path / "prepared-checkpoint.json").unlink(missing_ok=True)
         try:
             handle = self.remote.submit(request, script)
         except PreDispatchFailure as exc:

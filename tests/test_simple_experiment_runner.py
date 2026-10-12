@@ -988,7 +988,7 @@ def test_autotune_interruption_resumes_checkpointed_prepare_and_session(tmp_path
                        managed_autotune=True)
 
     interrupted = cell.run()
-    checkpoint = json.loads((cell.path / "prepared-checkpoint.json").read_text())
+    checkpoint = interrupted["prepared_checkpoint"]
     assert interrupted["status"] == "tune_pending"
     assert checkpoint == {"round": 1, "prepared": prepared}
     assert not remote.submitted and len(agent.requests) == 1
@@ -998,7 +998,50 @@ def test_autotune_interruption_resumes_checkpointed_prepare_and_session(tmp_path
     assert len(agent.requests) == 1 and len(agent.tunes) == 2
     assert [request["session_id"] for request in agent.tunes] == ["session-1"] * 2
     assert len(remote.submitted) == 1
-    assert not (cell.path / "prepared-checkpoint.json").exists()
+    assert "prepared_checkpoint" not in completed
+
+
+def test_autotune_restart_after_atomic_prepare_state_write_reuses_exact_session(
+        tmp_path, monkeypatch):
+    prepared = evidence("atomic-checkpoint")
+    prepared["candidate"] = autotune_candidate()
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_save = cell._save
+    interrupted = False
+
+    def interrupt_after_atomic_state_write(state):
+        nonlocal interrupted
+        value = original_save(state)
+        if state.get("status") == "tuning" and not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped after atomic state write")
+        return value
+
+    monkeypatch.setattr(cell, "_save", interrupt_after_atomic_state_write)
+    with pytest.raises(runner.RunnerError, match="after atomic state write"):
+        cell.run()
+
+    retained = json.loads(cell.state_path.read_text())
+    assert retained["status"] == "tuning"
+    assert retained["prepared_checkpoint"] == {"round": 1, "prepared": prepared}
+    assert len(agent.requests) == 1 and not agent.tunes and not remote.submitted
+
+    monkeypatch.setattr(cell, "_save", original_save)
+    completed = cell.resume()
+    assert completed["status"] == "complete"
+    assert len(agent.requests) == 1 and len(agent.tunes) == 1
+    assert agent.tunes[0]["session_id"] == prepared["session_id"]
+    assert len(remote.submitted) == 1
 
 
 def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):

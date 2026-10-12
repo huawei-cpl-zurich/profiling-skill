@@ -136,7 +136,7 @@ commit without rerunning the remote workload or duplicating the round commit.
 
 Before each new `run` invocation that may dispatch work, the runner records
 global `cpl-remote` `capabilities` and `preflight` receipts and requires `run`,
-`observe`, and `logs`. A failed probe is retained with its phase and diagnostics,
+`upload`, `observe`, and `logs`. A failed probe is retained with its phase and diagnostics,
 classified as infrastructure, and consumes neither a candidate attempt nor a
 round. Production execution uses only the user-wide global client, a named
 runtime, and a file-backed script.

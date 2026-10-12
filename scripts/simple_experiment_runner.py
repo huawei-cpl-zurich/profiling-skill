@@ -88,8 +88,8 @@ class CplRemote:
     @staticmethod
     def _identity(receipt: dict, handle: str, operation: str) -> None:
         target = handle.split(":", 3)[1] if handle.count(":") >= 3 else ""
-        actual_handle = receipt.get("handle") or receipt.get("REMOTE_HANDLE")
-        actual_target = receipt.get("target") or receipt.get("REMOTE_TARGET")
+        actual_handle = receipt.get("handle")
+        actual_target = receipt.get("target")
         if actual_handle != handle or (actual_target is not None and actual_target != target):
             raise ObservationLost(f"cpl-remote {operation} receipt identity mismatch")
 
@@ -101,8 +101,10 @@ class CplRemote:
             raise PreflightFailure("capabilities", str(exc)) from exc
         if capabilities.get("target", target) != target:
             raise PreflightFailure("capabilities", "cpl-remote capabilities target mismatch")
-        raw = capabilities.get("capabilities", capabilities.get("features", []))
-        available = {key for key, enabled in raw.items() if enabled} if isinstance(raw, dict) else set(raw)
+        raw = capabilities.get("capabilities")
+        if not isinstance(raw, dict):
+            raise PreflightFailure("capabilities", "capabilities must be a JSON object")
+        available = {key for key, enabled in raw.items() if enabled}
         missing = {"run", "observe", "logs"} - available
         if missing:
             raise PreflightFailure("capabilities", f"missing capabilities: {sorted(missing)}")
@@ -110,8 +112,8 @@ class CplRemote:
             preflight = self._call(["preflight", target])
         except ObservationLost as exc:
             raise PreflightFailure("preflight", str(exc)) from exc
-        state = preflight.get("state", preflight.get("status"))
-        if preflight.get("target", target) != target or state not in {"completed", "ok", "success"}:
+        state = preflight.get("state")
+        if preflight.get("target", target) != target or state != "completed":
             raise PreflightFailure("preflight", f"remote preflight failed: state={state}")
         return {"capabilities": capabilities, "preflight": preflight}
 
@@ -120,7 +122,7 @@ class CplRemote:
             "run", request["target"], "--runtime", request["runtime"],
             "--file", str(script), "--cwd", request["remote_workspace"],
         ])
-        handle = receipt.get("handle") or receipt.get("REMOTE_HANDLE")
+        handle = receipt.get("handle")
         if not isinstance(handle, str) or not handle.startswith(f"remote:{request['target']}:job:"):
             raise ObservationLost("cpl-remote dispatch returned no matching durable handle")
         return handle
@@ -128,12 +130,12 @@ class CplRemote:
     def _logs(self, handle: str, stream: str) -> str:
         receipt = self._call(["logs", handle, "--stream", stream, "--tail", "10000"])
         self._identity(receipt, handle, "logs")
-        return str(receipt.get("content") or receipt.get("REMOTE_CONTENT") or "")
+        return str(receipt.get("content") or "")
 
     def observe(self, handle: str) -> dict:
         receipt = self._call(["observe", handle, "--wait"])
         self._identity(receipt, handle, "observation")
-        state = receipt.get("state") or receipt.get("REMOTE_STATE")
+        state = receipt.get("state")
         if state not in {"completed", "failed", "cancelled", "missing"}:
             raise ObservationLost(f"remote observation is nonterminal: {state}")
         stdout, stderr = self._logs(handle, "stdout"), self._logs(handle, "stderr")
@@ -143,7 +145,7 @@ class CplRemote:
         except json.JSONDecodeError:
             envelope = None
         valid = isinstance(envelope, dict) and envelope.get("schema") == RESULT_SCHEMA
-        exit_code = receipt.get("exit", receipt.get("REMOTE_EXIT"))
+        exit_code = receipt.get("exit")
         if valid and envelope.get("outcome") == "success" and state == "completed" and exit_code == 0:
             return {**envelope, "stdout": stdout, "stderr": stderr}
         if valid and envelope.get("outcome") in {"candidate_failure", "infrastructure_failure"}:
@@ -190,7 +192,7 @@ class SubprocessAgent:
     def prepare(self, request: dict) -> dict:
         value = self._invoke(request)
         required = {"candidate", "script_fragment", "commands"}
-        if not required <= value.keys() or not (value.get("hypothesis") or value.get("reasoning")):
+        if not required <= value.keys() or not isinstance(value.get("hypothesis"), str):
             raise RunnerError("agent prepare result is incomplete")
         if (not isinstance(value["candidate"], str)
                 or not isinstance(value["script_fragment"], str)
@@ -331,7 +333,8 @@ class ExperimentCell:
         script_text = self._script(prepared.get("candidate"), prepared.get("script_fragment"))
         request = self._request(state, "prepare")
         try:
-            json.dumps(prepared); json.dumps(request)
+            json.dumps(prepared)
+            json.dumps(request)
         except (TypeError, ValueError) as exc:
             raise RunnerError(f"candidate evidence is not JSON serializable: {exc}") from exc
         number = state["attempts"] + 1
@@ -424,7 +427,7 @@ class ExperimentCell:
             "retrieved-knowledge.json": json.dumps(prepared.get("retrieved_knowledge", []), indent=2, sort_keys=True) + "\n",
             "result.json": json.dumps(result, indent=2, sort_keys=True) + "\n",
             "inputs.json": json.dumps(inputs, indent=2, sort_keys=True) + "\n",
-            "hypothesis.md": str(prepared.get("hypothesis") or prepared.get("reasoning")).rstrip() + "\n",
+            "hypothesis.md": prepared["hypothesis"].rstrip() + "\n",
             "reasoning.md": analysis["reasoning"].rstrip() + "\n",
             "postmortem.md": analysis["postmortem"].rstrip() + "\n",
         }

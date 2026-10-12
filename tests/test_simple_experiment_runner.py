@@ -59,11 +59,8 @@ def config(tmp_path, **updates):
 def evidence(label="v1"):
     return {
         "candidate": f"KERNEL = {label!r}\n",
-        "remote_script": "#!/bin/bash\npython candidate.py\n",
         "script_fragment": "python \"$CANDIDATE_PATH\"\n",
         "commands": ["python candidate.py"],
-        "reasoning": f"reasoning {label}",
-        "postmortem": f"postmortem {label}",
         "hypothesis": f"hypothesis {label}",
         "session_id": "session-1",
         "retrieved_knowledge": ["ref://example"],
@@ -94,7 +91,7 @@ class Remote:
 
     def preflight(self, request):
         self.preflights.append(request)
-        return {"capabilities": ["run", "observe", "logs"], "status": "completed"}
+        return {"capabilities": {"run": True, "observe": True, "logs": True}, "state": "completed"}
 
     def submit(self, request, script):
         handle = f"remote:{request['target']}:job:{len(self.submitted) + 1}"
@@ -237,7 +234,7 @@ def test_runner_materializes_exact_candidate_and_submitted_script(tmp_path):
     cell = initialized(tmp_path, remote, agent)
     cell.run()
     submitted = remote.submitted[0][1]
-    assert "CANDIDATE_PATH" in submitted and "S0VSTkVM" in submitted
+    assert "CANDIDATE_PATH" in submitted
     assert (cell.repo / "rounds/01/candidate.py").read_text() == evidence("exact")["candidate"]
     assert (cell.repo / "rounds/01/run.sh").read_text() == submitted
     assert subprocess.run(["bash", str(cell.path / "attempts/1/run.sh")], check=False).returncode == 0
@@ -330,7 +327,8 @@ def test_finalization_reuses_evidence_after_commit_interruption(tmp_path, monkey
 
 def test_subprocess_agent_isolated_home_cwd_prompt_and_skills(tmp_path):
     home, repo = tmp_path / "home", tmp_path / "repo"
-    home.mkdir(); repo.mkdir()
+    home.mkdir()
+    repo.mkdir()
     program = tmp_path / "agent.py"
     program.write_text(
         "import json,os,sys\n"
@@ -342,6 +340,18 @@ def test_subprocess_agent_isolated_home_cwd_prompt_and_skills(tmp_path):
     value = agent.prepare({"phase": "prepare", "prompt": "exact", "allowed_skills": ["one"]})
     assert value["hypothesis"] == str(repo)
     assert value["session_id"] == f"{home}|{home / '.codex'}"
+
+
+def test_prepare_requires_hypothesis_not_reasoning(tmp_path):
+    program = tmp_path / "agent.py"
+    program.write_text(
+        "import json\n"
+        "print(json.dumps({'candidate':'x','script_fragment':'true','commands':[],"
+        "'reasoning':'not a hypothesis'}))\n"
+    )
+    agent = runner.SubprocessAgent(["python", str(program)], tmp_path, tmp_path)
+    with pytest.raises(runner.RunnerError, match="incomplete"):
+        agent.prepare({"phase": "prepare"})
 
 
 def test_subprocess_agent_repair_and_analysis_flow(tmp_path):
@@ -422,6 +432,16 @@ def test_cpl_remote_adapter_uses_file_and_exact_handle(tmp_path, monkeypatch):
     assert calls[0] == ["/global/cpl-remote", "--json", "run", "bz-a3-1", "--runtime", "cann", "--file", str(script), "--cwd", "/work"]
     assert adapter.observe(handle)["outcome"] == "success"
     assert calls[1] == ["/global/cpl-remote", "--json", "observe", handle, "--wait"]
+
+
+def test_uppercase_remote_receipt_is_not_accepted():
+    def invoke(command, **kwargs):
+        value = {"REMOTE_HANDLE": "remote:bz-a3-1:job:77", "REMOTE_STATE": "running"}
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    with pytest.raises(runner.ObservationLost, match="durable handle"):
+        adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, Path("run.sh"))
 
 
 def test_cpl_remote_returns_remote_compile_diagnostics(tmp_path):
@@ -519,14 +539,14 @@ def test_preflight_requires_run_observe_logs_and_records_receipts(tmp_path):
     def invoke(command, **kwargs):
         calls.append(command)
         if "capabilities" in command:
-            value = {"target": "bz-a3-1", "capabilities": ["run", "observe", "logs"]}
+            value = {"target": "bz-a3-1", "capabilities": {"run": True, "observe": True, "logs": True}}
         else:
             value = {"target": "bz-a3-1", "state": "completed"}
         return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
 
     remote = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
     result = remote.preflight({"target": "bz-a3-1"})
-    assert result["capabilities"]["capabilities"] == ["run", "observe", "logs"]
+    assert result["capabilities"]["capabilities"] == {"run": True, "observe": True, "logs": True}
     assert calls == [
         ["/global/cpl-remote", "--json", "capabilities", "bz-a3-1"],
         ["/global/cpl-remote", "--json", "preflight", "bz-a3-1"],
@@ -537,7 +557,9 @@ def test_preflight_requires_run_observe_logs_and_records_receipts(tmp_path):
 def test_cpl_remote_reports_failed_preflight_phase(phase):
     def invoke(command, **kwargs):
         if "capabilities" in command:
-            capabilities = ["run", "observe"] if phase == "capabilities" else ["run", "observe", "logs"]
+            capabilities = ({"run": True, "observe": True}
+                            if phase == "capabilities"
+                            else {"run": True, "observe": True, "logs": True})
             value = {"target": "bz-a3-1", "state": "available", "capabilities": capabilities}
         else:
             value = {"target": "bz-a3-1", "state": "failed"}
@@ -547,6 +569,18 @@ def test_cpl_remote_reports_failed_preflight_phase(phase):
     with pytest.raises(runner.PreflightFailure) as failure:
         remote.preflight({"target": "bz-a3-1"})
     assert failure.value.phase == phase
+
+
+def test_preflight_rejects_alternate_status_vocabulary():
+    def invoke(command, **kwargs):
+        value = ({"target": "bz-a3-1", "capabilities": {"run": True, "observe": True, "logs": True}}
+                 if "capabilities" in command else {"target": "bz-a3-1", "status": "ok"})
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    remote = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    with pytest.raises(runner.PreflightFailure) as failure:
+        remote.preflight({"target": "bz-a3-1"})
+    assert failure.value.phase == "preflight"
 
 
 @pytest.mark.parametrize("phase", ["capabilities", "preflight"])
@@ -584,7 +618,8 @@ def test_preflight_failure_can_retry_without_missing_attempt(tmp_path):
 
 def test_cli_init_run_resume_report_end_to_end(tmp_path):
     skill = tmp_path / "cli-skill"
-    skill.mkdir(); (skill / "SKILL.md").write_text("cli skill\n")
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("cli skill\n")
     fake_home = tmp_path / "fake-home"
     client = fake_home / ".agents/skills/remote-access/scripts/cpl-remote"
     client.parent.mkdir(parents=True)

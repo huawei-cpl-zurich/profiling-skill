@@ -120,6 +120,19 @@ def success(us=12.5):
     return {"outcome": "success", "stdout": "PASS", "stderr": "", "profile_summary": {"duration_us": us}}
 
 
+def candidate_contract():
+    return {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "streaming_matmul_add_kernel_mix_aic",
+        "entrypoint": "streaming_matmul_add_kernel",
+        "fusion": {
+            "schema_version": 1,
+            "mode": "single-logical-launch",
+            "complete_operator": True,
+        },
+    }
+
+
 def test_init_creates_isolated_repo_and_branch(tmp_path):
     cell = initialized(tmp_path, Remote([]))
     assert cell.path == tmp_path / "runs" / "trial" / "a3-matmul-guarded"
@@ -481,6 +494,31 @@ def test_proven_pre_dispatch_failure_preserves_candidate_without_billing(tmp_pat
     archived = cell.path / "pre-dispatch/1"
     assert json.loads((archived / "infrastructure.json").read_text())["dispatch_state"] == "not_dispatched"
     assert json.loads((archived / "agent-result.json").read_text()) == evidence()
+
+
+def test_initial_and_repair_requests_include_exact_candidate_contract(tmp_path):
+    failed = {"outcome": "candidate_failure", "diagnostics": "compile failed"}
+    agent = Agent([evidence("initial"), evidence("repair")])
+    cell = initialized(tmp_path, Remote([failed, success()]), agent, rounds=1)
+    contract = candidate_contract()
+    manifest = cell.path / "candidate-manifest.json"
+    manifest.write_text(json.dumps(contract))
+    state = cell._state()
+    state["candidate_manifest_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    cell._save(state)
+
+    completed = cell.run()
+
+    assert completed["status"] == "complete"
+    assert len(agent.requests) == 2
+    assert [request["candidate_contract"] for request in agent.requests] == [
+        contract, contract,
+    ]
+    assert [request["prompt"] for request in agent.requests] == [
+        "Implement the exact requested kernel.\n",
+        "Implement the exact requested kernel.\n",
+    ]
+    assert agent.requests[1]["prior_result"] == failed
 
 
 @pytest.mark.parametrize("workspace", ["", "bad\npath", None])

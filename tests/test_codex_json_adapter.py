@@ -73,6 +73,35 @@ def test_prepare_invokes_isolated_codex_and_returns_thread(tmp_path):
     assert "same prompt" in call["prompt"]
 
 
+def test_prepare_prompt_directs_exact_candidate_contract_without_treatment_guidance(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    contract = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "streaming_matmul_add_kernel_mix_aic",
+        "entrypoint": "streaming_matmul_add_kernel",
+        "fusion": {
+            "schema_version": 1, "mode": "single-logical-launch",
+            "complete_operator": True,
+        },
+    }
+    request = {
+        "phase": "prepare", "prompt": "identical common prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [], "treatment": "guarded",
+        "candidate_contract": contract,
+    }
+
+    result, call = invoke(tmp_path, request)
+
+    assert result.returncode == 0, result.stderr
+    assert "define and launch exactly candidate_contract.entrypoint" in call["prompt"]
+    assert "Preserve candidate_contract.kernel_name" in call["prompt"]
+    assert "initial prepare and every same-round repair" in call["prompt"]
+    forwarded = json.loads(call["prompt"].split("REQUEST_JSON\n", 1)[1])
+    assert forwarded["candidate_contract"] == contract
+
+
 def test_analyze_resumes_exact_thread(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()

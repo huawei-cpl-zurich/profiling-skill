@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -48,6 +49,19 @@ class PreflightFailure(ObservationLost):
 
 class PreDispatchFailure(ObservationLost):
     """Failure proven to have occurred before a remote job was submitted."""
+
+
+def _load_fusion_contract():
+    path = Path(__file__).with_name("fully_fused_contract.py")
+    spec = importlib.util.spec_from_file_location("simple_runner_fusion_contract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load fusion contract: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+FUSION_CONTRACT = _load_fusion_contract()
 
 
 def _write_json(path: Path, value: dict | list) -> None:
@@ -460,6 +474,13 @@ class ExperimentCell:
             "prompt": self.config["prompt"], "treatment": self.config["treatment"],
             "allowed_skills": self.skill_names, "session_id": state.get("session_id"),
         }
+        if state.get("candidate_manifest_sha256") is not None:
+            manifest = self.path / "candidate-manifest.json"
+            try:
+                value = json.loads(manifest.read_text())
+                request["candidate_contract"] = FUSION_CONTRACT.validate_manifest(value)
+            except (OSError, json.JSONDecodeError, FUSION_CONTRACT.FusionContractError) as exc:
+                raise RunnerError(f"snapshotted candidate manifest is invalid: {exc}") from exc
         if state.get("prior_result") is not None:
             request.update(
                 candidate_diagnostics=state.get("candidate_diagnostics"),

@@ -3,7 +3,7 @@
 `scripts/profile_behavioral_gate.py` is a pure validator and aggregator for
 trusted launcher records. It does not launch agents, create workspaces,
 schedule or retry jobs, classify raw failures, or retain artifacts. The
-separate audited launcher owns Bubblewrap/auth isolation, opaque agent-visible
+separate isolated launcher owns Bubblewrap/auth isolation, opaque agent-visible
 paths, persistent sessions, remote observation, retry, and bounded retention.
 
 Run the validator only on a frozen artifact tree and launcher-produced records:
@@ -21,7 +21,7 @@ The command reads its three inputs and atomically writes only the report.
 ## Trust boundary
 
 The manifest pins a nonempty bounded text prompt artifact and its SHA-256, both
-skill trees, audited launcher, model/config,
+skill trees, isolated launcher, model/config,
 manual reviewer/config, allowed product targets, and four evidence cases (two A3 and two A5). Each case
 contains a byte-pinned compact JSON evidence reference, allowed target, valid
 durable handle, and bounded capture command/log. Rubrics are duplicate-free
@@ -82,5 +82,5 @@ strictly above current, and a trusted positive manual review with the pinned
 reviewer and nonempty notes for every successful acquisition and interpretation
 reasoning log in both arms. The report lists an attempt summary plus the exact
 prompt, evidence, command, log, reasoning, receipt, and manual-note references/hashes
-needed for audit. Live acceptance remains blocked until the audited launcher,
+needed for audit. Live acceptance remains blocked until the isolated launcher,
 product stack, and supported A5 profiling runtime are available.

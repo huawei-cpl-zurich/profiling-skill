@@ -50,7 +50,7 @@ but those tests exercised a fake executor rather than the live trust boundary.
 | A11 | Added live frozen-case attestations and unique acquisition captures | Prevent fixture fabrication or capture reuse | Capture tests |
 | A12 | Canonicalized rubrics as duplicate-free semantic sets and hardened all type boundaries | Preserve meaning across order while failing closed without tracebacks | Rubric/type tests |
 | A13 | Scored required rubric containment with pinned-review supersets and structured conflict rejection | Permit supported elaboration without dropping frozen claims or accepting incompatible saturation states | Missing, superset, unreviewed-extra, and conflict tests |
-| A14 | Aligned acquired evidence and payload validation with the audited launcher | Bind the selected target in the payload and the remote bytes to the retained artifact | Exact payload and remote-hash tests |
+| A14 | Aligned acquired evidence and payload validation with the isolated launcher | Bind the selected target in the payload and the remote bytes to the retained artifact | Exact payload and remote-hash tests |
 | A15 | Removed the post-dispatch handle from acquired evidence provenance | The remote evidence producer cannot access the broker-assigned durable handle; trusted outcomes bind and validate that handle independently | Exact acquired-provenance, outcome identity, and frozen-case tests |
 
 ## Complexity intentionally kept

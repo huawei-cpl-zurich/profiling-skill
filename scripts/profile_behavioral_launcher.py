@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run profiling behavioral agents behind the audited Bubblewrap boundary."""
+"""Run profiling behavioral agents behind an isolated Bubblewrap boundary."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def _sha(path: Path) -> str:
 
 
 def launcher_digest() -> str:
-    """Pin this adapter and the audited boundary implementation it inherits."""
+    """Pin this adapter and the isolation implementation it inherits."""
     value = hashlib.sha256()
     for path in (Path(__file__).resolve(), Path(__file__).with_name("production_launcher.py")):
         value.update(path.name.encode() + b"\0")
@@ -840,10 +840,10 @@ def broker_client(socket_path: Path, arguments: Sequence[str]) -> int:
 
 
 class BehavioralLauncher(ProductionLauncher):
-    """Specialize the audited production boundary for blinded behavioral gates."""
+    """Specialize the isolated process boundary for blinded behavioral gates."""
 
     def __init__(self, remote_command: Sequence[str], **kwargs):
-        super().__init__(["unused"], **kwargs)
+        super().__init__(**kwargs)
         self.remote_command = list(remote_command)
 
     def validate_request(self, request: dict) -> dict:

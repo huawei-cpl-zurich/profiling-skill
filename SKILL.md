@@ -8,6 +8,15 @@ description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascen
 Select the target before collecting or interpreting evidence. Product-specific
 metrics are not portable.
 
+## Run agent experiment campaigns
+
+Use `scripts/simple_experiment_runner.py` as the only supported experiment
+campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
+isolated Git-backed cell. Read [Simple experiment runner](docs/simple-experiment-runner.md)
+for its configuration, agent protocol, retained evidence, and recovery rules.
+Run separate cells concurrently at the orchestration layer; do not add a
+second scheduler, admission controller, receipt graph, or migration layer.
+
 ## Acquire live control evidence
 
 For generic Torch/Triton workload acquisition on `bz-a3-1`, `bz-a3-2`, or
@@ -92,12 +101,12 @@ do not silently substitute a convention from another coding skill. A contract
 probe should import and instantiate the candidate locally when that can be
 done without an accelerator.
 
-When a campaign grants one billed development check, enforce that limit in
-the controller. Use the check for the smallest representative case that can
+When an experiment grants one billed development check, enforce that limit in
+the runner. Use the check for the smallest representative case that can
 expose compilation or runtime errors, then let the agent repair files locally
-from the returned diagnostic. Invalid controller invocations may be rejected
-without billing, but they do not justify another device check. The host, not
-the candidate-writing agent, owns the final check across the complete case
+from the returned diagnostic. Malformed prepare responses are rejected before
+dispatch and without billing, but they do not justify another device check.
+The host, not the candidate-writing agent, owns the final check across the complete case
 set and records the candidate identity and durable job handle.
 
 Keep bulky compiler and runtime output beside the remote job. Return a compact
@@ -109,13 +118,13 @@ candidate failure.
 Classify failures by cause as well as dispatch state. Before a remote job
 exists, only transport, service, or host-environment failures are discardable
 infrastructure. Candidate-side validation, import, and submission failures
-reported by the controller or harness—including a reported missing
+reported by the host-owned terminal gate—including a reported missing
 submission—are counted candidate outcomes even when no handle was created.
 Do not infer validation that the harness does not perform. Once dispatch yields
 a durable handle, observe that same job.
 Count compilation, import, launch, runtime, correctness, and workload timeouts
 when the remote harness reports them as terminal candidate outcomes. A
-controller, transport, or observer timeout is not a candidate result: resume
+runner, transport, or observer timeout is not a candidate result: resume
 observation through the same handle, and never submit a duplicate merely
 because observation stopped.
 

@@ -242,7 +242,8 @@ def autotune_success(plan, winner="block-64", failed=()):
             "schema": runner.AUTOTUNE_RESULT_SCHEMA,
             "optimization_round": 1,
             "options": rows, "finalists": finalists,
-            "profiled_finalists": finalists, "winner_id": winner,
+            "profiled_finalists": finalists, "profile_failures": [],
+            "winner_id": winner,
             "winner_source_sha256": selected["source_sha256"],
             "winner_full_gate": {
                 "winner_id": winner,
@@ -632,16 +633,18 @@ def test_init_requires_existing_terminal_gate(tmp_path):
     assert not cell.path.exists()
 
 
-def test_autotune_rejects_legacy_shipped_gate_before_remote_dispatch(tmp_path):
-    shipped_gate = Path(__file__).parents[1] / "scripts/a3-gates/matmul.sh"
+@pytest.mark.parametrize("benchmark", ["matmul", "gdn", "bsa"])
+def test_autotune_accepts_managed_shipped_gate_without_remote_dispatch(
+    tmp_path, benchmark
+):
+    shipped_gate = Path(__file__).parents[1] / f"scripts/a3-gates/{benchmark}.sh"
     cfg = config(tmp_path, autotune=True, terminal_gate_path=str(shipped_gate))
     remote = Remote([])
     cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), remote)
 
-    with pytest.raises(runner.RunnerError, match="declaring managed-autotune/v1"):
-        cell.init()
+    state = cell.init()
 
-    assert not cell.path.exists()
+    assert state["status"] == "ready"
     assert not remote.preflights and not remote.submitted
 
 
@@ -1142,6 +1145,122 @@ def test_autotune_observation_resume_reuses_one_job_and_one_tune_phase(tmp_path)
     assert remote.observed == ["remote:bz-a3-1:job:1"] * 2
 
 
+def test_autotune_infrastructure_retry_round_trips_gate_checkpoint(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+    marker = tmp_path / "gate-runs.jsonl"
+    cfg = campaign_gate_config(
+        tmp_path, rounds=1, autotune=True, managed_autotune=True,
+        infrastructure_retries=2, billed_checks=4,
+    )
+    Path(cfg["terminal_gate_path"]).write_text(
+        runner.AUTOTUNE_GATE_CAPABILITY + "\n" + f"""python - <<'PY'
+import hashlib, json, os
+from pathlib import Path
+request = Path(os.environ["AUTOTUNE_REQUEST_PATH"])
+checkpoint_path = Path("gate-output/autotune-checkpoint.json")
+if checkpoint_path.is_file():
+    checkpoint = json.loads(checkpoint_path.read_text())
+    phase = "resumed"
+else:
+    checkpoint = {{
+        "schema": "{runner.AUTOTUNE_GATE_CHECKPOINT_SCHEMA}",
+        "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest(),
+        "optimization_round": int(os.environ["EXPERIMENT_ROUND"]),
+        "screens": {{"incumbent": {{"outcome": "success"}}}},
+        "profiles": {{"incumbent": {{"timing": {{"geomean_us": 4.0}}}}}},
+    }}
+    phase = "fresh"
+with Path({str(marker)!r}).open("a") as stream:
+    stream.write(json.dumps({{"phase": phase, "screens": len(checkpoint["screens"]),
+                             "profiles": len(checkpoint["profiles"])}}) + "\\n")
+print(json.dumps({{"schema": "{runner.RESULT_SCHEMA}",
+                  "outcome": "infrastructure_failure",
+                  "diagnostics": "retry checkpoint probe",
+                  "autotune_checkpoint": checkpoint}}))
+raise SystemExit(1)
+PY
+"""
+    )
+
+    class ExecutingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            if len(self.observed) == 2:
+                return {
+                    "outcome": "infrastructure_failure",
+                    "diagnostics": "device startup failed before gate execution",
+                }
+            script = self.submitted[len(self.observed) - 1][1]
+            run = subprocess.run(
+                ["bash"], input=script, text=True, capture_output=True, check=False,
+            )
+            envelope = json.loads(run.stdout.strip().splitlines()[-1])
+            return {**envelope, "stdout": run.stdout, "stderr": run.stderr}
+
+    agent = Agent([prepared])
+    remote = ExecutingRemote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, agent, remote)
+    cell.init()
+    cell.config["physical_device"] = 0
+    result = cell.run()
+
+    assert result["status"] == "infrastructure_failure" and result["round"] == 1
+    assert len(agent.requests) == len(agent.tunes) == 1
+    assert len(remote.submitted) == 3
+    assert [json.loads(line) for line in marker.read_text().splitlines()] == [
+        {"phase": "fresh", "screens": 1, "profiles": 1},
+        {"phase": "resumed", "screens": 1, "profiles": 1},
+    ]
+    assert json.loads(
+        (cell.path / "attempts/1/gate-autotune-checkpoint.json").read_text()
+    )["screens"] == {"incumbent": {"outcome": "success"}}
+    assert not (cell.path / "attempts/2/gate-autotune-checkpoint.json").exists()
+    assert json.loads(
+        (cell.path / "latest-gate-autotune-checkpoint.json").read_text()
+    )["profiles"] == {"incumbent": {"timing": {"geomean_us": 4.0}}}
+
+
+def test_autotune_infrastructure_retry_rejects_checkpoint_regression(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+    cfg = campaign_gate_config(
+        tmp_path, rounds=1, autotune=True, managed_autotune=True,
+        infrastructure_retries=2, billed_checks=4,
+    )
+
+    class RegressingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            request = cell.path / "attempts" / str(len(self.observed)) / "autotune-request.json"
+            request_value = json.loads(request.read_text())
+            request_bytes = json.dumps(
+                request_value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()
+            checkpoint = {
+                "schema": runner.AUTOTUNE_GATE_CHECKPOINT_SCHEMA,
+                "request_sha256": hashlib.sha256(request_bytes).hexdigest(),
+                "optimization_round": 1,
+                "screens": ({"incumbent": {"outcome": "success"}}
+                            if len(self.observed) == 1 else {}),
+                "profiles": {},
+            }
+            return {
+                "outcome": "infrastructure_failure", "diagnostics": "retry",
+                "autotune_checkpoint": checkpoint,
+            }
+
+    remote = RegressingRemote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent([prepared]), remote)
+    cell.init()
+    cell.config["physical_device"] = 0
+
+    with pytest.raises(runner.RunnerError, match="regressed retained progress"):
+        cell.run()
+    assert cell._state()["status"] == "gate_contract_failure"
+    assert len(remote.submitted) == 2
+
+
 def test_autotune_interruption_resumes_checkpointed_prepare_and_session(tmp_path):
     prepared = evidence("checkpointed")
     prepared["candidate"] = autotune_candidate()
@@ -1480,7 +1599,7 @@ def test_autotune_success_rejects_nonfastest_finalists_and_winner():
     retime_official(
         result["autotune_summary"]["finalist_profiles"]["incumbent"], 8.0,
     )
-    with pytest.raises(runner.RunnerError, match="fastest official"):
+    with pytest.raises(runner.RunnerError, match="first full-gate finalist"):
         runner.ExperimentCell._validate_autotune_success(plan, result)
 
 
@@ -1500,6 +1619,124 @@ def test_autotune_selection_ties_follow_request_order():
 
     selected, _ = runner.ExperimentCell._validate_autotune_success(plan, result)
     assert selected == plan["options"][0]["source"]
+
+
+def test_autotune_selection_uses_next_official_finalist_after_full_gate_failure():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(3)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    summary = result["autotune_summary"]
+    rejected = summary["finalist_profiles"]["v0"]
+    next_option = next(option for option in plan["options"] if option["id"] == "incumbent")
+    summary["winner_gate_failures"] = [{
+        "option_id": "v0", "source_sha256": rejected["source_sha256"],
+        "candidate_artifact_sha256": rejected["candidate_artifact_sha256"],
+        "outcome": "candidate_failure", "diagnostics": "full shape mismatch",
+        "commands": ["a3_terminal_gate full winner=v0"],
+    }]
+    summary["winner_id"] = "incumbent"
+    summary["winner_source_sha256"] = next_option["source_sha256"]
+    summary["winner_full_gate"].update(
+        winner_id="incumbent", source_sha256=next_option["source_sha256"],
+        candidate_artifact_sha256=next_option["source_sha256"],
+    )
+    rebind_winner_profile(result)
+
+    selected, accepted = runner.ExperimentCell._validate_autotune_success(plan, result)
+    assert selected == next_option["source"]
+    assert accepted["winner_gate_failures"][0]["option_id"] == "v0"
+
+
+def test_autotune_selection_accepts_bound_profile_failure_and_remaining_winner():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(3)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    summary = result["autotune_summary"]
+    failed = summary["finalist_profiles"].pop("incumbent")
+    summary["profiled_finalists"] = [
+        identifier for identifier in summary["profiled_finalists"]
+        if identifier != "incumbent"
+    ]
+    summary["profile_failures"] = [{
+        "option_id": "incumbent", "source_sha256": failed["source_sha256"],
+        "candidate_artifact_sha256": failed["candidate_artifact_sha256"],
+        "outcome": "candidate_failure", "diagnostics": "repeated launch failed",
+        "commands": ["batch_profile_a3 finalist=incumbent"],
+    }]
+
+    selected, accepted = runner.ExperimentCell._validate_autotune_success(plan, result)
+    assert selected == next(option["source"] for option in plan["options"]
+                            if option["id"] == "v0")
+    assert accepted["profile_failures"][0]["option_id"] == "incumbent"
+
+
+@pytest.mark.parametrize("mutation", ["missing", "identity", "overlap"])
+def test_autotune_selection_rejects_malformed_profile_failure(mutation):
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(3)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    summary = result["autotune_summary"]
+    failed = summary["finalist_profiles"].pop("incumbent")
+    summary["profiled_finalists"] = [
+        identifier for identifier in summary["profiled_finalists"]
+        if identifier != "incumbent"
+    ]
+    if mutation != "missing":
+        summary["profile_failures"] = [{
+            "option_id": "incumbent",
+            "source_sha256": ("0" * 64 if mutation == "identity"
+                              else failed["source_sha256"]),
+            "candidate_artifact_sha256": failed["candidate_artifact_sha256"],
+            "outcome": "candidate_failure", "diagnostics": "profile failed",
+            "commands": ["batch_profile_a3 finalist=incumbent"],
+        }]
+    if mutation == "overlap":
+        summary["profiled_finalists"].insert(0, "incumbent")
+
+    with pytest.raises(runner.RunnerError, match="profile failure|official timing"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def test_autotune_success_rejects_when_every_finalist_failed_full_gate():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(3)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    summary = result["autotune_summary"]
+    official_order = sorted(
+        summary["finalists"],
+        key=lambda identifier: (
+            summary["finalist_profiles"][identifier]["timing"]["geomean_us"],
+            summary["finalists"].index(identifier),
+        ),
+    )
+    summary["winner_gate_failures"] = [
+        {
+            "option_id": identifier,
+            "source_sha256": summary["finalist_profiles"][identifier]["source_sha256"],
+            "candidate_artifact_sha256": summary["finalist_profiles"][identifier][
+                "candidate_artifact_sha256"
+            ],
+            "outcome": "candidate_failure",
+            "diagnostics": "full gate failed",
+            "commands": [f"a3_terminal_gate full winner={identifier}"],
+        }
+        for identifier in official_order
+    ]
+
+    with pytest.raises(runner.RunnerError, match="no full-gate finalist"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
 
 
 @pytest.mark.parametrize("invalid_repeats", [None, True, 2, 3.0])
@@ -2076,6 +2313,26 @@ def test_explicit_failure_envelope_is_preserved_over_transport_exit():
     result = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote")).observe(handle)
     assert result["outcome"] == "candidate_failure"
     assert result["diagnostics"] == "compile"
+
+
+def test_infrastructure_envelope_preserves_autotune_checkpoint():
+    handle = "remote:bz-a3-1:job:checkpoint"
+    checkpoint = {"schema": runner.AUTOTUNE_GATE_CHECKPOINT_SCHEMA, "screens": {},
+                  "profiles": {}}
+    envelope = {"schema": runner.RESULT_SCHEMA, "outcome": "infrastructure_failure",
+                "diagnostics": "device unavailable", "autotune_checkpoint": checkpoint}
+
+    def invoke(command, **kwargs):
+        if "observe" in command:
+            value = {"handle": handle, "target": "bz-a3-1", "state": "failed", "exit": 1}
+        else:
+            content = json.dumps(envelope) if "stdout" in command else ""
+            value = {"handle": handle, "target": "bz-a3-1", "content": content}
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    result = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote")).observe(handle)
+    assert result["outcome"] == "infrastructure_failure"
+    assert result["autotune_checkpoint"] == checkpoint
 
 
 def test_logs_receipt_must_match_handle_and_target():

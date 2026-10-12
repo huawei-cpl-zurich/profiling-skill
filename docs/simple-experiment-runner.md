@@ -152,12 +152,23 @@ Candidate failures eliminate only their option. The three fastest successful
 options receive at least three repeated `msprof op` timings; every finalist
 profile binds its option ID, requested source SHA-256, exact executed artifact
 SHA-256, and concrete official timing object. Equal cheap timings retain
-request order. The fastest official finalist then receives the complete
-correctness/fusion gate and diagnostic pipe capture; equal recomputed official
-geomeans retain finalist order. Duplicate materialized sources are rejected
-before dispatch. Observation loss reuses the same durable handle, and
-completed option screens are checkpointed inside the retained job. Tuning
-options do not increment the optimization round.
+request order. A selected finalist that fails official profiling is retained
+as byte-bound `profile_failures` evidence and eliminated without profiling a
+replacement outside the original top three. Finalists with successful official
+timing then receive the complete correctness/fusion gate and
+diagnostic pipe capture in official timing order. A finalist that fails this
+complete gate is retained as byte-bound `winner_gate_failures` evidence and
+eliminated; the next finalist is tried, including the incumbent when it is
+among the three. The tuning attempt fails only when no finalist passes. Equal
+recomputed official geomeans retain finalist order. Duplicate materialized
+sources are rejected before dispatch. Observation loss reuses the same durable
+handle. For a terminal infrastructure failure, the gate returns its
+request-bound screen/profile checkpoint; the controller validates and
+atomically retains the latest monotonic progress, then materializes it in every
+later isolated remote attempt with the same request and round. An intervening
+failure before gate startup therefore cannot discard completed work. Neither
+kind of retry increments the
+optimization round or asks the agent to tune again.
 
 The selected winner is accepted only with concrete full-gate evidence. The
 result retains the stable `profiling-skill/a3-round-profile-summary/v1`

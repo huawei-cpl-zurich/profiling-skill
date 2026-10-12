@@ -1,3 +1,4 @@
+# simple-experiment-capability: managed-autotune/v1
 set -euo pipefail
 gate_root="$PWD/a3-gate"
 mkdir -p "$gate_root"
@@ -6,10 +7,15 @@ if ! tar -xf "$TERMINAL_GATE_BUNDLE_PATH" -C "$gate_root"; then
   exit 1
 fi
 gate_stdout="$PWD/a3-gate.stdout"
+autotune_args=()
+if test -n "${AUTOTUNE_REQUEST_PATH:-}"; then
+  autotune_args=(--autotune-request "$AUTOTUNE_REQUEST_PATH")
+fi
 set +e
 python "$gate_root/scripts/a3_terminal_gate.py" --root "$gate_root" \
   --candidate "$CANDIDATE_PATH" --manifest "$CANDIDATE_MANIFEST_PATH" \
   --benchmark bsa --output "$PWD/gate-output" --round "$EXPERIMENT_ROUND" \
+  "${autotune_args[@]}" \
   >"$gate_stdout"
 gate_rc=$?
 set -e

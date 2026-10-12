@@ -54,6 +54,7 @@ AUTOTUNE_BENCHMARK_CONTRACTS = {
 MAX_AUTOTUNE_BUNDLE_BYTES = 16 * 1_048_576
 AUTOTUNE_REQUEST_SCHEMA = "simple-experiment-autotune-request/v1"
 AUTOTUNE_RESULT_SCHEMA = "simple-experiment-autotune-result/v1"
+AUTOTUNE_GATE_CHECKPOINT_SCHEMA = "profiling-skill/a3-autotune-checkpoint/v1"
 AUTOTUNE_GATE_CAPABILITY = "# simple-experiment-capability: managed-autotune/v1"
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AUTOTUNE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -428,7 +429,8 @@ class CplRemote:
             diagnostics = f"contradictory success envelope: state={state}, exit={exit_code}; {diagnostics}"
         elif not valid:
             diagnostics = f"missing final {RESULT_SCHEMA} envelope; {diagnostics}"
-        return {"outcome": outcome, "diagnostics": diagnostics,
+        return {**(envelope if valid else {}),
+                "outcome": outcome, "diagnostics": diagnostics,
                 "stdout": stdout, "stderr": stderr, "remote_state": state,
                 "remote_exit": exit_code}
 
@@ -962,7 +964,8 @@ class ExperimentCell:
     @staticmethod
     def _script(candidate: str, terminal_gate: str, *, bundle: bytes | None = None,
                 manifest: bytes | None = None, physical_device: int | None = None,
-                round_number: int = 1, autotune_request: dict | None = None) -> str:
+                round_number: int = 1, autotune_request: dict | None = None,
+                gate_checkpoint: dict | None = None) -> str:
         if not isinstance(candidate, str) or not isinstance(terminal_gate, str):
             raise RunnerError("candidate and terminal gate must be strings")
         encoded = candidate.encode()
@@ -1012,6 +1015,24 @@ class ExperimentCell:
                 ">\"$experiment_dir/autotune-request.json\"\n"
                 "export AUTOTUNE_REQUEST_PATH=\"$experiment_dir/autotune-request.json\"\n"
             )
+        checkpoint_materialize = ""
+        if gate_checkpoint is not None:
+            if autotune_request is None:
+                raise RunnerError("autotune checkpoint requires an autotune request")
+            raw = json.dumps(
+                gate_checkpoint, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()
+            if len(raw) > MAX_AUTOTUNE_BUNDLE_BYTES:
+                raise RunnerError("autotune gate checkpoint is too large")
+            checkpoint_payload = base64.b64encode(gzip.compress(raw, mtime=0)).decode()
+            checkpoint_materialize = (
+                "mkdir -p \"$experiment_dir/gate-output\"\n"
+                "base64 -d >\"$experiment_dir/autotune-checkpoint.json.gz\" "
+                "<<'SIMPLE_AUTOTUNE_CHECKPOINT'\n"
+                f"{checkpoint_payload}\nSIMPLE_AUTOTUNE_CHECKPOINT\n"
+                "gzip -dc \"$experiment_dir/autotune-checkpoint.json.gz\" "
+                ">\"$experiment_dir/gate-output/autotune-checkpoint.json\"\n"
+            )
         return (
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             "experiment_dir=$(mktemp -d \"${TMPDIR:-/tmp}/simple-experiment.XXXXXX\")\n"
@@ -1019,7 +1040,8 @@ class ExperimentCell:
             "base64 -d >\"$experiment_dir/candidate.py\" <<'SIMPLE_CANDIDATE'\n"
             f"{payload}\nSIMPLE_CANDIDATE\n"
             "export CANDIDATE_PATH=\"$experiment_dir/candidate.py\"\n"
-            + materialize + autotune_materialize + "cd \"$experiment_dir\"\n" + gate_suffix
+            + materialize + autotune_materialize + checkpoint_materialize
+            + "cd \"$experiment_dir\"\n" + gate_suffix
         )
 
     @staticmethod
@@ -1042,12 +1064,22 @@ class ExperimentCell:
         bundle_path = self.path / "terminal-gate-bundle.tar"
         manifest_path = self.path / "candidate-manifest.json"
         physical_device = self._launch_device(state)
+        retained_gate_checkpoint = self.path / "latest-gate-autotune-checkpoint.json"
+        gate_checkpoint = None
+        if autotune_request is not None and retained_gate_checkpoint.is_file():
+            candidate_checkpoint = json.loads(retained_gate_checkpoint.read_text())
+            request_sha = hashlib.sha256(json.dumps(
+                autotune_request, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()).hexdigest()
+            if (candidate_checkpoint.get("request_sha256") == request_sha
+                    and candidate_checkpoint.get("optimization_round") == state["round"]):
+                gate_checkpoint = candidate_checkpoint
         script_text = self._script(
             prepared.get("candidate"), terminal_gate,
             bundle=bundle_path.read_bytes() if bundle_path.is_file() else None,
             manifest=manifest_path.read_bytes() if manifest_path.is_file() else None,
             physical_device=physical_device, round_number=state["round"],
-            autotune_request=autotune_request,
+            autotune_request=autotune_request, gate_checkpoint=gate_checkpoint,
         )
         request = self._request(state, "prepare")
         try:
@@ -1339,10 +1371,38 @@ class ExperimentCell:
         )[:MAX_AUTOTUNE_FINALISTS]
         if finalists != expected_finalists:
             raise RunnerError("autotune finalists are not the fastest successful options")
-        if profiled != finalists:
-            raise RunnerError("only and all finalists must receive official msprof timing")
+        if (not isinstance(profiled, list) or not profiled
+                or len(profiled) != len(set(profiled))
+                or any(identifier not in finalists for identifier in profiled)):
+            raise RunnerError("autotune profiled finalists must be a nonempty selected subset")
+        profile_failures = summary.get("profile_failures", [])
+        if not isinstance(profile_failures, list):
+            raise RunnerError("autotune profile failures must be a list")
+        failed_profiles = []
+        for failure in profile_failures:
+            identifier = failure.get("option_id") if isinstance(failure, dict) else None
+            source_sha = expected.get(identifier, {}).get("source_sha256")
+            commands = failure.get("commands") if isinstance(failure, dict) else None
+            if (identifier not in finalists or identifier in failed_profiles
+                    or failure.get("source_sha256") != source_sha
+                    or failure.get("candidate_artifact_sha256") != source_sha
+                    or failure.get("outcome") != "candidate_failure"
+                    or not isinstance(failure.get("diagnostics"), str)
+                    or not failure["diagnostics"]
+                    or not isinstance(commands, list) or not commands
+                    or not all(isinstance(command, str) for command in commands)):
+                raise RunnerError("autotune profile failure evidence is invalid")
+            failed_profiles.append(identifier)
+        expected_profile_failures = [identifier for identifier in finalists
+                                     if identifier not in profiled]
+        if (profiled != [identifier for identifier in finalists
+                                if identifier not in failed_profiles]
+                or failed_profiles != expected_profile_failures):
+            raise RunnerError(
+                "each selected finalist must have official timing or profile failure evidence"
+            )
         profiles = summary.get("finalist_profiles")
-        if not isinstance(profiles, dict) or set(profiles) != set(finalists):
+        if not isinstance(profiles, dict) or set(profiles) != set(profiled):
             raise RunnerError("autotune result must retain official evidence for every finalist")
         official_timings = {}
         for identifier, profile in profiles.items():
@@ -1355,14 +1415,39 @@ class ExperimentCell:
             official_timings[identifier], _ = ExperimentCell._validate_official_timing(
                 request, profile.get("timing"), f"finalist {identifier}",
             )
-        winner = summary.get("winner_id")
-        expected_winner = min(
-            finalists, key=lambda identifier: (
-                official_timings[identifier], finalists.index(identifier)
-            )
+        official_order = sorted(
+            profiled, key=lambda identifier: (
+                official_timings[identifier], profiled.index(identifier)
+            ),
         )
+        failures = summary.get("winner_gate_failures", [])
+        if not isinstance(failures, list):
+            raise RunnerError("autotune winner gate failures must be a list")
+        failed_ids = []
+        for failure in failures:
+            identifier = failure.get("option_id") if isinstance(failure, dict) else None
+            source_sha = expected.get(identifier, {}).get("source_sha256")
+            commands = failure.get("commands") if isinstance(failure, dict) else None
+            if (identifier not in profiled or identifier in failed_ids
+                    or failure.get("source_sha256") != source_sha
+                    or failure.get("candidate_artifact_sha256") != source_sha
+                    or failure.get("outcome") != "candidate_failure"
+                    or not isinstance(failure.get("diagnostics"), str)
+                    or not failure["diagnostics"]
+                    or not isinstance(commands, list) or not commands
+                    or not all(isinstance(command, str) for command in commands)):
+                raise RunnerError("autotune winner gate failure evidence is invalid")
+            failed_ids.append(identifier)
+        winner = summary.get("winner_id")
+        if failed_ids != official_order[:len(failed_ids)]:
+            raise RunnerError("autotune winner gate failures do not follow official timing order")
+        expected_winner = (
+            official_order[len(failed_ids)] if len(failed_ids) < len(official_order) else None
+        )
+        if expected_winner is None:
+            raise RunnerError("successful autotune result has no full-gate finalist")
         if winner != expected_winner:
-            raise RunnerError("autotune winner is not the fastest official finalist")
+            raise RunnerError("autotune winner is not the first full-gate finalist")
         if summary.get("winner_source_sha256") != expected[winner]["source_sha256"]:
             raise RunnerError("autotune winner source identity does not match the request")
         ExperimentCell._validate_winner_evidence(
@@ -1385,8 +1470,55 @@ class ExperimentCell:
 
     def _accept_result(self, state: dict, attempt: Path, prepared: dict, result: dict) -> dict:
         outcome = result.get("outcome")
+        autotune = self._attempt_autotune_request(attempt)
+        if autotune is not None and outcome == "infrastructure_failure":
+            checkpoint = result.get("autotune_checkpoint")
+            if checkpoint is not None:
+                request_sha = hashlib.sha256(json.dumps(
+                    autotune, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                ).encode()).hexdigest()
+                serialized = json.dumps(
+                    checkpoint, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                ).encode() if isinstance(checkpoint, dict) else b""
+                if (not isinstance(checkpoint, dict) or len(serialized) > MAX_AUTOTUNE_BUNDLE_BYTES
+                        or checkpoint.get("schema") != AUTOTUNE_GATE_CHECKPOINT_SCHEMA
+                        or checkpoint.get("request_sha256") != request_sha
+                        or checkpoint.get("optimization_round") != state["round"]
+                        or not isinstance(checkpoint.get("screens"), dict)
+                        or not isinstance(checkpoint.get("profiles"), dict)
+                        or not isinstance(checkpoint.get("profile_failures", {}), dict)
+                        or "completed_result" in checkpoint):
+                    diagnostics = "remote autotune checkpoint is invalid"
+                    state.pop("pending_attempt", None)
+                    state.update(status="gate_contract_failure", last_outcome=outcome,
+                                 gate_diagnostics=diagnostics)
+                    self._save(state)
+                    raise RunnerError(diagnostics)
+                latest_path = self.path / "latest-gate-autotune-checkpoint.json"
+                if latest_path.is_file():
+                    previous = json.loads(latest_path.read_text())
+                    same_request = (
+                        previous.get("request_sha256") == checkpoint["request_sha256"]
+                        and previous.get("optimization_round") == checkpoint["optimization_round"]
+                    )
+                    retained_maps = (
+                        "screens", "profiles", "profile_failures", "winner_gate_failures",
+                    )
+                    regressed = same_request and any(
+                        any(checkpoint.get(name, {}).get(key) != value
+                            for key, value in previous.get(name, {}).items())
+                        for name in retained_maps
+                    )
+                    if regressed:
+                        diagnostics = "remote autotune checkpoint regressed retained progress"
+                        state.pop("pending_attempt", None)
+                        state.update(status="gate_contract_failure", last_outcome=outcome,
+                                     gate_diagnostics=diagnostics)
+                        self._save(state)
+                        raise RunnerError(diagnostics)
+                _write_json(attempt / "gate-autotune-checkpoint.json", checkpoint)
+                _write_json(latest_path, checkpoint)
         if outcome == "success":
-            autotune = self._attempt_autotune_request(attempt)
             if autotune is not None:
                 try:
                     self._validate_autotune_success(autotune, result)

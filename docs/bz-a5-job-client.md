@@ -41,8 +41,9 @@ always addresses logical device zero. A dispatch receipt is persisted before
 observation. If observation is interrupted, the next identical request observes
 the exact recorded `remote:bz-a5:job:...` handle and never redispatches.
 
-Correctness and full-fusion checks are controller gates. Timing is accepted only
-after those gates. Successful profile responses contain compact `msprof op`
+Correctness and full-fusion checks belong to the host-owned terminal gate.
+Timing is accepted only after those checks. Successful profile responses
+contain compact `msprof op`
 rows, per-case samples and medians, a geometric mean, exact product/runtime/
 target/device provenance, and a remote path to the compact evidence JSON. Raw
 vendor report trees remain on the remote host.

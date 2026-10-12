@@ -235,6 +235,71 @@ def test_campaign_round_commit_retains_contract_and_bundle_digest(tmp_path):
     )
 
 
+def test_init_copies_hash_bound_canonical_skill_alias_and_private_auth(tmp_path):
+    source = tmp_path / "frozen-profiler-new"
+    source.mkdir()
+    (source / "SKILL.md").write_text("---\nname: ascend-profiling\n---\n")
+    digest = runner._tree_sha256(source)
+    auth = tmp_path / "auth.json"
+    auth.write_text('{"token":"private"}\n')
+    auth.chmod(0o600)
+    cfg = config(
+        tmp_path,
+        skill_paths=None,
+        skill_bindings=[{"name": "ascend-profiling", "path": str(source),
+                         "sha256": digest}],
+        agent_auth_path=str(auth),
+    )
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    cell.init()
+
+    copied = cell.agent_home / ".agents/skills/ascend-profiling/SKILL.md"
+    assert copied.read_text() == (source / "SKILL.md").read_text()
+    assert cell.skill_names == ["ascend-profiling"]
+    private_auth = cell.agent_home / ".codex/auth.json"
+    assert private_auth.read_bytes() == auth.read_bytes()
+    assert private_auth.stat().st_mode & 0o077 == 0
+    assert not (cell.agent_home / ".codex/config.toml").exists()
+    assert not (cell.repo / ".codex").exists()
+    for child in source.iterdir():
+        child.unlink()
+    source.rmdir()
+    assert cell.skill_names == ["ascend-profiling"]
+
+
+def test_init_rejects_skill_alias_that_disagrees_with_declared_name(tmp_path):
+    source = tmp_path / "skill-source"
+    source.mkdir()
+    (source / "SKILL.md").write_text("---\nname: wrong-skill\n---\n")
+    cfg = config(tmp_path, skill_paths=None, skill_bindings=[{
+        "name": "ascend-profiling", "path": str(source),
+        "sha256": runner._tree_sha256(source),
+    }])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    with pytest.raises(runner.RunnerError, match="name mismatch"):
+        cell.init()
+    assert not cell.path.exists()
+
+
+def test_subprocess_agent_does_not_inherit_global_skill_or_auth_environment(tmp_path, monkeypatch):
+    program = tmp_path / "agent.py"
+    program.write_text(
+        "import json,os,sys\n"
+        "json.load(sys.stdin)\n"
+        "print(json.dumps({'candidate':'x','commands':[],'hypothesis':"
+        "json.dumps(sorted(k for k in os.environ if 'SKILL' in k or 'TOKEN' in k))}))\n"
+    )
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    monkeypatch.setenv("GLOBAL_SKILL_PATH", "/global/skills")
+    monkeypatch.setenv("SECRET_TOKEN", "secret")
+    agent = runner.SubprocessAgent(["python", str(program)], repo, home)
+    value = agent.prepare({"phase": "prepare"})
+    assert value["hypothesis"] == "[]"
+
+
 def test_init_snapshots_optional_task_and_records_it_with_round_evidence(tmp_path):
     task = tmp_path / "benchmark-task.md"
     exact_task = b"\xef\xbb\xbfOptimize the supplied benchmark.\r\n"

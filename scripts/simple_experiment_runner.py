@@ -29,6 +29,7 @@ MAX_GATE_BUNDLE_BYTES = 8 * 1_048_576
 MAX_MANIFEST_BYTES = 64 * 1024
 MAX_AUTOTUNE_CONFIGURATIONS = 128
 MAX_AUTOTUNE_FINALISTS = 3
+MIN_AUTOTUNE_PROFILE_REPEATS = 3
 MAX_AUTOTUNE_BUNDLE_BYTES = 16 * 1_048_576
 AUTOTUNE_REQUEST_SCHEMA = "simple-experiment-autotune-request/v1"
 AUTOTUNE_RESULT_SCHEMA = "simple-experiment-autotune-result/v1"
@@ -262,6 +263,7 @@ def materialize_autotune(candidate: str, proposed: object) -> dict:
             "max_finalists": MAX_AUTOTUNE_FINALISTS,
             "finalist_selection": "lowest-cheap-timing-then-request-order",
             "finalist_timing": "msprof-op",
+            "min_finalist_repeats": MIN_AUTOTUNE_PROFILE_REPEATS,
             "winner_selection": "lowest-msprof-geomean-then-finalist-order",
             "winner_gate": "complete-correctness-fusion-and-pipe-evidence",
         },
@@ -1002,6 +1004,13 @@ class ExperimentCell:
             if (isinstance(timing, bool) or not isinstance(timing, (int, float))
                     or not math.isfinite(timing) or timing <= 0):
                 raise RunnerError(f"finalist {identifier} lacks valid msprof timing")
+            repeats = profile.get("repeats")
+            if (isinstance(repeats, bool) or not isinstance(repeats, int)
+                    or repeats < MIN_AUTOTUNE_PROFILE_REPEATS):
+                raise RunnerError(
+                    f"finalist {identifier} requires at least "
+                    f"{MIN_AUTOTUNE_PROFILE_REPEATS} msprof repeats"
+                )
             official_timings[identifier] = timing
         winner = summary.get("winner_id")
         expected_winner = min(

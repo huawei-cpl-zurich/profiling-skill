@@ -127,8 +127,9 @@ compressed, hash-bound request in the retained job.
 A compatible host gate screens all options in that job across its ranked
 correctness and fusion cases using ordinary synchronized device timing.
 Candidate failures eliminate only their option. The three fastest successful
-options receive repeated `msprof op` timing; equal cheap timings retain request
-order. The fastest official finalist then receives the complete
+options receive at least three repeated `msprof op` timings; every finalist
+profile reports an integer `repeats >= 3`, and equal cheap timings retain
+request order. The fastest official finalist then receives the complete
 correctness/fusion gate and diagnostic pipe capture; equal official geomeans
 retain finalist order. Duplicate materialized sources are rejected before
 dispatch. Observation loss reuses the same durable handle, and completed

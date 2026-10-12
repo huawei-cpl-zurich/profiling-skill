@@ -89,9 +89,9 @@ options together in one retained job. Compilation,
 representative correctness/fusion, and ordinary device timing are cheap search
 signals and do not advance the optimization-round counter. Candidate failures
 eliminate only that option. The host profiles the three fastest successful
-options with official repeated `msprof op` timing, runs the complete gate on
-the fastest official finalist, and records all options and outcomes. Stable
-request/finalist order breaks measurement ties. Do not call hardware or
+options with at least three official repeated `msprof op` timings each, runs
+the complete gate on the fastest official finalist, and records all options
+and outcomes. Stable request/finalist order breaks measurement ties. Do not call hardware or
 profiling commands yourself.
 
 ANALYZE PHASE

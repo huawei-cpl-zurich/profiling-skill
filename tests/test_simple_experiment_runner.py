@@ -837,6 +837,7 @@ def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
     assert first == second
     assert len(first["options"]) == 129
     assert first["options"][0]["id"] == "incumbent"
+    assert first["policy"]["min_finalist_repeats"] == 3
     assert first["options"][-1]["parameters"] == {"BLOCK": 1127, "WAVES": 1}
     assert first["options"][-1]["source_sha256"] == hashlib.sha256(
         first["options"][-1]["source"].encode()
@@ -998,9 +999,9 @@ def test_autotune_success_rejects_nonfastest_finalists_and_winner():
     result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v2"]
     result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v2"]
     result["autotune_summary"]["finalist_profiles"] = {
-        "incumbent": {"geomean_us": 11.0},
-        "v0": {"geomean_us": 9.0},
-        "v2": {"geomean_us": 12.0},
+        "incumbent": {"geomean_us": 11.0, "repeats": 3},
+        "v0": {"geomean_us": 9.0, "repeats": 3},
+        "v2": {"geomean_us": 12.0, "repeats": 3},
     }
     with pytest.raises(runner.RunnerError, match="fastest successful"):
         runner.ExperimentCell._validate_autotune_success(plan, result)
@@ -1023,11 +1024,29 @@ def test_autotune_selection_ties_follow_request_order():
     result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v1"]
     result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v1"]
     result["autotune_summary"]["finalist_profiles"] = {
-        identifier: {"geomean_us": 9.0} for identifier in ("incumbent", "v0", "v1")
+        identifier: {"geomean_us": 9.0, "repeats": 3}
+        for identifier in ("incumbent", "v0", "v1")
     }
 
     selected, _ = runner.ExperimentCell._validate_autotune_success(plan, result)
     assert selected == plan["options"][0]["source"]
+
+
+@pytest.mark.parametrize("invalid_repeats", [None, True, 2, 3.0])
+def test_autotune_success_requires_three_integer_msprof_repeats(invalid_repeats):
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": "v0", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    profile = result["autotune_summary"]["finalist_profiles"]["incumbent"]
+    if invalid_repeats is None:
+        profile.pop("repeats")
+    else:
+        profile["repeats"] = invalid_repeats
+
+    with pytest.raises(runner.RunnerError, match="at least 3 msprof repeats"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
 
 
 def test_runner_materializes_exact_candidate_and_submitted_script(tmp_path):

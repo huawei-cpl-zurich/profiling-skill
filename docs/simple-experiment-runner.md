@@ -21,6 +21,8 @@ retained job.
   "target": "bz-a3-1",
   "runtime": "cann",
   "remote_workspace": "/remote/workspace",
+  "terminal_gate_path": "/absolute/path/to/host-owned-gate.sh",
+  "billed_checks": 8,
   "rounds": 4,
   "infrastructure_retries": 2,
   "candidate_repairs": 2,
@@ -39,6 +41,10 @@ agent workflows; it is not an adversarial filesystem sandbox.
 Initialization builds the clone, branch, prompt, private home, and skills in a
 temporary sibling directory and publishes the cell atomically. Any failure
 removes the temporary cell, so the same `init` command is retryable.
+`terminal_gate_path` must name a host-owned file and `billed_checks` must be a
+positive integer. Initialization snapshots both the exact gate content and the
+check limit inside the cell. Later edits to the source gate or configuration
+cannot change either snapshot.
 
 ## Two agent phases
 
@@ -53,7 +59,6 @@ Prepare must return:
 ```json
 {
   "candidate": "complete candidate source",
-  "script_fragment": "python \"$CANDIDATE_PATH\"",
   "commands": ["python candidate.py"],
   "hypothesis": "why this candidate should work",
   "retrieved_knowledge": ["ref://stable-citation"],
@@ -66,7 +71,8 @@ are validated before an attempt number or directory is created, so rejected
 prepare output can be repaired without poisoning the round. The runner, not the agent, creates the exact
 submitted `run.sh`. It embeds the candidate, materializes it as `candidate.py`
 in a private remote temporary directory, exports `CANDIDATE_PATH`, changes to
-that directory, and executes `script_fragment`. The exact candidate and exact
+that directory, and executes the retained host-owned terminal gate. The agent
+cannot select or replace the executed fragment. The exact candidate, gate, and
 generated wrapper are retained and committed.
 
 After a successful terminal result, the runner invokes the same agent command
@@ -97,10 +103,22 @@ envelope may instead report `candidate_failure` or `infrastructure_failure`
 with diagnostics. Every stdout/stderr receipt must repeat the requested handle
 and matching target before its content is accepted.
 
+The retained gate runs after candidate materialization and owns the terminal
+result protocol. Candidate output cannot grant success: the gate must leave its
+result envelope as the last nonblank stdout line.
+
 Known infrastructure failures retry the same prepared candidate twice without
 advancing the round. Candidate failures return all repair evidence to the
 agent and consume a same-round repair. Exhausted budgets are terminal and a
 later `run` does not dispatch again.
+
+Every possible remote submission also consumes one billed check. The runner
+checks the snapshotted limit before preparing or dispatching replacement work
+and charges at the dispatch boundary, before asking `cpl-remote` to run. Thus a
+lost dispatch receipt is still charged and can never cause the cell to exceed
+its limit. Preflight-only failures and observation of an existing durable
+handle are not charged. Exhaustion is reported as `billed_checks_exhausted`;
+`report` includes both the immutable limit and used count.
 
 ## Recovery and evidence
 
@@ -120,7 +138,8 @@ reconciliation because an automatic replacement could duplicate live work.
 
 Each successful round adds exactly one commit under `repo/rounds/NN/` with the
 candidate, generated wrapper, command log, compact profile and terminal result,
-prompt/treatment/skill inputs, hypothesis, retrieved knowledge, final
+host terminal gate, prompt/treatment/skill inputs and billed-check limit,
+hypothesis, retrieved knowledge, final
 reasoning, and post-mortem. Large profiler report trees remain remote. The
 runner has no campaign admission, receipt graph, runtime-closure hash, sealed
 manifest, migration attestation, or generalized plugin layer.

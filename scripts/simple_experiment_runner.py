@@ -192,12 +192,11 @@ class SubprocessAgent:
 
     def prepare(self, request: dict) -> dict:
         value = self._invoke(request)
-        required = {"candidate", "script_fragment", "commands"}
+        required = {"candidate", "commands"}
         if (not required <= value.keys() or not isinstance(value.get("hypothesis"), str)
                 or not value["hypothesis"]):
             raise RunnerError("agent prepare result is incomplete")
         if (not isinstance(value["candidate"], str)
-                or not isinstance(value["script_fragment"], str)
                 or not isinstance(value["commands"], list)
                 or not all(isinstance(command, str) for command in value["commands"])):
             raise RunnerError("agent prepare result has invalid field types")
@@ -242,10 +241,27 @@ class ExperimentCell:
             raise RunnerError("skill_paths must be existing, uniquely named directories")
         return sources
 
+    def _immutable_inputs(self) -> tuple[Path, int]:
+        gate = Path(self.config.get("terminal_gate_path", "")).resolve()
+        if not gate.is_file():
+            raise RunnerError("terminal_gate_path must name an existing file")
+        billed = self.config.get("billed_checks")
+        if isinstance(billed, bool) or not isinstance(billed, int) or billed <= 0:
+            raise RunnerError("billed_checks must be a positive integer")
+        return gate, billed
+
     def init(self) -> dict:
         if self.path.exists():
             raise RunnerError(f"cell already exists: {self.path}")
         sources = self._skill_sources()
+        gate, billed_checks = self._immutable_inputs()
+        gate_content = gate.read_bytes()
+        if not gate_content:
+            raise RunnerError("terminal gate must not be empty")
+        try:
+            gate_content.decode()
+        except UnicodeDecodeError as exc:
+            raise RunnerError("terminal gate must be UTF-8 text") from exc
         parent = self.path.parent
         parent.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{self.name}-", dir=parent))
@@ -266,9 +282,13 @@ class ExperimentCell:
                 shutil.copytree(source, skill_root / source.name)
             (temporary / "attempts").mkdir()
             (temporary / "prompt.txt").write_text(self.config["prompt"])
+            retained_gate = temporary / "terminal-gate.sh"
+            retained_gate.write_bytes(gate_content)
+            retained_gate.chmod(0o500)
             _write_json(temporary / "state.json", {
                 "status": "ready", "round": 1, "attempts": 0,
                 "infrastructure_failures": 0, "candidate_repairs": 0,
+                "billed_checks_limit": billed_checks, "billed_checks_used": 0,
             })
             temporary.replace(self.path)
         except BaseException:
@@ -311,13 +331,14 @@ class ExperimentCell:
         _write_json(path, result)
 
     @staticmethod
-    def _script(candidate: str, fragment: str) -> str:
-        if not isinstance(candidate, str) or not isinstance(fragment, str):
-            raise RunnerError("candidate and script_fragment must be strings")
+    def _script(candidate: str, terminal_gate: str) -> str:
+        if not isinstance(candidate, str) or not isinstance(terminal_gate, str):
+            raise RunnerError("candidate and terminal gate must be strings")
         encoded = candidate.encode()
         if len(encoded) > MAX_CANDIDATE_BYTES:
             raise RunnerError(f"candidate is too large ({len(encoded)} bytes)")
         payload = base64.b64encode(encoded).decode()
+        gate_suffix = terminal_gate if terminal_gate.endswith("\n") else terminal_gate + "\n"
         return (
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             "experiment_dir=$(mktemp -d \"${TMPDIR:-/tmp}/simple-experiment.XXXXXX\")\n"
@@ -325,14 +346,27 @@ class ExperimentCell:
             "base64 -d >\"$experiment_dir/candidate.py\" <<'SIMPLE_CANDIDATE'\n"
             f"{payload}\nSIMPLE_CANDIDATE\n"
             "export CANDIDATE_PATH=\"$experiment_dir/candidate.py\"\n"
-            "cd \"$experiment_dir\"\n" + fragment.rstrip() + "\n"
+            "cd \"$experiment_dir\"\n" + gate_suffix
         )
+
+    @staticmethod
+    def _checks_exhausted(state: dict) -> bool:
+        return state["billed_checks_used"] >= state["billed_checks_limit"]
+
+    def _finish_billed_checks(self, state: dict, outcome: str | None = None) -> dict:
+        state["status"] = "billed_checks_exhausted"
+        if outcome:
+            state["last_outcome"] = outcome
+        return self._save(state)
 
     def _attempt(self, state: dict, prepared: dict) -> dict:
         if not isinstance(prepared.get("commands"), list) or not all(
                 isinstance(command, str) for command in prepared["commands"]):
             raise RunnerError("candidate commands must be a string list")
-        script_text = self._script(prepared.get("candidate"), prepared.get("script_fragment"))
+        if self._checks_exhausted(state):
+            return self._finish_billed_checks(state)
+        terminal_gate = (self.path / "terminal-gate.sh").read_text()
+        script_text = self._script(prepared.get("candidate"), terminal_gate)
         request = self._request(state, "prepare")
         try:
             json.dumps(prepared)
@@ -347,12 +381,13 @@ class ExperimentCell:
         script = attempt / "run.sh"
         script.write_text(script_text)
         script.chmod(0o700)
-        state["attempts"] = number
+        state.update(attempts=number, billed_checks_used=state["billed_checks_used"] + 1,
+                     status="infrastructure_unknown", pending_attempt=number)
+        self._save(state)
         try:
             handle = self.remote.submit(request, script)
         except ObservationLost as exc:
             _write_json(attempt / "infrastructure.json", {"diagnostics": str(exc), "phase": "dispatch"})
-            state.update(status="infrastructure_unknown", pending_attempt=number)
             return self._save(state)
         (attempt / "remote-job-id.txt").write_text(handle + "\n")
         state.update(status="observing", pending_attempt=number,
@@ -391,6 +426,9 @@ class ExperimentCell:
         else:
             state["infrastructure_failures"] += 1
             state["status"] = "infrastructure_failure"
+        if self._checks_exhausted(state):
+            state["last_outcome"] = outcome
+            state["status"] = "billed_checks_exhausted"
         return self._save(state)
 
     def _analyze(self, state: dict, attempt: Path, prepared: dict, result: dict) -> dict:
@@ -419,11 +457,13 @@ class ExperimentCell:
     def _finalize(self, state: dict, attempt: Path, prepared: dict,
                   result: dict, analysis: dict) -> None:
         inputs = {"prompt": self.config["prompt"], "treatment": self.config["treatment"],
-                  "allowed_skills": self.skill_names, "session_id": prepared.get("session_id")}
+                  "allowed_skills": self.skill_names, "session_id": prepared.get("session_id"),
+                  "billed_checks": state["billed_checks_limit"]}
         commands = "".join(json.dumps({"command": item}, sort_keys=True) + "\n"
                            for item in prepared["commands"])
         files = {
             "candidate.py": prepared["candidate"], "run.sh": (attempt / "run.sh").read_text(),
+            "terminal-gate.sh": (self.path / "terminal-gate.sh").read_text(),
             "commands.jsonl": commands,
             "profile-summary.json": json.dumps(result.get("profile_summary", {}), indent=2, sort_keys=True) + "\n",
             "retrieved-knowledge.json": json.dumps(prepared.get("retrieved_knowledge", []), indent=2, sort_keys=True) + "\n",
@@ -468,8 +508,10 @@ class ExperimentCell:
         state = self._state()
         if state.get("pending_attempt"):
             raise RunnerError("cell has pending work; use resume")
-        if state["status"] == "complete" or self._budget_exhausted(state):
+        if state["status"] in {"complete", "billed_checks_exhausted"} or self._budget_exhausted(state):
             return state
+        if self._checks_exhausted(state):
+            return self._finish_billed_checks(state)
         try:
             self._preflight()
         except ObservationLost:
@@ -481,10 +523,13 @@ class ExperimentCell:
                     if state["status"] == "infrastructure_failure" and last_agent.is_file()
                     else None)
         while True:
+            if self._checks_exhausted(state):
+                return self._finish_billed_checks(state, state.get("last_outcome"))
             if prepared is None:
                 prepared = self.agent.prepare(self._request(state, "prepare"))
             state = self._attempt(state, prepared)
-            if state["status"] in {"ready", "complete", "infrastructure_unknown", "analysis_pending"}:
+            if state["status"] in {"ready", "complete", "billed_checks_exhausted",
+                                   "infrastructure_unknown", "analysis_pending"}:
                 return state
             if state["status"] == "infrastructure_failure":
                 if self._budget_exhausted(state):
@@ -518,6 +563,8 @@ class ExperimentCell:
             outcomes[json.loads(result.read_text()).get("outcome", "unknown")] += 1
         return {"cell": self.name, "status": state["status"], "round": state["round"],
                 "rounds_completed": state["round"] - 1, "attempts": state["attempts"],
+                "billed_checks_limit": state["billed_checks_limit"],
+                "billed_checks_used": state["billed_checks_used"],
                 "outcomes": dict(sorted(outcomes.items())), "branch": self.branch}
 
 

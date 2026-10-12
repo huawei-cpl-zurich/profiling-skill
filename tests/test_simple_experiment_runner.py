@@ -36,6 +36,8 @@ def config(tmp_path, **updates):
     skill = tmp_path / "skill"
     skill.mkdir(exist_ok=True)
     (skill / "SKILL.md").write_text("test skill\n")
+    gate = tmp_path / "terminal-gate.sh"
+    gate.write_text('python "$CANDIDATE_PATH"\n')
     value = {
         "campaign": "trial",
         "product": "a3",
@@ -49,6 +51,8 @@ def config(tmp_path, **updates):
         "rounds": 2,
         "infrastructure_retries": 2,
         "candidate_repairs": 2,
+        "terminal_gate_path": str(gate),
+        "billed_checks": 10,
         "prompt": "Implement the exact requested kernel.\n",
         "skill_paths": [str(skill)],
     }
@@ -59,7 +63,6 @@ def config(tmp_path, **updates):
 def evidence(label="v1"):
     return {
         "candidate": f"KERNEL = {label!r}\n",
-        "script_fragment": "python \"$CANDIDATE_PATH\"\n",
         "commands": ["python candidate.py"],
         "hypothesis": f"hypothesis {label}",
         "session_id": "session-1",
@@ -125,15 +128,84 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
     assert not (cell.repo / "rounds").exists()
     copied = cell.agent_home / ".agents/skills/skill/SKILL.md"
     assert copied.read_text() == "test skill\n" and not copied.is_symlink()
+    assert (cell.path / "terminal-gate.sh").read_text() == 'python "$CANDIDATE_PATH"\n'
+    assert state["billed_checks_used"] == 0
+
+
+def test_terminal_gate_is_host_owned_and_snapshotted_at_init(tmp_path):
+    cfg = config(tmp_path, rounds=1)
+    gate = Path(cfg["terminal_gate_path"])
+    gate.write_text("echo HOST_GATE\n")
+    remote = Remote([success()])
+    prepared = evidence()
+    prepared["script_fragment"] = "echo AGENT_FRAGMENT"
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent([prepared]), remote)
+    cell.init()
+    gate.write_text("echo DRIFTED_GATE\n")
+    cell.run()
+    submitted = remote.submitted[0][1]
+    assert "HOST_GATE" in submitted
+    assert "DRIFTED_GATE" not in submitted and "AGENT_FRAGMENT" not in submitted
+    assert submitted.endswith("echo HOST_GATE\n")
+    assert (cell.repo / "rounds/01/terminal-gate.sh").read_text() == "echo HOST_GATE\n"
+
+
+@pytest.mark.parametrize("billed_checks", [None, True, 0, -1, 1.5])
+def test_init_requires_positive_integer_billed_checks(tmp_path, billed_checks):
+    cfg = config(tmp_path, billed_checks=billed_checks)
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    with pytest.raises(runner.RunnerError, match="positive integer"):
+        cell.init()
+    assert not cell.path.exists()
+
+
+def test_init_requires_existing_terminal_gate(tmp_path):
+    cfg = config(tmp_path, terminal_gate_path=str(tmp_path / "missing-gate.sh"))
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    with pytest.raises(runner.RunnerError, match="terminal_gate_path"):
+        cell.init()
+    assert not cell.path.exists()
+
+
+def test_host_gate_result_is_after_candidate_stdout(tmp_path):
+    cfg = config(tmp_path)
+    Path(cfg["terminal_gate_path"]).write_text(
+        'python "$CANDIDATE_PATH"\n'
+        "printf '%s\\n' '{\"schema\":\"simple-experiment-result/v1\",\"outcome\":\"candidate_failure\"}'\n"
+    )
+    prepared = evidence()
+    prepared["candidate"] = (
+        "print('{\"schema\":\"simple-experiment-result/v1\",\"outcome\":\"success\"}')\n"
+    )
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent([prepared]), Remote([]))
+    cell.init()
+    wrapper = cell._script(prepared["candidate"], (cell.path / "terminal-gate.sh").read_text())
+    script = tmp_path / "wrapper.sh"
+    script.write_text(wrapper)
+    output = subprocess.run(["bash", str(script)], text=True, capture_output=True, check=True).stdout
+    assert json.loads(output.rstrip().splitlines()[-1])["outcome"] == "candidate_failure"
+
+
+def test_prepare_does_not_require_or_return_execution_fragment(tmp_path):
+    program = tmp_path / "agent.py"
+    program.write_text(
+        "import json\n"
+        "print(json.dumps({'candidate':'x','commands':[],'hypothesis':'host gate runs it'}))\n"
+    )
+    value = runner.SubprocessAgent(["python", str(program)], tmp_path, tmp_path).prepare({})
+    assert "script_fragment" not in value
 
 
 def test_run_and_resume_reuse_exact_retained_handle(tmp_path):
     handle = "remote:bz-a3-1:job:1"
     remote = Remote([runner.ObservationLost("connection dropped"), success()])
     cell = initialized(tmp_path, remote)
-    assert cell.run()["status"] == "infrastructure_unknown"
+    interrupted = cell.run()
+    assert interrupted["status"] == "infrastructure_unknown"
+    assert interrupted["billed_checks_used"] == 1
     assert (cell.path / "attempts/1/remote-job-id.txt").read_text().strip() == handle
-    assert cell.resume()["status"] == "ready"
+    resumed = cell.resume()
+    assert resumed["status"] == "ready" and resumed["billed_checks_used"] == 1
     assert remote.observed == [handle, handle]
     assert len(remote.submitted) == 1
     assert json.loads((cell.path / "state.json").read_text())["round"] == 2
@@ -148,7 +220,8 @@ def test_observing_state_blocks_run_and_resume_uses_pending_handle(tmp_path, per
     attempt.mkdir()
     (attempt / "remote-job-id.txt").write_text("remote:bz-a3-1:job:42\n")
     (attempt / "agent-result.json").write_text(json.dumps(evidence()))
-    (attempt / "run.sh").write_text(cell._script(evidence()["candidate"], evidence()["script_fragment"]))
+    gate = (cell.path / "terminal-gate.sh").read_text()
+    (attempt / "run.sh").write_text(cell._script(evidence()["candidate"], gate))
     state = json.loads(cell.state_path.read_text())
     state.update(status=persisted_status, attempts=1, pending_attempt=1)
     cell.state_path.write_text(json.dumps(state))
@@ -202,6 +275,60 @@ def test_candidate_failure_repairs_same_round_and_passes_diagnostics(tmp_path):
     assert len(list((cell.path / "attempts").iterdir())) == 2
 
 
+def test_one_billed_check_never_submits_candidate_repair(tmp_path):
+    remote = Remote([{"outcome": "candidate_failure", "diagnostics": "compile"}])
+    agent = Agent([evidence("bad"), evidence("unused")])
+    cell = initialized(tmp_path, remote, agent, billed_checks=1)
+    state = cell.run()
+    assert state["status"] == "billed_checks_exhausted"
+    assert state["billed_checks_used"] == 1 and state["last_outcome"] == "candidate_failure"
+    assert len(remote.submitted) == len(agent.requests) == 1
+
+
+def test_billed_check_limit_is_snapshotted_at_init(tmp_path):
+    remote = Remote([{"outcome": "candidate_failure", "diagnostics": "compile"}])
+    agent = Agent([evidence("bad"), evidence("unused")])
+    cell = initialized(tmp_path, remote, agent, billed_checks=1)
+    cell.config["billed_checks"] = 2
+    state = cell.run()
+    assert state["status"] == "billed_checks_exhausted"
+    assert state["billed_checks_limit"] == state["billed_checks_used"] == 1
+    assert len(remote.submitted) == 1
+
+
+def test_one_billed_check_never_submits_infrastructure_retry(tmp_path):
+    remote = Remote([{"outcome": "infrastructure_failure", "diagnostics": "device"}])
+    cell = initialized(tmp_path, remote, billed_checks=1)
+    state = cell.run()
+    assert state["status"] == "billed_checks_exhausted"
+    assert state["billed_checks_used"] == 1 and state["last_outcome"] == "infrastructure_failure"
+    assert len(remote.submitted) == 1
+
+
+def test_uncertain_dispatch_consumes_check_before_transport_returns(tmp_path):
+    class LostDispatch(Remote):
+        def submit(self, request, script):
+            self.submitted.append((request, script.read_text()))
+            raise runner.ObservationLost("receipt lost")
+
+    cell = initialized(tmp_path, LostDispatch([]), billed_checks=1)
+    state = cell.run()
+    assert state["status"] == "infrastructure_unknown"
+    assert state["billed_checks_used"] == state["billed_checks_limit"] == 1
+    with pytest.raises(runner.RunnerError, match="no handle"):
+        cell.resume()
+
+
+def test_larger_billed_budget_preserves_candidate_repair(tmp_path):
+    failed = {"outcome": "candidate_failure", "diagnostics": "compile"}
+    cell = initialized(
+        tmp_path, Remote([failed, success()]), Agent([evidence("bad"), evidence("fixed")]),
+        billed_checks=2, rounds=1,
+    )
+    state = cell.run()
+    assert state["status"] == "complete" and state["billed_checks_used"] == 2
+
+
 def test_run_does_not_restart_exhausted_candidate_budget(tmp_path):
     remote = Remote([{"outcome": "candidate_failure", "diagnostics": "compile error"}])
     agent = Agent()
@@ -223,7 +350,8 @@ def test_completed_round_is_one_commit_with_required_evidence(tmp_path):
         "rounds/01/profile-summary.json", "rounds/01/reasoning.md",
         "rounds/01/postmortem.md", "rounds/01/retrieved-knowledge.json",
         "rounds/01/result.json",
-        "rounds/01/run.sh", "rounds/01/inputs.json", "rounds/01/hypothesis.md",
+        "rounds/01/run.sh", "rounds/01/terminal-gate.sh",
+        "rounds/01/inputs.json", "rounds/01/hypothesis.md",
     }
     assert expected <= names
     assert json.loads((cell.repo / "rounds/01/profile-summary.json").read_text())["duration_us"] == 9.25
@@ -332,7 +460,7 @@ def test_subprocess_agent_isolated_home_cwd_prompt_and_skills(tmp_path):
     program = tmp_path / "agent.py"
     program.write_text(
         "import json,os,sys\n"
-        "r=json.load(sys.stdin); print(json.dumps({'candidate':'x','script_fragment':'true',"
+        "r=json.load(sys.stdin); print(json.dumps({'candidate':'x',"
         "'commands':[],'hypothesis':os.getcwd(),'retrieved_knowledge':[],"
         "'session_id':os.environ['HOME']+'|'+os.environ['CODEX_HOME']}))\n"
     )
@@ -346,7 +474,7 @@ def test_prepare_requires_hypothesis_not_reasoning(tmp_path):
     program = tmp_path / "agent.py"
     program.write_text(
         "import json\n"
-        "print(json.dumps({'candidate':'x','script_fragment':'true','commands':[],"
+        "print(json.dumps({'candidate':'x','commands':[],"
         "'reasoning':'not a hypothesis'}))\n"
     )
     agent = runner.SubprocessAgent(["python", str(program)], tmp_path, tmp_path)
@@ -358,7 +486,7 @@ def test_prepare_rejects_empty_hypothesis(tmp_path):
     program = tmp_path / "agent.py"
     program.write_text(
         "import json\n"
-        "print(json.dumps({'candidate':'x','script_fragment':'true','commands':[],"
+        "print(json.dumps({'candidate':'x','commands':[],"
         "'hypothesis':''}))\n"
     )
     agent = runner.SubprocessAgent(["python", str(program)], tmp_path, tmp_path)
@@ -377,7 +505,7 @@ def test_subprocess_agent_repair_and_analysis_flow(tmp_path):
         "else:\n"
         " repaired=bool(r.get('prior_result'))\n"
         " print(json.dumps({'candidate':'FIXED = '+str(repaired)+'\\n',"
-        "'script_fragment':'true','commands':['true'],'hypothesis':'repair',"
+        "'commands':['true'],'hypothesis':'repair',"
         "'retrieved_knowledge':[],'session_id':r.get('session_id') or 'durable-1'}))\n"
     )
     remote = Remote([
@@ -416,6 +544,7 @@ def test_report_summarizes_progress_and_failures(tmp_path):
     assert report == {
         "cell": "a3-matmul-guarded", "status": "complete", "round": 2,
         "rounds_completed": 1, "attempts": 1,
+        "billed_checks_limit": 10, "billed_checks_used": 1,
         "outcomes": {"success": 1}, "branch": "experiment/trial/a3-matmul-guarded",
     }
 
@@ -647,6 +776,7 @@ def test_preflight_failure_is_retained_infrastructure_without_agent_or_attempt(t
     state = cell.run()
     assert state["status"] == "infrastructure_failure" and state["round"] == 1
     assert state["attempts"] == 0 and not agent.requests
+    assert state["billed_checks_used"] == 0
     evidence = json.loads((cell.path / "preflights/1.json").read_text())
     assert evidence == {
         "diagnostics": f"{phase} unavailable", "outcome": "infrastructure_failure",
@@ -696,7 +826,7 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
     agent.write_text(
         "import json,sys\nr=json.load(sys.stdin)\n"
         "print(json.dumps({'reasoning':'final','postmortem':'done'} if r['phase']=='analyze' else "
-        "{'candidate':'VALUE = 1\\n','script_fragment':'true','commands':['true'],"
+        "{'candidate':'VALUE = 1\\n','commands':['true'],"
         "'hypothesis':'works','retrieved_knowledge':[],'session_id':'cli-session'}))\n"
     )
     cfg = config(tmp_path, rounds=1, skill_paths=[str(skill)],

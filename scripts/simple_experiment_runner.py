@@ -34,16 +34,19 @@ MIN_AUTOTUNE_PROFILE_REPEATS = 3
 AUTOTUNE_BENCHMARK_CONTRACTS = {
     "matmul": {
         "correctness_cases": 10,
+        "profile_cases": [7, 8, 9],
         "entrypoint": "streaming_matmul_add_kernel",
         "kernel_name": "streaming_matmul_add_kernel_mix_aic",
     },
     "gdn": {
         "correctness_cases": 50,
+        "profile_cases": [40, 49, 47, 46, 45],
         "entrypoint": "chunk_gated_delta_rule_kernel",
         "kernel_name": "chunk_gated_delta_rule_kernel",
     },
     "bsa": {
         "correctness_cases": 50,
+        "profile_cases": [47, 46, 49, 44, 43],
         "entrypoint": "block_sparse_attention_kernel",
         "kernel_name": "block_sparse_attention_kernel",
     },
@@ -808,6 +811,7 @@ class ExperimentCell:
         plan.update(
             optimization_round=state["round"], benchmark=benchmark,
             required_correctness_cases=benchmark_contract["correctness_cases"],
+            expected_profile_cases=list(benchmark_contract["profile_cases"]),
             expected_entrypoint=benchmark_contract["entrypoint"],
             expected_declared_kernel_name=benchmark_contract["kernel_name"],
         )
@@ -868,6 +872,7 @@ class ExperimentCell:
         expected.update(
             optimization_round=state["round"], benchmark=benchmark,
             required_correctness_cases=benchmark_contract.get("correctness_cases"),
+            expected_profile_cases=list(benchmark_contract.get("profile_cases", [])),
             expected_entrypoint=benchmark_contract.get("entrypoint"),
             expected_declared_kernel_name=benchmark_contract.get("kernel_name"),
         )
@@ -1106,12 +1111,15 @@ class ExperimentCell:
             raise RunnerError("autotune winner lacks an A3 full-gate profile summary")
         benchmark = request.get("benchmark")
         required_cases = request.get("required_correctness_cases")
+        expected_profile_cases = request.get("expected_profile_cases")
         expected_entrypoint = request.get("expected_entrypoint")
         expected_declared = request.get("expected_declared_kernel_name")
-        if (isinstance(required_cases, bool) or not isinstance(required_cases, int)
-                or required_cases <= 0
-                or not isinstance(expected_entrypoint, str) or not expected_entrypoint
-                or not isinstance(expected_declared, str) or not expected_declared):
+        contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark)
+        if (contract is None
+                or required_cases != contract["correctness_cases"]
+                or expected_profile_cases != contract["profile_cases"]
+                or expected_entrypoint != contract["entrypoint"]
+                or expected_declared != contract["kernel_name"]):
             raise RunnerError("retained autotune benchmark contract is invalid")
         if (profile.get("benchmark") != benchmark
                 or profile.get("correctness_cases") != required_cases):
@@ -1182,8 +1190,8 @@ class ExperimentCell:
                 raise RunnerError("autotune winner timing cases lack repeated samples")
             case_ids.append(case_id)
             medians.append(median)
-        if len(case_ids) != len(set(case_ids)):
-            raise RunnerError("autotune winner timing case inventory is duplicated")
+        if case_ids != expected_profile_cases:
+            raise RunnerError("autotune winner timing cases do not match ranked inventory")
         expected_geomean = math.exp(sum(math.log(value) for value in medians) / len(medians))
         if not math.isclose(geomean, expected_geomean, rel_tol=1e-12, abs_tol=1e-12):
             raise RunnerError("autotune winner full-gate geomean does not match case medians")

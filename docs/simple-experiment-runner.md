@@ -168,16 +168,19 @@ summary and binds it through `autotune_summary.winner_full_gate`:
 
 The source and executed artifact hashes must equal the selected option. The
 profile digest uses UTF-8 JSON with sorted keys and compact separators. The
-retained request pins the benchmark, required correctness-case count,
-expected Python entrypoint, and expected declared kernel selector. The bound
-summary must equal those identities, prove one logical launch for every
-correctness case, and carry nonempty normalized A3 pipe observations whose
-exact selector matches the resolved timing selector. This prevents a gate from
-presenting internally consistent evidence for a different kernel.
+retained request pins the benchmark, required correctness-case count, ranked
+profiling cases (Matmul `[7, 8, 9]`, GDN `[40, 49, 47, 46, 45]`, or BSA
+`[47, 46, 49, 44, 43]`), expected Python entrypoint, and expected declared
+kernel selector. The bound summary must equal those identities, prove one
+logical launch for every correctness case, and carry nonempty normalized A3
+pipe observations whose exact selector matches the resolved timing selector.
+This prevents a gate from presenting internally consistent evidence for a
+different kernel.
 
 Official timing uses `msprof-op`/`BasicInfo` with an integer repeat count of at
-least three. Every timing case contains exactly that many positive samples and
-its recomputable median. Its nonempty capture inventory is case-major and has
+least three. Timing cases must equal the pinned ranked inventory in order;
+every case contains exactly that many positive samples and its recomputable
+median. Its nonempty capture inventory is case-major and has
 exactly one row for every `(case, iteration)`: each row retains the resolved
 and declared selectors, the matching duration, and lowercase SHA-256 digests
 for both compact evidence and the msprof log. The reported overall geomean is

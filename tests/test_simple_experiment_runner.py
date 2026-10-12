@@ -153,6 +153,7 @@ def autotune_candidate():
 def autotune_success(plan, winner="block-64", failed=()):
     plan.setdefault("benchmark", "matmul")
     plan.setdefault("required_correctness_cases", 10)
+    plan.setdefault("expected_profile_cases", [7, 8, 9])
     plan.setdefault("expected_entrypoint", "streaming_matmul_add_kernel")
     plan.setdefault("expected_declared_kernel_name", "streaming_matmul_add_kernel_mix_aic")
     rows = []
@@ -185,6 +186,10 @@ def autotune_success(plan, winner="block-64", failed=()):
             for index, identifier in enumerate(finalists)
         }.items() if identifier == winner
     )
+    timing_cases = [{
+        "case": case, "median_us": winner_timing,
+        "samples_us": [winner_timing] * 3,
+    } for case in plan["expected_profile_cases"]]
     profile_summary = {
         "schema": "profiling-skill/a3-round-profile-summary/v1",
         "benchmark": plan["benchmark"],
@@ -199,16 +204,18 @@ def autotune_success(plan, winner="block-64", failed=()):
             "metric": "BasicInfo", "profiler": "msprof-op",
             "timing_scope": "device-task", "kernel_name": resolved,
             "declared_kernel_name": declared, "resolved_kernel_name": resolved,
-            "cases": [{"case": 7, "median_us": winner_timing,
-                       "samples_us": [winner_timing] * 3}],
+            "cases": timing_cases,
             "repeats": 3, "geomean_us": winner_timing,
             "captures": [{
-                "case": 7, "iteration": iteration, "duration_us": winner_timing,
+                "case": case, "iteration": iteration, "duration_us": winner_timing,
                 "kernel_name": resolved, "declared_kernel_name": declared,
                 "resolved_kernel_name": resolved,
-                "evidence_sha256": f"{iteration + 1:064x}",
-                "msprof_log_sha256": f"{iteration + 11:064x}",
-            } for iteration in range(3)],
+                "evidence_sha256": f"{case_index * 3 + iteration + 1:064x}",
+                "msprof_log_sha256": f"{case_index * 3 + iteration + 101:064x}",
+            }
+                for case_index, case in enumerate(plan["expected_profile_cases"])
+                for iteration in range(3)
+            ],
         },
         "pipe_activity": {
             "schema_version": 1, "product": "a3",
@@ -953,6 +960,41 @@ def test_materialize_autotune_rejects_duplicate_sources(proposed):
         runner.materialize_autotune(autotune_candidate(), proposed)
 
 
+@pytest.mark.parametrize("task,correctness,ranked,entrypoint,kernel_name", [
+    ("matmul", 10, [7, 8, 9], "streaming_matmul_add_kernel",
+     "streaming_matmul_add_kernel_mix_aic"),
+    ("gdn", 50, [40, 49, 47, 46, 45], "chunk_gated_delta_rule_kernel",
+     "chunk_gated_delta_rule_kernel"),
+    ("bsa", 50, [47, 46, 49, 44, 43], "block_sparse_attention_kernel",
+     "block_sparse_attention_kernel"),
+])
+def test_autotune_request_pins_complete_benchmark_contract(
+        tmp_path, task, correctness, ranked, entrypoint, kernel_name):
+    prepared = evidence("contract")
+    prepared["candidate"] = autotune_candidate()
+    remote = Remote([runner.ObservationLost("retain request")])
+    cell = initialized(
+        tmp_path, remote, Agent([prepared]), rounds=1, task=task,
+        autotune=True, managed_autotune=True,
+    )
+
+    assert cell.run()["status"] == "infrastructure_unknown"
+    retained = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+    assert {
+        "benchmark": retained["benchmark"],
+        "required_correctness_cases": retained["required_correctness_cases"],
+        "expected_profile_cases": retained["expected_profile_cases"],
+        "expected_entrypoint": retained["expected_entrypoint"],
+        "expected_declared_kernel_name": retained["expected_declared_kernel_name"],
+    } == {
+        "benchmark": task,
+        "required_correctness_cases": correctness,
+        "expected_profile_cases": ranked,
+        "expected_entrypoint": entrypoint,
+        "expected_declared_kernel_name": kernel_name,
+    }
+
+
 def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp_path):
     prepared = evidence("structural")
     prepared["candidate"] = autotune_candidate()
@@ -994,6 +1036,7 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
     assert len(retained["options"]) == 101
     assert retained["optimization_round"] == 1
     assert retained["required_correctness_cases"] == 10
+    assert retained["expected_profile_cases"] == [7, 8, 9]
     assert retained["expected_entrypoint"] == "streaming_matmul_add_kernel"
     assert retained["expected_declared_kernel_name"] == (
         "streaming_matmul_add_kernel_mix_aic"
@@ -1421,6 +1464,7 @@ def winner_evidence_fixture():
     ])
     plan.update(
         optimization_round=1, benchmark="matmul", required_correctness_cases=10,
+        expected_profile_cases=[7, 8, 9],
         expected_entrypoint="streaming_matmul_add_kernel",
         expected_declared_kernel_name="streaming_matmul_add_kernel_mix_aic",
     )
@@ -1497,6 +1541,28 @@ def test_autotune_rejects_collectively_renamed_kernel_identity():
     rebind_winner_profile(result)
 
     with pytest.raises(runner.RunnerError, match="fusion evidence"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation", ["reordered", "subset", "other-in-range"])
+def test_autotune_rejects_noncanonical_ranked_profile_cases(mutation):
+    plan, result = winner_evidence_fixture()
+    timing = result["profile_summary"]["timing"]
+    if mutation == "reordered":
+        timing["cases"][0], timing["cases"][1] = timing["cases"][1], timing["cases"][0]
+        timing["captures"] = (
+            timing["captures"][3:6] + timing["captures"][0:3] + timing["captures"][6:]
+        )
+    elif mutation == "subset":
+        timing["cases"].pop()
+        del timing["captures"][-3:]
+    else:
+        timing["cases"][0]["case"] = 6
+        for capture in timing["captures"][:3]:
+            capture["case"] = 6
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match="ranked inventory"):
         runner.ExperimentCell._validate_autotune_success(plan, result)
 
 

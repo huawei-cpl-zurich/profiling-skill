@@ -9,9 +9,11 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shutil
+import statistics
 import subprocess
 import tempfile
 from collections import Counter
@@ -201,7 +203,42 @@ class BzA5WrapperRemote:
         timeout = config.get("timeout_seconds", 900)
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             raise RunnerError("timeout_seconds must be a positive integer")
+        bundle_value = config.get("bundle_path")
+        digest = config.get("bundle_sha256")
+        manifest_value = config.get("candidate_manifest_path")
+        bundled = any(value is not None for value in (
+            bundle_value, digest, config.get("warm_up"), config.get("launch_count"),
+            config.get("ranked_cases"), config.get("repeats"),
+        ))
+        bundle = None
+        if bundled:
+            if (not isinstance(bundle_value, str) or not Path(bundle_value).is_file()
+                    or Path(bundle_value).is_symlink()):
+                raise RunnerError("bundle_path must be a regular A5 gate bundle")
+            bundle = Path(bundle_value).resolve()
+            if (not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                    or hashlib.sha256(bundle.read_bytes()).hexdigest() != digest):
+                raise RunnerError("bundle_sha256 does not identify the A5 gate bundle")
+            if (not isinstance(manifest_value, str) or not Path(manifest_value).is_file()
+                    or Path(manifest_value).is_symlink()):
+                raise RunnerError("candidate_manifest_path must be a regular v2 manifest")
+        warm_up, launch_count = config.get("warm_up", 0), config.get("launch_count", 1)
+        ranked, repeats = config.get("ranked_cases", [0]), config.get("repeats", 1)
+        if (isinstance(warm_up, bool) or not isinstance(warm_up, int) or warm_up < 0
+                or isinstance(launch_count, bool) or not isinstance(launch_count, int)
+                or launch_count < 1):
+            raise RunnerError("warm_up and launch_count must be non-negative/positive integers")
+        if (not isinstance(ranked, list) or not ranked
+                or any(isinstance(case, bool) or not isinstance(case, int) or case < 0
+                       for case in ranked)
+                or isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1
+                or launch_count != len(ranked) * repeats):
+            raise RunnerError("ranked_cases/repeats must exactly determine launch_count")
         self.kernel_name, self.timeout = kernel, timeout
+        self.bundle, self.bundle_sha256 = bundle, digest
+        self.manifest = Path(manifest_value).resolve() if manifest_value else None
+        self.warm_up, self.launch_count = warm_up, launch_count
+        self.ranked_cases, self.repeats = ranked, repeats
         self.invoke = invoke or subprocess.run
         self.device: int | None = None
         self.state_root.mkdir(parents=True, exist_ok=True)
@@ -243,14 +280,27 @@ class BzA5WrapperRemote:
     def _save_receipt(self, receipt: dict) -> None:
         _write_json(self._receipt_path(receipt["handle"]), receipt)
 
-    def _application(self, script: Path, remote_result: str, destination: Path) -> None:
+    def _application(self, script: Path, remote_result: str, remote_bundle: str,
+                     round_number: int, destination: Path) -> None:
         payload = base64.b64encode(script.read_bytes()).decode()
+        declaration = (base64.b64encode(self.manifest.read_bytes()).decode()
+                       if self.manifest is not None else None)
+        gate_environment = ""
+        if declaration is not None and self.bundle is not None:
+            gate_environment = (
+                "base64 -d >\"$work/candidate.manifest.json\" <<'A5_CANDIDATE_MANIFEST'\n"
+                f"{declaration}\nA5_CANDIDATE_MANIFEST\n"
+                f"export TERMINAL_GATE_BUNDLE_PATH={remote_bundle}\n"
+                "export CANDIDATE_MANIFEST_PATH=\"$work/candidate.manifest.json\"\n"
+                f"export EXPERIMENT_ROUND={round_number}\n"
+            )
         destination.write_text(
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             "work=$(mktemp -d \"${TMPDIR:-/tmp}/a5-simple.XXXXXX\")\n"
             "trap 'rm -rf -- \"$work\"' EXIT\n"
             "base64 -d >\"$work/run.sh\" <<'A5_SIMPLE_SCRIPT'\n"
             f"{payload}\nA5_SIMPLE_SCRIPT\nchmod 700 \"$work/run.sh\"\n"
+            f"{gate_environment}"
             "set +e\n\"$work/run.sh\" >\"$work/stdout\" 2>\"$work/stderr\"\n"
             "rc=$?\nset -e\ncat \"$work/stdout\"\ncat \"$work/stderr\" >&2\n"
             f"tail -n 1 \"$work/stdout\" >{remote_result}\nexit \"$rc\"\n"
@@ -263,34 +313,56 @@ class BzA5WrapperRemote:
         workspace = request.get("remote_workspace")
         if not isinstance(workspace, str) or not self._SAFE_REMOTE.fullmatch(workspace):
             raise ObservationLost("remote_workspace must be an absolute whitespace-free path")
+        identity_inputs = {
+            "request": {key: request.get(key) for key in ("campaign", "cell", "round")},
+            "kernel_name": self.kernel_name, "warm_up": self.warm_up,
+            "launch_count": self.launch_count, "ranked_cases": self.ranked_cases,
+            "repeats": self.repeats, "bundle_sha256": self.bundle_sha256,
+            "manifest_sha256": (hashlib.sha256(self.manifest.read_bytes()).hexdigest()
+                                if self.manifest is not None else None),
+        }
         identity = hashlib.sha256(
-            script.read_bytes() + json.dumps({
-                key: request.get(key) for key in ("campaign", "cell", "round")
-            }, sort_keys=True).encode()
+            script.read_bytes()
+            + json.dumps(identity_inputs, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
         session, experiment = f"simple-{identity[:24]}", f"simple-{identity[:24]}"
         handle = f"remote:bz-a5:session:{session}"
         remote_root = f"{workspace.rstrip('/')}/.a5-simple-{identity}"
         remote_app, remote_result = f"{remote_root}.sh", f"{remote_root}.result.json"
+        remote_bundle = (f"{workspace.rstrip('/')}/a5-gate-{self.bundle_sha256}.tar"
+                         if self.bundle is not None else "")
         local_app = self.state_root / f"{identity}.sh"
-        self._application(script, remote_result, local_app)
+        self._application(script, remote_result, remote_bundle, request["round"], local_app)
         try:
+            bundle_transfer = (self._run([
+                str(self.wrappers["scp.sh"]), "upload", str(self.bundle), remote_bundle,
+            ]) if self.bundle is not None else None)
             transfer = self._run([
                 str(self.wrappers["scp.sh"]), "upload", str(local_app), remote_app,
             ])
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise ObservationLost(f"BZ-A5 wrapper upload failed: {exc}") from exc
-        if transfer.returncode or "BZ_A5_TRANSFER_STATE=completed" not in transfer.stdout:
-            raise ObservationLost(transfer.stderr or transfer.stdout or "BZ-A5 upload failed")
+        if ((bundle_transfer is not None and (bundle_transfer.returncode
+                or "BZ_A5_TRANSFER_STATE=completed" not in bundle_transfer.stdout))
+                or transfer.returncode
+                or "BZ_A5_TRANSFER_STATE=completed" not in transfer.stdout):
+            failed = bundle_transfer if (bundle_transfer is not None and (
+                bundle_transfer.returncode
+                or "BZ_A5_TRANSFER_STATE=completed" not in bundle_transfer.stdout
+            )) else transfer
+            raise ObservationLost(failed.stderr or failed.stdout or "BZ-A5 upload failed")
         command = [
             str(self.wrappers["profile-msprof.sh"]), "--device", str(self.device),
             "--metric", "OpBasicInfo", "--kernel-name", self.kernel_name,
-            "--warm-up", "0", "--launch-count", "1", "--experiment", experiment,
+            "--warm-up", str(self.warm_up), "--launch-count", str(self.launch_count),
+            "--experiment", experiment,
             "--session", session, "--result-file", remote_result,
             "--timeout-seconds", str(self.timeout), "--", remote_app,
         ]
         receipt = {"handle": handle, "target": "bz-a5", "session": session,
-                   "physical_device": self.device, "command": command, "attempts": 0}
+                   "physical_device": self.device, "command": command, "attempts": 0,
+                   "bundle_sha256": self.bundle_sha256,
+                   "manifest_sha256": identity_inputs["manifest_sha256"]}
         self._save_receipt(receipt)
         self._invoke_profile(receipt)
         return handle
@@ -356,11 +428,26 @@ class BzA5WrapperRemote:
                     pass
         durations = [duration for content in csv_values for duration in self._durations(content)]
         summary = dict(envelope.get("profile_summary") or {})
+        rows = []
+        if len(durations) == self.launch_count:
+            offset = 0
+            per_case = {case: [] for case in self.ranked_cases}
+            for _repeat in range(self.repeats):
+                for case in self.ranked_cases:
+                    per_case[case].append(durations[offset])
+                    offset += 1
+            rows = [{"case": case, "samples_us": values,
+                     "median_us": statistics.median(values)}
+                    for case, values in per_case.items()]
+        medians = [row["median_us"] for row in rows]
+        geomean = math.prod(medians) ** (1 / len(medians)) if medians else None
         summary.update(kernel_name=self.kernel_name, physical_device=receipt["physical_device"],
-                       durations_us=durations, sample_count=len(durations), metric="OpBasicInfo")
-        if envelope.get("outcome") == "success" and (receipt.get("returncode") or not durations):
-            envelope = {**envelope, "outcome": "candidate_failure",
-                        "diagnostics": "msprof captured no timing row for the exact kernel selector"}
+                       durations_us=durations, sample_count=len(durations), metric="OpBasicInfo",
+                       cases=rows, geomean_us=geomean)
+        if envelope.get("outcome") == "success" and (
+                receipt.get("returncode") or len(durations) != self.launch_count):
+            envelope = {**envelope, "outcome": "infrastructure_failure",
+                        "diagnostics": "msprof did not return the exact ranked launch count"}
         return {**envelope, "profile_summary": summary, "stdout": "", "stderr": stderr}
 
 
@@ -384,6 +471,7 @@ def _remote_from_config(config: dict, invoke: Callable | None = None,
             if configured is not None and configured != selector:
                 raise RunnerError("A5 kernel selector conflicts with the candidate manifest")
             transport["kernel_name"] = selector
+            transport["candidate_manifest_path"] = str(manifest_path.resolve())
         return BzA5WrapperRemote(transport, invoke=invoke)
     raise RunnerError("unsupported remote transport")
 

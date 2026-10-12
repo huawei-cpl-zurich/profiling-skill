@@ -454,6 +454,39 @@ def test_remote_success_envelope_fails_closed(state, exit_code, envelope):
     assert result["outcome"] != "success"
 
 
+@pytest.mark.parametrize("state,exit_code", [("missing", None), ("failed", 125), ("failed", 200)])
+def test_retained_or_setup_failure_without_envelope_is_infrastructure(state, exit_code):
+    handle = "remote:bz-a3-1:job:infra"
+
+    def invoke(command, **kwargs):
+        if "observe" in command:
+            value, code = {"handle": handle, "target": "bz-a3-1", "state": state, "exit": exit_code}, 1
+        else:
+            value, code = {"handle": handle, "target": "bz-a3-1", "content": "remote setup failed"}, 0
+        return subprocess.CompletedProcess(command, code, json.dumps(value), "")
+
+    result = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote")).observe(handle)
+    assert result["outcome"] == "infrastructure_failure"
+    assert "remote setup failed" in result["diagnostics"]
+
+
+def test_explicit_failure_envelope_is_preserved_over_transport_exit():
+    handle = "remote:bz-a3-1:job:explicit"
+    envelope = {"schema": runner.RESULT_SCHEMA, "outcome": "candidate_failure", "diagnostics": "compile"}
+
+    def invoke(command, **kwargs):
+        if "observe" in command:
+            value = {"handle": handle, "target": "bz-a3-1", "state": "failed", "exit": 125}
+        else:
+            content = json.dumps(envelope) if "stdout" in command else ""
+            value = {"handle": handle, "target": "bz-a3-1", "content": content}
+        return subprocess.CompletedProcess(command, 1 if "observe" in command else 0, json.dumps(value), "")
+
+    result = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote")).observe(handle)
+    assert result["outcome"] == "candidate_failure"
+    assert result["diagnostics"] == "compile"
+
+
 def test_logs_receipt_must_match_handle_and_target():
     handle = "remote:bz-a3-1:job:9"
 

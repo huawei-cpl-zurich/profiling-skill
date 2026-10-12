@@ -134,6 +134,8 @@ class CplRemote:
             return {**envelope, "stdout": stdout, "stderr": stderr}
         if valid and envelope.get("outcome") in {"candidate_failure", "infrastructure_failure"}:
             outcome = envelope["outcome"]
+        elif state == "missing" or exit_code in {125, 200}:
+            outcome = "infrastructure_failure"
         else:
             outcome = "candidate_failure"
         diagnostics = stderr or (envelope or {}).get("diagnostics") or stdout

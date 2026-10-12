@@ -155,7 +155,8 @@ class CplRemote:
                 or "\x00" in workspace or "\n" in workspace):
             raise RunnerError("remote_workspace must be a safe non-empty path")
         digest = hashlib.sha256(script.read_bytes()).hexdigest()
-        remote_script = f"{workspace.rstrip('/')}/.simple-experiment-{digest}.sh"
+        remote_name = f".simple-experiment-{digest}.sh"
+        remote_script = f"{workspace.rstrip('/')}/{remote_name}"
         try:
             uploaded = self._call(["upload", target, str(script), remote_script])
         except ObservationLost as exc:
@@ -168,7 +169,8 @@ class CplRemote:
                 f"exit={uploaded.get('exit')}"
             )
         launcher = script.with_name("dispatch.sh")
-        quoted = shlex.quote(remote_script)
+        launcher_script = remote_script if workspace.startswith("/") else f"./{remote_name}"
+        quoted = shlex.quote(launcher_script)
         launcher.write_text(
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             "infrastructure_failure() {\n"

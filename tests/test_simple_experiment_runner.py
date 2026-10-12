@@ -841,9 +841,13 @@ def test_upload_failure_is_proven_pre_dispatch(tmp_path):
 
 def test_remote_agent_upload_accepts_relative_workspace_and_absent_exit(tmp_path):
     calls = []
+    remote_root = tmp_path / "remote"
+    (remote_root / "campaign/cell").mkdir(parents=True)
 
     def invoke(command, **kwargs):
         calls.append(command)
+        if "upload" in command:
+            (remote_root / command[-1]).write_bytes(Path(command[-2]).read_bytes())
         value = ({"target": "gz-a3", "backend": "remote-agent", "state": "completed"}
                  if "upload" in command else
                  {"target": "gz-a3", "handle": "remote:gz-a3:job:8", "state": "running"})
@@ -860,6 +864,10 @@ def test_remote_agent_upload_accepts_relative_workspace_and_absent_exit(tmp_path
     assert handle == "remote:gz-a3:job:8"
     assert calls[0][-1] == f"campaign/cell/.simple-experiment-{digest}.sh"
     assert calls[1][-2:] == ["--cwd", "campaign/cell"]
+    launcher = script.with_name("dispatch.sh")
+    assert subprocess.run(
+        ["bash", str(launcher)], cwd=remote_root / "campaign/cell", check=False,
+    ).returncode == 0
 
 
 def test_cpl_remote_returns_remote_compile_diagnostics(tmp_path):

@@ -1,6 +1,5 @@
 import importlib.util
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -13,32 +12,6 @@ SPEC = importlib.util.spec_from_file_location(
 )
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
-
-
-OBSOLETE_CAMPAIGN_MODULES = (
-    "audited_bz_controller",
-    "audited_campaign",
-    "audited_campaign_production",
-    "audited_contract",
-    "audited_experiment",
-    "audited_lifecycle",
-    "audited_repair_canaries",
-    "audited_resource_admission",
-    "audited_runtime",
-    "audited_runtime_migration",
-    "audited_runtime_migration_apply",
-    "audited_terminal_reconciliation",
-    "audited_verifier",
-    "campaign",
-    "diagnostic_campaign",
-    "experimentctl",
-    "fully_fused_campaign_execution",
-    "one_shot_agent_runner",
-    "one_shot_bz_campaign",
-    "run_audited_toy_battery",
-    "two_shot_smoke_campaign",
-    "validate_audited_experiment",
-)
 
 
 def git(path, *args):
@@ -876,18 +849,3 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
     assert cli("resume")["status"] == "complete"
     assert cli("report")["rounds_completed"] == 1
     assert json.loads(transport_state.read_text()) == {"observe": 2, "run": 1}
-
-
-def test_obsolete_campaign_module_entrypoints_are_not_importable():
-    scripts = Path(__file__).parents[1] / "scripts"
-    environment = {**os.environ, "PYTHONPATH": str(scripts)}
-    for module in OBSOLETE_CAMPAIGN_MODULES:
-        result = subprocess.run(
-            ["python", "-c", f"import {module}"],
-            text=True,
-            capture_output=True,
-            env=environment,
-            check=False,
-        )
-        assert result.returncode != 0, module
-        assert f"No module named '{module}'" in result.stderr

@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import csv
 import hashlib
+import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -164,6 +167,225 @@ class CplRemote:
         return {"outcome": outcome, "diagnostics": diagnostics,
                 "stdout": stdout, "stderr": stderr, "remote_state": state,
                 "remote_exit": exit_code}
+
+
+class BzA5WrapperRemote:
+    """A5 transport using only the approved checked-in BZ-A5 wrappers."""
+
+    _SAFE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+    _SAFE_REMOTE = re.compile(r"/[A-Za-z0-9_./-]+")
+    _INFRASTRUCTURE = (
+        "observation-unavailable", "target unavailable", "device unavailable",
+        "no eligible", "connection timed out", "connection reset", "ssh:",
+    )
+
+    def __init__(self, config: dict, invoke: Callable | None = None):
+        if not isinstance(config, dict):
+            raise RunnerError("remote_transport must be an object")
+        root_value, state_value = config.get("wrapper_root"), config.get("state_root")
+        if not isinstance(root_value, str) or not Path(root_value).is_absolute():
+            raise RunnerError("wrapper_root must be an absolute checked-in wrapper directory")
+        if not isinstance(state_value, str) or not Path(state_value).is_absolute():
+            raise RunnerError("state_root must be an absolute ignored directory")
+        self.root, self.state_root = Path(root_value), Path(state_value)
+        self.wrappers = {
+            name: self.root / name for name in
+            ("triton.sh", "select-device.sh", "scp.sh", "profile-msprof.sh")
+        }
+        if any(not path.is_file() or not os.access(path, os.X_OK)
+               for path in self.wrappers.values()):
+            raise RunnerError("wrapper_root is missing an executable approved BZ-A5 wrapper")
+        kernel = config.get("kernel_name")
+        if not isinstance(kernel, str) or not self._SAFE_NAME.fullmatch(kernel):
+            raise RunnerError("kernel_name must be an exact safe profiler selector")
+        timeout = config.get("timeout_seconds", 900)
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
+            raise RunnerError("timeout_seconds must be a positive integer")
+        self.kernel_name, self.timeout = kernel, timeout
+        self.invoke = invoke or subprocess.run
+        self.device: int | None = None
+        self.state_root.mkdir(parents=True, exist_ok=True)
+
+    def _run(self, command: list[str]):
+        return self.invoke(command, text=True, capture_output=True, check=False)
+
+    def preflight(self, request: dict) -> dict:
+        if request.get("target") != "bz-a5":
+            raise PreflightFailure("target", "BZ-A5 wrapper transport requires target bz-a5")
+        try:
+            runtime = self._run([str(self.wrappers["triton.sh"]), "preflight"])
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise PreflightFailure("runtime", str(exc)) from exc
+        if runtime.returncode:
+            raise PreflightFailure("runtime", runtime.stderr or runtime.stdout)
+        try:
+            selected = self._run([
+                str(self.wrappers["select-device.sh"]), "--purpose", "profiling",
+            ])
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise PreflightFailure("device", str(exc)) from exc
+        match = re.search(r"^BZ_A5_DEVICE=([0-7])$", selected.stdout, re.MULTILINE)
+        if selected.returncode or match is None:
+            raise PreflightFailure("device", selected.stderr or selected.stdout)
+        self.device = int(match.group(1))
+        return {"target": "bz-a5", "runtime": "ready", "physical_device": self.device,
+                "selector": self.kernel_name}
+
+    @staticmethod
+    def _value(output: str, key: str) -> str | None:
+        values = [line[len(key) + 1:] for line in output.splitlines()
+                  if line.startswith(key + "=")]
+        return values[-1] if values else None
+
+    def _receipt_path(self, handle: str) -> Path:
+        return self.state_root / f"{hashlib.sha256(handle.encode()).hexdigest()}.json"
+
+    def _save_receipt(self, receipt: dict) -> None:
+        _write_json(self._receipt_path(receipt["handle"]), receipt)
+
+    def _application(self, script: Path, remote_result: str, destination: Path) -> None:
+        payload = base64.b64encode(script.read_bytes()).decode()
+        destination.write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            "work=$(mktemp -d \"${TMPDIR:-/tmp}/a5-simple.XXXXXX\")\n"
+            "trap 'rm -rf -- \"$work\"' EXIT\n"
+            "base64 -d >\"$work/run.sh\" <<'A5_SIMPLE_SCRIPT'\n"
+            f"{payload}\nA5_SIMPLE_SCRIPT\nchmod 700 \"$work/run.sh\"\n"
+            "set +e\n\"$work/run.sh\" >\"$work/stdout\" 2>\"$work/stderr\"\n"
+            "rc=$?\nset -e\ncat \"$work/stdout\"\ncat \"$work/stderr\" >&2\n"
+            f"tail -n 1 \"$work/stdout\" >{remote_result}\nexit \"$rc\"\n"
+        )
+        destination.chmod(0o700)
+
+    def submit(self, request: dict, script: Path) -> str:
+        if request.get("target") != "bz-a5" or self.device is None:
+            raise ObservationLost("BZ-A5 submission requires a successful wrapper preflight")
+        workspace = request.get("remote_workspace")
+        if not isinstance(workspace, str) or not self._SAFE_REMOTE.fullmatch(workspace):
+            raise ObservationLost("remote_workspace must be an absolute whitespace-free path")
+        identity = hashlib.sha256(
+            script.read_bytes() + json.dumps({
+                key: request.get(key) for key in ("campaign", "cell", "round")
+            }, sort_keys=True).encode()
+        ).hexdigest()
+        session, experiment = f"simple-{identity[:24]}", f"simple-{identity[:24]}"
+        handle = f"remote:bz-a5:session:{session}"
+        remote_root = f"{workspace.rstrip('/')}/.a5-simple-{identity}"
+        remote_app, remote_result = f"{remote_root}.sh", f"{remote_root}.result.json"
+        local_app = self.state_root / f"{identity}.sh"
+        self._application(script, remote_result, local_app)
+        try:
+            transfer = self._run([
+                str(self.wrappers["scp.sh"]), "upload", str(local_app), remote_app,
+            ])
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ObservationLost(f"BZ-A5 wrapper upload failed: {exc}") from exc
+        if transfer.returncode or "BZ_A5_TRANSFER_STATE=completed" not in transfer.stdout:
+            raise ObservationLost(transfer.stderr or transfer.stdout or "BZ-A5 upload failed")
+        command = [
+            str(self.wrappers["profile-msprof.sh"]), "--device", str(self.device),
+            "--metric", "OpBasicInfo", "--kernel-name", self.kernel_name,
+            "--warm-up", "0", "--launch-count", "1", "--experiment", experiment,
+            "--session", session, "--result-file", remote_result,
+            "--timeout-seconds", str(self.timeout), "--", remote_app,
+        ]
+        receipt = {"handle": handle, "target": "bz-a5", "session": session,
+                   "physical_device": self.device, "command": command, "attempts": 0}
+        self._save_receipt(receipt)
+        self._invoke_profile(receipt)
+        return handle
+
+    def _invoke_profile(self, receipt: dict) -> None:
+        receipt["attempts"] += 1
+        try:
+            result = self._run(receipt["command"])
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            receipt.update(status="observation_unavailable", diagnostics=str(exc))
+        else:
+            receipt.update(status="observed", returncode=result.returncode,
+                           stdout=result.stdout, stderr=result.stderr)
+        self._save_receipt(receipt)
+
+    @staticmethod
+    def _durations(csv_text: str) -> list[float]:
+        values = []
+        for row in csv.DictReader(io.StringIO(csv_text)):
+            field = next((value for key, value in row.items()
+                          if key and "duration" in key.lower() and "us" in key.lower()), None)
+            if field is not None:
+                try:
+                    values.append(float(field))
+                except ValueError:
+                    pass
+        return values
+
+    def observe(self, handle: str) -> dict:
+        path = self._receipt_path(handle)
+        if not path.is_file():
+            raise ObservationLost("unknown BZ-A5 wrapper session handle")
+        receipt = json.loads(path.read_text())
+        if receipt.get("handle") != handle or receipt.get("target") != "bz-a5":
+            raise ObservationLost("BZ-A5 wrapper receipt identity mismatch")
+        if receipt.get("status") == "observation_unavailable":
+            self._invoke_profile(receipt)
+            receipt = json.loads(path.read_text())
+        if receipt.get("status") != "observed":
+            raise ObservationLost(str(receipt.get("diagnostics", "wrapper observation unavailable")))
+        stdout, stderr = str(receipt.get("stdout", "")), str(receipt.get("stderr", ""))
+        encoded = self._value(stdout, "MSPROF_PROFILE_RESULT_BASE64")
+        envelope = None
+        if encoded:
+            try:
+                envelope = json.loads(base64.b64decode(encoded, validate=True))
+            except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+                envelope = None
+        valid = isinstance(envelope, dict) and envelope.get("schema") == RESULT_SCHEMA
+        if not valid:
+            diagnostics = stderr or stdout or "wrapper returned no workload result"
+            lowered = diagnostics.lower()
+            outcome = ("infrastructure_failure" if any(marker in lowered for marker in self._INFRASTRUCTURE)
+                       else "candidate_failure")
+            return {"outcome": outcome, "diagnostics": diagnostics[-16000:],
+                    "stdout": "", "stderr": stderr}
+        csv_values = []
+        for line in stdout.splitlines():
+            if line.startswith("MSPROF_PROFILE_CSV_BASE64="):
+                try:
+                    csv_values.append(base64.b64decode(line.split("=", 1)[1], validate=True).decode())
+                except (ValueError, UnicodeDecodeError):
+                    pass
+        durations = [duration for content in csv_values for duration in self._durations(content)]
+        summary = dict(envelope.get("profile_summary") or {})
+        summary.update(kernel_name=self.kernel_name, physical_device=receipt["physical_device"],
+                       durations_us=durations, sample_count=len(durations), metric="OpBasicInfo")
+        if envelope.get("outcome") == "success" and (receipt.get("returncode") or not durations):
+            envelope = {**envelope, "outcome": "candidate_failure",
+                        "diagnostics": "msprof captured no timing row for the exact kernel selector"}
+        return {**envelope, "profile_summary": summary, "stdout": "", "stderr": stderr}
+
+
+def _remote_from_config(config: dict, invoke: Callable | None = None,
+                        candidate_manifest_path: Path | None = None):
+    transport = config.get("remote_transport")
+    if transport is None:
+        return CplRemote(invoke=invoke)
+    if isinstance(transport, dict) and transport.get("kind") == "bz-a5-wrapper":
+        transport = dict(transport)
+        manifest_path = candidate_manifest_path
+        if manifest_path is None and isinstance(config.get("candidate_manifest_path"), str):
+            manifest_path = Path(config["candidate_manifest_path"])
+        if manifest_path is not None:
+            try:
+                manifest = json.loads(manifest_path.read_text())
+                selector = manifest["kernel_name"]
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError) as exc:
+                raise RunnerError("candidate manifest cannot supply the A5 kernel selector") from exc
+            configured = transport.get("kernel_name")
+            if configured is not None and configured != selector:
+                raise RunnerError("A5 kernel selector conflicts with the candidate manifest")
+            transport["kernel_name"] = selector
+        return BzA5WrapperRemote(transport, invoke=invoke)
+    raise RunnerError("unsupported remote transport")
 
 
 class SubprocessAgent:
@@ -625,7 +847,10 @@ def main() -> int:
     cell = ExperimentCell(args.root, config, None, None)
     if args.command in {"run", "resume"}:
         cell.agent = SubprocessAgent(config["agent_command"], cell.repo, cell.agent_home)
-        cell.remote = CplRemote()
+        manifest = cell.path / "candidate-manifest.json"
+        cell.remote = _remote_from_config(
+            config, candidate_manifest_path=manifest if manifest.is_file() else None,
+        )
     value = getattr(cell, args.command)()
     print(json.dumps(value, indent=2, sort_keys=True))
     return 0

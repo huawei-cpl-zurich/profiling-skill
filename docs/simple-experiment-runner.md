@@ -149,8 +149,9 @@ reconciliation because an automatic replacement could duplicate live work.
 
 Each successful round adds exactly one commit under `repo/rounds/NN/` with the
 candidate, generated wrapper, command log, compact profile and terminal result,
-host terminal gate, prompt/treatment/skill inputs, billed-check limit, and the
-snapshotted task digest when configured, plus hypothesis, retrieved knowledge,
-final reasoning, and post-mortem. Large profiler report trees remain remote. The
+host terminal gate, prompt/treatment/skill inputs, billed-check limit,
+hypothesis, retrieved knowledge, final reasoning, and post-mortem. When a task
+is configured, every round commit also contains its exact `TASK.md` bytes and
+digest. Large profiler report trees remain remote. The
 runner has no campaign admission, receipt graph, runtime-closure hash, sealed
 manifest, migration attestation, or generalized plugin layer.

@@ -136,17 +136,23 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
 
 def test_init_snapshots_optional_task_and_records_it_with_round_evidence(tmp_path):
     task = tmp_path / "benchmark-task.md"
-    task.write_text("Optimize the supplied benchmark.\n")
+    exact_task = b"\xef\xbb\xbfOptimize the supplied benchmark.\r\n"
+    task.write_bytes(exact_task)
     remote = Remote([success()])
     cell = initialized(tmp_path, remote, task_path=str(task), rounds=1)
     expected = hashlib.sha256(task.read_bytes()).hexdigest()
 
     task.write_text("source changed after init\n")
-    assert (cell.repo / "TASK.md").read_text() == "Optimize the supplied benchmark.\n"
+    assert (cell.repo / "TASK.md").read_bytes() == exact_task
     assert cell._state()["task_sha256"] == expected
     assert cell.run()["status"] == "complete"
     inputs = json.loads((cell.repo / "rounds/01/inputs.json").read_text())
     assert inputs["task_sha256"] == expected
+    retained = subprocess.run(
+        ["git", "-C", str(cell.repo), "show", "HEAD:rounds/01/TASK.md"],
+        capture_output=True, check=True,
+    ).stdout
+    assert retained == exact_task
 
 
 @pytest.mark.parametrize("operation", ["run", "resume"])
@@ -926,5 +932,10 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
     assert (cell_repo / "TASK.md").read_text() == "CLI task snapshot\n"
     assert cli("run")["status"] == "infrastructure_unknown"
     assert cli("resume")["status"] == "complete"
+    retained_task = subprocess.run(
+        ["git", "-C", str(cell_repo), "show", "HEAD:rounds/01/TASK.md"],
+        capture_output=True, check=True,
+    ).stdout
+    assert retained_task == b"CLI task snapshot\n"
     assert cli("report")["rounds_completed"] == 1
     assert json.loads(transport_state.read_text()) == {"observe": 2, "run": 1}

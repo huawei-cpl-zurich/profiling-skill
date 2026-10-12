@@ -505,17 +505,29 @@ class ExperimentCell:
             "reasoning.md": analysis["reasoning"].rstrip() + "\n",
             "postmortem.md": analysis["postmortem"].rstrip() + "\n",
         }
+        if state.get("task_sha256") is not None:
+            files["TASK.md"] = (self.repo / "TASK.md").read_bytes()
         folder = self.repo / "rounds" / f"{state['round']:02d}"
         if folder.exists():
             actual = {path.name for path in folder.iterdir() if path.is_file()}
-            if actual != set(files) or any((folder / name).read_text() != content for name, content in files.items()):
+            expected = {
+                name: content if isinstance(content, bytes) else content.encode()
+                for name, content in files.items()
+            }
+            if actual != set(files) or any(
+                (folder / name).read_bytes() != content
+                for name, content in expected.items()
+            ):
                 raise RunnerError(f"existing round {state['round']} evidence does not match")
         else:
             folder.parent.mkdir(parents=True, exist_ok=True)
             temporary = Path(tempfile.mkdtemp(prefix=f".{folder.name}-", dir=folder.parent))
             try:
                 for name, content in files.items():
-                    (temporary / name).write_text(content)
+                    if isinstance(content, bytes):
+                        (temporary / name).write_bytes(content)
+                    else:
+                        (temporary / name).write_text(content)
                 temporary.replace(folder)
             except BaseException:
                 shutil.rmtree(temporary, ignore_errors=True)

@@ -153,6 +153,29 @@ dispatch. Observation loss reuses the same durable handle, and completed
 option screens are checkpointed inside the retained job. Tuning options do not
 increment the optimization round.
 
+The selected winner is accepted only with concrete full-gate evidence. The
+result retains the stable `profiling-skill/a3-round-profile-summary/v1`
+summary and binds it through `autotune_summary.winner_full_gate`:
+
+```json
+{
+  "winner_id": "block-64",
+  "source_sha256": "<selected source SHA-256>",
+  "candidate_artifact_sha256": "<executed candidate.py SHA-256>",
+  "profile_summary_sha256": "<canonical profile-summary SHA-256>"
+}
+```
+
+The source and executed artifact hashes must equal the selected option. The
+profile digest uses UTF-8 JSON with sorted keys and compact separators. The
+bound summary must name the requested benchmark, report its complete case
+count (10 Matmul or 50 GDN/BSA), prove one logical launch for every correctness
+case, retain at least three official `msprof-op`/`BasicInfo` samples, and carry
+nonempty normalized A3 pipe observations whose exact selector matches the
+resolved timing selector. A custom gate may implement this protocol. The
+runner does not claim a shipped A3 gate supports it until that gate itself adds
+the capability declaration and produces this evidence.
+
 ## Reproducible seed repositories
 
 `scripts/materialize_experiment_seed.py SPEC.json` verifies hash-bound common

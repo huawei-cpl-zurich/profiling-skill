@@ -30,6 +30,7 @@ MAX_MANIFEST_BYTES = 64 * 1024
 MAX_AUTOTUNE_CONFIGURATIONS = 128
 MAX_AUTOTUNE_FINALISTS = 3
 MIN_AUTOTUNE_PROFILE_REPEATS = 3
+AUTOTUNE_CORRECTNESS_CASES = {"matmul": 10, "gdn": 50, "bsa": 50}
 MAX_AUTOTUNE_BUNDLE_BYTES = 16 * 1_048_576
 AUTOTUNE_REQUEST_SCHEMA = "simple-experiment-autotune-request/v1"
 AUTOTUNE_RESULT_SCHEMA = "simple-experiment-autotune-result/v1"
@@ -778,7 +779,14 @@ class ExperimentCell:
             plan = materialize_autotune(prepared["candidate"], tuned.get("configurations"))
         except RunnerError as exc:
             raise TuneRejected(str(exc)) from exc
-        plan["optimization_round"] = state["round"]
+        benchmark = self.config["task"]
+        required_cases = AUTOTUNE_CORRECTNESS_CASES.get(benchmark)
+        if required_cases is None:
+            raise TuneRejected(f"autotune has no correctness contract for {benchmark}")
+        plan.update(
+            optimization_round=state["round"], benchmark=benchmark,
+            required_correctness_cases=required_cases,
+        )
         raw = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         if len(gzip.compress(raw, mtime=0)) > MAX_AUTOTUNE_BUNDLE_BYTES:
             raise TuneRejected("compressed autotune request is too large")
@@ -831,7 +839,10 @@ class ExperimentCell:
             if isinstance(option, dict)
         ]
         expected = materialize_autotune(prepared["candidate"], proposed)
-        expected["optimization_round"] = state["round"]
+        expected.update(
+            optimization_round=state["round"], benchmark=self.config["task"],
+            required_correctness_cases=AUTOTUNE_CORRECTNESS_CASES.get(self.config["task"]),
+        )
         if plan != expected:
             raise RunnerError("retained autotune plan does not match prepared source")
         return plan
@@ -1059,6 +1070,93 @@ class ExperimentCell:
         return value
 
     @staticmethod
+    def _validate_winner_evidence(request: dict, result: dict, summary: dict,
+                                  expected: dict, winner: str) -> None:
+        profile = result.get("profile_summary")
+        if (not isinstance(profile, dict)
+                or profile.get("schema") != "profiling-skill/a3-round-profile-summary/v1"):
+            raise RunnerError("autotune winner lacks an A3 full-gate profile summary")
+        benchmark = request.get("benchmark")
+        required_cases = request.get("required_correctness_cases")
+        if (profile.get("benchmark") != benchmark
+                or profile.get("correctness_cases") != required_cases):
+            raise RunnerError("autotune winner correctness evidence is incomplete")
+
+        binding = summary.get("winner_full_gate")
+        required_binding = {
+            "winner_id", "source_sha256", "candidate_artifact_sha256",
+            "profile_summary_sha256",
+        }
+        if not isinstance(binding, dict) or not required_binding <= set(binding):
+            raise RunnerError("autotune winner lacks bound full-gate identity")
+        source_sha = expected[winner]["source_sha256"]
+        digest = hashlib.sha256(json.dumps(
+            profile, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        if (binding.get("winner_id") != winner
+                or binding.get("source_sha256") != source_sha
+                or binding.get("candidate_artifact_sha256") != source_sha
+                or binding.get("profile_summary_sha256") != digest):
+            raise RunnerError("autotune winner full-gate identity does not match its evidence")
+
+        fusion = profile.get("fusion")
+        fusion_cases = fusion.get("cases") if isinstance(fusion, dict) else None
+        if (not isinstance(fusion_cases, list) or len(fusion_cases) != required_cases
+                or any(isinstance(case, bool) or not isinstance(case, int)
+                       for case in fusion_cases)
+                or set(fusion_cases) != set(range(required_cases))
+                or fusion.get("logical_launches_per_case") != 1
+                or not isinstance(fusion.get("entrypoint"), str) or not fusion["entrypoint"]
+                or not isinstance(fusion.get("kernel_name"), str) or not fusion["kernel_name"]):
+            raise RunnerError("autotune winner lacks complete fusion evidence")
+
+        timing = profile.get("timing")
+        if not isinstance(timing, dict):
+            raise RunnerError("autotune winner lacks official full-gate timing")
+        repeats = timing.get("repeats")
+        geomean = timing.get("geomean_us")
+        declared = timing.get("declared_kernel_name")
+        resolved = timing.get("resolved_kernel_name")
+        timing_cases = timing.get("cases")
+        if (timing.get("profiler") != "msprof-op" or timing.get("metric") != "BasicInfo"
+                or isinstance(repeats, bool) or not isinstance(repeats, int)
+                or repeats < MIN_AUTOTUNE_PROFILE_REPEATS
+                or isinstance(geomean, bool) or not isinstance(geomean, (int, float))
+                or not math.isfinite(geomean) or geomean <= 0
+                or not isinstance(declared, str) or not declared
+                or not isinstance(resolved, str) or not resolved
+                or timing.get("kernel_name") != resolved
+                or declared != fusion["kernel_name"]
+                or not isinstance(timing_cases, list) or not timing_cases):
+            raise RunnerError("autotune winner lacks official full-gate timing")
+        for case in timing_cases:
+            samples = case.get("samples_us") if isinstance(case, dict) else None
+            if (not isinstance(samples, list) or len(samples) < repeats
+                    or any(isinstance(item, bool) or not isinstance(item, (int, float))
+                           or not math.isfinite(item) or item <= 0 for item in samples)):
+                raise RunnerError("autotune winner timing cases lack repeated samples")
+
+        pipes = profile.get("pipe_activity")
+        observations = pipes.get("observations") if isinstance(pipes, dict) else None
+        provenance = pipes.get("provenance") if isinstance(pipes, dict) else None
+        if (not isinstance(pipes, dict) or pipes.get("product") != "a3"
+                or pipes.get("evidence_kind") != "per-block-pipe-activity"
+                or not isinstance(observations, list) or not observations
+                or not isinstance(provenance, dict)
+                or provenance.get("kernel_selector") != resolved):
+            raise RunnerError("autotune winner lacks exact-selector pipe evidence")
+        for observation in observations:
+            activity = observation.get("activity") if isinstance(observation, dict) else None
+            saturation = observation.get("saturation") if isinstance(observation, dict) else None
+            if (not isinstance(activity, dict) or not activity
+                    or not isinstance(saturation, dict)
+                    or saturation.get("state") != "unknown"
+                    or any(isinstance(item, bool) or not isinstance(item, (int, float))
+                           or not math.isfinite(item) or not 0 <= item <= 1
+                           for item in activity.values())):
+                raise RunnerError("autotune winner has empty or invalid pipe observations")
+
+    @staticmethod
     def _validate_autotune_success(request: dict, result: dict) -> tuple[str, dict]:
         summary = result.get("autotune_summary")
         if not isinstance(summary, dict) or summary.get("schema") != AUTOTUNE_RESULT_SCHEMA:
@@ -1135,10 +1233,11 @@ class ExperimentCell:
         )
         if winner != expected_winner:
             raise RunnerError("autotune winner is not the fastest official finalist")
-        if summary.get("winner_full_gate") is not True:
-            raise RunnerError("autotune winner must be a fully gated profiled finalist")
         if summary.get("winner_source_sha256") != expected[winner]["source_sha256"]:
             raise RunnerError("autotune winner source identity does not match the request")
+        ExperimentCell._validate_winner_evidence(
+            request, result, summary, expected, winner,
+        )
         commands = summary.get("commands")
         if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
             raise RunnerError("autotune result commands must be a string list")

@@ -151,6 +151,8 @@ def autotune_candidate():
 
 
 def autotune_success(plan, winner="block-64", failed=()):
+    plan.setdefault("benchmark", "matmul")
+    plan.setdefault("required_correctness_cases", 10)
     rows = []
     for index, option in enumerate(plan["options"]):
         if option["id"] in failed:
@@ -170,20 +172,66 @@ def autotune_success(plan, winner="block-64", failed=()):
         key=lambda row: (row["cheap_device_timing_us"], order[row["id"]]),
     )[:3]]
     selected = next(option for option in plan["options"] if option["id"] == winner)
+    declared = "streaming_matmul_add_kernel_mix_aic"
+    resolved = "streaming_matmul_add_kernel"
+    winner_timing = next(
+        value["geomean_us"] for identifier, value in {
+            identifier: {
+                "geomean_us": 9.0 if identifier == winner else 10.0 + index,
+                "repeats": 3,
+            }
+            for index, identifier in enumerate(finalists)
+        }.items() if identifier == winner
+    )
+    profile_summary = {
+        "schema": "profiling-skill/a3-round-profile-summary/v1",
+        "benchmark": plan["benchmark"],
+        "correctness_cases": plan["required_correctness_cases"],
+        "fusion": {
+            "entrypoint": "streaming_matmul_add_kernel",
+            "kernel_name": declared,
+            "cases": list(range(plan["required_correctness_cases"])),
+            "logical_launches_per_case": 1,
+        },
+        "timing": {
+            "metric": "BasicInfo", "profiler": "msprof-op",
+            "timing_scope": "device-task", "kernel_name": resolved,
+            "declared_kernel_name": declared, "resolved_kernel_name": resolved,
+            "cases": [{"case": 7, "median_us": winner_timing,
+                       "samples_us": [winner_timing] * 3}],
+            "repeats": 3, "geomean_us": winner_timing, "captures": [],
+        },
+        "pipe_activity": {
+            "schema_version": 1, "product": "a3",
+            "evidence_kind": "per-block-pipe-activity",
+            "provenance": {"kernel_selector": resolved},
+            "observations": [{
+                "observation_id": f"{resolved}:block-0:cube0",
+                "activity": {"aic_mte2": 0.5},
+                "saturation": {"state": "unknown", "reason": "no denominator"},
+            }],
+        },
+        "timeline": {"available": False, "kind": "a3-temporal-pipe-phases",
+                     "reason": "A3 activity evidence is non-temporal"},
+    }
+    profile_sha = hashlib.sha256(json.dumps(
+        profile_summary, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
     return {
         "outcome": "success", "stdout": "PASS", "stderr": "",
-        "profile_summary": {
-            "timing": {"profiled_ids": finalists},
-            "pipe_activity": {"available": True},
-            "timeline": {"available": False, "reason": "unsupported"},
-        },
+        "profile_summary": profile_summary,
         "autotune_summary": {
             "schema": runner.AUTOTUNE_RESULT_SCHEMA,
             "optimization_round": 1,
             "options": rows, "finalists": finalists,
             "profiled_finalists": finalists, "winner_id": winner,
             "winner_source_sha256": selected["source_sha256"],
-            "winner_full_gate": True,
+            "winner_full_gate": {
+                "winner_id": winner,
+                "source_sha256": selected["source_sha256"],
+                "candidate_artifact_sha256": selected["source_sha256"],
+                "profile_summary_sha256": profile_sha,
+            },
             "commands": ["compile all", "time survivors", "msprof finalists"],
             "finalist_profiles": {
                 identifier: {
@@ -194,6 +242,15 @@ def autotune_success(plan, winner="block-64", failed=()):
             },
         },
     }
+
+
+def rebind_winner_profile(result):
+    profile = result["profile_summary"]
+    result["autotune_summary"]["winner_full_gate"]["profile_summary_sha256"] = (
+        hashlib.sha256(json.dumps(
+            profile, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+    )
 
 
 def candidate_contract():
@@ -1341,6 +1398,67 @@ def test_autotune_success_requires_three_integer_msprof_repeats(invalid_repeats)
         profile["repeats"] = invalid_repeats
 
     with pytest.raises(runner.RunnerError, match="at least 3 msprof repeats"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def winner_evidence_fixture():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": "block-64", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+    ])
+    plan.update(optimization_round=1, benchmark="matmul", required_correctness_cases=10)
+    return plan, autotune_success(plan)
+
+
+def test_autotune_accepts_real_shaped_bound_winner_evidence():
+    plan, result = winner_evidence_fixture()
+    selected, summary = runner.ExperimentCell._validate_autotune_success(plan, result)
+    assert selected == plan["options"][1]["source"]
+    assert summary["winner_full_gate"]["winner_id"] == "block-64"
+
+
+def test_autotune_rejects_missing_winner_evidence_binding():
+    plan, result = winner_evidence_fixture()
+    result["autotune_summary"].pop("winner_full_gate")
+    with pytest.raises(runner.RunnerError, match="bound full-gate identity"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("field", [
+    "winner_id", "source_sha256", "candidate_artifact_sha256", "profile_summary_sha256",
+])
+def test_autotune_rejects_missing_or_mismatched_winner_identity(field):
+    plan, result = winner_evidence_fixture()
+    if field == "winner_id":
+        result["autotune_summary"]["winner_full_gate"][field] = "incumbent"
+    else:
+        result["autotune_summary"]["winner_full_gate"][field] = "0" * 64
+    with pytest.raises(runner.RunnerError, match="identity"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("correctness", "correctness evidence"),
+    ("fusion", "fusion evidence"),
+    ("missing-pipes", "pipe evidence"),
+    ("empty-pipes", "pipe evidence"),
+    ("selector", "pipe evidence"),
+])
+def test_autotune_rejects_incomplete_winner_full_gate_evidence(mutation, message):
+    plan, result = winner_evidence_fixture()
+    profile = result["profile_summary"]
+    if mutation == "correctness":
+        profile["correctness_cases"] = 9
+    elif mutation == "fusion":
+        profile["fusion"]["logical_launches_per_case"] = 2
+    elif mutation == "missing-pipes":
+        profile.pop("pipe_activity")
+    elif mutation == "empty-pipes":
+        profile["pipe_activity"]["observations"] = []
+    else:
+        profile["pipe_activity"]["provenance"]["kernel_selector"] = "other-kernel"
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match=message):
         runner.ExperimentCell._validate_autotune_success(plan, result)
 
 

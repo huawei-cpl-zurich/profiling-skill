@@ -38,7 +38,7 @@
 
 | ID | Candidate | Classification | Evidence | Proposed action | Status |
 | --- | --- | --- | --- | --- | --- |
-| C1 | Reuse `ProductionLauncher` as a base | essential | preserves audited auth, runtime, resolver, and thread parsing | keep | retained |
+| C1 | Reuse the controller-free `ProductionLauncher` isolation base | essential | preserves auth, runtime, resolver, and thread parsing without a second campaign lifecycle | keep | retained |
 | C2 | Host socket broker | essential | prevents credentials/raw transports entering the sandbox | keep | retained |
 | C3 | Separate artifact/review helpers | essential | core gate requires bounded hashes and external review | keep | retained |
 | C4 | Generic Docker or direct-SSH backends | speculative | not requested and would duplicate/weaken existing boundary | do not add | ablated by design |

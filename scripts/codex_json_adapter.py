@@ -64,10 +64,21 @@ def validate_request(value: object) -> dict:
 
 
 def codex_prompt(request: dict) -> str:
+    candidate_contract = ""
+    if request.get("candidate_contract") is not None:
+        candidate_contract = (
+            " The candidate source must define and launch exactly "
+            "candidate_contract.entrypoint. Preserve candidate_contract.kernel_name as the "
+            "host profiling selector, and implement the complete operator as the declared "
+            "fully fused single logical launch. Apply these requirements to initial prepare "
+            "and every same-round repair; the exact task-specific names are data in "
+            "candidate_contract, not treatment guidance."
+        )
     contract = (
         "\n\nFollow the experiment prompt and the JSON phase request below. "
         "Return only the response object required by that phase. Do not access "
-        "hardware, remote transports, global skills, or files outside this Git repository.\n"
+        "hardware, remote transports, global skills, or files outside this Git repository."
+        + candidate_contract + "\n"
     )
     return request["prompt"] + contract + "REQUEST_JSON\n" + json.dumps(request, sort_keys=True)
 

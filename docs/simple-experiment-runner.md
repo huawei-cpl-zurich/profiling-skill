@@ -83,7 +83,14 @@ The runner sends one JSON object on stdin and reads one JSON object on stdout.
 The prepare request contains `phase=prepare`, exact prompt, treatment, allowed
 skill names, round, repo, target/runtime, and optional `session_id`. A
 same-round repair also contains the prior candidate, full terminal result,
-exact attempt path, and diagnostics.
+exact attempt path, and diagnostics. When a host-owned campaign gate has
+snapshotted a validated v2 candidate manifest, every initial and repair request
+also contains its exact normalized `candidate_contract`: `schema`,
+`entrypoint`, `kernel_name`, and `fusion`. The adapter's common instruction
+requires the agent to define and launch exactly `candidate_contract.entrypoint`,
+preserve `candidate_contract.kernel_name` as the host selector, and implement
+the declared complete operator as one fused logical launch. Task-specific names
+remain request data, so the instruction stays byte-identical across treatments.
 
 Prepare must return:
 

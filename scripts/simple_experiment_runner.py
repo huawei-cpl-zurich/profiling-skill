@@ -176,7 +176,7 @@ class CplRemote:
         workspace = request["remote_workspace"]
         if (not isinstance(workspace, str) or not workspace
                 or "\x00" in workspace or "\n" in workspace):
-            raise RunnerError("remote_workspace must be a safe non-empty path")
+            raise PreDispatchFailure("remote_workspace must be a safe non-empty path")
         digest = hashlib.sha256(script.read_bytes()).hexdigest()
         remote_name = f".simple-experiment-{digest}.sh"
         remote_script = f"{workspace.rstrip('/')}/{remote_name}"
@@ -552,6 +552,13 @@ class ExperimentCell:
             "prompt": self.config["prompt"], "treatment": self.config["treatment"],
             "allowed_skills": self.skill_names, "session_id": state.get("session_id"),
         }
+        if state.get("candidate_manifest_sha256") is not None:
+            manifest = self.path / "candidate-manifest.json"
+            try:
+                value = json.loads(manifest.read_text())
+                request["candidate_contract"] = FUSION_CONTRACT.validate_manifest(value)
+            except (OSError, json.JSONDecodeError, FUSION_CONTRACT.FusionContractError) as exc:
+                raise RunnerError(f"snapshotted candidate manifest is invalid: {exc}") from exc
         if state.get("prior_result") is not None:
             request.update(
                 candidate_diagnostics=state.get("candidate_diagnostics"),

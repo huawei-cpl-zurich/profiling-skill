@@ -32,7 +32,7 @@ def fake_codex(tmp_path: Path) -> Path:
 def invoke(tmp_path: Path, request: dict):
     home = tmp_path / "home"
     codex_home = home / ".codex"
-    codex_home.mkdir(parents=True)
+    codex_home.mkdir(parents=True, exist_ok=True)
     (codex_home / "auth.json").write_text("{}")
     (codex_home / "auth.json").chmod(0o600)
     capture = tmp_path / "capture.json"
@@ -120,6 +120,30 @@ def test_analyze_resumes_exact_thread(tmp_path):
     }
     assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
     assert "thread-old" in call["argv"]
+
+
+def test_generated_config_is_removed_between_prepare_and_analyze(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    prepare = {
+        "phase": "prepare", "prompt": "same prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [],
+    }
+    first, _ = invoke(tmp_path, prepare)
+    assert first.returncode == 0, first.stderr
+    assert not (tmp_path / "home/.codex/config.toml").exists()
+
+    analyze = {
+        "phase": "analyze", "prompt": "same prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [], "session_id": "thread-123",
+        "candidate": "VALUE=1", "terminal_result": {"outcome": "success"},
+    }
+    second, call = invoke(tmp_path, analyze)
+    assert second.returncode == 0, second.stderr
+    assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
+    assert (tmp_path / "home/.codex/auth.json").is_file()
+    assert not (tmp_path / "home/.codex/config.toml").exists()
 
 
 def test_adapter_rejects_missing_private_auth(tmp_path):

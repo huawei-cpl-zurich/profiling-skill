@@ -8,6 +8,15 @@ description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascen
 Select the target before collecting or interpreting evidence. Product-specific
 metrics are not portable.
 
+## Run agent experiment campaigns
+
+Use `scripts/simple_experiment_runner.py` as the only supported experiment
+campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
+isolated Git-backed cell. Read [Simple experiment runner](docs/simple-experiment-runner.md)
+for its configuration, agent protocol, retained evidence, and recovery rules.
+Run separate cells concurrently at the orchestration layer; do not add a
+second scheduler, admission controller, receipt graph, or migration layer.
+
 ## Acquire live control evidence
 
 For generic Torch/Triton workload acquisition on `bz-a3-1`, `bz-a3-2`, or
@@ -92,8 +101,8 @@ do not silently substitute a convention from another coding skill. A contract
 probe should import and instantiate the candidate locally when that can be
 done without an accelerator.
 
-When a campaign grants one billed development check, enforce that limit in
-the controller. Use the check for the smallest representative case that can
+When an experiment grants one billed development check, enforce that limit in
+the runner. Use the check for the smallest representative case that can
 expose compilation or runtime errors, then let the agent repair files locally
 from the returned diagnostic. Invalid controller invocations may be rejected
 without billing, but they do not justify another device check. The host, not

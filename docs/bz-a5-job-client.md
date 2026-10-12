@@ -1,7 +1,7 @@
 # BZ-A5 production job client
 
-`scripts/bz_a5_job_client.py` is the A5 specialization of the audited native
-Triton job boundary. It accepts the same JSON protocol as the A3 client, but
+`scripts/bz_a5_job_client.py` is the A5 specialization of the native Triton job
+boundary. It accepts the same JSON protocol as the A3 client, but
 requires `product=a5`, `runtime=cann91`, and a frozen placement whose target is
 `bz-a5`.
 

@@ -16,7 +16,11 @@ job.
   "treatment": "guarded-new-profiler",
   "prompt": "The exact common experiment prompt.\n",
   "task_path": "/absolute/path/to/benchmark-task.md",
-  "skill_paths": ["/absolute/path/to/guarded", "/absolute/path/to/profiler"],
+  "skill_bindings": [
+    {"name": "triton-guarded-kernel", "path": "/frozen/guarded", "sha256": "..."},
+    {"name": "ascend-profiling", "path": "/frozen/profiler-new", "sha256": "..."}
+  ],
+  "agent_auth_path": "/ignored/private/auth.json",
   "source_repo": "/absolute/path/to/source",
   "base_ref": "main",
   "target": "bz-a3-1",
@@ -27,7 +31,7 @@ job.
   "rounds": 4,
   "infrastructure_retries": 2,
   "candidate_repairs": 2,
-  "agent_command": ["experiment-agent", "--json"]
+  "agent_command": ["python", "/absolute/path/to/codex_json_adapter.py", "--model", "gpt-5.6-sol"]
 }
 ```
 
@@ -38,12 +42,20 @@ Use `py311-torch` for BZ-A3 cells and `cann91` for BZ-A5 cells.
 read `TASK.md`; initialization snapshots the exact UTF-8 file into the cell
 repository at that name. Prompts that contain their complete task need not set
 it, so generic cells remain unchanged.
-`skill_paths` is an explicit allowlist. At initialization those directories
-are copied, not linked, into the cell-private
-`agent-home/.agents/skills/<name>`. Every agent invocation uses the cell repo
-as its working directory and sets `HOME` to `agent-home` and `CODEX_HOME` to
-`agent-home/.codex`. This prevents accidental treatment crossover for normal
-agent workflows; it is not an adversarial filesystem sandbox.
+`skill_bindings` is the production allowlist. Each binding gives the canonical
+agent-visible name, frozen source directory, and production tree SHA-256.
+Initialization verifies the tree and copies it, without links, into
+`agent-home/.agents/skills/<name>`. Legacy `skill_paths` remains supported for
+existing local fixtures but provides neither aliases nor a declared digest.
+
+`agent_auth_path` names one ignored, mode-0600 authentication file. The runner
+copies only those bytes to the private `CODEX_HOME/auth.json`; it never copies
+global configuration, rules, or skills. Agent subprocesses receive a minimal
+environment allowlist plus cell-private `HOME` and `CODEX_HOME`, so ambient
+token and skill variables are not inherited. The production adapter also
+rejects a private home containing `config.toml` or an unsafe auth file. This
+prevents accidental treatment crossover for normal agent workflows; it is not
+an adversarial filesystem sandbox.
 
 Initialization builds the clone, branch, prompt, private home, and skills in a
 temporary sibling directory and publishes the cell atomically. Any failure
@@ -74,6 +86,24 @@ Prepare must return:
   "session_id": "optional durable agent session"
 }
 ```
+
+The supplied `scripts/codex_json_adapter.py` implements this protocol over
+`codex exec --json` and exact-thread `codex exec resume`. It ignores user
+configuration and rules, requests a schema-constrained final response, emits
+only the response JSON on stdout, and returns the durable Codex thread as
+`session_id` after prepare. Configure its model and reasoning effort explicitly
+in `agent_command`.
+
+## Reproducible seed repositories
+
+`scripts/materialize_experiment_seed.py SPEC.json` verifies hash-bound common
+prompt, task, and seed files before atomically creating a clean Git repository,
+`TASK.md`, `cell.json`, and `receipt.json`. Its seed commit has fixed author and
+time metadata, so identical file bytes produce the same commit and tree across
+output locations. `cell.json` embeds the exact common prompt and points the
+runner at the generated task snapshot and seed repository. Add task-specific
+baseline, case inventory, starter candidate, and host candidate manifest as
+explicit `files` bindings; remote gates remain independently host-owned.
 
 Candidates are limited to 1 MiB. Candidate fields and the generated wrapper
 are validated before an attempt number or directory is created, so rejected

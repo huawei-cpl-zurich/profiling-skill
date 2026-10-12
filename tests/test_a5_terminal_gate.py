@@ -159,6 +159,59 @@ def wrapper_root(tmp_path):
     return root
 
 
+def seed_repo(tmp_path):
+    repo = tmp_path / "seed"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-b", "main"], check=True,
+                   capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email",
+                    "test@example.invalid"], check=True)
+    (repo / "README.md").write_text("isolated seed\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-m", "seed"], check=True,
+                   capture_output=True)
+    return repo
+
+
+def test_initialized_a5_cell_snapshots_gate_inputs_and_selects_device_at_launch(tmp_path):
+    wrappers = wrapper_root(tmp_path)
+    generated = builder.generate(ROOT, tmp_path / "generated", wrapper_root=wrappers,
+                                 state_root=tmp_path / "wrapper-state")
+    fragment = generated["tasks"]["matmul"]
+    skill = tmp_path / "skill"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("fixture\n")
+    config = {
+        "campaign": "campaign", "product": "a5", "task": "matmul",
+        "treatment": "guarded", "source_repo": str(seed_repo(tmp_path)),
+        "base_ref": "main", "target": "bz-a5", "runtime": "cann91",
+        "remote_workspace": "/remote/work", "rounds": 4,
+        "infrastructure_retries": 2, "candidate_repairs": 2,
+        "billed_checks": 12, "prompt": "Optimize the task.\n",
+        "skill_paths": [str(skill)], **fragment,
+    }
+    assert not ({"device", "physical_device"} & config["remote_transport"].keys())
+    cell = runner.ExperimentCell(tmp_path / "runs", config, None, None)
+    state = cell.init()
+    retained_manifest = cell.path / "candidate-manifest.json"
+    retained_bundle = cell.path / "terminal-gate-bundle.tar"
+    assert hashlib.sha256(retained_manifest.read_bytes()).hexdigest() == state[
+        "candidate_manifest_sha256"]
+    assert hashlib.sha256(retained_bundle.read_bytes()).hexdigest() == state[
+        "gate_bundle_sha256"]
+
+    # Later mutation of generator output cannot change the admitted cell.
+    Path(fragment["candidate_manifest_path"]).write_text("{}\n")
+    remote = runner._remote_from_config(
+        config, invoke=FakeWrappers(""), candidate_manifest_path=retained_manifest,
+        gate_bundle_path=retained_bundle,
+    )
+    selected = remote.preflight({"target": "bz-a5"})
+    assert selected["physical_device"] == 6
+    assert remote.kernel_name == gate.SPECS["matmul"]["kernel_name"]
+
+
 def test_approved_wrapper_stages_digest_bundle_and_profiles_ranked_launches(tmp_path):
     generated = builder.generate(ROOT, tmp_path / "generated",
                                  wrapper_root=wrapper_root(tmp_path),

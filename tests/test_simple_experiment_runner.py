@@ -33,12 +33,13 @@ def source_repo(tmp_path):
     return path
 
 
-def config(tmp_path, **updates):
+def config(tmp_path, managed_autotune=False, **updates):
     skill = tmp_path / "skill"
     skill.mkdir(exist_ok=True)
     (skill / "SKILL.md").write_text("test skill\n")
     gate = tmp_path / "terminal-gate.sh"
-    gate.write_text('python "$CANDIDATE_PATH"\n')
+    capability = runner.AUTOTUNE_GATE_CAPABILITY + "\n" if managed_autotune else ""
+    gate.write_text(capability + 'python "$CANDIDATE_PATH"\n')
     value = {
         "campaign": "trial",
         "product": "a3",
@@ -499,6 +500,19 @@ def test_init_requires_existing_terminal_gate(tmp_path):
     assert not cell.path.exists()
 
 
+def test_autotune_rejects_legacy_shipped_gate_before_remote_dispatch(tmp_path):
+    shipped_gate = Path(__file__).parents[1] / "scripts/a3-gates/matmul.sh"
+    cfg = config(tmp_path, autotune=True, terminal_gate_path=str(shipped_gate))
+    remote = Remote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), remote)
+
+    with pytest.raises(runner.RunnerError, match="declaring managed-autotune/v1"):
+        cell.init()
+
+    assert not cell.path.exists()
+    assert not remote.preflights and not remote.submitted
+
+
 def test_host_gate_result_is_after_candidate_stdout(tmp_path):
     cfg = config(tmp_path)
     Path(cfg["terminal_gate_path"]).write_text(
@@ -897,7 +911,8 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
             return autotune_success(json.loads(attempt.read_text()), winner="option-000")
 
     remote = TuningRemote([])
-    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True)
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
     completed = cell.run()
 
     assert completed["status"] == "complete"
@@ -918,6 +933,9 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
     assert completed["round"] == 2 and completed["attempts"] == 1
     assert (folder / "autotune-commands.jsonl").read_text().count("command") == 3
     assert "AUTOTUNE_REQUEST_PATH" in remote.submitted[0][1]
+    assert runner.AUTOTUNE_GATE_CAPABILITY in (
+        cell.path / "terminal-gate.sh"
+    ).read_text().splitlines()
     assert agent.analyses[0]["candidate"] == (folder / "candidate.py").read_text()
     assert agent.analyses[0]["structural_candidate"] == autotune_candidate()
 
@@ -936,11 +954,51 @@ def test_autotune_observation_resume_reuses_one_job_and_one_tune_phase(tmp_path)
             return autotune_success(plan)
 
     remote = ResumeRemote([])
-    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True)
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
     assert cell.run()["status"] == "infrastructure_unknown"
     assert cell.resume()["status"] == "complete"
     assert len(remote.submitted) == len(agent.tunes) == 1
     assert remote.observed == ["remote:bz-a3-1:job:1"] * 2
+
+
+def test_autotune_interruption_resumes_checkpointed_prepare_and_session(tmp_path):
+    prepared = evidence("checkpointed")
+    prepared["candidate"] = autotune_candidate()
+
+    class InterruptedTuneAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            if len(self.tunes) == 1:
+                raise runner.AgentInterrupted("tune transport interrupted")
+            return {"configurations": [
+                {"id": "block-64", "parameters": {"BLOCK": 64},
+                 "hypothesis": "wider block"},
+            ]}
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = InterruptedTuneAgent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+
+    interrupted = cell.run()
+    checkpoint = json.loads((cell.path / "prepared-checkpoint.json").read_text())
+    assert interrupted["status"] == "tune_pending"
+    assert checkpoint == {"round": 1, "prepared": prepared}
+    assert not remote.submitted and len(agent.requests) == 1
+
+    completed = cell.resume()
+    assert completed["status"] == "complete"
+    assert len(agent.requests) == 1 and len(agent.tunes) == 2
+    assert [request["session_id"] for request in agent.tunes] == ["session-1"] * 2
+    assert len(remote.submitted) == 1
+    assert not (cell.path / "prepared-checkpoint.json").exists()
 
 
 def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
@@ -965,7 +1023,8 @@ def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
             return value
 
     cell = initialized(
-        tmp_path, InvalidRemote([]), FourAgent([prepared]), rounds=1, autotune=True
+        tmp_path, InvalidRemote([]), FourAgent([prepared]), rounds=1, autotune=True,
+        managed_autotune=True,
     )
     with pytest.raises(runner.RunnerError, match="one to three"):
         cell.run()
@@ -983,7 +1042,7 @@ def test_autotune_success_rejects_a_result_from_another_round(tmp_path):
             return value
 
     cell = initialized(tmp_path, WrongRoundRemote([]), Agent([prepared]),
-                       rounds=1, autotune=True)
+                       rounds=1, autotune=True, managed_autotune=True)
     with pytest.raises(runner.RunnerError, match="optimization round"):
         cell.run()
 

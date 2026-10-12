@@ -83,9 +83,10 @@ warrants it. Return exactly:
 }
 ```
 
-The host deterministically materializes every distinct option, always adds the
-declared incumbent, rejects duplicate materialized sources, and screens the
-options together in one retained job. Compilation,
+The configured managed-autotune-capable host gate deterministically
+materializes every distinct option, always adds the declared incumbent,
+rejects duplicate materialized sources, and screens the options together in
+one retained job. Compilation,
 representative correctness/fusion, and ordinary device timing are cheap search
 signals and do not advance the optimization-round counter. Candidate failures
 eliminate only that option. The host profiles the three fastest successful

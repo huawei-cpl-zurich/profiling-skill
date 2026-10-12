@@ -115,7 +115,11 @@ in `agent_command`.
 `autotune=true` is an opt-in runner/gate contract. The configured terminal
 gate must consume `AUTOTUNE_REQUEST_PATH` and emit the validated autotune
 result schema described below; a legacy gate fails closed instead of silently
-running only the incumbent. With that option enabled, prepare must define one
+running only the incumbent. A capable gate declares the exact line
+`# simple-experiment-capability: managed-autotune/v1`; the runner does not
+infer support from a shipped filename, target, or product. Gates acquire
+managed-search support only when their own snapshot carries that declaration.
+With that option enabled, prepare must define one
 top-level literal `AUTOTUNE_CONFIG` mapping. Before dispatch, the same durable agent thread
 receives `phase=tune`, the declared mapping, prior-round profile summary when
 available, and the limits of 128 proposed configurations and three profiled
@@ -123,6 +127,10 @@ finalists. It returns zero through 128 `{id, parameters, hypothesis}` objects;
 parameters may override only declared JSON-scalar keys. The runner
 deterministically materializes the incumbent and every proposal and embeds one
 compressed, hash-bound request in the retained job.
+
+The prepare response, including its candidate and durable session, is
+atomically checkpointed before tune. If the agent turn is interrupted, `resume`
+reuses that exact checkpoint and thread; it does not prepare a replacement.
 
 A compatible host gate screens all options in that job across its ranked
 correctness and fusion cases using ordinary synchronized device timing.

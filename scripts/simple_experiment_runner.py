@@ -33,6 +33,7 @@ MIN_AUTOTUNE_PROFILE_REPEATS = 3
 MAX_AUTOTUNE_BUNDLE_BYTES = 16 * 1_048_576
 AUTOTUNE_REQUEST_SCHEMA = "simple-experiment-autotune-request/v1"
 AUTOTUNE_RESULT_SCHEMA = "simple-experiment-autotune-result/v1"
+AUTOTUNE_GATE_CAPABILITY = "# simple-experiment-capability: managed-autotune/v1"
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AUTOTUNE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 AGENT_ENV_ALLOWLIST = {
@@ -637,9 +638,14 @@ class ExperimentCell:
         if not gate_content:
             raise RunnerError("terminal gate must not be empty")
         try:
-            gate_content.decode()
+            gate_text = gate_content.decode()
         except UnicodeDecodeError as exc:
             raise RunnerError("terminal gate must be UTF-8 text") from exc
+        if (autotune_enabled
+                and AUTOTUNE_GATE_CAPABILITY not in gate_text.splitlines()):
+            raise RunnerError(
+                "autotune requires a terminal gate declaring managed-autotune/v1"
+            )
         parent = self.path.parent
         parent.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{self.name}-", dir=parent))
@@ -762,6 +768,43 @@ class ExperimentCell:
         plan = materialize_autotune(prepared["candidate"], tuned.get("configurations"))
         plan["optimization_round"] = state["round"]
         return plan
+
+    def _checkpoint_prepared(self, state: dict, prepared: dict) -> dict:
+        session = prepared.get("session_id")
+        if not isinstance(session, str) or not session:
+            raise RunnerError("autotune prepare result requires a durable session_id")
+        try:
+            json.dumps(prepared)
+        except (TypeError, ValueError) as exc:
+            raise RunnerError(f"prepared candidate is not JSON serializable: {exc}") from exc
+        _write_json(self.path / "prepared-checkpoint.json", {
+            "round": state["round"], "prepared": prepared,
+        })
+        state.update(status="tuning", session_id=session)
+        return self._save(state)
+
+    def _load_prepared_checkpoint(self, state: dict) -> dict:
+        path = self.path / "prepared-checkpoint.json"
+        if path.is_symlink() or not path.is_file():
+            raise RunnerError("retained prepared candidate is missing or replaced")
+        value = json.loads(path.read_text())
+        if (not isinstance(value, dict) or value.get("round") != state["round"]
+                or not isinstance(value.get("prepared"), dict)):
+            raise RunnerError("retained prepared candidate is invalid")
+        prepared = value["prepared"]
+        if prepared.get("session_id") != state.get("session_id"):
+            raise RunnerError("retained prepared session does not match state")
+        return prepared
+
+    def _pending_tune(self, state: dict, prepared: dict) -> tuple[dict, dict | None]:
+        try:
+            plan = self._tune(state, prepared)
+            state["status"] = "tuning"
+            state.pop("tune_diagnostics", None)
+            return state, plan
+        except AgentInterrupted as exc:
+            state.update(status="tune_pending", tune_diagnostics=str(exc))
+            return self._save(state), None
 
     def _preflight(self) -> None:
         folder = self.path / "preflights"
@@ -886,6 +929,7 @@ class ExperimentCell:
         state.update(attempts=number, billed_checks_used=state["billed_checks_used"] + 1,
                      status="infrastructure_unknown", pending_attempt=number)
         self._save(state)
+        (self.path / "prepared-checkpoint.json").unlink(missing_ok=True)
         try:
             handle = self.remote.submit(request, script)
         except PreDispatchFailure as exc:
@@ -1189,6 +1233,8 @@ class ExperimentCell:
     def run(self) -> dict:
         state = self._state()
         self._verify_task_snapshot(state)
+        if state.get("status") in {"tuning", "tune_pending"}:
+            raise RunnerError("cell has pending tune work; use resume")
         if state.get("pending_attempt"):
             raise RunnerError("cell has pending work; use resume")
         if state["status"] in {"complete", "billed_checks_exhausted"} or self._budget_exhausted(state):
@@ -1219,7 +1265,13 @@ class ExperimentCell:
             if prepared is None:
                 prepared = self.agent.prepare(self._request(state, "prepare"))
                 self._verify_task_snapshot(state)
-                autotune_request = self._tune(state, prepared)
+                if state.get("autotune_enabled"):
+                    state = self._checkpoint_prepared(state, prepared)
+                    state, autotune_request = self._pending_tune(state, prepared)
+                    if state["status"] == "tune_pending":
+                        return state
+                else:
+                    autotune_request = None
             state = self._attempt(state, prepared, autotune_request)
             if state["status"] in {"ready", "complete", "billed_checks_exhausted",
                                    "infrastructure_unknown", "analysis_pending"}:
@@ -1237,6 +1289,20 @@ class ExperimentCell:
         state = self._state()
         self._verify_task_snapshot(state)
         pending = state.get("pending_attempt")
+        if not pending and state.get("status") in {"tuning", "tune_pending"}:
+            self._launch_device(state)
+            try:
+                self._preflight()
+            except ObservationLost as exc:
+                state["status"] = "tune_pending"
+                state["tune_diagnostics"] = str(exc)
+                return self._save(state)
+            prepared = self._load_prepared_checkpoint(state)
+            state, autotune_request = self._pending_tune(state, prepared)
+            if state["status"] == "tune_pending":
+                return state
+            state.pop("tune_diagnostics", None)
+            return self._attempt(state, prepared, autotune_request)
         if not pending:
             raise RunnerError("cell has no pending retained work to resume")
         attempt = self.path / "attempts" / str(pending)

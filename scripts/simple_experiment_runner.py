@@ -1371,8 +1371,6 @@ class ExperimentCell:
         prepared = json.loads((attempt / "agent-result.json").read_text())
         if (attempt / "result.json").exists():
             result = json.loads((attempt / "result.json").read_text())
-            if result.get("outcome") == "success":
-                return self._analyze(state, attempt, prepared, result)
             return self._accept_result(state, attempt, prepared, result)
         handle_path = attempt / "remote-job-id.txt"
         if not handle_path.is_file():

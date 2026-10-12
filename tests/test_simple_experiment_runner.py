@@ -1149,6 +1149,39 @@ def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
     assert len(cell.remote.submitted) == 1
 
 
+def test_resume_validates_retained_success_before_analysis(tmp_path, monkeypatch):
+    prepared = evidence("malformed-result")
+    prepared["candidate"] = autotune_candidate()
+    remote = Remote([success()])
+    cell = initialized(tmp_path, remote, Agent([prepared]), rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_accept = cell._accept_result
+    interrupted = False
+
+    def interrupt_before_acceptance(state, attempt, candidate, result):
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped before result acceptance")
+        return original_accept(state, attempt, candidate, result)
+
+    monkeypatch.setattr(cell, "_accept_result", interrupt_before_acceptance)
+    with pytest.raises(runner.RunnerError, match="before result acceptance"):
+        cell.run()
+    retained = cell._state()
+    assert retained["status"] == "observing" and retained["pending_attempt"] == 1
+    assert (cell.path / "attempts/1/result.json").is_file()
+
+    monkeypatch.setattr(cell, "_accept_result", original_accept)
+    with pytest.raises(runner.RunnerError, match="omitted its result summary"):
+        cell.resume()
+    failed = cell._state()
+    assert failed["status"] == "gate_contract_failure"
+    assert "pending_attempt" not in failed
+    assert cell.run()["status"] == "gate_contract_failure"
+    assert len(remote.submitted) == len(remote.observed) == 1
+
+
 def test_autotune_success_rejects_a_result_from_another_round(tmp_path):
     prepared = evidence("structural")
     prepared["candidate"] = autotune_candidate()

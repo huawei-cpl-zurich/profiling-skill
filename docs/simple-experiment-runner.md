@@ -19,7 +19,7 @@ retained job.
   "source_repo": "/absolute/path/to/source",
   "base_ref": "main",
   "target": "bz-a3-1",
-  "runtime": "cann",
+  "runtime": "py311-torch",
   "remote_workspace": "/remote/workspace",
   "terminal_gate_path": "/absolute/path/to/host-owned-gate.sh",
   "billed_checks": 8,
@@ -29,6 +29,8 @@ retained job.
   "agent_command": ["experiment-agent", "--json"]
 }
 ```
+
+Use `py311-torch` for BZ-A3 cells and `cann91` for BZ-A5 cells.
 
 `prompt` is required and is passed byte-for-byte to every agent phase.
 `skill_paths` is an explicit allowlist. At initialization those directories

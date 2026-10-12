@@ -20,6 +20,8 @@ def fake_codex(tmp_path: Path) -> Path:
         "request=json.loads(prompt.split('REQUEST_JSON\\n',1)[1])\n"
         "if request['phase']=='prepare':\n"
         " value={'candidate':'VALUE = 1\\n','commands':['python -m py_compile candidate.py'],'hypothesis':'compile first','retrieved_knowledge':[]}\n"
+        "elif request['phase']=='tune':\n"
+        " value={'configurations':[{'id':'block-64','parameters':{'BLOCK':64},'hypothesis':'wider block'}]}\n"
         "else:\n"
         " value={'reasoning':'profile supports the change','postmortem':'retain it'}\n"
         "out.write_text(json.dumps(value))\n"
@@ -118,6 +120,27 @@ def test_analyze_resumes_exact_thread(tmp_path):
     assert json.loads(result.stdout) == {
         "reasoning": "profile supports the change", "postmortem": "retain it"
     }
+    assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
+    assert "thread-old" in call["argv"]
+
+
+def test_tune_resumes_exact_thread_and_returns_bounded_parameter_space(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    request = {
+        "phase": "tune", "prompt": "same prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [], "session_id": "thread-old",
+        "candidate": "AUTOTUNE_CONFIG = {'BLOCK': 32}\n",
+        "declared_autotune_config": {"BLOCK": 32},
+    }
+    result, call = invoke(tmp_path, request)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"configurations": [{
+        "id": "block-64", "parameters": {"BLOCK": 64},
+        "hypothesis": "wider block",
+    }]}
     assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
     assert "thread-old" in call["argv"]
 

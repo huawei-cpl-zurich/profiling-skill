@@ -30,6 +30,7 @@ job.
   "terminal_gate_bundle_path": "/absolute/path/to/a3-terminal-gate.tar",
   "candidate_manifest_path": "/absolute/path/to/matmul.manifest.json",
   "billed_checks": 8,
+  "autotune": true,
   "rounds": 4,
   "infrastructure_retries": 2,
   "candidate_repairs": 2,
@@ -77,7 +78,7 @@ Every `run` and `resume`, including the boundaries after agent prepare and
 analyze calls, rejects a missing, replaced, or changed cell `TASK.md`. Later
 edits to source inputs or configuration cannot change these snapshots.
 
-## Two agent phases
+## Three agent phases
 
 The runner sends one JSON object on stdin and reads one JSON object on stdout.
 The prepare request contains `phase=prepare`, exact prompt, treatment, allowed
@@ -110,6 +111,27 @@ configuration and rules, requests a schema-constrained final response, emits
 only the response JSON on stdout, and returns the durable Codex thread as
 `session_id` after prepare. Configure its model and reasoning effort explicitly
 in `agent_command`.
+
+`autotune=true` is an opt-in runner/gate contract. The configured terminal
+gate must consume `AUTOTUNE_REQUEST_PATH` and emit the validated autotune
+result schema described below; a legacy gate fails closed instead of silently
+running only the incumbent. With that option enabled, prepare must define one
+top-level literal `AUTOTUNE_CONFIG` mapping. Before dispatch, the same durable agent thread
+receives `phase=tune`, the declared mapping, prior-round profile summary when
+available, and the limits of 128 proposed configurations and three profiled
+finalists. It returns zero through 128 `{id, parameters, hypothesis}` objects;
+parameters may override only declared JSON-scalar keys. The runner
+deterministically materializes the incumbent and every proposal and embeds one
+compressed, hash-bound request in the retained job.
+
+A compatible host gate screens all options in that job across its ranked
+correctness and fusion cases using ordinary synchronized device timing.
+Candidate failures eliminate only their option. The incumbent and two fastest surviving
+challengers receive repeated `msprof op` timing; the fastest official finalist
+then receives the complete correctness/fusion gate and diagnostic pipe
+capture. Observation loss reuses the same durable handle, and completed option
+screens are checkpointed inside the retained job. Tuning options do not
+increment the optimization round.
 
 ## Reproducible seed repositories
 
@@ -203,7 +225,8 @@ retained evidence proves dispatch never began (including the legacy local
 prepared candidate for the next `run`.
 
 Each successful round adds exactly one commit under `repo/rounds/NN/` with the
-candidate, generated wrapper, command log, compact profile and terminal result,
+selected and structural candidates, compact tuning request/result, generated
+wrapper, agent and host command logs, compact profile and terminal result,
 host terminal gate, prompt/treatment/skill inputs, billed-check limit,
 hypothesis, retrieved knowledge, final reasoning, and post-mortem. When a task
 is configured, every round commit also contains its exact `TASK.md` bytes and

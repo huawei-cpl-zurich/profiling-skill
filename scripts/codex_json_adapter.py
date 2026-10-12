@@ -28,6 +28,24 @@ SCHEMAS = {
             "retrieved_knowledge": {"type": "array", "items": {"type": "string"}},
         },
     },
+    "tune": {
+        "type": "object", "additionalProperties": False,
+        "required": ["configurations"],
+        "properties": {
+            "configurations": {
+                "type": "array", "maxItems": 128,
+                "items": {
+                    "type": "object", "additionalProperties": False,
+                    "required": ["id", "parameters", "hypothesis"],
+                    "properties": {
+                        "id": {"type": "string", "minLength": 1},
+                        "parameters": {"type": "object"},
+                        "hypothesis": {"type": "string", "minLength": 1},
+                    },
+                },
+            },
+        },
+    },
     "analyze": {
         "type": "object", "additionalProperties": False,
         "required": ["reasoning", "postmortem"],
@@ -51,15 +69,15 @@ def private_codex_home() -> Path:
 
 def validate_request(value: object) -> dict:
     if not isinstance(value, dict) or value.get("phase") not in SCHEMAS:
-        raise AdapterError("request must select prepare or analyze")
+        raise AdapterError("request must select prepare, tune, or analyze")
     for field in ("prompt", "repo"):
         if not isinstance(value.get(field), str) or not value[field]:
             raise AdapterError(f"request requires {field}")
     repo = Path(value["repo"]).resolve()
     if not repo.is_dir() or not (repo / ".git").exists():
         raise AdapterError("request repo must be an initialized Git repository")
-    if value["phase"] == "analyze" and not isinstance(value.get("session_id"), str):
-        raise AdapterError("analyze requires an exact session_id")
+    if value["phase"] in {"tune", "analyze"} and not isinstance(value.get("session_id"), str):
+        raise AdapterError(f"{value['phase']} requires an exact session_id")
     return value
 
 
@@ -140,6 +158,19 @@ def invoke(args: argparse.Namespace, request: dict) -> dict:
             if not thread and not request.get("session_id"):
                 raise AdapterError("codex did not return a durable thread id")
             response["session_id"] = thread or request["session_id"]
+        elif request["phase"] == "tune":
+            configurations = response["configurations"]
+            if not isinstance(configurations, list) or len(configurations) > 128:
+                raise AdapterError("codex tune response has invalid configurations")
+            for configuration in configurations:
+                if (not isinstance(configuration, dict)
+                        or set(configuration) != {"id", "parameters", "hypothesis"}
+                        or not isinstance(configuration["id"], str)
+                        or not configuration["id"]
+                        or not isinstance(configuration["parameters"], dict)
+                        or not isinstance(configuration["hypothesis"], str)
+                        or not configuration["hypothesis"]):
+                    raise AdapterError("codex tune response has invalid configurations")
         elif (not isinstance(response["reasoning"], str)
               or not isinstance(response["postmortem"], str)):
             raise AdapterError("codex analyze response has invalid field types")

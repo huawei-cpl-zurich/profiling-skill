@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
+import gzip
 import hashlib
 import importlib.util
 import json
 import os
+import math
 import re
 import shlex
 import shutil
@@ -24,7 +27,13 @@ RESULT_SCHEMA = "simple-experiment-result/v1"
 MAX_CANDIDATE_BYTES = 1_048_576
 MAX_GATE_BUNDLE_BYTES = 8 * 1_048_576
 MAX_MANIFEST_BYTES = 64 * 1024
+MAX_AUTOTUNE_CONFIGURATIONS = 128
+MAX_AUTOTUNE_FINALISTS = 3
+MAX_AUTOTUNE_BUNDLE_BYTES = 16 * 1_048_576
+AUTOTUNE_REQUEST_SCHEMA = "simple-experiment-autotune-request/v1"
+AUTOTUNE_RESULT_SCHEMA = "simple-experiment-autotune-result/v1"
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+AUTOTUNE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 AGENT_ENV_ALLOWLIST = {
     "PATH", "LANG", "LC_ALL", "LC_CTYPE", "SSL_CERT_FILE", "SSL_CERT_DIR",
     "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
@@ -117,6 +126,138 @@ def _tree_sha256(root: Path) -> str:
             digest.update(oct(stat.S_IMODE(mode)).encode() + b"\0")
             digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+def _json_scalar(value: object, label: str) -> None:
+    if value is None or isinstance(value, (str, bool, int)):
+        return
+    if isinstance(value, float) and math.isfinite(value):
+        return
+    raise RunnerError(f"{label} must be a finite JSON scalar")
+
+
+def _python_scalar(value: object) -> str:
+    _json_scalar(value, "autotune value")
+    if value is None:
+        return "None"
+    if value is True:
+        return "True"
+    if value is False:
+        return "False"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    return repr(value)
+
+
+def _autotune_assignment(candidate: str) -> tuple[ast.AST, dict[str, object]]:
+    try:
+        tree = ast.parse(candidate)
+    except SyntaxError as exc:
+        raise RunnerError(f"candidate is not valid Python: {exc}") from exc
+    matches = []
+    for node in tree.body:
+        target = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+        elif isinstance(node, ast.AnnAssign):
+            target = node.target
+        if isinstance(target, ast.Name) and target.id == "AUTOTUNE_CONFIG":
+            matches.append(node)
+    if len(matches) != 1:
+        raise RunnerError("candidate must declare exactly one top-level AUTOTUNE_CONFIG")
+    try:
+        value = ast.literal_eval(matches[0].value)
+    except (ValueError, TypeError) as exc:
+        raise RunnerError("AUTOTUNE_CONFIG must be a literal mapping") from exc
+    if not isinstance(value, dict) or not value:
+        raise RunnerError("AUTOTUNE_CONFIG must be a non-empty literal mapping")
+    for key, item in value.items():
+        if not isinstance(key, str) or not key:
+            raise RunnerError("AUTOTUNE_CONFIG keys must be non-empty strings")
+        _json_scalar(item, f"AUTOTUNE_CONFIG[{key!r}]")
+    return matches[0], value
+
+
+def _replace_autotune_assignment(candidate: str, node: ast.AST,
+                                 values: dict[str, object]) -> str:
+    lines = candidate.splitlines(keepends=True)
+
+    def offset(line: int, byte_column: int) -> int:
+        prefix = "".join(lines[:line - 1])
+        raw = lines[line - 1].encode()
+        try:
+            column = len(raw[:byte_column].decode())
+        except UnicodeDecodeError as exc:
+            raise RunnerError("AUTOTUNE_CONFIG has an invalid source offset") from exc
+        return len(prefix) + column
+
+    start = offset(node.lineno, node.col_offset)
+    end = offset(node.end_lineno, node.end_col_offset)
+    literal = "{" + ", ".join(
+        f"{json.dumps(key, ensure_ascii=False)}: {_python_scalar(values[key])}"
+        for key in sorted(values)
+    ) + "}"
+    return candidate[:start] + f"AUTOTUNE_CONFIG = {literal}" + candidate[end:]
+
+
+def materialize_autotune(candidate: str, proposed: object) -> dict:
+    """Validate and deterministically materialize an agent-proposed tuning space."""
+    node, incumbent = _autotune_assignment(candidate)
+    if not isinstance(proposed, list) or len(proposed) > MAX_AUTOTUNE_CONFIGURATIONS:
+        raise RunnerError(
+            f"tune phase must return zero through {MAX_AUTOTUNE_CONFIGURATIONS} configurations"
+        )
+    options = [{
+        "id": "incumbent", "parameters": dict(sorted(incumbent.items())),
+        "hypothesis": "declared structural-candidate configuration",
+    }]
+    seen = {"incumbent"}
+    for index, configuration in enumerate(proposed):
+        if not isinstance(configuration, dict) or set(configuration) != {
+                "id", "parameters", "hypothesis"}:
+            raise RunnerError(f"autotune configuration {index} has invalid fields")
+        identifier = configuration["id"]
+        parameters = configuration["parameters"]
+        hypothesis = configuration["hypothesis"]
+        if (not isinstance(identifier, str) or not AUTOTUNE_ID.fullmatch(identifier)
+                or identifier in seen):
+            raise RunnerError(f"autotune configuration {index} has an invalid or duplicate id")
+        if not isinstance(parameters, dict):
+            raise RunnerError(f"autotune configuration {identifier} parameters must be an object")
+        unknown = set(parameters) - set(incumbent)
+        if unknown:
+            raise RunnerError(
+                f"autotune configuration {identifier} overrides undeclared keys: {sorted(unknown)}"
+            )
+        for key, value in parameters.items():
+            _json_scalar(value, f"autotune configuration {identifier}.{key}")
+        if not isinstance(hypothesis, str) or not hypothesis.strip():
+            raise RunnerError(f"autotune configuration {identifier} requires a hypothesis")
+        merged = {**incumbent, **parameters}
+        options.append({
+            "id": identifier, "parameters": dict(sorted(merged.items())),
+            "hypothesis": hypothesis,
+        })
+        seen.add(identifier)
+    for option in options:
+        source = _replace_autotune_assignment(candidate, node, option["parameters"])
+        encoded = source.encode()
+        if len(encoded) > MAX_CANDIDATE_BYTES:
+            raise RunnerError(f"autotune configuration {option['id']} is too large")
+        option["source"] = source
+        option["source_sha256"] = hashlib.sha256(encoded).hexdigest()
+    return {
+        "schema": AUTOTUNE_REQUEST_SCHEMA,
+        "policy": {
+            "screen": ["compile", "representative-correctness", "fusion", "cheap-device-timing"],
+            "max_agent_configurations": MAX_AUTOTUNE_CONFIGURATIONS,
+            "max_finalists": MAX_AUTOTUNE_FINALISTS,
+            "finalist_timing": "msprof-op",
+            "winner_gate": "complete-correctness-fusion-and-pipe-evidence",
+        },
+        "incumbent_id": "incumbent",
+        "options": options,
+    }
 
 
 class CplRemote:
@@ -290,6 +431,13 @@ class SubprocessAgent:
                 or not isinstance(value["commands"], list)
                 or not all(isinstance(command, str) for command in value["commands"])):
             raise RunnerError("agent prepare result has invalid field types")
+        return value
+
+    def tune(self, request: dict) -> dict:
+        value = self._invoke(request)
+        configurations = value.get("configurations")
+        if not isinstance(configurations, list) or len(configurations) > MAX_AUTOTUNE_CONFIGURATIONS:
+            raise RunnerError("agent tune result requires at most 128 configurations")
         return value
 
     def analyze(self, request: dict) -> dict:
@@ -467,6 +615,9 @@ class ExperimentCell:
         if self.path.exists():
             raise RunnerError(f"cell already exists: {self.path}")
         sources = self._skill_sources()
+        autotune_enabled = self.config.get("autotune", False)
+        if not isinstance(autotune_enabled, bool):
+            raise RunnerError("autotune must be a boolean")
         auth_content = self._auth_content()
         (gate, billed_checks, task_content, bundle_content,
          manifest_content) = self._immutable_inputs()
@@ -526,6 +677,7 @@ class ExperimentCell:
                 "task_sha256": task_sha256,
                 "gate_bundle_sha256": bundle_sha256,
                 "candidate_manifest_sha256": manifest_sha256,
+                "autotune_enabled": autotune_enabled,
                 "skill_names": [name for name, _ in sources],
                 "skill_sha256": {name: _tree_sha256(source) for name, source in sources},
             })
@@ -567,6 +719,37 @@ class ExperimentCell:
             )
         return request
 
+    def _previous_profile_summary(self, state: dict) -> dict | None:
+        if state["round"] <= 1:
+            return None
+        path = self.repo / "rounds" / f"{state['round'] - 1:02d}" / "profile-summary.json"
+        if not path.is_file():
+            return None
+        value = json.loads(path.read_text())
+        if not isinstance(value, dict):
+            raise RunnerError("previous profile summary is not an object")
+        return value
+
+    def _tune(self, state: dict, prepared: dict) -> dict | None:
+        if not state.get("autotune_enabled"):
+            return None
+        node, declared = _autotune_assignment(prepared["candidate"])
+        del node
+        request = {
+            **self._request(state, "tune"),
+            "candidate": prepared["candidate"],
+            "declared_autotune_config": dict(sorted(declared.items())),
+            "structural_hypothesis": prepared["hypothesis"],
+            "prior_profile_summary": self._previous_profile_summary(state),
+            "max_configurations": MAX_AUTOTUNE_CONFIGURATIONS,
+            "max_profiled_finalists": MAX_AUTOTUNE_FINALISTS,
+        }
+        tuned = self.agent.tune(request)
+        self._verify_task_snapshot(state)
+        plan = materialize_autotune(prepared["candidate"], tuned.get("configurations"))
+        plan["optimization_round"] = state["round"]
+        return plan
+
     def _preflight(self) -> None:
         folder = self.path / "preflights"
         sequence = len(list(folder.glob("*.json"))) + 1 if folder.exists() else 1
@@ -583,7 +766,7 @@ class ExperimentCell:
     @staticmethod
     def _script(candidate: str, terminal_gate: str, *, bundle: bytes | None = None,
                 manifest: bytes | None = None, physical_device: int | None = None,
-                round_number: int = 1) -> str:
+                round_number: int = 1, autotune_request: dict | None = None) -> str:
         if not isinstance(candidate, str) or not isinstance(terminal_gate, str):
             raise RunnerError("candidate and terminal gate must be strings")
         encoded = candidate.encode()
@@ -615,6 +798,24 @@ class ExperimentCell:
                 "export ASCEND_DEVICE_ID=0\n"
                 f"export EXPERIMENT_ROUND={round_number}\n"
             )
+        autotune_materialize = ""
+        if autotune_request is not None:
+            if autotune_request.get("schema") != AUTOTUNE_REQUEST_SCHEMA:
+                raise RunnerError("autotune request has an invalid schema")
+            raw = json.dumps(
+                autotune_request, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()
+            compressed = gzip.compress(raw, mtime=0)
+            if len(compressed) > MAX_AUTOTUNE_BUNDLE_BYTES:
+                raise RunnerError("compressed autotune request is too large")
+            tune_payload = base64.b64encode(compressed).decode()
+            autotune_materialize = (
+                "base64 -d >\"$experiment_dir/autotune-request.json.gz\" <<'SIMPLE_AUTOTUNE'\n"
+                f"{tune_payload}\nSIMPLE_AUTOTUNE\n"
+                "gzip -dc \"$experiment_dir/autotune-request.json.gz\" "
+                ">\"$experiment_dir/autotune-request.json\"\n"
+                "export AUTOTUNE_REQUEST_PATH=\"$experiment_dir/autotune-request.json\"\n"
+            )
         return (
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             "experiment_dir=$(mktemp -d \"${TMPDIR:-/tmp}/simple-experiment.XXXXXX\")\n"
@@ -622,7 +823,7 @@ class ExperimentCell:
             "base64 -d >\"$experiment_dir/candidate.py\" <<'SIMPLE_CANDIDATE'\n"
             f"{payload}\nSIMPLE_CANDIDATE\n"
             "export CANDIDATE_PATH=\"$experiment_dir/candidate.py\"\n"
-            + materialize + "cd \"$experiment_dir\"\n" + gate_suffix
+            + materialize + autotune_materialize + "cd \"$experiment_dir\"\n" + gate_suffix
         )
 
     @staticmethod
@@ -635,7 +836,7 @@ class ExperimentCell:
             state["last_outcome"] = outcome
         return self._save(state)
 
-    def _attempt(self, state: dict, prepared: dict) -> dict:
+    def _attempt(self, state: dict, prepared: dict, autotune_request: dict | None = None) -> dict:
         if not isinstance(prepared.get("commands"), list) or not all(
                 isinstance(command, str) for command in prepared["commands"]):
             raise RunnerError("candidate commands must be a string list")
@@ -650,6 +851,7 @@ class ExperimentCell:
             bundle=bundle_path.read_bytes() if bundle_path.is_file() else None,
             manifest=manifest_path.read_bytes() if manifest_path.is_file() else None,
             physical_device=physical_device, round_number=state["round"],
+            autotune_request=autotune_request,
         )
         request = self._request(state, "prepare")
         try:
@@ -662,6 +864,8 @@ class ExperimentCell:
         attempt.mkdir()
         _write_json(attempt / "request.json", request)
         _write_json(attempt / "agent-result.json", prepared)
+        if autotune_request is not None:
+            _write_json(attempt / "autotune-request.json", autotune_request)
         _write_json(attempt / "launch.json", {"physical_device": physical_device})
         script = attempt / "run.sh"
         script.write_text(script_text)
@@ -716,9 +920,93 @@ class ExperimentCell:
         (attempt / "stderr.log").write_text(str(result.get("stderr", "")))
         return self._accept_result(state, attempt, prepared, result)
 
+    @staticmethod
+    def _attempt_autotune_request(attempt: Path) -> dict | None:
+        path = attempt / "autotune-request.json"
+        if not path.is_file():
+            return None
+        value = json.loads(path.read_text())
+        if not isinstance(value, dict) or value.get("schema") != AUTOTUNE_REQUEST_SCHEMA:
+            raise RunnerError("retained autotune request is invalid")
+        return value
+
+    @staticmethod
+    def _validate_autotune_success(request: dict, result: dict) -> tuple[str, dict]:
+        summary = result.get("autotune_summary")
+        if not isinstance(summary, dict) or summary.get("schema") != AUTOTUNE_RESULT_SCHEMA:
+            raise RunnerError("successful autotune gate omitted its result summary")
+        if summary.get("optimization_round") != request.get("optimization_round"):
+            raise RunnerError("autotune result does not match its optimization round")
+        expected = {option["id"]: option for option in request["options"]}
+        rows = summary.get("options")
+        if not isinstance(rows, list) or len(rows) != len(expected):
+            raise RunnerError("autotune result must report every requested option exactly once")
+        actual = {}
+        for row in rows:
+            if not isinstance(row, dict):
+                raise RunnerError("autotune option result must be an object")
+            identifier = row.get("id")
+            if not isinstance(identifier, str) or identifier in actual or identifier not in expected:
+                raise RunnerError("autotune result contains an unknown or duplicate option")
+            if row.get("source_sha256") != expected[identifier]["source_sha256"]:
+                raise RunnerError(f"autotune result source mismatch for {identifier}")
+            outcome = row.get("outcome")
+            if outcome not in {"success", "candidate_failure"}:
+                raise RunnerError(f"autotune option {identifier} has invalid outcome")
+            timing = row.get("cheap_device_timing_us")
+            if outcome == "success" and (
+                    isinstance(timing, bool) or not isinstance(timing, (int, float))
+                    or not math.isfinite(timing) or timing <= 0):
+                raise RunnerError(f"autotune option {identifier} lacks valid cheap timing")
+            if outcome == "candidate_failure" and not isinstance(row.get("diagnostics"), str):
+                raise RunnerError(f"failed autotune option {identifier} lacks diagnostics")
+            actual[identifier] = row
+        if set(actual) != set(expected):
+            raise RunnerError("autotune result option inventory does not match the request")
+        finalists = summary.get("finalists")
+        profiled = summary.get("profiled_finalists")
+        if (not isinstance(finalists, list) or not finalists
+                or len(finalists) > MAX_AUTOTUNE_FINALISTS
+                or len(finalists) != len(set(finalists))
+                or any(identifier not in actual or actual[identifier]["outcome"] != "success"
+                       for identifier in finalists)):
+            raise RunnerError("autotune finalists must be one to three successful options")
+        if profiled != finalists:
+            raise RunnerError("only and all finalists must receive official msprof timing")
+        profiles = summary.get("finalist_profiles")
+        if not isinstance(profiles, dict) or set(profiles) != set(finalists):
+            raise RunnerError("autotune result must retain official evidence for every finalist")
+        for identifier, profile in profiles.items():
+            timing = profile.get("geomean_us") if isinstance(profile, dict) else None
+            if (isinstance(timing, bool) or not isinstance(timing, (int, float))
+                    or not math.isfinite(timing) or timing <= 0):
+                raise RunnerError(f"finalist {identifier} lacks valid msprof timing")
+        winner = summary.get("winner_id")
+        if winner not in finalists or summary.get("winner_full_gate") is not True:
+            raise RunnerError("autotune winner must be a fully gated profiled finalist")
+        if summary.get("winner_source_sha256") != expected[winner]["source_sha256"]:
+            raise RunnerError("autotune winner source identity does not match the request")
+        commands = summary.get("commands")
+        if not isinstance(commands, list) or not all(isinstance(item, str) for item in commands):
+            raise RunnerError("autotune result commands must be a string list")
+        return expected[winner]["source"], summary
+
+    @staticmethod
+    def _public_autotune_request(request: dict) -> dict:
+        return {
+            **request,
+            "options": [
+                {key: value for key, value in option.items() if key != "source"}
+                for option in request["options"]
+            ],
+        }
+
     def _accept_result(self, state: dict, attempt: Path, prepared: dict, result: dict) -> dict:
         outcome = result.get("outcome")
         if outcome == "success":
+            autotune = self._attempt_autotune_request(attempt)
+            if autotune is not None:
+                self._validate_autotune_success(autotune, result)
             state["status"] = "analyzing"
             self._save(state)
             return self._analyze(state, attempt, prepared, result)
@@ -745,7 +1033,16 @@ class ExperimentCell:
         if analysis_path.exists():
             analysis = json.loads(analysis_path.read_text())
         else:
-            request = {**self._request(state, "analyze"), "candidate": prepared["candidate"],
+            autotune = self._attempt_autotune_request(attempt)
+            selected = prepared["candidate"]
+            if autotune is not None:
+                selected, _ = self._validate_autotune_success(autotune, result)
+            request = {**self._request(state, "analyze"), "candidate": selected,
+                       "structural_candidate": prepared["candidate"],
+                       "autotune_request": (
+                           self._public_autotune_request(autotune)
+                           if autotune is not None else None
+                       ),
                        "terminal_result": result, "attempt": str(attempt)}
             try:
                 analysis = self.agent.analyze(request)
@@ -778,8 +1075,12 @@ class ExperimentCell:
                   "physical_device": launch.get("physical_device")}
         commands = "".join(json.dumps({"command": item}, sort_keys=True) + "\n"
                            for item in prepared["commands"])
+        autotune = self._attempt_autotune_request(attempt)
+        selected = prepared["candidate"]
+        if autotune is not None:
+            selected, autotune_summary = self._validate_autotune_success(autotune, result)
         files = {
-            "candidate.py": prepared["candidate"], "run.sh": (attempt / "run.sh").read_text(),
+            "candidate.py": selected, "run.sh": (attempt / "run.sh").read_text(),
             "terminal-gate.sh": (self.path / "terminal-gate.sh").read_text(),
             "commands.jsonl": commands,
             "profile-summary.json": json.dumps(result.get("profile_summary", {}), indent=2, sort_keys=True) + "\n",
@@ -790,6 +1091,17 @@ class ExperimentCell:
             "reasoning.md": analysis["reasoning"].rstrip() + "\n",
             "postmortem.md": analysis["postmortem"].rstrip() + "\n",
         }
+        if autotune is not None:
+            public_request = self._public_autotune_request(autotune)
+            files.update({
+                "structural-candidate.py": prepared["candidate"],
+                "autotune-request.json": json.dumps(public_request, indent=2, sort_keys=True) + "\n",
+                "autotune-result.json": json.dumps(autotune_summary, indent=2, sort_keys=True) + "\n",
+                "autotune-commands.jsonl": "".join(
+                    json.dumps({"command": item}, sort_keys=True) + "\n"
+                    for item in autotune_summary["commands"]
+                ),
+            })
         if state.get("task_sha256") is not None:
             files["TASK.md"] = (self.repo / "TASK.md").read_bytes()
         if state.get("candidate_manifest_sha256") is not None:
@@ -858,13 +1170,19 @@ class ExperimentCell:
         prepared = (json.loads(last_agent.read_text())
                     if state["status"] == "infrastructure_failure" and last_agent.is_file()
                     else None)
+        autotune_request = None
+        if prepared is not None:
+            retained_tune = last_agent.with_name("autotune-request.json")
+            if retained_tune.is_file():
+                autotune_request = json.loads(retained_tune.read_text())
         while True:
             if self._checks_exhausted(state):
                 return self._finish_billed_checks(state, state.get("last_outcome"))
             if prepared is None:
                 prepared = self.agent.prepare(self._request(state, "prepare"))
                 self._verify_task_snapshot(state)
-            state = self._attempt(state, prepared)
+                autotune_request = self._tune(state, prepared)
+            state = self._attempt(state, prepared, autotune_request)
             if state["status"] in {"ready", "complete", "billed_checks_exhausted",
                                    "infrastructure_unknown", "analysis_pending"}:
                 return state
@@ -875,6 +1193,7 @@ class ExperimentCell:
             if self._budget_exhausted(state):
                 return state
             prepared = None
+            autotune_request = None
 
     def resume(self) -> dict:
         state = self._state()

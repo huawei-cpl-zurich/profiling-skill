@@ -92,6 +92,7 @@ class Agent:
     def __init__(self, values=None):
         self.values = list(values or [evidence()])
         self.requests = []
+        self.tunes = []
         self.analyses = []
 
     def prepare(self, request):
@@ -101,6 +102,13 @@ class Agent:
     def analyze(self, request):
         self.analyses.append(request)
         return {"reasoning": "final reasoning", "postmortem": "final postmortem"}
+
+    def tune(self, request):
+        self.tunes.append(request)
+        return {"configurations": [
+            {"id": "block-64", "parameters": {"BLOCK": 64},
+             "hypothesis": "test a wider block"},
+        ]}
 
 
 class Remote:
@@ -135,6 +143,48 @@ def initialized(tmp_path, remote, agent=None, **updates):
 
 def success(us=12.5):
     return {"outcome": "success", "stdout": "PASS", "stderr": "", "profile_summary": {"duration_us": us}}
+
+
+def autotune_candidate():
+    return "AUTOTUNE_CONFIG = {'BLOCK': 32, 'WAVES': 1}\nKERNEL = 'candidate'\n"
+
+
+def autotune_success(plan, winner="block-64", failed=()):
+    rows = []
+    for index, option in enumerate(plan["options"]):
+        if option["id"] in failed:
+            rows.append({
+                "id": option["id"], "source_sha256": option["source_sha256"],
+                "outcome": "candidate_failure", "diagnostics": "compile failed",
+            })
+        else:
+            rows.append({
+                "id": option["id"], "source_sha256": option["source_sha256"],
+                "outcome": "success", "cheap_device_timing_us": 10.0 + index,
+            })
+    finalists = [winner]
+    selected = next(option for option in plan["options"] if option["id"] == winner)
+    return {
+        "outcome": "success", "stdout": "PASS", "stderr": "",
+        "profile_summary": {
+            "timing": {"profiled_ids": finalists},
+            "pipe_activity": {"available": True},
+            "timeline": {"available": False, "reason": "unsupported"},
+        },
+        "autotune_summary": {
+            "schema": runner.AUTOTUNE_RESULT_SCHEMA,
+            "optimization_round": 1,
+            "options": rows, "finalists": finalists,
+            "profiled_finalists": finalists, "winner_id": winner,
+            "winner_source_sha256": selected["source_sha256"],
+            "winner_full_gate": True,
+            "commands": ["compile all", "time survivors", "msprof finalists"],
+            "finalist_profiles": {
+                identifier: {"geomean_us": 9.0, "repeats": 3}
+                for identifier in finalists
+            },
+        },
+    }
 
 
 def candidate_contract():
@@ -765,6 +815,155 @@ def test_completed_round_is_one_commit_with_required_evidence(tmp_path):
     }
     assert expected <= names
     assert json.loads((cell.repo / "rounds/01/profile-summary.json").read_text())["duration_us"] == 9.25
+
+
+def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
+    proposed = [
+        {"id": f"option-{index:03d}", "parameters": {"BLOCK": index + 1},
+         "hypothesis": f"test block {index + 1}"}
+        for index in range(128)
+    ]
+    first = runner.materialize_autotune(autotune_candidate(), proposed)
+    second = runner.materialize_autotune(autotune_candidate(), proposed)
+
+    assert first == second
+    assert len(first["options"]) == 129
+    assert first["options"][0]["id"] == "incumbent"
+    assert first["options"][-1]["parameters"] == {"BLOCK": 128, "WAVES": 1}
+    assert first["options"][-1]["source_sha256"] == hashlib.sha256(
+        first["options"][-1]["source"].encode()
+    ).hexdigest()
+
+
+@pytest.mark.parametrize(
+    "candidate,proposed,message",
+    [
+        ("VALUE = 1\n", [], "exactly one"),
+        (autotune_candidate(), [
+            {"id": "bad", "parameters": {"UNDECLARED": 1}, "hypothesis": "bad"}
+        ], "undeclared"),
+        (autotune_candidate(), [
+            {"id": "bad", "parameters": {"BLOCK": [1]}, "hypothesis": "bad"}
+        ], "JSON scalar"),
+    ],
+)
+def test_materialize_autotune_rejects_invalid_spaces(candidate, proposed, message):
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.materialize_autotune(candidate, proposed)
+
+
+def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+    class HundredOptionAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            return {"configurations": [
+                {"id": f"option-{index:03d}",
+                 "parameters": {"BLOCK": 64 if index == 0 else index + 65},
+                 "hypothesis": "broad deterministic canary"}
+                for index in range(100)
+            ]}
+
+    agent = HundredOptionAgent([prepared])
+
+    class TuningRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            request_path = Path(self.submitted[0][1])
+            del request_path
+            attempt = cell.path / "attempts/1/autotune-request.json"
+            return autotune_success(json.loads(attempt.read_text()), winner="option-000")
+
+    remote = TuningRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True)
+    completed = cell.run()
+
+    assert completed["status"] == "complete"
+    assert len(agent.tunes) == 1
+    assert agent.tunes[0]["declared_autotune_config"] == {"BLOCK": 32, "WAVES": 1}
+    assert agent.tunes[0]["max_configurations"] == 128
+    folder = cell.repo / "rounds/01"
+    assert "'BLOCK': 64" not in (folder / "candidate.py").read_text()
+    assert '"BLOCK": 64' in (folder / "candidate.py").read_text()
+    assert (folder / "structural-candidate.py").read_text() == autotune_candidate()
+    retained = json.loads((folder / "autotune-request.json").read_text())
+    assert len(retained["options"]) == 101
+    assert retained["optimization_round"] == 1
+    assert all("source" not in option for option in retained["options"])
+    result = json.loads((folder / "autotune-result.json").read_text())
+    assert result["winner_id"] == "option-000" and result["optimization_round"] == 1
+    assert completed["round"] == 2 and completed["attempts"] == 1
+    assert (folder / "autotune-commands.jsonl").read_text().count("command") == 3
+    assert "AUTOTUNE_REQUEST_PATH" in remote.submitted[0][1]
+    assert agent.analyses[0]["candidate"] == (folder / "candidate.py").read_text()
+    assert agent.analyses[0]["structural_candidate"] == autotune_candidate()
+
+
+def test_autotune_observation_resume_reuses_one_job_and_one_tune_phase(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+    agent = Agent([prepared])
+
+    class ResumeRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            if len(self.observed) == 1:
+                raise runner.ObservationLost("observer disconnected")
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    remote = ResumeRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True)
+    assert cell.run()["status"] == "infrastructure_unknown"
+    assert cell.resume()["status"] == "complete"
+    assert len(remote.submitted) == len(agent.tunes) == 1
+    assert remote.observed == ["remote:bz-a3-1:job:1"] * 2
+
+
+def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+
+    class FourAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            return {"configurations": [
+                {"id": f"v{index}", "parameters": {"BLOCK": index + 33},
+                 "hypothesis": "variant"} for index in range(4)
+            ]}
+
+    class InvalidRemote(Remote):
+        def observe(self, handle):
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            value = autotune_success(plan, winner="v0")
+            finalists = [option["id"] for option in plan["options"][:4]]
+            value["autotune_summary"]["finalists"] = finalists
+            value["autotune_summary"]["profiled_finalists"] = finalists
+            return value
+
+    cell = initialized(
+        tmp_path, InvalidRemote([]), FourAgent([prepared]), rounds=1, autotune=True
+    )
+    with pytest.raises(runner.RunnerError, match="one to three"):
+        cell.run()
+
+
+def test_autotune_success_rejects_a_result_from_another_round(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+
+    class WrongRoundRemote(Remote):
+        def observe(self, handle):
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            value = autotune_success(plan)
+            value["autotune_summary"]["optimization_round"] = 2
+            return value
+
+    cell = initialized(tmp_path, WrongRoundRemote([]), Agent([prepared]),
+                       rounds=1, autotune=True)
+    with pytest.raises(runner.RunnerError, match="optimization round"):
+        cell.run()
 
 
 def test_runner_materializes_exact_candidate_and_submitted_script(tmp_path):

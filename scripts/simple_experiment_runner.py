@@ -153,7 +153,7 @@ class CplRemote:
         workspace = request["remote_workspace"]
         if (not isinstance(workspace, str) or not workspace
                 or "\x00" in workspace or "\n" in workspace):
-            raise RunnerError("remote_workspace must be a safe non-empty path")
+            raise PreDispatchFailure("remote_workspace must be a safe non-empty path")
         digest = hashlib.sha256(script.read_bytes()).hexdigest()
         remote_name = f".simple-experiment-{digest}.sh"
         remote_script = f"{workspace.rstrip('/')}/{remote_name}"

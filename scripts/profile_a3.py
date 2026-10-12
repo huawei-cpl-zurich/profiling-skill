@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one A2/A3 msprof-op capture and emit compact latency evidence."""
+"""Run one A2/A3 msprof-op capture and emit compact capture evidence."""
 
 from __future__ import annotations
 
@@ -147,6 +147,53 @@ def summarize(
     }
 
 
+def summarize_pipe(
+    root: Path,
+    kernel: str | None,
+    *,
+    warm_up: int,
+    launch_count: int,
+    target_family: str = "Ascend-A2-A3",
+) -> dict:
+    if kernel is None:
+        raise InvalidCapture("PipeUtilization requires an exact kernel selector")
+    # Validate that the adjacent BasicInfo export contains the selector. The
+    # stricter single-launch association is enforced by the A3 normalizer.
+    summarize(
+        root, kernel, warm_up=warm_up, launch_count=launch_count,
+        target_family=target_family,
+    )
+    roles = {
+        "pipe_basic_info": sorted(root.rglob("OpBasicInfo*.csv")),
+        "pipe_utilization": sorted(root.rglob("PipeUtilization*.csv")),
+    }
+    for role, files in roles.items():
+        if len(files) != 1:
+            raise InvalidCapture(
+                f"expected exactly one {role} CSV under {root}, found {len(files)}"
+            )
+    return {
+        "schema_version": 1,
+        "target_family": target_family,
+        "profiler": "msprof-op",
+        "metric": "PipeUtilization",
+        "protocol": {
+            "warm_up": warm_up,
+            "launch_count": launch_count,
+            "replay_mode": "kernel",
+            "kernel_selector": kernel,
+        },
+        "sources": [
+            {
+                "role": role,
+                "path": files[0].relative_to(root).as_posix(),
+                "sha256": sha256(files[0]),
+            }
+            for role, files in roles.items()
+        ],
+    }
+
+
 def positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
@@ -158,6 +205,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--kernel-name")
+    parser.add_argument("--metric", choices=("BasicInfo", "PipeUtilization"),
+                        default="BasicInfo")
     parser.add_argument("--warm-up", type=int, default=3)
     parser.add_argument("--launch-count", type=positive_int, default=1)
     parser.add_argument("--target-family", choices=("Ascend-A2-A3", "Ascend-A5"),
@@ -196,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
         "op",
         f"--application={application}",
         f"--output={raw}",
-        "--aic-metrics=BasicInfo",
+        f"--aic-metrics={args.metric}",
         f"--warm-up={args.warm_up}",
         f"--launch-count={args.launch_count}",
         "--replay-mode=kernel",
@@ -245,12 +294,10 @@ def main(argv: list[str] | None = None) -> int:
             raise InvalidCapture(f"msprof exited with status {returncode}")
         if SUCCESS_LINE not in transcript:
             raise InvalidCapture("msprof terminal success marker is missing")
-        evidence = summarize(
-            raw,
-            args.kernel_name,
-            warm_up=args.warm_up,
-            launch_count=args.launch_count,
-            target_family=args.target_family,
+        summarize_capture = summarize_pipe if args.metric == "PipeUtilization" else summarize
+        evidence = summarize_capture(
+            raw, args.kernel_name, warm_up=args.warm_up,
+            launch_count=args.launch_count, target_family=args.target_family,
         )
         evidence["status"] = "success"
         evidence["application"] = args.application

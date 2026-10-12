@@ -71,6 +71,21 @@ def validate_environment() -> str | None:
     return None
 
 
+def validate_pipe_activity(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("managed A3 profile is missing pipe activity evidence")
+    if value.get("product") != "a3" or value.get("evidence_kind") != "per-block-pipe-activity":
+        raise ValueError("managed A3 pipe activity evidence has the wrong product or kind")
+    observations = value.get("observations")
+    if not isinstance(observations, list) or not observations:
+        raise ValueError("managed A3 pipe activity evidence has no observations")
+    for observation in observations:
+        saturation = observation.get("saturation") if isinstance(observation, dict) else None
+        if not isinstance(saturation, dict) or saturation.get("state") != "unknown":
+            raise ValueError("managed A3 pipe observations must keep saturation unknown")
+    return value
+
+
 def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
              output: Path, round_number: int) -> tuple[str, str, dict]:
     spec = SPECS[benchmark]
@@ -115,7 +130,10 @@ def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
     profile_job = {
         **common, "action": "profile", "cases": spec["ranked"], "repeats": 3,
         "round": round_number,
-        "profiling": {"tool": "msprof op", "kernel_name": spec["kernel_name"]},
+        "profiling": {
+            "tool": "msprof op", "kernel_name": spec["kernel_name"],
+            "pipe_activity": True,
+        },
     }
     response_path = output / "profile-response.json"
     profile_output = output / "profile"
@@ -123,6 +141,8 @@ def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
         profile_job, runner=root / "scripts/a3_benchmark_runner.py",
         profiler=root / "scripts/profile_a3.py", output=profile_output,
         response_path=response_path, kernel_name=spec["kernel_name"],
+        normalizer=root / "scripts/normalize_a3_pipe_evidence.py",
+        activity_model=root / "references/a3-pipe-activity-model.json",
     )
     try:
         response = json.loads(response_path.read_text())
@@ -132,13 +152,31 @@ def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
     if rc or response.get("status") != "ok" or evidence.get("status") != "success":
         diagnostics = str(response.get("diagnostics") or evidence.get("failure") or "profiling failed")
         return failure_outcome(str(response.get("status", "infrastructure_error")), diagnostics), diagnostics, {}
-    summary = {
-        "benchmark": benchmark, "correctness_cases": len(spec["cases"]),
-        "fusion": fusion_summary, "profiler": evidence.get("profiler"),
+    try:
+        pipe_activity = validate_pipe_activity(evidence.get("pipe_activity"))
+    except ValueError as exc:
+        return "infrastructure_failure", str(exc), {}
+    timing = {
+        "metric": "BasicInfo",
+        "profiler": evidence.get("profiler"),
         "timing_scope": evidence.get("timing_scope"),
         "kernel_name": evidence.get("kernel_name"), "cases": evidence.get("cases"),
         "repeats": evidence.get("repeats"), "geomean_us": evidence.get("geomean_us"),
         "captures": evidence.get("captures"),
+    }
+    summary = {
+        "schema": "profiling-skill/a3-round-profile-summary/v1",
+        "benchmark": benchmark, "correctness_cases": len(spec["cases"]),
+        "fusion": fusion_summary, "timing": timing,
+        "pipe_activity": pipe_activity,
+        "timeline": {
+            "available": False,
+            "kind": "a3-temporal-pipe-phases",
+            "reason": (
+                "A3 PipeUtilization rows are non-temporal activity observations; "
+                "TimelineDetail flow relationships do not provide A5-style temporal pipe phases"
+            ),
+        },
     }
     return "success", "", summary
 

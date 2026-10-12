@@ -36,7 +36,7 @@ def manifest(task):
 
 
 def fake_modules(task, *, check_status="ok", profile_status="success",
-                 fusion_error: str | None = None):
+                 fusion_error: str | None = None, include_pipe_activity=True):
     spec = gate.SPECS[task]
     fusion_rows = [
         {"schema": "profiling-skill/fusion-evidence/v1", "case": case,
@@ -78,12 +78,22 @@ def fake_modules(task, *, check_status="ok", profile_status="success",
             "status": "ok" if ok else "infrastructure_error",
             "diagnostics": "msprof unavailable" if not ok else "",
         }))
+        pipe_activity = {
+            "schema_version": 1, "product": "a3",
+            "evidence_kind": "per-block-pipe-activity",
+            "observations": [{
+                "observation_id": f"{spec['kernel_name']}:block-0:cube0",
+                "activity": {"aic_mte2": 0.5},
+                "saturation": {"state": "unknown", "reason": "no capacity denominator"},
+            }],
+        }
         (output / "evidence.json").write_text(json.dumps({
             "status": profile_status, "profiler": "msprof-op",
             "timing_scope": "device-task", "kernel_name": spec["kernel_name"],
             "cases": [{"case": case, "median_us": 2.0, "samples_us": [2.0] * 3}
                       for case in spec["ranked"]],
             "repeats": 3, "geomean_us": 2.0, "captures": [],
+            **({"pipe_activity": pipe_activity} if include_pipe_activity else {}),
         }))
         return 0 if ok else 1
 
@@ -125,8 +135,13 @@ def test_gate_runs_full_correctness_before_ranked_profile(tmp_path, monkeypatch)
     )
     assert outcome == "success" and diagnostics == ""
     assert summary["correctness_cases"] == 50
-    assert [row["case"] for row in summary["cases"]] == [40, 49, 47, 46, 45]
-    assert summary["repeats"] == 3 and summary["profiler"] == "msprof-op"
+    assert summary["schema"] == "profiling-skill/a3-round-profile-summary/v1"
+    assert [row["case"] for row in summary["timing"]["cases"]] == [40, 49, 47, 46, 45]
+    assert summary["timing"]["repeats"] == 3
+    assert summary["timing"]["profiler"] == "msprof-op"
+    assert summary["pipe_activity"]["observations"][0]["saturation"]["state"] == "unknown"
+    assert summary["timeline"]["available"] is False
+    assert summary["timeline"]["kind"] == "a3-temporal-pipe-phases"
     assert summary["fusion"]["logical_launches_per_case"] == 1
 
 
@@ -169,6 +184,43 @@ def test_profile_tool_failure_is_infrastructure(tmp_path, monkeypatch):
     )
     assert outcome == "infrastructure_failure"
     assert "msprof unavailable" in diagnostics and summary == {}
+
+
+def test_missing_pipe_activity_fails_instead_of_claiming_profile_guidance(
+    tmp_path, monkeypatch
+):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules("matmul", include_pipe_activity=False)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == "managed A3 profile is missing pipe activity evidence"
+
+
+def test_claimed_a3_saturation_is_rejected(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = list(fake_modules("matmul"))
+    original = modules[2].execute
+
+    def saturated(job, **kwargs):
+        rc = original(job, **kwargs)
+        path = kwargs["output"] / "evidence.json"
+        evidence = json.loads(path.read_text())
+        evidence["pipe_activity"]["observations"][0]["saturation"]["state"] = "saturated"
+        path.write_text(json.dumps(evidence))
+        return rc
+
+    modules[2] = SimpleNamespace(execute=saturated)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert "keep saturation unknown" in diagnostics
 
 
 def test_wrong_host_task_manifest_is_infrastructure_failure(tmp_path, monkeypatch):

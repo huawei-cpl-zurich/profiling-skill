@@ -15,6 +15,8 @@ FILES = (
     "scripts/a3_terminal_gate.py", "scripts/a3_benchmark_runner.py",
     "scripts/fully_fused_contract.py", "scripts/profile_a3.py",
     "scripts/batch_profile_a3.py",
+    "scripts/normalize_a3_pipe_evidence.py",
+    "references/a3-pipe-activity-model.json",
     "benchmarks/gdn/baseline.py", "benchmarks/gdn/cases.jsonl",
     "benchmarks/gdn/baseline.json", "benchmarks/bsa/baseline.py",
     "benchmarks/bsa/cases.jsonl", "benchmarks/bsa/baseline.json",

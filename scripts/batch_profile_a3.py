@@ -118,8 +118,80 @@ def read_capture(evidence_path: Path, run: subprocess.CompletedProcess[str],
     return "success", latency
 
 
+def source_path(capture_dir: Path, evidence: dict, role: str) -> Path:
+    matches = [item for item in evidence.get("sources", [])
+               if isinstance(item, dict) and item.get("role") == role]
+    if len(matches) != 1 or not isinstance(matches[0].get("path"), str):
+        raise ValueError(f"PipeUtilization evidence requires one {role} source")
+    raw = (capture_dir / "raw").resolve()
+    path = (raw / matches[0]["path"]).resolve()
+    if raw not in path.parents or not path.is_file() or digest(path) != matches[0].get("sha256"):
+        raise ValueError(f"PipeUtilization {role} source is invalid")
+    return path
+
+
+def capture_pipe(job: dict, *, runner: Path, profiler: Path, normalizer: Path,
+                 activity_model: Path, work: Path, output: Path,
+                 selector: str, logs: list[str]) -> tuple[dict | None, str | None, str]:
+    case = job["cases"][0]
+    capture_id = f"round-{job['round']}-case-{case}-pipe"
+    item_job = {**job, "case": case, "iteration": 0}
+    item_job.pop("cases", None)
+    item_job.pop("repeats", None)
+    item_job_path = work / "pipe-job.json"
+    item_response = work / "pipe-response.json"
+    capture_dir = work / "pipe"
+    write_json(item_job_path, item_job)
+    command = [
+        sys.executable, str(profiler), "--output", str(capture_dir),
+        "--metric", "PipeUtilization", "--kernel-name", selector,
+        "--warm-up", "0", "--launch-count", "1", "--target-family", "Ascend-A2-A3",
+        "--", sys.executable, str(runner), "--job", str(item_job_path),
+        "--output", str(item_response),
+    ]
+    run = subprocess.run(command, text=True, capture_output=True, check=False)
+    if (capture_dir / "msprof.log").is_file():
+        logs.append("[pipe selector=" + selector + "]\n" +
+                    (capture_dir / "msprof.log").read_text(errors="replace"))
+    try:
+        remote = json.loads(item_response.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, "infrastructure_error", f"pipe capture produced no valid runner response: {exc}"
+    if remote.get("status") != "ok":
+        status = remote.get("status", "infrastructure_error")
+        if status not in {"compile_error", "runtime_error", "correctness_error"}:
+            status = "infrastructure_error"
+        return None, status, str(remote.get("diagnostics", ""))
+    try:
+        capture = json.loads((capture_dir / "evidence.json").read_text())
+        if run.returncode or capture.get("status") != "success" or capture.get("metric") != "PipeUtilization":
+            failure = capture.get("failure", {})
+            status = "submission_error" if failure.get("reason") == "selector_miss" else "infrastructure_error"
+            return None, status, str(failure.get("message", "PipeUtilization capture failed"))
+        basic = source_path(capture_dir, capture, "pipe_basic_info")
+        pipe = source_path(capture_dir, capture, "pipe_utilization")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return None, "infrastructure_error", f"PipeUtilization evidence is invalid: {exc}"
+    normalized = output / "pipe-activity.json"
+    normalize = subprocess.run([
+        sys.executable, str(normalizer), "--product", "a3",
+        "--activity-model", str(activity_model), "--basic-info", str(basic),
+        "--pipe-utilization", str(pipe), "--capture-id", capture_id,
+        "--kernel-name", selector, "--launch-count", "1", "--output", str(normalized),
+    ], text=True, capture_output=True, check=False)
+    if normalize.returncode:
+        return None, "infrastructure_error", (
+            "A3 pipe normalization failed: " + (normalize.stderr or normalize.stdout).strip()
+        )
+    try:
+        return json.loads(normalized.read_text()), None, ""
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, "infrastructure_error", f"normalized A3 pipe evidence is unavailable: {exc}"
+
+
 def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
-            response_path: Path, kernel_name: str) -> int:
+            response_path: Path, kernel_name: str,
+            normalizer: Path | None = None, activity_model: Path | None = None) -> int:
     bound = identity(job)
     if kernel_name != bound["kernel_name"]:
         result = failure(job, "infrastructure_error",
@@ -208,6 +280,21 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
         rows.append({"case": case, "median_us": statistics.median(samples),
                      "samples_us": samples})
     geomean = math.exp(sum(math.log(row["median_us"]) for row in rows) / len(rows))
+    pipe_activity = None
+    if job.get("profiling", {}).get("pipe_activity"):
+        if normalizer is None or activity_model is None:
+            result = failure(job, "infrastructure_error",
+                             "A3 pipe normalizer and activity model are required", captures,
+                             resolved_kernel_name)
+            return emit_failure(output, response_path, result, captures, logs)
+        pipe_activity, pipe_status, pipe_diagnostics = capture_pipe(
+            job, runner=runner, profiler=profiler, normalizer=normalizer,
+            activity_model=activity_model, work=work, output=output,
+            selector=resolved_kernel_name or declared_kernel_name, logs=logs,
+        )
+        if pipe_status:
+            result = failure(job, pipe_status, pipe_diagnostics, captures, resolved_kernel_name)
+            return emit_failure(output, response_path, result, captures, logs)
     evidence = {
         "schema_version": 1,
         "status": "success",
@@ -223,6 +310,8 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
         "repeats": job["repeats"],
         "geomean_us": geomean,
     }
+    if pipe_activity is not None:
+        evidence["pipe_activity"] = pipe_activity
     response = {"status": "ok", "diagnostics": "", **bound,
                 "declared_kernel_name": declared_kernel_name,
                 "resolved_kernel_name": resolved_kernel_name,
@@ -241,12 +330,15 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--response", type=Path, required=True)
     parser.add_argument("--kernel-name", required=True)
+    parser.add_argument("--normalizer", type=Path)
+    parser.add_argument("--activity-model", type=Path)
     args = parser.parse_args()
     try:
         job = json.loads(args.job.read_text())
         return execute(job, runner=args.runner, profiler=args.profiler,
                        output=args.output, response_path=args.response,
-                       kernel_name=args.kernel_name)
+                       kernel_name=args.kernel_name, normalizer=args.normalizer,
+                       activity_model=args.activity_model)
     except BaseException as exc:
         result = {"status": "infrastructure_error", "diagnostics": f"batch driver failed: {exc}"}
         if "job" in locals() and isinstance(job, dict):

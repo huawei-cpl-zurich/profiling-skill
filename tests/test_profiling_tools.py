@@ -589,6 +589,38 @@ with (target / 'OpBasicInfo_1.csv').open('w', newline='') as stream:
     assert len(evidence["sources"][0]["sha256"]) == 64
 
 
+def test_a3_profile_runs_exact_pipe_capture_and_returns_source_manifest(tmp_path: Path):
+    msprof = fake_msprof(
+        tmp_path,
+        """\
+with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['Op Name', 'Task Duration(us)'])
+    writer.writeheader(); writer.writerow({'Op Name': 'wanted', 'Task Duration(us)': '8.0'})
+with (target / 'PipeUtilization.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['block_id', 'sub_block_id', 'aic_time(us)', 'aic_mte2_ratio'])
+    writer.writeheader(); writer.writerow({'block_id': '0', 'sub_block_id': 'cube0', 'aic_time(us)': '8.0', 'aic_mte2_ratio': '0.5'})
+""",
+    )
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        [
+            "python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(output),
+            "--metric", "PipeUtilization", "--kernel-name", "wanted",
+            "--warm-up", "0", "--launch-count", "1", "--msprof", str(msprof),
+            "--", "python3", "case.py",
+        ],
+        text=True, capture_output=True, check=True,
+    )
+    evidence = json.loads(result.stdout)
+    assert evidence["metric"] == "PipeUtilization"
+    assert evidence["protocol"]["kernel_selector"] == "wanted"
+    assert evidence["protocol"]["launch_count"] == 1
+    assert {item["role"] for item in evidence["sources"]} == {
+        "pipe_basic_info", "pipe_utilization",
+    }
+    assert all(len(item["sha256"]) == 64 for item in evidence["sources"])
+
+
 def test_a3_profile_rejects_success_without_matching_kernel(tmp_path: Path):
     msprof = fake_msprof(
         tmp_path,

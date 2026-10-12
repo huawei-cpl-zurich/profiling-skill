@@ -81,6 +81,21 @@ For reusable control acquisition, use the mandatory two-pass helper above.
 kernel. Run independent timing captures for repetitions and use their median;
 do not use profiled Python wall time.
 
+In managed optimization rounds, the host terminal gate owns hardware evidence;
+the candidate-writing agent must not bypass it. A successful A3 round summary
+has three explicit sections: repeated exact-kernel `BasicInfo` under `timing`,
+normalized single-launch `PipeUtilization` under `pipe_activity`, and a
+`timeline` availability record. Treat a timing-only summary, absent pipe
+observations, or a missing availability record as missing profiling evidence,
+not as a pipe-guided result. Report the omission to the controller and do not
+invent the missing metrics or acquire them through an unapproved route.
+
+Every managed A3 pipe observation must retain `saturation.state: unknown`.
+Use its activity fractions to compare work composition and form a next-step
+hypothesis, but never call a high ratio saturated. A managed A3 timeline record
+is expected to mark A5-style temporal pipe phases unavailable: A3
+`TimelineDetail` flow relationships do not supply that evidence.
+
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, A3 pipe inventory, normalization command, and interpretation
 boundaries. `PipeUtilization` ratios are activity divided by task cycles; they

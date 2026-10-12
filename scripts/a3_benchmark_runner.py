@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.util
 import io
 import json
-import os
-import sys
 import time
 import traceback
 from pathlib import Path
@@ -317,47 +316,81 @@ def execute(job: dict) -> dict:
     evidence = []
     fusion_evidence = []
     for case in cases:
+        inputs = reference_inputs = expected = candidate_inputs = None
+        candidate_model = actual = audit = None
+        primary_result = cleanup_error = None
         try:
-            inputs = selected_inputs(baseline, Path(job["case_spec"]), case)
-            reference_inputs = clone(inputs)
-            with torch.no_grad():
-                expected = baseline.Model()(*reference_inputs)
-                torch.npu.synchronize()
-        except BaseException as exc:
-            return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound,
-                    "case_evidence": evidence}
-        try:
-            candidate_inputs = clone(inputs)
-            audit = None
-            if "fusion_contract" in job:
-                audit = FusionRuntimeAudit(job["fusion_contract"])
-                audit.instrument(candidate)
-            candidate_model = candidate.Model()
-            with torch.no_grad():
-                torch.npu.synchronize()
-                started = time.perf_counter_ns()
-                if audit is None:
-                    actual = candidate_model(*candidate_inputs)
-                else:
-                    with audit.dispatch_mode():
-                        actual = candidate_model(*candidate_inputs)
-                torch.npu.synchronize()
-                elapsed_us = (time.perf_counter_ns() - started) / 1000.0
-            if audit is not None:
-                fusion_evidence.append(audit.finish(case, actual))
-        except BaseException as exc:
-            return {"status": classify(exc), "diagnostics": diagnostic(exc), **bound,
-                    "case_evidence": evidence}
-        try:
-            passed, max_abs = compare(actual, expected, **tolerances)
-        except BaseException as exc:
-            return {"status": "infrastructure_error", "diagnostics": diagnostic(exc), **bound,
-                    "case_evidence": evidence}
-        evidence.append({"case": case, "passed": passed, "max_abs_error": max_abs,
-                         "host_elapsed_us": elapsed_us})
-        if not passed:
-            return {"status": "correctness_error", "diagnostics": f"case {case} mismatch",
-                    **bound, "passed": False, "case_evidence": evidence}
+            try:
+                inputs = selected_inputs(baseline, Path(job["case_spec"]), case)
+                reference_inputs = clone(inputs)
+                with torch.no_grad():
+                    expected = baseline.Model()(*reference_inputs)
+                    torch.npu.synchronize()
+            except BaseException as exc:
+                primary_result = {
+                    "status": "infrastructure_error", "diagnostics": diagnostic(exc),
+                    **bound, "case_evidence": evidence,
+                }
+            if primary_result is None:
+                try:
+                    candidate_inputs = clone(inputs)
+                    if "fusion_contract" in job:
+                        audit = FusionRuntimeAudit(job["fusion_contract"])
+                        audit.instrument(candidate)
+                    candidate_model = candidate.Model()
+                    with torch.no_grad():
+                        torch.npu.synchronize()
+                        started = time.perf_counter_ns()
+                        if audit is None:
+                            actual = candidate_model(*candidate_inputs)
+                        else:
+                            with audit.dispatch_mode():
+                                actual = candidate_model(*candidate_inputs)
+                        torch.npu.synchronize()
+                        elapsed_us = (time.perf_counter_ns() - started) / 1000.0
+                    if audit is not None:
+                        fusion_evidence.append(audit.finish(case, actual))
+                except BaseException as exc:
+                    primary_result = {
+                        "status": classify(exc), "diagnostics": diagnostic(exc), **bound,
+                        "case_evidence": evidence,
+                    }
+            if primary_result is None:
+                try:
+                    passed, max_abs = compare(actual, expected, **tolerances)
+                except BaseException as exc:
+                    primary_result = {
+                        "status": "infrastructure_error", "diagnostics": diagnostic(exc),
+                        **bound, "case_evidence": evidence,
+                    }
+            if primary_result is None:
+                evidence.append({"case": case, "passed": passed, "max_abs_error": max_abs,
+                                 "host_elapsed_us": elapsed_us})
+                if not passed:
+                    primary_result = {
+                        "status": "correctness_error", "diagnostics": f"case {case} mismatch",
+                        **bound, "passed": False, "case_evidence": evidence,
+                    }
+        finally:
+            try:
+                if audit is not None:
+                    audit._restore_run_hooks()
+            except BaseException as exc:
+                cleanup_error = exc
+            inputs = reference_inputs = expected = candidate_inputs = None
+            candidate_model = actual = audit = None
+            try:
+                gc.collect()
+                empty_cache = getattr(torch.npu, "empty_cache", None)
+                if callable(empty_cache):
+                    empty_cache()
+            except BaseException as exc:
+                cleanup_error = cleanup_error or exc
+        if primary_result is not None:
+            return primary_result
+        if cleanup_error is not None:
+            return {"status": "infrastructure_error", "diagnostics": diagnostic(cleanup_error),
+                    **bound, "case_evidence": evidence}
     result = {"status": "ok", "diagnostics": "", **bound, "passed": True,
               "case_evidence": evidence}
     if "fusion_contract" in job:

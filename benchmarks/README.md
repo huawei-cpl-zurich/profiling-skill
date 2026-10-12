@@ -5,11 +5,11 @@ copied from `huawei-cpl-zurich/ascendc-kernelgen-data`, branch
 `br_perf_baseline`, revision
 `a42c54b916189500e2f7cb47640980f230f2eb65`.
 
-| ID | Original file | Device | Development cases |
-| --- | --- | ---: | --- |
-| `gdn` | `npu_benchmark/level4/30_ChunkGatedDeltaRule.{py,json}` | 0 | 40, 49, 47, 46, 45 |
-| `bsa` | `npu_benchmark/level4/54_BlockSparseAttnFwd.{py,json}` | 1 | 47, 46, 49, 44, 43 |
-| `matmul` | local `benchmarks/streaming_matmul_add.py` control | 2 | 7, 8, 9 |
+| ID | Original file | Development cases |
+| --- | --- | --- |
+| `gdn` | `npu_benchmark/level4/30_ChunkGatedDeltaRule.{py,json}` | 40, 49, 47, 46, 45 |
+| `bsa` | `npu_benchmark/level4/54_BlockSparseAttnFwd.{py,json}` | 47, 46, 49, 44, 43 |
+| `matmul` | local `benchmarks/streaming_matmul_add.py` control | 7, 8, 9 |
 
 The GDN and BSA specifications contain exactly 50 cases. Matmul contains seven
 correctness cases followed by three performance cases and uses `rtol=atol=2e-2`.
@@ -21,12 +21,12 @@ Its source identity is repository revision
 the Python loaders resolve their case file from the module stem. Experiment
 candidates are separate files; do not modify these baselines during a run.
 
-Generated controller configurations include matmul and its files are part of
-the frozen controller closure. The campaign scheduling change separately adds
-isolated matmul agent cells to the measured wave plan.
+Select the target and eligible device at execution time; device identities are
+not part of these benchmark specifications. Use each baseline as source input
+for an isolated simple-runner cell and leave it unchanged during the run.
 
-The three-treatment, nine-cell protocol and reproducible launch procedure are
-documented in [`docs/experiment-campaign.md`](../docs/experiment-campaign.md).
+The reproducible experiment lifecycle is documented in
+[`docs/simple-experiment-runner.md`](../docs/simple-experiment-runner.md).
 
 `natural_before_tasks.py` exports six additional, independent before-only Triton
 bundles: two gather/recurrent weighted-moment regimes, two masked nonlinear

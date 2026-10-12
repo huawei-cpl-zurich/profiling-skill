@@ -1,10 +1,10 @@
 # Simple experiment runner
 
-`scripts/simple_experiment_runner.py` runs one experiment cell without the
-audited campaign control plane. A cell has one readable folder, isolated Git
-clone, branch, private agent home, and append-only attempt history. Git commits
-are the round history. A remote handle is only a pointer used to resume one
-retained job.
+`scripts/simple_experiment_runner.py` is the only supported experiment campaign
+entrypoint. It runs one cell with one readable folder, isolated Git clone,
+branch, private agent home, and append-only attempt history. Git commits are
+the round history. A remote handle is only a pointer used to resume one retained
+job.
 
 ## Configuration
 
@@ -70,12 +70,13 @@ Prepare must return:
 
 Candidates are limited to 1 MiB. Candidate fields and the generated wrapper
 are validated before an attempt number or directory is created, so rejected
-prepare output can be repaired without poisoning the round. The runner, not the agent, creates the exact
-submitted `run.sh`. It embeds the candidate, materializes it as `candidate.py`
-in a private remote temporary directory, exports `CANDIDATE_PATH`, changes to
-that directory, and executes the retained host-owned terminal gate. The agent
-cannot select or replace the executed fragment. The exact candidate, gate, and
-generated wrapper are retained and committed.
+prepare output can be repaired without poisoning the round. The runner, not
+the agent, creates the exact submitted `run.sh`. It embeds the candidate,
+materializes it as `candidate.py` in a private remote temporary directory,
+exports `CANDIDATE_PATH`, changes to that directory, and executes the retained
+host-owned terminal gate. The agent cannot select or replace the executed
+fragment. The exact candidate, gate, and generated wrapper are retained and
+committed.
 
 After a successful terminal result, the runner invokes the same agent command
 with `phase=analyze`, the session ID, candidate, exact attempt path, and full
@@ -86,10 +87,11 @@ commit without rerunning the remote workload or duplicating the round commit.
 
 ## Remote result contract
 
-Before each new `run` invocation that may dispatch work, the runner records global `cpl-remote`
-`capabilities` and `preflight` receipts and requires `run`, `observe`, and
-`logs`. A failed probe is retained with its phase and diagnostics, classified
-as infrastructure, and consumes neither a candidate attempt nor a round. Production execution uses only the user-wide global client, a named
+Before each new `run` invocation that may dispatch work, the runner records
+global `cpl-remote` `capabilities` and `preflight` receipts and requires `run`,
+`observe`, and `logs`. A failed probe is retained with its phase and diagnostics,
+classified as infrastructure, and consumes neither a candidate attempt nor a
+round. Production execution uses only the user-wide global client, a named
 runtime, and a file-backed script.
 
 The last nonblank stdout line must be a JSON envelope:

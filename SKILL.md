@@ -35,6 +35,15 @@ attribution or races are in doubt. A3 simulated timelines are not A5 hardware
 timelines; do not transfer newly observed A3 mechanisms to A2 or A5 without
 validation.
 
+## Run agent experiment campaigns
+
+Use `scripts/simple_experiment_runner.py` as the only supported experiment
+campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
+isolated Git-backed cell. Read [Simple experiment runner](docs/simple-experiment-runner.md)
+for its configuration, agent protocol, retained evidence, and recovery rules.
+Run separate cells concurrently at the orchestration layer; do not add a
+second scheduler, admission controller, receipt graph, or migration layer.
+
 ## Acquire live control evidence
 
 Use a supplied target-aware measurement interface when the benchmark provides

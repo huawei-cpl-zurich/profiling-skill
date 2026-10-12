@@ -354,6 +354,18 @@ def test_prepare_requires_hypothesis_not_reasoning(tmp_path):
         agent.prepare({"phase": "prepare"})
 
 
+def test_prepare_rejects_empty_hypothesis(tmp_path):
+    program = tmp_path / "agent.py"
+    program.write_text(
+        "import json\n"
+        "print(json.dumps({'candidate':'x','script_fragment':'true','commands':[],"
+        "'hypothesis':''}))\n"
+    )
+    agent = runner.SubprocessAgent(["python", str(program)], tmp_path, tmp_path)
+    with pytest.raises(runner.RunnerError, match="incomplete"):
+        agent.prepare({"phase": "prepare"})
+
+
 def test_subprocess_agent_repair_and_analysis_flow(tmp_path):
     program = tmp_path / "agent-flow.py"
     program.write_text(
@@ -441,6 +453,19 @@ def test_uppercase_remote_receipt_is_not_accepted():
 
     adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
     with pytest.raises(runner.ObservationLost, match="durable handle"):
+        adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, Path("run.sh"))
+
+
+@pytest.mark.parametrize("receipt_target", [None, "bz-a3-2"])
+def test_submit_receipt_requires_explicit_matching_target(receipt_target):
+    def invoke(command, **kwargs):
+        value = {"handle": "remote:bz-a3-1:job:77", "state": "running"}
+        if receipt_target is not None:
+            value["target"] = receipt_target
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    with pytest.raises(runner.ObservationLost, match="matching durable handle"):
         adapter.submit({"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, Path("run.sh"))
 
 

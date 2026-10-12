@@ -123,7 +123,8 @@ class CplRemote:
             "--file", str(script), "--cwd", request["remote_workspace"],
         ])
         handle = receipt.get("handle")
-        if not isinstance(handle, str) or not handle.startswith(f"remote:{request['target']}:job:"):
+        if (receipt.get("target") != request["target"] or not isinstance(handle, str)
+                or not handle.startswith(f"remote:{request['target']}:job:")):
             raise ObservationLost("cpl-remote dispatch returned no matching durable handle")
         return handle
 
@@ -192,7 +193,8 @@ class SubprocessAgent:
     def prepare(self, request: dict) -> dict:
         value = self._invoke(request)
         required = {"candidate", "script_fragment", "commands"}
-        if not required <= value.keys() or not isinstance(value.get("hypothesis"), str):
+        if (not required <= value.keys() or not isinstance(value.get("hypothesis"), str)
+                or not value["hypothesis"]):
             raise RunnerError("agent prepare result is incomplete")
         if (not isinstance(value["candidate"], str)
                 or not isinstance(value["script_fragment"], str)

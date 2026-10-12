@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -23,10 +24,6 @@ RESULT_SCHEMA = "simple-experiment-result/v1"
 MAX_CANDIDATE_BYTES = 1_048_576
 MAX_GATE_BUNDLE_BYTES = 8 * 1_048_576
 MAX_MANIFEST_BYTES = 64 * 1024
-FUSION_DECLARATION = {
-    "schema_version": 1, "mode": "single-logical-launch", "complete_operator": True,
-}
-EXPORTED_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.$:/-]*")
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 AGENT_ENV_ALLOWLIST = {
     "PATH", "LANG", "LC_ALL", "LC_CTYPE", "SSL_CERT_FILE", "SSL_CERT_DIR",
@@ -56,17 +53,24 @@ class PreDispatchFailure(ObservationLost):
     """Failure proven to have occurred before a remote job was submitted."""
 
 
+def _load_fusion_contract():
+    path = Path(__file__).with_name("fully_fused_contract.py")
+    spec = importlib.util.spec_from_file_location("simple_runner_fusion_contract", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load fusion contract: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+FUSION_CONTRACT = _load_fusion_contract()
+
+
 def _validate_candidate_manifest(value: object) -> None:
-    required = {"schema", "kernel_name", "entrypoint", "fusion"}
-    if (not isinstance(value, dict) or set(value) != required
-            or value.get("schema") != "profiling-skill/candidate-kernel/v2"):
-        raise RunnerError("candidate manifest must be an exact v2 declaration")
-    kernel, entrypoint = value.get("kernel_name"), value.get("entrypoint")
-    if (not isinstance(kernel, str) or EXPORTED_NAME.fullmatch(kernel) is None
-            or not isinstance(entrypoint, str) or EXPORTED_NAME.fullmatch(entrypoint) is None
-            or kernel not in {entrypoint, f"{entrypoint}_mix_aic", f"{entrypoint}_mix_aiv"}
-            or value.get("fusion") != FUSION_DECLARATION):
-        raise RunnerError("candidate manifest has an invalid fully-fused contract")
+    try:
+        FUSION_CONTRACT.validate_manifest(value)
+    except FUSION_CONTRACT.FusionContractError as exc:
+        raise RunnerError(f"candidate manifest is invalid: {exc}") from exc
 
 
 def _write_json(path: Path, value: dict | list) -> None:

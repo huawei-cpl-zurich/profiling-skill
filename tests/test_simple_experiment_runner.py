@@ -219,7 +219,7 @@ def test_campaign_manifest_rejects_unrelated_selector(tmp_path):
     value["kernel_name"] = "unrelated_kernel"
     path.write_text(json.dumps(value))
     cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
-    with pytest.raises(runner.RunnerError, match="fully-fused contract"):
+    with pytest.raises(runner.RunnerError, match="declared entrypoint"):
         cell.init()
 
 

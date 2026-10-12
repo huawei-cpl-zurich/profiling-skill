@@ -38,7 +38,8 @@ def manifest(task):
 def fake_modules(task, *, check_status="ok", profile_status="success",
                  fusion_error: str | None = None, include_pipe_activity=True,
                  resolved_kernel_name: str | None = None,
-                 pipe_kernel_name: str | None = None):
+                 pipe_kernel_name: str | None = None,
+                 pipe_selector_miss: bool = False):
     spec = gate.SPECS[task]
     resolved_kernel_name = resolved_kernel_name or spec["kernel_name"]
     pipe_kernel_name = pipe_kernel_name or resolved_kernel_name
@@ -77,10 +78,13 @@ def fake_modules(task, *, check_status="ok", profile_status="success",
     def batch_execute(job, **kwargs):
         output, response = kwargs["output"], kwargs["response_path"]
         output.mkdir(parents=True)
-        ok = profile_status == "success"
+        ok = profile_status == "success" and not pipe_selector_miss
         response.write_text(json.dumps({
             "status": "ok" if ok else "infrastructure_error",
-            "diagnostics": "msprof unavailable" if not ok else "",
+            "diagnostics": (
+                "no PipeUtilization export for resolved kernel"
+                if pipe_selector_miss else "msprof unavailable" if not ok else ""
+            ),
         }))
         pipe_activity = {
             "schema_version": 1, "product": "a3",
@@ -93,7 +97,8 @@ def fake_modules(task, *, check_status="ok", profile_status="success",
             }],
         }
         (output / "evidence.json").write_text(json.dumps({
-            "status": profile_status, "profiler": "msprof-op",
+            "status": "failure" if pipe_selector_miss else profile_status,
+            "profiler": "msprof-op",
             "timing_scope": "device-task", "kernel_name": resolved_kernel_name,
             "declared_kernel_name": spec["kernel_name"],
             "resolved_kernel_name": resolved_kernel_name,
@@ -228,6 +233,20 @@ def test_profile_tool_failure_is_infrastructure(tmp_path, monkeypatch):
     )
     assert outcome == "infrastructure_failure"
     assert "msprof unavailable" in diagnostics and summary == {}
+
+
+def test_pipe_selector_miss_after_timing_success_is_infrastructure(
+    tmp_path, monkeypatch
+):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules("matmul", pipe_selector_miss=True)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == "no PipeUtilization export for resolved kernel"
 
 
 def test_missing_pipe_activity_fails_instead_of_claiming_profile_guidance(

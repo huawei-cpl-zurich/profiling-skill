@@ -20,6 +20,14 @@ def load_client():
     return module
 
 
+def load_driver():
+    spec = importlib.util.spec_from_file_location("batch_profile_a3_test", DRIVER)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
 def fixture(tmp_path: Path, mode: str = "ok") -> tuple[list[str], Path, Path]:
     job = {
         "benchmark": "matmul", "action": "profile", "device": 2,
@@ -200,6 +208,40 @@ else:
     }
     assert activity["observations"][0]["saturation"]["state"] == "unknown"
     assert activity["provenance"]["launch_count"] == 1
+
+
+def test_pipe_selector_miss_after_resolved_timing_is_infrastructure(tmp_path: Path):
+    profiler = tmp_path / "profiler.py"
+    profiler.write_text('''#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+args=sys.argv[1:]
+def value(name): return args[args.index(name)+1]
+out=Path(value("--output")); out.mkdir(parents=True)
+response=Path(args[-1]); response.write_text(json.dumps({"status":"ok","diagnostics":""}))
+(out/"msprof.log").write_text("clean selector miss\\n")
+(out/"evidence.json").write_text(json.dumps({
+ "status":"failure", "failure":{"kind":"profiling", "reason":"selector_miss",
+ "kernel_selector":"resolved_kernel", "message":"no PipeUtilization export for resolved_kernel",
+ "msprof_returncode":0}}))
+raise SystemExit(1)
+''')
+    work, output = tmp_path / "work", tmp_path / "output"
+    work.mkdir(); output.mkdir()
+    pipe, status, diagnostics = load_driver().capture_pipe(
+        {
+            "benchmark": "matmul", "action": "profile", "device": 0,
+            "cases": [7], "repeats": 3, "round": 2,
+            "profiling": {"kernel_name": "declared_mix_aic", "pipe_activity": True},
+        },
+        runner=tmp_path / "runner.py", profiler=profiler,
+        normalizer=ROOT / "scripts/normalize_a3_pipe_evidence.py",
+        activity_model=ROOT / "references/a3-pipe-activity-model.json",
+        work=work, output=output, selector="resolved_kernel", logs=[],
+    )
+    assert pipe is None
+    assert status == "infrastructure_error"
+    assert diagnostics == "no PipeUtilization export for resolved_kernel"
 
 
 def test_batch_preserves_candidate_failure_and_partial_evidence(tmp_path: Path):

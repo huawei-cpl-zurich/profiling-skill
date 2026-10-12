@@ -166,8 +166,12 @@ def capture_pipe(job: dict, *, runner: Path, profiler: Path, normalizer: Path,
         capture = json.loads((capture_dir / "evidence.json").read_text())
         if run.returncode or capture.get("status") != "success" or capture.get("metric") != "PipeUtilization":
             failure = capture.get("failure", {})
-            status = "submission_error" if failure.get("reason") == "selector_miss" else "infrastructure_error"
-            return None, status, str(failure.get("message", "PipeUtilization capture failed"))
+            # BasicInfo timing already resolved this exact selector. A miss in
+            # the subsequent pipe replay is therefore an acquisition/export
+            # inconsistency, not a new candidate submission failure.
+            return None, "infrastructure_error", str(
+                failure.get("message", "PipeUtilization capture failed")
+            )
         basic = source_path(capture_dir, capture, "pipe_basic_info")
         pipe = source_path(capture_dir, capture, "pipe_utilization")
     except (OSError, json.JSONDecodeError, ValueError) as exc:

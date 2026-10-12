@@ -36,8 +36,12 @@ def manifest(task):
 
 
 def fake_modules(task, *, check_status="ok", profile_status="success",
-                 fusion_error: str | None = None, include_pipe_activity=True):
+                 fusion_error: str | None = None, include_pipe_activity=True,
+                 resolved_kernel_name: str | None = None,
+                 pipe_kernel_name: str | None = None):
     spec = gate.SPECS[task]
+    resolved_kernel_name = resolved_kernel_name or spec["kernel_name"]
+    pipe_kernel_name = pipe_kernel_name or resolved_kernel_name
     fusion_rows = [
         {"schema": "profiling-skill/fusion-evidence/v1", "case": case,
          "output_launch_id": "launch-0", "operators": [{
@@ -81,6 +85,7 @@ def fake_modules(task, *, check_status="ok", profile_status="success",
         pipe_activity = {
             "schema_version": 1, "product": "a3",
             "evidence_kind": "per-block-pipe-activity",
+            "provenance": {"kernel_selector": pipe_kernel_name},
             "observations": [{
                 "observation_id": f"{spec['kernel_name']}:block-0:cube0",
                 "activity": {"aic_mte2": 0.5},
@@ -89,7 +94,9 @@ def fake_modules(task, *, check_status="ok", profile_status="success",
         }
         (output / "evidence.json").write_text(json.dumps({
             "status": profile_status, "profiler": "msprof-op",
-            "timing_scope": "device-task", "kernel_name": spec["kernel_name"],
+            "timing_scope": "device-task", "kernel_name": resolved_kernel_name,
+            "declared_kernel_name": spec["kernel_name"],
+            "resolved_kernel_name": resolved_kernel_name,
             "cases": [{"case": case, "median_us": 2.0, "samples_us": [2.0] * 3}
                       for case in spec["ranked"]],
             "repeats": 3, "geomean_us": 2.0, "captures": [],
@@ -139,10 +146,47 @@ def test_gate_runs_full_correctness_before_ranked_profile(tmp_path, monkeypatch)
     assert [row["case"] for row in summary["timing"]["cases"]] == [40, 49, 47, 46, 45]
     assert summary["timing"]["repeats"] == 3
     assert summary["timing"]["profiler"] == "msprof-op"
+    assert summary["timing"]["kernel_name"] == gate.SPECS["gdn"]["kernel_name"]
     assert summary["pipe_activity"]["observations"][0]["saturation"]["state"] == "unknown"
     assert summary["timeline"]["available"] is False
     assert summary["timeline"]["kind"] == "a3-temporal-pipe-phases"
     assert summary["fusion"]["logical_launches_per_case"] == 1
+
+
+def test_gate_reports_suffix_fallback_as_exact_resolved_timing_identity(
+    tmp_path, monkeypatch
+):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    declared = gate.SPECS["matmul"]["kernel_name"]
+    resolved = "streaming_matmul_add_kernel"
+    modules = fake_modules("matmul", resolved_kernel_name=resolved)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 2,
+    )
+    assert outcome == "success" and diagnostics == ""
+    assert summary["timing"]["kernel_name"] == resolved
+    assert summary["timing"]["declared_kernel_name"] == declared
+    assert summary["timing"]["resolved_kernel_name"] == resolved
+    assert summary["pipe_activity"]["provenance"]["kernel_selector"] == resolved
+
+
+def test_gate_rejects_timing_and_pipe_selector_mismatch(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules(
+        "matmul", resolved_kernel_name="streaming_matmul_add_kernel",
+        pipe_kernel_name=gate.SPECS["matmul"]["kernel_name"],
+    )
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 2,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == (
+        "managed A3 timing and pipe activity use different exact kernel selectors"
+    )
 
 
 def test_compile_failure_stops_before_profiling(tmp_path, monkeypatch):

@@ -225,12 +225,12 @@ def test_suffix_selector_falls_back_once_then_caches_resolution(tmp_path: Path):
     evidence = json.loads((output / "evidence.json").read_text())
 
     assert run.returncode == 0
-    assert result["kernel_name"] == declared
+    assert result["kernel_name"] == "candidate_kernel"
     assert result["resolved_kernel_name"] == "candidate_kernel"
     assert [json.loads(line) for line in calls.read_text().splitlines()] == [
         declared, "candidate_kernel", "candidate_kernel", "candidate_kernel", "candidate_kernel",
     ]
-    assert evidence["kernel_name"] == declared
+    assert evidence["kernel_name"] == "candidate_kernel"
     assert evidence["declared_kernel_name"] == declared
     assert evidence["resolved_kernel_name"] == "candidate_kernel"
     assert all(capture["kernel_name"] == "candidate_kernel"

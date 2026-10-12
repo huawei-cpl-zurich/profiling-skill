@@ -86,6 +86,24 @@ def validate_pipe_activity(value: object) -> dict:
     return value
 
 
+def validate_profile_identity(evidence: dict, pipe_activity: dict) -> tuple[str, str]:
+    declared = evidence.get("declared_kernel_name")
+    resolved = evidence.get("resolved_kernel_name")
+    if not isinstance(declared, str) or not declared:
+        raise ValueError("managed A3 timing evidence is missing its declared kernel selector")
+    if not isinstance(resolved, str) or not resolved:
+        raise ValueError("managed A3 timing evidence is missing its resolved kernel selector")
+    if evidence.get("kernel_name") != resolved:
+        raise ValueError("managed A3 timing kernel identity is not the resolved selector")
+    provenance = pipe_activity.get("provenance")
+    pipe_selector = provenance.get("kernel_selector") if isinstance(provenance, dict) else None
+    if pipe_selector != resolved:
+        raise ValueError(
+            "managed A3 timing and pipe activity use different exact kernel selectors"
+        )
+    return declared, resolved
+
+
 def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
              output: Path, round_number: int) -> tuple[str, str, dict]:
     spec = SPECS[benchmark]
@@ -154,13 +172,19 @@ def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
         return failure_outcome(str(response.get("status", "infrastructure_error")), diagnostics), diagnostics, {}
     try:
         pipe_activity = validate_pipe_activity(evidence.get("pipe_activity"))
+        declared_kernel_name, resolved_kernel_name = validate_profile_identity(
+            evidence, pipe_activity,
+        )
     except ValueError as exc:
         return "infrastructure_failure", str(exc), {}
     timing = {
         "metric": "BasicInfo",
         "profiler": evidence.get("profiler"),
         "timing_scope": evidence.get("timing_scope"),
-        "kernel_name": evidence.get("kernel_name"), "cases": evidence.get("cases"),
+        "kernel_name": resolved_kernel_name,
+        "declared_kernel_name": declared_kernel_name,
+        "resolved_kernel_name": resolved_kernel_name,
+        "cases": evidence.get("cases"),
         "repeats": evidence.get("repeats"), "geomean_us": evidence.get("geomean_us"),
         "captures": evidence.get("captures"),
     }

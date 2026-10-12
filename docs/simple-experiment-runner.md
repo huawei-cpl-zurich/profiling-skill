@@ -126,11 +126,13 @@ compressed, hash-bound request in the retained job.
 
 A compatible host gate screens all options in that job across its ranked
 correctness and fusion cases using ordinary synchronized device timing.
-Candidate failures eliminate only their option. The incumbent and two fastest surviving
-challengers receive repeated `msprof op` timing; the fastest official finalist
-then receives the complete correctness/fusion gate and diagnostic pipe
-capture. Observation loss reuses the same durable handle, and completed option
-screens are checkpointed inside the retained job. Tuning options do not
+Candidate failures eliminate only their option. The three fastest successful
+options receive repeated `msprof op` timing; equal cheap timings retain request
+order. The fastest official finalist then receives the complete
+correctness/fusion gate and diagnostic pipe capture; equal official geomeans
+retain finalist order. Duplicate materialized sources are rejected before
+dispatch. Observation loss reuses the same durable handle, and completed
+option screens are checkpointed inside the retained job. Tuning options do not
 increment the optimization round.
 
 ## Reproducible seed repositories

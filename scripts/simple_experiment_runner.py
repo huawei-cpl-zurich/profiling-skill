@@ -239,11 +239,19 @@ def materialize_autotune(candidate: str, proposed: object) -> dict:
             "hypothesis": hypothesis,
         })
         seen.add(identifier)
+    materialized_sources = {}
     for option in options:
         source = _replace_autotune_assignment(candidate, node, option["parameters"])
         encoded = source.encode()
         if len(encoded) > MAX_CANDIDATE_BYTES:
             raise RunnerError(f"autotune configuration {option['id']} is too large")
+        duplicate = materialized_sources.get(source)
+        if duplicate is not None:
+            raise RunnerError(
+                f"autotune configurations {duplicate} and {option['id']} "
+                "materialize identical source"
+            )
+        materialized_sources[source] = option["id"]
         option["source"] = source
         option["source_sha256"] = hashlib.sha256(encoded).hexdigest()
     return {
@@ -252,7 +260,9 @@ def materialize_autotune(candidate: str, proposed: object) -> dict:
             "screen": ["compile", "representative-correctness", "fusion", "cheap-device-timing"],
             "max_agent_configurations": MAX_AUTOTUNE_CONFIGURATIONS,
             "max_finalists": MAX_AUTOTUNE_FINALISTS,
+            "finalist_selection": "lowest-cheap-timing-then-request-order",
             "finalist_timing": "msprof-op",
+            "winner_selection": "lowest-msprof-geomean-then-finalist-order",
             "winner_gate": "complete-correctness-fusion-and-pipe-evidence",
         },
         "incumbent_id": "incumbent",
@@ -737,6 +747,7 @@ class ExperimentCell:
         del node
         request = {
             **self._request(state, "tune"),
+            "session_id": prepared.get("session_id", state.get("session_id")),
             "candidate": prepared["candidate"],
             "declared_autotune_config": dict(sorted(declared.items())),
             "structural_hypothesis": prepared["hypothesis"],
@@ -971,18 +982,36 @@ class ExperimentCell:
                 or any(identifier not in actual or actual[identifier]["outcome"] != "success"
                        for identifier in finalists)):
             raise RunnerError("autotune finalists must be one to three successful options")
+        request_order = {identifier: index for index, identifier in enumerate(expected)}
+        expected_finalists = sorted(
+            (identifier for identifier, row in actual.items() if row["outcome"] == "success"),
+            key=lambda identifier: (
+                actual[identifier]["cheap_device_timing_us"], request_order[identifier]
+            ),
+        )[:MAX_AUTOTUNE_FINALISTS]
+        if finalists != expected_finalists:
+            raise RunnerError("autotune finalists are not the fastest successful options")
         if profiled != finalists:
             raise RunnerError("only and all finalists must receive official msprof timing")
         profiles = summary.get("finalist_profiles")
         if not isinstance(profiles, dict) or set(profiles) != set(finalists):
             raise RunnerError("autotune result must retain official evidence for every finalist")
+        official_timings = {}
         for identifier, profile in profiles.items():
             timing = profile.get("geomean_us") if isinstance(profile, dict) else None
             if (isinstance(timing, bool) or not isinstance(timing, (int, float))
                     or not math.isfinite(timing) or timing <= 0):
                 raise RunnerError(f"finalist {identifier} lacks valid msprof timing")
+            official_timings[identifier] = timing
         winner = summary.get("winner_id")
-        if winner not in finalists or summary.get("winner_full_gate") is not True:
+        expected_winner = min(
+            finalists, key=lambda identifier: (
+                official_timings[identifier], finalists.index(identifier)
+            )
+        )
+        if winner != expected_winner:
+            raise RunnerError("autotune winner is not the fastest official finalist")
+        if summary.get("winner_full_gate") is not True:
             raise RunnerError("autotune winner must be a fully gated profiled finalist")
         if summary.get("winner_source_sha256") != expected[winner]["source_sha256"]:
             raise RunnerError("autotune winner source identity does not match the request")

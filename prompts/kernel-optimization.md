@@ -83,14 +83,16 @@ warrants it. Return exactly:
 }
 ```
 
-The host deterministically materializes every option, always adds the declared
-incumbent, and screens them together in one retained job. Compilation,
+The host deterministically materializes every distinct option, always adds the
+declared incumbent, rejects duplicate materialized sources, and screens the
+options together in one retained job. Compilation,
 representative correctness/fusion, and ordinary device timing are cheap search
 signals and do not advance the optimization-round counter. Candidate failures
-eliminate only that option. The host profiles at most three finalists with
-official repeated `msprof op` timing, runs the complete gate on the selected
-winner, and records all options and outcomes. Do not call hardware or profiling
-commands yourself.
+eliminate only that option. The host profiles the three fastest successful
+options with official repeated `msprof op` timing, runs the complete gate on
+the fastest official finalist, and records all options and outcomes. Stable
+request/finalist order breaks measurement ties. Do not call hardware or
+profiling commands yourself.
 
 ANALYZE PHASE
 

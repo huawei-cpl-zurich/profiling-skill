@@ -162,7 +162,12 @@ def autotune_success(plan, winner="block-64", failed=()):
                 "id": option["id"], "source_sha256": option["source_sha256"],
                 "outcome": "success", "cheap_device_timing_us": 10.0 + index,
             })
-    finalists = [winner]
+    successful = [row for row in rows if row["outcome"] == "success"]
+    order = {option["id"]: index for index, option in enumerate(plan["options"])}
+    finalists = [row["id"] for row in sorted(
+        successful,
+        key=lambda row: (row["cheap_device_timing_us"], order[row["id"]]),
+    )[:3]]
     selected = next(option for option in plan["options"] if option["id"] == winner)
     return {
         "outcome": "success", "stdout": "PASS", "stderr": "",
@@ -180,8 +185,11 @@ def autotune_success(plan, winner="block-64", failed=()):
             "winner_full_gate": True,
             "commands": ["compile all", "time survivors", "msprof finalists"],
             "finalist_profiles": {
-                identifier: {"geomean_us": 9.0, "repeats": 3}
-                for identifier in finalists
+                identifier: {
+                    "geomean_us": 9.0 if identifier == winner else 10.0 + index,
+                    "repeats": 3,
+                }
+                for index, identifier in enumerate(finalists)
             },
         },
     }
@@ -819,8 +827,8 @@ def test_completed_round_is_one_commit_with_required_evidence(tmp_path):
 
 def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
     proposed = [
-        {"id": f"option-{index:03d}", "parameters": {"BLOCK": index + 1},
-         "hypothesis": f"test block {index + 1}"}
+        {"id": f"option-{index:03d}", "parameters": {"BLOCK": index + 1000},
+         "hypothesis": f"test block {index + 1000}"}
         for index in range(128)
     ]
     first = runner.materialize_autotune(autotune_candidate(), proposed)
@@ -829,7 +837,7 @@ def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
     assert first == second
     assert len(first["options"]) == 129
     assert first["options"][0]["id"] == "incumbent"
-    assert first["options"][-1]["parameters"] == {"BLOCK": 128, "WAVES": 1}
+    assert first["options"][-1]["parameters"] == {"BLOCK": 1127, "WAVES": 1}
     assert first["options"][-1]["source_sha256"] == hashlib.sha256(
         first["options"][-1]["source"].encode()
     ).hexdigest()
@@ -850,6 +858,18 @@ def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
 def test_materialize_autotune_rejects_invalid_spaces(candidate, proposed, message):
     with pytest.raises(runner.RunnerError, match=message):
         runner.materialize_autotune(candidate, proposed)
+
+
+@pytest.mark.parametrize("proposed", [
+    [{"id": "same-as-incumbent", "parameters": {}, "hypothesis": "duplicate"}],
+    [
+        {"id": "first", "parameters": {"BLOCK": 64}, "hypothesis": "first"},
+        {"id": "second", "parameters": {"BLOCK": 64}, "hypothesis": "second"},
+    ],
+])
+def test_materialize_autotune_rejects_duplicate_sources(proposed):
+    with pytest.raises(runner.RunnerError, match="materialize identical source"):
+        runner.materialize_autotune(autotune_candidate(), proposed)
 
 
 def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp_path):
@@ -881,6 +901,7 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
 
     assert completed["status"] == "complete"
     assert len(agent.tunes) == 1
+    assert agent.tunes[0]["session_id"] == prepared["session_id"] == "session-1"
     assert agent.tunes[0]["declared_autotune_config"] == {"BLOCK": 32, "WAVES": 1}
     assert agent.tunes[0]["max_configurations"] == 128
     folder = cell.repo / "rounds/01"
@@ -964,6 +985,49 @@ def test_autotune_success_rejects_a_result_from_another_round(tmp_path):
                        rounds=1, autotune=True)
     with pytest.raises(runner.RunnerError, match="optimization round"):
         cell.run()
+
+
+def test_autotune_success_rejects_nonfastest_finalists_and_winner():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(4)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+
+    result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v2"]
+    result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v2"]
+    result["autotune_summary"]["finalist_profiles"] = {
+        "incumbent": {"geomean_us": 11.0},
+        "v0": {"geomean_us": 9.0},
+        "v2": {"geomean_us": 12.0},
+    }
+    with pytest.raises(runner.RunnerError, match="fastest successful"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+    result = autotune_success(plan, winner="v0")
+    result["autotune_summary"]["finalist_profiles"]["incumbent"]["geomean_us"] = 8.0
+    with pytest.raises(runner.RunnerError, match="fastest official"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def test_autotune_selection_ties_follow_request_order():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(3)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="incumbent")
+    for row in result["autotune_summary"]["options"]:
+        row["cheap_device_timing_us"] = 10.0
+    result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v1"]
+    result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v1"]
+    result["autotune_summary"]["finalist_profiles"] = {
+        identifier: {"geomean_us": 9.0} for identifier in ("incumbent", "v0", "v1")
+    }
+
+    selected, _ = runner.ExperimentCell._validate_autotune_success(plan, result)
+    assert selected == plan["options"][0]["source"]
 
 
 def test_runner_materializes_exact_candidate_and_submitted_script(tmp_path):

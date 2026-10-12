@@ -265,6 +265,14 @@ class ExperimentCell:
             raise RunnerError("observation is uncertain; resume the retained handle")
         if state["status"] == "complete":
             return state
+        if (state["status"] == "infrastructure_failure"
+                and state["infrastructure_failures"]
+                > int(self.config.get("infrastructure_retries", 2))):
+            return state
+        if (state["status"] == "candidate_failure"
+                and state["candidate_repairs"]
+                > int(self.config.get("candidate_repairs", 2))):
+            return state
         prepared = None
         while True:
             if prepared is None:

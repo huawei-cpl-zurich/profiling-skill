@@ -140,6 +140,16 @@ def test_retry_limit_is_clear_infrastructure_failure(tmp_path):
     assert result["round"] == 1 and result["infrastructure_failures"] == 3
 
 
+def test_run_does_not_restart_exhausted_infrastructure_budget(tmp_path):
+    remote = Remote([{"outcome": "infrastructure_failure", "diagnostics": "offline"}])
+    agent = Agent()
+    cell = initialized(tmp_path, remote, agent, infrastructure_retries=0)
+    exhausted = cell.run()
+    assert cell.run() == exhausted
+    assert len(agent.requests) == 1
+    assert len(remote.submitted) == 1
+
+
 def test_candidate_failure_repairs_same_round_and_passes_diagnostics(tmp_path):
     failed = {"outcome": "candidate_failure", "diagnostics": "compile: bad tl.load"}
     agent = Agent([evidence("bad"), evidence("fixed")])
@@ -149,6 +159,16 @@ def test_candidate_failure_repairs_same_round_and_passes_diagnostics(tmp_path):
     assert agent.requests[1]["round"] == 1
     assert agent.requests[1]["candidate_diagnostics"] == "compile: bad tl.load"
     assert len(list((cell.path / "attempts").iterdir())) == 2
+
+
+def test_run_does_not_restart_exhausted_candidate_budget(tmp_path):
+    remote = Remote([{"outcome": "candidate_failure", "diagnostics": "compile error"}])
+    agent = Agent()
+    cell = initialized(tmp_path, remote, agent, candidate_repairs=0)
+    exhausted = cell.run()
+    assert cell.run() == exhausted
+    assert len(agent.requests) == 1
+    assert len(remote.submitted) == 1
 
 
 def test_completed_round_is_one_commit_with_required_evidence(tmp_path):

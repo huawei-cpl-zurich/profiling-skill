@@ -817,12 +817,28 @@ class ExperimentCell:
             raise RunnerError("retained prepared session does not match state")
         return prepared
 
+    def _load_autotune_checkpoint(self, state: dict, prepared: dict) -> dict:
+        plan = state.get("autotune_checkpoint")
+        if (not isinstance(plan, dict) or plan.get("schema") != AUTOTUNE_REQUEST_SCHEMA
+                or plan.get("optimization_round") != state["round"]):
+            raise RunnerError("retained autotune plan is invalid")
+        options = plan.get("options")
+        if not isinstance(options, list) or not options:
+            raise RunnerError("retained autotune plan is invalid")
+        proposed = [
+            {key: option.get(key) for key in ("id", "parameters", "hypothesis")}
+            for option in options[1:]
+            if isinstance(option, dict)
+        ]
+        expected = materialize_autotune(prepared["candidate"], proposed)
+        expected["optimization_round"] = state["round"]
+        if plan != expected:
+            raise RunnerError("retained autotune plan does not match prepared source")
+        return plan
+
     def _pending_tune(self, state: dict, prepared: dict) -> tuple[dict, dict | None]:
         try:
             plan = self._tune(state, prepared)
-            state["status"] = "tuning"
-            state.pop("tune_diagnostics", None)
-            return state, plan
         except AgentInterrupted as exc:
             state.update(status="tune_pending", tune_diagnostics=str(exc))
             return self._save(state), None
@@ -838,13 +854,18 @@ class ExperimentCell:
                 prior_attempt=None,
             )
             state.pop("prepared_checkpoint", None)
+            state.pop("autotune_checkpoint", None)
             state.pop("tune_diagnostics", None)
             return self._save(state), None
         except RunnerError as exc:
             state.update(status="input_integrity_failure", diagnostics=str(exc))
             state.pop("prepared_checkpoint", None)
+            state.pop("autotune_checkpoint", None)
             state.pop("tune_diagnostics", None)
             return self._save(state), None
+        state.update(status="tuned", autotune_checkpoint=plan)
+        state.pop("tune_diagnostics", None)
+        return self._save(state), plan
 
     def _preflight(self) -> None:
         folder = self.path / "preflights"
@@ -957,6 +978,15 @@ class ExperimentCell:
             raise RunnerError(f"candidate evidence is not JSON serializable: {exc}") from exc
         number = state["attempts"] + 1
         attempt = self.path / "attempts" / str(number)
+        if attempt.exists():
+            dispatch_evidence = {
+                "remote-job-id.txt", "result.json", "infrastructure.json",
+                "stdout.log", "stderr.log",
+            }
+            if (state.get("status") != "tuned"
+                    or any((attempt / name).exists() for name in dispatch_evidence)):
+                raise RunnerError("attempt path already contains retained dispatch evidence")
+            shutil.rmtree(attempt)
         attempt.mkdir()
         _write_json(attempt / "request.json", request)
         _write_json(attempt / "agent-result.json", prepared)
@@ -969,6 +999,7 @@ class ExperimentCell:
         state.update(attempts=number, billed_checks_used=state["billed_checks_used"] + 1,
                      status="infrastructure_unknown", pending_attempt=number)
         state.pop("prepared_checkpoint", None)
+        state.pop("autotune_checkpoint", None)
         self._save(state)
         try:
             handle = self.remote.submit(request, script)
@@ -1282,7 +1313,7 @@ class ExperimentCell:
     def run(self) -> dict:
         state = self._state()
         self._verify_task_snapshot(state)
-        if state.get("status") in {"tuning", "tune_pending"}:
+        if state.get("status") in {"tuning", "tune_pending", "tuned"}:
             raise RunnerError("cell has pending tune work; use resume")
         if state.get("pending_attempt"):
             raise RunnerError("cell has pending work; use resume")
@@ -1347,22 +1378,26 @@ class ExperimentCell:
         state = self._state()
         self._verify_task_snapshot(state)
         pending = state.get("pending_attempt")
-        if not pending and state.get("status") in {"tuning", "tune_pending"}:
+        if not pending and state.get("status") in {"tuning", "tune_pending", "tuned"}:
+            retained_status = state["status"]
             self._launch_device(state)
             try:
                 self._preflight()
             except ObservationLost as exc:
-                state["status"] = "tune_pending"
+                state["status"] = "tuned" if retained_status == "tuned" else "tune_pending"
                 state["tune_diagnostics"] = str(exc)
                 return self._save(state)
             prepared = self._load_prepared_checkpoint(state)
-            state, autotune_request = self._pending_tune(state, prepared)
-            if state["status"] == "tune_pending":
-                return state
-            if state["status"] == "candidate_failure":
-                return state
-            if state["status"] == "input_integrity_failure":
-                return state
+            if retained_status == "tuned":
+                autotune_request = self._load_autotune_checkpoint(state, prepared)
+            else:
+                state, autotune_request = self._pending_tune(state, prepared)
+                if state["status"] == "tune_pending":
+                    return state
+                if state["status"] == "candidate_failure":
+                    return state
+                if state["status"] == "input_integrity_failure":
+                    return state
             state.pop("tune_diagnostics", None)
             return self._attempt(state, prepared, autotune_request)
         if not pending:

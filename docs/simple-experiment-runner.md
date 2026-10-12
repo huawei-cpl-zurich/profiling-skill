@@ -135,6 +135,11 @@ Source/configuration checks that the controller can perform run before that
 checkpoint. Invalid tune output becomes an explicit same-round candidate
 repair and discards the checkpoint; input-integrity and gate-contract failures
 are terminal rather than misleadingly resumable.
+An accepted materialized plan is then stored in a second atomic `tuned` state
+before attempt creation. Resume validates and dispatches those exact options,
+source hashes, and policy without another agent turn. If interruption leaves a
+pre-dispatch attempt directory before its state transition, resume rebuilds it
+from the retained plan only when no dispatch evidence exists.
 
 A compatible host gate screens all options in that job across its ranked
 correctness and fusion cases using ordinary synchronized device timing.

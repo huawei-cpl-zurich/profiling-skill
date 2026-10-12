@@ -1044,6 +1044,90 @@ def test_autotune_restart_after_atomic_prepare_state_write_reuses_exact_session(
     assert len(remote.submitted) == 1
 
 
+def test_autotune_restart_after_atomic_plan_write_reuses_exact_plan(tmp_path, monkeypatch):
+    prepared = evidence("accepted-plan")
+    prepared["candidate"] = autotune_candidate()
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_save = cell._save
+    interrupted = False
+
+    def interrupt_after_atomic_plan_write(state):
+        nonlocal interrupted
+        value = original_save(state)
+        if state.get("status") == "tuned" and not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped after atomic plan write")
+        return value
+
+    monkeypatch.setattr(cell, "_save", interrupt_after_atomic_plan_write)
+    with pytest.raises(runner.RunnerError, match="after atomic plan write"):
+        cell.run()
+
+    retained = json.loads(cell.state_path.read_text())
+    exact_plan = retained["autotune_checkpoint"]
+    assert retained["status"] == "tuned"
+    assert len(agent.requests) == len(agent.tunes) == 1
+    assert not remote.submitted
+
+    monkeypatch.setattr(cell, "_save", original_save)
+    completed = cell.resume()
+    dispatched_plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+    assert completed["status"] == "complete"
+    assert dispatched_plan == exact_plan
+    assert len(agent.requests) == len(agent.tunes) == len(remote.submitted) == 1
+
+
+def test_autotune_restart_rebuilds_only_predispatch_attempt_from_retained_plan(
+        tmp_path, monkeypatch):
+    prepared = evidence("predispatch")
+    prepared["candidate"] = autotune_candidate()
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_save = cell._save
+    interrupted = False
+
+    def interrupt_before_attempt_state_write(state):
+        nonlocal interrupted
+        if state.get("status") == "infrastructure_unknown" and not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped before attempt state write")
+        return original_save(state)
+
+    monkeypatch.setattr(cell, "_save", interrupt_before_attempt_state_write)
+    with pytest.raises(runner.RunnerError, match="before attempt state write"):
+        cell.run()
+    retained = json.loads(cell.state_path.read_text())
+    exact_plan = retained["autotune_checkpoint"]
+    assert retained["status"] == "tuned"
+    assert (cell.path / "attempts/1/autotune-request.json").is_file()
+    assert not remote.submitted
+
+    monkeypatch.setattr(cell, "_save", original_save)
+    completed = cell.resume()
+    dispatched_plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+    assert completed["status"] == "complete" and dispatched_plan == exact_plan
+    assert len(agent.tunes) == len(remote.submitted) == 1
+
+
 @pytest.mark.parametrize("invalid_source", [
     "KERNEL = 'missing config'\n",
     "AUTOTUNE_CONFIG = dict(BLOCK=32)\n",

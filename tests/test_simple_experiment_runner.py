@@ -785,6 +785,9 @@ def test_cpl_remote_adapter_uses_file_and_exact_handle(tmp_path, monkeypatch):
                         "--file", str(launcher), "--cwd", "/work"]
     assert script.read_text() not in launcher.read_text()
     assert digest in launcher.read_text()
+    failure = subprocess.run(["bash", str(launcher)], text=True, capture_output=True)
+    assert failure.returncode == 125
+    assert json.loads(failure.stdout.strip())["outcome"] == "infrastructure_failure"
     assert adapter.observe(handle)["outcome"] == "success"
     assert calls[2] == ["/global/cpl-remote", "--json", "observe", handle, "--wait"]
 
@@ -834,6 +837,29 @@ def test_upload_failure_is_proven_pre_dispatch(tmp_path):
         adapter.submit(
             {"target": "bz-a3-1", "runtime": "cann", "remote_workspace": "/work"}, script
         )
+
+
+def test_remote_agent_upload_accepts_relative_workspace_and_absent_exit(tmp_path):
+    calls = []
+
+    def invoke(command, **kwargs):
+        calls.append(command)
+        value = ({"target": "gz-a3", "backend": "remote-agent", "state": "completed"}
+                 if "upload" in command else
+                 {"target": "gz-a3", "handle": "remote:gz-a3:job:8", "state": "running"})
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    script = tmp_path / "run.sh"
+    script.write_text("true\n")
+    adapter = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    handle = adapter.submit({
+        "target": "gz-a3", "runtime": "py311-torch",
+        "remote_workspace": "campaign/cell",
+    }, script)
+    digest = hashlib.sha256(script.read_bytes()).hexdigest()
+    assert handle == "remote:gz-a3:job:8"
+    assert calls[0][-1] == f"campaign/cell/.simple-experiment-{digest}.sh"
+    assert calls[1][-2:] == ["--cwd", "campaign/cell"]
 
 
 def test_cpl_remote_returns_remote_compile_diagnostics(tmp_path):

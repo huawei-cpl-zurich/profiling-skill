@@ -151,17 +151,18 @@ class CplRemote:
     def submit(self, request: dict, script: Path) -> str:
         target = request["target"]
         workspace = request["remote_workspace"]
-        if (not isinstance(workspace, str) or not workspace.startswith("/")
+        if (not isinstance(workspace, str) or not workspace
                 or "\x00" in workspace or "\n" in workspace):
-            raise RunnerError("remote_workspace must be a safe absolute path")
+            raise RunnerError("remote_workspace must be a safe non-empty path")
         digest = hashlib.sha256(script.read_bytes()).hexdigest()
         remote_script = f"{workspace.rstrip('/')}/.simple-experiment-{digest}.sh"
         try:
             uploaded = self._call(["upload", target, str(script), remote_script])
         except ObservationLost as exc:
             raise PreDispatchFailure(f"payload upload failed: {exc}") from exc
+        upload_exit = uploaded.get("exit")
         if (uploaded.get("target") != target or uploaded.get("state") != "completed"
-                or uploaded.get("exit") not in {0, "0"}):
+                or upload_exit is not None and upload_exit not in {0, "0"}):
             raise PreDispatchFailure(
                 f"payload upload was not confirmed: state={uploaded.get('state')}, "
                 f"exit={uploaded.get('exit')}"
@@ -170,7 +171,14 @@ class CplRemote:
         quoted = shlex.quote(remote_script)
         launcher.write_text(
             "#!/usr/bin/env bash\nset -euo pipefail\n"
-            f"test \"$(sha256sum {quoted} | cut -d' ' -f1)\" = {digest}\n"
+            "infrastructure_failure() {\n"
+            "  printf '%s\\n' '{\"schema\":\"simple-experiment-result/v1\","
+            "\"outcome\":\"infrastructure_failure\","
+            "\"diagnostics\":\"staged payload verification failed\"}'\n"
+            "  exit 125\n"
+            "}\n"
+            f"actual_sha=$(sha256sum {quoted} 2>/dev/null | cut -d' ' -f1) || infrastructure_failure\n"
+            f"test \"$actual_sha\" = {digest} || infrastructure_failure\n"
             f"exec bash {quoted}\n"
         )
         launcher.chmod(0o700)

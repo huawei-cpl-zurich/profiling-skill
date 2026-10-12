@@ -35,7 +35,8 @@ def manifest(task):
     }
 
 
-def fake_modules(task, *, check_status="ok", profile_status="success"):
+def fake_modules(task, *, check_status="ok", profile_status="success",
+                 fusion_error: str | None = None):
     spec = gate.SPECS[task]
     fusion_rows = [
         {"schema": "profiling-skill/fusion-evidence/v1", "case": case,
@@ -55,13 +56,18 @@ def fake_modules(task, *, check_status="ok", profile_status="success"):
     class FusionError(ValueError):
         pass
 
+    def validate_fusion(value, evidence, expected_cases):
+        if fusion_error is not None:
+            raise FusionError(fusion_error)
+        return {
+            "entrypoint": value["entrypoint"], "kernel_name": value["kernel_name"],
+            "cases": list(expected_cases), "logical_launches_per_case": 1,
+        }
+
     fusion = SimpleNamespace(
         FusionContractError=FusionError,
         validate_manifest=lambda value: value,
-        validate_fusion_evidence=lambda value, evidence, expected_cases: {
-            "entrypoint": value["entrypoint"], "kernel_name": value["kernel_name"],
-            "cases": list(expected_cases), "logical_launches_per_case": 1,
-        },
+        validate_fusion_evidence=validate_fusion,
     )
 
     def batch_execute(job, **kwargs):
@@ -134,6 +140,23 @@ def test_compile_failure_stops_before_profiling(tmp_path, monkeypatch):
     )
     assert outcome == "candidate_failure"
     assert diagnostics == "compile failed" and summary == {}
+
+
+def test_fusion_failure_preserves_actionable_entrypoint_diagnostics(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    detail = (
+        "Triton launch entrypoint mismatch: expected='streaming_matmul_add_kernel'; "
+        "observed=['matmul_kernel']; "
+        "kernel_name selector='streaming_matmul_add_kernel_mix_aic'"
+    )
+    modules = fake_modules("matmul", fusion_error=detail)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "candidate_failure" and summary == {}
+    assert diagnostics == f"fully-fused audit failed: {detail}"
 
 
 def test_profile_tool_failure_is_infrastructure(tmp_path, monkeypatch):

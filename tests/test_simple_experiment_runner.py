@@ -388,6 +388,45 @@ def test_campaign_manifest_rejects_unrelated_selector(tmp_path):
         cell.init()
 
 
+def test_unsupported_autotune_task_terminalizes_before_agent_or_remote_work(tmp_path):
+    agent, remote = Agent(), Remote([])
+    cell = runner.ExperimentCell(
+        tmp_path / "runs",
+        config(tmp_path, task="unsupported", autotune=True, managed_autotune=True),
+        agent, remote,
+    )
+
+    initialized_state = cell.init()
+    assert initialized_state["status"] == "input_integrity_failure"
+    assert initialized_state["candidate_repairs"] == 0
+    assert "no benchmark contract" in initialized_state["diagnostics"]
+    assert cell.run() == initialized_state
+    assert cell.run() == initialized_state
+    assert not agent.requests and not agent.tunes and not agent.analyses
+    assert not remote.preflights and not remote.submitted and not remote.observed
+
+
+def test_mismatched_autotune_manifest_terminalizes_before_agent_or_remote_work(tmp_path):
+    cfg = campaign_gate_config(
+        tmp_path, autotune=True, managed_autotune=True,
+    )
+    manifest = Path(cfg["candidate_manifest_path"])
+    value = json.loads(manifest.read_text())
+    value.update(entrypoint="other_kernel", kernel_name="other_kernel")
+    manifest.write_text(json.dumps(value))
+    agent, remote = Agent(), Remote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, agent, remote)
+
+    initialized_state = cell.init()
+    assert initialized_state["status"] == "input_integrity_failure"
+    assert initialized_state["candidate_repairs"] == 0
+    assert "manifest does not match" in initialized_state["diagnostics"]
+    assert cell.run() == initialized_state
+    assert cell.run() == initialized_state
+    assert not agent.requests and not agent.tunes and not agent.analyses
+    assert not remote.preflights and not remote.submitted and not remote.observed
+
+
 @pytest.mark.parametrize("filename", ["terminal-gate-bundle.tar", "candidate-manifest.json"])
 def test_campaign_gate_snapshot_drift_blocks_dispatch(tmp_path, filename):
     cfg = campaign_gate_config(tmp_path)

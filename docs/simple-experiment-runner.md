@@ -119,6 +119,11 @@ running only the incumbent. A capable gate declares the exact line
 `# simple-experiment-capability: managed-autotune/v1`; the runner does not
 infer support from a shipped filename, target, or product. Gates acquire
 managed-search support only when their own snapshot carries that declaration.
+Initialization also requires a supported benchmark contract and, when a
+candidate manifest is supplied, its exact expected entrypoint and declared
+kernel selector. Unsupported tasks or well-formed but mismatched manifests
+enter stable `input_integrity_failure` state before agent or remote work and do
+not consume candidate-repair budget.
 With that option enabled, prepare must define one
 top-level literal `AUTOTUNE_CONFIG` mapping. Before dispatch, the same durable agent thread
 receives `phase=tune`, the declared mapping, prior-round profile summary when

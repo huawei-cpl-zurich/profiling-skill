@@ -608,6 +608,31 @@ class ExperimentCell:
             raise RunnerError("task_path must name an existing UTF-8 file") from exc
         return gate, billed, task_content, bundle_content, manifest_content
 
+    def _validate_autotune_host_inputs(self, manifest_content: bytes | None) -> None:
+        benchmark = self.config["task"]
+        contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark)
+        if contract is None:
+            raise RunnerError(f"autotune has no benchmark contract for {benchmark}")
+        correctness = contract.get("correctness_cases")
+        profile_cases = contract.get("profile_cases")
+        if (isinstance(correctness, bool) or not isinstance(correctness, int)
+                or correctness <= 0
+                or not isinstance(profile_cases, list) or not profile_cases
+                or any(isinstance(case, bool) or not isinstance(case, int)
+                       or not 0 <= case < correctness for case in profile_cases)
+                or len(profile_cases) != len(set(profile_cases))
+                or not isinstance(contract.get("entrypoint"), str)
+                or not contract["entrypoint"]
+                or not isinstance(contract.get("kernel_name"), str)
+                or not contract["kernel_name"]):
+            raise RunnerError(f"autotune benchmark contract is invalid for {benchmark}")
+        if manifest_content is None:
+            return
+        declaration = FUSION_CONTRACT.validate_manifest(json.loads(manifest_content))
+        if (declaration["entrypoint"] != contract["entrypoint"]
+                or declaration["kernel_name"] != contract["kernel_name"]):
+            raise RunnerError("candidate manifest does not match the benchmark contract")
+
     def _launch_device(self, state: dict) -> int | None:
         has_campaign_gate = state.get("gate_bundle_sha256") is not None
         physical_device = self.config.get("physical_device")
@@ -671,6 +696,12 @@ class ExperimentCell:
             raise RunnerError(
                 "autotune requires a terminal gate declaring managed-autotune/v1"
             )
+        input_diagnostics = None
+        if autotune_enabled:
+            try:
+                self._validate_autotune_host_inputs(manifest_content)
+            except (RunnerError, FUSION_CONTRACT.FusionContractError) as exc:
+                input_diagnostics = str(exc)
         parent = self.path.parent
         parent.mkdir(parents=True, exist_ok=True)
         temporary = Path(tempfile.mkdtemp(prefix=f".{self.name}-", dir=parent))
@@ -713,8 +744,9 @@ class ExperimentCell:
                 retained_manifest.chmod(0o400)
                 bundle_sha256 = hashlib.sha256(bundle_content).hexdigest()
                 manifest_sha256 = hashlib.sha256(manifest_content).hexdigest()
-            _write_json(temporary / "state.json", {
-                "status": "ready", "round": 1, "attempts": 0,
+            initial_state = {
+                "status": "input_integrity_failure" if input_diagnostics else "ready",
+                "round": 1, "attempts": 0,
                 "infrastructure_failures": 0, "candidate_repairs": 0,
                 "billed_checks_limit": billed_checks, "billed_checks_used": 0,
                 "task_sha256": task_sha256,
@@ -723,7 +755,10 @@ class ExperimentCell:
                 "autotune_enabled": autotune_enabled,
                 "skill_names": [name for name, _ in sources],
                 "skill_sha256": {name: _tree_sha256(source) for name, source in sources},
-            })
+            }
+            if input_diagnostics:
+                initial_state["diagnostics"] = input_diagnostics
+            _write_json(temporary / "state.json", initial_state)
             temporary.replace(self.path)
         except BaseException:
             shutil.rmtree(temporary, ignore_errors=True)
@@ -802,12 +837,12 @@ class ExperimentCell:
         benchmark = self.config["task"]
         benchmark_contract = AUTOTUNE_BENCHMARK_CONTRACTS.get(benchmark)
         if benchmark_contract is None:
-            raise TuneRejected(f"autotune has no correctness contract for {benchmark}")
+            raise RunnerError(f"autotune has no benchmark contract for {benchmark}")
         declared = request.get("candidate_contract")
         if declared is not None and (
                 declared.get("entrypoint") != benchmark_contract["entrypoint"]
                 or declared.get("kernel_name") != benchmark_contract["kernel_name"]):
-            raise TuneRejected("candidate manifest does not match the benchmark contract")
+            raise RunnerError("candidate manifest does not match the benchmark contract")
         plan.update(
             optimization_round=state["round"], benchmark=benchmark,
             required_correctness_cases=benchmark_contract["correctness_cases"],

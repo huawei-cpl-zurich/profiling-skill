@@ -152,6 +152,25 @@ def test_normalizes_aiv_without_temporal_claim(tmp_path: Path):
     assert observation["saturation"]["state"] == "unknown"
 
 
+@pytest.mark.parametrize("row", [
+    aic_row(
+        aic_cube_ratio="NA", aic_mte1_ratio="NA", aic_mte2_ratio="NA",
+        aic_mte3_ratio="NA", aic_fixpipe_ratio="NA", aic_scalar_ratio="NA",
+    ),
+    {
+        "block_id": "0", "sub_block_id": "cube0",
+        "aic_time(us)": "7.0", "aiv_time(us)": "NA",
+        "aic_total_cycles": "12600",
+    },
+])
+def test_rejects_observation_without_finite_modeled_activity(
+    tmp_path: Path, row: dict[str, object]
+):
+    run = run_normalizer(tmp_path, [row])
+    assert run.returncode == 2
+    assert "no finite modeled activity fractions" in run.stderr
+
+
 def test_memory_join_preserves_distinct_capture_and_unknown_units(tmp_path: Path):
     run = run_normalizer(tmp_path, [aic_row()], memory_rows=[memory_row()])
     assert run.returncode == 0, run.stderr

@@ -262,6 +262,10 @@ def normalize(args: argparse.Namespace) -> dict[str, Any]:
                 raise InvalidEvidence(f"{field} must be a fraction between 0 and 1")
             activity[resource] = ratio
             metrics[f"{resource}_activity_fraction"] = ratio
+        if not activity:
+            raise InvalidEvidence(
+                f"pipe topology key {(block, sub_block)!r} has no finite modeled activity fractions"
+            )
         cycles_field = f"{prefix}_total_cycles"
         cycles = optional_number(row.get(cycles_field), cycles_field)
         if cycles is not None:

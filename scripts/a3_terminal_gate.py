@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 
@@ -83,6 +84,14 @@ def validate_pipe_activity(value: object) -> dict:
         saturation = observation.get("saturation") if isinstance(observation, dict) else None
         if not isinstance(saturation, dict) or saturation.get("state") != "unknown":
             raise ValueError("managed A3 pipe observations must keep saturation unknown")
+        activity = observation.get("activity") if isinstance(observation, dict) else None
+        if (not isinstance(activity, dict) or not activity
+                or any(isinstance(item, bool) or not isinstance(item, (int, float))
+                       or not math.isfinite(item) or not 0 <= item <= 1
+                       for item in activity.values())):
+            raise ValueError(
+                "every managed A3 pipe observation requires a finite modeled activity fraction"
+            )
     return value
 
 
@@ -93,8 +102,8 @@ def validate_profile_identity(evidence: dict, pipe_activity: dict) -> tuple[str,
         raise ValueError("managed A3 timing evidence is missing its declared kernel selector")
     if not isinstance(resolved, str) or not resolved:
         raise ValueError("managed A3 timing evidence is missing its resolved kernel selector")
-    if evidence.get("kernel_name") != resolved:
-        raise ValueError("managed A3 timing kernel identity is not the resolved selector")
+    if evidence.get("kernel_name") != declared:
+        raise ValueError("managed A3 client-facing kernel identity is not the declared selector")
     provenance = pipe_activity.get("provenance")
     pipe_selector = provenance.get("kernel_selector") if isinstance(provenance, dict) else None
     if pipe_selector != resolved:

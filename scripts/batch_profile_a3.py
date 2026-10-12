@@ -306,7 +306,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                           else "Ascend-A2-A3"),
         "profiler": "msprof-op",
         "timing_scope": "device-task",
-        "kernel_name": resolved_kernel_name,
+        "kernel_name": declared_kernel_name,
         "declared_kernel_name": declared_kernel_name,
         "resolved_kernel_name": resolved_kernel_name,
         "captures": captures,
@@ -317,7 +317,6 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
     if pipe_activity is not None:
         evidence["pipe_activity"] = pipe_activity
     response = {"status": "ok", "diagnostics": "", **bound,
-                "kernel_name": resolved_kernel_name,
                 "declared_kernel_name": declared_kernel_name,
                 "resolved_kernel_name": resolved_kernel_name,
                 "profile_cases": rows, "geomean_us": geomean, "passed": True}

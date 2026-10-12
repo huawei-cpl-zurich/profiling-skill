@@ -91,6 +91,9 @@ not as a pipe-guided result. Report the omission to the controller and do not
 invent the missing metrics or acquire them through an unapproved route.
 
 Every managed A3 pipe observation must retain `saturation.state: unknown`.
+Every observation must also contain at least one finite modeled activity
+fraction; an empty observation is missing evidence, even when another block or
+sub-block has metrics.
 Use its activity fractions to compare work composition and form a next-step
 hypothesis, but never call a high ratio saturated. A managed A3 timeline record
 is expected to mark A5-style temporal pipe phases unavailable: A3

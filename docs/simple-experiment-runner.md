@@ -29,7 +29,6 @@ job.
   "terminal_gate_path": "/absolute/path/to/host-owned-gate.sh",
   "terminal_gate_bundle_path": "/absolute/path/to/a3-terminal-gate.tar",
   "candidate_manifest_path": "/absolute/path/to/matmul.manifest.json",
-  "physical_device": 3,
   "billed_checks": 8,
   "rounds": 4,
   "infrastructure_retries": 2,
@@ -66,12 +65,14 @@ removes the temporary cell, so the same `init` command is retryable.
 `terminal_gate_path` must name a host-owned file and `billed_checks` must be a
 positive integer. Initialization snapshots both the exact gate content and the
 check limit inside the cell. When configured, it also records the task digest.
-An A3 campaign gate additionally requires all three of
-`terminal_gate_bundle_path`, `candidate_manifest_path`, and `physical_device`.
-The runner snapshots the binary bundle and exact v2 fully-fused declaration,
-records their digests, and rejects later replacement. The physical placement
-is host configuration rather than gate source: the wrapper exposes only that
-physical device and maps it to logical device 0.
+An A3 campaign gate requires `terminal_gate_bundle_path` and
+`candidate_manifest_path` together. The runner snapshots the binary bundle and
+exact v2 fully-fused declaration, records their digests, and rejects later
+replacement. Initialization is device-neutral. The scheduler adds a
+non-negative `physical_device` to the configuration for each `run`; the runner
+rejects missing or invalid placement before remote preflight or dispatch. The
+launch wrapper exposes only that physical device and maps it to logical device
+0, while the resulting round evidence records the device actually used.
 Every `run` and `resume`, including the boundaries after agent prepare and
 analyze calls, rejects a missing, replaced, or changed cell `TASK.md`. Later
 edits to source inputs or configuration cannot change these snapshots.

@@ -332,7 +332,7 @@ class ExperimentCell:
 
     def _immutable_inputs(
         self,
-    ) -> tuple[Path, int, bytes | None, bytes | None, bytes | None, int | None]:
+    ) -> tuple[Path, int, bytes | None, bytes | None, bytes | None]:
         gate = Path(self.config.get("terminal_gate_path", "")).resolve()
         if not gate.is_file():
             raise RunnerError("terminal_gate_path must name an existing file")
@@ -341,19 +341,13 @@ class ExperimentCell:
             raise RunnerError("billed_checks must be a positive integer")
         bundle_value = self.config.get("terminal_gate_bundle_path")
         manifest_value = self.config.get("candidate_manifest_path")
-        physical_device = self.config.get("physical_device")
-        campaign_gate = any(value is not None for value in (
-            bundle_value, manifest_value, physical_device,
-        ))
+        campaign_gate = bundle_value is not None or manifest_value is not None
         bundle_content = manifest_content = None
         if campaign_gate:
             if not isinstance(bundle_value, str) or not isinstance(manifest_value, str):
                 raise RunnerError(
                     "campaign gates require terminal_gate_bundle_path and candidate_manifest_path"
                 )
-            if (isinstance(physical_device, bool) or not isinstance(physical_device, int)
-                    or physical_device < 0):
-                raise RunnerError("physical_device must be a non-negative integer")
             bundle, manifest = Path(bundle_value).resolve(), Path(manifest_value).resolve()
             if not bundle.is_file() or bundle.is_symlink():
                 raise RunnerError("terminal_gate_bundle_path must name a regular file")
@@ -371,8 +365,7 @@ class ExperimentCell:
             _validate_candidate_manifest(candidate_manifest)
         configured_task = self.config.get("task_path")
         if configured_task is None:
-            return (gate, billed, None, bundle_content, manifest_content,
-                    physical_device if campaign_gate else None)
+            return gate, billed, None, bundle_content, manifest_content
         if not isinstance(configured_task, str) or not configured_task:
             raise RunnerError("task_path must name an existing UTF-8 file")
         task = Path(configured_task).resolve()
@@ -383,8 +376,21 @@ class ExperimentCell:
             task_content.decode()
         except UnicodeDecodeError as exc:
             raise RunnerError("task_path must name an existing UTF-8 file") from exc
-        return (gate, billed, task_content, bundle_content, manifest_content,
-                physical_device if campaign_gate else None)
+        return gate, billed, task_content, bundle_content, manifest_content
+
+    def _launch_device(self, state: dict) -> int | None:
+        has_campaign_gate = state.get("gate_bundle_sha256") is not None
+        physical_device = self.config.get("physical_device")
+        if not has_campaign_gate:
+            if physical_device is not None:
+                raise RunnerError("physical_device requires a snapshotted campaign gate")
+            return None
+        if (isinstance(physical_device, bool) or not isinstance(physical_device, int)
+                or physical_device < 0):
+            raise RunnerError(
+                "physical_device must be supplied at run time as a non-negative integer"
+            )
+        return physical_device
 
     def _verify_task_snapshot(self, state: dict) -> None:
         expected = state.get("task_sha256")
@@ -418,8 +424,8 @@ class ExperimentCell:
             raise RunnerError(f"cell already exists: {self.path}")
         sources = self._skill_sources()
         auth_content = self._auth_content()
-        (gate, billed_checks, task_content, bundle_content, manifest_content,
-         physical_device) = self._immutable_inputs()
+        (gate, billed_checks, task_content, bundle_content,
+         manifest_content) = self._immutable_inputs()
         gate_content = gate.read_bytes()
         if not gate_content:
             raise RunnerError("terminal gate must not be empty")
@@ -476,7 +482,6 @@ class ExperimentCell:
                 "task_sha256": task_sha256,
                 "gate_bundle_sha256": bundle_sha256,
                 "candidate_manifest_sha256": manifest_sha256,
-                "physical_device": physical_device,
                 "skill_names": [name for name, _ in sources],
                 "skill_sha256": {name: _tree_sha256(source) for name, source in sources},
             })
@@ -588,11 +593,12 @@ class ExperimentCell:
         terminal_gate = (self.path / "terminal-gate.sh").read_text()
         bundle_path = self.path / "terminal-gate-bundle.tar"
         manifest_path = self.path / "candidate-manifest.json"
+        physical_device = self._launch_device(state)
         script_text = self._script(
             prepared.get("candidate"), terminal_gate,
             bundle=bundle_path.read_bytes() if bundle_path.is_file() else None,
             manifest=manifest_path.read_bytes() if manifest_path.is_file() else None,
-            physical_device=state.get("physical_device"), round_number=state["round"],
+            physical_device=physical_device, round_number=state["round"],
         )
         request = self._request(state, "prepare")
         try:
@@ -605,6 +611,7 @@ class ExperimentCell:
         attempt.mkdir()
         _write_json(attempt / "request.json", request)
         _write_json(attempt / "agent-result.json", prepared)
+        _write_json(attempt / "launch.json", {"physical_device": physical_device})
         script = attempt / "run.sh"
         script.write_text(script_text)
         script.chmod(0o700)
@@ -684,13 +691,16 @@ class ExperimentCell:
 
     def _finalize(self, state: dict, attempt: Path, prepared: dict,
                   result: dict, analysis: dict) -> None:
+        launch_path = attempt / "launch.json"
+        launch = (json.loads(launch_path.read_text()) if launch_path.is_file()
+                  else {"physical_device": state.get("physical_device")})
         inputs = {"prompt": self.config["prompt"], "treatment": self.config["treatment"],
                   "allowed_skills": self.skill_names, "session_id": prepared.get("session_id"),
                   "billed_checks": state["billed_checks_limit"],
                   "task_sha256": state.get("task_sha256"),
                   "gate_bundle_sha256": state.get("gate_bundle_sha256"),
                   "candidate_manifest_sha256": state.get("candidate_manifest_sha256"),
-                  "physical_device": state.get("physical_device")}
+                  "physical_device": launch.get("physical_device")}
         commands = "".join(json.dumps({"command": item}, sort_keys=True) + "\n"
                            for item in prepared["commands"])
         files = {
@@ -760,6 +770,7 @@ class ExperimentCell:
             return state
         if self._checks_exhausted(state):
             return self._finish_billed_checks(state)
+        self._launch_device(state)
         try:
             self._preflight()
         except ObservationLost:

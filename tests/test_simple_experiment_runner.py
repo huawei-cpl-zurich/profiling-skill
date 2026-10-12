@@ -74,7 +74,7 @@ def campaign_gate_config(tmp_path, **updates):
     }))
     return config(
         tmp_path, terminal_gate_bundle_path=str(bundle),
-        candidate_manifest_path=str(manifest), physical_device=3, **updates,
+        candidate_manifest_path=str(manifest), **updates,
     )
 
 
@@ -151,13 +151,13 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
     assert state["task_sha256"] is None and not (cell.repo / "TASK.md").exists()
 
 
-def test_campaign_gate_inputs_are_snapshotted_and_materialized(tmp_path):
+def test_campaign_gate_init_is_device_neutral_and_inputs_are_snapshotted(tmp_path):
     cfg = campaign_gate_config(tmp_path)
     cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
     state = cell.init()
     source_bundle = Path(cfg["terminal_gate_bundle_path"])
     source_manifest = Path(cfg["candidate_manifest_path"])
-    assert state["physical_device"] == 3
+    assert "physical_device" not in state
     assert state["gate_bundle_sha256"] == hashlib.sha256(source_bundle.read_bytes()).hexdigest()
     assert state["candidate_manifest_sha256"] == hashlib.sha256(
         source_manifest.read_bytes()
@@ -186,7 +186,6 @@ def test_campaign_gate_inputs_are_snapshotted_and_materialized(tmp_path):
 @pytest.mark.parametrize(
     "updates,message",
     [
-        ({"physical_device": -1}, "physical_device"),
         ({"candidate_manifest_path": None}, "require terminal_gate_bundle_path"),
         ({"terminal_gate_bundle_path": None}, "require terminal_gate_bundle_path"),
     ],
@@ -197,6 +196,20 @@ def test_campaign_gate_inputs_fail_closed(tmp_path, updates, message):
     cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
     with pytest.raises(runner.RunnerError, match=message):
         cell.init()
+
+
+@pytest.mark.parametrize("physical_device", [None, -1, True, "2"])
+def test_campaign_run_requires_valid_launch_device_before_remote_work(
+        tmp_path, physical_device):
+    cfg = campaign_gate_config(tmp_path)
+    remote, agent = Remote([]), Agent()
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, agent, remote)
+    cell.init()
+    if physical_device is not None:
+        cell.config["physical_device"] = physical_device
+    with pytest.raises(runner.RunnerError, match="physical_device.*run time"):
+        cell.run()
+    assert not remote.preflights and not remote.submitted and not agent.requests
 
 
 def test_campaign_manifest_rejects_unrelated_selector(tmp_path):
@@ -227,12 +240,14 @@ def test_campaign_round_commit_retains_contract_and_bundle_digest(tmp_path):
     cfg = campaign_gate_config(tmp_path, rounds=1)
     cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([success()]))
     cell.init()
+    cell.config["physical_device"] = 3
     assert cell.run()["status"] == "complete"
     evidence_dir = cell.repo / "rounds/01"
     assert json.loads((evidence_dir / "candidate-manifest.json").read_text())["schema"].endswith("/v2")
     assert (evidence_dir / "terminal-gate-bundle.sha256").read_text().strip() == (
         cell._state()["gate_bundle_sha256"]
     )
+    assert json.loads((evidence_dir / "inputs.json").read_text())["physical_device"] == 3
 
 
 def test_init_copies_hash_bound_canonical_skill_alias_and_private_auth(tmp_path):

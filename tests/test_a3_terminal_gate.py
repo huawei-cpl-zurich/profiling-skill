@@ -1,11 +1,14 @@
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
 import tarfile
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 
 ROOT = Path(__file__).parents[1]
@@ -145,7 +148,7 @@ def test_profile_tool_failure_is_infrastructure(tmp_path, monkeypatch):
     assert "msprof unavailable" in diagnostics and summary == {}
 
 
-def test_wrong_task_manifest_fails_before_execution(tmp_path, monkeypatch):
+def test_wrong_host_task_manifest_is_infrastructure_failure(tmp_path, monkeypatch):
     root, candidate, declaration = prepare(tmp_path, "gdn")
     declaration.write_text(json.dumps(manifest("bsa")))
     modules = fake_modules("gdn")
@@ -154,8 +157,21 @@ def test_wrong_task_manifest_fails_before_execution(tmp_path, monkeypatch):
     outcome, diagnostics, summary = gate.run_gate(
         root, candidate, declaration, "gdn", tmp_path / "out", 1,
     )
-    assert outcome == "candidate_failure"
+    assert outcome == "infrastructure_failure"
     assert "benchmark contract" in diagnostics and summary == {}
+
+
+def test_invalid_host_manifest_is_infrastructure_failure(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "gdn")
+    declaration.write_text("not json")
+    modules = fake_modules("gdn")
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "gdn", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure"
+    assert "invalid host candidate contract" in diagnostics and summary == {}
 
 
 def test_bundle_is_deterministic_and_self_describing(tmp_path):
@@ -191,3 +207,61 @@ def test_thin_gate_classifies_bundle_failure_as_infrastructure(tmp_path):
     assert result.returncode == 1
     assert envelope["schema"] == gate.RESULT_SCHEMA
     assert envelope["outcome"] == "infrastructure_failure"
+
+
+@pytest.mark.parametrize("task", ["gdn", "bsa", "matmul"])
+def test_thin_gate_classifies_missing_entrypoint_as_infrastructure(tmp_path, task):
+    bundle = tmp_path / "missing-entrypoint.tar"
+    with tarfile.open(bundle, "w") as archive:
+        info = tarfile.TarInfo("placeholder")
+        info.size = 0
+        archive.addfile(info, io.BytesIO())
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("candidate\n")
+    declaration = tmp_path / "manifest.json"
+    declaration.write_text(json.dumps(manifest(task)))
+    environment = {
+        **os.environ, "TERMINAL_GATE_BUNDLE_PATH": str(bundle),
+        "CANDIDATE_PATH": str(candidate), "CANDIDATE_MANIFEST_PATH": str(declaration),
+        "EXPERIMENT_ROUND": "1",
+    }
+    result = subprocess.run(
+        ["bash", str(ROOT / f"scripts/a3-gates/{task}.sh")], cwd=tmp_path,
+        env=environment, text=True, capture_output=True, check=False,
+    )
+    envelope = json.loads(result.stdout.strip().splitlines()[-1])
+    assert result.returncode == 1
+    assert envelope == {
+        "schema": gate.RESULT_SCHEMA,
+        "outcome": "infrastructure_failure",
+        "diagnostics": "host gate entrypoint produced no result envelope",
+    }
+
+
+def test_thin_gate_preserves_valid_candidate_failure_envelope(tmp_path):
+    bundle = tmp_path / "candidate-failure.tar"
+    source = (
+        "import json,sys\n"
+        "print(json.dumps({'schema':'simple-experiment-result/v1',"
+        "'outcome':'candidate_failure','diagnostics':'compile failed'}))\n"
+        "raise SystemExit(1)\n"
+    ).encode()
+    with tarfile.open(bundle, "w") as archive:
+        info = tarfile.TarInfo("scripts/a3_terminal_gate.py")
+        info.size = len(source)
+        archive.addfile(info, io.BytesIO(source))
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("candidate\n")
+    declaration = tmp_path / "manifest.json"
+    declaration.write_text(json.dumps(manifest("matmul")))
+    environment = {
+        **os.environ, "TERMINAL_GATE_BUNDLE_PATH": str(bundle),
+        "CANDIDATE_PATH": str(candidate), "CANDIDATE_MANIFEST_PATH": str(declaration),
+        "EXPERIMENT_ROUND": "1",
+    }
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/a3-gates/matmul.sh")], cwd=tmp_path,
+        env=environment, text=True, capture_output=True, check=False,
+    )
+    assert result.returncode == 1
+    assert json.loads(result.stdout.strip().splitlines()[-1])["outcome"] == "candidate_failure"

@@ -81,10 +81,14 @@ def run_gate(root: Path, candidate: Path, manifest_path: Path, benchmark: str,
         manifest = json.loads(manifest_path.read_text())
         declaration = fusion.validate_manifest(manifest)
     except (OSError, json.JSONDecodeError, fusion.FusionContractError) as exc:
-        return "candidate_failure", f"invalid host candidate contract: {exc}", {}
+        return "infrastructure_failure", f"invalid host candidate contract: {exc}", {}
     if (declaration["entrypoint"] != spec["entrypoint"]
             or declaration["kernel_name"] != spec["kernel_name"]):
-        return "candidate_failure", "candidate manifest does not match the benchmark contract", {}
+        return (
+            "infrastructure_failure",
+            "host candidate manifest does not match the benchmark contract",
+            {},
+        )
 
     common = {
         "protocol_version": 1, "profile": "bz-a3", "product": "a3",

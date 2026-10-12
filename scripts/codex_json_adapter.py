@@ -73,7 +73,7 @@ def codex_prompt(request: dict) -> str:
 
 
 def invoke(args: argparse.Namespace, request: dict) -> dict:
-    private_codex_home()
+    home = private_codex_home()
     with tempfile.TemporaryDirectory(prefix="codex-json-adapter-") as temporary:
         schema = Path(temporary) / "schema.json"
         output = Path(temporary) / "last-message.json"
@@ -90,8 +90,13 @@ def invoke(args: argparse.Namespace, request: dict) -> dict:
             if not isinstance(session, str) or not session:
                 raise AdapterError("resumed phase requires session_id")
             command = [args.codex, "exec", "resume", *common, session, "-"]
-        result = subprocess.run(command, input=codex_prompt(request), text=True,
-                                capture_output=True, check=False)
+        try:
+            result = subprocess.run(command, input=codex_prompt(request), text=True,
+                                    capture_output=True, check=False)
+        finally:
+            generated_config = home / "config.toml"
+            if generated_config.is_file() and not generated_config.is_symlink():
+                generated_config.unlink()
         if result.returncode:
             raise AdapterError(result.stderr.strip() or "codex exec failed")
         thread = None

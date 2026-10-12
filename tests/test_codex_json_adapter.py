@@ -13,6 +13,7 @@ def fake_codex(tmp_path: Path) -> Path:
         "#!/usr/bin/env python3\n"
         "import json, os, pathlib, sys\n"
         "capture=pathlib.Path(os.environ['FAKE_CAPTURE'])\n"
+        "(pathlib.Path(os.environ['CODEX_HOME'])/'config.toml').write_text('generated = true\\n')\n"
         "prompt=sys.stdin.read()\n"
         "capture.write_text(json.dumps({'argv':sys.argv[1:],'prompt':prompt,'home':os.environ.get('HOME'),'codex_home':os.environ.get('CODEX_HOME')}))\n"
         "out=pathlib.Path(sys.argv[sys.argv.index('-o')+1])\n"
@@ -71,6 +72,8 @@ def test_prepare_invokes_isolated_codex_and_returns_thread(tmp_path):
     assert call["home"] == str(tmp_path / "home")
     assert call["codex_home"] == str(tmp_path / "home/.codex")
     assert "same prompt" in call["prompt"]
+    assert (tmp_path / "home/.codex/auth.json").is_file()
+    assert not (tmp_path / "home/.codex/config.toml").exists()
 
 
 def test_analyze_resumes_exact_thread(tmp_path):

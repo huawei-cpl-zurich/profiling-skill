@@ -31,6 +31,12 @@ class AgentInterrupted(RunnerError):
     pass
 
 
+class PreflightFailure(ObservationLost):
+    def __init__(self, phase: str, diagnostics: str):
+        super().__init__(diagnostics)
+        self.phase = phase
+
+
 def _write_json(path: Path, value: dict | list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as stream:
@@ -89,16 +95,24 @@ class CplRemote:
 
     def preflight(self, request: dict) -> dict:
         target = request["target"]
-        capabilities = self._call(["capabilities", target])
-        preflight = self._call(["preflight", target])
-        if capabilities.get("target", target) != target or preflight.get("target", target) != target:
-            raise ObservationLost("cpl-remote preflight target mismatch")
+        try:
+            capabilities = self._call(["capabilities", target])
+        except ObservationLost as exc:
+            raise PreflightFailure("capabilities", str(exc)) from exc
+        if capabilities.get("target", target) != target:
+            raise PreflightFailure("capabilities", "cpl-remote capabilities target mismatch")
         raw = capabilities.get("capabilities", capabilities.get("features", []))
         available = {key for key, enabled in raw.items() if enabled} if isinstance(raw, dict) else set(raw)
         missing = {"run", "observe", "logs"} - available
+        if missing:
+            raise PreflightFailure("capabilities", f"missing capabilities: {sorted(missing)}")
+        try:
+            preflight = self._call(["preflight", target])
+        except ObservationLost as exc:
+            raise PreflightFailure("preflight", str(exc)) from exc
         state = preflight.get("state", preflight.get("status"))
-        if missing or state not in {"completed", "ok", "success"}:
-            raise ObservationLost(f"remote preflight failed; missing={sorted(missing)}, state={state}")
+        if preflight.get("target", target) != target or state not in {"completed", "ok", "success"}:
+            raise PreflightFailure("preflight", f"remote preflight failed: state={state}")
         return {"capabilities": capabilities, "preflight": preflight}
 
     def submit(self, request: dict, script: Path) -> str:
@@ -282,11 +296,20 @@ class ExperimentCell:
     def _preflight(self) -> None:
         folder = self.path / "preflights"
         sequence = len(list(folder.glob("*.json"))) + 1 if folder.exists() else 1
-        _write_json(folder / f"{sequence}.json",
-                    self.remote.preflight({"target": self.config["target"]}))
+        path = folder / f"{sequence}.json"
+        try:
+            result = self.remote.preflight({"target": self.config["target"]})
+        except ObservationLost as exc:
+            _write_json(path, {"outcome": "infrastructure_failure",
+                               "phase": getattr(exc, "phase", "preflight"),
+                               "diagnostics": str(exc)})
+            raise
+        _write_json(path, result)
 
     @staticmethod
     def _script(candidate: str, fragment: str) -> str:
+        if not isinstance(candidate, str) or not isinstance(fragment, str):
+            raise RunnerError("candidate and script_fragment must be strings")
         encoded = candidate.encode()
         if len(encoded) > MAX_CANDIDATE_BYTES:
             raise RunnerError(f"candidate is too large ({len(encoded)} bytes)")
@@ -302,23 +325,32 @@ class ExperimentCell:
         )
 
     def _attempt(self, state: dict, prepared: dict) -> dict:
-        state["attempts"] += 1
-        attempt = self.path / "attempts" / str(state["attempts"])
-        attempt.mkdir()
+        if not isinstance(prepared.get("commands"), list) or not all(
+                isinstance(command, str) for command in prepared["commands"]):
+            raise RunnerError("candidate commands must be a string list")
+        script_text = self._script(prepared.get("candidate"), prepared.get("script_fragment"))
         request = self._request(state, "prepare")
+        try:
+            json.dumps(prepared); json.dumps(request)
+        except (TypeError, ValueError) as exc:
+            raise RunnerError(f"candidate evidence is not JSON serializable: {exc}") from exc
+        number = state["attempts"] + 1
+        attempt = self.path / "attempts" / str(number)
+        attempt.mkdir()
         _write_json(attempt / "request.json", request)
         _write_json(attempt / "agent-result.json", prepared)
         script = attempt / "run.sh"
-        script.write_text(self._script(prepared["candidate"], prepared["script_fragment"]))
+        script.write_text(script_text)
         script.chmod(0o700)
+        state["attempts"] = number
         try:
             handle = self.remote.submit(request, script)
         except ObservationLost as exc:
             _write_json(attempt / "infrastructure.json", {"diagnostics": str(exc), "phase": "dispatch"})
-            state.update(status="infrastructure_unknown", pending_attempt=state["attempts"])
+            state.update(status="infrastructure_unknown", pending_attempt=number)
             return self._save(state)
         (attempt / "remote-job-id.txt").write_text(handle + "\n")
-        state.update(status="observing", pending_attempt=state["attempts"],
+        state.update(status="observing", pending_attempt=number,
                      session_id=prepared.get("session_id", state.get("session_id")))
         self._save(state)
         return self._observe(state, attempt, handle, prepared)
@@ -433,9 +465,16 @@ class ExperimentCell:
             raise RunnerError("cell has pending work; use resume")
         if state["status"] == "complete" or self._budget_exhausted(state):
             return state
-        self._preflight()
-        prepared = (json.loads((self.path / "attempts" / str(state["attempts"]) / "agent-result.json").read_text())
-                    if state["status"] == "infrastructure_failure" else None)
+        try:
+            self._preflight()
+        except ObservationLost:
+            state["infrastructure_failures"] += 1
+            state["status"] = "infrastructure_failure"
+            return self._save(state)
+        last_agent = self.path / "attempts" / str(state["attempts"]) / "agent-result.json"
+        prepared = (json.loads(last_agent.read_text())
+                    if state["status"] == "infrastructure_failure" and last_agent.is_file()
+                    else None)
         while True:
             if prepared is None:
                 prepared = self.agent.prepare(self._request(state, "prepare"))

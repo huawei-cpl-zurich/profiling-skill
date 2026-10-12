@@ -257,6 +257,18 @@ def test_candidate_size_is_bounded_before_remote_submission(tmp_path):
     assert not remote.submitted
 
 
+def test_rejected_candidate_creates_no_attempt_and_retry_can_succeed(tmp_path):
+    remote = Remote([success()])
+    agent = Agent([evidence("x" * 1_100_000), evidence("fixed")])
+    cell = initialized(tmp_path, remote, agent)
+    with pytest.raises(runner.RunnerError, match="candidate.*large"):
+        cell.run()
+    assert not any((cell.path / "attempts").iterdir())
+    assert json.loads(cell.state_path.read_text())["attempts"] == 0
+    assert cell.run()["round"] == 2
+    assert len(remote.submitted) == 1
+
+
 def test_analysis_interruption_resumes_without_remote_rerun(tmp_path):
     class Interrupted(Agent):
         def analyze(self, request):
@@ -519,3 +531,103 @@ def test_preflight_requires_run_observe_logs_and_records_receipts(tmp_path):
         ["/global/cpl-remote", "--json", "capabilities", "bz-a3-1"],
         ["/global/cpl-remote", "--json", "preflight", "bz-a3-1"],
     ]
+
+
+@pytest.mark.parametrize("phase", ["capabilities", "preflight"])
+def test_cpl_remote_reports_failed_preflight_phase(phase):
+    def invoke(command, **kwargs):
+        if "capabilities" in command:
+            capabilities = ["run", "observe"] if phase == "capabilities" else ["run", "observe", "logs"]
+            value = {"target": "bz-a3-1", "state": "available", "capabilities": capabilities}
+        else:
+            value = {"target": "bz-a3-1", "state": "failed"}
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    remote = runner.CplRemote(invoke=invoke, executable=Path("/global/cpl-remote"))
+    with pytest.raises(runner.PreflightFailure) as failure:
+        remote.preflight({"target": "bz-a3-1"})
+    assert failure.value.phase == phase
+
+
+@pytest.mark.parametrize("phase", ["capabilities", "preflight"])
+def test_preflight_failure_is_retained_infrastructure_without_agent_or_attempt(tmp_path, phase):
+    class FailedPreflight(Remote):
+        def preflight(self, request):
+            raise runner.PreflightFailure(phase, f"{phase} unavailable")
+
+    remote, agent = FailedPreflight([]), Agent()
+    cell = initialized(tmp_path, remote, agent)
+    state = cell.run()
+    assert state["status"] == "infrastructure_failure" and state["round"] == 1
+    assert state["attempts"] == 0 and not agent.requests
+    evidence = json.loads((cell.path / "preflights/1.json").read_text())
+    assert evidence == {
+        "diagnostics": f"{phase} unavailable", "outcome": "infrastructure_failure",
+        "phase": phase,
+    }
+
+
+def test_preflight_failure_can_retry_without_missing_attempt(tmp_path):
+    class FlakyPreflight(Remote):
+        def preflight(self, request):
+            if not self.preflights:
+                self.preflights.append(request)
+                raise runner.PreflightFailure("preflight", "temporarily unavailable")
+            return super().preflight(request)
+
+    remote, agent = FlakyPreflight([success()]), Agent()
+    cell = initialized(tmp_path, remote, agent)
+    assert cell.run()["status"] == "infrastructure_failure"
+    assert cell.run()["round"] == 2
+    assert len(agent.requests) == len(remote.submitted) == 1
+
+
+def test_cli_init_run_resume_report_end_to_end(tmp_path):
+    skill = tmp_path / "cli-skill"
+    skill.mkdir(); (skill / "SKILL.md").write_text("cli skill\n")
+    fake_home = tmp_path / "fake-home"
+    client = fake_home / ".agents/skills/remote-access/scripts/cpl-remote"
+    client.parent.mkdir(parents=True)
+    transport_state = tmp_path / "transport.json"
+    client.write_text(
+        "#!/usr/bin/env python3\nimport json,sys\nfrom pathlib import Path\n"
+        f"p=Path({str(transport_state)!r}); s=json.loads(p.read_text()) if p.exists() else {{'observe':0,'run':0}}\n"
+        "a=sys.argv[2]; handle='remote:bz-a3-1:job:e2e'\n"
+        "if a=='capabilities': out={'target':'bz-a3-1','state':'available','capabilities':{'run':True,'observe':True,'logs':True}}\n"
+        "elif a=='preflight': out={'target':'bz-a3-1','state':'completed'}\n"
+        "elif a=='run': s['run']+=1; out={'target':'bz-a3-1','state':'running','handle':handle}\n"
+        "elif a=='observe':\n"
+        " s['observe']+=1; out={'target':'bz-a3-1','handle':handle,'state':'observation-unavailable' if s['observe']==1 else 'completed','exit':None if s['observe']==1 else 0}\n"
+        "elif a=='logs':\n"
+        " content=json.dumps({'schema':'simple-experiment-result/v1','outcome':'success','profile_summary':{'duration_us':1.0}}) if 'stdout' in sys.argv else ''\n"
+        " out={'target':'bz-a3-1','handle':handle,'state':'completed','content':content}\n"
+        "p.write_text(json.dumps(s)); print(json.dumps(out))\n"
+    )
+    client.chmod(0o700)
+    agent = tmp_path / "agent.py"
+    agent.write_text(
+        "import json,sys\nr=json.load(sys.stdin)\n"
+        "print(json.dumps({'reasoning':'final','postmortem':'done'} if r['phase']=='analyze' else "
+        "{'candidate':'VALUE = 1\\n','script_fragment':'true','commands':['true'],"
+        "'hypothesis':'works','retrieved_knowledge':[],'session_id':'cli-session'}))\n"
+    )
+    cfg = config(tmp_path, rounds=1, skill_paths=[str(skill)],
+                 agent_command=["python", str(agent)])
+    config_path = tmp_path / "cell.json"
+    config_path.write_text(json.dumps(cfg))
+    runs = tmp_path / "cli-runs"
+    script = Path(__file__).parents[1] / "scripts/simple_experiment_runner.py"
+    environment = {**__import__("os").environ, "HOME": str(fake_home), "PYTHONDONTWRITEBYTECODE": "1"}
+
+    def cli(command):
+        result = subprocess.run(
+            ["python", str(script), command, "--root", str(runs), "--config", str(config_path)],
+            text=True, capture_output=True, env=environment, check=True,
+        )
+        return json.loads(result.stdout)
+
+    assert cli("init")["status"] == "ready"
+    assert cli("run")["status"] == "infrastructure_unknown"
+    assert cli("resume")["status"] == "complete"
+    assert cli("report")["rounds_completed"] == 1
+    assert json.loads(transport_state.read_text()) == {"observe": 2, "run": 1}

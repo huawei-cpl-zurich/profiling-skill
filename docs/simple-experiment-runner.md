@@ -61,7 +61,9 @@ Prepare must return:
 }
 ```
 
-Candidates are limited to 1 MiB. The runner, not the agent, creates the exact
+Candidates are limited to 1 MiB. Candidate fields and the generated wrapper
+are validated before an attempt number or directory is created, so rejected
+prepare output can be repaired without poisoning the round. The runner, not the agent, creates the exact
 submitted `run.sh`. It embeds the candidate, materializes it as `candidate.py`
 in a private remote temporary directory, exports `CANDIDATE_PATH`, changes to
 that directory, and executes `script_fragment`. The exact candidate and exact
@@ -78,7 +80,8 @@ commit without rerunning the remote workload or duplicating the round commit.
 
 Before each new `run` invocation that may dispatch work, the runner records global `cpl-remote`
 `capabilities` and `preflight` receipts and requires `run`, `observe`, and
-`logs`. Production execution uses only the user-wide global client, a named
+`logs`. A failed probe is retained with its phase and diagnostics, classified
+as infrastructure, and consumes neither a candidate attempt nor a round. Production execution uses only the user-wide global client, a named
 runtime, and a file-backed script.
 
 The last nonblank stdout line must be a JSON envelope:

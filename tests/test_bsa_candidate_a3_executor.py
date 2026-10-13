@@ -5,6 +5,7 @@ import importlib.util
 import json
 import sys
 import tarfile
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -166,11 +167,31 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     script = Path(script_path).read_text()
     assert runtime == "py311-torch" and cwd == "/srv/profiling"
     assert "ASCEND_RT_VISIBLE_DEVICES" not in script
-    assert 'CPL_DEVICE_LEASE_ROOT="$PWD/.cpl-device-leases"' in script
+    assert 'CPL_DEVICE_LEASE_ROOT="$HOME/.cpl-device-leases"' in script
+    assert "BSA_MIN_FREE_DEVICE_BYTES=12884901888" in script
+    assert 'flock 9' in script and 'compact-result.log' in script
     assert "remote_driver.py" in script
     with tarfile.open(archive) as bundle:
         driver = bundle.extractfile("remote_driver.py").read().decode()
     assert '"device-lease-%d.lock"%physical' in driver
+
+
+def test_device_probe_rejects_low_free_memory_with_compact_diagnostics(
+    tmp_path, monkeypatch,
+):
+    module = load()
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(module.remote_driver_source(), "remote_driver.py", "exec"), namespace)
+    monkeypatch.setenv("CPL_DEVICE_LEASE_ROOT", str(tmp_path / "leases"))
+    monkeypatch.setenv("BSA_MIN_FREE_DEVICE_BYTES", str(10_000))
+    monkeypatch.setattr(namespace["time"], "sleep", lambda _seconds: None)
+    monkeypatch.setattr(namespace["subprocess"], "run", lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=0,
+                                        stdout='{"free":5410,"total":10000}\n',
+                                        stderr=""))
+
+    with pytest.raises(RuntimeError, match=r"free=5410 required=10000"):
+        namespace["pick_device"]()
 
 
 def test_capture_binds_exact_selector_and_returns_pipe_rows(tmp_path):
@@ -234,6 +255,20 @@ def test_candidate_failures_are_preserved(remote_status, tmp_path):
     assert result["diagnostics"] == "candidate broke"
 
 
+def test_prelease_memory_failure_preserves_compact_remote_diagnostics(tmp_path):
+    module = load()
+    remote = {"schema": module.REMOTE_SCHEMA, "status": "infrastructure_error",
+              "diagnostics": "no device passed: 3:free=5410 required=10000"}
+    transport = FakeTransport(module, remote)
+    cfg, _ = config(module, tmp_path, transport)
+
+    result = module.Executor(cfg, transport).execute(request())
+
+    assert result["status"] == "infrastructure_error"
+    assert result["diagnostics"] == remote["diagnostics"]
+    assert result["provenance"]["physical_device"] == -1
+
+
 def test_observer_interruption_preserves_handle_and_resume_does_not_redispatch(tmp_path):
     module = load()
     transport = FakeTransport(module, success(), interrupted=True)
@@ -279,6 +314,53 @@ def test_terminal_infrastructure_requires_numbered_new_attempt(tmp_path):
     assert len(transport.runs) == 2
     receipts = sorted((tmp_path / "state").rglob("dispatch.json"))
     assert [path.parent.name for path in receipts] == ["attempt-0001", "attempt-0002"]
+
+
+def test_incomplete_attempt_is_redispatched_idempotently_in_same_attempt(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+
+    first = executor.execute(request())
+    assert first["status"] == "ok"
+    receipt = next((tmp_path / "state").rglob("attempt-0001/dispatch.json"))
+    receipt.unlink()
+
+    second = executor.execute(request())
+
+    assert second["status"] == "ok"
+    assert len(transport.runs) == 2
+    assert len(list((tmp_path / "state").rglob("attempt-*"))) == 1
+    first_script = Path(transport.runs[0][2]).read_text()
+    second_script = Path(transport.runs[1][2]).read_text()
+    assert first_script == second_script
+    assert "execution.lock" in second_script
+
+
+def test_upload_failure_does_not_poison_attempt_identity(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+    upload = transport.upload
+    failures = 0
+
+    def fail_once(*args):
+        nonlocal failures
+        failures += 1
+        if failures == 1:
+            raise module.ExecutorError("infrastructure_error", "upload unavailable")
+        upload(*args)
+
+    transport.upload = fail_once
+    assert executor.execute(request())["status"] == "infrastructure_error"
+
+    result = executor.execute(request())
+
+    assert result["status"] == "ok"
+    assert len(transport.runs) == 1
+    assert len(list((tmp_path / "state").rglob("attempt-0001/dispatch.json"))) == 1
 
 
 def test_target_is_part_of_identity_and_persisted_handle_target_is_checked(tmp_path):

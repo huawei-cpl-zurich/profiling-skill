@@ -15,6 +15,7 @@ credential values. Configure an invocation with ignored local environment:
 export BSA_A3_TARGET=bz-a3-1
 export BSA_A3_REMOTE_ROOT=/the/provisioned/writable/workspace
 export BSA_A3_STATE_DIR=/a/durable/local/state/directory
+export BSA_A3_MIN_FREE_DEVICE_BYTES=12884901888
 ```
 
 `BSA_A3_TARGET` may be `bz-a3-1` or `bz-a3-2`. The named runtime is taken from
@@ -47,9 +48,12 @@ script under the named runtime, and observe the retained handle.
 
 The remote driver takes a nonblocking `flock` lease before probing each
 physical device and holds it for the entire retained job. It uses the shared
-`.cpl-device-leases/device-lease-N.lock` namespace also used by acquisition
-jobs, so independent profiling workflows cannot claim the same device.
-Process exit releases the lease, so stale lock files are harmless. The bounded scan selects
+`$HOME/.cpl-device-leases/device-lease-N.lock` namespace also used by
+acquisition jobs, so workflows with different remote roots cannot claim the
+same device. The probe also requires the configured minimum free memory (12
+GiB by default for the frozen BSA cases), reporting compact `free=N
+required=M` diagnostics for rejected devices. Process exit releases the
+lease, so stale lock files are harmless. The bounded scan selects
 an eligible device without freezing a physical ID in source. The selected ID
 is exposed only as provenance; the application sees logical device 0.
 
@@ -99,6 +103,14 @@ dispatches a duplicate. A terminal infrastructure response is recorded under
 `retry:{mode:new_attempt,prior_handle}` can retire it and dispatch the next
 numbered attempt. Candidate failures are terminal and are not retried as
 infrastructure.
+
+Dispatch preparation is serialized by a local file lock. Each remote attempt
+also has a deterministic execution root protected by `flock` and a durable
+compact-result file. If the controller stops after submission but before
+writing `dispatch.json`, the next invocation can safely reissue that attempt:
+the replacement joins the same remote lock and consumes the first job's
+result instead of repeating device work. Pre-dispatch failures reuse the same
+attempt rather than permanently poisoning its identity.
 
 Do not delete the executor state while a handle may still be running. A changed
 candidate, case, selector, action, or harness revision produces a different

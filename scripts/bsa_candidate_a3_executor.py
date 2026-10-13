@@ -9,6 +9,7 @@ and report parsing in one retained cpl-remote job.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import math
@@ -43,6 +44,7 @@ class ExecutorConfig:
     baseline: Path
     cases: Path
     runner: Path
+    min_free_device_bytes: int = 12 * 1024**3
 
 
 def canonical(value: object) -> bytes:
@@ -223,9 +225,10 @@ def emit(value):
     print("BSA_CANDIDATE_RESULT="+json.dumps(value,sort_keys=True,separators=(",",":")),flush=True)
 
 def pick_device():
-    probe="import torch,torch_npu;torch.npu.set_device(0);x=torch.ones(1,device='npu');torch.npu.synchronize();assert float(x.cpu()[0])==1"
+    probe="import json,torch,torch_npu;torch.npu.set_device(0);x=torch.ones(1,device='npu');torch.npu.synchronize();assert float(x.cpu()[0])==1;free,total=torch.npu.mem_get_info();print(json.dumps({'free':free,'total':total}))"
     failures=[]; root=pathlib.Path(os.environ["CPL_DEVICE_LEASE_ROOT"]
                                   ); root.mkdir(parents=True,exist_ok=True)
+    required=int(os.environ["BSA_MIN_FREE_DEVICE_BYTES"])
     for _attempt in range(5):
       for physical in range(8):
         lease=(root/("device-lease-%d.lock"%physical)).open("a+")
@@ -234,7 +237,13 @@ def pick_device():
         env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
         try: run=subprocess.run([sys.executable,"-c",probe],env=env,text=True,capture_output=True,timeout=20)
         except subprocess.TimeoutExpired: failures.append("%d:timeout"%physical); lease.close(); continue
-        if run.returncode==0: return physical,env,lease
+        if run.returncode==0:
+          try: free=int(json.loads(run.stdout.splitlines()[-1])["free"])
+          except (IndexError,KeyError,TypeError,ValueError,json.JSONDecodeError):
+            failures.append("%d:memory probe malformed"%physical); lease.close(); continue
+          if free < required:
+            failures.append("%d:free=%d required=%d"%(physical,free,required)); lease.close(); continue
+          return physical,env,lease
         failures.append("%d:%s"%(physical,(run.stderr or run.stdout)[-120:])); lease.close()
       time.sleep(1)
     raise RuntimeError("no device passed bounded probe: "+"; ".join(failures))
@@ -427,6 +436,10 @@ class Executor:
             raise ExecutorError("infrastructure_error", "unsupported A3 target")
         if (not config.remote_root.startswith("/") or ".." in PurePosixPath(config.remote_root).parts):
             raise ExecutorError("infrastructure_error", "remote root must be absolute and normalized")
+        if (isinstance(config.min_free_device_bytes, bool)
+                or not isinstance(config.min_free_device_bytes, int)
+                or config.min_free_device_bytes <= 0):
+            raise ExecutorError("infrastructure_error", "minimum free device memory must be positive")
         self.config, self.transport = config, transport
 
     def _bundle(self, request: dict, state: Path) -> Path:
@@ -466,6 +479,7 @@ class Executor:
                 "product": "a3",
                 "target": self.config.target,
                 "runtime": runtime,
+                "min_free_device_bytes": self.config.min_free_device_bytes,
                 "baseline_sha256": file_digest(self.config.baseline),
                 "baseline_data_sha256": file_digest(self.config.baseline.with_suffix(".json")),
                 "cases_sha256": file_digest(self.config.cases),
@@ -474,67 +488,8 @@ class Executor:
                 "executor_sha256": file_digest(Path(__file__).resolve()),
             })
             state = self.config.state_dir / execution_sha
-            attempts = sorted(path for path in state.glob("attempt-*") if path.is_dir())
-            if not attempts:
-                if retry is not None:
-                    raise ExecutorError("infrastructure_error", "retry has no retained attempt")
-                attempt = state / "attempt-0001"
-                dispatch = True
-            else:
-                attempt = attempts[-1]
-                receipt = self._receipt(attempt, request_sha, runtime)
-                handle, command = receipt["handle"], receipt["command"]
-                if retry is None:
-                    dispatch = False
-                elif retry["mode"] == "observe":
-                    if retry["handle"] != handle:
-                        raise ExecutorError("infrastructure_error", "retry handle does not match retained handle")
-                    dispatch = False
-                else:
-                    if retry["prior_handle"] != handle:
-                        raise ExecutorError("infrastructure_error", "prior handle does not match retained handle")
-                    terminal_path = attempt / "terminal.json"
-                    if not terminal_path.is_file():
-                        raise ExecutorError("infrastructure_error", "cannot replace a nonterminal retained handle",
-                                            handle=handle, terminal=False)
-                    terminal = json.loads(terminal_path.read_text())
-                    if terminal.get("handle") != handle:
-                        raise ExecutorError("infrastructure_error", "terminal receipt identity mismatch",
-                                            handle=handle)
-                    attempt = state / f"attempt-{len(attempts) + 1:04d}"
-                    dispatch = True
-
-            receipt_path = attempt / "dispatch.json"
-            if dispatch:
-                self.transport.capabilities(self.config.target)
-                self.transport.preflight(self.config.target)
-                archive = self._bundle(base_request, attempt)
-                remote_archive = f"{self.config.remote_root}/payload-{file_digest(archive)}.tar"
-                self.transport.upload(self.config.target, archive, remote_archive)
-                run_root = f"{self.config.remote_root}/runs/{execution_sha}/{attempt.name}"
-                quoted = {"archive": shlex.quote(remote_archive),
-                          "digest": shlex.quote(file_digest(archive)),
-                          "run_root": shlex.quote(run_root)}
-                script = f'''#!/usr/bin/env bash
-set -euo pipefail
-archive={quoted["archive"]}; run_root={quoted["run_root"]}
-test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
-export CPL_DEVICE_LEASE_ROOT="$PWD/.cpl-device-leases"
-rm -rf "$run_root"; mkdir -p "$run_root"; tar -xf "$archive" -C "$run_root"
-cd "$run_root"; exec python remote_driver.py
-'''
-                script_path = state / "run.sh"
-                script_path.write_text(script)
-                handle = self.transport.run(self.config.target, runtime, script_path,
-                                            self.config.remote_root)
-                command = getattr(self.transport, "last_command", [
-                    "cpl-remote", "run", self.config.target, "--runtime", runtime,
-                    "--file", str(script_path), "--cwd", self.config.remote_root,
-                ])
-                atomic_json(receipt_path, {"schema_version": 1,
-                            "request_sha256": request_sha, "handle": handle,
-                            "target": self.config.target, "runtime": runtime,
-                            "command": command})
+            attempt, handle, command = self._prepare_attempt(
+                base_request, request_sha, execution_sha, state, runtime, retry)
             remote = self.transport.observe_result(self.config.target, handle)
             atomic_json(attempt / "terminal.json", {
                 "handle": handle, "status": remote.get("status", "malformed"),
@@ -559,6 +514,104 @@ cd "$run_root"; exec python remote_driver.py
             return {"status": "infrastructure_error", "diagnostics": str(exc),
                     "terminal": True}
 
+    def _prepare_attempt(self, base_request, request_sha, execution_sha, state,
+                         runtime, retry):
+        state.mkdir(parents=True, exist_ok=True)
+        with (state / "dispatch.lock").open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            attempts = sorted(path for path in state.glob("attempt-*") if path.is_dir())
+            if not attempts:
+                if retry is not None:
+                    raise ExecutorError("infrastructure_error", "retry has no retained attempt")
+                attempt = state / "attempt-0001"
+                dispatch = True
+            else:
+                attempt = attempts[-1]
+                receipt_path = attempt / "dispatch.json"
+                if not receipt_path.is_file():
+                    intent_path = attempt / "intent.json"
+                    if intent_path.is_file():
+                        intent = json.loads(intent_path.read_text())
+                        if (intent.get("request_sha256") != request_sha
+                                or intent.get("target") != self.config.target
+                                or intent.get("runtime") != runtime):
+                            raise ExecutorError("infrastructure_error",
+                                                "incomplete attempt intent mismatch")
+                    if retry is not None:
+                        raise ExecutorError(
+                            "infrastructure_error",
+                            "incomplete attempt has no handle for explicit retry",
+                            terminal=False,
+                        )
+                    # The remote script is idempotent for this attempt root. Reissuing a
+                    # lost dispatch therefore observes or joins the same device work.
+                    dispatch = True
+                else:
+                    receipt = self._receipt(attempt, request_sha, runtime)
+                    handle, command = receipt["handle"], receipt["command"]
+                    if retry is None:
+                        dispatch = False
+                    elif retry["mode"] == "observe":
+                        if retry["handle"] != handle:
+                            raise ExecutorError("infrastructure_error", "retry handle does not match retained handle")
+                        dispatch = False
+                    else:
+                        if retry["prior_handle"] != handle:
+                            raise ExecutorError("infrastructure_error", "prior handle does not match retained handle")
+                        terminal_path = attempt / "terminal.json"
+                        if not terminal_path.is_file():
+                            raise ExecutorError("infrastructure_error", "cannot replace a nonterminal retained handle",
+                                                handle=handle, terminal=False)
+                        terminal = json.loads(terminal_path.read_text())
+                        if terminal.get("handle") != handle:
+                            raise ExecutorError("infrastructure_error", "terminal receipt identity mismatch",
+                                                handle=handle)
+                        attempt = state / f"attempt-{len(attempts) + 1:04d}"
+                        dispatch = True
+
+            receipt_path = attempt / "dispatch.json"
+            if dispatch:
+                atomic_json(attempt / "intent.json", {
+                    "schema_version": 1, "request_sha256": request_sha,
+                    "target": self.config.target, "runtime": runtime,
+                })
+                self.transport.capabilities(self.config.target)
+                self.transport.preflight(self.config.target)
+                archive = self._bundle(base_request, attempt)
+                remote_archive = f"{self.config.remote_root}/payload-{file_digest(archive)}.tar"
+                self.transport.upload(self.config.target, archive, remote_archive)
+                run_root = f"{self.config.remote_root}/runs/{execution_sha}/{attempt.name}"
+                quoted = {"archive": shlex.quote(remote_archive),
+                          "digest": shlex.quote(file_digest(archive)),
+                          "run_root": shlex.quote(run_root)}
+                script = f'''#!/usr/bin/env bash
+set -euo pipefail
+archive={quoted["archive"]}; run_root={quoted["run_root"]}
+test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
+export CPL_DEVICE_LEASE_ROOT="$HOME/.cpl-device-leases"
+export BSA_MIN_FREE_DEVICE_BYTES={self.config.min_free_device_bytes}
+mkdir -p "$run_root"; exec 9>"$run_root/execution.lock"; flock 9
+if test -s "$run_root/compact-result.log"; then cat "$run_root/compact-result.log"; exit 0; fi
+work="$run_root/work"; mkdir -p "$work"; tar -xf "$archive" -C "$work"
+cd "$work"; python remote_driver.py >"$run_root/result.tmp"
+grep -q '^BSA_CANDIDATE_RESULT=' "$run_root/result.tmp"
+mv "$run_root/result.tmp" "$run_root/compact-result.log"
+cat "$run_root/compact-result.log"
+'''
+                script_path = attempt / "run.sh"
+                script_path.write_text(script)
+                handle = self.transport.run(self.config.target, runtime, script_path,
+                                            self.config.remote_root)
+                command = getattr(self.transport, "last_command", [
+                    "cpl-remote", "run", self.config.target, "--runtime", runtime,
+                    "--file", str(script_path), "--cwd", self.config.remote_root,
+                ])
+                atomic_json(receipt_path, {"schema_version": 1,
+                            "request_sha256": request_sha, "handle": handle,
+                            "target": self.config.target, "runtime": runtime,
+                            "command": command})
+            return attempt, handle, command
+
     def _receipt(self, attempt: Path, request_sha: str, runtime: str) -> dict:
         receipt_path = attempt / "dispatch.json"
         if not receipt_path.is_file():
@@ -580,13 +633,16 @@ cd "$run_root"; exec python remote_driver.py
         if not isinstance(remote, dict) or remote.get("schema") != REMOTE_SCHEMA:
             raise ExecutorError("infrastructure_error", "remote result schema mismatch",
                                 handle=handle)
+        status = remote.get("status")
         physical = remote.get("physical_device")
         if isinstance(physical, bool) or not isinstance(physical, int) or physical < 0:
-            raise ExecutorError("infrastructure_error", "remote physical device is missing",
-                                handle=handle)
+            if status == "infrastructure_error":
+                physical = -1
+            else:
+                raise ExecutorError("infrastructure_error", "remote physical device is missing",
+                                    handle=handle)
         provenance = {"product": "a3", "target": self.config.target, "runtime": runtime,
                       "physical_device": physical, "command": command, "handle": handle}
-        status = remote.get("status")
         if status in CANDIDATE_FAILURES:
             return {"status": status, "diagnostics": str(remote.get("diagnostics", "")),
                     "terminal": True, "evidence_sha256": digest_json(remote),
@@ -662,10 +718,14 @@ def main(argv=None) -> int:
             )
         state = Path(os.environ.get(
             "BSA_A3_STATE_DIR", str(args.response.parent / ".bsa-a3-executor-state")))
+        minimum = int(os.environ.get("BSA_A3_MIN_FREE_DEVICE_BYTES", str(12 * 1024**3)))
+        if minimum <= 0:
+            raise ExecutorError("infrastructure_error",
+                                "BSA_A3_MIN_FREE_DEVICE_BYTES must be positive")
         config = ExecutorConfig(target, remote_root, state,
                                 here / "benchmarks/bsa/baseline.py",
                                 here / "benchmarks/bsa/cases.jsonl",
-                                here / "scripts/a3_benchmark_runner.py")
+                                here / "scripts/a3_benchmark_runner.py", minimum)
         result = Executor(config, CplRemoteTransport()).execute(request)
     except (OSError, ValueError, json.JSONDecodeError, ExecutorError) as exc:
         result = {"status": "infrastructure_error", "diagnostics": str(exc)}

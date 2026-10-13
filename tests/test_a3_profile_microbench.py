@@ -48,6 +48,17 @@ def test_manifest_has_ten_hypotheses_and_six_timeline_controls():
         assert item["expected_evidence"]
         assert item["falsifier"]
         assert item["sweeps"]
+    for item in payload["hypotheses"]:
+        if item["id"] == "schedule-knobs":
+            assert "sanity" not in item
+            continue
+        assert item["sanity"]["signals"]
+        assert item["sanity"]["minimum_absolute_change"] > 0
+    split = next(item for item in payload["timeline_probes"]
+                 if item["id"] == "fused-vs-split")
+    assert split["launch_contract"] == {
+        variant: len(split["kernel_names"][variant]) for variant in ("before", "after")
+    }
 
 
 def test_contract_is_deterministic_and_enumerates_every_manifest_experiment():
@@ -149,3 +160,17 @@ def test_reference_models_make_before_after_outputs_equivalent():
         before = module.reference_output(experiment["id"], "before", inputs)
         after = module.reference_output(experiment["id"], "after", inputs)
         assert module.outputs_close(before, after), experiment["id"]
+
+
+def test_runtime_control_inputs_are_nontrivial_and_feed_reference_addresses():
+    module = load_module()
+    inputs = module.generate_inputs("head-rank", "heads-16")
+    assert 0 < int(inputs["rank"][0]) == int(inputs["head_flags"].sum()) < 16
+    shifted = module.reference_output("head-rank", "before", inputs)
+    plain = inputs["x"] * 1.5 + 2.0
+    assert not module.outputs_close(shifted, plain)
+
+    scalar = module.generate_inputs("scalar-mask-decision", "blocks-8")
+    by_block = scalar["selected"].reshape(-1, 128)
+    assert all(bool((row == row[0]).all()) for row in by_block)
+    assert bool(scalar["selected"].any()) and not bool(scalar["selected"].all())

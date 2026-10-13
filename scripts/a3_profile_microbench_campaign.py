@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import shutil
@@ -18,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "experiments" / "a3-profile-hypotheses.json"
 ACQUIRE = ROOT / "scripts" / "acquire_profile.py"
 INFRA_FAILURES = {"transport_error", "host_environment", "device_unavailable"}
+RETRYABLE_ACQUISITION_FAILURES = INFRA_FAILURES | {"evidence_failure", "profiler_failure"}
 
 
 def canonical(value: object) -> bytes:
@@ -44,7 +46,9 @@ def enumerate_cells(manifest: dict) -> list[dict]:
 def select_shard(cells: list[dict], index: int, count: int) -> list[dict]:
     if count < 1 or not 0 <= index < count:
         raise ValueError("shard index must be in [0, shard count)")
-    return [cell for position, cell in enumerate(cells) if position % count == index]
+    # Before/after cells are adjacent by construction. Keep each pair on one
+    # shard so attribution never crosses independently leased devices.
+    return [cell for position, cell in enumerate(cells) if (position // 2) % count == index]
 
 
 def _atomic_json(path: Path, value: dict) -> None:
@@ -71,8 +75,36 @@ def invoke_acquisition(
     """Run or resume one acquire_profile pass and return compact evidence."""
     receipt = Path(str(evidence_path) + ".dispatch.json")
     if evidence_path.exists():
+        module_spec = importlib.util.spec_from_file_location("campaign_acquire_profile", ACQUIRE)
+        module = importlib.util.module_from_spec(module_spec)
+        assert module_spec.loader
+        module_spec.loader.exec_module(module)
+        identity = module.build_bundle(
+            bundle=bundle, entrypoint=entrypoint, arguments=workload_args
+        ).identity
+        expected = {
+            "schema_version": 1, "mode": phase, "product": "a3", "target": target,
+            "runtime": module.TARGETS["a3"][target], "dispatch_key": dispatch_key,
+            "workload": identity, "kernel_name": selector,
+            "launch_count": launch_count,
+        }
+        try:
+            receipt_value = json.loads(receipt.read_bytes())
+            evidence = json.loads(evidence_path.read_bytes())
+        except (OSError, json.JSONDecodeError) as exc:
+            return {"ok": False, "classification": "evidence_failure", "phase": phase,
+                    "message": f"cached acquisition metadata is unreadable: {exc}"}
+        if (receipt_value.get("request") != expected or
+                receipt_value.get("request_sha256") != hashlib.sha256(canonical(expected)).hexdigest()):
+            return {"ok": False, "classification": "evidence_failure", "phase": phase,
+                    "message": "cached acquisition does not match current dispatch identity"}
+        try:
+            module.validate_evidence(evidence, phase, "a3", target, dispatch_key, identity)
+        except module.AcquisitionError as exc:
+            return {"ok": False, "classification": "evidence_failure", "phase": phase,
+                    "message": str(exc)}
         return {"ok": True, "handle": _receipt_handle(receipt),
-                "evidence": json.loads(evidence_path.read_bytes())}
+                "evidence": evidence}
     command = [
         sys.executable, str(ACQUIRE), phase, "--product", "a3", "--target", target,
         "--dispatch-key", dispatch_key, "--bundle", str(bundle),
@@ -96,13 +128,27 @@ def invoke_acquisition(
             r"classification=([^ ]+) phase=([^ ]+)(?: handle=([^: ]+:[^ ]+))?",
             result.stderr,
         )
-        return {
+        failure = {
             "ok": False,
             "classification": match.group(1) if match else "controller_failure",
             "phase": match.group(2) if match else phase,
             "handle": handle,
             "message": result.stderr[-2000:],
         }
+        # Transport loss may leave a live job and must retain its receipt for
+        # observation. Terminal host/device/evidence failures are retired so a
+        # numbered campaign retry receives a fresh dispatch identity.
+        if failure["classification"] in {
+            "host_environment", "device_unavailable", "evidence_failure", "profiler_failure"
+        } and receipt.exists():
+            retired = receipt.with_name(receipt.name + ".retired")
+            counter = 1
+            while retired.exists():
+                retired = receipt.with_name(receipt.name + f".retired-{counter}")
+                counter += 1
+            receipt.replace(retired)
+            failure["retired_receipt"] = str(retired)
+        return failure
     return {"ok": True, "handle": _receipt_handle(receipt),
             "evidence": json.loads(evidence_path.read_bytes())}
 
@@ -145,83 +191,155 @@ def _summary(samples: list[float], required: int, threshold: float) -> dict:
 
 def run_cell(
     cell: dict, cell_dir: Path, acquire, *, samples: int, max_attempts: int,
-    max_relative_range: float,
+    max_relative_range: float, campaign_identity_sha256: str | None = None,
 ) -> dict:
+    campaign_identity_sha256 = campaign_identity_sha256 or hashlib.sha256(canonical({
+        "cell": cell, "samples": samples, "max_attempts": max_attempts,
+        "max_relative_range": max_relative_range,
+    })).hexdigest()
     state_path = cell_dir / "result.json"
     if state_path.exists():
         prior = json.loads(state_path.read_bytes())
+        if prior.get("campaign_identity_sha256") != campaign_identity_sha256:
+            raise ValueError("stale cached cell does not match campaign identity")
         if prior.get("status") in {
             "success", "candidate_failure", "profiling_failure", "inconclusive"
         }:
             return prior
-    values, signal_values, attempts, infra = [], {}, [], 0
-    handles, sources, devices = [], [], []
-    for attempt in range(max_attempts):
+    prior = prior if state_path.exists() else {}
+    attempts = list(prior.get("attempts", []))
+    values = [float(item["duration_proxy_us"]) for item in attempts
+              if item.get("classification") == "valid" and item.get("duration_proxy_us")]
+    signal_values = {name: list(item.get("values", []))
+                     for name, item in prior.get("signals", {}).items()}
+    infra = int(prior.get("discarded_infrastructure_attempts", 0))
+    provenance = prior.get("provenance", {})
+    handles = list(provenance.get("handles", []))
+    sources = list(provenance.get("sources", []))
+    devices = list(provenance.get("devices", []))
+    placements = list(provenance.get("placements", []))
+    timeline_evidence = prior.get("timeline")
+
+    def persist(result):
+        result["campaign_identity_sha256"] = campaign_identity_sha256
+        _atomic_json(state_path, result)
+        return result
+    consumed_attempts = sum(item.get("identity_consumed", True) for item in attempts)
+    for attempt in range(consumed_attempts, max_attempts):
         basic = acquire("basic", cell, attempt, None)
         handles.extend(x for x in [basic.get("handle")] if x)
         if not basic["ok"]:
             record = {k: basic.get(k) for k in ("classification", "phase", "message", "handle")}
+            record["identity_consumed"] = basic.get("classification") != "transport_error"
             attempts.append(record)
-            if basic.get("classification") in INFRA_FAILURES:
-                infra += 1
+            if basic.get("classification") in RETRYABLE_ACQUISITION_FAILURES:
+                infra += basic.get("classification") in INFRA_FAILURES
+                partial = persist(_result(
+                    cell, "running", _summary(values, samples, max_relative_range),
+                    signal_values, attempts, handles, sources, devices, placements, infra,
+                    timeline_evidence,
+                ))
+                if basic.get("classification") == "transport_error":
+                    return partial
                 continue
             result = _failure_result(cell, attempts, handles, infra, basic)
-            _atomic_json(state_path, result)
-            return result
+            return persist(result)
         observed = basic["evidence"]["capture"]["observed_kernel_names"]
         if not all(selector in observed for selector in cell["kernel_names"]):
             failure = {"classification": "evidence_failure", "phase": "basic",
                        "message": f"expected {cell['kernel_names']!r}, observed {observed!r}"}
             result = _failure_result(cell, attempts, handles, infra, failure)
-            _atomic_json(state_path, result)
-            return result
+            return persist(result)
         pipes = []
         for selector in cell["kernel_names"]:
             pipe = acquire("pipe", cell, attempt, selector)
             handles.extend(x for x in [pipe.get("handle")] if x)
             if not pipe["ok"]:
-                attempts.append({k: pipe.get(k) for k in
-                                 ("classification", "phase", "message", "handle")})
-                if pipe.get("classification") in INFRA_FAILURES:
-                    infra += 1
+                record = {k: pipe.get(k) for k in
+                          ("classification", "phase", "message", "handle")}
+                record["identity_consumed"] = pipe.get("classification") != "transport_error"
+                attempts.append(record)
+                if pipe.get("classification") in RETRYABLE_ACQUISITION_FAILURES:
+                    infra += pipe.get("classification") in INFRA_FAILURES
                     pipes = []
+                    partial = persist(_result(
+                        cell, "running", _summary(values, samples, max_relative_range),
+                        signal_values, attempts, handles, sources, devices, placements, infra,
+                        timeline_evidence,
+                    ))
+                    if pipe.get("classification") == "transport_error":
+                        return partial
                     break
                 result = _failure_result(cell, attempts, handles, infra, pipe)
-                _atomic_json(state_path, result)
-                return result
+                return persist(result)
             pipes.append(pipe)
         if not pipes:
             continue
+        if cell["kind"] == "timeline":
+            timeline = acquire("timeline", cell, attempt, cell["kernel_names"][0])
+            handles.extend(x for x in [timeline.get("handle")] if x)
+            if not timeline["ok"]:
+                record = {k: timeline.get(k) for k in
+                          ("classification", "phase", "message", "handle")}
+                record["identity_consumed"] = timeline.get("classification") != "transport_error"
+                attempts.append(record)
+                if timeline.get("classification") in RETRYABLE_ACQUISITION_FAILURES:
+                    infra += timeline.get("classification") in INFRA_FAILURES
+                    partial = persist(_result(
+                        cell, "running", _summary(values, samples, max_relative_range),
+                        signal_values, attempts, handles, sources, devices, placements, infra,
+                        timeline_evidence,
+                    ))
+                    if timeline.get("classification") == "transport_error":
+                        return partial
+                    continue
+                result = _failure_result(cell, attempts, handles, infra, timeline)
+                return persist(result)
+            capture = timeline["evidence"]["capture"]
+            timeline_evidence = {
+                "status": capture.get("availability", "unavailable"),
+                "reason": capture.get(
+                    "reason", "attempted acquisition exported no TimelineDetail availability"
+                ),
+                "sources": capture.get("sources", []),
+                "handle": timeline.get("handle"),
+            }
+            sources.extend(capture.get("sources", []))
         try:
             duration, current_signals = _numeric_rows(pipes)
         except ValueError as exc:
             failure = {"classification": "evidence_failure", "phase": "pipe",
                        "message": str(exc)}
             result = _failure_result(cell, attempts, handles, infra, failure)
-            _atomic_json(state_path, result)
-            return result
+            return persist(result)
         values.append(duration)
         for name, observations in current_signals.items():
             signal_values.setdefault(name, []).extend(observations)
         for item in [basic, *pipes]:
             evidence = item["evidence"]
             devices.append(evidence.get("device"))
+            if evidence.get("device"):
+                placements.append({"target": evidence.get("target"),
+                                   "physical_id": evidence["device"].get("physical_id")})
             sources.extend(evidence["capture"].get("sources", []))
         attempts.append({"classification": "valid", "attempt": attempt,
                          "selectors": cell["kernel_names"], "duration_proxy_us": duration})
         measurements = _summary(values, samples, max_relative_range)
         partial = _result(cell, "success" if measurements["stable"] else "running",
                           measurements, signal_values, attempts, handles, sources,
-                          devices, infra)
-        _atomic_json(state_path, partial)
+                          devices, placements, infra, timeline_evidence)
+        persist(partial)
         if measurements["stable"]:
             return partial
     measurements = _summary(values, samples, max_relative_range)
-    status = "inconclusive" if values else "infrastructure_exhausted"
+    acquisition_failed = any(item.get("classification") in {
+        "evidence_failure", "profiler_failure"
+    } for item in attempts)
+    status = ("inconclusive" if values else
+              ("profiling_failure" if acquisition_failed else "infrastructure_exhausted"))
     result = _result(cell, status, measurements, signal_values, attempts, handles,
-                     sources, devices, infra)
-    _atomic_json(state_path, result)
-    return result
+                     sources, devices, placements, infra, timeline_evidence)
+    return persist(result)
 
 
 def _signals(values: dict[str, list[float]]) -> dict:
@@ -230,17 +348,18 @@ def _signals(values: dict[str, list[float]]) -> dict:
 
 
 def _result(cell, status, measurements, signals, attempts, handles, sources,
-            devices, infra):
+            devices, placements, infra, timeline_evidence=None):
     value = {
         **cell, "status": status, "measurements": measurements,
         "signals": _signals(signals), "attempts": attempts,
         "discarded_infrastructure_attempts": infra,
-        "provenance": {"handles": handles, "devices": devices, "sources": sources},
+        "provenance": {"handles": handles, "devices": devices,
+                       "placements": placements, "sources": sources},
     }
     if cell["kind"] == "timeline":
-        value["timeline"] = {
-            "status": "unavailable",
-            "reason": "A3 msprof-op acquisition emitted no TimelineDetail evidence",
+        value["timeline"] = timeline_evidence or {
+            "status": "not_attempted",
+            "reason": "TimelineDetail acquisition did not reach an export attempt",
         }
     return value
 
@@ -249,7 +368,7 @@ def _failure_result(cell, attempts, handles, infra, failure):
     status = ("candidate_failure" if failure.get("classification") == "workload_failure"
               else "profiling_failure")
     value = _result(cell, status, _summary([], 1, 0.05), {},
-                    attempts, handles, [], [], infra)
+                    attempts, handles, [], [], [], infra)
     value["failure"] = {k: failure.get(k) for k in
                         ("classification", "phase", "message") if failure.get(k)}
     return value
@@ -302,7 +421,29 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                     and before.get("measurements", {}).get("median")
                     and after.get("measurements", {}).get("median")
                 )
-                if valid:
+                placement_rows = []
+                for cell in (before, after):
+                    placement_rows.extend(
+                        (cell or {}).get("provenance", {}).get("placements", [])
+                    )
+                placements = {
+                    (item.get("target"), item.get("physical_id"))
+                    for item in placement_rows if item.get("physical_id") is not None
+                }
+                placement_valid = not placement_rows or len(placements) == 1
+                sanity = spec.get("sanity", {})
+                sanity_changes = []
+                for name in sanity.get("signals", []):
+                    left = (before or {}).get("signals", {}).get(name, {}).get("mean")
+                    right = (after or {}).get("signals", {}).get(name, {}).get("mean")
+                    if left is not None and right is not None:
+                        sanity_changes.append(abs(float(left) - float(right)))
+                minimum_sanity = float(sanity.get(
+                    "minimum_absolute_change", sanity.get("minimum", 0.0)
+                ))
+                sanity_valid = (not sanity or bool(sanity_changes) and
+                                max(sanity_changes) >= minimum_sanity)
+                if valid and placement_valid and sanity_valid:
                     before_value = float(before["measurements"]["median"])
                     after_value = float(after["measurements"]["median"])
                     measurement = {
@@ -314,6 +455,19 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                     }
                     measurements.append(measurement)
                     outcome = _direction(before_value, after_value, spec["expected"], absolute=False)
+                elif valid and not placement_valid:
+                    measurements.append({
+                        "status": "infrastructure_failure", "sweep": sweep_id,
+                        "reason": "before/after were not measured on one physical target/device",
+                        "placements": [list(item) for item in sorted(placements)],
+                    })
+                    outcome = "unavailable"
+                elif valid and not sanity_valid:
+                    measurements.append({
+                        "status": "profiling_failure", "sweep": sweep_id,
+                        "reason": "declared pipe sanity signal was absent or below its minimum",
+                    })
+                    outcome = "unavailable"
                 else:
                     measurements.append({
                         "status": _measurement_status(before, after), "sweep": sweep_id,
@@ -324,7 +478,13 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                 for prediction in spec["signal_predictions"]:
                     name = prediction["name"]
                     if prediction.get("availability") == "required":
-                        assessments[name].append((sweep_id, "not_exported", None, None))
+                        timeline_states = {
+                            (cell or {}).get("timeline", {}).get("status")
+                            for cell in (before, after)
+                        }
+                        relationship = ("context_only" if timeline_states == {"available"}
+                                        else "not_exported")
+                        assessments[name].append((sweep_id, relationship, None, None))
                         continue
                     left = (before or {}).get("signals", {}).get(name, {}).get("mean")
                     right = (after or {}).get("signals", {}).get(name, {}).get("mean")
@@ -402,8 +562,9 @@ def merge_shards(shards: list[dict], manifest: dict) -> dict:
     if not shards:
         raise ValueError("at least one shard is required")
     digests = {item["manifest_sha256"] for item in shards}
-    if len(digests) != 1:
-        raise ValueError("manifest hashes differ")
+    expected_digest = hashlib.sha256(canonical(manifest)).hexdigest()
+    if digests != {expected_digest}:
+        raise ValueError("shard manifest identity does not match the merge manifest")
     results, ids = [], set()
     for shard in shards:
         for result in shard["raw_cells"]:
@@ -412,7 +573,7 @@ def merge_shards(shards: list[dict], manifest: dict) -> dict:
             ids.add(result["id"])
             results.append(result)
     raw_cells = sorted(results, key=lambda item: item["id"])
-    value = {"schema_version": 1, "manifest_sha256": digests.pop(),
+    value = {"schema_version": 1, "manifest_sha256": expected_digest,
              "raw_cells": raw_cells,
              "results": summarize_hypotheses(raw_cells, manifest)}
     validate_report_hypotheses(value)
@@ -474,6 +635,7 @@ def main(argv=None) -> int:
         raise SystemExit("samples must be positive and no greater than max-attempts")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     bundle = _bundle(args.output_dir, args.manifest)
+    manifest_sha256 = hashlib.sha256(canonical(manifest)).hexdigest()
     cells = cells[:args.cell_limit] if args.cell_limit else cells
     results = []
     for cell in cells:
@@ -493,17 +655,27 @@ def main(argv=None) -> int:
                                current["sweep"], "--variant", current["variant"],
                                "--launches", "1"],
                 evidence_path=Path(str(base) + suffix + ".json"), selector=selector,
-                basic_evidence=basic_path if phase == "pipe" else None,
+                basic_evidence=basic_path if phase in {"pipe", "timeline"} else None,
                 cpl_remote=args.cpl_remote,
                 launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
             )
 
+        identity = hashlib.sha256(canonical({
+            "schema_version": 1, "manifest_sha256": manifest_sha256,
+            "cell": cell, "target": args.target, "samples": args.samples,
+            "max_attempts": args.max_attempts,
+            "max_relative_range": args.max_relative_range,
+            "benchmark_sha256": hashlib.sha256(
+                (ROOT / "benchmarks/a3_profile_microbench.py").read_bytes()
+            ).hexdigest(),
+        })).hexdigest()
         results.append(run_cell(cell, cell_dir, acquire, samples=args.samples,
                                 max_attempts=args.max_attempts,
-                                max_relative_range=args.max_relative_range))
+                                max_relative_range=args.max_relative_range,
+                                campaign_identity_sha256=identity))
     value = {
         "schema_version": 1,
-        "manifest_sha256": hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
+        "manifest_sha256": manifest_sha256,
         "target": args.target,
         "shard": {"index": args.shard_index, "count": args.shard_count},
         "raw_cells": results,

@@ -85,10 +85,17 @@ def generate_inputs(experiment_id: str, sweep_id: str) -> dict[str, torch.Tensor
         }
     x = torch.randn((n,), generator=generator, dtype=torch.float32)
     selected = torch.arange(n) < min(work, n)
+    if experiment_id == "scalar-mask-decision":
+        selected = (torch.arange(n) // 128) < max(1, work // 2)
     # Irregular load masking deliberately differs from the block-prefix probes.
     if experiment_id == "load-masking" and sweep_id.startswith("irregular"):
         selected = (torch.arange(n) * 17 % 4) == 0
-    return {"x": x, "selected": selected, "work": torch.tensor(work)}
+    head_flags = torch.zeros((max(work, 1),), dtype=torch.int32)
+    head_flags[::4] = 1
+    return {
+        "x": x, "selected": selected, "work": torch.tensor(work),
+        "head_flags": head_flags, "rank": head_flags.sum().reshape(1),
+    }
 
 
 def reference_output(
@@ -99,6 +106,15 @@ def reference_output(
     if experiment_id in {"row-reduction-vs-dot", "query-reuse"}:
         return inputs["lhs"] @ inputs["rhs"]
     x = inputs["x"]
+    if experiment_id == "head-rank":
+        return torch.roll(x, shifts=-int(inputs["rank"][0])) * 1.5 + 2.0
+    if experiment_id == "key-tile-size":
+        return x * 1.5 + 2.0 + x.sum() * 1e-6
+    if experiment_id == "loop-bound":
+        return x * (1.0 + int(inputs["work"]) * 1e-6) * 1.5 + 2.0
+    if experiment_id == "scalar-mask-decision":
+        adjusted = torch.where(inputs["selected"], x + 0.125, x - 0.125)
+        return adjusted * 1.5 + 2.0
     if experiment_id in {
         "empty-tile-skip", "load-masking", "sparse-mode-control"
     }:
@@ -115,33 +131,68 @@ def outputs_close(left: torch.Tensor, right: torch.Tensor) -> bool:
 if triton is not None:
     @triton.jit
     def a3_vector_probe(
-        x, selected, output, n: tl.constexpr, work: tl.constexpr,
+        x, selected, work_ptr, output, n: tl.constexpr, work: tl.constexpr,
         block: tl.constexpr, mode: tl.constexpr, loops: tl.constexpr,
     ):
         offsets = tl.program_id(0) * block + tl.arange(0, block)
         valid = offsets < n
-        values = tl.load(x + offsets, mask=valid, other=0.0)
         chosen = tl.load(selected + offsets, mask=valid, other=0).to(tl.int1)
+        if mode == 4:
+            values = tl.load(x + offsets, mask=valid & chosen, other=0.0)
+        else:
+            values = tl.load(x + offsets, mask=valid, other=0.0)
         if mode == 1:  # explicit fixed-bound control work
-            state = values
+            runtime_work = tl.load(work_ptr)
+            state = values * 0.0
             for index in range(0, loops):
-                state += tl.where(index < work, values * 0.000001, 0.0)
-            values = state - values * (work * 0.000001)
+                state += tl.where(index < runtime_work, values * 0.000001, values * 0.0)
+            values += state
         if mode == 2:  # replicated lane decision
             decision = tl.load(selected + offsets, mask=valid, other=0).to(tl.int1)
-            values = tl.where(decision, values, values)
+            values = tl.where(decision, values + 0.125, values - 0.125)
         if mode == 3:  # scalar decision broadcast over a block
-            decision = tl.load(selected + tl.program_id(0), mask=True, other=0)
-            values = values + decision.to(tl.float32) * 0.0
+            decision = tl.load(selected + tl.program_id(0) * block, mask=True, other=0)
+            values = tl.where(decision, values + 0.125, values - 0.125)
         result = values * 1.5 + 2.0
-        if mode == 4:  # final predicate controls loads/stores
-            values = tl.load(x + offsets, mask=valid & chosen, other=0.0)
+        if mode == 4:  # only this variant executes the final-predicate load
             result = values * 1.5 + 2.0
-        if mode == 5:  # generic mode predicate
-            chosen = chosen & (offsets < work)
+        if mode == 5:  # runtime-generic mode predicate
+            runtime_work = tl.load(work_ptr)
+            chosen = offsets < runtime_work
+        if mode == 6:  # compile-time specialized equivalent
+            chosen = offsets < work
         if mode >= 4:
             result = tl.where(chosen, result, 0.0)
         tl.store(output + offsets, result, mask=valid)
+
+    @triton.jit
+    def a3_head_rank_probe(
+        x, flags, rank_ptr, output, n: tl.constexpr, heads: tl.constexpr,
+        block: tl.constexpr, direct: tl.constexpr,
+    ):
+        offsets = tl.program_id(0) * block + tl.arange(0, block)
+        if direct:
+            rank = tl.load(rank_ptr)
+        else:
+            rank = 0
+            for index in range(0, heads):
+                rank += tl.load(flags + index)
+        source = (offsets + rank) % n
+        values = tl.load(x + source, mask=offsets < n, other=0.0)
+        tl.store(output + offsets, values * 1.5 + 2.0, mask=offsets < n)
+
+    @triton.jit
+    def a3_key_tile_probe(
+        x, output, n: tl.constexpr, block: tl.constexpr, key_tile: tl.constexpr,
+    ):
+        offsets = tl.program_id(0) * block + tl.arange(0, block)
+        total = 0.0
+        for start in range(0, n, key_tile):
+            keys = start + tl.arange(0, key_tile)
+            total += tl.sum(tl.load(x + keys, mask=keys < n, other=0.0))
+        values = tl.load(x + offsets, mask=offsets < n, other=0.0)
+        tl.store(output + offsets, values * 1.5 + 2.0 + total * 1e-6,
+                 mask=offsets < n)
 
     @triton.jit
     def a3_row_reduce_probe(lhs, rhs, output, size: tl.constexpr):
@@ -220,7 +271,8 @@ if triton is not None:
         value = tl.load(x + offsets, mask=valid)
         tl.store(output + offsets, value * 1.5 + 2.0, mask=valid)
 else:
-    a3_vector_probe = a3_row_reduce_probe = a3_empty_skip_probe = a3_dot_probe = None
+    a3_vector_probe = a3_head_rank_probe = a3_key_tile_probe = None
+    a3_row_reduce_probe = a3_empty_skip_probe = a3_dot_probe = None
     a3_phase_probe = a3_phase_copy = a3_phase_compute = None
 
 
@@ -246,13 +298,22 @@ def _launch(experiment_id: str, variant: str, inputs: dict, output: torch.Tensor
         return ["a3_dot_probe"]
 
     x, selected = inputs["x"], inputs["selected"]
+    work_ptr = inputs["work"]
     work, block, mode, loops = int(inputs["work"]), 128, 0, 1
     if experiment_id == "loop-bound":
         mode, loops = 1, (256 if variant == "before" else work)
     elif experiment_id == "head-rank":
-        mode, loops = (1, work) if variant == "before" else (0, 1)
+        a3_head_rank_probe[(triton.cdiv(n, block),)](
+            x, inputs["head_flags"], inputs["rank"], output,
+            n=n, heads=work, block=block, direct=(variant == "after"),
+        )
+        return ["a3_head_rank_probe"]
     elif experiment_id == "key-tile-size":
-        block = 64 if variant == "before" else 128
+        key_tile = 64 if variant == "before" else 128
+        a3_key_tile_probe[(triton.cdiv(n, block),)](
+            x, output, n=n, block=block, key_tile=key_tile,
+        )
+        return ["a3_key_tile_probe"]
     elif experiment_id == "empty-tile-skip":
         if variant == "after":
             a3_empty_skip_probe[(triton.cdiv(n, block),)](
@@ -263,7 +324,7 @@ def _launch(experiment_id: str, variant: str, inputs: dict, output: torch.Tensor
     elif experiment_id == "scalar-mask-decision":
         mode = 2 if variant == "before" else 3
     elif experiment_id == "load-masking":
-        mode = 6 if variant == "before" else 4
+        mode = 7 if variant == "before" else 4
     elif experiment_id == "sparse-mode-control":
         mode = 5 if variant == "before" else 6
 
@@ -283,7 +344,10 @@ def _launch(experiment_id: str, variant: str, inputs: dict, output: torch.Tensor
             a3_phase_copy[(triton.cdiv(n, block),)](x, scratch, n=n, block=block)
             a3_phase_compute[(triton.cdiv(n, block),)](scratch, output, n=n, block=block)
             return ["a3_phase_copy", "a3_phase_compute"]
-        scratch = torch.zeros_like(x)
+        # Reuse the deterministic input as the second stream. Allocating or
+        # zeroing scratch here would add a setup operator ahead of the probe,
+        # breaking the BasicInfo launch contract.
+        scratch = x
         a3_phase_probe[(triton.cdiv(n, block),)](
             x, scratch, output, n=n, block=block,
             compute_loops=compute_loops, phase_mode=phase_mode,
@@ -295,7 +359,7 @@ def _launch(experiment_id: str, variant: str, inputs: dict, output: torch.Tensor
         kwargs = {"num_warps": 4 if variant == "before" else 8,
                   "num_stages": 1 if variant == "before" else 2}
     a3_vector_probe[(triton.cdiv(n, block),)](
-        x, selected, output, n=n, work=work, block=block,
+        x, selected, work_ptr, output, n=n, work=work, block=block,
         mode=mode, loops=loops, **kwargs,
     )
     return ["a3_vector_probe"]

@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
@@ -132,7 +133,13 @@ def build_bundle(
             "sha256": hashlib.sha256(raw).hexdigest(),
         }
         manifest_files.append(item)
-        files.append({**item, "data_b64": base64.b64encode(raw).decode()})
+        compressed = zlib.compress(raw, level=9)
+        if len(compressed) < len(raw):
+            files.append({**item, "encoding": "zlib+base64",
+                          "data_b64": base64.b64encode(compressed).decode()})
+        else:
+            files.append({**item, "encoding": "base64",
+                          "data_b64": base64.b64encode(raw).decode()})
     if selected not in {item["path"] for item in manifest_files}:
         raise AcquisitionError("entrypoint is not a regular file in the bundle")
     manifest = {"schema_version": 1, "entrypoint": selected, "files": manifest_files}
@@ -204,6 +211,18 @@ def validate_evidence(value, mode, product, target, dispatch_key, identity):
             phase="evidence",
             classification="evidence_failure",
         )
+    if mode == "timeline":
+        availability = capture.get("availability")
+        if availability not in {"available", "unavailable"}:
+            raise AcquisitionError(
+                "TimelineDetail availability is missing",
+                phase="evidence", classification="evidence_failure",
+            )
+        if availability == "available" and not capture.get("sources"):
+            raise AcquisitionError(
+                "available TimelineDetail evidence has no compact sources",
+                phase="evidence", classification="evidence_failure",
+            )
     saturation = value.get("saturation")
     if not isinstance(saturation, dict) or saturation.get("state") != "unknown":
         raise AcquisitionError(
@@ -245,12 +264,13 @@ def _remote_program(mode, product, target, dispatch_key, spec, kernel_name, laun
         "__METRIC__": repr(
             "--aic-metrics=BasicInfo"
             if mode == "basic"
-            else "--aic-metrics=PipeUtilization"
+            else ("--aic-metrics=PipeUtilization" if mode == "pipe"
+                  else "--aic-metrics=TimelineDetail")
         ),
         "__LAUNCHES__": str(launches),
     }
     program = r'''#!/usr/bin/env python3
-import base64, csv, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile
+import base64, csv, fcntl, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile, zlib
 
 MODE=__MODE__; PRODUCT=__PRODUCT__; TARGET=__TARGET__; RUNTIME=__RUNTIME__
 DISPATCH_KEY=base64.b64decode(__KEY__).decode()
@@ -276,13 +296,19 @@ torch.npu.synchronize(); assert float(y.cpu()[3]) == 4.0
 
 def pick_device():
     failures=[]
+    lease_root=pathlib.Path.cwd()/".cpl-device-leases"; lease_root.mkdir(exist_ok=True)
     for physical in range(8):
+        lease=open(lease_root/("device-lease-%d.lock"%physical),"a+")
+        try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            lease.close(); failures.append("%d:leased"%physical); continue
         env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
         try:
             result=subprocess.run([sys.executable,"-c",PROBE],text=True,capture_output=True,env=env,timeout=20)
         except subprocess.TimeoutExpired:
-            failures.append("%d:timeout"%physical); continue
-        if result.returncode == 0: return physical,env
+            lease.close(); failures.append("%d:timeout"%physical); continue
+        if result.returncode == 0: return physical,env,lease
+        lease.close()
         failures.append("%d:%s"%(physical,(result.stderr or result.stdout)[-160:]))
     fail("device-probe","device_unavailable","no device passed bounded probe: "+"; ".join(failures))
 
@@ -329,6 +355,8 @@ def materialize(root):
         rel=pathlib.PurePosixPath(item["path"])
         if rel.is_absolute() or ".." in rel.parts: fail("bundle","bundle_failure","unsafe path")
         raw=base64.b64decode(item["data_b64"],validate=True)
+        if item.get("encoding")=="zlib+base64": raw=zlib.decompress(raw)
+        elif item.get("encoding")!="base64": fail("bundle","bundle_failure","unsupported encoding")
         if len(raw)!=item["size"] or hashlib.sha256(raw).hexdigest()!=item["sha256"]:
             fail("bundle","bundle_failure","file identity mismatch: "+item["path"])
         path=bundle/pathlib.Path(*rel.parts); path.parent.mkdir(parents=True,exist_ok=True)
@@ -339,7 +367,12 @@ def materialize(root):
         fail("bundle","bundle_failure","manifest identity mismatch")
     return bundle
 
-physical,env=pick_device()
+def device_failure(value):
+    text=value.lower()
+    return any(marker in text for marker in (
+      "tsdopen","lazysetdevice","out of memory","device is busy","set device failed"))
+
+physical,env,device_lease=pick_device()
 retention=hashlib.sha256((DISPATCH_KEY+"\0"+MODE).encode()).hexdigest()[:20]
 retained_parent=pathlib.Path.cwd()/".cpl-profile-evidence"; retained_parent.mkdir(parents=True,exist_ok=True)
 root=pathlib.Path(tempfile.mkdtemp(prefix=retention+"-",dir=retained_parent))
@@ -348,21 +381,32 @@ try:
     argv=([sys.executable,str(entry)] if entry.suffix==".py" else [str(entry)])+IDENTITY["arguments"]
     try: check=subprocess.run(argv,cwd=bundle,text=True,capture_output=True,env=env,timeout=300)
     except subprocess.TimeoutExpired as exc: fail("workload","workload_failure","timeout: "+str(exc))
-    if check.returncode: fail("workload","workload_failure","exit %d: %s"%(check.returncode,(check.stderr or check.stdout)[-2000:]))
+    if check.returncode:
+        detail=(check.stderr or check.stdout)[-2000:]
+        fail("workload","device_unavailable" if device_failure(detail) else "workload_failure","exit %d: %s"%(check.returncode,detail))
     wrapper=root/"workload.sh"
     wrapper.write_text("#!/bin/sh\nset -eu\ncd "+shlex.quote(str(bundle))+"\nexec "+shlex.join(argv)+"\n"); wrapper.chmod(0o700)
-    metric="BasicInfo" if MODE=="basic" else "PipeUtilization"; report=root/"report"
+    metric={"basic":"BasicInfo","pipe":"PipeUtilization","timeline":"TimelineDetail"}[MODE]; report=root/"report"
     command=["msprof","op","--application="+str(wrapper),"--output="+str(report),METRIC_ARG,
              "--warm-up=0","--launch-count="+str(LAUNCH_COUNT),"--kill=off"]
-    if MODE=="pipe": command.append("--kernel-name="+KERNEL_NAME)
+    if MODE in ("pipe","timeline"): command.append("--kernel-name="+KERNEL_NAME)
     try: result=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
     except subprocess.TimeoutExpired as exc: fail("profiler","profiler_failure","timeout: "+str(exc))
     transcript=result.stdout+result.stderr
-    if result.returncode: fail("profiler","profiler_failure","exit %d: %s"%(result.returncode,transcript[-2000:]))
-    if SUCCESS not in transcript: fail("profiler","profiler_failure","terminal success marker missing: "+transcript[-1000:])
-    rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
+    if result.returncode and device_failure(transcript):
+        fail("profiler","device_unavailable","exit %d: %s"%(result.returncode,transcript[-2000:]))
+    timeline_unavailable=MODE=="timeline" and (result.returncode or SUCCESS not in transcript)
+    if result.returncode and not timeline_unavailable: fail("profiler","device_unavailable" if device_failure(transcript) else "profiler_failure","exit %d: %s"%(result.returncode,transcript[-2000:]))
+    if SUCCESS not in transcript and not timeline_unavailable: fail("profiler","profiler_failure","terminal success marker missing: "+transcript[-1000:])
+    if MODE=="timeline":
+        timeline_files=sorted(p for p in report.rglob("*") if p.is_file() and "timeline" in p.name.lower())
+        sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in timeline_files[:128]]
+        availability="available" if timeline_files and not timeline_unavailable else "unavailable"
+        rows=[]; names=[KERNEL_NAME]
+    else:
+        rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
     if len(names)>256: fail("evidence","evidence_failure","observed kernel count exceeds compact bound")
-    selected=[] if MODE=="basic" else [row for name,row in rows if name==KERNEL_NAME]
+    selected=[] if MODE in ("basic","timeline") else [row for name,row in rows if name==KERNEL_NAME]
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
     if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
     def normalized(value):
@@ -379,6 +423,9 @@ try:
       "selected_kernel":KERNEL_NAME,"rows":selected,"sources":sources,
       "log_sha256":hashlib.sha256(normalized(transcript).encode()).hexdigest()},
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
+    if MODE=="timeline":
+      evidence["capture"]["availability"]=availability
+      evidence["capture"]["reason"]=("TimelineDetail export retained compact file identities" if availability=="available" else "attempted TimelineDetail export produced no inspectable timeline files")
     raw=(json.dumps(evidence,sort_keys=True,separators=(",",":"))+"\n").encode()
     if str(root).encode() in raw: fail("evidence","evidence_failure","retained report path leaked into compact evidence")
     digest=hashlib.sha256(raw).hexdigest()
@@ -405,8 +452,8 @@ def render_remote_payload(
         if isinstance(workload, BundleSpec)
         else build_bundle(workload=Path(workload), arguments=arguments)
     )
-    if mode == "pipe" and not kernel_name:
-        raise AcquisitionError("pipe pass requires --kernel-name")
+    if mode in {"pipe", "timeline"} and not kernel_name:
+        raise AcquisitionError(f"{mode} pass requires --kernel-name")
     return _remote_program(
         mode, product, target, dispatch_key, spec, kernel_name, launches
     )
@@ -715,7 +762,7 @@ def _normalized_argv(argv):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("basic", "pipe"))
+    parser.add_argument("mode", choices=("basic", "pipe", "timeline"))
     parser.add_argument("--product", choices=sorted(TARGETS), required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--dispatch-key", required=True)
@@ -741,8 +788,8 @@ def parse_args(argv=None):
     args = parser.parse_args(_normalized_argv(argv))
     if args.mode == "basic" and (args.basic_evidence or args.kernel_name):
         parser.error("basic pass does not accept selector options")
-    if args.mode == "pipe" and (not args.basic_evidence or not args.kernel_name):
-        parser.error("pipe pass requires --basic-evidence and --kernel-name")
+    if args.mode in {"pipe", "timeline"} and (not args.basic_evidence or not args.kernel_name):
+        parser.error(f"{args.mode} pass requires --basic-evidence and --kernel-name")
     if args.bundle and not args.entrypoint:
         parser.error("--bundle requires --entrypoint")
     if args.workload and args.entrypoint:
@@ -770,7 +817,7 @@ def main(argv=None):
             entrypoint=args.entrypoint,
             arguments=args.workload_arg,
         )
-        if args.mode == "pipe":
+        if args.mode in {"pipe", "timeline"}:
             basic = _read_basic(
                 args.basic_evidence, args.product, args.target, spec.identity
             )

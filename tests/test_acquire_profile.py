@@ -634,6 +634,31 @@ def test_activity_evidence_cannot_claim_saturation(tmp_path):
         )
 
 
+def test_a3_payload_leases_device_and_classifies_runtime_device_failures(tmp_path):
+    module = load_module()
+    workload = tmp_path / "w.py"
+    workload.write_text("print('ok')\n")
+    payload = module.render_remote_payload(
+        "basic", "a3", "bz-a3-1", "lease", workload, [], None, 1
+    )
+    assert "fcntl.flock" in payload
+    assert "LOCK_EX|fcntl.LOCK_NB" in payload
+    assert "device-lease" in payload
+    for marker in ("tsdopen", "lazysetdevice", "out of memory"):
+        assert marker in payload.lower()
+
+
+def test_timeline_payload_retains_attempted_export_absence(tmp_path):
+    module = load_module()
+    workload = tmp_path / "w.py"
+    workload.write_text("print('ok')\n")
+    payload = module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "timeline", workload, [], "kernel", 1
+    )
+    assert "TimelineDetail" in payload
+    assert '"availability":"unavailable"' in payload or "availability" in payload
+
+
 @pytest.mark.parametrize("mode", ["basic", "pipe"])
 def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     module = load_module()
@@ -748,6 +773,17 @@ def test_bundle_manifest_binds_sibling_imports_and_data(tmp_path):
         bundle=bundle, entrypoint="main.py", arguments=["--x"]
     )
     assert changed.identity["manifest_sha256"] != original
+
+
+def test_bundle_compresses_repetitive_sources_without_changing_manifest_identity(tmp_path):
+    module = load_module()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    source = bundle / "main.py"
+    source.write_text("value = 1\n" * 2000)
+    spec = module.build_bundle(bundle=bundle, entrypoint="main.py", arguments=[])
+    assert spec.files[0]["encoding"] == "zlib+base64"
+    assert spec.identity == identity(source, [])
 
 
 def test_pipe_rejects_changed_sibling_file_before_dispatch(tmp_path):

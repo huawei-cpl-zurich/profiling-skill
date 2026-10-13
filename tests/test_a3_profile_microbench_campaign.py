@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -54,6 +55,9 @@ def test_enumeration_is_complete_and_shards_are_disjoint():
         cell["id"] for cell in cells
     }
     assert not (set(x["id"] for x in shards[0]) & set(x["id"] for x in shards[1]))
+    for cell in cells[::2]:
+        pair = {cell["id"], cell["id"].replace("/before", "/after")}
+        assert any(pair <= {item["id"] for item in shard} for shard in shards)
 
 
 def test_cell_collects_three_stable_exact_pipe_samples(tmp_path):
@@ -97,6 +101,10 @@ def test_infrastructure_failure_is_discarded_but_candidate_failure_is_counted(tm
             return evidence(current["kernel_names"][0], 0)
         return evidence(selector, 10.0)
 
+    interrupted = module.run_cell(cell, tmp_path, acquire, samples=1, max_attempts=3,
+                                  max_relative_range=0.05)
+    assert interrupted["status"] == "running"
+    assert interrupted["attempts"][0]["identity_consumed"] is False
     result = module.run_cell(cell, tmp_path, acquire, samples=1, max_attempts=3,
                              max_relative_range=0.05)
     assert result["status"] == "success"
@@ -146,10 +154,9 @@ def test_timeline_absence_is_unavailable_not_failure(tmp_path):
     result = module.run_cell(cell, tmp_path, acquire, samples=1, max_attempts=1,
                              max_relative_range=0.05)
     assert result["status"] == "success"
-    assert result["timeline"] == {
-        "status": "unavailable",
-        "reason": "A3 msprof-op acquisition emitted no TimelineDetail evidence",
-    }
+    assert result["timeline"]["status"] == "unavailable"
+    assert "attempted acquisition" in result["timeline"]["reason"]
+    assert result["timeline"]["handle"] == "remote:bz-a3-1:job:x"
 
 
 def test_existing_dispatch_receipt_resumes_same_handle(tmp_path, monkeypatch):
@@ -176,13 +183,71 @@ def test_existing_dispatch_receipt_resumes_same_handle(tmp_path, monkeypatch):
     assert "remote:bz-a3-1:job:kept" in observed["command"]
 
 
+def test_cached_acquisition_is_bound_to_bundle_and_dispatch_identity(tmp_path):
+    campaign = load_module()
+    acquire_spec = importlib.util.spec_from_file_location(
+        "test_campaign_acquire", ROOT / "scripts/acquire_profile.py"
+    )
+    acquire = importlib.util.module_from_spec(acquire_spec)
+    assert acquire_spec.loader
+    acquire_spec.loader.exec_module(acquire)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    workload = bundle / "main.py"
+    workload.write_text("print('one')\n")
+    identity_value = acquire.build_bundle(
+        bundle=bundle, entrypoint="main.py", arguments=[]
+    ).identity
+    request = {
+        "schema_version": 1, "mode": "basic", "product": "a3",
+        "target": "bz-a3-1", "runtime": "py311-torch", "dispatch_key": "test-key",
+        "workload": identity_value, "kernel_name": None, "launch_count": 1,
+    }
+    output = tmp_path / "evidence.json"
+    empty_digest = hashlib.sha256(b"").hexdigest()
+    output.write_text(json.dumps({
+        "schema_version": 2, "schema": "cpl.profile-acquisition.v2",
+        "status": "success", "phase": "basic", "product": "a3",
+        "target": "bz-a3-1", "runtime": "py311-torch", "dispatch_key": "test-key",
+        "workload": identity_value, "provenance": {"product": "a3", "target": "bz-a3-1"},
+        "normal_run": {"exit_code": 0,
+                       "stdout": {"bytes": 0, "sha256": empty_digest},
+                       "stderr": {"bytes": 0, "sha256": empty_digest}},
+        "capture": {"metric": "BasicInfo", "observed_kernel_names": ["kernel"],
+                    "rows": [], "sources": []},
+        "saturation": {"state": "unknown"},
+    }))
+    receipt = Path(str(output) + ".dispatch.json")
+    receipt.write_text(json.dumps({
+        "schema_version": 1, "handle": "remote:bz-a3-1:job:cached",
+        "request": request,
+        "request_sha256": hashlib.sha256(campaign.canonical(request)).hexdigest(),
+    }))
+    result = campaign.invoke_acquisition(
+        phase="basic", target="bz-a3-1", dispatch_key="test-key", bundle=bundle,
+        entrypoint="main.py", workload_args=[], evidence_path=output, selector=None,
+        basic_evidence=None, cpl_remote=None, launch_count=1,
+    )
+    assert result["ok"] is True
+
+    workload.write_text("print('two')\n")
+    stale = campaign.invoke_acquisition(
+        phase="basic", target="bz-a3-1", dispatch_key="test-key", bundle=bundle,
+        entrypoint="main.py", workload_args=[], evidence_path=output, selector=None,
+        basic_evidence=None, cpl_remote=None, launch_count=1,
+    )
+    assert stale["ok"] is False
+    assert stale["classification"] == "evidence_failure"
+
+
 def test_merge_rejects_overlap_and_combines_disjoint_results(tmp_path):
     module = load_module()
-    one = {"schema_version": 1, "manifest_sha256": "x", "shard": {"index": 0, "count": 2},
-           "raw_cells": [{"id": "a"}]}
-    two = {"schema_version": 1, "manifest_sha256": "x", "shard": {"index": 1, "count": 2},
-           "raw_cells": [{"id": "b"}]}
     manifest = {"hypotheses": [], "timeline_probes": []}
+    digest = hashlib.sha256(module.canonical(manifest)).hexdigest()
+    one = {"schema_version": 1, "manifest_sha256": digest, "shard": {"index": 0, "count": 2},
+           "raw_cells": [{"id": "a"}]}
+    two = {"schema_version": 1, "manifest_sha256": digest, "shard": {"index": 1, "count": 2},
+           "raw_cells": [{"id": "b"}]}
     merged = module.merge_shards([one, two], manifest)
     assert [x["id"] for x in merged["raw_cells"]] == ["a", "b"]
     assert merged["results"] == []
@@ -193,6 +258,17 @@ def test_merge_rejects_overlap_and_combines_disjoint_results(tmp_path):
         assert "duplicate" in str(error)
     else:
         raise AssertionError("duplicate cell was accepted")
+
+
+def test_merge_rejects_manifest_digest_mismatch():
+    module = load_module()
+    shard = {"schema_version": 1, "manifest_sha256": "stale", "raw_cells": []}
+    try:
+        module.merge_shards([shard], {"hypotheses": [], "timeline_probes": []})
+    except ValueError as error:
+        assert "manifest" in str(error)
+    else:
+        raise AssertionError("stale manifest was accepted")
 
 
 def cell(experiment, sweep, variant, median, signals, status="success"):
@@ -266,6 +342,52 @@ def test_summary_propagates_failure_and_timeline_not_exported():
         "name": "timeline_phase_order", "relationship": "not_exported",
         "summary": "TimelineDetail was unavailable for every controlled capture",
     }]
+
+
+def test_summary_rejects_cross_device_pair_and_identical_sanity_signal():
+    module = load_module()
+    spec = {
+        "id": "loop", "question": "Local bound", "falsifier": "no",
+        "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+        "signal_predictions": [{"name": "aiv_scalar_ratio", "direction": "decrease",
+                                "minimum_absolute_change": 0.02}],
+        "sanity": {"signals": ["aiv_scalar_ratio"], "minimum_absolute_change": 0.001},
+        "variants": {"before": "b", "after": "a"}, "kernel_names": {},
+        "sweeps": [{"id": "short"}],
+    }
+    before = cell("loop", "short", "before", 10.0, {"aiv_scalar_ratio": 0.5})
+    after = cell("loop", "short", "after", 8.0, {"aiv_scalar_ratio": 0.4})
+    before["provenance"] = {"placements": [{"target": "bz-a3-1", "physical_id": 0}]}
+    after["provenance"] = {"placements": [{"target": "bz-a3-1", "physical_id": 1}]}
+    result = module.summarize_hypotheses(
+        [before, after], {"hypotheses": [spec], "timeline_probes": []}
+    )[0]
+    assert result["measurements"][0]["status"] == "infrastructure_failure"
+    assert result["measurements"][0]["reason"] == "before/after were not measured on one physical target/device"
+
+    after["provenance"] = before["provenance"]
+    after["signals"]["aiv_scalar_ratio"]["mean"] = 0.5
+    result = module.summarize_hypotheses(
+        [before, after], {"hypotheses": [spec], "timeline_probes": []}
+    )[0]
+    assert result["measurements"][0]["status"] == "profiling_failure"
+    assert "sanity" in result["measurements"][0]["reason"]
+
+
+def test_cached_cell_is_bound_to_campaign_identity(tmp_path):
+    module = load_module()
+    cell_value = module.enumerate_cells(json.loads(MANIFEST.read_text()))[0]
+    path = tmp_path / "result.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"status": "success", "campaign_identity_sha256": "old"}))
+    try:
+        module.run_cell(cell_value, tmp_path, lambda *_: None, samples=3,
+                        max_attempts=7, max_relative_range=0.05,
+                        campaign_identity_sha256="new")
+    except ValueError as error:
+        assert "stale" in str(error)
+    else:
+        raise AssertionError("stale cached cell was reused")
 
 
 def test_real_summary_is_accepted_by_current_report_classifier():

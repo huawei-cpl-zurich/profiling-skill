@@ -34,6 +34,15 @@ the declared direction. The manifest's falsifier is equally important: for
 example, a compiler may eliminate a scan, scalarize a vector decision, or
 reject a resource-heavy tile.
 
+The control differences are runtime-live. The fixed loop reads its active
+extent at runtime while retaining the inactive predicates; head rank is either
+scanned from runtime flags or loaded directly and then feeds the source
+address; key tile size changes the real reduction loop. Scalar decisions feed
+non-identity arithmetic, generic sparse mode reads a runtime extent, and the
+load-mask variants issue mutually exclusive unmasked or final-predicate loads.
+The manifest declares a minimum pipe-signal sanity change so a compiler-erased
+contrast is reported as inconclusive profiling evidence, not as causal proof.
+
 The six timeline controls cover an ordered stability replicate, reversed
 source order, repeated load/compute regions, compute-duration scaling,
 serialized versus independent dataflow, and fused versus split launches.
@@ -88,6 +97,10 @@ PipeUtilization pass for every expected kernel. Three samples whose relative
 range is at most 5% are required by default; acquisition is capped at seven
 attempts. The retained dispatch receipt is authoritative after observer loss,
 so rerunning a cell resumes its handle instead of creating another job.
+Terminal infrastructure or malformed-evidence attempts retire that receipt
+and advance to a numbered retry identity. A nonterminal transport interruption
+does not consume the attempt identity. Each remote acquisition holds a
+nonblocking physical-device lease from probe through evidence emission.
 
 Run two deterministic shards concurrently on the two configured A3 targets:
 
@@ -115,7 +128,15 @@ are `candidate_failure`; profiler or malformed-evidence failures are
 the sum of each exact kernel's maximum AIC/AIV reported time. It is explicitly
 a PipeUtilization core-time proxy, not BasicInfo task latency.
 
-Timeline cells use the same acquisition path but record TimelineDetail as
-`unavailable` when the A3 op exporter does not provide it. This is not a
-candidate failure and does not authorize phase-order claims from aggregate
-pipe activity.
+Before/after cells are assigned to the same shard and are paired only when
+their retained target and physical-device placement match. Shard merge also
+verifies the canonical manifest digest, while cached terminal cells are bound
+to the manifest, benchmark source, target, sampling policy, and cell contract.
+
+Timeline cells make a real `--aic-metrics=TimelineDetail` acquisition after
+BasicInfo discovery. Compact identities for any timeline files are retained;
+otherwise the attempted command's log digest and explicit absence are recorded
+as `unavailable`. On the validated A3 runtime, handle
+`remote:bz-a3-1:job:20261013T225304Z-fdae1c669479` accepted the attempt but
+exported no inspectable TimelineDetail files. This is not a candidate failure
+and does not authorize phase-order claims from aggregate pipe activity.

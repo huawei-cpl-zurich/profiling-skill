@@ -128,8 +128,10 @@ With that option enabled, prepare must define one
 top-level literal `AUTOTUNE_CONFIG` mapping. Before dispatch, the same durable agent thread
 receives `phase=tune`, the declared mapping, prior-round profile summary when
 available, and the limits of 128 proposed configurations and three profiled
-finalists. It returns zero through 128 `{id, parameters, hypothesis}` objects;
-parameters may override only declared JSON-scalar keys. The runner
+finalists. It returns zero through 128 `{id, parameters, hypothesis}` objects.
+Every `parameters` object repeats all declared keys (including unchanged
+values), preserves compatible JSON-scalar types, and may not add keys. This
+complete mapping is required by the strict Codex structured-output schema. The runner
 deterministically materializes the incumbent and every proposal and embeds one
 compressed, hash-bound request in the retained job.
 

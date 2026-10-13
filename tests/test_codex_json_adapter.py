@@ -15,13 +15,16 @@ def fake_codex(tmp_path: Path) -> Path:
         "capture=pathlib.Path(os.environ['FAKE_CAPTURE'])\n"
         "(pathlib.Path(os.environ['CODEX_HOME'])/'config.toml').write_text('generated = true\\n')\n"
         "prompt=sys.stdin.read()\n"
-        "capture.write_text(json.dumps({'argv':sys.argv[1:],'prompt':prompt,'home':os.environ.get('HOME'),'codex_home':os.environ.get('CODEX_HOME')}))\n"
+        "schema=json.loads(pathlib.Path(sys.argv[sys.argv.index('--output-schema')+1]).read_text())\n"
+        "capture.write_text(json.dumps({'argv':sys.argv[1:],'prompt':prompt,'home':os.environ.get('HOME'),'codex_home':os.environ.get('CODEX_HOME'),'schema':schema}))\n"
         "out=pathlib.Path(sys.argv[sys.argv.index('-o')+1])\n"
         "request=json.loads(prompt.split('REQUEST_JSON\\n',1)[1])\n"
         "if request['phase']=='prepare':\n"
         " value={'candidate':'VALUE = 1\\n','commands':['python -m py_compile candidate.py'],'hypothesis':'compile first','retrieved_knowledge':[]}\n"
         "elif request['phase']=='tune':\n"
-        " value={'configurations':[{'id':'block-64','parameters':{'BLOCK':64},'hypothesis':'wider block'}]}\n"
+        " parameters=dict(request['declared_autotune_config'])\n"
+        " if 'BLOCK' in parameters: parameters['BLOCK']=64\n"
+        " value={'configurations':[{'id':'block-64','parameters':parameters,'hypothesis':'wider block'}]}\n"
         "else:\n"
         " value={'reasoning':'profile supports the change','postmortem':'retain it'}\n"
         "out.write_text(json.dumps(value))\n"
@@ -143,6 +146,49 @@ def test_tune_resumes_exact_thread_and_returns_bounded_parameter_space(tmp_path)
     }]}
     assert call["argv"][:4] == ["exec", "resume", "--json", "--ignore-user-config"]
     assert "thread-old" in call["argv"]
+    parameters = call["schema"]["properties"]["configurations"]["items"][
+        "properties"
+    ]["parameters"]
+    assert parameters == {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"BLOCK": {"type": "integer"}},
+        "required": ["BLOCK"],
+    }
+
+
+def test_tune_schema_uses_all_declared_keys_and_json_scalar_types(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True)
+    declared = {
+        "BLOCK": 32, "EVEN": True, "EPS": 0.5, "MODE": "fast", "EMPTY": None,
+    }
+    request = {
+        "phase": "tune", "prompt": "same prompt", "repo": str(repo),
+        "round": 1, "allowed_skills": [], "session_id": "thread-old",
+        "candidate": "AUTOTUNE_CONFIG = {}\n",
+        "declared_autotune_config": declared,
+    }
+
+    result, call = invoke(tmp_path, request)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["configurations"][0]["parameters"] == {
+        **declared, "BLOCK": 64,
+    }
+    parameters = call["schema"]["properties"]["configurations"]["items"][
+        "properties"
+    ]["parameters"]
+    assert parameters["additionalProperties"] is False
+    assert parameters["required"] == sorted(declared)
+    assert parameters["properties"] == {
+        "BLOCK": {"type": "integer"},
+        "EMPTY": {"type": "null"},
+        "EPS": {"type": "number"},
+        "EVEN": {"type": "boolean"},
+        "MODE": {"type": "string"},
+    }
 
 
 def test_generated_config_is_removed_between_prepare_and_analyze(tmp_path):

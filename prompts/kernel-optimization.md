@@ -65,8 +65,10 @@ TUNE PHASE
 
 When `phase` is `tune`, the structural candidate has not yet been dispatched.
 It contains exactly one top-level literal `AUTOTUNE_CONFIG` mapping. Propose
-zero through 128 configurations that override only keys already declared in
-that mapping. Use this broad, cheap search for compile-time launch and tiling
+zero through 128 configurations. Every configuration must repeat the complete
+set of keys in that mapping, including unchanged values, and each value must
+keep a compatible declared JSON-scalar type. Do not add or omit keys. Use this
+broad, cheap search for compile-time launch and tiling
 parameters; do not use it to smuggle in a different algorithm or source body.
 You may and should request at least 100 useful options when the parameter space
 warrants it. Return exactly:

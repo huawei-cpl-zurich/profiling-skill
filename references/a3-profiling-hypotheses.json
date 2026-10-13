@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "results": [
+    {
+      "hypothesis_id": "per-sequence-loop-bound",
+      "title": "Per-sequence K bounds remove packed-sequence control work",
+      "before": "Iterate to total packed K and mask inactive iterations",
+      "after": "Iterate only to the current sequence length sk",
+      "sweep": "Hold active sk fixed while increasing unrelated packed sequence lengths and batch count",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+      "falsification": "After latency or scalar activity continues to scale with unrelated packed K",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "direct-head-rank",
+      "title": "Direct sparse-head rank removes an O(H) per-program scan",
+      "before": "Scan prior heads to determine sparse-head rank",
+      "after": "Derive rank directly from the known head ordering",
+      "sweep": "Increase head count while holding tokens and active sparse heads fixed",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+      "falsification": "Both versions scale equally with head count",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "key-tile-size",
+      "title": "Moderately larger key tiles amortize loop overhead",
+      "before": "BLOCK_N 32 or 64",
+      "after": "BLOCK_N 128, with 256 and 512 retained as compile/resource probes",
+      "sweep": "Key lengths around every tile boundary with otherwise identical code",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.03},
+      "falsification": "Larger tiles do not reduce latency or fail before reducing loop overhead",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "whole-tile-skip",
+      "title": "Skipping fully masked tiles avoids vector and memory work",
+      "before": "Load and compute every key tile then mask its contribution",
+      "after": "Branch around K/V, score, and softmax work when the entire tile is rejected",
+      "sweep": "Block-aligned sparsity from 0% to 100% at fixed shape",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+      "falsification": "Latency stays flat as rejected-tile fraction increases",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "scalar-block-decision",
+      "title": "One scalar block-mask decision avoids lane-replicated control work",
+      "before": "Evaluate the block decision across token lanes",
+      "after": "Load and evaluate one scalar decision per block",
+      "sweep": "Increase key length and block count with identical block-aligned masks",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+      "falsification": "Scalarization does not improve long-K cases",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "fine-grained-load-mask",
+      "title": "Fine-grained load masking has a predicate-overhead crossover",
+      "before": "Use a simple valid-region mask for K/V loads",
+      "after": "Apply the final token predicate to K/V loads",
+      "sweep": "Regular block masks and increasingly irregular token masks at fixed dimensions",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.03},
+      "falsification": "The final predicate never wins even when almost all transferred tokens are rejected",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "schedule-autotune-only",
+      "title": "Warp and stage choices are cheap autotuning variables, not stable profiler diagnoses",
+      "before": "Default schedule",
+      "after": "Best schedule from at least 100 cheap timing candidates",
+      "sweep": "Legal warps and stages with source held constant",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.01},
+      "falsification": "A stable pipe signature predicts the winner across shapes",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "matrix-tiled-dot",
+      "title": "Matrix-tiled tl.dot removes the row-wise reduction bottleneck",
+      "before": "One query/head program using an elementwise product and tl.sum",
+      "after": "Multiple query rows using a matrix-tiled tl.dot",
+      "sweep": "Query rows, head dimension, and key length subject to compile/resource limits",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.1},
+      "falsification": "The tiled dot is valid but cannot beat the row-wise reduction on any representative case",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "query-tile-kv-reuse",
+      "title": "Tiling query rows reuses K/V data",
+      "before": "One query row per program",
+      "after": "Multiple query rows per program sharing key/value tiles",
+      "sweep": "Query tile height and K length while recording compile/resource failures",
+      "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+      "falsification": "Added resource pressure offsets reuse for every legal query tile",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "mask-mode-control",
+      "title": "Dense, causal, streaming, and block-sparse modes have distinct control costs",
+      "before": "Dense mode",
+      "after": "Causal, streaming, or block-sparse mode with equal useful tensor work",
+      "sweep": "Mode and sparsity while holding dimensions and useful output elements fixed",
+      "expected": {"direction": "increase", "minimum_relative_change": 0.03},
+      "falsification": "Mode does not change latency or activity evidence",
+      "measurements": [],
+      "signals": []
+    },
+    {
+      "hypothesis_id": "timeline-phase-order",
+      "title": "A3 timeline evidence can distinguish ordered phases inside one launch",
+      "before": "Long load, vector, then store phases",
+      "after": "Reverse the phase order without changing phase work",
+      "sweep": "A-B-C, C-B-A, A-B-A, serialized/overlapped, duration sweeps, and fused/separate-kernel control",
+      "expected": {"direction": "no_change", "minimum_relative_change": 0.05},
+      "falsification": "Available exports contain only aggregate activity or relationships and cannot recover injected order",
+      "measurements": [],
+      "signals": [
+        {
+          "name": "timeline_phase_order",
+          "relationship": "not_exported",
+          "summary": "Unavailable until controlled captures demonstrate temporal attribution"
+        }
+      ]
+    }
+  ]
+}

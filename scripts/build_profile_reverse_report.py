@@ -151,11 +151,33 @@ def normalize_producer_inputs(
         parent_id = occurrence.get("parent_occurrence_id", occurrence.get("parent_candidate_id"))
         if parent_id is not None:
             parent_id = identifier(parent_id, f"occurrence {occurrence_id!r} parent")
-        if occurrence.get("is_starter") is True or occurrence.get("lineage_role") == "starter":
+        is_starter = (
+            occurrence.get("is_starter") is True
+            or occurrence.get("lineage_role") == "starter"
+        )
+        if is_starter:
             starter_ids.append(occurrence_id)
-        note = occurrence.get("artifact_diagnostics")
+        note = occurrence.get("lineage_note") or occurrence.get("artifact_diagnostics")
         if not recoverable and not note:
             note = f"candidate is not executable: {recoverability}"
+        if recoverable and not parent_id and not is_starter and not note:
+            note = "producer supplied no evidence-backed parent"
+        if not recoverable:
+            lineage_state = "unrecoverable"
+        elif is_starter:
+            lineage_state = "starter"
+        elif parent_id:
+            lineage_state = "linked"
+        else:
+            lineage_state = "unlinked"
+        deltas = occurrence.get("parent_feature_deltas", {})
+        if not isinstance(deltas, dict):
+            raise InvalidReportInput(
+                f"occurrence {occurrence_id!r}.parent_feature_deltas must be an object"
+            )
+        features = execution.get("features", {})
+        if not isinstance(features, dict):
+            raise InvalidReportInput(f"execution {execution_id!r}.features must be an object")
         candidates.append({
             "candidate_id": occurrence_id,
             "treatment": occurrence.get("treatment"),
@@ -168,10 +190,11 @@ def normalize_producer_inputs(
                 if recoverable and first_occurrence.get(execution_id) != occurrence_id
                 else None
             ),
-            "lineage_state": "complete" if recoverable else "unrecoverable",
-            "lineage_note": None if recoverable else str(note),
-            "source_features": execution.get("parameters", occurrence.get("parameters", {})),
-            "code_delta": [occurrence["hypothesis"]] if occurrence.get("hypothesis") else [],
+            "lineage_state": lineage_state,
+            "lineage_note": str(note) if note else None,
+            "source_features": features,
+            "code_delta": deltas,
+            "hypothesis": occurrence.get("hypothesis"),
             "execution_id": execution_id,
             "execution_status": result_state.get("status") if isinstance(result_state, dict) else None,
             "kernel_name": result_state.get("kernel_name") if isinstance(result_state, dict) else None,
@@ -250,6 +273,56 @@ def normalize_inputs(
     return manifest, results
 
 
+def normalize_hypothesis_inputs(document: dict[str, Any]) -> dict[str, Any]:
+    if document.get("schema_version") != 1:
+        raise InvalidReportInput("hypotheses must be a schema-version 1 object")
+    results = objects(document.get("results"), "hypotheses.results")
+    if any("hypothesis_id" not in item and "variant" in item for item in results):
+        raise InvalidReportInput(
+            "raw unpaired microcampaign cells are not valid hypothesis evidence"
+        )
+    report_ready = "raw_cells" in document
+    raw_by_id: dict[str, dict[str, Any]] = {}
+    if report_ready:
+        for cell in objects(document.get("raw_cells"), "hypotheses.raw_cells"):
+            cell_id = identifier(cell.get("id"), "raw cell id")
+            if cell_id in raw_by_id:
+                raise InvalidReportInput(f"duplicate raw microcampaign cell {cell_id!r}")
+            raw_by_id[cell_id] = cell
+        identifier(document.get("manifest_sha256"), "hypotheses.manifest_sha256")
+    allowed = {
+        "valid", "candidate_failure", "infrastructure_failure",
+        "profiling_failure", "unavailable", "inconclusive",
+    }
+    for item in results:
+        identifier(item.get("hypothesis_id"), "hypothesis_id")
+        measurements = objects(item.get("measurements", []), "hypothesis.measurements")
+        for measurement in measurements:
+            status = measurement.get("status")
+            if status not in allowed:
+                raise InvalidReportInput(f"invalid hypothesis measurement status {status!r}")
+            if status == "valid":
+                finite_positive(measurement.get("before"), "hypothesis measurement before")
+                finite_positive(measurement.get("after"), "hypothesis measurement after")
+                if report_ready:
+                    before_id = identifier(
+                        measurement.get("before_cell_id"), "measurement.before_cell_id"
+                    )
+                    after_id = identifier(
+                        measurement.get("after_cell_id"), "measurement.after_cell_id"
+                    )
+                    if (
+                        before_id not in raw_by_id
+                        or after_id not in raw_by_id
+                        or raw_by_id[before_id].get("variant") != "before"
+                        or raw_by_id[after_id].get("variant") != "after"
+                    ):
+                        raise InvalidReportInput(
+                            "paired hypothesis measurement must reference retained before/after cells"
+                        )
+    return document
+
+
 def effective_candidate(
     candidate_id: str, candidates: dict[str, dict[str, Any]]
 ) -> str:
@@ -325,8 +398,7 @@ def classify_hypothesis(item: dict[str, Any]) -> tuple[str, str]:
 def compile_report(
     manifest: dict[str, Any], capture_doc: dict[str, Any], hypothesis_doc: dict[str, Any]
 ) -> dict[str, Any]:
-    if hypothesis_doc.get("schema_version") != 1:
-        raise InvalidReportInput("hypotheses must be a schema-version 1 object")
+    hypothesis_doc = normalize_hypothesis_inputs(hypothesis_doc)
     raw_candidates = objects(manifest.get("candidates"), "manifest.candidates")
     candidates: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(raw_candidates):
@@ -334,9 +406,11 @@ def compile_report(
         if candidate_id in candidates:
             raise InvalidReportInput(f"duplicate candidate_id {candidate_id!r}")
         lineage_state = candidate.get("lineage_state", "complete")
-        if lineage_state not in {"complete", "incomplete", "unrecoverable"}:
+        if lineage_state not in {
+            "complete", "incomplete", "unrecoverable", "starter", "linked", "unlinked",
+        }:
             raise InvalidReportInput(f"candidate {candidate_id!r} has invalid lineage_state")
-        if lineage_state != "complete":
+        if lineage_state in {"incomplete", "unrecoverable", "unlinked"}:
             identifier(candidate.get("lineage_note"), f"candidate {candidate_id!r}.lineage_note")
         candidates[candidate_id] = candidate
     starter_id = manifest.get("starter_candidate_id")
@@ -422,6 +496,7 @@ def compile_report(
             "evidence_source_candidate_id": evidence_id,
             "source_features": candidate.get("source_features", {}),
             "code_delta": candidate.get("code_delta", []),
+            "hypothesis": candidate.get("hypothesis"),
             "cases": case_results,
             "geometric_mean": {
                 "latency_us": geometric_mean([
@@ -498,6 +573,11 @@ def compile_report(
         "campaign_id": manifest.get("campaign_id"),
         "report_state": report_state,
         "references": manifest.get("references", []),
+        "hypothesis_evidence": {
+            "manifest_sha256": hypothesis_doc.get("manifest_sha256"),
+            "raw_cell_count": len(hypothesis_doc.get("raw_cells", [])),
+            "paired_result_count": len(compiled_hypotheses),
+        },
         "candidates": compiled_candidates,
         "hypotheses": sorted(compiled_hypotheses, key=lambda row: row["hypothesis_id"]),
         "signals": signal_rows,
@@ -547,7 +627,14 @@ def render_markdown(report: dict[str, Any]) -> str:
             )
         deltas = item.get("code_delta") or []
         if deltas:
-            lines.append(f"- Code delta for `{item['candidate_id']}`: " + "; ".join(map(str, deltas)) + ".")
+            rendered = (
+                json.dumps(deltas, sort_keys=True, separators=(",", ":"))
+                if isinstance(deltas, dict)
+                else "; ".join(map(str, deltas))
+            )
+            lines.append(f"- Code delta for `{item['candidate_id']}`: {rendered}.")
+        if item.get("hypothesis"):
+            lines.append(f"- Candidate hypothesis for `{item['candidate_id']}`: {item['hypothesis']}.")
         if item["failures"]:
             for failure in item["failures"]:
                 lines.append(

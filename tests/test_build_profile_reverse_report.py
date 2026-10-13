@@ -260,15 +260,15 @@ def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage
         "environment": {"product": "a3", "runtime": "named"},
         "occurrences": [
             {"occurrence_id": "starter-occ", "execution_id": "exec-a", "treatment": "starter", "round": 0, "position": 0, "option_id": "starter", "recoverability": "recoverable", "source_sha256": "a", "is_starter": True},
-            {"occurrence_id": "fast-occ", "execution_id": "exec-b", "treatment": "guarded", "round": 1, "position": 0, "option_id": "fast", "recoverability": "recoverable", "source_sha256": "b", "parent_occurrence_id": "starter-occ", "hypothesis": "local K bound"},
+            {"occurrence_id": "fast-occ", "execution_id": "exec-b", "treatment": "guarded", "round": 1, "position": 0, "option_id": "fast", "recoverability": "recoverable", "source_sha256": "b", "parent_occurrence_id": "starter-occ", "lineage_note": "request-declared incumbent", "parent_feature_deltas": {"loop_bound": {"before": "total_packed_k", "after": "per_sequence_k"}, "block_n": {"before": 64, "after": 128}}, "hypothesis": "local K bound"},
             {"occurrence_id": "fast-duplicate", "execution_id": "exec-b", "treatment": "guarded", "round": 2, "position": 1, "option_id": "same", "recoverability": "recoverable", "source_sha256": "b"},
             {"occurrence_id": "failed-occ", "execution_id": "exec-c", "treatment": "cannbot", "round": 1, "position": 0, "option_id": "bad", "recoverability": "recoverable", "source_sha256": "c"},
             {"occurrence_id": "lost-occ", "treatment": "cannbot", "round": 1, "position": 1, "option_id": "lost", "recoverability": "source_unavailable", "artifact_diagnostics": "sanitized artifact omitted source"},
         ],
         "executions": [
-            {"execution_id": "exec-a", "source": source_a, "source_sha256": "a", "parameters": {"BLOCK_N": 64}, "occurrence_ids": ["starter-occ"]},
-            {"execution_id": "exec-b", "source": source_b, "source_sha256": "b", "parameters": {"BLOCK_N": 128}, "occurrence_ids": ["fast-occ", "fast-duplicate"]},
-            {"execution_id": "exec-c", "source": source_c, "source_sha256": "c", "parameters": {"BLOCK_N": 512}, "occurrence_ids": ["failed-occ"]},
+            {"execution_id": "exec-a", "source": source_a, "source_sha256": "a", "parameters": {"BLOCK_N": 64}, "features": {"loop_bound": "total_packed_k", "block_n": 64}, "occurrence_ids": ["starter-occ"]},
+            {"execution_id": "exec-b", "source": source_b, "source_sha256": "b", "parameters": {"BLOCK_N": 128}, "features": {"loop_bound": "per_sequence_k", "block_n": 128}, "occurrence_ids": ["fast-occ", "fast-duplicate"]},
+            {"execution_id": "exec-c", "source": source_c, "source_sha256": "c", "parameters": {"BLOCK_N": 512}, "features": {"loop_bound": "total_packed_k", "block_n": 512}, "occurrence_ids": ["failed-occ"]},
         ],
     }
     provenance = {"target": "bz-a3-2", "runtime": "named", "physical_device": 1, "command": ["run"], "handle": "remote:job-1"}
@@ -313,6 +313,14 @@ def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage
     assert by_id["fast-duplicate"]["duplicate_of"] == "fast-occ"
     assert by_id["fast-duplicate"]["evidence_source_candidate_id"] == "fast-occ"
     assert by_id["fast-occ"]["kernel_name"] == "kernel"
+    assert by_id["fast-occ"]["source_features"] == {"loop_bound": "per_sequence_k", "block_n": 128}
+    assert by_id["fast-occ"]["code_delta"] == {
+        "loop_bound": {"before": "total_packed_k", "after": "per_sequence_k"},
+        "block_n": {"before": 64, "after": 128},
+    }
+    assert by_id["fast-occ"]["hypothesis"] == "local K bound"
+    assert by_id["fast-occ"]["lineage_note"] == "request-declared incumbent"
+    assert by_id["failed-occ"]["lineage_state"] == "unlinked"
     assert by_id["fast-occ"]["cases"]["47"]["starter_speedup"] == 101.0 / 50.0
     assert by_id["fast-occ"]["cases"]["47"]["parent_speedup"] == 101.0 / 50.0
     assert by_id["fast-occ"]["cases"]["47"]["profile_metrics"] == {"aiv_vec_ratio": 0.51}
@@ -356,3 +364,47 @@ def test_producer_schema_without_explicit_starter_or_parent_has_no_speedups(tmp_
     assert candidate["parent_candidate_id"] is None
     assert candidate["cases"]["47"]["starter_speedup"] is None
     assert candidate["cases"]["47"]["parent_speedup"] is None
+
+
+def test_accepts_only_paired_microcampaign_hypothesis_results(tmp_path: Path):
+    manifest, captures, _ = fixtures(tmp_path)
+    paired = {
+        "schema_version": 1,
+        "manifest_sha256": "a" * 64,
+        "raw_cells": [
+            {"id": "loop/small/before", "variant": "before"},
+            {"id": "loop/small/after", "variant": "after"},
+        ],
+        "results": [{
+            "hypothesis_id": "loop",
+            "title": "Local loop bounds reduce time",
+            "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+            "measurements": [{
+                "status": "valid", "before": 100.0, "after": 80.0,
+                "sweep": "small", "metric": "core-time proxy", "unit": "us",
+                "before_cell_id": "loop/small/before", "after_cell_id": "loop/small/after",
+            }],
+            "signals": [],
+            "falsification": "after does not improve",
+        }],
+    }
+    paired_path = tmp_path / "paired.json"
+    write_json(paired_path, paired)
+    output = tmp_path / "paired-out"
+    accepted = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(paired_path), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    assert json.loads((output / "report.json").read_text())["hypotheses"][0]["classification"] == "supported"
+
+    raw_path = tmp_path / "raw.json"
+    write_json(raw_path, {"schema_version": 1, "results": [
+        {"id": "loop/small/before", "experiment": "loop", "sweep": "small", "variant": "before", "status": "success", "measurements": {"median": 100.0}}
+    ]})
+    rejected = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(raw_path), "--output-dir", str(tmp_path / "raw-out")],
+        text=True, capture_output=True, check=False,
+    )
+    assert rejected.returncode == 2
+    assert "raw unpaired microcampaign cells" in rejected.stderr

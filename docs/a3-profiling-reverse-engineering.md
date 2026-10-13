@@ -47,6 +47,13 @@ worktree yet. The generator will populate source features, code deltas,
 per-case medians, starter and parent speedups, duplicates, and both candidate
 and infrastructure failures without discarding any manifest entry.
 
+For the producer schema, source features come from each execution's static
+`features` analysis and code deltas preserve the occurrence's structured
+`parent_feature_deltas` exactly. Free-text `hypothesis` remains a separate
+field. Parent speedup is computed only for `parent_occurrence_id`, starter
+speedup only for an explicitly identified starter, and an occurrence without
+such evidence is marked `unlinked` rather than assigned a guessed lineage.
+
 Known historical deltas to test causally include local sequence loop bounds,
 direct sparse-head rank, tile size, whole-tile skipping, scalar block-mask
 decisions, fine-grained K/V load predicates, scheduling parameters, matrix-tiled
@@ -127,6 +134,12 @@ The manifest and results may be supplied directly in the producer schemas
 candidate; occurrences sharing an execution are linked explicitly rather than
 collapsed. Unrecoverable CANNBot occurrences remain visible with no invented
 starter or parent. The output directory contains `report.json`, `report.md`, and `candidates.csv`.
+
+Microcampaign hypothesis input must be report-ready paired evidence: top-level
+`raw_cells` may retain the original cells, but every `results` item must name a
+hypothesis and every valid measurement must contain before/after values and
+their before/after cell IDs. Raw per-variant cells are never treated as causal
+hypothesis evidence.
 The JSON is the canonical joined result; Markdown and CSV are deterministic
 views. Invalid lineage, unknown candidates, bad latencies, and unvalidated
 saturation claims fail closed with exit status 2.

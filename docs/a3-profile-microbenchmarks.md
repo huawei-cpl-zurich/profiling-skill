@@ -79,3 +79,39 @@ target and selected physical device, durable remote handle, kernel selector,
 raw one-launch CSV hashes, and compact normalized evidence. Infrastructure
 failures are retried against the same logical experiment and are not converted
 into compiler or correctness failures.
+
+## Resumable campaign
+
+The campaign coordinator expands the manifest into 52 variant/sweep cells. It
+uses `scripts/acquire_profile.py` for a discovery pass followed by an exact
+PipeUtilization pass for every expected kernel. Three samples whose relative
+range is at most 5% are required by default; acquisition is capped at seven
+attempts. The retained dispatch receipt is authoritative after observer loss,
+so rerunning a cell resumes its handle instead of creating another job.
+
+Run two deterministic shards concurrently on the two configured A3 targets:
+
+```bash
+python scripts/a3_profile_microbench_campaign.py run \
+  --target bz-a3-1 --shard-index 0 --shard-count 2 --output-dir artifacts/a3-shard-0
+python scripts/a3_profile_microbench_campaign.py run \
+  --target bz-a3-2 --shard-index 1 --shard-count 2 --output-dir artifacts/a3-shard-1
+python scripts/a3_profile_microbench_campaign.py merge \
+  --input artifacts/a3-shard-0/shard-result.json \
+          artifacts/a3-shard-1/shard-result.json \
+  --output artifacts/a3-hypothesis-results.json
+```
+
+The merged `schema_version: 1` document exposes `results`, each with raw
+measurements, summarized pipe signals, discarded infrastructure attempts, and
+handles/devices/source hashes. Compilation, runtime, and correctness failures
+are `candidate_failure`; profiler or malformed-evidence failures are
+`profiling_failure`; exhausted device/transport problems remain
+`infrastructure_exhausted`. For a split variant, the reported duration proxy is
+the sum of each exact kernel's maximum AIC/AIV reported time. It is explicitly
+a PipeUtilization core-time proxy, not BasicInfo task latency.
+
+Timeline cells use the same acquisition path but record TimelineDetail as
+`unavailable` when the A3 op exporter does not provide it. This is not a
+candidate failure and does not authorize phase-order claims from aggregate
+pipe activity.

@@ -492,3 +492,135 @@ def test_consumes_merged_results_and_preserves_structured_pipe_components(tmp_pa
     assert "remote:one" in markdown
     assert "selector=`kernel_mix` block=`0` sub-block=`vector0`" in markdown
     assert "aiv_vec_ratio" in markdown
+
+
+def test_consumes_final_multi_component_candidate_and_hypothesis_shapes(tmp_path: Path):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "campaign_root": "/campaign",
+        "starter_occurrence_id": "starter",
+        "occurrences": [{
+            "occurrence_id": "starter", "execution_id": "exec-starter",
+            "recoverability": "recoverable", "lineage_role": "starter",
+        }],
+        "executions": [{
+            "execution_id": "exec-starter", "features": {"block_n": 64},
+            "occurrence_ids": ["starter"],
+        }],
+    }
+    provenance = {
+        "target": "bz-a3-1", "runtime": "py311-torch", "physical_device": 2,
+        "command": ["cpl-remote", "run"], "handle": "remote:component",
+    }
+
+    def component(selector: str, sub_block: str, ratio: str, digest: str) -> dict:
+        return {
+            "duration_us": 10.0 if sub_block == "cube0" else 12.0,
+            "pipe_utilization": {
+                "metric": "PipeUtilization", "selector": selector,
+                "rows": [{
+                    "block_id": "0", "sub_block_id": sub_block,
+                    "activity_ratio": ratio,
+                }],
+            },
+            "evidence_sha256": digest * 64,
+            "provenance": provenance,
+        }
+
+    merged = {
+        "schema": "profiling-skill/bsa-candidate-merged-results/v1",
+        "manifest_sha256": "f" * 64,
+        "run_contract": {
+            "cases": [47], "stable_samples": 1, "max_samples": 3,
+            "variability_threshold": 0.05, "require_provenance": True,
+            "sample_selection": "first_stable_consecutive_window",
+        },
+        "shard_count": 1, "present_shards": [0], "missing_shards": [],
+        "missing_execution_ids": [],
+        "sources": [{"path": "shard-0.json", "shard_index": 0}],
+        "executions": {"exec-starter": {
+            "status": "completed", "kernel_name": "bsa_aic",
+            "selectors": ["bsa_aic", "bsa_aiv"],
+            "components": [
+                {"selector": "bsa_aic", "kind": "aic"},
+                {"selector": "bsa_aiv", "kind": "aiv"},
+            ],
+            "basic_info": {
+                "kernel_names": ["bsa_aic", "bsa_aiv"],
+                "components": [
+                    {"selector": "bsa_aic", "kind": "aic"},
+                    {"selector": "bsa_aiv", "kind": "aiv"},
+                ],
+                "compact": {"metric": "BasicInfo", "rows": []},
+                "evidence_sha256": "0" * 64, "provenance": provenance,
+            },
+            "cases": {"47": {
+                "status": "completed", "accepted_sample_indexes": [0],
+                "median_us": 12.0, "relative_range": 0.0,
+                "samples": [{
+                    "duration_us": 12.0,
+                    "duration_aggregation": "max_component_duration",
+                    "components": {
+                        "bsa_aic": component("bsa_aic", "cube0", "0.70", "1"),
+                        "bsa_aiv": component("bsa_aiv", "vector0", "0.50", "2"),
+                    },
+                }],
+            }},
+            "infrastructure_failures": [], "geomean_us": 12.0,
+        }},
+    }
+    hypotheses = {
+        "schema_version": 1, "manifest_sha256": "a" * 64,
+        "raw_cells": [
+            {"id": "tile/long/before", "variant": "before", "status": "success"},
+            {"id": "tile/long/after", "variant": "after", "status": "success"},
+        ],
+        "results": [{
+            "hypothesis_id": "tile", "title": "Larger tile reduces latency",
+            "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+            "falsification": "latency does not decrease",
+            "measurements": [{
+                "status": "valid", "sweep": "long", "before": 20.0, "after": 12.0,
+                "metric": "latency", "unit": "us",
+                "before_cell_id": "tile/long/before", "after_cell_id": "tile/long/after",
+            }],
+            "signals": [{
+                "name": "aiv_vec_ratio", "relationship": "tracks_outcome",
+                "summary": "changed with latency",
+            }],
+        }],
+    }
+    manifest_path, results_path, hypotheses_path = (
+        tmp_path / "manifest.json", tmp_path / "merged.json", tmp_path / "hypotheses.json",
+    )
+    write_json(manifest_path, manifest)
+    write_json(results_path, merged)
+    write_json(hypotheses_path, hypotheses)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path),
+         "--results", str(results_path), "--hypotheses", str(hypotheses_path),
+         "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    starter = report["candidates"][0]
+    assert starter["geometric_mean"]["latency_us"] == 12.0
+    sample = starter["cases"]["47"]["samples"][0]
+    assert set(sample["profile_evidence"]["components"]) == {"bsa_aic", "bsa_aiv"}
+    assert sample["provenance"]["components"]["bsa_aiv"]["handle"] == "remote:component"
+    assert sample["evidence_sha256"]["components"]["bsa_aic"] == "1" * 64
+    assert starter["cases"]["47"]["profile_components"] == [
+        {"component_selector": "bsa_aic", "metric": "PipeUtilization",
+         "selector": "bsa_aic", "block_id": "0", "sub_block_id": "cube0",
+         "metrics": {"activity_ratio": 0.7}},
+        {"component_selector": "bsa_aiv", "metric": "PipeUtilization",
+         "selector": "bsa_aiv", "block_id": "0", "sub_block_id": "vector0",
+         "metrics": {"activity_ratio": 0.5}},
+    ]
+    assert report["hypotheses"][0]["classification"] == "supported"
+    assert report["signals"][0]["classification"] == "useful"
+    markdown = (output / "report.md").read_text()
+    assert "component=`bsa_aiv` selector=`bsa_aiv`" in markdown
+    assert "remote:component" in markdown

@@ -135,7 +135,7 @@ python scripts/build_profile_reverse_report.py \
 
 The manifest and results may be supplied directly in the producer schemas
 `profiling-skill/bsa-candidate-manifest/v1` and
-either `profiling-skill/bsa-candidate-results/v1` or merged
+either legacy `profiling-skill/bsa-candidate-results/v1` or merged
 `profiling-skill/bsa-candidate-merged-results/v1`. Merge contract, present and
 missing shards, missing executions, and source checkpoints remain explicit.
 Each occurrence remains a report
@@ -146,7 +146,11 @@ starter or parent. The output directory contains `report.json`, `report.md`, and
 Structured PipeUtilization evidence retains its metric, exact selector, and
 block/sub-block components. Numeric CSV strings are normalized within the same
 component identity and summarized only across comparable samples; AIC and AIV
-rows or distinct sub-blocks are never flattened into one metric average.
+rows or distinct sub-blocks are never flattened into one metric average. The
+merged producer may contain v2 samples whose latency is the maximum duration
+across separately captured AIC/AIV components. Those component selectors,
+evidence digests, and per-component provenance remain nested and auditable;
+only the declared aggregate duration participates in latency comparisons.
 
 Microcampaign hypothesis input must be report-ready paired evidence: top-level
 `raw_cells` may retain the original cells, but every `results` item must name a

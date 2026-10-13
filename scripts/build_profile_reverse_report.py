@@ -107,12 +107,45 @@ def pipe_profile(pipe: Any) -> tuple[dict[str, float], list[dict[str, Any]]]:
     }, []
 
 
+def sample_profile(sample: dict[str, Any]) -> dict[str, Any]:
+    nested = sample.get("components")
+    if not isinstance(nested, dict):
+        pipe = sample.get("pipe_utilization")
+        numeric, components = pipe_profile(pipe)
+        return {
+            "metrics": numeric, "components": components, "raw": pipe,
+            "evidence_sha256": sample.get("evidence_sha256"),
+            "provenance": sample.get("provenance"),
+        }
+    parsed_components = []
+    evidence, provenance = {}, {}
+    for component_selector, component in sorted(nested.items()):
+        selector = identifier(component_selector, "sample component selector")
+        if not isinstance(component, dict):
+            raise InvalidReportInput(f"sample component {selector!r} must be an object")
+        _, rows = pipe_profile(component.get("pipe_utilization"))
+        for row in rows:
+            parsed_components.append({"component_selector": selector, **row})
+        evidence[selector] = component.get("evidence_sha256")
+        provenance[selector] = component.get("provenance")
+    return {
+        "metrics": {},
+        "components": parsed_components,
+        "raw": {
+            "duration_aggregation": sample.get("duration_aggregation"),
+            "components": nested,
+        },
+        "evidence_sha256": {"components": evidence},
+        "provenance": {"components": provenance},
+    }
+
+
 def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     samples: dict[str, list[float]] = defaultdict(list)
     metrics: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     evidence_samples: dict[str, list[dict[str, Any]]] = defaultdict(list)
     component_metrics: dict[
-        str, dict[tuple[str, str, str, str], dict[str, list[float]]]
+        str, dict[tuple[str | None, str, str, str, str], dict[str, list[float]]]
     ] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for index, row in enumerate(rows):
         if row.get("status") == "valid":
@@ -143,6 +176,7 @@ def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                         metrics[case_id][str(name)].append(number)
             for component in profile.get("components", []) if isinstance(profile, dict) else []:
                 key = (
+                    component.get("component_selector"),
                     component["metric"], component["selector"],
                     component["block_id"], component["sub_block_id"],
                 )
@@ -153,16 +187,22 @@ def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         values = samples[case]
         median = statistics.median(values) if values else None
         components = []
-        for key, metric_values in sorted(component_metrics[case].items()):
-            metric, selector, block, sub_block = key
-            components.append({
+        for key, metric_values in sorted(
+            component_metrics[case].items(),
+            key=lambda item: tuple("" if value is None else value for value in item[0]),
+        ):
+            component_selector, metric, selector, block, sub_block = key
+            output_component = {
                 "metric": metric, "selector": selector,
                 "block_id": block, "sub_block_id": sub_block,
                 "metrics": {
                     name: statistics.median(observations)
                     for name, observations in sorted(metric_values.items())
                 },
-            })
+            }
+            if component_selector is not None:
+                output_component["component_selector"] = component_selector
+            components.append(output_component)
         result[case] = {
             "median_latency_us": median,
             "latency_samples_us": sorted(values),
@@ -303,16 +343,19 @@ def normalize_producer_inputs(
                 raise InvalidReportInput(f"result case {case_id!r} must be an object")
             accepted = set(case.get("accepted_sample_indexes", range(len(case.get("samples", [])))))
             for sample_index, sample in enumerate(objects(case.get("samples", []), "result samples")):
-                pipe = sample.get("pipe_utilization")
-                numeric, components = pipe_profile(pipe)
+                profile = sample_profile(sample)
                 captures.append({
                     "candidate_id": candidate_id,
                     "case_id": str(case_id),
                     "status": "valid",
                     "latency_us": sample.get("duration_us"),
-                    "profile": {"metrics": numeric, "components": components, "raw": pipe},
-                    "evidence_sha256": sample.get("evidence_sha256"),
-                    "provenance": sample.get("provenance"),
+                    "profile": {
+                        "metrics": profile["metrics"],
+                        "components": profile["components"],
+                        "raw": profile["raw"],
+                    },
+                    "evidence_sha256": profile["evidence_sha256"],
+                    "provenance": profile["provenance"],
                     "accepted": sample_index in accepted,
                 })
         failure = state.get("failure")
@@ -842,10 +885,14 @@ def render_markdown(report: dict[str, Any]) -> str:
             ])
             for index, sample in enumerate(case["samples"]):
                 accepted = sample.get("accepted") is not False
+                evidence = sample.get("evidence_sha256") or "unavailable"
+                rendered_evidence = (
+                    evidence if isinstance(evidence, str) else compact_json(evidence)
+                )
                 lines.append(
                     f"- Sample {index}: latency={fmt(sample.get('latency_us'))} µs; "
                     f"accepted={str(accepted).lower()}; "
-                    f"evidence_sha256=`{sample.get('evidence_sha256') or 'unavailable'}`; "
+                    f"evidence_sha256=`{rendered_evidence}`; "
                     f"provenance={compact_json(sample.get('provenance'))}."
                 )
                 if sample.get("profile_evidence") is not None:
@@ -860,8 +907,13 @@ def render_markdown(report: dict[str, Any]) -> str:
                     f"- Comparable scalar profile metrics: {compact_json(case['profile_metrics'])}."
                 )
             for component in case["profile_components"]:
+                component_boundary = (
+                    f"component=`{component['component_selector']}` "
+                    if component.get("component_selector") is not None else ""
+                )
                 lines.append(
                     f"- Pipe component `{component['metric']}` "
+                    f"{component_boundary}"
                     f"selector=`{component['selector']}` block=`{component['block_id']}` "
                     f"sub-block=`{component['sub_block_id']}`: "
                     f"{compact_json(component['metrics'])}."

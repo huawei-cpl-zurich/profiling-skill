@@ -226,27 +226,28 @@ def emit(value):
 
 def pick_device():
     probe="import json,torch,torch_npu;torch.npu.set_device(0);x=torch.ones(1,device='npu');torch.npu.synchronize();assert float(x.cpu()[0])==1;free,total=torch.npu.mem_get_info();print(json.dumps({'free':free,'total':total}))"
-    failures=[]; root=pathlib.Path(os.environ["CPL_DEVICE_LEASE_ROOT"]
+    failures={}; root=pathlib.Path(os.environ["CPL_DEVICE_LEASE_ROOT"]
                                   ); root.mkdir(parents=True,exist_ok=True)
     required=int(os.environ["BSA_MIN_FREE_DEVICE_BYTES"])
-    for _attempt in range(5):
+    for _attempt in range(1):
       for physical in range(8):
         lease=(root/("device-lease-%d.lock"%physical)).open("a+")
         try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError: lease.close(); continue
         env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
         try: run=subprocess.run([sys.executable,"-c",probe],env=env,text=True,capture_output=True,timeout=20)
-        except subprocess.TimeoutExpired: failures.append("%d:timeout"%physical); lease.close(); continue
+        except subprocess.TimeoutExpired: failures[physical]="timeout"; lease.close(); continue
         if run.returncode==0:
           try: free=int(json.loads(run.stdout.splitlines()[-1])["free"])
           except (IndexError,KeyError,TypeError,ValueError,json.JSONDecodeError):
-            failures.append("%d:memory probe malformed"%physical); lease.close(); continue
+            failures[physical]="memory probe malformed"; lease.close(); continue
           if free < required:
-            failures.append("%d:free=%d required=%d"%(physical,free,required)); lease.close(); continue
+            failures[physical]="free=%d required=%d"%(free,required); lease.close(); continue
           return physical,env,lease
-        failures.append("%d:%s"%(physical,(run.stderr or run.stdout)[-120:])); lease.close()
+        failures[physical]=(run.stderr or run.stdout)[-120:]; lease.close()
       time.sleep(1)
-    raise RuntimeError("no device passed bounded probe: "+"; ".join(failures))
+    raise RuntimeError("no device passed bounded probe: "+"; ".join(
+      "%d:%s"%(physical,failures[physical]) for physical in sorted(failures)))
 
 def job_for(req):
     cases=req["correctness_cases"] if req["action"]=="discover" else [req["case"]]

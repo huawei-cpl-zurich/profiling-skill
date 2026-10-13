@@ -190,8 +190,9 @@ def test_device_probe_rejects_low_free_memory_with_compact_diagnostics(
                                         stdout='{"free":5410,"total":10000}\n',
                                         stderr=""))
 
-    with pytest.raises(RuntimeError, match=r"free=5410 required=10000"):
+    with pytest.raises(RuntimeError, match=r"free=5410 required=10000") as error:
         namespace["pick_device"]()
+    assert str(error.value).count("free=5410 required=10000") == 8
 
 
 def test_capture_binds_exact_selector_and_returns_pipe_rows(tmp_path):

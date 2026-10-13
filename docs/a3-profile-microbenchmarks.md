@@ -102,8 +102,12 @@ python scripts/a3_profile_microbench_campaign.py merge \
   --output artifacts/a3-hypothesis-results.json
 ```
 
-The merged `schema_version: 1` document exposes `results`, each with raw
-measurements, summarized pipe signals, discarded infrastructure attempts, and
+The merged `schema_version: 1` document retains all per-variant evidence under
+`raw_cells` and exposes report-ready paired hypothesis records under `results`.
+Each result contains structured expected direction/threshold, one before/after
+measurement per sweep, and signal relationships using the report vocabulary
+`tracks_outcome`, `context_only`, `contradicts_outcome`, or `not_exported`.
+Raw cells retain samples, pipe signals, discarded infrastructure attempts, and
 handles/devices/source hashes. Compilation, runtime, and correctness failures
 are `candidate_failure`; profiler or malformed-evidence failures are
 `profiling_failure`; exhausted device/transport problems remain

@@ -42,6 +42,9 @@ def test_manifest_has_ten_hypotheses_and_six_timeline_controls():
     all_items = payload["hypotheses"] + payload["timeline_probes"]
     for item in all_items:
         assert set(item["variants"]) == {"before", "after"}
+        assert item["expected"]["direction"] in {"decrease", "increase", "no_change"}
+        assert 0 <= item["expected"]["minimum_relative_change"] < 1
+        assert isinstance(item["signal_predictions"], list)
         assert item["expected_evidence"]
         assert item["falsifier"]
         assert item["sweeps"]

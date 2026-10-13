@@ -255,7 +255,150 @@ def _failure_result(cell, attempts, handles, infra, failure):
     return value
 
 
-def merge_shards(shards: list[dict]) -> dict:
+def _direction(before: float, after: float, expected: dict, *, absolute: bool) -> str:
+    direction = expected["direction"]
+    threshold = expected.get(
+        "minimum_absolute_change" if absolute else "minimum_relative_change", 0.0
+    )
+    change = before - after if absolute else (before - after) / before
+    if direction == "decrease":
+        return "supports" if change >= threshold else (
+            "refutes" if change <= -threshold else "inconclusive"
+        )
+    if direction == "increase":
+        return "supports" if change <= -threshold else (
+            "refutes" if change >= threshold else "inconclusive"
+        )
+    return "supports" if abs(change) <= threshold else "refutes"
+
+
+def _measurement_status(before: dict | None, after: dict | None) -> str:
+    statuses = {item.get("status") for item in (before, after) if item}
+    if "candidate_failure" in statuses:
+        return "candidate_failure"
+    if "infrastructure_exhausted" in statuses:
+        return "infrastructure_failure"
+    if "profiling_failure" in statuses:
+        return "profiling_failure"
+    return "unavailable"
+
+
+def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
+    """Pair variant cells into build_profile_reverse_report's input contract."""
+    by_key = {
+        (cell.get("experiment"), cell.get("sweep"), cell.get("variant")): cell
+        for cell in raw_cells
+    }
+    results = []
+    for key in ("hypotheses", "timeline_probes"):
+        for spec in manifest[key]:
+            measurements, assessments = [], {item["name"]: [] for item in spec["signal_predictions"]}
+            for sweep in spec["sweeps"]:
+                sweep_id = sweep["id"]
+                before = by_key.get((spec["id"], sweep_id, "before"))
+                after = by_key.get((spec["id"], sweep_id, "after"))
+                valid = (
+                    before and after and before.get("status") == after.get("status") == "success"
+                    and before.get("measurements", {}).get("median")
+                    and after.get("measurements", {}).get("median")
+                )
+                if valid:
+                    before_value = float(before["measurements"]["median"])
+                    after_value = float(after["measurements"]["median"])
+                    measurement = {
+                        "status": "valid", "sweep": sweep_id,
+                        "before": before_value, "after": after_value,
+                        "metric": before["measurements"]["metric"],
+                        "unit": before["measurements"]["unit"],
+                        "before_cell_id": before["id"], "after_cell_id": after["id"],
+                    }
+                    measurements.append(measurement)
+                    outcome = _direction(before_value, after_value, spec["expected"], absolute=False)
+                else:
+                    measurements.append({
+                        "status": _measurement_status(before, after), "sweep": sweep_id,
+                        "before_status": before.get("status") if before else "missing",
+                        "after_status": after.get("status") if after else "missing",
+                    })
+                    outcome = "unavailable"
+                for prediction in spec["signal_predictions"]:
+                    name = prediction["name"]
+                    if prediction.get("availability") == "required":
+                        assessments[name].append((sweep_id, "not_exported", None, None))
+                        continue
+                    left = (before or {}).get("signals", {}).get(name, {}).get("mean")
+                    right = (after or {}).get("signals", {}).get(name, {}).get("mean")
+                    if left is None or right is None:
+                        assessments[name].append((sweep_id, "not_exported", left, right))
+                        continue
+                    signal = _direction(float(left), float(right), prediction, absolute=True)
+                    if outcome == "unavailable" or "inconclusive" in {outcome, signal}:
+                        relationship = "context_only"
+                    elif outcome == signal:
+                        relationship = "tracks_outcome"
+                    else:
+                        relationship = "contradicts_outcome"
+                    assessments[name].append((sweep_id, relationship, float(left), float(right)))
+            signals = []
+            for prediction in spec["signal_predictions"]:
+                name, rows = prediction["name"], assessments[prediction["name"]]
+                relationships = {row[1] for row in rows}
+                relationship = next(iter(relationships)) if len(relationships) == 1 else "context_only"
+                if relationship == "not_exported" and key == "timeline_probes":
+                    summary = "TimelineDetail was unavailable for every controlled capture"
+                else:
+                    details = []
+                    for sweep_id, relation, left, right in rows:
+                        if left is None or right is None:
+                            details.append(f"{sweep_id}: {relation}")
+                        else:
+                            details.append(
+                                f"{sweep_id}: before={left:g}, after={right:g}; "
+                                + ({
+                                    "tracks_outcome": "signal and latency track the declared outcome",
+                                    "contradicts_outcome": "signal contradicts the observed latency outcome",
+                                    "context_only": "signal is contextual or below its declared threshold",
+                                    "not_exported": "signal was not exported",
+                                }[relation])
+                            )
+                    summary = "; ".join(details)
+                signals.append({"name": name, "relationship": relationship, "summary": summary})
+            results.append({
+                "hypothesis_id": spec["id"], "title": spec.get("question", spec["id"]),
+                "expected": spec["expected"], "falsification": spec["falsifier"],
+                "measurements": measurements, "signals": signals,
+            })
+    return results
+
+
+def validate_report_hypotheses(document: dict) -> bool:
+    """Validate the subset consumed by build_profile_reverse_report.py."""
+    if document.get("schema_version") != 1 or not isinstance(document.get("results"), list):
+        raise ValueError("report hypotheses require schema_version 1 and results")
+    relationships = {"tracks_outcome", "context_only", "contradicts_outcome", "not_exported"}
+    for item in document["results"]:
+        if not isinstance(item.get("hypothesis_id"), str) or not item["hypothesis_id"]:
+            raise ValueError("hypothesis_id is required")
+        expected = item.get("expected", {})
+        if expected.get("direction") not in {"decrease", "increase", "no_change"}:
+            raise ValueError("invalid expected direction")
+        threshold = expected.get("minimum_relative_change")
+        if not isinstance(threshold, (int, float)) or not 0 <= threshold < 1:
+            raise ValueError("invalid expected threshold")
+        if not isinstance(item.get("measurements"), list) or not isinstance(item.get("signals"), list):
+            raise ValueError("measurements and signals must be arrays")
+        for row in item["measurements"]:
+            if row.get("status") == "valid" and not (
+                float(row["before"]) > 0 and float(row["after"]) > 0
+            ):
+                raise ValueError("valid paired measurements must be positive")
+        for signal in item["signals"]:
+            if not signal.get("name") or signal.get("relationship") not in relationships:
+                raise ValueError("invalid signal relationship")
+    return True
+
+
+def merge_shards(shards: list[dict], manifest: dict) -> dict:
     if not shards:
         raise ValueError("at least one shard is required")
     digests = {item["manifest_sha256"] for item in shards}
@@ -263,13 +406,17 @@ def merge_shards(shards: list[dict]) -> dict:
         raise ValueError("manifest hashes differ")
     results, ids = [], set()
     for shard in shards:
-        for result in shard["results"]:
+        for result in shard["raw_cells"]:
             if result["id"] in ids:
                 raise ValueError(f"duplicate cell {result['id']}")
             ids.add(result["id"])
             results.append(result)
-    return {"schema_version": 1, "manifest_sha256": digests.pop(),
-            "results": sorted(results, key=lambda item: item["id"])}
+    raw_cells = sorted(results, key=lambda item: item["id"])
+    value = {"schema_version": 1, "manifest_sha256": digests.pop(),
+             "raw_cells": raw_cells,
+             "results": summarize_hypotheses(raw_cells, manifest)}
+    validate_report_hypotheses(value)
+    return value
 
 
 def _bundle(output: Path, manifest: Path) -> Path:
@@ -302,13 +449,15 @@ def parse_args(argv=None):
     run.add_argument("--cpl-remote", type=Path)
     merge.add_argument("--input", type=Path, nargs="+", required=True)
     merge.add_argument("--output", type=Path, required=True)
+    merge.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
     if args.command == "merge":
-        value = merge_shards([json.loads(path.read_bytes()) for path in args.input])
+        manifest = json.loads(args.manifest.read_bytes())
+        value = merge_shards([json.loads(path.read_bytes()) for path in args.input], manifest)
         _atomic_json(args.output, value)
         return 0
     manifest = json.loads(args.manifest.read_bytes())
@@ -357,8 +506,10 @@ def main(argv=None) -> int:
         "manifest_sha256": hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
         "target": args.target,
         "shard": {"index": args.shard_index, "count": args.shard_count},
-        "results": results,
+        "raw_cells": results,
+        "results": summarize_hypotheses(results, manifest),
     }
+    validate_report_hypotheses(value)
     _atomic_json(args.output_dir / "shard-result.json", value)
     return 0
 

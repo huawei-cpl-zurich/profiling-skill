@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "a3_profile_microbench_campaign.py"
@@ -177,15 +179,112 @@ def test_existing_dispatch_receipt_resumes_same_handle(tmp_path, monkeypatch):
 def test_merge_rejects_overlap_and_combines_disjoint_results(tmp_path):
     module = load_module()
     one = {"schema_version": 1, "manifest_sha256": "x", "shard": {"index": 0, "count": 2},
-           "results": [{"id": "a"}]}
+           "raw_cells": [{"id": "a"}]}
     two = {"schema_version": 1, "manifest_sha256": "x", "shard": {"index": 1, "count": 2},
-           "results": [{"id": "b"}]}
-    merged = module.merge_shards([one, two])
-    assert [x["id"] for x in merged["results"]] == ["a", "b"]
-    two["results"] = [{"id": "a"}]
+           "raw_cells": [{"id": "b"}]}
+    manifest = {"hypotheses": [], "timeline_probes": []}
+    merged = module.merge_shards([one, two], manifest)
+    assert [x["id"] for x in merged["raw_cells"]] == ["a", "b"]
+    assert merged["results"] == []
+    two["raw_cells"] = [{"id": "a"}]
     try:
-        module.merge_shards([one, two])
+        module.merge_shards([one, two], manifest)
     except ValueError as error:
         assert "duplicate" in str(error)
     else:
         raise AssertionError("duplicate cell was accepted")
+
+
+def cell(experiment, sweep, variant, median, signals, status="success"):
+    return {
+        "id": f"{experiment}/{sweep}/{variant}", "experiment": experiment,
+        "sweep": sweep, "variant": variant, "kind": "hypothesis", "status": status,
+        "measurements": {"median": median, "metric": "proxy", "unit": "us"},
+        "signals": {name: {"mean": value} for name, value in signals.items()},
+    }
+
+
+def test_summarize_pairs_into_current_report_hypothesis_contract():
+    module = load_module()
+    manifest = {
+        "hypotheses": [{
+            "id": "loop", "question": "Local bound", "falsifier": "does not fall",
+            "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+            "signal_predictions": [{
+                "name": "aiv_scalar_ratio", "direction": "decrease",
+                "minimum_absolute_change": 0.02,
+            }],
+            "variants": {"before": "b", "after": "a"}, "kernel_names": {},
+            "sweeps": [{"id": "short"}],
+        }],
+        "timeline_probes": [],
+    }
+    raw = [
+        cell("loop", "short", "before", 10.0, {"aiv_scalar_ratio": 0.5}),
+        cell("loop", "short", "after", 8.0, {"aiv_scalar_ratio": 0.4}),
+    ]
+    summarized = module.summarize_hypotheses(raw, manifest)
+    assert summarized == [{
+        "hypothesis_id": "loop", "title": "Local bound",
+        "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+        "falsification": "does not fall",
+        "measurements": [{
+            "status": "valid", "sweep": "short", "before": 10.0, "after": 8.0,
+            "metric": "proxy", "unit": "us",
+            "before_cell_id": "loop/short/before", "after_cell_id": "loop/short/after",
+        }],
+        "signals": [{
+            "name": "aiv_scalar_ratio", "relationship": "tracks_outcome",
+            "summary": "short: before=0.5, after=0.4; signal and latency track the declared outcome",
+        }],
+    }]
+    # This mirrors build_profile_reverse_report.py's current hypothesis input.
+    assert module.validate_report_hypotheses({"schema_version": 1, "results": summarized})
+
+
+def test_summary_propagates_failure_and_timeline_not_exported():
+    module = load_module()
+    manifest = {
+        "hypotheses": [],
+        "timeline_probes": [{
+            "id": "timeline", "question": "Can phases be seen?", "falsifier": "absent",
+            "expected": {"direction": "no_change", "minimum_relative_change": 0.05},
+            "signal_predictions": [{"name": "timeline_phase_order", "availability": "required"}],
+            "variants": {"before": "b", "after": "a"}, "kernel_names": {},
+            "sweeps": [{"id": "order"}],
+        }],
+    }
+    before = cell("timeline", "order", "before", None, {}, "infrastructure_exhausted")
+    after = cell("timeline", "order", "after", 2.0, {})
+    before["kind"] = after["kind"] = "timeline"
+    result = module.summarize_hypotheses([before, after], manifest)[0]
+    assert result["measurements"] == [{
+        "status": "infrastructure_failure", "sweep": "order",
+        "before_status": "infrastructure_exhausted", "after_status": "success",
+    }]
+    assert result["signals"] == [{
+        "name": "timeline_phase_order", "relationship": "not_exported",
+        "summary": "TimelineDetail was unavailable for every controlled capture",
+    }]
+
+
+def test_real_summary_is_accepted_by_current_report_classifier():
+    report_path = ROOT.parent / "reverse-profile-report" / "scripts" / "build_profile_reverse_report.py"
+    if not report_path.exists():
+        pytest.skip("report worktree is not present; equivalent contract validator runs above")
+    campaign = load_module()
+    spec = {
+        "id": "loop", "question": "Local bound", "falsifier": "does not fall",
+        "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+        "signal_predictions": [], "variants": {"before": "b", "after": "a"},
+        "kernel_names": {}, "sweeps": [{"id": "short"}],
+    }
+    summary = campaign.summarize_hypotheses([
+        cell("loop", "short", "before", 10.0, {}),
+        cell("loop", "short", "after", 8.0, {}),
+    ], {"hypotheses": [spec], "timeline_probes": []})[0]
+    report_spec = importlib.util.spec_from_file_location("current_reverse_report", report_path)
+    report = importlib.util.module_from_spec(report_spec)
+    assert report_spec.loader
+    report_spec.loader.exec_module(report)
+    assert report.classify_hypothesis(summary)[0] == "supported"

@@ -32,8 +32,8 @@ def read_object(path: Path, label: str) -> dict[str, Any]:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise InvalidReportInput(f"cannot read {label} {path}: {error}") from error
-    if not isinstance(value, dict) or value.get("schema_version") != 1:
-        raise InvalidReportInput(f"{label} must be a schema-version 1 object")
+    if not isinstance(value, dict):
+        raise InvalidReportInput(f"{label} must be an object")
     return value
 
 
@@ -72,14 +72,24 @@ def geometric_mean(values: list[float]) -> float | None:
 def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     samples: dict[str, list[float]] = defaultdict(list)
     metrics: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    evidence_samples: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for index, row in enumerate(rows):
         if row.get("status") == "valid":
             case_id = identifier(row.get("case_id"), f"captures[{index}].case_id")
-            samples[case_id].append(
-                finite_positive(row.get("latency_us"), f"captures[{index}].latency_us")
-            )
+            latency = finite_positive(row.get("latency_us"), f"captures[{index}].latency_us")
             profile = row.get("profile")
             raw_metrics = profile.get("metrics") if isinstance(profile, dict) else None
+            evidence_samples[case_id].append({
+                "latency_us": latency,
+                "profile_metrics": raw_metrics or {},
+                "profile_evidence": profile.get("raw") if isinstance(profile, dict) else None,
+                "evidence_sha256": row.get("evidence_sha256"),
+                "provenance": row.get("provenance"),
+                "accepted": row.get("accepted"),
+            })
+            if row.get("accepted") is False:
+                continue
+            samples[case_id].append(latency)
             if raw_metrics is not None:
                 if not isinstance(raw_metrics, dict):
                     raise InvalidReportInput(f"captures[{index}].profile.metrics must be an object")
@@ -100,8 +110,144 @@ def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 name: statistics.median(metric_values)
                 for name, metric_values in sorted(metrics[case].items())
             },
+            "samples": evidence_samples[case],
         }
     return result
+
+
+def normalize_producer_inputs(
+    manifest: dict[str, Any], results: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if results.get("schema") != "profiling-skill/bsa-candidate-results/v1":
+        raise InvalidReportInput("producer results schema mismatch")
+    occurrences = objects(manifest.get("occurrences"), "manifest.occurrences")
+    executions = {
+        identifier(item.get("execution_id"), "manifest execution_id"): item
+        for item in objects(manifest.get("executions"), "manifest.executions")
+    }
+    result_executions = results.get("executions")
+    if not isinstance(result_executions, dict):
+        raise InvalidReportInput("producer results.executions must be an object")
+
+    first_occurrence: dict[str, str] = {}
+    for occurrence in occurrences:
+        execution_id = occurrence.get("execution_id")
+        if isinstance(execution_id, str) and execution_id:
+            first_occurrence.setdefault(execution_id, identifier(
+                occurrence.get("occurrence_id"), "manifest occurrence_id"
+            ))
+
+    candidates, starter_ids = [], []
+    for occurrence in occurrences:
+        occurrence_id = identifier(occurrence.get("occurrence_id"), "manifest occurrence_id")
+        execution_id = occurrence.get("execution_id")
+        recoverability = occurrence.get("recoverability", "recoverable")
+        execution = executions.get(execution_id, {}) if isinstance(execution_id, str) else {}
+        result_state = (
+            result_executions.get(execution_id, {})
+            if isinstance(execution_id, str) else {}
+        )
+        recoverable = recoverability == "recoverable" and bool(execution)
+        parent_id = occurrence.get("parent_occurrence_id", occurrence.get("parent_candidate_id"))
+        if parent_id is not None:
+            parent_id = identifier(parent_id, f"occurrence {occurrence_id!r} parent")
+        if occurrence.get("is_starter") is True or occurrence.get("lineage_role") == "starter":
+            starter_ids.append(occurrence_id)
+        note = occurrence.get("artifact_diagnostics")
+        if not recoverable and not note:
+            note = f"candidate is not executable: {recoverability}"
+        candidates.append({
+            "candidate_id": occurrence_id,
+            "treatment": occurrence.get("treatment"),
+            "round": occurrence.get("round"),
+            "option": occurrence.get("option_id", occurrence.get("position")),
+            "source_hash": occurrence.get("source_sha256", execution.get("source_sha256")),
+            "parent_candidate_id": parent_id,
+            "duplicate_of": (
+                first_occurrence.get(execution_id)
+                if recoverable and first_occurrence.get(execution_id) != occurrence_id
+                else None
+            ),
+            "lineage_state": "complete" if recoverable else "unrecoverable",
+            "lineage_note": None if recoverable else str(note),
+            "source_features": execution.get("parameters", occurrence.get("parameters", {})),
+            "code_delta": [occurrence["hypothesis"]] if occurrence.get("hypothesis") else [],
+            "execution_id": execution_id,
+            "execution_status": result_state.get("status") if isinstance(result_state, dict) else None,
+            "kernel_name": result_state.get("kernel_name") if isinstance(result_state, dict) else None,
+            "basic_info": result_state.get("basic_info") if isinstance(result_state, dict) else None,
+        })
+    if len(starter_ids) > 1:
+        raise InvalidReportInput("producer manifest identifies more than one starter occurrence")
+
+    captures = []
+    for execution_id, state in result_executions.items():
+        if execution_id not in first_occurrence:
+            raise InvalidReportInput(f"results reference unknown execution {execution_id!r}")
+        if not isinstance(state, dict):
+            raise InvalidReportInput(f"result execution {execution_id!r} must be an object")
+        candidate_id = first_occurrence[execution_id]
+        cases = state.get("cases", {})
+        if not isinstance(cases, dict):
+            raise InvalidReportInput(f"result execution {execution_id!r}.cases must be an object")
+        for case_id, case in cases.items():
+            if not isinstance(case, dict):
+                raise InvalidReportInput(f"result case {case_id!r} must be an object")
+            accepted = set(case.get("accepted_sample_indexes", range(len(case.get("samples", [])))))
+            for sample_index, sample in enumerate(objects(case.get("samples", []), "result samples")):
+                pipe = sample.get("pipe_utilization")
+                numeric = {
+                    str(name): float(value)
+                    for name, value in pipe.items()
+                    if isinstance(pipe, dict)
+                    and not isinstance(value, bool)
+                    and isinstance(value, (int, float))
+                    and math.isfinite(float(value))
+                } if isinstance(pipe, dict) else {}
+                captures.append({
+                    "candidate_id": candidate_id,
+                    "case_id": str(case_id),
+                    "status": "valid",
+                    "latency_us": sample.get("duration_us"),
+                    "profile": {"metrics": numeric, "raw": pipe},
+                    "evidence_sha256": sample.get("evidence_sha256"),
+                    "provenance": sample.get("provenance"),
+                    "accepted": sample_index in accepted,
+                })
+        failure = state.get("failure")
+        if isinstance(failure, dict):
+            category = failure.get("category")
+            captures.append({
+                "candidate_id": candidate_id,
+                "case_id": "__execution__",
+                "status": "infrastructure_failure" if category == "infrastructure" else "candidate_failure",
+                "failure": {"kind": failure.get("kind", "unknown"), "message": failure.get("diagnostics", "")},
+            })
+        for failure in objects(state.get("infrastructure_failures", []), "infrastructure_failures"):
+            captures.append({
+                "candidate_id": candidate_id,
+                "case_id": "__execution__",
+                "status": "infrastructure_failure",
+                "failure": {"kind": failure.get("kind", "unknown"), "message": failure.get("diagnostics", "")},
+            })
+    normalized_manifest = {
+        "schema_version": 1,
+        "campaign_id": manifest.get("campaign_root", "bsa-candidate-campaign"),
+        "starter_candidate_id": starter_ids[0] if starter_ids else None,
+        "references": manifest.get("references", []),
+        "candidates": candidates,
+    }
+    return normalized_manifest, {"schema_version": 1, "captures": captures}
+
+
+def normalize_inputs(
+    manifest: dict[str, Any], results: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if manifest.get("schema") == "profiling-skill/bsa-candidate-manifest/v1":
+        return normalize_producer_inputs(manifest, results)
+    if manifest.get("schema_version") != 1 or results.get("schema_version") != 1:
+        raise InvalidReportInput("manifest and captures must use compatible version 1 schemas")
+    return manifest, results
 
 
 def effective_candidate(
@@ -179,6 +325,8 @@ def classify_hypothesis(item: dict[str, Any]) -> tuple[str, str]:
 def compile_report(
     manifest: dict[str, Any], capture_doc: dict[str, Any], hypothesis_doc: dict[str, Any]
 ) -> dict[str, Any]:
+    if hypothesis_doc.get("schema_version") != 1:
+        raise InvalidReportInput("hypotheses must be a schema-version 1 object")
     raw_candidates = objects(manifest.get("candidates"), "manifest.candidates")
     candidates: dict[str, dict[str, Any]] = {}
     for index, candidate in enumerate(raw_candidates):
@@ -191,9 +339,11 @@ def compile_report(
         if lineage_state != "complete":
             identifier(candidate.get("lineage_note"), f"candidate {candidate_id!r}.lineage_note")
         candidates[candidate_id] = candidate
-    starter_id = identifier(manifest.get("starter_candidate_id"), "starter_candidate_id")
-    if starter_id not in candidates:
-        raise InvalidReportInput("starter_candidate_id references unknown candidate")
+    starter_id = manifest.get("starter_candidate_id")
+    if starter_id is not None:
+        starter_id = identifier(starter_id, "starter_candidate_id")
+        if starter_id not in candidates:
+            raise InvalidReportInput("starter_candidate_id references unknown candidate")
 
     captures = objects(capture_doc.get("captures"), "captures")
     validate_saturation(captures)
@@ -207,7 +357,10 @@ def compile_report(
         captures_by_candidate[candidate_id].append(capture)
 
     summaries = {key: summaries_by_case(value) for key, value in captures_by_candidate.items()}
-    starter_summaries = summaries.get(effective_candidate(starter_id, candidates), {})
+    starter_summaries = (
+        summaries.get(effective_candidate(starter_id, candidates), {})
+        if starter_id is not None else {}
+    )
     compiled_candidates = []
     for candidate_id in sorted(candidates):
         candidate = candidates[candidate_id]
@@ -239,7 +392,10 @@ def compile_report(
                 "parent_speedup": parent_speedup,
             }
         failures = []
-        for row in captures_by_candidate.get(candidate_id, []):
+        failure_rows = list(captures_by_candidate.get(evidence_id, []))
+        if evidence_id != candidate_id:
+            failure_rows.extend(captures_by_candidate.get(candidate_id, []))
+        for row in failure_rows:
             if row.get("status") == "valid":
                 continue
             failure = row.get("failure") if isinstance(row.get("failure"), dict) else {}
@@ -259,6 +415,10 @@ def compile_report(
             "duplicate_of": candidate.get("duplicate_of"),
             "lineage_state": candidate.get("lineage_state", "complete"),
             "lineage_note": candidate.get("lineage_note"),
+            "execution_id": candidate.get("execution_id"),
+            "execution_status": candidate.get("execution_status"),
+            "kernel_name": candidate.get("kernel_name"),
+            "basic_info": candidate.get("basic_info"),
             "evidence_source_candidate_id": evidence_id,
             "source_features": candidate.get("source_features", {}),
             "code_delta": candidate.get("code_delta", []),
@@ -271,6 +431,10 @@ def compile_report(
                 "parent_speedup": geometric_mean(parent_ratios),
             },
             "failures": failures,
+            "infrastructure_failures": [
+                failure for failure in failures
+                if failure["status"] == "infrastructure_failure"
+            ],
             "saturation": {
                 "state": "unknown",
                 "reason": "no validated capacity evidence",
@@ -312,10 +476,27 @@ def compile_report(
             "assessments": assessments,
         })
 
+    terminal = all(
+        item["lineage_state"] == "unrecoverable"
+        or bool(item["cases"])
+        or any(failure["status"] == "candidate_failure" for failure in item["failures"])
+        for item in compiled_candidates
+    )
+    valid_evidence = any(item["cases"] for item in compiled_candidates)
+    hypotheses_complete = bool(compiled_hypotheses) and all(
+        item["classification"] != "unavailable" for item in compiled_hypotheses
+    )
+    has_evidence = valid_evidence or any(item["failures"] for item in compiled_candidates)
+    if not has_evidence:
+        report_state = "reproducible_scaffold"
+    elif terminal and hypotheses_complete:
+        report_state = "complete"
+    else:
+        report_state = "partial"
     return {
         "schema_version": 1,
         "campaign_id": manifest.get("campaign_id"),
-        "report_state": "reproducible_scaffold",
+        "report_state": report_state,
         "references": manifest.get("references", []),
         "candidates": compiled_candidates,
         "hypotheses": sorted(compiled_hypotheses, key=lambda row: row["hypothesis_id"]),
@@ -332,10 +513,17 @@ def speedup(value: Any) -> str:
 
 
 def render_markdown(report: dict[str, Any]) -> str:
+    state = report["report_state"]
+    if state == "complete":
+        banner = "**Complete retained evidence.** All declared candidates and controlled hypotheses reached terminal evidence states."
+    elif state == "partial":
+        banner = "**Partial evidence.** Missing, retryable, or unavailable evidence remains explicit below."
+    else:
+        banner = "**Reproducible scaffold.** Replace fixture inputs with retained campaign outputs; missing evidence remains explicit."
     lines = [
         "# A3 profiling reverse-engineering report",
         "",
-        "> **Reproducible scaffold.** Replace fixture inputs with retained campaign outputs; missing evidence remains explicit.",
+        f"> {banner}",
         "",
         f"Campaign: `{report.get('campaign_id')}`",
         "",
@@ -403,7 +591,9 @@ def write_outputs(report: dict[str, Any], output_dir: Path) -> None:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--manifest", required=True, type=Path)
-    result.add_argument("--captures", required=True, type=Path)
+    evidence = result.add_mutually_exclusive_group(required=True)
+    evidence.add_argument("--results", type=Path, help="producer results or normalized captures")
+    evidence.add_argument("--captures", type=Path, help="legacy alias for --results")
     result.add_argument("--hypotheses", required=True, type=Path)
     result.add_argument("--output-dir", required=True, type=Path)
     return result
@@ -412,11 +602,11 @@ def parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = parser().parse_args()
     try:
-        report = compile_report(
+        manifest, captures = normalize_inputs(
             read_object(args.manifest, "manifest"),
-            read_object(args.captures, "captures"),
-            read_object(args.hypotheses, "hypotheses"),
+            read_object(args.results or args.captures, "results"),
         )
+        report = compile_report(manifest, captures, read_object(args.hypotheses, "hypotheses"))
         write_outputs(report, args.output_dir)
     except InvalidReportInput as error:
         print(f"error: {error}", file=sys.stderr)

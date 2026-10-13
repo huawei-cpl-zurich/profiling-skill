@@ -116,12 +116,17 @@ to improve latency, and aggregate activity is not presented as a timeline.
 ```bash
 python scripts/build_profile_reverse_report.py \
   --manifest campaign/candidate-manifest.json \
-  --captures campaign/captures.json \
+  --results campaign/candidate-results.json \
   --hypotheses campaign/hypothesis-results.json \
   --output-dir campaign/report
 ```
 
-The output directory contains `report.json`, `report.md`, and `candidates.csv`.
+The manifest and results may be supplied directly in the producer schemas
+`profiling-skill/bsa-candidate-manifest/v1` and
+`profiling-skill/bsa-candidate-results/v1`. Each occurrence remains a report
+candidate; occurrences sharing an execution are linked explicitly rather than
+collapsed. Unrecoverable CANNBot occurrences remain visible with no invented
+starter or parent. The output directory contains `report.json`, `report.md`, and `candidates.csv`.
 The JSON is the canonical joined result; Markdown and CSV are deterministic
 views. Invalid lineage, unknown candidates, bad latencies, and unvalidated
 saturation claims fail closed with exit status 2.

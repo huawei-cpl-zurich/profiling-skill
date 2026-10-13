@@ -192,7 +192,7 @@ def test_builds_joined_outputs_and_preserves_failures_and_duplicates(tmp_path: P
     }
 
     markdown = (output / "report.md").read_text()
-    assert "Reproducible scaffold" in markdown
+    assert "Partial evidence" in markdown
     assert "bound the loop by sequence length" in markdown
     assert "ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics" in markdown
     assert "Saturation: unknown" in markdown
@@ -247,3 +247,112 @@ def test_checked_in_hypotheses_are_valid_unavailable_scaffold(tmp_path: Path):
     report = json.loads((tmp_path / "planned" / "report.json").read_text())
     assert len(report["hypotheses"]) == 11
     assert {item["classification"] for item in report["hypotheses"]} == {"unavailable"}
+    assert report["report_state"] == "partial"
+
+
+def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage(
+    tmp_path: Path,
+):
+    source_a, source_b, source_c = "SOURCE_A", "SOURCE_B", "SOURCE_C"
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "campaign_root": "/retained/campaign",
+        "environment": {"product": "a3", "runtime": "named"},
+        "occurrences": [
+            {"occurrence_id": "starter-occ", "execution_id": "exec-a", "treatment": "starter", "round": 0, "position": 0, "option_id": "starter", "recoverability": "recoverable", "source_sha256": "a", "is_starter": True},
+            {"occurrence_id": "fast-occ", "execution_id": "exec-b", "treatment": "guarded", "round": 1, "position": 0, "option_id": "fast", "recoverability": "recoverable", "source_sha256": "b", "parent_occurrence_id": "starter-occ", "hypothesis": "local K bound"},
+            {"occurrence_id": "fast-duplicate", "execution_id": "exec-b", "treatment": "guarded", "round": 2, "position": 1, "option_id": "same", "recoverability": "recoverable", "source_sha256": "b"},
+            {"occurrence_id": "failed-occ", "execution_id": "exec-c", "treatment": "cannbot", "round": 1, "position": 0, "option_id": "bad", "recoverability": "recoverable", "source_sha256": "c"},
+            {"occurrence_id": "lost-occ", "treatment": "cannbot", "round": 1, "position": 1, "option_id": "lost", "recoverability": "source_unavailable", "artifact_diagnostics": "sanitized artifact omitted source"},
+        ],
+        "executions": [
+            {"execution_id": "exec-a", "source": source_a, "source_sha256": "a", "parameters": {"BLOCK_N": 64}, "occurrence_ids": ["starter-occ"]},
+            {"execution_id": "exec-b", "source": source_b, "source_sha256": "b", "parameters": {"BLOCK_N": 128}, "occurrence_ids": ["fast-occ", "fast-duplicate"]},
+            {"execution_id": "exec-c", "source": source_c, "source_sha256": "c", "parameters": {"BLOCK_N": 512}, "occurrence_ids": ["failed-occ"]},
+        ],
+    }
+    provenance = {"target": "bz-a3-2", "runtime": "named", "physical_device": 1, "command": ["run"], "handle": "remote:job-1"}
+    results = {
+        "schema": "profiling-skill/bsa-candidate-results/v1",
+        "cases": [47],
+        "executions": {
+            "exec-a": {"status": "completed", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 101.0, "relative_range": 0.02, "accepted_sample_indexes": [0, 1], "samples": [
+                {"duration_us": 100.0, "pipe_utilization": {"aiv_vec_ratio": 0.7}, "evidence_sha256": "1" * 64, "provenance": provenance},
+                {"duration_us": 102.0, "pipe_utilization": {"aiv_vec_ratio": 0.72}, "evidence_sha256": "2" * 64, "provenance": provenance},
+                {"duration_us": 150.0, "pipe_utilization": {"aiv_vec_ratio": 0.99}, "evidence_sha256": "9" * 64, "provenance": provenance},
+            ]}}, "infrastructure_failures": []},
+            "exec-b": {"status": "completed", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 50.0, "relative_range": 0.04, "accepted_sample_indexes": [0, 1], "samples": [
+                {"duration_us": 49.0, "pipe_utilization": {"aiv_vec_ratio": 0.5}, "evidence_sha256": "3" * 64, "provenance": provenance},
+                {"duration_us": 51.0, "pipe_utilization": {"aiv_vec_ratio": 0.52}, "evidence_sha256": "4" * 64, "provenance": provenance},
+            ]}}, "infrastructure_failures": [{"kind": "transport", "diagnostics": "recovered observer"}]},
+            "exec-c": {"status": "candidate_failure", "kernel_name": None, "cases": {"47": {"status": "pending", "samples": []}}, "failure": {"kind": "compile_error", "category": "candidate", "diagnostics": "resource limit"}, "infrastructure_failures": []},
+        },
+    }
+    manifest_path, results_path, hypotheses_path = (
+        tmp_path / "producer-manifest.json",
+        tmp_path / "producer-results.json",
+        tmp_path / "hypotheses.json",
+    )
+    write_json(manifest_path, manifest)
+    write_json(results_path, results)
+    (tmp_path / "legacy").mkdir()
+    _, _, legacy_hypotheses = fixtures(tmp_path / "legacy")
+    hypotheses_path.write_text(legacy_hypotheses.read_text())
+
+    output = tmp_path / "producer-report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--results", str(results_path), "--hypotheses", str(hypotheses_path), "--output-dir", str(output)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    by_id = {item["candidate_id"]: item for item in report["candidates"]}
+    assert set(by_id) == {"starter-occ", "fast-occ", "fast-duplicate", "failed-occ", "lost-occ"}
+    assert by_id["fast-duplicate"]["duplicate_of"] == "fast-occ"
+    assert by_id["fast-duplicate"]["evidence_source_candidate_id"] == "fast-occ"
+    assert by_id["fast-occ"]["kernel_name"] == "kernel"
+    assert by_id["fast-occ"]["cases"]["47"]["starter_speedup"] == 101.0 / 50.0
+    assert by_id["fast-occ"]["cases"]["47"]["parent_speedup"] == 101.0 / 50.0
+    assert by_id["fast-occ"]["cases"]["47"]["profile_metrics"] == {"aiv_vec_ratio": 0.51}
+    assert by_id["starter-occ"]["cases"]["47"]["latency_samples_us"] == [100.0, 102.0]
+    assert len(by_id["starter-occ"]["cases"]["47"]["samples"]) == 3
+    assert by_id["starter-occ"]["cases"]["47"]["samples"][2]["accepted"] is False
+    sample = by_id["fast-occ"]["cases"]["47"]["samples"][0]
+    assert sample["evidence_sha256"] == "3" * 64
+    assert sample["provenance"]["handle"] == "remote:job-1"
+    assert by_id["fast-occ"]["infrastructure_failures"][0]["message"] == "recovered observer"
+    assert by_id["fast-duplicate"]["infrastructure_failures"][0]["message"] == "recovered observer"
+    assert by_id["failed-occ"]["failures"][0]["kind"] == "compile_error"
+    assert by_id["lost-occ"]["lineage_state"] == "unrecoverable"
+    assert by_id["lost-occ"]["parent_candidate_id"] is None
+    assert by_id["lost-occ"]["geometric_mean"]["starter_speedup"] is None
+    assert report["report_state"] == "partial"
+
+
+def test_producer_schema_without_explicit_starter_or_parent_has_no_speedups(tmp_path: Path):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "occurrences": [{"occurrence_id": "only", "execution_id": "exec", "recoverability": "recoverable"}],
+        "executions": [{"execution_id": "exec", "occurrence_ids": ["only"], "parameters": {}}],
+    }
+    results = {
+        "schema": "profiling-skill/bsa-candidate-results/v1",
+        "executions": {"exec": {"status": "completed", "cases": {"47": {"status": "completed", "samples": [{"duration_us": 9.0, "pipe_utilization": {}, "provenance": {}}]}}, "infrastructure_failures": []}},
+    }
+    manifest_path, results_path = tmp_path / "manifest.json", tmp_path / "results.json"
+    write_json(manifest_path, manifest)
+    write_json(results_path, results)
+    output = tmp_path / "out"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--captures", str(results_path), "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(output)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    candidate = json.loads((output / "report.json").read_text())["candidates"][0]
+    assert candidate["parent_candidate_id"] is None
+    assert candidate["cases"]["47"]["starter_speedup"] is None
+    assert candidate["cases"]["47"]["parent_speedup"] is None

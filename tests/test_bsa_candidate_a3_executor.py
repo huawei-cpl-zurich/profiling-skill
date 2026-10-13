@@ -166,7 +166,11 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     script = Path(script_path).read_text()
     assert runtime == "py311-torch" and cwd == "/srv/profiling"
     assert "ASCEND_RT_VISIBLE_DEVICES" not in script
+    assert 'CPL_DEVICE_LEASE_ROOT="$PWD/.cpl-device-leases"' in script
     assert "remote_driver.py" in script
+    with tarfile.open(archive) as bundle:
+        driver = bundle.extractfile("remote_driver.py").read().decode()
+    assert '"device-lease-%d.lock"%physical' in driver
 
 
 def test_capture_binds_exact_selector_and_returns_pipe_rows(tmp_path):

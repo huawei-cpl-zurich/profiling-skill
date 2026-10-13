@@ -224,11 +224,11 @@ def emit(value):
 
 def pick_device():
     probe="import torch,torch_npu;torch.npu.set_device(0);x=torch.ones(1,device='npu');torch.npu.synchronize();assert float(x.cpu()[0])==1"
-    failures=[]; root=pathlib.Path(os.environ["BSA_DEVICE_LEASE_ROOT"]
+    failures=[]; root=pathlib.Path(os.environ["CPL_DEVICE_LEASE_ROOT"]
                                   ); root.mkdir(parents=True,exist_ok=True)
     for _attempt in range(5):
       for physical in range(8):
-        lease=(root/("device-%d.lock"%physical)).open("a+")
+        lease=(root/("device-lease-%d.lock"%physical)).open("a+")
         try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError: lease.close(); continue
         env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
@@ -519,7 +519,7 @@ class Executor:
 set -euo pipefail
 archive={quoted["archive"]}; run_root={quoted["run_root"]}
 test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
-export BSA_DEVICE_LEASE_ROOT="$PWD/.bsa-device-leases"
+export CPL_DEVICE_LEASE_ROOT="$PWD/.cpl-device-leases"
 rm -rf "$run_root"; mkdir -p "$run_root"; tar -xf "$archive" -C "$run_root"
 cd "$run_root"; exec python remote_driver.py
 '''

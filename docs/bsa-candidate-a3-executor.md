@@ -46,9 +46,10 @@ preflight checks, upload the deterministic tar bundle, dispatch a file-backed
 script under the named runtime, and observe the retained handle.
 
 The remote driver takes a nonblocking `flock` lease before probing each
-physical device and holds it for the entire retained job. Lock files are
-shared by all executor runs under the configured remote root; process exit
-releases the lease, so stale lock files are harmless. The bounded scan selects
+physical device and holds it for the entire retained job. It uses the shared
+`.cpl-device-leases/device-lease-N.lock` namespace also used by acquisition
+jobs, so independent profiling workflows cannot claim the same device.
+Process exit releases the lease, so stale lock files are harmless. The bounded scan selects
 an eligible device without freezing a physical ID in source. The selected ID
 is exposed only as provenance; the application sees logical device 0.
 

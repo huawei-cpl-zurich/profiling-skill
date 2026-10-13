@@ -213,7 +213,7 @@ class CplRemoteTransport:
 def remote_driver_source() -> str:
     """Return the dependency-free program executed inside the staged bundle."""
     return r'''#!/usr/bin/env python3
-import csv, fcntl, hashlib, importlib.util, json, math, os, pathlib, shlex, statistics, subprocess, sys, time, traceback
+import csv, fcntl, hashlib, importlib.util, json, math, os, pathlib, re, shlex, statistics, subprocess, sys, time, traceback
 
 SCHEMA="profiling-skill/bsa-candidate-remote-result/v1"
 SUCCESS="Profiling running finished. All task success."
@@ -258,6 +258,13 @@ def job_for(req):
       "fusion_contract":{"entrypoint":req["candidate"]["declared_kernel_name"],
                          "kernel_name":req["candidate"]["declared_kernel_name"]}}
 
+def is_device_infra(text):
+    lowered=text.lower()
+    phrases=("tsdopen","lazysetdevice","out of memory","outofmemoryerror",
+             "device unavailable","device is unavailable","npu device")
+    return any(phrase in lowered for phrase in phrases) or bool(
+        re.search(r"(?<![a-z0-9])oom(?![a-z0-9])",lowered))
+
 def run_workload(req,env,output):
     job=job_for(req); jobpath=output.with_suffix(".job.json"); jobpath.write_text(json.dumps(job))
     run=subprocess.run([sys.executable,"runner.py","--job",str(jobpath),"--output",str(output)],
@@ -267,9 +274,7 @@ def run_workload(req,env,output):
     if run.returncode and result.get("status")=="ok":
         return {"status":"infrastructure_error","diagnostics":"runner exited %d after success"%run.returncode}
     diagnostic=str(result.get("diagnostics","" )).lower()
-    infra=("tsdopen","lazysetdevice","out of memory","oom","device unavailable",
-           "device is unavailable","npu device")
-    if any(marker in diagnostic for marker in infra): result["status"]="infrastructure_error"
+    if is_device_infra(diagnostic): result["status"]="infrastructure_error"
     return result
 
 def load(path,name):
@@ -292,9 +297,8 @@ def profile_workload():
                 model(*harness.clone(inputs)); torch.npu.synchronize()
     except BaseException as exc:
       text=(type(exc).__name__+": "+str(exc)).lower()
-      infra=("tsdopen","lazysetdevice","out of memory","oom","device unavailable")
       compile_markers=("compile","compiler","triton","lowering","codegen","semantic")
-      status=("infrastructure_error" if any(x in text for x in infra) else
+      status=("infrastructure_error" if is_device_infra(text) else
               "compile_error" if any(x in text for x in compile_markers) else "runtime_error")
       pathlib.Path("profile-failure.json").write_text(json.dumps(
         {"status":status,"diagnostics":"".join(traceback.format_exception(type(exc),exc,exc.__traceback__))}))
@@ -339,7 +343,10 @@ def duration(row):
 def compact_pipe(rows):
     groups={}
     for row in rows:
-        groups.setdefault((row.get("block_id",""),row.get("sub_block_id","")),[]).append(row)
+        identity=(row.get("block_id",""),row.get("sub_block_id",""))
+        if identity in groups:
+            raise ValueError("duplicate PipeUtilization identity block_id=%r sub_block_id=%r"%identity)
+        groups[identity]=[row]
     result=[]
     for _key,items in sorted(groups.items()):
         merged={}
@@ -417,7 +424,9 @@ def main():
       names=sorted({name(row) for row in basic if name(row)})
       if names != [selector]:
           emit({"status":"infrastructure_error","diagnostics":"selector-binding BasicInfo mismatch: "+repr(names),"physical_device":physical}); return
-      pipe=compact_pipe(read_rows(csvs(report,"PipeUtilization")))
+      try: pipe=compact_pipe(read_rows(csvs(report,"PipeUtilization")))
+      except ValueError as exc:
+          emit({"status":"infrastructure_error","diagnostics":str(exc),"physical_device":physical}); return
       values=[duration(row) for row in basic if name(row)==selector]
       values=[value for value in values if value is not None]
       if not pipe or len(values)!=1:

@@ -132,6 +132,32 @@ def test_staged_remote_driver_is_valid_python():
     compile(module.remote_driver_source(), "remote_driver.py", "exec")
 
 
+def test_remote_classifier_uses_bounded_out_of_memory_markers():
+    module = load()
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(module.remote_driver_source(), "remote_driver.py", "exec"), namespace)
+
+    assert namespace["is_device_infra"]("torch.OutOfMemoryError: NPU out of memory")
+    assert namespace["is_device_infra"]("runtime failed: OOM while allocating")
+    assert not namespace["is_device_infra"]("candidate boom in user code")
+    assert not namespace["is_device_infra"]("room size mismatch")
+
+
+def test_pipe_compaction_rejects_duplicate_block_identity_across_csvs(tmp_path):
+    module = load()
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(module.remote_driver_source(), "remote_driver.py", "exec"), namespace)
+    first, second = tmp_path / "PipeUtilization-0.csv", tmp_path / "PipeUtilization-1.csv"
+    header = "block_id,sub_block_id,aiv_vec_ratio\n"
+    first.write_text(header + "0,vector0,0.5\n")
+    second.write_text(header + "0,vector0,0.7\n")
+
+    rows = namespace["read_rows"]([first, second])
+
+    with pytest.raises(ValueError, match="duplicate PipeUtilization identity"):
+        namespace["compact_pipe"](rows)
+
+
 def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_path):
     module = load()
     transport = FakeTransport(module, success())

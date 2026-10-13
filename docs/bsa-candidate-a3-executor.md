@@ -73,7 +73,9 @@ declared Triton entrypoint, including compiler AIC/AIV suffixes, plus compact
 BasicInfo rows. The coordinator requests each component separately. Capture
 reruns the single requested case, supplies the exact component selector to
 msprof with `PipeUtilization`, and verifies selector-binding BasicInfo.
-Repeated PipeUtilization rows are reduced to per-block/sub-block medians.
+Each `(block_id, sub_block_id)` identity must occur exactly once across all
+matching PipeUtilization CSVs. Duplicate identities fail as infrastructure
+instead of synthesizing a median from ambiguous reports.
 
 Each logical stability sample is a separate msprof process and report. The
 adapter never presents multiple launches from one report as independent

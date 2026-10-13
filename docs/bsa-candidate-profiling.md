@@ -22,6 +22,15 @@ another retained request when the same source hash is available. Otherwise
 they remain represented as `source_unavailable`; a hash is never treated as
 executable source.
 
+Each execution also contains deterministic source features for loop bounds,
+head-rank lookup, block sizes, whole-tile skipping, scalar block decisions,
+K/V masking, warps/stages, reduction style, and query/grid tiling. Each
+non-incumbent option links to the exact incumbent occurrence declared by its
+own request and records the feature delta. A next-round incumbent is linked to
+the prior winner only when the prior winner hash resolves to one unambiguous
+successful occurrence. Partial or ambiguous CANNBot history stays unlinked;
+the inventory never guesses lineage.
+
 ## Executor contract
 
 The coordinator invokes an executable as:
@@ -99,6 +108,39 @@ record. After seven valid but unstable samples, the case becomes
 a compilation or runtime defect. Large vendor report trees remain remote.
 
 Use `status --results RESULTS.json` for a compact terminal/retry summary.
+
+## Parallel shards
+
+Execution assignment is `sha256(execution_id) mod shard_count`, so it is
+deterministic and does not alter candidate or occurrence identity. Run shards
+in separate result paths:
+
+```bash
+python scripts/bsa_candidate_profiler.py run \
+  --manifest "$EVIDENCE_ROOT/manifest.json" \
+  --config experiments/bsa-profile-candidates.json \
+  --executor "$BUNDLE_EXECUTOR" \
+  --shard-count 8 --shard-index 0 \
+  --output "$EVIDENCE_ROOT/shard-0.json"
+```
+
+Indexes are zero-based. Every invocation with the same output must retain the
+same count and index. Merge any completed or checkpointed subset with:
+
+```bash
+python scripts/bsa_candidate_profiler.py merge-results \
+  --manifest "$EVIDENCE_ROOT/manifest.json" \
+  --config experiments/bsa-profile-candidates.json \
+  --input "$EVIDENCE_ROOT/shard-0.json" \
+  --input "$EVIDENCE_ROOT/shard-1.json" \
+  --output "$EVIDENCE_ROOT/merged.json"
+```
+
+The merger preserves each execution state, sample, diagnostic, and provenance
+object verbatim. It rejects repeated shard indexes, overlapping executions,
+wrong-shard assignments, and manifest, sample-policy, or shard-count mismatch.
+The merged result explicitly lists missing shard indexes and execution IDs, so
+a partial merge cannot look complete.
 
 ## Remote execution policy
 

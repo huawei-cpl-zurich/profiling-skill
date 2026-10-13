@@ -137,6 +137,27 @@ def one_execution() -> dict:
     }
 
 
+def many_executions(count: int = 5) -> dict:
+    manifest = one_execution()
+    manifest["executions"] = []
+    manifest["occurrences"] = []
+    for index in range(count):
+        source = f"SOURCE_{index}"
+        execution_id = f"exec-{index}"
+        manifest["executions"].append({
+            "execution_id": execution_id,
+            "source": source,
+            "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+            "parameters": {"BLOCK_N": 32 * (index + 1)},
+            "declared_kernel_name": "block_sparse_attention_kernel",
+            "occurrence_ids": [f"occ-{index}"],
+        })
+        manifest["occurrences"].append({
+            "occurrence_id": f"occ-{index}", "execution_id": execution_id,
+        })
+    return manifest
+
+
 def test_runner_discovers_kernel_and_accepts_stable_three_samples(tmp_path: Path) -> None:
     executor = tmp_path / "executor.py"
     make_executor(executor, [
@@ -268,3 +289,213 @@ def test_production_mode_rejects_success_without_remote_provenance(tmp_path: Pat
     execution = result["executions"]["exec-1"]
     assert execution["status"] == "retryable_infrastructure"
     assert execution["infrastructure_failures"][0]["kind"] == "invalid_provenance"
+
+
+def test_sharding_is_deterministic_exhaustive_and_does_not_change_identity(tmp_path: Path) -> None:
+    manifest = many_executions(11)
+    original_ids = [item["execution_id"] for item in manifest["executions"]]
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit('must not execute')\n")
+    executor.chmod(0o755)
+    selected = []
+
+    for index in range(4):
+        result = MODULE.run_campaign(
+            manifest, tmp_path / f"shard-{index}.json", executor, cases=[47],
+            stable_samples=3, max_samples=7, max_actions=0,
+            shard_count=4, shard_index=index,
+        )
+        assert result["shard"] == {
+            "algorithm": "sha256-mod-v1", "count": 4, "index": index,
+        }
+        assert {item["status"] for item in result["executions"].values()} == {"pending"}
+        selected.extend(result["executions"])
+
+    assert sorted(selected) == sorted(original_ids)
+    assert len(selected) == len(set(selected))
+    assert [item["execution_id"] for item in manifest["executions"]] == original_ids
+
+
+def test_merge_combines_disjoint_shards_without_losing_checkpoint_data(tmp_path: Path) -> None:
+    manifest = many_executions(7)
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit('must not execute')\n")
+    executor.chmod(0o755)
+    paths = []
+    for index in range(3):
+        path = tmp_path / f"shard-{index}.json"
+        MODULE.run_campaign(
+            manifest, path, executor, cases=[47], stable_samples=3,
+            max_samples=7, max_actions=0, shard_count=3, shard_index=index,
+        )
+        paths.append(path)
+    first = json.loads(paths[0].read_text())
+    first_execution = next(iter(first["executions"].values()))
+    first_execution["infrastructure_failures"].append({
+        "kind": "device_error", "provenance": {"handle": "remote:x:job:y"},
+    })
+    write_json(paths[0], first)
+
+    merged = MODULE.merge_results(manifest, paths)
+
+    assert merged["missing_shards"] == []
+    assert merged["missing_execution_ids"] == []
+    assert sorted(merged["executions"]) == sorted(
+        item["execution_id"] for item in manifest["executions"]
+    )
+    retained = merged["executions"][next(iter(first["executions"]))]
+    assert retained["infrastructure_failures"][0]["kind"] == "device_error"
+
+
+def test_merge_reports_missing_shards_and_executions(tmp_path: Path) -> None:
+    manifest = many_executions(9)
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit('must not execute')\n")
+    executor.chmod(0o755)
+    path = tmp_path / "shard-1.json"
+    result = MODULE.run_campaign(
+        manifest, path, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=0, shard_count=3, shard_index=1,
+    )
+
+    merged = MODULE.merge_results(manifest, [path])
+
+    assert merged["missing_shards"] == [0, 2]
+    assert sorted(merged["missing_execution_ids"]) == sorted(
+        set(item["execution_id"] for item in manifest["executions"])
+        - set(result["executions"])
+    )
+
+
+def test_merge_rejects_overlapping_or_mismatched_shards(tmp_path: Path) -> None:
+    manifest = many_executions(4)
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit('must not execute')\n")
+    executor.chmod(0o755)
+    path = tmp_path / "shard.json"
+    MODULE.run_campaign(
+        manifest, path, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=0, shard_count=2, shard_index=0,
+    )
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_bytes(path.read_bytes())
+
+    try:
+        MODULE.merge_results(manifest, [path, duplicate])
+    except MODULE.InvalidArtifact as exc:
+        assert "overlapping shard index" in str(exc)
+    else:
+        raise AssertionError("overlap was accepted")
+
+    mismatch = json.loads(path.read_text())
+    mismatch["manifest_sha256"] = "0" * 64
+    write_json(duplicate, mismatch)
+    try:
+        MODULE.merge_results(manifest, [duplicate])
+    except MODULE.InvalidArtifact as exc:
+        assert "manifest mismatch" in str(exc)
+    else:
+        raise AssertionError("manifest mismatch was accepted")
+
+    mismatch = json.loads(path.read_text())
+    mismatch["run_contract"]["max_samples"] = 99
+    write_json(duplicate, mismatch)
+    try:
+        MODULE.merge_results(manifest, [path, duplicate])
+    except MODULE.InvalidArtifact as exc:
+        assert "run contract mismatch" in str(exc)
+    else:
+        raise AssertionError("contract mismatch was accepted")
+
+
+def test_extract_features_covers_bsa_code_and_launch_dimensions() -> None:
+    source = """
+AUTOTUNE_CONFIG = {"BLOCK_M": 16, "BLOCK_N": 128, "num_warps": 4, "num_stages": 2}
+for hh in range(0, H):
+    rank += (hh < h)
+for start in range(0, TOTAL_K, BLOCK_N):
+    keep = valid & predicate
+    has = tl.sum(keep.to(tl.int32), axis=0) > 0
+    if has:
+        kv = tl.load(k + offsets, mask=keep[:, None], other=0.0)
+score = tl.sum(kv * qv[None, :], axis=1)
+grid = (triton.cdiv(tq, BLOCK_M), h)
+"""
+    features = MODULE.extract_features(
+        source, {"BLOCK_M": 16, "BLOCK_N": 128, "num_warps": 4, "num_stages": 2}
+    )
+
+    assert features == {
+        "loop_bound": "total_packed_k",
+        "head_rank_strategy": "linear_scan",
+        "block_n": 128,
+        "whole_tile_skip": True,
+        "scalar_block_decision": False,
+        "kv_mask_style": "final_keep",
+        "num_warps": 4,
+        "num_stages": 2,
+        "reduction_strategy": "row_tl_sum",
+        "query_tiling": "block_m",
+        "block_m": 16,
+        "grid_strategy": "query_tiles_by_head",
+    }
+
+
+def test_inventory_emits_only_provable_lineage_and_feature_deltas(tmp_path: Path) -> None:
+    root = campaign_fixture(tmp_path)
+    treatment = MODULE.TREATMENTS[0]
+    incumbent = option("incumbent", "for start in range(0, TOTAL_K, 64):\n pass", BLOCK_N=64)
+    child = option(
+        "local-bound", "for start in tl.range(0, sk, 128):\n pass",
+        BLOCK_N=128, num_warps=4,
+    )
+    write_json(root / treatment / "attempts/1/autotune-request.json", {
+        "schema": "simple-experiment-autotune-request/v1",
+        "optimization_round": 1,
+        "incumbent_id": "incumbent",
+        "expected_declared_kernel_name": "block_sparse_attention_kernel",
+        "options": [incumbent, child],
+    })
+    write_json(root / treatment / "attempts/1/result.json", {"outcome": "success"})
+    write_json(root / treatment / "repo/rounds/01/autotune-result.json", {
+        "winner_id": "local-bound", "winner_source_sha256": child["source_sha256"],
+    })
+    write_json(root / treatment / "attempts/2/autotune-request.json", {
+        "schema": "simple-experiment-autotune-request/v1",
+        "optimization_round": 2,
+        "incumbent_id": "incumbent",
+        "expected_declared_kernel_name": "block_sparse_attention_kernel",
+        "options": [{**child, "id": "incumbent"}],
+    })
+
+    manifest = MODULE.inventory_campaign(root, environment={"product": "a3"})
+    occurrences = {item["occurrence_id"]: item for item in manifest["occurrences"]}
+    round1_incumbent = next(
+        item for item in occurrences.values()
+        if item["treatment"] == treatment and item["round"] == 1
+        and item["option_id"] == "incumbent"
+    )
+    round1_child = next(
+        item for item in occurrences.values()
+        if item["treatment"] == treatment and item["round"] == 1
+        and item["option_id"] == "local-bound"
+    )
+    round2_incumbent = next(
+        item for item in occurrences.values()
+        if item["treatment"] == treatment and item["round"] == 2
+    )
+
+    assert round1_child["parent_occurrence_id"] == round1_incumbent["occurrence_id"]
+    assert round1_child["lineage_note"] == "request-declared incumbent"
+    assert round1_child["parent_feature_deltas"]["loop_bound"] == {
+        "before": "total_packed_k", "after": "per_sequence_k",
+    }
+    assert round2_incumbent["parent_occurrence_id"] == round1_child["occurrence_id"]
+    assert round2_incumbent["lineage_note"] == "prior round winner hash"
+    assert round2_incumbent["parent_feature_deltas"] == {}
+    # Other treatments have no evidence linking their round-one incumbent.
+    unlinked = next(
+        item for item in occurrences.values()
+        if item["treatment"] == MODULE.TREATMENTS[2]
+    )
+    assert "parent_occurrence_id" not in unlinked

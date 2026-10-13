@@ -12,6 +12,10 @@
     "max_samples": 7,
     "relative_range_threshold": 0.05
   },
+  "sharding": {
+    "algorithm": "sha256-mod-v1",
+    "recommended_count": 8
+  },
   "metrics": ["BasicInfo", "PipeUtilization"],
   "require_provenance": true,
   "expected_kernel_name": "block_sparse_attention_kernel"

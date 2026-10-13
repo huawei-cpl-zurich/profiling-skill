@@ -62,10 +62,19 @@ def campaign_fixture(tmp_path: Path) -> Path:
     return root
 
 
+def starter(source: str = "SOURCE_A", **parameters: int) -> dict:
+    return {
+        "source": source,
+        "parameters": parameters or {"BLOCK_N": 64, "num_warps": 4},
+        "declared_kernel_name": "_bsa_reference_fwd",
+    }
+
+
 def test_inventory_preserves_occurrences_and_maps_exact_duplicates(tmp_path: Path) -> None:
     manifest = MODULE.inventory_campaign(
         campaign_fixture(tmp_path),
         environment={"product": "a3", "runtime": "py311-torch", "suite": "bsa-v1"},
+        starter=starter(),
     )
 
     assert manifest["summary"] == {
@@ -98,11 +107,53 @@ def test_inventory_retains_hash_only_candidate_as_unrecoverable(tmp_path: Path) 
     )
     write_json(root / MODULE.TREATMENTS[0] / "attempts/1/autotune-request.json", request)
 
-    manifest = MODULE.inventory_campaign(root, environment={"product": "a3"})
+    manifest = MODULE.inventory_campaign(
+        root, environment={"product": "a3"}, starter=starter()
+    )
 
     lost = next(x for x in manifest["occurrences"] if x["option_id"] == "lost")
     assert lost["recoverability"] == "source_unavailable"
     assert manifest["summary"]["unrecoverable_occurrences"] == 1
+
+
+def test_inventory_identifies_one_global_starter_without_consumer_guessing(
+    tmp_path: Path,
+) -> None:
+    manifest = MODULE.inventory_campaign(
+        campaign_fixture(tmp_path), environment={"product": "a3"}, starter=starter()
+    )
+
+    occurrences = {
+        item["occurrence_id"]: item for item in manifest["occurrences"]
+    }
+    starter_occurrence = occurrences[manifest["starter_occurrence_id"]]
+    assert starter_occurrence["lineage_role"] == "starter"
+    assert starter_occurrence["source_sha256"] == hashlib.sha256(b"SOURCE_A").hexdigest()
+    assert sum(
+        item.get("lineage_role") == "starter" for item in manifest["occurrences"]
+    ) == 1
+
+
+def test_inventory_adds_synthetic_starter_execution_when_outside_options(
+    tmp_path: Path,
+) -> None:
+    manifest = MODULE.inventory_campaign(
+        campaign_fixture(tmp_path), environment={"product": "a3"},
+        starter=starter("FROZEN_STARTER", BLOCK_N=32),
+    )
+
+    occurrence = next(
+        item for item in manifest["occurrences"]
+        if item["occurrence_id"] == manifest["starter_occurrence_id"]
+    )
+    execution = next(
+        item for item in manifest["executions"]
+        if item["execution_id"] == occurrence["execution_id"]
+    )
+    assert occurrence["lineage_role"] == "starter"
+    assert occurrence["treatment"] is None
+    assert execution["declared_kernel_name"] == "_bsa_reference_fwd"
+    assert execution["source"] == "FROZEN_STARTER"
 
 
 def make_executor(path: Path, bodies: list[dict]) -> None:
@@ -113,6 +164,9 @@ def make_executor(path: Path, bodies: list[dict]) -> None:
         "p=argparse.ArgumentParser();p.add_argument('--request');p.add_argument('--response');a=p.parse_args()\n"
         f"bodies={bodies!r}\n"
         "state=Path(a.response).with_suffix('.count')\n"
+        "requests=Path(a.response).with_suffix('.requests')\n"
+        "history=json.loads(requests.read_text()) if requests.exists() else []\n"
+        "history.append(json.loads(Path(a.request).read_text()));requests.write_text(json.dumps(history))\n"
         "n=int(state.read_text()) if state.exists() else 0\n"
         "state.write_text(str(n+1))\n"
         "Path(a.response).write_text(json.dumps(bodies[min(n,len(bodies)-1)]))\n"
@@ -133,7 +187,11 @@ def one_execution() -> dict:
             "declared_kernel_name": "block_sparse_attention_kernel",
             "occurrence_ids": ["occ-1"],
         }],
-        "occurrences": [{"occurrence_id": "occ-1", "execution_id": "exec-1"}],
+        "starter_occurrence_id": "occ-1",
+        "occurrences": [{
+            "occurrence_id": "occ-1", "execution_id": "exec-1",
+            "lineage_role": "starter",
+        }],
     }
 
 
@@ -155,6 +213,8 @@ def many_executions(count: int = 5) -> dict:
         manifest["occurrences"].append({
             "occurrence_id": f"occ-{index}", "execution_id": execution_id,
         })
+    manifest["starter_occurrence_id"] = "occ-0"
+    manifest["occurrences"][0]["lineage_role"] = "starter"
     return manifest
 
 
@@ -185,7 +245,7 @@ def test_runner_discovers_kernel_and_accepts_stable_three_samples(tmp_path: Path
     assert len(execution["cases"]["47"]["samples"]) == 3
 
 
-def test_runner_retries_noise_to_find_tightest_stable_window(tmp_path: Path) -> None:
+def test_runner_uses_first_stable_consecutive_window_without_cherry_picking(tmp_path: Path) -> None:
     executor = tmp_path / "executor.py"
     make_executor(executor, [
         {"status": "ok", "kernel_names": ["actual_kernel"], "basic_info": {},
@@ -193,7 +253,7 @@ def test_runner_retries_noise_to_find_tightest_stable_window(tmp_path: Path) -> 
         *[
             {"status": "ok", "duration_us": value, "pipe_utilization": {"p": value},
              "evidence_sha256": str(index) * 64}
-            for index, value in enumerate([100.0, 130.0, 101.0, 99.0], start=2)
+            for index, value in enumerate([100.0, 130.0, 101.0, 99.0, 100.0], start=2)
         ],
     ])
 
@@ -203,9 +263,111 @@ def test_runner_retries_noise_to_find_tightest_stable_window(tmp_path: Path) -> 
     )
 
     case = result["executions"]["exec-1"]["cases"]["47"]
-    assert [x["duration_us"] for x in case["samples"]] == [100.0, 130.0, 101.0, 99.0]
-    assert case["accepted_sample_indexes"] == [0, 2, 3]
+    assert [x["duration_us"] for x in case["samples"]] == [100.0, 130.0, 101.0, 99.0, 100.0]
+    assert case["accepted_sample_indexes"] == [2, 3, 4]
     assert case["median_us"] == 100.0
+
+
+def test_runner_profiles_all_discovered_components_and_aggregates_max_duration(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {
+            "status": "ok",
+            "components": [
+                {"selector": "block_sparse_attention_kernel_aic", "kind": "aic"},
+                {"selector": "block_sparse_attention_kernel_aiv", "kind": "aiv"},
+            ],
+            "basic_info": {"rows": 2},
+            "evidence_sha256": "1" * 64,
+        },
+        *[
+            {
+                "status": "ok", "duration_us": duration,
+                "pipe_utilization": {"rows": [{"selector": selector}]},
+                "evidence_sha256": str(index) * 64,
+            }
+            for index, (selector, duration) in enumerate([
+                ("aic", 80.0), ("aiv", 100.0),
+                ("aic", 81.0), ("aiv", 102.0),
+                ("aic", 79.0), ("aiv", 98.0),
+            ], start=2)
+        ],
+    ])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=None,
+    )
+
+    execution = result["executions"]["exec-1"]
+    assert execution["selectors"] == [
+        "block_sparse_attention_kernel_aic",
+        "block_sparse_attention_kernel_aiv",
+    ]
+    samples = execution["cases"]["47"]["samples"]
+    assert [sample["duration_us"] for sample in samples] == [100.0, 102.0, 98.0]
+    assert samples[0]["duration_aggregation"] == "max_component_duration"
+    assert set(samples[0]["components"]) == set(execution["selectors"])
+    requests = json.loads(
+        (tmp_path / "results.protocol" / "response.requests").read_text()
+    )
+    assert [request["kernel_name"] for request in requests[1:]] == [
+        "block_sparse_attention_kernel_aic",
+        "block_sparse_attention_kernel_aiv",
+    ] * 3
+
+
+def test_runner_resumes_partial_multi_component_sample_without_recapturing(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {"status": "ok", "components": [{"selector": "aic"}, {"selector": "aiv"}],
+         "evidence_sha256": "1" * 64},
+        {"status": "ok", "duration_us": 80.0, "pipe_utilization": {},
+         "evidence_sha256": "2" * 64},
+        {"status": "infrastructure_error", "diagnostics": "profiler unavailable",
+         "terminal": True},
+        {"status": "ok", "duration_us": 100.0, "pipe_utilization": {},
+         "evidence_sha256": "3" * 64},
+    ])
+    output = tmp_path / "results.json"
+
+    first = MODULE.run_campaign(
+        one_execution(), output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=None,
+    )
+    partial = first["executions"]["exec-1"]["cases"]["47"]["in_progress_sample"]
+    assert set(partial["components"]) == {"aic"}
+
+    second = MODULE.run_campaign(
+        one_execution(), output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=1,
+    )
+    sample = second["executions"]["exec-1"]["cases"]["47"]["samples"][0]
+    assert set(sample["components"]) == {"aic", "aiv"}
+    assert sample["duration_us"] == 100.0
+
+
+def test_runner_rejects_legacy_checkpoint_with_migration_message(tmp_path: Path) -> None:
+    output = tmp_path / "results.json"
+    write_json(output, {"schema": "profiling-skill/bsa-candidate-results/v1"})
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit(1)\n")
+    executor.chmod(0o755)
+
+    try:
+        MODULE.run_campaign(
+            one_execution(), output, executor, cases=[47], stable_samples=3,
+            max_samples=7, max_actions=0,
+        )
+    except MODULE.InvalidArtifact as exc:
+        assert "legacy v1 checkpoint" in str(exc)
+        assert "regenerate" in str(exc)
+    else:
+        raise AssertionError("legacy checkpoint was accepted")
 
 
 def test_runner_classifies_candidate_failure_and_keeps_diagnostics(tmp_path: Path) -> None:
@@ -289,6 +451,84 @@ def test_production_mode_rejects_success_without_remote_provenance(tmp_path: Pat
     execution = result["executions"]["exec-1"]
     assert execution["status"] == "retryable_infrastructure"
     assert execution["infrastructure_failures"][0]["kind"] == "invalid_provenance"
+
+
+def test_production_mode_rejects_wrong_target_runtime_and_invalid_digest(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "executor.py"
+    provenance = {
+        "target": "bz-a5", "runtime": "wrong-runtime", "physical_device": 0,
+        "command": ["run"], "handle": "remote:bz-a5:job:wrong",
+    }
+    make_executor(executor, [{
+        "status": "ok", "kernel_names": ["block_sparse_attention_kernel"],
+        "basic_info": {}, "evidence_sha256": "not-a-digest",
+        "provenance": provenance,
+    }])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=None, require_provenance=True,
+    )
+
+    failure = result["executions"]["exec-1"]["infrastructure_failures"][0]
+    assert failure["kind"] == "invalid_provenance"
+    assert "A3 target" in failure["diagnostics"]
+
+    provenance.update({
+        "target": "bz-a3-1", "runtime": "py311-torch",
+        "handle": "remote:bz-a3-1:job:right",
+    })
+    make_executor(executor, [{
+        "status": "ok", "kernel_names": ["block_sparse_attention_kernel"],
+        "basic_info": {}, "evidence_sha256": "not-a-digest",
+        "provenance": provenance,
+    }])
+    manifest = one_execution()
+    manifest["environment"]["runtime"] = "py311-torch"
+    digest_result = MODULE.run_campaign(
+        manifest, tmp_path / "digest-results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=None, require_provenance=True,
+    )
+    digest_failure = digest_result["executions"]["exec-1"]["infrastructure_failures"][0]
+    assert digest_failure["kind"] == "invalid_evidence_digest"
+
+
+def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "executor.py"
+    handle = "remote:bz-a3-1:job:still-running"
+    make_executor(executor, [
+        {"status": "infrastructure_error", "diagnostics": "observer disconnected",
+         "terminal": False, "provenance": {"handle": handle}},
+        {"status": "infrastructure_error", "diagnostics": "job failed",
+         "terminal": True, "provenance": {"handle": handle}},
+        {"status": "ok", "kernel_names": ["block_sparse_attention_kernel"],
+         "evidence_sha256": "a" * 64},
+    ])
+    output = tmp_path / "results.json"
+    manifest = one_execution()
+
+    MODULE.run_campaign(
+        manifest, output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=None,
+    )
+    MODULE.run_campaign(
+        manifest, output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=None,
+    )
+    MODULE.run_campaign(
+        manifest, output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=1,
+    )
+
+    requests = json.loads(
+        (tmp_path / "results.protocol" / "response.requests").read_text()
+    )
+    assert requests[1]["retry"] == {"mode": "observe", "handle": handle}
+    assert requests[2]["retry"] == {"mode": "new_attempt", "prior_handle": handle}
 
 
 def test_sharding_is_deterministic_exhaustive_and_does_not_change_identity(tmp_path: Path) -> None:
@@ -468,7 +708,9 @@ def test_inventory_emits_only_provable_lineage_and_feature_deltas(tmp_path: Path
         "options": [{**child, "id": "incumbent"}],
     })
 
-    manifest = MODULE.inventory_campaign(root, environment={"product": "a3"})
+    manifest = MODULE.inventory_campaign(
+        root, environment={"product": "a3"}, starter=starter()
+    )
     occurrences = {item["occurrence_id"]: item for item in manifest["occurrences"]}
     round1_incumbent = next(
         item for item in occurrences.values()

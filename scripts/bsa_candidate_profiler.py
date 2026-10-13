@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import itertools
 import json
 import math
 import os
@@ -31,9 +30,11 @@ TREATMENTS = (
 )
 CANDIDATE_FAILURES = {"compile_error", "runtime_error", "correctness_error"}
 SCHEMA = "profiling-skill/bsa-candidate-manifest/v1"
-RESULT_SCHEMA = "profiling-skill/bsa-candidate-results/v1"
+LEGACY_RESULT_SCHEMA = "profiling-skill/bsa-candidate-results/v1"
+RESULT_SCHEMA = "profiling-skill/bsa-candidate-results/v2"
 MERGED_RESULT_SCHEMA = "profiling-skill/bsa-candidate-merged-results/v1"
 SHARD_ALGORITHM = "sha256-mod-v1"
+SAMPLE_SELECTION = "first-stable-consecutive-window-v1"
 
 
 class InvalidArtifact(ValueError):
@@ -138,7 +139,9 @@ def _attempt_number(path: Path) -> tuple[int, str]:
     return (int(name), name) if name.isdigit() else (2**31, name)
 
 
-def inventory_campaign(root: Path, *, environment: dict[str, Any]) -> dict[str, Any]:
+def inventory_campaign(
+    root: Path, *, environment: dict[str, Any], starter: dict[str, Any]
+) -> dict[str, Any]:
     """Recover every request occurrence and group exact executable duplicates."""
     root = root.resolve()
     occurrences: list[dict[str, Any]] = []
@@ -314,6 +317,60 @@ def inventory_campaign(root: Path, *, environment: dict[str, Any]) -> dict[str, 
                 parent_execution["features"], current_execution["features"]
             )
 
+    starter_source = starter.get("source")
+    starter_parameters = starter.get("parameters", {})
+    starter_kernel_name = starter.get("declared_kernel_name")
+    if (
+        not isinstance(starter_source, str)
+        or not isinstance(starter_parameters, dict)
+        or not isinstance(starter_kernel_name, str)
+        or not starter_kernel_name
+    ):
+        raise InvalidArtifact("starter requires source, parameters, and declared kernel name")
+    starter_sha = hashlib.sha256(starter_source.encode()).hexdigest()
+    starter_identity = {
+        "benchmark": "bsa", "source_sha256": starter_sha,
+        "parameters": starter_parameters, "environment": environment,
+    }
+    starter_execution_id = "candidate-" + _sha(starter_identity)[:20]
+    matching_occurrences = sorted(
+        (
+            item for item in occurrences
+            if item.get("execution_id") == starter_execution_id
+        ),
+        key=lambda item: item["occurrence_id"],
+    )
+    if matching_occurrences:
+        starter_occurrence = matching_occurrences[0]
+        executions[starter_execution_id]["declared_kernel_name"] = starter_kernel_name
+    else:
+        starter_occurrence = {
+            "occurrence_id": "frozen-bsa-starter",
+            "treatment": None,
+            "round": 0,
+            "attempt": None,
+            "position": 0,
+            "option_id": "frozen-bsa-starter",
+            "parameters": starter_parameters,
+            "hypothesis": None,
+            "source_sha256": starter_sha,
+            "artifact_outcome": None,
+            "artifact_diagnostics": None,
+            "request_path": None,
+            "recoverability": "recoverable",
+            "execution_id": starter_execution_id,
+        }
+        occurrences.append(starter_occurrence)
+        executions[starter_execution_id] = {
+            "execution_id": starter_execution_id,
+            **starter_identity,
+            "source": starter_source,
+            "features": extract_features(starter_source, starter_parameters),
+            "declared_kernel_name": starter_kernel_name,
+            "occurrence_ids": [starter_occurrence["occurrence_id"]],
+        }
+    starter_occurrence["lineage_role"] = "starter"
+
     recoverable_count = sum(
         item["recoverability"] == "recoverable" for item in occurrences
     )
@@ -321,6 +378,7 @@ def inventory_campaign(root: Path, *, environment: dict[str, Any]) -> dict[str, 
         "schema": SCHEMA,
         "campaign_root": str(root),
         "environment": environment,
+        "starter_occurrence_id": starter_occurrence["occurrence_id"],
         "treatments": treatment_summary,
         "occurrences": occurrences,
         "executions": sorted(executions.values(), key=lambda item: item["execution_id"]),
@@ -368,6 +426,7 @@ def _run_contract(
         "max_samples": max_samples,
         "variability_threshold": variability_threshold,
         "require_provenance": require_provenance,
+        "sample_selection": SAMPLE_SELECTION,
     }
 
 
@@ -393,6 +452,8 @@ def _initial_results(
             item["execution_id"]: {
                 "status": "pending",
                 "kernel_name": None,
+                "selectors": None,
+                "components": None,
                 "basic_info": None,
                 "cases": {
                     str(case): {"status": "pending", "samples": []}
@@ -412,6 +473,11 @@ def _load_results(
     if not path.exists():
         return _initial_results(manifest, contract, shard_count, shard_index)
     value = _read_json(path)
+    if value.get("schema") == LEGACY_RESULT_SCHEMA:
+        raise InvalidArtifact(
+            "legacy v1 checkpoint cannot represent consecutive-window or "
+            "multi-component captures; regenerate it with the v2 runner"
+        )
     if value.get("schema") != RESULT_SCHEMA:
         raise InvalidArtifact("result schema mismatch")
     if value.get("manifest_sha256") != _sha(manifest):
@@ -460,42 +526,89 @@ def _invoke_executor(
     return response
 
 
-def _stable_subset(samples: list[dict[str, Any]], wanted: int, threshold: float):
-    best = None
-    for indexes in itertools.combinations(range(len(samples)), wanted):
+def _stable_window(samples: list[dict[str, Any]], wanted: int, threshold: float):
+    for start in range(len(samples) - wanted + 1):
+        indexes = tuple(range(start, start + wanted))
         values = [float(samples[index]["duration_us"]) for index in indexes]
         median = statistics.median(values)
         relative_range = (max(values) - min(values)) / median
-        candidate = (relative_range, indexes, median)
-        if best is None or candidate < best:
-            best = candidate
-    if best is not None and best[0] <= threshold:
-        return best
+        if relative_range <= threshold:
+            return relative_range, indexes, median
     return None
 
 
 def _failure(response: dict[str, Any]) -> dict[str, Any]:
     kind = response.get("status", "infrastructure_error")
-    return {
+    failure = {
         "kind": kind,
         "category": "candidate" if kind in CANDIDATE_FAILURES else "infrastructure",
         "diagnostics": str(response.get("diagnostics", "")),
         "evidence_sha256": response.get("evidence_sha256"),
         "provenance": response.get("provenance"),
     }
+    if "terminal" in response:
+        failure["terminal"] = response["terminal"]
+    return failure
 
 
-def _valid_provenance(value: object) -> bool:
+def _valid_provenance(value: object, environment: dict[str, Any]) -> bool:
     if not isinstance(value, dict):
         return False
+    target = value.get("target")
+    runtime = value.get("runtime")
+    expected_runtime = environment.get("runtime")
     return (
-        isinstance(value.get("target"), str)
-        and isinstance(value.get("runtime"), str)
+        target in {"gz-a3", "bz-a3-1", "bz-a3-2"}
+        and isinstance(runtime, str)
+        and (not isinstance(expected_runtime, str) or runtime == expected_runtime)
         and isinstance(value.get("physical_device"), int)
         and isinstance(value.get("command"), (str, list))
         and isinstance(value.get("handle"), str)
-        and value["handle"].startswith("remote:")
+        and value["handle"].startswith(f"remote:{target}:")
     )
+
+
+def _valid_evidence_digest(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-fA-F]{64}", value) is not None
+
+
+def _validate_manifest(manifest: dict[str, Any]) -> None:
+    if manifest.get("schema") != SCHEMA:
+        raise InvalidArtifact("manifest schema mismatch")
+    starter_id = manifest.get("starter_occurrence_id")
+    occurrences = manifest.get("occurrences")
+    starters = [
+        item for item in occurrences or []
+        if isinstance(item, dict) and item.get("lineage_role") == "starter"
+    ]
+    if (
+        not isinstance(starter_id, str)
+        or len(starters) != 1
+        or starters[0].get("occurrence_id") != starter_id
+    ):
+        raise InvalidArtifact(
+            "manifest must identify exactly one starter occurrence via "
+            "starter_occurrence_id and lineage_role"
+        )
+
+
+def _retry_from_failure(response: dict[str, Any]) -> dict[str, Any] | None:
+    provenance = response.get("provenance")
+    handle = provenance.get("handle") if isinstance(provenance, dict) else None
+    if not isinstance(handle, str) or not handle.startswith("remote:"):
+        return None
+    if response.get("terminal") is True:
+        return {"mode": "new_attempt", "prior_handle": handle}
+    retry = {"mode": "observe", "handle": handle}
+    if "terminal" not in response:
+        retry["terminal_unknown"] = True
+    return retry
+
+
+def _with_retry(request: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(state.get("retry"), dict):
+        request["retry"] = state["retry"]
+    return request
 
 
 def run_campaign(
@@ -512,8 +625,7 @@ def run_campaign(
     shard_count: int = 1,
     shard_index: int = 0,
 ) -> dict[str, Any]:
-    if manifest.get("schema") != SCHEMA:
-        raise InvalidArtifact("manifest schema mismatch")
+    _validate_manifest(manifest)
     if stable_samples < 1 or max_samples < stable_samples:
         raise InvalidArtifact("sample limits are invalid")
     _validate_shard(shard_count, shard_index)
@@ -532,18 +644,18 @@ def run_campaign(
         state = results["executions"][candidate["execution_id"]]
         if state["status"] in {"completed", "candidate_failure", "measurement_unstable"}:
             continue
-        if state["kernel_name"] is None:
+        if state.get("selectors") is None:
             if max_actions is not None and actions >= max_actions:
                 _atomic_json(output, results)
                 return results
             state["status"] = "running"
-            response = _invoke_executor(executor, protocol_dir, {
+            response = _invoke_executor(executor, protocol_dir, _with_retry({
                 "schema": "profiling-skill/bsa-candidate-executor-request/v1",
                 "action": "discover",
                 "candidate": candidate,
                 "correctness_cases": cases,
                 "metric": "BasicInfo",
-            })
+            }, state))
             actions += 1
             status = response.get("status")
             if status in CANDIDATE_FAILURES:
@@ -554,41 +666,75 @@ def run_campaign(
             if status != "ok":
                 state["status"] = "retryable_infrastructure"
                 state["infrastructure_failures"].append(_failure(response))
+                state["retry"] = _retry_from_failure(response)
                 _atomic_json(output, results)
                 continue
-            if require_provenance and not _valid_provenance(response.get("provenance")):
+            state.pop("retry", None)
+            if require_provenance and not _valid_provenance(
+                response.get("provenance"), manifest["environment"]
+            ):
                 state["status"] = "retryable_infrastructure"
                 state["infrastructure_failures"].append({
                     "kind": "invalid_provenance",
                     "category": "infrastructure",
-                    "diagnostics": "BasicInfo response lacks target/runtime/device/command/handle",
+                    "diagnostics": (
+                        "BasicInfo provenance must match the requested runtime and "
+                        "an allowed A3 target/device/command/handle"
+                    ),
                 })
                 _atomic_json(output, results)
                 continue
+            if not _valid_evidence_digest(response.get("evidence_sha256")):
+                state["status"] = "retryable_infrastructure"
+                state["infrastructure_failures"].append({
+                    "kind": "invalid_evidence_digest",
+                    "category": "infrastructure",
+                    "diagnostics": "BasicInfo response lacks a valid SHA-256 evidence digest",
+                })
+                _atomic_json(output, results)
+                continue
+            raw_components = response.get("components")
+            components = None
+            if (
+                isinstance(raw_components, list) and raw_components
+                and all(
+                    isinstance(item, dict)
+                    and isinstance(item.get("selector"), str)
+                    and item["selector"]
+                    for item in raw_components
+                )
+            ):
+                selectors = [item["selector"] for item in raw_components]
+                if len(selectors) == len(set(selectors)):
+                    components = raw_components
             names = response.get("kernel_names")
-            if not isinstance(names, list) or not names or not all(
+            if components is None and isinstance(names, list) and names and all(
                 isinstance(name, str) and name for name in names
             ):
+                declared = candidate["declared_kernel_name"]
+                selected = declared if declared in names else (names[0] if len(names) == 1 else None)
+                if selected is not None:
+                    components = [{"selector": selected}]
+            if components is None:
                 state["status"] = "retryable_infrastructure"
                 state["infrastructure_failures"].append({
                     "kind": "invalid_basic_info",
-                    "diagnostics": "BasicInfo returned no valid kernel names",
+                    "diagnostics": (
+                        "BasicInfo returned neither distinct explicit components nor "
+                        "one unambiguous legacy kernel selector"
+                    ),
                 })
                 _atomic_json(output, results)
                 continue
-            declared = candidate["declared_kernel_name"]
-            state["kernel_name"] = declared if declared in names else (names[0] if len(names) == 1 else None)
-            if state["kernel_name"] is None:
-                state["status"] = "candidate_failure"
-                state["failure"] = {
-                    "kind": "kernel_selector_ambiguous",
-                    "category": "candidate",
-                    "diagnostics": f"declared {declared!r}; BasicInfo observed {names!r}",
-                }
-                _atomic_json(output, results)
-                continue
+            state["components"] = components
+            state["selectors"] = [item["selector"] for item in components]
+            # Retained for report consumers which predate split AIC/AIV kernels.
+            state["kernel_name"] = state["selectors"][0]
             state["basic_info"] = {
-                "kernel_names": names,
+                "kernel_names": (
+                    names if isinstance(names, list) else state["selectors"]
+                ),
+                "components": components,
                 "compact": response.get("basic_info"),
                 "evidence_sha256": response.get("evidence_sha256"),
                 "provenance": response.get("provenance"),
@@ -601,7 +747,7 @@ def run_campaign(
             if case_state["status"] == "completed":
                 continue
             while len(case_state["samples"]) < max_samples:
-                stable = _stable_subset(
+                stable = _stable_window(
                     case_state["samples"], stable_samples, variability_threshold
                 ) if len(case_state["samples"]) >= stable_samples else None
                 if stable is not None:
@@ -617,56 +763,94 @@ def run_campaign(
                     interrupted = True
                     break
                 state["status"] = "running"
-                response = _invoke_executor(executor, protocol_dir, {
-                    "schema": "profiling-skill/bsa-candidate-executor-request/v1",
-                    "action": "capture",
-                    "candidate": candidate,
-                    "case": case,
-                    "sample_index": len(case_state["samples"]),
-                    "kernel_name": state["kernel_name"],
-                    "metric": "PipeUtilization",
+                partial = case_state.setdefault("in_progress_sample", {
+                    "sample_index": len(case_state["samples"]), "components": {},
                 })
-                actions += 1
-                status = response.get("status")
-                if status in CANDIDATE_FAILURES:
-                    state["status"] = "candidate_failure"
-                    state["failure"] = _failure(response)
-                    interrupted = True
-                    break
-                if status != "ok":
-                    state["status"] = "retryable_infrastructure"
-                    state["infrastructure_failures"].append(_failure(response))
-                    interrupted = True
-                    break
-                if require_provenance and not _valid_provenance(response.get("provenance")):
-                    state["status"] = "retryable_infrastructure"
-                    state["infrastructure_failures"].append({
-                        "kind": "invalid_provenance",
-                        "category": "infrastructure",
-                        "diagnostics": "PipeUtilization response lacks target/runtime/device/command/handle",
-                    })
-                    interrupted = True
-                    break
-                duration = response.get("duration_us")
-                if (
-                    not isinstance(duration, (int, float))
-                    or not math.isfinite(duration)
-                    or duration <= 0
-                    or not isinstance(response.get("pipe_utilization"), (dict, list))
-                ):
-                    state["status"] = "retryable_infrastructure"
-                    state["infrastructure_failures"].append({
-                        "kind": "invalid_pipe_evidence",
-                        "diagnostics": "capture lacks positive duration or compact PipeUtilization",
-                    })
-                    interrupted = True
+                for component in state["components"]:
+                    selector = component["selector"]
+                    if selector in partial["components"]:
+                        continue
+                    if max_actions is not None and actions >= max_actions:
+                        interrupted = True
+                        break
+                    response = _invoke_executor(executor, protocol_dir, _with_retry({
+                        "schema": "profiling-skill/bsa-candidate-executor-request/v1",
+                        "action": "capture",
+                        "candidate": candidate,
+                        "case": case,
+                        "sample_index": len(case_state["samples"]),
+                        "kernel_name": selector,
+                        "component": component,
+                        "metric": "PipeUtilization",
+                    }, state))
+                    actions += 1
+                    status = response.get("status")
+                    if status in CANDIDATE_FAILURES:
+                        state["status"] = "candidate_failure"
+                        state["failure"] = _failure(response)
+                        interrupted = True
+                        break
+                    if status != "ok":
+                        state["status"] = "retryable_infrastructure"
+                        state["infrastructure_failures"].append(_failure(response))
+                        state["retry"] = _retry_from_failure(response)
+                        interrupted = True
+                        break
+                    state.pop("retry", None)
+                    if require_provenance and not _valid_provenance(
+                        response.get("provenance"), manifest["environment"]
+                    ):
+                        state["status"] = "retryable_infrastructure"
+                        state["infrastructure_failures"].append({
+                            "kind": "invalid_provenance",
+                            "category": "infrastructure",
+                            "diagnostics": "PipeUtilization response lacks target/runtime/device/command/handle",
+                        })
+                        interrupted = True
+                        break
+                    if not _valid_evidence_digest(response.get("evidence_sha256")):
+                        state["status"] = "retryable_infrastructure"
+                        state["infrastructure_failures"].append({
+                            "kind": "invalid_evidence_digest",
+                            "category": "infrastructure",
+                            "diagnostics": (
+                                "PipeUtilization response lacks a valid SHA-256 "
+                                "evidence digest"
+                            ),
+                        })
+                        interrupted = True
+                        break
+                    duration = response.get("duration_us")
+                    if (
+                        not isinstance(duration, (int, float))
+                        or not math.isfinite(duration)
+                        or duration <= 0
+                        or not isinstance(response.get("pipe_utilization"), (dict, list))
+                    ):
+                        state["status"] = "retryable_infrastructure"
+                        state["infrastructure_failures"].append({
+                            "kind": "invalid_pipe_evidence",
+                            "diagnostics": "capture lacks positive duration or compact PipeUtilization",
+                        })
+                        interrupted = True
+                        break
+                    partial["components"][selector] = {
+                        "duration_us": float(duration),
+                        "pipe_utilization": response["pipe_utilization"],
+                        "evidence_sha256": response.get("evidence_sha256"),
+                        "provenance": response.get("provenance"),
+                    }
+                    _atomic_json(output, results)
+                if interrupted:
                     break
                 case_state["samples"].append({
-                    "duration_us": float(duration),
-                    "pipe_utilization": response["pipe_utilization"],
-                    "evidence_sha256": response.get("evidence_sha256"),
-                    "provenance": response.get("provenance"),
+                    "duration_us": max(
+                        item["duration_us"] for item in partial["components"].values()
+                    ),
+                    "duration_aggregation": "max_component_duration",
+                    "components": partial["components"],
                 })
+                del case_state["in_progress_sample"]
                 _atomic_json(output, results)
             if interrupted:
                 break
@@ -676,7 +860,7 @@ def run_campaign(
                     "kind": "measurement_instability",
                     "category": "infrastructure",
                     "diagnostics": (
-                        f"no {stable_samples}-sample subset within "
+                        f"no {stable_samples}-sample consecutive window within "
                         f"{variability_threshold:.1%} after {max_samples} valid samples"
                     ),
                 }
@@ -697,8 +881,7 @@ def merge_results(
     manifest: dict[str, Any], inputs: list[Path],
     *, expected_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if manifest.get("schema") != SCHEMA:
-        raise InvalidArtifact("manifest schema mismatch")
+    _validate_manifest(manifest)
     if not inputs:
         raise InvalidArtifact("merge requires at least one shard checkpoint")
     manifest_sha = _sha(manifest)
@@ -779,6 +962,8 @@ def main() -> int:
     inventory = subparsers.add_parser("inventory")
     inventory.add_argument("--campaign", type=Path, required=True)
     inventory.add_argument("--config", type=Path, required=True)
+    inventory.add_argument("--starter-source", type=Path, required=True)
+    inventory.add_argument("--starter-manifest", type=Path, required=True)
     inventory.add_argument("--output", type=Path, required=True)
     run = subparsers.add_parser("run")
     run.add_argument("--manifest", type=Path, required=True)
@@ -800,7 +985,18 @@ def main() -> int:
     try:
         if args.command == "inventory":
             config = _config(args.config)
-            manifest = inventory_campaign(args.campaign, environment=config["environment"])
+            starter_metadata = _read_json(args.starter_manifest)
+            if starter_metadata.get("schema") != "profiling-skill/candidate-kernel/v1":
+                raise InvalidArtifact("starter manifest schema mismatch")
+            manifest = inventory_campaign(
+                args.campaign,
+                environment=config["environment"],
+                starter={
+                    "source": args.starter_source.read_text(),
+                    "parameters": starter_metadata.get("parameters", {}),
+                    "declared_kernel_name": starter_metadata.get("kernel_name"),
+                },
+            )
             _atomic_json(args.output, manifest)
             print(json.dumps(manifest["summary"], sort_keys=True))
         elif args.command == "run":

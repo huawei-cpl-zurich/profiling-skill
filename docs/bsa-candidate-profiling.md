@@ -12,6 +12,8 @@ source/configuration identities share one device capture.
 python scripts/bsa_candidate_profiler.py inventory \
   --campaign "$CAMPAIGN_ROOT" \
   --config experiments/bsa-profile-candidates.json \
+  --starter-source "$FROZEN_STARTER/candidate.py" \
+  --starter-manifest "$FROZEN_STARTER/candidate.manifest.json" \
   --output "$EVIDENCE_ROOT/manifest.json"
 ```
 
@@ -21,6 +23,15 @@ under the ignored evidence directory. Hash-only options are reconciled from
 another retained request when the same source hash is available. Otherwise
 they remain represented as `source_unavailable`; a hash is never treated as
 executable source.
+
+The frozen starter is mandatory input, not inferred from the four treatments.
+The manifest's top-level `starter_occurrence_id` resolves its one global
+starter occurrence, which has `lineage_role: "starter"`. When its exact
+source, parameters, and environment already identify a campaign execution,
+the inventory reuses the first deterministic matching occurrence. Otherwise
+it adds one synthetic occurrence/execution, which is profiled by the same
+runner. Reports must use `starter_occurrence_id`; they must not guess a
+different baseline for each treatment.
 
 Each execution also contains deterministic source features for loop bounds,
 head-rank lookup, block sizes, whole-tile skipping, scalar block decisions,
@@ -52,9 +63,12 @@ then perform an unfiltered `msprof op` BasicInfo capture. Success is:
 ```json
 {
   "status": "ok",
-  "kernel_names": ["block_sparse_attention_kernel"],
+  "components": [
+    {"selector": "block_sparse_attention_kernel_aic", "kind": "aic"},
+    {"selector": "block_sparse_attention_kernel_aiv", "kind": "aiv"}
+  ],
   "basic_info": {"rows": 1},
-  "evidence_sha256": "...",
+  "evidence_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "provenance": {
     "target": "bz-a3-1", "runtime": "py311-torch",
     "physical_device": 0, "command": ["..."],
@@ -63,16 +77,24 @@ then perform an unfiltered `msprof op` BasicInfo capture. Success is:
 }
 ```
 
+`components` is the logical candidate's exact, complete selector list in
+deterministic order. A one-component adapter may instead return the legacy
+`kernel_names` list when it resolves unambiguously to the declared name or a
+single observed name. Multiple ungrouped legacy names remain invalid because
+the coordinator cannot prove that unrelated framework tasks belong to the
+candidate.
+
 For `action=capture`, it must execute exactly the requested case and exact
-discovered selector with `PipeUtilization`, analyze the report in place, and
-return only compact rows:
+discovered component selector with `PipeUtilization`, analyze the report in
+place, and return only compact rows. The request repeats both `kernel_name`
+and the component descriptor from discovery:
 
 ```json
 {
   "status": "ok",
   "duration_us": 545027.2,
   "pipe_utilization": {"rows": []},
-  "evidence_sha256": "...",
+  "evidence_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "provenance": {
     "target": "bz-a3-1", "runtime": "py311-torch",
     "physical_device": 0, "command": ["..."],
@@ -86,6 +108,21 @@ Candidate failures use `compile_error`, `runtime_error`, or
 profiler-tool, missing-response, and malformed-evidence failures use
 `infrastructure_error`; they do not consume a valid sample or change candidate
 status permanently.
+
+Every successful discovery or capture must include a valid 64-hex-character
+`evidence_sha256`. In production mode, provenance must name one allowed A3
+target (`gz-a3`, `bz-a3-1`, or `bz-a3-2`), the manifest-requested runtime, a
+physical device, exact command, and a handle belonging to that target.
+
+Infrastructure responses should include their provenance handle and
+`terminal`. The coordinator checkpoints the resulting retry object and passes
+it verbatim on the next request. A nonterminal (or legacy terminal-unknown)
+response becomes `{"mode":"observe","handle":"..."}`; the executor must
+observe that durable job rather than duplicate it. A proven terminal response
+becomes `{"mode":"new_attempt","prior_handle":"..."}`, authorizing a fresh
+attempt while preserving its predecessor. Legacy responses which omit
+`terminal` are conservatively observe-only; the adapter must eventually return
+explicit terminal state or a migration/observation timeout, never redispatch.
 
 ## Resume and stability
 
@@ -101,11 +138,22 @@ The result is atomically checkpointed after discovery and every capture.
 Rerunning the same command skips terminal candidates and completed cases.
 `--max-actions N` provides a bounded smoke or scheduled slice.
 
-A case completes when the tightest three valid samples have relative range
-`(max-min)/median <= 5%`. Samples outside that accepted subset remain in the
-record. After seven valid but unstable samples, the case becomes
+A logical sample captures every discovered component. A partial component set
+is checkpointed and resumed without recapturing successful components. Its
+duration is `max_component_duration`, appropriate for the concurrent AIC/AIV
+parts of one logical launch; compact pipe evidence and provenance remain
+separate per exact selector.
+
+A case completes at the first chronological consecutive three-sample window
+whose relative range `(max-min)/median <= 5%`. This predefined scan cannot
+assemble a favorable subset from nonadjacent observations. After seven valid
+but unstable logical samples, the case becomes
 `measurement_unstable`, classified as infrastructure/measurement rather than
 a compilation or runtime defect. Large vendor report trees remain remote.
+
+Version-1 checkpoints predate both consecutive-window selection and
+multi-component samples. The version-2 runner rejects them with an explicit
+regeneration message instead of silently changing their interpretation.
 
 Use `status --results RESULTS.json` for a compact terminal/retry summary.
 

@@ -10,7 +10,8 @@
   "sampling": {
     "stable_samples": 3,
     "max_samples": 7,
-    "relative_range_threshold": 0.05
+    "relative_range_threshold": 0.05,
+    "selection": "first-stable-consecutive-window"
   },
   "sharding": {
     "algorithm": "sha256-mod-v1",
@@ -18,5 +19,6 @@
   },
   "metrics": ["BasicInfo", "PipeUtilization"],
   "require_provenance": true,
-  "expected_kernel_name": "block_sparse_attention_kernel"
+  "expected_kernel_name": "block_sparse_attention_kernel",
+  "starter_kernel_name": "_bsa_reference_fwd"
 }

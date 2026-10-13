@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -644,8 +645,74 @@ def test_a3_payload_leases_device_and_classifies_runtime_device_failures(tmp_pat
     assert "fcntl.flock" in payload
     assert "LOCK_EX|fcntl.LOCK_NB" in payload
     assert "device-lease" in payload
+    assert 'pathlib.Path.home()/".cpl-device-leases"' in payload
     for marker in ("tsdopen", "lazysetdevice", "out of memory"):
         assert marker in payload.lower()
+
+
+def test_generated_payload_shares_home_device_leases_across_cwds(tmp_path):
+    module = load_module()
+    workload = tmp_path / "work.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\n"
+        "class NPU:\n def set_device(self,x): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\n"
+        "class V:\n def __add__(self,x): return self\n def cpu(self): return self\n def __getitem__(self,x): return 4.0\n"
+        "def arange(*a,**k): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    msprof = tools / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib,sys,time\n"
+        "out=pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output=')))/'OPPROF'\n"
+        "out.mkdir(parents=True)\n"
+        "(out/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\nprobe,1\\n')\n"
+        "time.sleep(0.5)\n"
+        "print('Profiling running finished. All task success.')\n"
+    )
+    msprof.chmod(0o755)
+    scripts, processes = [], []
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {
+        **os.environ, "HOME": str(home),
+        "PATH": f"{tools}:{os.environ['PATH']}", "PYTHONPATH": str(modules),
+    }
+    for index in range(2):
+        cwd = tmp_path / f"cwd-{index}"
+        cwd.mkdir()
+        script = cwd / "payload.py"
+        script.write_text(module.render_remote_payload(
+            "basic", "a3", "bz-a3-1", f"lease-{index}", workload, [], None, 1
+        ))
+        scripts.append(script)
+    processes.append(subprocess.Popen(
+        ["python3", str(scripts[0])], cwd=scripts[0].parent, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+    ))
+    lock = home / ".cpl-device-leases/device-lease-0.lock"
+    deadline = time.monotonic() + 3
+    while not lock.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert lock.exists()
+    processes.append(subprocess.Popen(
+        ["python3", str(scripts[1])], cwd=scripts[1].parent, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+    ))
+    devices = []
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 0, stderr
+        encoded = next(line.split("=", 1)[1] for line in stdout.splitlines()
+                       if line.startswith("ACQUIRE_EVIDENCE_B64="))
+        devices.append(json.loads(base64.b64decode(encoded))["device"]["physical_id"])
+    assert sorted(devices) == [0, 1]
 
 
 def test_timeline_payload_retains_attempted_export_absence(tmp_path):

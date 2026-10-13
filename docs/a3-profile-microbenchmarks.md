@@ -100,7 +100,9 @@ so rerunning a cell resumes its handle instead of creating another job.
 Terminal infrastructure or malformed-evidence attempts retire that receipt
 and advance to a numbered retry identity. A nonterminal transport interruption
 does not consume the attempt identity. Each remote acquisition holds a
-nonblocking physical-device lease from probe through evidence emission.
+nonblocking physical-device lease from probe through evidence emission. The
+shared convention is `$HOME/.cpl-device-leases/device-lease-N.lock`, so jobs
+from different remote working directories still contend for the same device.
 
 Run two deterministic shards concurrently on the two configured A3 targets:
 

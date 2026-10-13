@@ -296,7 +296,7 @@ torch.npu.synchronize(); assert float(y.cpu()[3]) == 4.0
 
 def pick_device():
     failures=[]
-    lease_root=pathlib.Path.cwd()/".cpl-device-leases"; lease_root.mkdir(exist_ok=True)
+    lease_root=pathlib.Path.home()/".cpl-device-leases"; lease_root.mkdir(exist_ok=True)
     for physical in range(8):
         lease=open(lease_root/("device-lease-%d.lock"%physical),"a+")
         try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)

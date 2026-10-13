@@ -33,12 +33,13 @@ def source_repo(tmp_path):
     return path
 
 
-def config(tmp_path, **updates):
+def config(tmp_path, managed_autotune=False, **updates):
     skill = tmp_path / "skill"
     skill.mkdir(exist_ok=True)
     (skill / "SKILL.md").write_text("test skill\n")
     gate = tmp_path / "terminal-gate.sh"
-    gate.write_text('python "$CANDIDATE_PATH"\n')
+    capability = runner.AUTOTUNE_GATE_CAPABILITY + "\n" if managed_autotune else ""
+    gate.write_text(capability + 'python "$CANDIDATE_PATH"\n')
     value = {
         "campaign": "trial",
         "product": "a3",
@@ -92,6 +93,7 @@ class Agent:
     def __init__(self, values=None):
         self.values = list(values or [evidence()])
         self.requests = []
+        self.tunes = []
         self.analyses = []
 
     def prepare(self, request):
@@ -101,6 +103,13 @@ class Agent:
     def analyze(self, request):
         self.analyses.append(request)
         return {"reasoning": "final reasoning", "postmortem": "final postmortem"}
+
+    def tune(self, request):
+        self.tunes.append(request)
+        return {"configurations": [
+            {"id": "block-64", "parameters": {"BLOCK": 64},
+             "hypothesis": "test a wider block"},
+        ]}
 
 
 class Remote:
@@ -135,6 +144,149 @@ def initialized(tmp_path, remote, agent=None, **updates):
 
 def success(us=12.5):
     return {"outcome": "success", "stdout": "PASS", "stderr": "", "profile_summary": {"duration_us": us}}
+
+
+def autotune_candidate():
+    return "AUTOTUNE_CONFIG = {'BLOCK': 32, 'WAVES': 1}\nKERNEL = 'candidate'\n"
+
+
+def autotune_success(plan, winner="block-64", failed=()):
+    plan.setdefault("benchmark", "matmul")
+    plan.setdefault("required_correctness_cases", 10)
+    plan.setdefault("expected_profile_cases", [7, 8, 9])
+    plan.setdefault("expected_entrypoint", "streaming_matmul_add_kernel")
+    plan.setdefault("expected_declared_kernel_name", "streaming_matmul_add_kernel_mix_aic")
+    rows = []
+    for index, option in enumerate(plan["options"]):
+        if option["id"] in failed:
+            rows.append({
+                "id": option["id"], "source_sha256": option["source_sha256"],
+                "outcome": "candidate_failure", "diagnostics": "compile failed",
+            })
+        else:
+            rows.append({
+                "id": option["id"], "source_sha256": option["source_sha256"],
+                "outcome": "success", "cheap_device_timing_us": 10.0 + index,
+            })
+    successful = [row for row in rows if row["outcome"] == "success"]
+    order = {option["id"]: index for index, option in enumerate(plan["options"])}
+    finalists = [row["id"] for row in sorted(
+        successful,
+        key=lambda row: (row["cheap_device_timing_us"], order[row["id"]]),
+    )[:3]]
+    selected = next(option for option in plan["options"] if option["id"] == winner)
+    declared = "streaming_matmul_add_kernel_mix_aic"
+    resolved = "streaming_matmul_add_kernel"
+    official_values = {
+        identifier: 9.0 if identifier == winner else 10.0 + index
+        for index, identifier in enumerate(finalists)
+    }
+    winner_timing = official_values[winner]
+
+    def official_timing(value, evidence_label):
+        return {
+            "metric": "BasicInfo", "profiler": "msprof-op",
+            "timing_scope": "device-task", "kernel_name": resolved,
+            "declared_kernel_name": declared, "resolved_kernel_name": resolved,
+            "cases": [{
+                "case": case, "median_us": value, "samples_us": [value] * 3,
+            } for case in plan["expected_profile_cases"]],
+            "repeats": 3, "geomean_us": value,
+            "captures": [{
+                "case": case, "iteration": iteration, "duration_us": value,
+                "kernel_name": resolved, "declared_kernel_name": declared,
+                "resolved_kernel_name": resolved,
+                "evidence_sha256": hashlib.sha256(
+                    f"{evidence_label}:evidence:{case}:{iteration}".encode()
+                ).hexdigest(),
+                "msprof_log_sha256": hashlib.sha256(
+                    f"{evidence_label}:log:{case}:{iteration}".encode()
+                ).hexdigest(),
+            }
+                for case in plan["expected_profile_cases"]
+                for iteration in range(3)
+            ],
+        }
+
+    profile_summary = {
+        "schema": "profiling-skill/a3-round-profile-summary/v1",
+        "benchmark": plan["benchmark"],
+        "correctness_cases": plan["required_correctness_cases"],
+        "fusion": {
+            "entrypoint": "streaming_matmul_add_kernel",
+            "kernel_name": declared,
+            "cases": list(range(plan["required_correctness_cases"])),
+            "logical_launches_per_case": 1,
+        },
+        "timing": official_timing(winner_timing, "winner-full-gate"),
+        "pipe_activity": {
+            "schema_version": 1, "product": "a3",
+            "evidence_kind": "per-block-pipe-activity",
+            "provenance": {"kernel_selector": resolved},
+            "observations": [{
+                "observation_id": f"{resolved}:block-0:cube0",
+                "activity": {"aic_mte2": 0.5},
+                "saturation": {"state": "unknown", "reason": "no denominator"},
+            }],
+        },
+        "timeline": {"available": False, "kind": "a3-temporal-pipe-phases",
+                     "reason": "A3 activity evidence is non-temporal"},
+    }
+    profile_sha = hashlib.sha256(json.dumps(
+        profile_summary, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
+    return {
+        "outcome": "success", "stdout": "PASS", "stderr": "",
+        "profile_summary": profile_summary,
+        "autotune_summary": {
+            "schema": runner.AUTOTUNE_RESULT_SCHEMA,
+            "optimization_round": 1,
+            "options": rows, "finalists": finalists,
+            "profiled_finalists": finalists, "winner_id": winner,
+            "winner_source_sha256": selected["source_sha256"],
+            "winner_full_gate": {
+                "winner_id": winner,
+                "source_sha256": selected["source_sha256"],
+                "candidate_artifact_sha256": selected["source_sha256"],
+                "profile_summary_sha256": profile_sha,
+            },
+            "commands": ["compile all", "time survivors", "msprof finalists"],
+            "finalist_profiles": {
+                identifier: {
+                    "option_id": identifier,
+                    "source_sha256": next(
+                        option["source_sha256"] for option in plan["options"]
+                        if option["id"] == identifier
+                    ),
+                    "candidate_artifact_sha256": next(
+                        option["source_sha256"] for option in plan["options"]
+                        if option["id"] == identifier
+                    ),
+                    "timing": official_timing(official_values[identifier], identifier),
+                }
+                for identifier in finalists
+            },
+        },
+    }
+
+
+def rebind_winner_profile(result):
+    profile = result["profile_summary"]
+    result["autotune_summary"]["winner_full_gate"]["profile_summary_sha256"] = (
+        hashlib.sha256(json.dumps(
+            profile, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+    )
+
+
+def retime_official(profile, value):
+    timing = profile["timing"]
+    timing["geomean_us"] = value
+    for case in timing["cases"]:
+        case["samples_us"] = [value] * timing["repeats"]
+        case["median_us"] = value
+    for capture in timing["captures"]:
+        capture["duration_us"] = value
 
 
 def candidate_contract():
@@ -234,6 +386,45 @@ def test_campaign_manifest_rejects_unrelated_selector(tmp_path):
     cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
     with pytest.raises(runner.RunnerError, match="declared entrypoint"):
         cell.init()
+
+
+def test_unsupported_autotune_task_terminalizes_before_agent_or_remote_work(tmp_path):
+    agent, remote = Agent(), Remote([])
+    cell = runner.ExperimentCell(
+        tmp_path / "runs",
+        config(tmp_path, task="unsupported", autotune=True, managed_autotune=True),
+        agent, remote,
+    )
+
+    initialized_state = cell.init()
+    assert initialized_state["status"] == "input_integrity_failure"
+    assert initialized_state["candidate_repairs"] == 0
+    assert "no benchmark contract" in initialized_state["diagnostics"]
+    assert cell.run() == initialized_state
+    assert cell.run() == initialized_state
+    assert not agent.requests and not agent.tunes and not agent.analyses
+    assert not remote.preflights and not remote.submitted and not remote.observed
+
+
+def test_mismatched_autotune_manifest_terminalizes_before_agent_or_remote_work(tmp_path):
+    cfg = campaign_gate_config(
+        tmp_path, autotune=True, managed_autotune=True,
+    )
+    manifest = Path(cfg["candidate_manifest_path"])
+    value = json.loads(manifest.read_text())
+    value.update(entrypoint="other_kernel", kernel_name="other_kernel")
+    manifest.write_text(json.dumps(value))
+    agent, remote = Agent(), Remote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, agent, remote)
+
+    initialized_state = cell.init()
+    assert initialized_state["status"] == "input_integrity_failure"
+    assert initialized_state["candidate_repairs"] == 0
+    assert "manifest does not match" in initialized_state["diagnostics"]
+    assert cell.run() == initialized_state
+    assert cell.run() == initialized_state
+    assert not agent.requests and not agent.tunes and not agent.analyses
+    assert not remote.preflights and not remote.submitted and not remote.observed
 
 
 @pytest.mark.parametrize("filename", ["terminal-gate-bundle.tar", "candidate-manifest.json"])
@@ -439,6 +630,19 @@ def test_init_requires_existing_terminal_gate(tmp_path):
     with pytest.raises(runner.RunnerError, match="terminal_gate_path"):
         cell.init()
     assert not cell.path.exists()
+
+
+def test_autotune_rejects_legacy_shipped_gate_before_remote_dispatch(tmp_path):
+    shipped_gate = Path(__file__).parents[1] / "scripts/a3-gates/matmul.sh"
+    cfg = config(tmp_path, autotune=True, terminal_gate_path=str(shipped_gate))
+    remote = Remote([])
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), remote)
+
+    with pytest.raises(runner.RunnerError, match="declaring managed-autotune/v1"):
+        cell.init()
+
+    assert not cell.path.exists()
+    assert not remote.preflights and not remote.submitted
 
 
 def test_host_gate_result_is_after_candidate_stdout(tmp_path):
@@ -765,6 +969,730 @@ def test_completed_round_is_one_commit_with_required_evidence(tmp_path):
     }
     assert expected <= names
     assert json.loads((cell.repo / "rounds/01/profile-summary.json").read_text())["duration_us"] == 9.25
+
+
+def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
+    proposed = [
+        {"id": f"option-{index:03d}", "parameters": {"BLOCK": index + 1000},
+         "hypothesis": f"test block {index + 1000}"}
+        for index in range(128)
+    ]
+    first = runner.materialize_autotune(autotune_candidate(), proposed)
+    second = runner.materialize_autotune(autotune_candidate(), proposed)
+
+    assert first == second
+    assert len(first["options"]) == 129
+    assert first["options"][0]["id"] == "incumbent"
+    assert first["policy"]["min_finalist_repeats"] == 3
+    assert first["options"][-1]["parameters"] == {"BLOCK": 1127, "WAVES": 1}
+    assert first["options"][-1]["source_sha256"] == hashlib.sha256(
+        first["options"][-1]["source"].encode()
+    ).hexdigest()
+
+
+@pytest.mark.parametrize(
+    "candidate,proposed,message",
+    [
+        ("VALUE = 1\n", [], "exactly one"),
+        (autotune_candidate(), [
+            {"id": "bad", "parameters": {"UNDECLARED": 1}, "hypothesis": "bad"}
+        ], "undeclared"),
+        (autotune_candidate(), [
+            {"id": "bad", "parameters": {"BLOCK": [1]}, "hypothesis": "bad"}
+        ], "JSON scalar"),
+    ],
+)
+def test_materialize_autotune_rejects_invalid_spaces(candidate, proposed, message):
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.materialize_autotune(candidate, proposed)
+
+
+@pytest.mark.parametrize("proposed", [
+    [{"id": "same-as-incumbent", "parameters": {}, "hypothesis": "duplicate"}],
+    [
+        {"id": "first", "parameters": {"BLOCK": 64}, "hypothesis": "first"},
+        {"id": "second", "parameters": {"BLOCK": 64}, "hypothesis": "second"},
+    ],
+])
+def test_materialize_autotune_rejects_duplicate_sources(proposed):
+    with pytest.raises(runner.RunnerError, match="materialize identical source"):
+        runner.materialize_autotune(autotune_candidate(), proposed)
+
+
+@pytest.mark.parametrize("task,correctness,ranked,entrypoint,kernel_name", [
+    ("matmul", 10, [7, 8, 9], "streaming_matmul_add_kernel",
+     "streaming_matmul_add_kernel_mix_aic"),
+    ("gdn", 50, [40, 49, 47, 46, 45], "chunk_gated_delta_rule_kernel",
+     "chunk_gated_delta_rule_kernel"),
+    ("bsa", 50, [47, 46, 49, 44, 43], "block_sparse_attention_kernel",
+     "block_sparse_attention_kernel"),
+])
+def test_autotune_request_pins_complete_benchmark_contract(
+        tmp_path, task, correctness, ranked, entrypoint, kernel_name):
+    prepared = evidence("contract")
+    prepared["candidate"] = autotune_candidate()
+    remote = Remote([runner.ObservationLost("retain request")])
+    cell = initialized(
+        tmp_path, remote, Agent([prepared]), rounds=1, task=task,
+        autotune=True, managed_autotune=True,
+    )
+
+    assert cell.run()["status"] == "infrastructure_unknown"
+    retained = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+    assert {
+        "benchmark": retained["benchmark"],
+        "required_correctness_cases": retained["required_correctness_cases"],
+        "expected_profile_cases": retained["expected_profile_cases"],
+        "expected_entrypoint": retained["expected_entrypoint"],
+        "expected_declared_kernel_name": retained["expected_declared_kernel_name"],
+    } == {
+        "benchmark": task,
+        "required_correctness_cases": correctness,
+        "expected_profile_cases": ranked,
+        "expected_entrypoint": entrypoint,
+        "expected_declared_kernel_name": kernel_name,
+    }
+
+
+def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+    class HundredOptionAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            return {"configurations": [
+                {"id": f"option-{index:03d}",
+                 "parameters": {"BLOCK": 64 if index == 0 else index + 65},
+                 "hypothesis": "broad deterministic canary"}
+                for index in range(100)
+            ]}
+
+    agent = HundredOptionAgent([prepared])
+
+    class TuningRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            request_path = Path(self.submitted[0][1])
+            del request_path
+            attempt = cell.path / "attempts/1/autotune-request.json"
+            return autotune_success(json.loads(attempt.read_text()), winner="option-000")
+
+    remote = TuningRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    completed = cell.run()
+
+    assert completed["status"] == "complete"
+    assert len(agent.tunes) == 1
+    assert agent.tunes[0]["session_id"] == prepared["session_id"] == "session-1"
+    assert agent.tunes[0]["declared_autotune_config"] == {"BLOCK": 32, "WAVES": 1}
+    assert agent.tunes[0]["max_configurations"] == 128
+    folder = cell.repo / "rounds/01"
+    assert "'BLOCK': 64" not in (folder / "candidate.py").read_text()
+    assert '"BLOCK": 64' in (folder / "candidate.py").read_text()
+    assert (folder / "structural-candidate.py").read_text() == autotune_candidate()
+    retained = json.loads((folder / "autotune-request.json").read_text())
+    assert len(retained["options"]) == 101
+    assert retained["optimization_round"] == 1
+    assert retained["required_correctness_cases"] == 10
+    assert retained["expected_profile_cases"] == [7, 8, 9]
+    assert retained["expected_entrypoint"] == "streaming_matmul_add_kernel"
+    assert retained["expected_declared_kernel_name"] == (
+        "streaming_matmul_add_kernel_mix_aic"
+    )
+    assert all("source" not in option for option in retained["options"])
+    result = json.loads((folder / "autotune-result.json").read_text())
+    assert result["winner_id"] == "option-000" and result["optimization_round"] == 1
+    assert len(result["finalist_profiles"]) == 3
+    assert all(
+        set(profile) >= {
+            "option_id", "source_sha256", "candidate_artifact_sha256", "timing",
+        } and [case["case"] for case in profile["timing"]["cases"]] == [7, 8, 9]
+        for profile in result["finalist_profiles"].values()
+    )
+    assert completed["round"] == 2 and completed["attempts"] == 1
+    assert (folder / "autotune-commands.jsonl").read_text().count("command") == 3
+    assert "AUTOTUNE_REQUEST_PATH" in remote.submitted[0][1]
+    assert runner.AUTOTUNE_GATE_CAPABILITY in (
+        cell.path / "terminal-gate.sh"
+    ).read_text().splitlines()
+    assert agent.analyses[0]["candidate"] == (folder / "candidate.py").read_text()
+    assert agent.analyses[0]["structural_candidate"] == autotune_candidate()
+
+
+def test_autotune_observation_resume_reuses_one_job_and_one_tune_phase(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+    agent = Agent([prepared])
+
+    class ResumeRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            if len(self.observed) == 1:
+                raise runner.ObservationLost("observer disconnected")
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    remote = ResumeRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    assert cell.run()["status"] == "infrastructure_unknown"
+    assert cell.resume()["status"] == "complete"
+    assert len(remote.submitted) == len(agent.tunes) == 1
+    assert remote.observed == ["remote:bz-a3-1:job:1"] * 2
+
+
+def test_autotune_interruption_resumes_checkpointed_prepare_and_session(tmp_path):
+    prepared = evidence("checkpointed")
+    prepared["candidate"] = autotune_candidate()
+
+    class InterruptedTuneAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            if len(self.tunes) == 1:
+                raise runner.AgentInterrupted("tune transport interrupted")
+            return {"configurations": [
+                {"id": "block-64", "parameters": {"BLOCK": 64},
+                 "hypothesis": "wider block"},
+            ]}
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = InterruptedTuneAgent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+
+    interrupted = cell.run()
+    checkpoint = interrupted["prepared_checkpoint"]
+    assert interrupted["status"] == "tune_pending"
+    assert checkpoint == {"round": 1, "prepared": prepared}
+    assert not remote.submitted and len(agent.requests) == 1
+
+    completed = cell.resume()
+    assert completed["status"] == "complete"
+    assert len(agent.requests) == 1 and len(agent.tunes) == 2
+    assert [request["session_id"] for request in agent.tunes] == ["session-1"] * 2
+    assert len(remote.submitted) == 1
+    assert "prepared_checkpoint" not in completed
+
+
+def test_autotune_restart_after_atomic_prepare_state_write_reuses_exact_session(
+        tmp_path, monkeypatch):
+    prepared = evidence("atomic-checkpoint")
+    prepared["candidate"] = autotune_candidate()
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_save = cell._save
+    interrupted = False
+
+    def interrupt_after_atomic_state_write(state):
+        nonlocal interrupted
+        value = original_save(state)
+        if state.get("status") == "tuning" and not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped after atomic state write")
+        return value
+
+    monkeypatch.setattr(cell, "_save", interrupt_after_atomic_state_write)
+    with pytest.raises(runner.RunnerError, match="after atomic state write"):
+        cell.run()
+
+    retained = json.loads(cell.state_path.read_text())
+    assert retained["status"] == "tuning"
+    assert retained["prepared_checkpoint"] == {"round": 1, "prepared": prepared}
+    assert len(agent.requests) == 1 and not agent.tunes and not remote.submitted
+
+    monkeypatch.setattr(cell, "_save", original_save)
+    completed = cell.resume()
+    assert completed["status"] == "complete"
+    assert len(agent.requests) == 1 and len(agent.tunes) == 1
+    assert agent.tunes[0]["session_id"] == prepared["session_id"]
+    assert len(remote.submitted) == 1
+
+
+def test_autotune_restart_after_atomic_plan_write_reuses_exact_plan(tmp_path, monkeypatch):
+    prepared = evidence("accepted-plan")
+    prepared["candidate"] = autotune_candidate()
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_save = cell._save
+    interrupted = False
+
+    def interrupt_after_atomic_plan_write(state):
+        nonlocal interrupted
+        value = original_save(state)
+        if state.get("status") == "tuned" and not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped after atomic plan write")
+        return value
+
+    monkeypatch.setattr(cell, "_save", interrupt_after_atomic_plan_write)
+    with pytest.raises(runner.RunnerError, match="after atomic plan write"):
+        cell.run()
+
+    retained = json.loads(cell.state_path.read_text())
+    exact_plan = retained["autotune_checkpoint"]
+    assert retained["status"] == "tuned"
+    assert len(agent.requests) == len(agent.tunes) == 1
+    assert not remote.submitted
+
+    monkeypatch.setattr(cell, "_save", original_save)
+    completed = cell.resume()
+    dispatched_plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+    assert completed["status"] == "complete"
+    assert dispatched_plan == exact_plan
+    assert len(agent.requests) == len(agent.tunes) == len(remote.submitted) == 1
+
+
+def test_autotune_restart_rebuilds_only_predispatch_attempt_from_retained_plan(
+        tmp_path, monkeypatch):
+    prepared = evidence("predispatch")
+    prepared["candidate"] = autotune_candidate()
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([prepared])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_save = cell._save
+    interrupted = False
+
+    def interrupt_before_attempt_state_write(state):
+        nonlocal interrupted
+        if state.get("status") == "infrastructure_unknown" and not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped before attempt state write")
+        return original_save(state)
+
+    monkeypatch.setattr(cell, "_save", interrupt_before_attempt_state_write)
+    with pytest.raises(runner.RunnerError, match="before attempt state write"):
+        cell.run()
+    retained = json.loads(cell.state_path.read_text())
+    exact_plan = retained["autotune_checkpoint"]
+    assert retained["status"] == "tuned"
+    assert (cell.path / "attempts/1/autotune-request.json").is_file()
+    assert not remote.submitted
+
+    monkeypatch.setattr(cell, "_save", original_save)
+    completed = cell.resume()
+    dispatched_plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+    assert completed["status"] == "complete" and dispatched_plan == exact_plan
+    assert len(agent.tunes) == len(remote.submitted) == 1
+
+
+@pytest.mark.parametrize("invalid_source", [
+    "KERNEL = 'missing config'\n",
+    "AUTOTUNE_CONFIG = dict(BLOCK=32)\n",
+])
+def test_invalid_prepared_autotune_source_stays_ready_for_replacement_prepare(
+        tmp_path, invalid_source):
+    rejected = evidence("rejected")
+    rejected.update(candidate=invalid_source, session_id="rejected-session")
+    repaired = evidence("repaired")
+    repaired.update(candidate=autotune_candidate(), session_id="repair-session")
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = Agent([rejected, repaired])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+
+    with pytest.raises(runner.RunnerError, match="AUTOTUNE_CONFIG"):
+        cell.run()
+    retained = cell._state()
+    assert retained["status"] == "ready" and "prepared_checkpoint" not in retained
+    assert not agent.tunes and not remote.submitted
+
+    assert cell.run()["status"] == "complete"
+    assert len(agent.requests) == 2 and len(agent.tunes) == 1
+    assert agent.tunes[0]["session_id"] == "repair-session"
+    assert len(remote.submitted) == 1
+
+
+def test_invalid_tune_output_becomes_same_round_candidate_repair(tmp_path):
+    first = evidence("first")
+    second = evidence("second")
+    first["candidate"] = second["candidate"] = autotune_candidate()
+
+    class RepairingAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            if len(self.tunes) == 1:
+                return {"configurations": [
+                    {"id": "invalid", "parameters": {"UNKNOWN": 1},
+                     "hypothesis": "invalid output"},
+                ]}
+            return {"configurations": [
+                {"id": "block-64", "parameters": {"BLOCK": 64},
+                 "hypothesis": "valid repair"},
+            ]}
+
+    class CompletingRemote(Remote):
+        def observe(self, handle):
+            self.observed.append(handle)
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            return autotune_success(plan)
+
+    agent = RepairingAgent([first, second])
+    remote = CompletingRemote([])
+    cell = initialized(tmp_path, remote, agent, rounds=1, autotune=True,
+                       managed_autotune=True)
+
+    completed = cell.run()
+    assert completed["status"] == "complete" and completed["round"] == 2
+    assert len(agent.requests) == len(agent.tunes) == 2
+    assert "undeclared" in agent.requests[1]["candidate_diagnostics"]
+    assert agent.requests[1]["round"] == 1
+    assert len(remote.submitted) == 1
+
+
+def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+
+    class FourAgent(Agent):
+        def tune(self, request):
+            self.tunes.append(request)
+            return {"configurations": [
+                {"id": f"v{index}", "parameters": {"BLOCK": index + 33},
+                 "hypothesis": "variant"} for index in range(4)
+            ]}
+
+    class InvalidRemote(Remote):
+        def observe(self, handle):
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            value = autotune_success(plan, winner="v0")
+            finalists = [option["id"] for option in plan["options"][:4]]
+            value["autotune_summary"]["finalists"] = finalists
+            value["autotune_summary"]["profiled_finalists"] = finalists
+            return value
+
+    cell = initialized(
+        tmp_path, InvalidRemote([]), FourAgent([prepared]), rounds=1, autotune=True,
+        managed_autotune=True,
+    )
+    with pytest.raises(runner.RunnerError, match="one to three"):
+        cell.run()
+    failed = cell._state()
+    assert failed["status"] == "gate_contract_failure"
+    assert "pending_attempt" not in failed
+    assert cell.run()["status"] == "gate_contract_failure"
+    assert len(cell.remote.submitted) == 1
+
+
+def test_resume_validates_retained_success_before_analysis(tmp_path, monkeypatch):
+    prepared = evidence("malformed-result")
+    prepared["candidate"] = autotune_candidate()
+    remote = Remote([success()])
+    cell = initialized(tmp_path, remote, Agent([prepared]), rounds=1, autotune=True,
+                       managed_autotune=True)
+    original_accept = cell._accept_result
+    interrupted = False
+
+    def interrupt_before_acceptance(state, attempt, candidate, result):
+        nonlocal interrupted
+        if not interrupted:
+            interrupted = True
+            raise runner.RunnerError("controller stopped before result acceptance")
+        return original_accept(state, attempt, candidate, result)
+
+    monkeypatch.setattr(cell, "_accept_result", interrupt_before_acceptance)
+    with pytest.raises(runner.RunnerError, match="before result acceptance"):
+        cell.run()
+    retained = cell._state()
+    assert retained["status"] == "observing" and retained["pending_attempt"] == 1
+    assert (cell.path / "attempts/1/result.json").is_file()
+
+    monkeypatch.setattr(cell, "_accept_result", original_accept)
+    with pytest.raises(runner.RunnerError, match="omitted its result summary"):
+        cell.resume()
+    failed = cell._state()
+    assert failed["status"] == "gate_contract_failure"
+    assert "pending_attempt" not in failed
+    assert cell.run()["status"] == "gate_contract_failure"
+    assert len(remote.submitted) == len(remote.observed) == 1
+
+
+def test_autotune_success_rejects_a_result_from_another_round(tmp_path):
+    prepared = evidence("structural")
+    prepared["candidate"] = autotune_candidate()
+
+    class WrongRoundRemote(Remote):
+        def observe(self, handle):
+            plan = json.loads((cell.path / "attempts/1/autotune-request.json").read_text())
+            value = autotune_success(plan)
+            value["autotune_summary"]["optimization_round"] = 2
+            return value
+
+    cell = initialized(tmp_path, WrongRoundRemote([]), Agent([prepared]),
+                       rounds=1, autotune=True, managed_autotune=True)
+    with pytest.raises(runner.RunnerError, match="optimization round"):
+        cell.run()
+
+
+def test_autotune_success_rejects_nonfastest_finalists_and_winner():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(4)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+
+    result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v2"]
+    result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v2"]
+    with pytest.raises(runner.RunnerError, match="fastest successful"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+    result = autotune_success(plan, winner="v0")
+    retime_official(
+        result["autotune_summary"]["finalist_profiles"]["incumbent"], 8.0,
+    )
+    with pytest.raises(runner.RunnerError, match="fastest official"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def test_autotune_selection_ties_follow_request_order():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+         "hypothesis": "variant"} for index in range(3)
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="incumbent")
+    for row in result["autotune_summary"]["options"]:
+        row["cheap_device_timing_us"] = 10.0
+    result["autotune_summary"]["finalists"] = ["incumbent", "v0", "v1"]
+    result["autotune_summary"]["profiled_finalists"] = ["incumbent", "v0", "v1"]
+    for profile in result["autotune_summary"]["finalist_profiles"].values():
+        retime_official(profile, 9.0)
+
+    selected, _ = runner.ExperimentCell._validate_autotune_success(plan, result)
+    assert selected == plan["options"][0]["source"]
+
+
+@pytest.mark.parametrize("invalid_repeats", [None, True, 2, 3.0])
+def test_autotune_success_requires_three_integer_msprof_repeats(invalid_repeats):
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": "v0", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    timing = result["autotune_summary"]["finalist_profiles"]["incumbent"]["timing"]
+    if invalid_repeats is None:
+        timing.pop("repeats")
+    else:
+        timing["repeats"] = invalid_repeats
+
+    with pytest.raises(runner.RunnerError, match="official msprof timing"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("cheap-only", "official msprof timing"),
+    ("geomean-only", "official msprof timing"),
+    ("fabricated-geomean", "geomean"),
+    ("fabricated-capture", "capture evidence"),
+    ("source", "identity mismatch"),
+    ("artifact", "identity mismatch"),
+])
+def test_autotune_rejects_unbound_or_unsubstantiated_finalist_profiles(mutation, message):
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": "v0", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+    ])
+    plan["optimization_round"] = 1
+    result = autotune_success(plan, winner="v0")
+    profile = result["autotune_summary"]["finalist_profiles"]["incumbent"]
+    if mutation == "cheap-only":
+        profile.pop("timing")
+        profile["cheap_device_timing_us"] = 0.01
+    elif mutation == "geomean-only":
+        profile["timing"] = {"geomean_us": 1.0, "repeats": 3}
+    elif mutation == "fabricated-geomean":
+        profile["timing"]["geomean_us"] = 1.0
+    elif mutation == "fabricated-capture":
+        profile["timing"]["captures"][0]["duration_us"] = 1.0
+    elif mutation == "source":
+        profile["source_sha256"] = "0" * 64
+    else:
+        profile["candidate_artifact_sha256"] = "0" * 64
+
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def winner_evidence_fixture():
+    plan = runner.materialize_autotune(autotune_candidate(), [
+        {"id": "block-64", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+    ])
+    plan.update(
+        optimization_round=1, benchmark="matmul", required_correctness_cases=10,
+        expected_profile_cases=[7, 8, 9],
+        expected_entrypoint="streaming_matmul_add_kernel",
+        expected_declared_kernel_name="streaming_matmul_add_kernel_mix_aic",
+    )
+    return plan, autotune_success(plan)
+
+
+def test_autotune_accepts_real_shaped_bound_winner_evidence():
+    plan, result = winner_evidence_fixture()
+    selected, summary = runner.ExperimentCell._validate_autotune_success(plan, result)
+    assert selected == plan["options"][1]["source"]
+    assert summary["winner_full_gate"]["winner_id"] == "block-64"
+
+
+def test_autotune_rejects_missing_winner_evidence_binding():
+    plan, result = winner_evidence_fixture()
+    result["autotune_summary"].pop("winner_full_gate")
+    with pytest.raises(runner.RunnerError, match="bound full-gate identity"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("field", [
+    "winner_id", "source_sha256", "candidate_artifact_sha256", "profile_summary_sha256",
+])
+def test_autotune_rejects_missing_or_mismatched_winner_identity(field):
+    plan, result = winner_evidence_fixture()
+    if field == "winner_id":
+        result["autotune_summary"]["winner_full_gate"][field] = "incumbent"
+    else:
+        result["autotune_summary"]["winner_full_gate"][field] = "0" * 64
+    with pytest.raises(runner.RunnerError, match="identity"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("correctness", "correctness evidence"),
+    ("fusion", "fusion evidence"),
+    ("missing-pipes", "pipe evidence"),
+    ("empty-pipes", "pipe evidence"),
+    ("selector", "pipe evidence"),
+])
+def test_autotune_rejects_incomplete_winner_full_gate_evidence(mutation, message):
+    plan, result = winner_evidence_fixture()
+    profile = result["profile_summary"]
+    if mutation == "correctness":
+        profile["correctness_cases"] = 9
+    elif mutation == "fusion":
+        profile["fusion"]["logical_launches_per_case"] = 2
+    elif mutation == "missing-pipes":
+        profile.pop("pipe_activity")
+    elif mutation == "empty-pipes":
+        profile["pipe_activity"]["observations"] = []
+    else:
+        profile["pipe_activity"]["provenance"]["kernel_selector"] = "other-kernel"
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+def test_autotune_rejects_collectively_renamed_kernel_identity():
+    plan, result = winner_evidence_fixture()
+    profile = result["profile_summary"]
+    profile["fusion"].update(entrypoint="other_entrypoint", kernel_name="other_declared")
+    profile["timing"].update(
+        declared_kernel_name="other_declared", resolved_kernel_name="other_resolved",
+        kernel_name="other_resolved",
+    )
+    profile["pipe_activity"]["provenance"]["kernel_selector"] = "other_resolved"
+    for capture in profile["timing"]["captures"]:
+        capture.update(
+            kernel_name="other_resolved", declared_kernel_name="other_declared",
+            resolved_kernel_name="other_resolved",
+        )
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match="fusion evidence"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation", ["reordered", "subset", "other-in-range"])
+def test_autotune_rejects_noncanonical_ranked_profile_cases(mutation):
+    plan, result = winner_evidence_fixture()
+    timing = result["profile_summary"]["timing"]
+    if mutation == "reordered":
+        timing["cases"][0], timing["cases"][1] = timing["cases"][1], timing["cases"][0]
+        timing["captures"] = (
+            timing["captures"][3:6] + timing["captures"][0:3] + timing["captures"][6:]
+        )
+    elif mutation == "subset":
+        timing["cases"].pop()
+        del timing["captures"][-3:]
+    else:
+        timing["cases"][0]["case"] = 6
+        for capture in timing["captures"][:3]:
+            capture["case"] = 6
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match="ranked inventory"):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    ("empty-captures", "capture inventory"),
+    ("missing-capture", "capture inventory"),
+    ("capture-duration", "capture evidence"),
+    ("capture-digest", "capture evidence"),
+    ("capture-log-digest", "capture evidence"),
+    ("capture-selector", "capture evidence"),
+    ("median", "repeated samples"),
+    ("geomean", "geomean"),
+])
+def test_autotune_rejects_unsubstantiated_timing_aggregates(mutation, message):
+    plan, result = winner_evidence_fixture()
+    timing = result["profile_summary"]["timing"]
+    if mutation == "empty-captures":
+        timing["captures"] = []
+    elif mutation == "missing-capture":
+        timing["captures"].pop()
+    elif mutation == "capture-duration":
+        timing["captures"][0]["duration_us"] += 1
+    elif mutation == "capture-digest":
+        timing["captures"][0]["evidence_sha256"] = "not-a-digest"
+    elif mutation == "capture-log-digest":
+        timing["captures"][0]["msprof_log_sha256"] = "not-a-digest"
+    elif mutation == "capture-selector":
+        timing["captures"][0]["resolved_kernel_name"] = "other-kernel"
+    elif mutation == "median":
+        timing["cases"][0]["median_us"] += 1
+    else:
+        timing["geomean_us"] += 1
+    rebind_winner_profile(result)
+
+    with pytest.raises(runner.RunnerError, match=message):
+        runner.ExperimentCell._validate_autotune_success(plan, result)
 
 
 def test_runner_materializes_exact_candidate_and_submitted_script(tmp_path):

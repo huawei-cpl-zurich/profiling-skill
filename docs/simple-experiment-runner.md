@@ -30,6 +30,7 @@ job.
   "terminal_gate_bundle_path": "/absolute/path/to/a3-terminal-gate.tar",
   "candidate_manifest_path": "/absolute/path/to/matmul.manifest.json",
   "billed_checks": 8,
+  "autotune": true,
   "rounds": 4,
   "infrastructure_retries": 2,
   "candidate_repairs": 2,
@@ -77,7 +78,7 @@ Every `run` and `resume`, including the boundaries after agent prepare and
 analyze calls, rejects a missing, replaced, or changed cell `TASK.md`. Later
 edits to source inputs or configuration cannot change these snapshots.
 
-## Two agent phases
+## Three agent phases
 
 The runner sends one JSON object on stdin and reads one JSON object on stdout.
 The prepare request contains `phase=prepare`, exact prompt, treatment, allowed
@@ -110,6 +111,90 @@ configuration and rules, requests a schema-constrained final response, emits
 only the response JSON on stdout, and returns the durable Codex thread as
 `session_id` after prepare. Configure its model and reasoning effort explicitly
 in `agent_command`.
+
+`autotune=true` is an opt-in runner/gate contract. The configured terminal
+gate must consume `AUTOTUNE_REQUEST_PATH` and emit the validated autotune
+result schema described below; a legacy gate fails closed instead of silently
+running only the incumbent. A capable gate declares the exact line
+`# simple-experiment-capability: managed-autotune/v1`; the runner does not
+infer support from a shipped filename, target, or product. Gates acquire
+managed-search support only when their own snapshot carries that declaration.
+Initialization also requires a supported benchmark contract and, when a
+candidate manifest is supplied, its exact expected entrypoint and declared
+kernel selector. Unsupported tasks or well-formed but mismatched manifests
+enter stable `input_integrity_failure` state before agent or remote work and do
+not consume candidate-repair budget.
+With that option enabled, prepare must define one
+top-level literal `AUTOTUNE_CONFIG` mapping. Before dispatch, the same durable agent thread
+receives `phase=tune`, the declared mapping, prior-round profile summary when
+available, and the limits of 128 proposed configurations and three profiled
+finalists. It returns zero through 128 `{id, parameters, hypothesis}` objects;
+parameters may override only declared JSON-scalar keys. The runner
+deterministically materializes the incumbent and every proposal and embeds one
+compressed, hash-bound request in the retained job.
+
+The prepare response, including its candidate and durable session, is
+atomically checkpointed before tune. If the agent turn is interrupted, `resume`
+reuses that exact checkpoint and thread; it does not prepare a replacement.
+Source/configuration checks that the controller can perform run before that
+checkpoint. Invalid tune output becomes an explicit same-round candidate
+repair and discards the checkpoint; input-integrity and gate-contract failures
+are terminal rather than misleadingly resumable.
+An accepted materialized plan is then stored in a second atomic `tuned` state
+before attempt creation. Resume validates and dispatches those exact options,
+source hashes, and policy without another agent turn. If interruption leaves a
+pre-dispatch attempt directory before its state transition, resume rebuilds it
+from the retained plan only when no dispatch evidence exists.
+
+A compatible host gate screens all options in that job across its ranked
+correctness and fusion cases using ordinary synchronized device timing.
+Candidate failures eliminate only their option. The three fastest successful
+options receive at least three repeated `msprof op` timings; every finalist
+profile binds its option ID, requested source SHA-256, exact executed artifact
+SHA-256, and concrete official timing object. Equal cheap timings retain
+request order. The fastest official finalist then receives the complete
+correctness/fusion gate and diagnostic pipe capture; equal recomputed official
+geomeans retain finalist order. Duplicate materialized sources are rejected
+before dispatch. Observation loss reuses the same durable handle, and
+completed option screens are checkpointed inside the retained job. Tuning
+options do not increment the optimization round.
+
+The selected winner is accepted only with concrete full-gate evidence. The
+result retains the stable `profiling-skill/a3-round-profile-summary/v1`
+summary and binds it through `autotune_summary.winner_full_gate`:
+
+```json
+{
+  "winner_id": "block-64",
+  "source_sha256": "<selected source SHA-256>",
+  "candidate_artifact_sha256": "<executed candidate.py SHA-256>",
+  "profile_summary_sha256": "<canonical profile-summary SHA-256>"
+}
+```
+
+The source and executed artifact hashes must equal the selected option. The
+profile digest uses UTF-8 JSON with sorted keys and compact separators. The
+retained request pins the benchmark, required correctness-case count, ranked
+profiling cases (Matmul `[7, 8, 9]`, GDN `[40, 49, 47, 46, 45]`, or BSA
+`[47, 46, 49, 44, 43]`), expected Python entrypoint, and expected declared
+kernel selector. The bound summary must equal those identities, prove one
+logical launch for every correctness case, and carry nonempty normalized A3
+pipe observations whose exact selector matches the resolved timing selector.
+This prevents a gate from presenting internally consistent evidence for a
+different kernel.
+
+Every finalist and the winner full gate use the same official timing contract:
+`msprof-op`/`BasicInfo`, `device-task` scope, and an integer repeat count of at
+least three. Timing cases must equal the pinned ranked inventory in order;
+every case contains exactly that many positive samples and its recomputable
+median. Its nonempty capture inventory is case-major and has
+exactly one row for every `(case, iteration)`: each row retains the resolved
+and declared selectors, the matching duration, and lowercase SHA-256 digests
+for both compact evidence and the msprof log. The reported overall geomean is
+recomputed from case medians; aggregate comparisons use relative and absolute
+tolerances of `1e-12`. A custom gate may implement this protocol. The runner
+does not claim a shipped A3 gate supports it until that gate itself adds the
+capability declaration and produces this evidence.
 
 ## Reproducible seed repositories
 
@@ -203,7 +288,8 @@ retained evidence proves dispatch never began (including the legacy local
 prepared candidate for the next `run`.
 
 Each successful round adds exactly one commit under `repo/rounds/NN/` with the
-candidate, generated wrapper, command log, compact profile and terminal result,
+selected and structural candidates, compact tuning request/result, generated
+wrapper, agent and host command logs, compact profile and terminal result,
 host terminal gate, prompt/treatment/skill inputs, billed-check limit,
 hypothesis, retrieved knowledge, final reasoning, and post-mortem. When a task
 is configured, every round commit also contains its exact `TASK.md` bytes and

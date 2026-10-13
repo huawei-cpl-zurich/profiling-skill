@@ -45,37 +45,59 @@ only the installed global remote-access client to run capabilities and
 preflight checks, upload the deterministic tar bundle, dispatch a file-backed
 script under the named runtime, and observe the retained handle.
 
-The remote driver probes physical devices with a bounded Torch-NPU operation.
-The chosen physical ID is exposed only as provenance; the application sees
-logical device 0. It first runs all requested correctness cases through the
-frozen benchmark runner. Candidate compilation, execution, and comparison
-failures remain `compile_error`, `runtime_error`, or `correctness_error`.
-Device, transport, profiler, selector-evidence, and malformed-result failures
-are `infrastructure_error`.
+The remote driver takes a nonblocking `flock` lease before probing each
+physical device and holds it for the entire retained job. Lock files are
+shared by all executor runs under the configured remote root; process exit
+releases the lease, so stale lock files are harmless. The bounded scan selects
+an eligible device without freezing a physical ID in source. The selected ID
+is exposed only as provenance; the application sees logical device 0.
+
+Correctness runs through the frozen benchmark runner before every profile.
+The runtime audit requires exactly one logical Triton launch to produce the
+output and rejects framework compute or multiple Triton launches. Compiler
+AIC/AIV components of that logical kernel are permitted. Candidate
+compilation, execution, and comparison failures remain `compile_error`,
+`runtime_error`, or `correctness_error`, including failures raised inside the
+profiled repeat. TsdOpen, LazySetDevice, device OOM/unavailability, transport,
+profiler, selector-evidence, and malformed-result failures are
+`infrastructure_error`.
 
 Discovery performs an unfiltered BasicInfo capture after correctness. It
-returns only observed names matching the declared Triton entrypoint (including
-the compiler's component suffix) and their compact rows. Capture reruns the
-single requested case, supplies that exact discovered name to msprof with
-`PipeUtilization`, verifies selector-binding BasicInfo, and explicitly launches
-the candidate seven times. The distinct BasicInfo durations are cached by
-candidate, case, and selector; subsequent coordinator sample requests consume
-the corresponding cached duration without another remote job. Repeated
-PipeUtilization rows are reduced to per-block/sub-block medians, retaining one
-compact pipe table shared by those timing samples.
+returns explicit component descriptors for observed names matching the
+declared Triton entrypoint, including compiler AIC/AIV suffixes, plus compact
+BasicInfo rows. The coordinator requests each component separately. Capture
+reruns the single requested case, supplies the exact component selector to
+msprof with `PipeUtilization`, and verifies selector-binding BasicInfo.
+Repeated PipeUtilization rows are reduced to per-block/sub-block medians.
 
-Every successful response records target, named runtime, selected physical
-device, normalized `cpl-remote run` command, and durable handle. The evidence
-digest covers the complete compact remote result.
+Each logical stability sample is a separate msprof process and report. The
+adapter never presents multiple launches from one report as independent
+samples. To avoid one remote dispatch per sample, one retained job collects a
+bounded batch of three independent captures for the same case and exact
+component. Later coordinator requests for those sample indexes observe the
+same terminal handle and consume the corresponding compact capture. Sample
+indexes outside that batch create another content-addressed retained job. For
+a multi-component logical kernel the coordinator takes the maximum component
+duration for the sample and retains every component's pipe rows and
+provenance.
+
+Every terminal response records product, target, named runtime, selected
+physical device, normalized `cpl-remote run` command, durable handle, and an
+explicit terminal flag. The evidence digest covers the complete compact
+remote result.
 
 ## Interruption and recovery
 
-Dispatch state is keyed by the canonical request plus the frozen baseline,
-case data, runner, and remote-driver hashes. The durable handle is written
-before observation. Repeating the same request with the same harness observes
-that handle and does not upload or submit a replacement job. An observer interruption therefore
-returns retryable infrastructure evidence containing the original handle; rerun
-the same coordinator command after transport recovery.
+Dispatch state is keyed by product, target, named runtime, canonical request,
+and frozen baseline, case data, runner, remote-driver, and executor hashes.
+The durable handle is written before observation and its target is validated
+before reuse. An observer interruption returns `terminal=false` with the
+original handle; `retry:{mode:observe,handle}` observes that attempt and never
+dispatches a duplicate. A terminal infrastructure response is recorded under
+`attempt-000N`; only
+`retry:{mode:new_attempt,prior_handle}` can retire it and dispatch the next
+numbered attempt. Candidate failures are terminal and are not retried as
+infrastructure.
 
 Do not delete the executor state while a handle may still be running. A changed
 candidate, case, selector, action, or harness revision produces a different

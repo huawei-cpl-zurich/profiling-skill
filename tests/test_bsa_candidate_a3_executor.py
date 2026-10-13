@@ -42,6 +42,7 @@ def request(action="discover"):
     else:
         value.update(case=47, sample_index=0,
                      kernel_name="block_sparse_attention_kernel",
+                     component={"selector": "block_sparse_attention_kernel", "kind": "aiv"},
                      metric="PipeUtilization")
     return value
 
@@ -69,13 +70,13 @@ class FakeTransport:
         self.runs.append((target, runtime, script, cwd))
         self.last_command = ["cpl-remote", "run", target, "--runtime", runtime,
                              "--file", str(script), "--cwd", cwd]
-        return "remote:bz-a3-1:job:retained-1"
+        return f"remote:{target}:job:retained-{len(self.runs)}"
 
     def observe_result(self, target, handle):
         self.observations.append((target, handle))
         if self.interrupted:
             raise self.module.ExecutorError("infrastructure_error", "observer unavailable",
-                                            handle=handle)
+                                            handle=handle, terminal=False)
         return self.remote_result
 
 
@@ -95,12 +96,15 @@ def success(action="discover"):
         "correctness": [{"case": 47, "passed": True}],
     }
     if action == "discover":
-        base.update(kernel_names=["block_sparse_attention_kernel"],
+        base.update(components=[
+                        {"selector": "block_sparse_attention_kernel_mix_aic", "kind": "aic"},
+                        {"selector": "block_sparse_attention_kernel_mix_aiv", "kind": "aiv"},
+                    ],
                     basic_info={"metric": "BasicInfo", "rows": [
-                        {"Op Name": "block_sparse_attention_kernel",
+                        {"Op Name": "block_sparse_attention_kernel_mix_aic",
                          "Task Duration(us)": "10.0"}]})
     else:
-        base.update(duration_us=10.0, duration_samples_us=[10.0, 10.2, 9.9], pipe_utilization={
+        base.update(duration_us=10.0, pipe_utilization={
             "metric": "PipeUtilization", "selector": "block_sparse_attention_kernel",
             "rows": [{"aiv_vec_ratio": "0.75"}],
         })
@@ -121,6 +125,12 @@ def test_invalid_request_is_rejected_before_remote_calls(tmp_path):
     assert not transport.probes
 
 
+def test_staged_remote_driver_is_valid_python():
+    module = load()
+
+    compile(module.remote_driver_source(), "remote_driver.py", "exec")
+
+
 def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_path):
     module = load()
     transport = FakeTransport(module, success())
@@ -129,11 +139,15 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     result = module.Executor(cfg, transport).execute(request())
 
     assert result["status"] == "ok"
-    assert result["kernel_names"] == ["block_sparse_attention_kernel"]
+    assert [item["kind"] for item in result["components"]] == ["aic", "aiv"]
     assert result["basic_info"]["rows"][0]["Task Duration(us)"] == "10.0"
     assert result["provenance"]["physical_device"] == 3
     assert result["provenance"]["runtime"] == "py311-torch"
     assert result["provenance"]["handle"] == "remote:bz-a3-1:job:retained-1"
+    assert result["provenance"]["product"] == "a3"
+    assert result["terminal"] is True
+    assert result["correctness"] == [{"case": 47, "passed": True}]
+    assert len(result["evidence_sha256"]) == 64
     assert transport.probes == [("capabilities", "bz-a3-1"),
                                 ("preflight", "bz-a3-1")]
     assert len(transport.uploads) == len(transport.runs) == 1
@@ -168,9 +182,22 @@ def test_capture_binds_exact_selector_and_returns_pipe_rows(tmp_path):
     assert result["evidence_sha256"] == module.digest_json(success("capture"))
 
 
-def test_capture_caches_distinct_msprof_launch_samples_without_redispatch(tmp_path):
+def test_capture_samples_use_independent_captures_in_one_retained_batch(tmp_path):
     module = load()
-    transport = FakeTransport(module, success("capture"))
+    remote = success("capture")
+    remote.pop("duration_us")
+    remote.pop("pipe_utilization")
+    remote["captures"] = [
+        {"sample_index": 0, "duration_us": 10.0, "pipe_utilization": {
+            "metric": "PipeUtilization", "selector": "block_sparse_attention_kernel",
+            "rows": [{"aiv_vec_ratio": "0.75"}],
+        }},
+        {"sample_index": 1, "duration_us": 11.0, "pipe_utilization": {
+            "metric": "PipeUtilization", "selector": "block_sparse_attention_kernel",
+            "rows": [{"aiv_vec_ratio": "0.76"}],
+        }},
+    ]
+    transport = FakeTransport(module, remote)
     cfg, _ = config(module, tmp_path, transport)
     executor = module.Executor(cfg, transport)
 
@@ -180,8 +207,9 @@ def test_capture_caches_distinct_msprof_launch_samples_without_redispatch(tmp_pa
     second = executor.execute(second_request)
 
     assert first["duration_us"] == 10.0
-    assert second["duration_us"] == 10.2
+    assert second["duration_us"] == 11.0
     assert second["provenance"]["handle"] == first["provenance"]["handle"]
+    assert first["evidence_sha256"] != second["evidence_sha256"]
     assert len(transport.runs) == 1
 
 
@@ -211,16 +239,65 @@ def test_observer_interruption_preserves_handle_and_resume_does_not_redispatch(t
     first = executor.execute(request())
     assert first["status"] == "infrastructure_error"
     assert first["provenance"]["handle"] == "remote:bz-a3-1:job:retained-1"
+    assert first["terminal"] is False
     assert len(transport.runs) == 1
 
     transport.interrupted = False
-    second = executor.execute(request())
+    retry = request()
+    retry["retry"] = {"mode": "observe", "handle": first["provenance"]["handle"]}
+    second = executor.execute(retry)
     assert second["status"] == "ok"
     assert len(transport.runs) == 1
     assert transport.observations == [
         ("bz-a3-1", "remote:bz-a3-1:job:retained-1"),
         ("bz-a3-1", "remote:bz-a3-1:job:retained-1"),
     ]
+
+
+def test_terminal_infrastructure_requires_numbered_new_attempt(tmp_path):
+    module = load()
+    remote = {"schema": module.REMOTE_SCHEMA, "status": "infrastructure_error",
+              "diagnostics": "device reset", "physical_device": 1}
+    transport = FakeTransport(module, remote)
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+
+    first = executor.execute(request())
+    assert first["terminal"] is True
+    handle = first["provenance"]["handle"]
+    transport.remote_result = success()
+    retry = request()
+    retry["retry"] = {"mode": "new_attempt", "prior_handle": handle}
+    second = executor.execute(retry)
+
+    assert second["status"] == "ok"
+    assert second["provenance"]["handle"] != handle
+    assert len(transport.runs) == 2
+    receipts = sorted((tmp_path / "state").rglob("dispatch.json"))
+    assert [path.parent.name for path in receipts] == ["attempt-0001", "attempt-0002"]
+
+
+def test_target_is_part_of_identity_and_persisted_handle_target_is_checked(tmp_path):
+    module = load()
+    first_transport = FakeTransport(module, success())
+    cfg, _ = config(module, tmp_path, first_transport)
+    assert module.Executor(cfg, first_transport).execute(request())["status"] == "ok"
+
+    second_transport = FakeTransport(module, success())
+    second_cfg = module.ExecutorConfig(**{**cfg.__dict__, "target": "bz-a3-2"})
+    second = module.Executor(second_cfg, second_transport).execute(request())
+    assert second["status"] == "ok"
+    assert second["provenance"]["target"] == "bz-a3-2"
+    assert len(second_transport.runs) == 1
+
+    receipt = next(path for path in (tmp_path / "state").rglob(
+        "attempt-0001/dispatch.json") if json.loads(path.read_text())["target"] == "bz-a3-1")
+    document = json.loads(receipt.read_text())
+    document["handle"] = "remote:bz-a3-2:job:wrong-target"
+    receipt.write_text(json.dumps(document))
+    observed = module.Executor(cfg, first_transport).execute(request())
+    assert observed["status"] == "infrastructure_error"
+    assert "target" in observed["diagnostics"]
 
 
 def test_remote_result_rejects_wrong_selector_and_malformed_pipe_evidence(tmp_path):

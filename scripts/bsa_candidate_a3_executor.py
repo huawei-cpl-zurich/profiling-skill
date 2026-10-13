@@ -29,8 +29,9 @@ TARGETS = {"bz-a3-1", "bz-a3-2"}
 
 
 class ExecutorError(RuntimeError):
-    def __init__(self, status: str, message: str, *, handle: str | None = None):
-        self.status, self.handle = status, handle
+    def __init__(self, status: str, message: str, *, handle: str | None = None,
+                 terminal: bool = True):
+        self.status, self.handle, self.terminal = status, handle, terminal
         super().__init__(message)
 
 
@@ -108,6 +109,17 @@ def validate_request(value: object) -> dict[str, Any]:
                 or not isinstance(value.get("sample_index"), int)
                 or value["sample_index"] < 0):
             raise ExecutorError("infrastructure_error", "invalid PipeUtilization capture request")
+        component = value.get("component")
+        if (not isinstance(component, dict)
+                or component.get("selector") != value["kernel_name"]):
+            raise ExecutorError("infrastructure_error", "capture component selector mismatch")
+    retry = value.get("retry")
+    if retry is not None:
+        if not isinstance(retry, dict) or retry.get("mode") not in {"observe", "new_attempt"}:
+            raise ExecutorError("infrastructure_error", "invalid retry request")
+        field = "handle" if retry["mode"] == "observe" else "prior_handle"
+        if not isinstance(retry.get(field), str):
+            raise ExecutorError("infrastructure_error", "retry handle is missing")
     return value
 
 
@@ -168,13 +180,17 @@ class CplRemoteTransport:
         return handle
 
     def observe_result(self, target: str, handle: str) -> dict:
-        observed = self._call(["observe", handle, "--wait", "--timeout", "900"], 930)
+        try:
+            observed = self._call(["observe", handle, "--wait", "--timeout", "900"], 930)
+        except ExecutorError as exc:
+            raise ExecutorError("infrastructure_error", str(exc), handle=handle,
+                                terminal=False) from exc
         if observed.get("handle") != handle:
             raise ExecutorError("infrastructure_error", "observation identity mismatch",
                                 handle=handle)
         if observed.get("state") not in {"completed", "failed", "cancelled"}:
             raise ExecutorError("infrastructure_error", "retained job is not terminal",
-                                handle=handle)
+                                handle=handle, terminal=False)
         stdout = self._call(["logs", handle, "--stream", "stdout", "--tail", "8"], 120)
         stderr = self._call(["logs", handle, "--stream", "stderr", "--tail", "100"], 120)
         marker = "BSA_CANDIDATE_RESULT="
@@ -195,8 +211,7 @@ class CplRemoteTransport:
 def remote_driver_source() -> str:
     """Return the dependency-free program executed inside the staged bundle."""
     return r'''#!/usr/bin/env python3
-import csv, hashlib, json, math, os, pathlib, shlex, statistics, subprocess, sys, tempfile
-import importlib.util
+import csv, fcntl, hashlib, importlib.util, json, math, os, pathlib, shlex, statistics, subprocess, sys, time, traceback
 
 SCHEMA="profiling-skill/bsa-candidate-remote-result/v1"
 SUCCESS="Profiling running finished. All task success."
@@ -209,13 +224,19 @@ def emit(value):
 
 def pick_device():
     probe="import torch,torch_npu;torch.npu.set_device(0);x=torch.ones(1,device='npu');torch.npu.synchronize();assert float(x.cpu()[0])==1"
-    failures=[]
-    for physical in range(8):
+    failures=[]; root=pathlib.Path(os.environ["BSA_DEVICE_LEASE_ROOT"]
+                                  ); root.mkdir(parents=True,exist_ok=True)
+    for _attempt in range(5):
+      for physical in range(8):
+        lease=(root/("device-%d.lock"%physical)).open("a+")
+        try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError: lease.close(); continue
         env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
         try: run=subprocess.run([sys.executable,"-c",probe],env=env,text=True,capture_output=True,timeout=20)
-        except subprocess.TimeoutExpired: failures.append("%d:timeout"%physical); continue
-        if run.returncode==0: return physical,env
-        failures.append("%d:%s"%(physical,(run.stderr or run.stdout)[-120:]))
+        except subprocess.TimeoutExpired: failures.append("%d:timeout"%physical); lease.close(); continue
+        if run.returncode==0: return physical,env,lease
+        failures.append("%d:%s"%(physical,(run.stderr or run.stdout)[-120:])); lease.close()
+      time.sleep(1)
     raise RuntimeError("no device passed bounded probe: "+"; ".join(failures))
 
 def job_for(req):
@@ -223,7 +244,9 @@ def job_for(req):
     return {"protocol_version":1,"runtime":req["candidate"]["environment"]["runtime"],
       "benchmark":"bsa","action":"check","device":0,"logical_device":0,
       "candidate":"candidate.py","baseline":"baseline.py","case_spec":"cases.jsonl",
-      "cases":cases,"scope":"candidate-profile","tolerances":{"rtol":0.02,"atol":0.02}}
+      "cases":cases,"scope":"candidate-profile","tolerances":{"rtol":0.02,"atol":0.02},
+      "fusion_contract":{"entrypoint":req["candidate"]["declared_kernel_name"],
+                         "kernel_name":req["candidate"]["declared_kernel_name"]}}
 
 def run_workload(req,env,output):
     job=job_for(req); jobpath=output.with_suffix(".job.json"); jobpath.write_text(json.dumps(job))
@@ -233,6 +256,10 @@ def run_workload(req,env,output):
     except Exception as exc: return {"status":"infrastructure_error","diagnostics":"runner response missing: "+repr(exc)}
     if run.returncode and result.get("status")=="ok":
         return {"status":"infrastructure_error","diagnostics":"runner exited %d after success"%run.returncode}
+    diagnostic=str(result.get("diagnostics","" )).lower()
+    infra=("tsdopen","lazysetdevice","out of memory","oom","device unavailable",
+           "device is unavailable","npu device")
+    if any(marker in diagnostic for marker in infra): result["status"]="infrastructure_error"
     return result
 
 def load(path,name):
@@ -247,12 +274,30 @@ def profile_workload():
     cases=req["correctness_cases"] if req["action"]=="discover" else [req["case"]]
     import torch
     model=candidate.Model()
-    with torch.no_grad():
-        repeats=1 if req["action"]=="discover" else 7
-        for _ in range(repeats):
+    try:
+      with torch.no_grad():
+        for _ in range(1):
             for case in cases:
                 inputs=harness.selected_inputs(baseline,pathlib.Path("cases.jsonl"),case)
                 model(*harness.clone(inputs)); torch.npu.synchronize()
+    except BaseException as exc:
+      text=(type(exc).__name__+": "+str(exc)).lower()
+      infra=("tsdopen","lazysetdevice","out of memory","oom","device unavailable")
+      compile_markers=("compile","compiler","triton","lowering","codegen","semantic")
+      status=("infrastructure_error" if any(x in text for x in infra) else
+              "compile_error" if any(x in text for x in compile_markers) else "runtime_error")
+      pathlib.Path("profile-failure.json").write_text(json.dumps(
+        {"status":status,"diagnostics":"".join(traceback.format_exception(type(exc),exc,exc.__traceback__))}))
+      raise
+
+def valid_fusion(result,cases):
+    evidence=result.get("fusion_evidence")
+    if not isinstance(evidence,list) or len(evidence)!=len(cases): return False
+    for item in evidence:
+      ops=item.get("operators",[]); triton=[op for op in ops if op.get("origin")=="triton"]
+      if (len(triton)!=1 or any(op.get("origin")!="triton" for op in ops)
+          or item.get("output_launch_id")!=triton[0].get("launch_id")): return False
+    return True
 
 def csvs(root,needle):
     found=sorted(root.rglob(needle+"*.csv"))
@@ -301,10 +346,28 @@ def compact_pipe(rows):
         result.append(merged)
     return result
 
+def run_profile(req,env,report,physical,correctness):
+    failure=pathlib.Path("profile-failure.json"); failure.unlink(missing_ok=True)
+    application=shlex.join([sys.executable,"remote_driver.py","--profile-workload"])
+    command=["msprof","op","--application="+application,"--output="+str(report),
+             "--aic-metrics="+req["metric"],"--warm-up=0",
+             "--launch-count="+("64" if req["action"]=="discover" else "1"),"--kill=off"]
+    if req["action"]=="capture": command.append("--kernel-name="+req["kernel_name"])
+    try: prof=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
+    except subprocess.TimeoutExpired as exc:
+        return None,{"status":"infrastructure_error","diagnostics":"msprof timeout: "+str(exc),"physical_device":physical}
+    transcript=prof.stdout+prof.stderr
+    if prof.returncode or SUCCESS not in transcript:
+        if failure.is_file():
+            item=json.loads(failure.read_text()); item.update(physical_device=physical,
+              correctness=correctness.get("case_evidence",[])); return None,item
+        return None,{"status":"infrastructure_error","diagnostics":"msprof failed: "+transcript[-2000:],"physical_device":physical}
+    return read_rows(csvs(report,"OpBasicInfo")),None
+
 def main():
     if sys.argv[1:]==["--profile-workload"]: profile_workload(); return
     req=json.loads(pathlib.Path("request.json").read_text())
-    try: physical,env=pick_device()
+    try: physical,env,lease=pick_device()
     except Exception as exc: emit({"status":"infrastructure_error","diagnostics":str(exc)}); return
     correctness=run_workload(req,env,pathlib.Path("correctness.json"))
     if correctness.get("status")!="ok":
@@ -313,38 +376,46 @@ def main():
         emit({"status":status,"diagnostics":str(correctness.get("diagnostics","")),
               "physical_device":physical,"correctness":correctness.get("case_evidence",[])})
         return
-    report=pathlib.Path("report"); application=shlex.join([
-        sys.executable,"remote_driver.py","--profile-workload"])
-    metric=req["metric"]
-    command=["msprof","op","--application="+application,"--output="+str(report),
-             "--aic-metrics="+metric,"--warm-up=0",
-             "--launch-count="+("64" if req["action"]=="discover" else "7"),"--kill=off"]
-    if req["action"]=="capture": command.append("--kernel-name="+req["kernel_name"])
-    try: prof=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
-    except subprocess.TimeoutExpired as exc:
-        emit({"status":"infrastructure_error","diagnostics":"msprof timeout: "+str(exc),"physical_device":physical}); return
-    transcript=prof.stdout+prof.stderr
-    if prof.returncode or SUCCESS not in transcript:
-        emit({"status":"infrastructure_error","diagnostics":"msprof failed: "+transcript[-2000:],"physical_device":physical}); return
-    basic=read_rows(csvs(report,"OpBasicInfo")); names=sorted({name(row) for row in basic if name(row)})
+    expected_cases=req["correctness_cases"] if req["action"]=="discover" else [req["case"]]
+    if not valid_fusion(correctness,expected_cases):
+        emit({"status":"correctness_error","diagnostics":"candidate is not one fully fused logical Triton launch",
+              "physical_device":physical,"correctness":correctness.get("case_evidence",[])})
+        return
     declared=req["candidate"]["declared_kernel_name"]
     if req["action"]=="discover":
+        report=pathlib.Path("report-discover")
+        basic,failure=run_profile(req,env,report,physical,correctness)
+        if failure: emit(failure); return
+        names=sorted({name(row) for row in basic if name(row)})
         selected=[item for item in names if item==declared or item.startswith(declared+"_")]
         rows=[row for row in basic if name(row) in selected]
         if not selected:
             emit({"status":"infrastructure_error","diagnostics":"BasicInfo did not observe declared kernel; observed="+repr(names),"physical_device":physical}); return
+        components=[]
+        for selector in selected:
+            kind=("aic" if selector.endswith("_mix_aic") else
+                  "aiv" if selector.endswith("_mix_aiv") else None)
+            components.append({"selector":selector,**({"kind":kind} if kind else {})})
         emit({"status":"ok","physical_device":physical,"correctness":correctness["case_evidence"],
-              "kernel_names":selected,"basic_info":{"metric":"BasicInfo","rows":rows}}); return
+              "components":components,"basic_info":{"metric":"BasicInfo","rows":rows}}); return
     selector=req["kernel_name"]
-    if sorted({item for item in names if item}) != [selector]:
-        emit({"status":"infrastructure_error","diagnostics":"selector-binding BasicInfo mismatch: "+repr(names),"physical_device":physical}); return
-    pipe=compact_pipe(read_rows(csvs(report,"PipeUtilization"))); values=[duration(row) for row in basic if name(row)==selector]
-    values=[value for value in values if value is not None]
-    if not pipe or not values:
-        emit({"status":"infrastructure_error","diagnostics":"capture lacks exact PipeUtilization or duration rows","physical_device":physical}); return
+    batch_start=(req["sample_index"]//3)*3; captures=[]
+    for sample_index in range(batch_start,batch_start+3):
+      report=pathlib.Path("report-%d"%sample_index)
+      basic,failure=run_profile(req,env,report,physical,correctness)
+      if failure: emit(failure); return
+      names=sorted({name(row) for row in basic if name(row)})
+      if names != [selector]:
+          emit({"status":"infrastructure_error","diagnostics":"selector-binding BasicInfo mismatch: "+repr(names),"physical_device":physical}); return
+      pipe=compact_pipe(read_rows(csvs(report,"PipeUtilization")))
+      values=[duration(row) for row in basic if name(row)==selector]
+      values=[value for value in values if value is not None]
+      if not pipe or len(values)!=1:
+          emit({"status":"infrastructure_error","diagnostics":"capture lacks one exact PipeUtilization or duration row","physical_device":physical}); return
+      captures.append({"sample_index":sample_index,"duration_us":values[0],
+                       "pipe_utilization":{"metric":"PipeUtilization","selector":selector,"rows":pipe}})
     emit({"status":"ok","physical_device":physical,"correctness":correctness["case_evidence"],
-          "duration_us":values[0],"duration_samples_us":values,"pipe_utilization":{
-          "metric":"PipeUtilization","selector":selector,"rows":pipe}})
+          "captures":captures})
 
 if __name__=="__main__": main()
 '''
@@ -380,14 +451,21 @@ class Executor:
 
     def execute(self, raw_request: object) -> dict:
         handle = None
+        command: list[str] = []
+        runtime = ""
         try:
             request = validate_request(raw_request)
-            cached = self._cached_capture(request)
-            if cached is not None:
-                return cached
-            request_sha = digest_json(request)
+            retry = request.get("retry")
+            base_request = {key: value for key, value in request.items() if key != "retry"}
+            if base_request["action"] == "capture":
+                base_request["sample_index"] = (base_request["sample_index"] // 3) * 3
+            request_sha = digest_json(base_request)
+            runtime = request["candidate"]["environment"]["runtime"]
             execution_sha = digest_json({
                 "request_sha256": request_sha,
+                "product": "a3",
+                "target": self.config.target,
+                "runtime": runtime,
                 "baseline_sha256": file_digest(self.config.baseline),
                 "baseline_data_sha256": file_digest(self.config.baseline.with_suffix(".json")),
                 "cases_sha256": file_digest(self.config.cases),
@@ -396,24 +474,44 @@ class Executor:
                 "executor_sha256": file_digest(Path(__file__).resolve()),
             })
             state = self.config.state_dir / execution_sha
-            receipt_path = state / "dispatch.json"
-            runtime = request["candidate"]["environment"]["runtime"]
-            command: list[str] = []
-            if receipt_path.is_file():
-                receipt = json.loads(receipt_path.read_text())
-                if receipt.get("request_sha256") != request_sha:
-                    raise ExecutorError("infrastructure_error", "dispatch receipt mismatch")
-                handle = receipt.get("handle")
-                command = receipt.get("command")
-                if not isinstance(command, list) or not all(isinstance(x, str) for x in command):
-                    raise ExecutorError("infrastructure_error", "dispatch command is missing")
+            attempts = sorted(path for path in state.glob("attempt-*") if path.is_dir())
+            if not attempts:
+                if retry is not None:
+                    raise ExecutorError("infrastructure_error", "retry has no retained attempt")
+                attempt = state / "attempt-0001"
+                dispatch = True
             else:
+                attempt = attempts[-1]
+                receipt = self._receipt(attempt, request_sha, runtime)
+                handle, command = receipt["handle"], receipt["command"]
+                if retry is None:
+                    dispatch = False
+                elif retry["mode"] == "observe":
+                    if retry["handle"] != handle:
+                        raise ExecutorError("infrastructure_error", "retry handle does not match retained handle")
+                    dispatch = False
+                else:
+                    if retry["prior_handle"] != handle:
+                        raise ExecutorError("infrastructure_error", "prior handle does not match retained handle")
+                    terminal_path = attempt / "terminal.json"
+                    if not terminal_path.is_file():
+                        raise ExecutorError("infrastructure_error", "cannot replace a nonterminal retained handle",
+                                            handle=handle, terminal=False)
+                    terminal = json.loads(terminal_path.read_text())
+                    if terminal.get("handle") != handle:
+                        raise ExecutorError("infrastructure_error", "terminal receipt identity mismatch",
+                                            handle=handle)
+                    attempt = state / f"attempt-{len(attempts) + 1:04d}"
+                    dispatch = True
+
+            receipt_path = attempt / "dispatch.json"
+            if dispatch:
                 self.transport.capabilities(self.config.target)
                 self.transport.preflight(self.config.target)
-                archive = self._bundle(request, state)
+                archive = self._bundle(base_request, attempt)
                 remote_archive = f"{self.config.remote_root}/payload-{file_digest(archive)}.tar"
                 self.transport.upload(self.config.target, archive, remote_archive)
-                run_root = f"{self.config.remote_root}/runs/{execution_sha}"
+                run_root = f"{self.config.remote_root}/runs/{execution_sha}/{attempt.name}"
                 quoted = {"archive": shlex.quote(remote_archive),
                           "digest": shlex.quote(file_digest(archive)),
                           "run_root": shlex.quote(run_root)}
@@ -421,6 +519,7 @@ class Executor:
 set -euo pipefail
 archive={quoted["archive"]}; run_root={quoted["run_root"]}
 test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
+export BSA_DEVICE_LEASE_ROOT="$PWD/.bsa-device-leases"
 rm -rf "$run_root"; mkdir -p "$run_root"; tar -xf "$archive" -C "$run_root"
 cd "$run_root"; exec python remote_driver.py
 '''
@@ -437,67 +536,45 @@ cd "$run_root"; exec python remote_driver.py
                             "target": self.config.target, "runtime": runtime,
                             "command": command})
             remote = self.transport.observe_result(self.config.target, handle)
+            atomic_json(attempt / "terminal.json", {
+                "handle": handle, "status": remote.get("status", "malformed"),
+                "terminal": True, "evidence_sha256": digest_json(remote),
+            })
             response = self._response(request, remote, runtime, command, handle)
-            self._cache_captures(request, remote, response)
+            atomic_json(attempt / "terminal.json", {
+                "handle": handle, "status": response["status"], "terminal": True,
+                "evidence_sha256": response.get("evidence_sha256"),
+            })
             return response
         except ExecutorError as exc:
             provenance = None
             if exc.handle or handle:
-                provenance = {"target": self.config.target, "runtime": (
-                    raw_request.get("candidate", {}).get("environment", {}).get("runtime", "")
-                    if isinstance(raw_request, dict) else ""),
-                    "physical_device": -1, "command": [], "handle": exc.handle or handle}
+                provenance = {"product": "a3", "target": self.config.target,
+                              "runtime": runtime, "physical_device": -1,
+                              "command": command, "handle": exc.handle or handle}
             return {"status": "infrastructure_error", "diagnostics": str(exc),
+                    "terminal": exc.terminal,
                     **({"provenance": provenance} if provenance else {})}
         except (OSError, ValueError, json.JSONDecodeError, tarfile.TarError) as exc:
-            return {"status": "infrastructure_error", "diagnostics": str(exc)}
+            return {"status": "infrastructure_error", "diagnostics": str(exc),
+                    "terminal": True}
 
-    def _cache_path(self, request: dict) -> Path:
-        candidate = request["candidate"]
-        identity = {"source_sha256": candidate["source_sha256"],
-                    "parameters": candidate.get("parameters", {}),
-                    "environment": candidate["environment"], "case": request.get("case"),
-                    "kernel_name": request.get("kernel_name"),
-                    "baseline_sha256": file_digest(self.config.baseline),
-                    "cases_sha256": file_digest(self.config.cases),
-                    "runner_sha256": file_digest(self.config.runner),
-                    "executor_sha256": file_digest(Path(__file__).resolve())}
-        return self.config.state_dir / "capture-cache" / (digest_json(identity) + ".json")
-
-    def _cached_capture(self, request: dict) -> dict | None:
-        if request["action"] != "capture":
-            return None
-        path = self._cache_path(request)
-        if not path.is_file():
-            return None
-        value = json.loads(path.read_text())
-        index = request.get("sample_index")
-        samples = value.get("samples")
-        if (isinstance(index, bool) or not isinstance(index, int) or index < 0
-                or not isinstance(samples, list) or index >= len(samples)):
-            return None
-        item = {"duration_us": samples[index],
-                "pipe_utilization": value["pipe_utilization"],
-                "sample_index": index, "remote_evidence_sha256": value["evidence_sha256"]}
-        return {"status": "ok", "diagnostics": "", "duration_us": samples[index],
-                "pipe_utilization": value["pipe_utilization"],
-                "evidence_sha256": digest_json(item), "provenance": value["provenance"]}
-
-    def _cache_captures(self, request: dict, remote: dict, response: dict) -> None:
-        if request["action"] != "capture" or response.get("status") != "ok":
-            return
-        samples = remote.get("duration_samples_us", [response["duration_us"]])
-        if (not isinstance(samples, list) or not samples or len(samples) > 7
-                or any(isinstance(value, bool) or not isinstance(value, (int, float))
-                       or not math.isfinite(value) or value <= 0 for value in samples)):
-            return
-        atomic_json(self._cache_path(request), {
-            "schema": "profiling-skill/bsa-candidate-capture-cache/v1",
-            "samples": [float(value) for value in samples],
-            "pipe_utilization": response["pipe_utilization"],
-            "evidence_sha256": response["evidence_sha256"],
-            "provenance": response["provenance"],
-        })
+    def _receipt(self, attempt: Path, request_sha: str, runtime: str) -> dict:
+        receipt_path = attempt / "dispatch.json"
+        if not receipt_path.is_file():
+            raise ExecutorError("infrastructure_error", "retained attempt lacks dispatch receipt")
+        receipt = json.loads(receipt_path.read_text())
+        if (receipt.get("request_sha256") != request_sha
+                or receipt.get("target") != self.config.target
+                or receipt.get("runtime") != runtime):
+            raise ExecutorError("infrastructure_error", "dispatch receipt identity mismatch")
+        handle, command = receipt.get("handle"), receipt.get("command")
+        if not isinstance(handle, str) or not handle.startswith(
+                f"remote:{self.config.target}:job:"):
+            raise ExecutorError("infrastructure_error", "dispatch handle target mismatch")
+        if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
+            raise ExecutorError("infrastructure_error", "dispatch command is missing")
+        return receipt
 
     def _response(self, request, remote, runtime, command, handle):
         if not isinstance(remote, dict) or remote.get("schema") != REMOTE_SCHEMA:
@@ -507,33 +584,47 @@ cd "$run_root"; exec python remote_driver.py
         if isinstance(physical, bool) or not isinstance(physical, int) or physical < 0:
             raise ExecutorError("infrastructure_error", "remote physical device is missing",
                                 handle=handle)
-        provenance = {"target": self.config.target, "runtime": runtime,
+        provenance = {"product": "a3", "target": self.config.target, "runtime": runtime,
                       "physical_device": physical, "command": command, "handle": handle}
         status = remote.get("status")
         if status in CANDIDATE_FAILURES:
             return {"status": status, "diagnostics": str(remote.get("diagnostics", "")),
-                    "evidence_sha256": digest_json(remote), "provenance": provenance}
+                    "terminal": True, "evidence_sha256": digest_json(remote),
+                    "provenance": provenance}
         if status != "ok":
             return {"status": "infrastructure_error",
                     "diagnostics": str(remote.get("diagnostics", "remote execution failed")),
-                    "evidence_sha256": digest_json(remote), "provenance": provenance}
+                    "terminal": True, "evidence_sha256": digest_json(remote),
+                    "provenance": provenance}
         result = {"status": "ok", "diagnostics": "", "evidence_sha256": digest_json(remote),
-                  "provenance": provenance}
+                  "terminal": True, "provenance": provenance}
+        if isinstance(remote.get("correctness"), list):
+            result["correctness"] = remote["correctness"]
         if request["action"] == "discover":
-            names, evidence = remote.get("kernel_names"), remote.get("basic_info")
-            if (not isinstance(names, list) or not names
-                    or not all(isinstance(name, str) and name for name in names)
+            components, evidence = remote.get("components"), remote.get("basic_info")
+            if (not isinstance(components, list) or not components
+                    or not all(isinstance(item, dict)
+                               and isinstance(item.get("selector"), str)
+                               and item["selector"]
+                               and item.get("kind") in {None, "aic", "aiv"}
+                               for item in components)
+                    or len({item["selector"] for item in components}) != len(components)
                     or not isinstance(evidence, dict)):
                 raise ExecutorError("infrastructure_error", "invalid BasicInfo evidence",
                                     handle=handle)
-            result.update(kernel_names=names, basic_info=evidence)
+            result.update(components=components, basic_info=evidence)
         else:
-            evidence, duration = remote.get("pipe_utilization"), remote.get("duration_us")
-            samples = remote.get("duration_samples_us")
-            sample_index = request.get("sample_index", 0)
-            if (isinstance(samples, list) and not isinstance(sample_index, bool)
-                    and isinstance(sample_index, int) and 0 <= sample_index < len(samples)):
-                duration = samples[sample_index]
+            capture = remote
+            if isinstance(remote.get("captures"), list):
+                matches = [item for item in remote["captures"]
+                           if isinstance(item, dict)
+                           and item.get("sample_index") == request["sample_index"]]
+                if len(matches) != 1:
+                    raise ExecutorError("infrastructure_error",
+                                        "retained batch lacks requested independent capture",
+                                        handle=handle)
+                capture = matches[0]
+            evidence, duration = capture.get("pipe_utilization"), capture.get("duration_us")
             if (not isinstance(evidence, dict)
                     or evidence.get("selector") != request["kernel_name"]
                     or isinstance(duration, bool) or not isinstance(duration, (int, float))
@@ -542,6 +633,11 @@ cd "$run_root"; exec python remote_driver.py
                                     "invalid exact-selector PipeUtilization evidence",
                                     handle=handle)
             result.update(duration_us=float(duration), pipe_utilization=evidence)
+            if capture is not remote:
+                result["evidence_sha256"] = digest_json({
+                    "schema": REMOTE_SCHEMA, "status": "ok", "physical_device": physical,
+                    "correctness": remote.get("correctness", []), "capture": capture,
+                })
         return result
 
 

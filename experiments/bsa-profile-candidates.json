@@ -1,0 +1,18 @@
+{
+  "schema": "profiling-skill/bsa-profile-candidates-config/v1",
+  "cases": [47, 46, 49, 44, 43],
+  "environment": {
+    "product": "a3",
+    "runtime": "py311-torch",
+    "benchmark": "ascendc-kernelgen-data/level4/54_BlockSparseAttnFwd.py",
+    "campaign_protocol": "bsa-candidate-profile-v1"
+  },
+  "sampling": {
+    "stable_samples": 3,
+    "max_samples": 7,
+    "relative_range_threshold": 0.05
+  },
+  "metrics": ["BasicInfo", "PipeUtilization"],
+  "require_provenance": true,
+  "expected_kernel_name": "block_sparse_attention_kernel"
+}

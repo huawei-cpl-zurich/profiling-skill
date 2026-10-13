@@ -69,10 +69,51 @@ def geometric_mean(values: list[float]) -> float | None:
     return math.exp(sum(math.log(value) for value in values) / len(values))
 
 
+def pipe_profile(pipe: Any) -> tuple[dict[str, float], list[dict[str, Any]]]:
+    if not isinstance(pipe, dict):
+        return {}, []
+    if pipe.get("metric") == "PipeUtilization" and isinstance(pipe.get("rows"), list):
+        selector = identifier(pipe.get("selector"), "PipeUtilization selector")
+        components = []
+        for index, raw in enumerate(pipe["rows"]):
+            if not isinstance(raw, dict):
+                raise InvalidReportInput(f"PipeUtilization rows[{index}] must be an object")
+            block = identifier(raw.get("block_id"), f"PipeUtilization rows[{index}].block_id")
+            sub_block = identifier(
+                raw.get("sub_block_id"), f"PipeUtilization rows[{index}].sub_block_id"
+            )
+            values = {}
+            for name, value in raw.items():
+                if name in {"block_id", "sub_block_id"} or isinstance(value, bool):
+                    continue
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(number):
+                    values[str(name)] = number
+            components.append({
+                "metric": "PipeUtilization", "selector": selector,
+                "block_id": block, "sub_block_id": sub_block,
+                "metrics": values,
+            })
+        return {}, components
+    return {
+        str(name): float(value)
+        for name, value in pipe.items()
+        if not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(float(value))
+    }, []
+
+
 def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     samples: dict[str, list[float]] = defaultdict(list)
     metrics: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
     evidence_samples: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    component_metrics: dict[
+        str, dict[tuple[str, str, str, str], dict[str, list[float]]]
+    ] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for index, row in enumerate(rows):
         if row.get("status") == "valid":
             case_id = identifier(row.get("case_id"), f"captures[{index}].case_id")
@@ -83,6 +124,7 @@ def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "latency_us": latency,
                 "profile_metrics": raw_metrics or {},
                 "profile_evidence": profile.get("raw") if isinstance(profile, dict) else None,
+                "profile_components": profile.get("components", []) if isinstance(profile, dict) else [],
                 "evidence_sha256": row.get("evidence_sha256"),
                 "provenance": row.get("provenance"),
                 "accepted": row.get("accepted"),
@@ -99,17 +141,37 @@ def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                     number = float(value)
                     if math.isfinite(number):
                         metrics[case_id][str(name)].append(number)
+            for component in profile.get("components", []) if isinstance(profile, dict) else []:
+                key = (
+                    component["metric"], component["selector"],
+                    component["block_id"], component["sub_block_id"],
+                )
+                for name, number in component["metrics"].items():
+                    component_metrics[case_id][key][name].append(number)
     result = {}
-    for case, values in sorted(samples.items()):
-        median = statistics.median(values)
+    for case in sorted(evidence_samples):
+        values = samples[case]
+        median = statistics.median(values) if values else None
+        components = []
+        for key, metric_values in sorted(component_metrics[case].items()):
+            metric, selector, block, sub_block = key
+            components.append({
+                "metric": metric, "selector": selector,
+                "block_id": block, "sub_block_id": sub_block,
+                "metrics": {
+                    name: statistics.median(observations)
+                    for name, observations in sorted(metric_values.items())
+                },
+            })
         result[case] = {
             "median_latency_us": median,
             "latency_samples_us": sorted(values),
-            "relative_range": (max(values) - min(values)) / median,
+            "relative_range": ((max(values) - min(values)) / median if values else None),
             "profile_metrics": {
                 name: statistics.median(metric_values)
                 for name, metric_values in sorted(metrics[case].items())
             },
+            "profile_components": components,
             "samples": evidence_samples[case],
         }
     return result
@@ -118,9 +180,40 @@ def summaries_by_case(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 def normalize_producer_inputs(
     manifest: dict[str, Any], results: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    if results.get("schema") != "profiling-skill/bsa-candidate-results/v1":
+    result_schema = results.get("schema")
+    if result_schema not in {
+        "profiling-skill/bsa-candidate-results/v1",
+        "profiling-skill/bsa-candidate-merged-results/v1",
+    }:
         raise InvalidReportInput("producer results schema mismatch")
     occurrences = objects(manifest.get("occurrences"), "manifest.occurrences")
+    occurrence_ids = {
+        identifier(item.get("occurrence_id"), "manifest occurrence_id")
+        for item in occurrences
+    }
+    declared_starter = manifest.get("starter_occurrence_id")
+    role_starters = [
+        item["occurrence_id"] for item in occurrences
+        if item.get("lineage_role") == "starter"
+    ]
+    legacy_starters = [
+        item["occurrence_id"] for item in occurrences if item.get("is_starter") is True
+    ]
+    if declared_starter is not None:
+        starter_id = identifier(declared_starter, "manifest.starter_occurrence_id")
+        if starter_id not in occurrence_ids or role_starters != [starter_id]:
+            raise InvalidReportInput(
+                "starter_occurrence_id must reference the sole lineage_role starter"
+            )
+        if legacy_starters and legacy_starters != [starter_id]:
+            raise InvalidReportInput("legacy starter alias conflicts with starter_occurrence_id")
+    else:
+        candidates_for_starter = role_starters or legacy_starters
+        if len(candidates_for_starter) > 1:
+            raise InvalidReportInput("producer manifest identifies more than one starter occurrence")
+        if role_starters and legacy_starters and role_starters != legacy_starters:
+            raise InvalidReportInput("producer starter annotations conflict")
+        starter_id = candidates_for_starter[0] if candidates_for_starter else None
     executions = {
         identifier(item.get("execution_id"), "manifest execution_id"): item
         for item in objects(manifest.get("executions"), "manifest.executions")
@@ -137,7 +230,7 @@ def normalize_producer_inputs(
                 occurrence.get("occurrence_id"), "manifest occurrence_id"
             ))
 
-    candidates, starter_ids = [], []
+    candidates = []
     for occurrence in occurrences:
         occurrence_id = identifier(occurrence.get("occurrence_id"), "manifest occurrence_id")
         execution_id = occurrence.get("execution_id")
@@ -151,12 +244,7 @@ def normalize_producer_inputs(
         parent_id = occurrence.get("parent_occurrence_id", occurrence.get("parent_candidate_id"))
         if parent_id is not None:
             parent_id = identifier(parent_id, f"occurrence {occurrence_id!r} parent")
-        is_starter = (
-            occurrence.get("is_starter") is True
-            or occurrence.get("lineage_role") == "starter"
-        )
-        if is_starter:
-            starter_ids.append(occurrence_id)
+        is_starter = occurrence_id == starter_id
         note = occurrence.get("lineage_note") or occurrence.get("artifact_diagnostics")
         if not recoverable and not note:
             note = f"candidate is not executable: {recoverability}"
@@ -200,9 +288,6 @@ def normalize_producer_inputs(
             "kernel_name": result_state.get("kernel_name") if isinstance(result_state, dict) else None,
             "basic_info": result_state.get("basic_info") if isinstance(result_state, dict) else None,
         })
-    if len(starter_ids) > 1:
-        raise InvalidReportInput("producer manifest identifies more than one starter occurrence")
-
     captures = []
     for execution_id, state in result_executions.items():
         if execution_id not in first_occurrence:
@@ -219,20 +304,13 @@ def normalize_producer_inputs(
             accepted = set(case.get("accepted_sample_indexes", range(len(case.get("samples", [])))))
             for sample_index, sample in enumerate(objects(case.get("samples", []), "result samples")):
                 pipe = sample.get("pipe_utilization")
-                numeric = {
-                    str(name): float(value)
-                    for name, value in pipe.items()
-                    if isinstance(pipe, dict)
-                    and not isinstance(value, bool)
-                    and isinstance(value, (int, float))
-                    and math.isfinite(float(value))
-                } if isinstance(pipe, dict) else {}
+                numeric, components = pipe_profile(pipe)
                 captures.append({
                     "candidate_id": candidate_id,
                     "case_id": str(case_id),
                     "status": "valid",
                     "latency_us": sample.get("duration_us"),
-                    "profile": {"metrics": numeric, "raw": pipe},
+                    "profile": {"metrics": numeric, "components": components, "raw": pipe},
                     "evidence_sha256": sample.get("evidence_sha256"),
                     "provenance": sample.get("provenance"),
                     "accepted": sample_index in accepted,
@@ -256,10 +334,29 @@ def normalize_producer_inputs(
     normalized_manifest = {
         "schema_version": 1,
         "campaign_id": manifest.get("campaign_root", "bsa-candidate-campaign"),
-        "starter_candidate_id": starter_ids[0] if starter_ids else None,
+        "starter_candidate_id": starter_id,
+        "required_case_ids": [
+            str(case) for case in (
+                results.get("run_contract", {}).get("cases")
+                if isinstance(results.get("run_contract"), dict)
+                else results.get("cases", [])
+            )
+        ],
+        "campaign_evidence": {
+            "result_schema": result_schema,
+            "run_contract": results.get("run_contract"),
+            "shard_count": results.get("shard_count"),
+            "present_shards": results.get("present_shards", []),
+            "missing_shards": results.get("missing_shards", []),
+            "missing_execution_ids": results.get("missing_execution_ids", []),
+            "sources": results.get("sources", []),
+        },
         "references": manifest.get("references", []),
         "candidates": candidates,
     }
+    for candidate in normalized_manifest["candidates"]:
+        if candidate.get("execution_id") in normalized_manifest["campaign_evidence"]["missing_execution_ids"]:
+            candidate["execution_status"] = "missing"
     return normalized_manifest, {"schema_version": 1, "captures": captures}
 
 
@@ -431,6 +528,30 @@ def compile_report(
         captures_by_candidate[candidate_id].append(capture)
 
     summaries = {key: summaries_by_case(value) for key, value in captures_by_candidate.items()}
+    declared_cases = manifest.get("required_case_ids")
+    if declared_cases:
+        if not isinstance(declared_cases, list):
+            raise InvalidReportInput("required_case_ids must be an array")
+        required_cases = {str(case) for case in declared_cases}
+        if len(required_cases) != len(declared_cases):
+            raise InvalidReportInput("required_case_ids must be unique")
+    else:
+        required_cases = None
+
+    def aggregate_coverage(case_summaries: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        available = {
+            case_id for case_id, summary in case_summaries.items()
+            if summary["median_latency_us"] is not None
+        }
+        expected = required_cases if required_cases is not None else set(case_summaries)
+        missing = expected - available
+        return {
+            "required_case_ids": sorted(expected),
+            "available_case_ids": sorted(available),
+            "missing_case_ids": sorted(missing),
+            "complete": bool(expected) and not missing,
+        }
+
     starter_summaries = (
         summaries.get(effective_candidate(starter_id, candidates), {})
         if starter_id is not None else {}
@@ -448,14 +569,25 @@ def compile_report(
             parent_summaries = summaries.get(effective_candidate(parent_id, candidates), {})
         else:
             parent_summaries = {}
+        coverage = aggregate_coverage(candidate_summaries)
+        starter_coverage = aggregate_coverage(starter_summaries)
+        parent_coverage = aggregate_coverage(parent_summaries)
         case_results: dict[str, dict[str, Any]] = {}
         starter_ratios, parent_ratios = [], []
         for case_id, summary in candidate_summaries.items():
             latency = summary["median_latency_us"]
             starter = starter_summaries.get(case_id)
             parent = parent_summaries.get(case_id)
-            starter_speedup = starter["median_latency_us"] / latency if starter else None
-            parent_speedup = parent["median_latency_us"] / latency if parent else None
+            starter_speedup = (
+                starter["median_latency_us"] / latency
+                if latency is not None and starter and starter["median_latency_us"] is not None
+                else None
+            )
+            parent_speedup = (
+                parent["median_latency_us"] / latency
+                if latency is not None and parent and parent["median_latency_us"] is not None
+                else None
+            )
             if starter_speedup is not None:
                 starter_ratios.append(starter_speedup)
             if parent_speedup is not None:
@@ -498,12 +630,25 @@ def compile_report(
             "code_delta": candidate.get("code_delta", []),
             "hypothesis": candidate.get("hypothesis"),
             "cases": case_results,
+            "aggregate_coverage": coverage,
             "geometric_mean": {
                 "latency_us": geometric_mean([
-                    item["median_latency_us"] for item in candidate_summaries.values()
-                ]),
-                "starter_speedup": geometric_mean(starter_ratios),
-                "parent_speedup": geometric_mean(parent_ratios),
+                    candidate_summaries[case]["median_latency_us"]
+                    for case in coverage["required_case_ids"]
+                ]) if coverage["complete"] else None,
+                "starter_speedup": (
+                    geometric_mean(starter_ratios)
+                    if coverage["complete"] and starter_coverage["complete"]
+                    and len(starter_ratios) == len(coverage["required_case_ids"])
+                    else None
+                ),
+                "parent_speedup": (
+                    geometric_mean(parent_ratios)
+                    if parent_id is not None and coverage["complete"]
+                    and parent_coverage["complete"]
+                    and len(parent_ratios) == len(coverage["required_case_ids"])
+                    else None
+                ),
             },
             "failures": failures,
             "infrastructure_failures": [
@@ -551,10 +696,15 @@ def compile_report(
             "assessments": assessments,
         })
 
+    terminal_statuses = {"completed", "candidate_failure", "measurement_unstable"}
     terminal = all(
         item["lineage_state"] == "unrecoverable"
-        or bool(item["cases"])
-        or any(failure["status"] == "candidate_failure" for failure in item["failures"])
+        or (
+            item["execution_status"] in terminal_statuses
+            if item["execution_status"] is not None
+            else item["aggregate_coverage"]["complete"]
+            or any(failure["status"] == "candidate_failure" for failure in item["failures"])
+        )
         for item in compiled_candidates
     )
     valid_evidence = any(item["cases"] for item in compiled_candidates)
@@ -562,9 +712,14 @@ def compile_report(
         item["classification"] != "unavailable" for item in compiled_hypotheses
     )
     has_evidence = valid_evidence or any(item["failures"] for item in compiled_candidates)
+    campaign_evidence = manifest.get("campaign_evidence", {})
+    campaign_complete = not (
+        campaign_evidence.get("missing_shards")
+        or campaign_evidence.get("missing_execution_ids")
+    )
     if not has_evidence:
         report_state = "reproducible_scaffold"
-    elif terminal and hypotheses_complete:
+    elif terminal and hypotheses_complete and campaign_complete:
         report_state = "complete"
     else:
         report_state = "partial"
@@ -573,6 +728,7 @@ def compile_report(
         "campaign_id": manifest.get("campaign_id"),
         "report_state": report_state,
         "references": manifest.get("references", []),
+        "campaign_evidence": campaign_evidence,
         "hypothesis_evidence": {
             "manifest_sha256": hypothesis_doc.get("manifest_sha256"),
             "raw_cell_count": len(hypothesis_doc.get("raw_cells", [])),
@@ -607,11 +763,20 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"Campaign: `{report.get('campaign_id')}`",
         "",
-        "## Candidate results",
-        "",
+    ]
+    campaign = report.get("campaign_evidence", {})
+    if campaign:
+        lines.extend([
+            f"Result schema: `{campaign.get('result_schema')}`",
+            f"Missing shards: `{', '.join(map(str, campaign.get('missing_shards', []))) or 'none'}`",
+            f"Missing executions: `{', '.join(campaign.get('missing_execution_ids', [])) or 'none'}`",
+            "",
+        ])
+    lines.extend([
+        "## Candidate results", "",
         "| Candidate | Treatment | Parent | Duplicate of | Geomean µs | vs starter | vs parent |",
         "|---|---|---|---|---:|---:|---:|",
-    ]
+    ])
     for item in report["candidates"]:
         mean = item["geometric_mean"]
         lines.append(

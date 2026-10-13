@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "build_profile_reverse_report.py"
@@ -274,18 +276,20 @@ def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage
     provenance = {"target": "bz-a3-2", "runtime": "named", "physical_device": 1, "command": ["run"], "handle": "remote:job-1"}
     results = {
         "schema": "profiling-skill/bsa-candidate-results/v1",
-        "cases": [47],
+        "cases": [47, 48],
         "executions": {
-            "exec-a": {"status": "completed", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 101.0, "relative_range": 0.02, "accepted_sample_indexes": [0, 1], "samples": [
+            "exec-a": {"status": "running", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 101.0, "relative_range": 0.02, "accepted_sample_indexes": [0, 1], "samples": [
                 {"duration_us": 100.0, "pipe_utilization": {"aiv_vec_ratio": 0.7}, "evidence_sha256": "1" * 64, "provenance": provenance},
                 {"duration_us": 102.0, "pipe_utilization": {"aiv_vec_ratio": 0.72}, "evidence_sha256": "2" * 64, "provenance": provenance},
                 {"duration_us": 150.0, "pipe_utilization": {"aiv_vec_ratio": 0.99}, "evidence_sha256": "9" * 64, "provenance": provenance},
+            ]}, "48": {"status": "measurement_unstable", "accepted_sample_indexes": [], "samples": [
+                {"duration_us": 180.0, "pipe_utilization": {"aiv_vec_ratio": 0.8}, "evidence_sha256": "8" * 64, "provenance": provenance}
             ]}}, "infrastructure_failures": []},
-            "exec-b": {"status": "completed", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 50.0, "relative_range": 0.04, "accepted_sample_indexes": [0, 1], "samples": [
+            "exec-b": {"status": "running", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 50.0, "relative_range": 0.04, "accepted_sample_indexes": [0, 1], "samples": [
                 {"duration_us": 49.0, "pipe_utilization": {"aiv_vec_ratio": 0.5}, "evidence_sha256": "3" * 64, "provenance": provenance},
                 {"duration_us": 51.0, "pipe_utilization": {"aiv_vec_ratio": 0.52}, "evidence_sha256": "4" * 64, "provenance": provenance},
-            ]}}, "infrastructure_failures": [{"kind": "transport", "diagnostics": "recovered observer"}]},
-            "exec-c": {"status": "candidate_failure", "kernel_name": None, "cases": {"47": {"status": "pending", "samples": []}}, "failure": {"kind": "compile_error", "category": "candidate", "diagnostics": "resource limit"}, "infrastructure_failures": []},
+            ]}, "48": {"status": "pending", "samples": []}}, "infrastructure_failures": [{"kind": "transport", "diagnostics": "recovered observer"}]},
+            "exec-c": {"status": "candidate_failure", "kernel_name": None, "cases": {"47": {"status": "pending", "samples": []}, "48": {"status": "pending", "samples": []}}, "failure": {"kind": "compile_error", "category": "candidate", "diagnostics": "resource limit"}, "infrastructure_failures": []},
         },
     }
     manifest_path, results_path, hypotheses_path = (
@@ -327,6 +331,11 @@ def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage
     assert by_id["starter-occ"]["cases"]["47"]["latency_samples_us"] == [100.0, 102.0]
     assert len(by_id["starter-occ"]["cases"]["47"]["samples"]) == 3
     assert by_id["starter-occ"]["cases"]["47"]["samples"][2]["accepted"] is False
+    assert by_id["starter-occ"]["cases"]["48"]["median_latency_us"] is None
+    assert len(by_id["starter-occ"]["cases"]["48"]["samples"]) == 1
+    assert by_id["fast-occ"]["geometric_mean"]["latency_us"] is None
+    assert by_id["fast-occ"]["geometric_mean"]["starter_speedup"] is None
+    assert by_id["fast-occ"]["aggregate_coverage"]["missing_case_ids"] == ["48"]
     sample = by_id["fast-occ"]["cases"]["47"]["samples"][0]
     assert sample["evidence_sha256"] == "3" * 64
     assert sample["provenance"]["handle"] == "remote:job-1"
@@ -408,3 +417,73 @@ def test_accepts_only_paired_microcampaign_hypothesis_results(tmp_path: Path):
     )
     assert rejected.returncode == 2
     assert "raw unpaired microcampaign cells" in rejected.stderr
+
+
+def test_consumes_merged_results_and_preserves_structured_pipe_components(tmp_path: Path):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "campaign_root": "/campaign",
+        "starter_occurrence_id": "starter",
+        "occurrences": [
+            {"occurrence_id": "starter", "execution_id": "exec-starter", "recoverability": "recoverable", "lineage_role": "starter"},
+            {"occurrence_id": "candidate", "execution_id": "exec-candidate", "recoverability": "recoverable", "parent_occurrence_id": "starter", "lineage_note": "request-declared incumbent", "parent_feature_deltas": {"block_n": {"before": 64, "after": 128}}},
+        ],
+        "executions": [
+            {"execution_id": "exec-starter", "features": {"block_n": 64}, "occurrence_ids": ["starter"]},
+            {"execution_id": "exec-candidate", "features": {"block_n": 128}, "occurrence_ids": ["candidate"]},
+        ],
+    }
+    pipe = {
+        "metric": "PipeUtilization", "selector": "kernel_mix",
+        "rows": [
+            {"block_id": "0", "sub_block_id": "vector0", "aiv_vec_ratio": "0.50", "aiv_scalar_ratio": "0.20"},
+            {"block_id": "0", "sub_block_id": "cube0", "aic_cube_ratio": "0.70", "aic_scalar_ratio": "0.10"},
+        ],
+    }
+    provenance = {"target": "bz-a3-1", "handle": "remote:one"}
+    merged = {
+        "schema": "profiling-skill/bsa-candidate-merged-results/v1",
+        "manifest_sha256": "f" * 64,
+        "run_contract": {"cases": [43, 44], "stable_samples": 1, "max_samples": 3, "variability_threshold": 0.05, "require_provenance": True},
+        "shard_count": 2,
+        "present_shards": [0],
+        "missing_shards": [1],
+        "missing_execution_ids": ["exec-candidate"],
+        "sources": [{"path": "shard-0.json", "shard_index": 0}],
+        "executions": {"exec-starter": {
+            "status": "completed", "kernel_name": "kernel_mix", "infrastructure_failures": [],
+            "cases": {
+                "43": {"status": "completed", "accepted_sample_indexes": [0], "samples": [{"duration_us": 10.0, "pipe_utilization": pipe, "evidence_sha256": "1" * 64, "provenance": provenance}]},
+                "44": {"status": "completed", "accepted_sample_indexes": [0], "samples": [{"duration_us": 20.0, "pipe_utilization": pipe, "evidence_sha256": "2" * 64, "provenance": provenance}]},
+            },
+        }},
+    }
+    manifest_path, results_path = tmp_path / "manifest.json", tmp_path / "merged.json"
+    write_json(manifest_path, manifest)
+    write_json(results_path, merged)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--results", str(results_path), "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    assert report["campaign_evidence"]["result_schema"] == "profiling-skill/bsa-candidate-merged-results/v1"
+    assert report["campaign_evidence"]["missing_shards"] == [1]
+    assert report["campaign_evidence"]["missing_execution_ids"] == ["exec-candidate"]
+    assert report["report_state"] == "partial"
+    candidates = {item["candidate_id"]: item for item in report["candidates"]}
+    starter = candidates["starter"]
+    assert starter["lineage_state"] == "starter"
+    assert starter["geometric_mean"]["latency_us"] == pytest.approx((10.0 * 20.0) ** 0.5)
+    components = starter["cases"]["43"]["profile_components"]
+    assert components == [
+        {"metric": "PipeUtilization", "selector": "kernel_mix", "block_id": "0", "sub_block_id": "cube0", "metrics": {"aic_cube_ratio": 0.7, "aic_scalar_ratio": 0.1}},
+        {"metric": "PipeUtilization", "selector": "kernel_mix", "block_id": "0", "sub_block_id": "vector0", "metrics": {"aiv_scalar_ratio": 0.2, "aiv_vec_ratio": 0.5}},
+    ]
+    assert starter["cases"]["43"]["profile_metrics"] == {}
+    assert candidates["candidate"]["execution_status"] == "missing"
+    assert candidates["candidate"]["geometric_mean"]["latency_us"] is None
+    markdown = (output / "report.md").read_text()
+    assert "Missing shards: `1`" in markdown
+    assert "Missing executions: `exec-candidate`" in markdown

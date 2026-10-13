@@ -34,7 +34,9 @@ The generated report computes latency and speedup per case, then takes the
 geometric mean across comparable cases. Parent-relative comparisons explain a
 round's code delta; starter-relative comparisons show total progress. Missing
 cases are unavailable rather than silently removed from a claimed common-case
-aggregate.
+aggregate. Candidate, starter, and parent must each cover the complete case set
+declared by the run contract before an aggregate latency or speedup is emitted.
+Rejected samples remain in the report even when a case has no accepted timing.
 
 Activity fractions are non-temporal observations. They do not provide a
 validated A3 capacity denominator or saturation threshold, so this A3 report
@@ -53,6 +55,9 @@ For the producer schema, source features come from each execution's static
 field. Parent speedup is computed only for `parent_occurrence_id`, starter
 speedup only for an explicitly identified starter, and an occurrence without
 such evidence is marked `unlinked` rather than assigned a guessed lineage.
+The canonical starter is `starter_occurrence_id`, which must agree with the
+single occurrence labeled `lineage_role: starter`; `is_starter` is accepted
+only as a legacy alias when the canonical field is absent.
 
 Known historical deltas to test causally include local sequence loop bounds,
 direct sparse-head rank, tile size, whole-tile skipping, scalar block-mask
@@ -130,10 +135,18 @@ python scripts/build_profile_reverse_report.py \
 
 The manifest and results may be supplied directly in the producer schemas
 `profiling-skill/bsa-candidate-manifest/v1` and
-`profiling-skill/bsa-candidate-results/v1`. Each occurrence remains a report
+either `profiling-skill/bsa-candidate-results/v1` or merged
+`profiling-skill/bsa-candidate-merged-results/v1`. Merge contract, present and
+missing shards, missing executions, and source checkpoints remain explicit.
+Each occurrence remains a report
 candidate; occurrences sharing an execution are linked explicitly rather than
 collapsed. Unrecoverable CANNBot occurrences remain visible with no invented
 starter or parent. The output directory contains `report.json`, `report.md`, and `candidates.csv`.
+
+Structured PipeUtilization evidence retains its metric, exact selector, and
+block/sub-block components. Numeric CSV strings are normalized within the same
+component identity and summarized only across comparable samples; AIC and AIV
+rows or distinct sub-blocks are never flattened into one metric average.
 
 Microcampaign hypothesis input must be report-ready paired evidence: top-level
 `raw_cells` may retain the original cells, but every `results` item must name a

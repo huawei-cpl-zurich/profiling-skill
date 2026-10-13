@@ -748,6 +748,10 @@ def speedup(value: Any) -> str:
     return "unavailable" if value is None else f"{float(value):.6g}x"
 
 
+def compact_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     state = report["report_state"]
     if state == "complete":
@@ -806,6 +810,63 @@ def render_markdown(report: dict[str, Any]) -> str:
                     f"- Failure `{item['candidate_id']}` case `{failure['case_id']}`: "
                     f"{failure['status']}/{failure['kind']} — {failure['message']}"
                 )
+    lines.extend(["", "### Auditable candidate evidence", ""])
+    for item in report["candidates"]:
+        candidate_id = item["candidate_id"]
+        coverage = item["aggregate_coverage"]
+        lines.extend([
+            f"#### `{candidate_id}`", "",
+            "- Aggregate coverage: "
+            f"complete={str(coverage['complete']).lower()}; "
+            f"required={compact_json(coverage['required_case_ids'])}; "
+            f"available={compact_json(coverage['available_case_ids'])}; "
+            f"missing={compact_json(coverage['missing_case_ids'])}.",
+        ])
+        if item.get("basic_info") is not None:
+            lines.extend([
+                f"- BasicInfo for `{candidate_id}`:", "",
+                "```json", json.dumps(item["basic_info"], indent=2, sort_keys=True), "```",
+            ])
+        else:
+            lines.append(f"- BasicInfo for `{candidate_id}`: unavailable.")
+        if not item["cases"]:
+            lines.extend(["- Per-case retained evidence: unavailable.", ""])
+            continue
+        for case_id, case in sorted(item["cases"].items()):
+            lines.extend([
+                f"##### Case `{case_id}`", "",
+                f"- Median latency: {fmt(case['median_latency_us'])} µs; "
+                f"relative range: {fmt(case['relative_range'])}; "
+                f"accepted samples: {len(case['latency_samples_us'])}; "
+                f"retained samples: {len(case['samples'])}.",
+            ])
+            for index, sample in enumerate(case["samples"]):
+                accepted = sample.get("accepted") is not False
+                lines.append(
+                    f"- Sample {index}: latency={fmt(sample.get('latency_us'))} µs; "
+                    f"accepted={str(accepted).lower()}; "
+                    f"evidence_sha256=`{sample.get('evidence_sha256') or 'unavailable'}`; "
+                    f"provenance={compact_json(sample.get('provenance'))}."
+                )
+                if sample.get("profile_evidence") is not None:
+                    lines.extend([
+                        f"  Raw profile evidence for sample {index}:", "",
+                        "```json",
+                        json.dumps(sample["profile_evidence"], indent=2, sort_keys=True),
+                        "```",
+                    ])
+            if case["profile_metrics"]:
+                lines.append(
+                    f"- Comparable scalar profile metrics: {compact_json(case['profile_metrics'])}."
+                )
+            for component in case["profile_components"]:
+                lines.append(
+                    f"- Pipe component `{component['metric']}` "
+                    f"selector=`{component['selector']}` block=`{component['block_id']}` "
+                    f"sub-block=`{component['sub_block_id']}`: "
+                    f"{compact_json(component['metrics'])}."
+                )
+            lines.append("")
     lines.extend(["", "Saturation: unknown — no validated capacity evidence.", "", "## Hypotheses", ""])
     for item in report["hypotheses"]:
         lines.append(f"- **{item['classification']}** — {item['title']} (`{item['hypothesis_id']}`): {item['reason']}")

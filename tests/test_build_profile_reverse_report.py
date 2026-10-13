@@ -452,6 +452,7 @@ def test_consumes_merged_results_and_preserves_structured_pipe_components(tmp_pa
         "sources": [{"path": "shard-0.json", "shard_index": 0}],
         "executions": {"exec-starter": {
             "status": "completed", "kernel_name": "kernel_mix", "infrastructure_failures": [],
+            "basic_info": {"kernel_names": ["kernel_mix"], "evidence_sha256": "0" * 64, "provenance": provenance},
             "cases": {
                 "43": {"status": "completed", "accepted_sample_indexes": [0], "samples": [{"duration_us": 10.0, "pipe_utilization": pipe, "evidence_sha256": "1" * 64, "provenance": provenance}]},
                 "44": {"status": "completed", "accepted_sample_indexes": [0], "samples": [{"duration_us": 20.0, "pipe_utilization": pipe, "evidence_sha256": "2" * 64, "provenance": provenance}]},
@@ -487,3 +488,7 @@ def test_consumes_merged_results_and_preserves_structured_pipe_components(tmp_pa
     markdown = (output / "report.md").read_text()
     assert "Missing shards: `1`" in markdown
     assert "Missing executions: `exec-candidate`" in markdown
+    assert "BasicInfo for `starter`" in markdown
+    assert "remote:one" in markdown
+    assert "selector=`kernel_mix` block=`0` sub-block=`vector0`" in markdown
+    assert "aiv_vec_ratio" in markdown

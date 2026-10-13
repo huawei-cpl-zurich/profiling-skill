@@ -44,7 +44,7 @@ class ExecutorConfig:
     baseline: Path
     cases: Path
     runner: Path
-    min_free_device_bytes: int = 12 * 1024**3
+    min_free_device_bytes: int = 32 * 1024**3
 
 
 def canonical(value: object) -> bytes:
@@ -718,7 +718,7 @@ def main(argv=None) -> int:
             )
         state = Path(os.environ.get(
             "BSA_A3_STATE_DIR", str(args.response.parent / ".bsa-a3-executor-state")))
-        minimum = int(os.environ.get("BSA_A3_MIN_FREE_DEVICE_BYTES", str(12 * 1024**3)))
+        minimum = int(os.environ.get("BSA_A3_MIN_FREE_DEVICE_BYTES", str(32 * 1024**3)))
         if minimum <= 0:
             raise ExecutorError("infrastructure_error",
                                 "BSA_A3_MIN_FREE_DEVICE_BYTES must be positive")

@@ -15,7 +15,7 @@ credential values. Configure an invocation with ignored local environment:
 export BSA_A3_TARGET=bz-a3-1
 export BSA_A3_REMOTE_ROOT=/the/provisioned/writable/workspace
 export BSA_A3_STATE_DIR=/a/durable/local/state/directory
-export BSA_A3_MIN_FREE_DEVICE_BYTES=12884901888
+export BSA_A3_MIN_FREE_DEVICE_BYTES=34359738368
 ```
 
 `BSA_A3_TARGET` may be `bz-a3-1` or `bz-a3-2`. The named runtime is taken from
@@ -50,7 +50,7 @@ The remote driver takes a nonblocking `flock` lease before probing each
 physical device and holds it for the entire retained job. It uses the shared
 `$HOME/.cpl-device-leases/device-lease-N.lock` namespace also used by
 acquisition jobs, so workflows with different remote roots cannot claim the
-same device. The probe also requires the configured minimum free memory (12
+same device. The probe also requires the configured minimum free memory (32
 GiB by default for the frozen BSA cases), reporting compact `free=N
 required=M` diagnostics for rejected devices. Process exit releases the
 lease, so stale lock files are harmless. The bounded scan selects

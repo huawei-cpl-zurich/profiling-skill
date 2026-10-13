@@ -168,7 +168,7 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     assert runtime == "py311-torch" and cwd == "/srv/profiling"
     assert "ASCEND_RT_VISIBLE_DEVICES" not in script
     assert 'CPL_DEVICE_LEASE_ROOT="$HOME/.cpl-device-leases"' in script
-    assert "BSA_MIN_FREE_DEVICE_BYTES=12884901888" in script
+    assert "BSA_MIN_FREE_DEVICE_BYTES=34359738368" in script
     assert 'flock 9' in script and 'compact-result.log' in script
     assert "remote_driver.py" in script
     with tarfile.open(archive) as bundle:

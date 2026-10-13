@@ -164,6 +164,19 @@ def _json_scalar(value: object, label: str) -> None:
     raise RunnerError(f"{label} must be a finite JSON scalar")
 
 
+def _same_json_scalar_type(value: object, declared: object) -> bool:
+    if declared is None:
+        return value is None
+    if isinstance(declared, bool):
+        return isinstance(value, bool)
+    if isinstance(declared, int):
+        return isinstance(value, int) and not isinstance(value, bool)
+    if isinstance(declared, float):
+        return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value))
+    return isinstance(value, str)
+
+
 def _python_scalar(value: object) -> str:
     _json_scalar(value, "autotune value")
     if value is None:
@@ -257,13 +270,23 @@ def materialize_autotune(candidate: str, proposed: object) -> dict:
             raise RunnerError(
                 f"autotune configuration {identifier} overrides undeclared keys: {sorted(unknown)}"
             )
+        missing = set(incumbent) - set(parameters)
+        if missing:
+            raise RunnerError(
+                f"autotune configuration {identifier} must provide the complete declared "
+                f"mapping; missing keys: {sorted(missing)}"
+            )
         for key, value in parameters.items():
             _json_scalar(value, f"autotune configuration {identifier}.{key}")
+            if not _same_json_scalar_type(value, incumbent[key]):
+                raise RunnerError(
+                    f"autotune configuration {identifier}.{key} must preserve its "
+                    "declared JSON-scalar type"
+                )
         if not isinstance(hypothesis, str) or not hypothesis.strip():
             raise RunnerError(f"autotune configuration {identifier} requires a hypothesis")
-        merged = {**incumbent, **parameters}
         options.append({
-            "id": identifier, "parameters": dict(sorted(merged.items())),
+            "id": identifier, "parameters": dict(sorted(parameters.items())),
             "hypothesis": hypothesis,
         })
         seen.add(identifier)

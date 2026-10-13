@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import math
 import os
 import stat
 import subprocess
@@ -39,7 +41,10 @@ SCHEMAS = {
                     "required": ["id", "parameters", "hypothesis"],
                     "properties": {
                         "id": {"type": "string", "minLength": 1},
-                        "parameters": {"type": "object"},
+                        "parameters": {
+                            "type": "object", "additionalProperties": False,
+                            "required": [], "properties": {},
+                        },
                         "hypothesis": {"type": "string", "minLength": 1},
                     },
                 },
@@ -52,6 +57,57 @@ SCHEMAS = {
         "properties": {"reasoning": {"type": "string"}, "postmortem": {"type": "string"}},
     },
 }
+
+
+def _scalar_schema(value: object, label: str) -> dict:
+    if value is None:
+        return {"type": "null"}
+    if isinstance(value, bool):
+        return {"type": "boolean"}
+    if isinstance(value, int):
+        return {"type": "integer"}
+    if isinstance(value, float) and math.isfinite(value):
+        return {"type": "number"}
+    if isinstance(value, str):
+        return {"type": "string"}
+    raise AdapterError(f"{label} must be a finite JSON scalar")
+
+
+def schema_for_request(request: dict) -> dict:
+    """Build one strict Codex output schema from the request's declared keys."""
+    schema = copy.deepcopy(SCHEMAS[request["phase"]])
+    if request["phase"] != "tune":
+        return schema
+    declared = request.get("declared_autotune_config")
+    if not isinstance(declared, dict) or not declared:
+        raise AdapterError("tune requires a non-empty declared_autotune_config")
+    properties = {}
+    for key in sorted(declared):
+        if not isinstance(key, str) or not key:
+            raise AdapterError("declared_autotune_config keys must be non-empty strings")
+        properties[key] = _scalar_schema(
+            declared[key], f"declared_autotune_config[{key!r}]"
+        )
+    parameters = schema["properties"]["configurations"]["items"]["properties"][
+        "parameters"
+    ]
+    parameters["properties"] = properties
+    parameters["required"] = sorted(properties)
+    return schema
+
+
+def _matches_scalar_schema(value: object, schema: dict) -> bool:
+    expected = schema["type"]
+    if expected == "null":
+        return value is None
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value))
+    return expected == "string" and isinstance(value, str)
 
 
 def private_codex_home() -> Path:
@@ -78,6 +134,7 @@ def validate_request(value: object) -> dict:
         raise AdapterError("request repo must be an initialized Git repository")
     if value["phase"] in {"tune", "analyze"} and not isinstance(value.get("session_id"), str):
         raise AdapterError(f"{value['phase']} requires an exact session_id")
+    schema_for_request(value)
     return value
 
 
@@ -103,10 +160,11 @@ def codex_prompt(request: dict) -> str:
 
 def invoke(args: argparse.Namespace, request: dict) -> dict:
     home = private_codex_home()
+    response_schema = schema_for_request(request)
     with tempfile.TemporaryDirectory(prefix="codex-json-adapter-") as temporary:
         schema = Path(temporary) / "schema.json"
         output = Path(temporary) / "last-message.json"
-        schema.write_text(json.dumps(SCHEMAS[request["phase"]], sort_keys=True))
+        schema.write_text(json.dumps(response_schema, sort_keys=True))
         common = ["--json", "--ignore-user-config", "--ignore-rules",
                   "--model", args.model,
                   "-c", f'model_reasoning_effort="{args.reasoning_effort}"',
@@ -163,6 +221,9 @@ def invoke(args: argparse.Namespace, request: dict) -> dict:
             if not isinstance(configurations, list) or len(configurations) > 128:
                 raise AdapterError("codex tune response has invalid configurations")
             for configuration in configurations:
+                parameter_schema = response_schema["properties"]["configurations"][
+                    "items"
+                ]["properties"]["parameters"]
                 if (not isinstance(configuration, dict)
                         or set(configuration) != {"id", "parameters", "hypothesis"}
                         or not isinstance(configuration["id"], str)
@@ -171,6 +232,11 @@ def invoke(args: argparse.Namespace, request: dict) -> dict:
                         or not isinstance(configuration["hypothesis"], str)
                         or not configuration["hypothesis"]):
                     raise AdapterError("codex tune response has invalid configurations")
+                if (set(configuration["parameters"]) != set(parameter_schema["required"])
+                        or any(not _matches_scalar_schema(
+                            value, parameter_schema["properties"][key]
+                        ) for key, value in configuration["parameters"].items())):
+                    raise AdapterError("codex tune response has invalid parameter mapping")
         elif (not isinstance(response["reasoning"], str)
               or not isinstance(response["postmortem"], str)):
             raise AdapterError("codex analyze response has invalid field types")

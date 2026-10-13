@@ -107,7 +107,7 @@ class Agent:
     def tune(self, request):
         self.tunes.append(request)
         return {"configurations": [
-            {"id": "block-64", "parameters": {"BLOCK": 64},
+            {"id": "block-64", "parameters": {"BLOCK": 64, "WAVES": 1},
              "hypothesis": "test a wider block"},
         ]}
 
@@ -976,7 +976,8 @@ def test_completed_round_is_one_commit_with_required_evidence(tmp_path):
 
 def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
     proposed = [
-        {"id": f"option-{index:03d}", "parameters": {"BLOCK": index + 1000},
+        {"id": f"option-{index:03d}",
+         "parameters": {"BLOCK": index + 1000, "WAVES": 1},
          "hypothesis": f"test block {index + 1000}"}
         for index in range(128)
     ]
@@ -1001,8 +1002,16 @@ def test_materialize_autotune_is_deterministic_and_supports_128_agent_options():
             {"id": "bad", "parameters": {"UNDECLARED": 1}, "hypothesis": "bad"}
         ], "undeclared"),
         (autotune_candidate(), [
-            {"id": "bad", "parameters": {"BLOCK": [1]}, "hypothesis": "bad"}
+            {"id": "bad", "parameters": {"BLOCK": [1], "WAVES": 1},
+             "hypothesis": "bad"}
         ], "JSON scalar"),
+        (autotune_candidate(), [
+            {"id": "bad", "parameters": {"BLOCK": 64}, "hypothesis": "bad"}
+        ], "complete declared mapping"),
+        (autotune_candidate(), [
+            {"id": "bad", "parameters": {"BLOCK": True, "WAVES": 1},
+             "hypothesis": "bad"}
+        ], "preserve its declared JSON-scalar type"),
     ],
 )
 def test_materialize_autotune_rejects_invalid_spaces(candidate, proposed, message):
@@ -1011,10 +1020,13 @@ def test_materialize_autotune_rejects_invalid_spaces(candidate, proposed, messag
 
 
 @pytest.mark.parametrize("proposed", [
-    [{"id": "same-as-incumbent", "parameters": {}, "hypothesis": "duplicate"}],
+    [{"id": "same-as-incumbent", "parameters": {"BLOCK": 32, "WAVES": 1},
+      "hypothesis": "duplicate"}],
     [
-        {"id": "first", "parameters": {"BLOCK": 64}, "hypothesis": "first"},
-        {"id": "second", "parameters": {"BLOCK": 64}, "hypothesis": "second"},
+        {"id": "first", "parameters": {"BLOCK": 64, "WAVES": 1},
+         "hypothesis": "first"},
+        {"id": "second", "parameters": {"BLOCK": 64, "WAVES": 1},
+         "hypothesis": "second"},
     ],
 ])
 def test_materialize_autotune_rejects_duplicate_sources(proposed):
@@ -1065,7 +1077,9 @@ def test_autotune_round_commits_selected_source_and_complete_search_evidence(tmp
             self.tunes.append(request)
             return {"configurations": [
                 {"id": f"option-{index:03d}",
-                 "parameters": {"BLOCK": 64 if index == 0 else index + 65},
+                 "parameters": {
+                     "BLOCK": 64 if index == 0 else index + 65, "WAVES": 1,
+                 },
                  "hypothesis": "broad deterministic canary"}
                 for index in range(100)
             ]}
@@ -1271,7 +1285,7 @@ def test_autotune_interruption_resumes_checkpointed_prepare_and_session(tmp_path
             if len(self.tunes) == 1:
                 raise runner.AgentInterrupted("tune transport interrupted")
             return {"configurations": [
-                {"id": "block-64", "parameters": {"BLOCK": 64},
+                {"id": "block-64", "parameters": {"BLOCK": 64, "WAVES": 1},
                  "hypothesis": "wider block"},
             ]}
 
@@ -1475,7 +1489,7 @@ def test_invalid_tune_output_becomes_same_round_candidate_repair(tmp_path):
                      "hypothesis": "invalid output"},
                 ]}
             return {"configurations": [
-                {"id": "block-64", "parameters": {"BLOCK": 64},
+                {"id": "block-64", "parameters": {"BLOCK": 64, "WAVES": 1},
                  "hypothesis": "valid repair"},
             ]}
 
@@ -1506,7 +1520,8 @@ def test_autotune_success_rejects_more_than_three_profiled_finalists(tmp_path):
         def tune(self, request):
             self.tunes.append(request)
             return {"configurations": [
-                {"id": f"v{index}", "parameters": {"BLOCK": index + 33},
+                {"id": f"v{index}",
+                 "parameters": {"BLOCK": index + 33, "WAVES": 1},
                  "hypothesis": "variant"} for index in range(4)
             ]}
 
@@ -1584,7 +1599,7 @@ def test_autotune_success_rejects_a_result_from_another_round(tmp_path):
 
 def test_autotune_success_rejects_nonfastest_finalists_and_winner():
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64, "WAVES": 1},
          "hypothesis": "variant"} for index in range(4)
     ])
     plan["optimization_round"] = 1
@@ -1605,7 +1620,7 @@ def test_autotune_success_rejects_nonfastest_finalists_and_winner():
 
 def test_autotune_selection_ties_follow_request_order():
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64, "WAVES": 1},
          "hypothesis": "variant"} for index in range(3)
     ])
     plan["optimization_round"] = 1
@@ -1623,7 +1638,7 @@ def test_autotune_selection_ties_follow_request_order():
 
 def test_autotune_selection_uses_next_official_finalist_after_full_gate_failure():
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64, "WAVES": 1},
          "hypothesis": "variant"} for index in range(3)
     ])
     plan["optimization_round"] = 1
@@ -1652,7 +1667,7 @@ def test_autotune_selection_uses_next_official_finalist_after_full_gate_failure(
 
 def test_autotune_selection_accepts_bound_profile_failure_and_remaining_winner():
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64, "WAVES": 1},
          "hypothesis": "variant"} for index in range(3)
     ])
     plan["optimization_round"] = 1
@@ -1679,7 +1694,7 @@ def test_autotune_selection_accepts_bound_profile_failure_and_remaining_winner()
 @pytest.mark.parametrize("mutation", ["missing", "identity", "overlap"])
 def test_autotune_selection_rejects_malformed_profile_failure(mutation):
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64, "WAVES": 1},
          "hypothesis": "variant"} for index in range(3)
     ])
     plan["optimization_round"] = 1
@@ -1708,7 +1723,7 @@ def test_autotune_selection_rejects_malformed_profile_failure(mutation):
 
 def test_autotune_success_rejects_when_every_finalist_failed_full_gate():
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": f"v{index}", "parameters": {"BLOCK": index + 64},
+        {"id": f"v{index}", "parameters": {"BLOCK": index + 64, "WAVES": 1},
          "hypothesis": "variant"} for index in range(3)
     ])
     plan["optimization_round"] = 1
@@ -1742,7 +1757,8 @@ def test_autotune_success_rejects_when_every_finalist_failed_full_gate():
 @pytest.mark.parametrize("invalid_repeats", [None, True, 2, 3.0])
 def test_autotune_success_requires_three_integer_msprof_repeats(invalid_repeats):
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": "v0", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+        {"id": "v0", "parameters": {"BLOCK": 64, "WAVES": 1},
+         "hypothesis": "variant"}
     ])
     plan["optimization_round"] = 1
     result = autotune_success(plan, winner="v0")
@@ -1766,7 +1782,8 @@ def test_autotune_success_requires_three_integer_msprof_repeats(invalid_repeats)
 ])
 def test_autotune_rejects_unbound_or_unsubstantiated_finalist_profiles(mutation, message):
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": "v0", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+        {"id": "v0", "parameters": {"BLOCK": 64, "WAVES": 1},
+         "hypothesis": "variant"}
     ])
     plan["optimization_round"] = 1
     result = autotune_success(plan, winner="v0")
@@ -1791,7 +1808,8 @@ def test_autotune_rejects_unbound_or_unsubstantiated_finalist_profiles(mutation,
 
 def winner_evidence_fixture():
     plan = runner.materialize_autotune(autotune_candidate(), [
-        {"id": "block-64", "parameters": {"BLOCK": 64}, "hypothesis": "variant"}
+        {"id": "block-64", "parameters": {"BLOCK": 64, "WAVES": 1},
+         "hypothesis": "variant"}
     ])
     plan.update(
         optimization_round=1, benchmark="matmul", required_correctness_cases=10,

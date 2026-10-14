@@ -35,6 +35,11 @@ RESULT_SCHEMA = "profiling-skill/bsa-candidate-results/v2"
 MERGED_RESULT_SCHEMA = "profiling-skill/bsa-candidate-merged-results/v1"
 SHARD_ALGORITHM = "sha256-mod-v1"
 SAMPLE_SELECTION = "first-stable-consecutive-window-v1"
+TARGET_ACTIVATION = {
+    "gz-a3": "target-default",
+    "bz-a3-1": "named-runtime",
+    "bz-a3-2": "named-runtime",
+}
 
 
 class InvalidArtifact(ValueError):
@@ -416,9 +421,35 @@ def _validate_shard(shard_count: int, shard_index: int) -> None:
         raise InvalidArtifact("shard index must be in [0, shard count)")
 
 
+def _execution_environment(environment: object) -> dict[str, str]:
+    if not isinstance(environment, dict):
+        raise InvalidArtifact("execution environment must be an object")
+    target = environment.get("target")
+    runtime = environment.get("runtime")
+    activation = environment.get("runtime_activation")
+    expected_activation = TARGET_ACTIVATION.get(target)
+    if (
+        expected_activation is None
+        or not isinstance(runtime, str)
+        or not runtime
+        or activation != expected_activation
+    ):
+        raise InvalidArtifact(
+            "execution environment requires an allowed A3 target, a logical "
+            "runtime, and its matching runtime_activation "
+            "(gz-a3=target-default; bz-a3-1/bz-a3-2=named-runtime)"
+        )
+    return {
+        "target": target,
+        "runtime": runtime,
+        "runtime_activation": activation,
+    }
+
+
 def _run_contract(
     cases: list[int], stable_samples: int, max_samples: int,
     variability_threshold: float, require_provenance: bool,
+    environment: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "cases": cases,
@@ -427,6 +458,7 @@ def _run_contract(
         "variability_threshold": variability_threshold,
         "require_provenance": require_provenance,
         "sample_selection": SAMPLE_SELECTION,
+        "execution_environment": _execution_environment(environment),
     }
 
 
@@ -482,7 +514,15 @@ def _load_results(
         raise InvalidArtifact("result schema mismatch")
     if value.get("manifest_sha256") != _sha(manifest):
         raise InvalidArtifact("result manifest identity mismatch")
-    if value.get("run_contract") != contract:
+    checkpoint_contract = value.get("run_contract")
+    if (
+        not isinstance(checkpoint_contract, dict)
+        or "execution_environment" not in checkpoint_contract
+    ):
+        raise InvalidArtifact(
+            "checkpoint predates target/runtime activation identity; regenerate it"
+        )
+    if checkpoint_contract != contract:
         raise InvalidArtifact("result run contract mismatch")
     expected_shard = {
         "algorithm": SHARD_ALGORITHM, "count": shard_count, "index": shard_index,
@@ -554,13 +594,13 @@ def _failure(response: dict[str, Any]) -> dict[str, Any]:
 def _valid_provenance(value: object, environment: dict[str, Any]) -> bool:
     if not isinstance(value, dict):
         return False
+    expected = _execution_environment(environment)
     target = value.get("target")
     runtime = value.get("runtime")
-    expected_runtime = environment.get("runtime")
     return (
-        target in {"gz-a3", "bz-a3-1", "bz-a3-2"}
-        and isinstance(runtime, str)
-        and (not isinstance(expected_runtime, str) or runtime == expected_runtime)
+        target == expected["target"]
+        and runtime == expected["runtime"]
+        and value.get("runtime_activation") == expected["runtime_activation"]
         and isinstance(value.get("physical_device"), int)
         and isinstance(value.get("command"), (str, list))
         and isinstance(value.get("handle"), str)
@@ -626,11 +666,13 @@ def run_campaign(
     shard_index: int = 0,
 ) -> dict[str, Any]:
     _validate_manifest(manifest)
+    execution_environment = _execution_environment(manifest.get("environment"))
     if stable_samples < 1 or max_samples < stable_samples:
         raise InvalidArtifact("sample limits are invalid")
     _validate_shard(shard_count, shard_index)
     contract = _run_contract(
-        cases, stable_samples, max_samples, variability_threshold, require_provenance
+        cases, stable_samples, max_samples, variability_threshold,
+        require_provenance, manifest["environment"],
     )
     results = _load_results(
         output, manifest, contract, shard_count, shard_index
@@ -655,6 +697,7 @@ def run_campaign(
                 "candidate": candidate,
                 "correctness_cases": cases,
                 "metric": "BasicInfo",
+                "execution_environment": execution_environment,
             }, state))
             actions += 1
             status = response.get("status")
@@ -678,8 +721,8 @@ def run_campaign(
                     "kind": "invalid_provenance",
                     "category": "infrastructure",
                     "diagnostics": (
-                        "BasicInfo provenance must match the requested runtime and "
-                        "an allowed A3 target/device/command/handle"
+                        "BasicInfo provenance must match the requested A3 target, "
+                        "runtime activation, device, command, and handle"
                     ),
                 })
                 _atomic_json(output, results)
@@ -782,6 +825,7 @@ def run_campaign(
                         "kernel_name": selector,
                         "component": component,
                         "metric": "PipeUtilization",
+                        "execution_environment": execution_environment,
                     }, state))
                     actions += 1
                     status = response.get("status")
@@ -804,7 +848,10 @@ def run_campaign(
                         state["infrastructure_failures"].append({
                             "kind": "invalid_provenance",
                             "category": "infrastructure",
-                            "diagnostics": "PipeUtilization response lacks target/runtime/device/command/handle",
+                            "diagnostics": (
+                                "PipeUtilization provenance must match the requested "
+                                "A3 target, runtime activation, device, command, and handle"
+                            ),
                         })
                         interrupted = True
                         break
@@ -899,6 +946,10 @@ def merge_results(
         current_contract = value.get("run_contract")
         if not isinstance(current_contract, dict):
             raise InvalidArtifact(f"invalid run contract in {path}")
+        if "execution_environment" not in current_contract:
+            raise InvalidArtifact(
+                f"run contract predates target/runtime activation identity in {path}"
+            )
         if contract is None:
             contract = current_contract
         elif current_contract != contract:
@@ -1026,6 +1077,7 @@ def main() -> int:
                 config["sampling"]["max_samples"],
                 config["sampling"]["relative_range_threshold"],
                 config.get("require_provenance", True),
+                config["environment"],
             )
             result = merge_results(manifest, args.input, expected_contract=expected)
             _atomic_json(args.output, result)

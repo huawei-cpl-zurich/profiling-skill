@@ -178,7 +178,12 @@ def one_execution() -> dict:
     source = "SOURCE"
     return {
         "schema": "profiling-skill/bsa-candidate-manifest/v1",
-        "environment": {"product": "a3"},
+        "environment": {
+            "product": "a3",
+            "target": "gz-a3",
+            "runtime": "py311-torch",
+            "runtime_activation": "target-default",
+        },
         "executions": [{
             "execution_id": "exec-1",
             "source": source,
@@ -266,6 +271,87 @@ def test_runner_uses_first_stable_consecutive_window_without_cherry_picking(tmp_
     assert [x["duration_us"] for x in case["samples"]] == [100.0, 130.0, 101.0, 99.0, 100.0]
     assert case["accepted_sample_indexes"] == [2, 3, 4]
     assert case["median_us"] == 100.0
+
+
+def test_run_contract_and_executor_request_bind_target_and_runtime_activation(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{
+        "status": "infrastructure_error", "diagnostics": "stop after request",
+    }])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=1,
+    )
+
+    expected = {
+        "target": "gz-a3",
+        "runtime": "py311-torch",
+        "runtime_activation": "target-default",
+    }
+    assert result["run_contract"]["execution_environment"] == expected
+    requests = json.loads(
+        (tmp_path / "results.protocol" / "response.requests").read_text()
+    )
+    assert requests[0]["execution_environment"] == expected
+
+
+def test_runner_rejects_bz_checkpoint_reuse_as_gz(tmp_path: Path) -> None:
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit('must not execute')\n")
+    executor.chmod(0o755)
+    bz_manifest = one_execution()
+    bz_manifest["environment"].update({
+        "target": "bz-a3-1", "runtime_activation": "named-runtime",
+    })
+    output = tmp_path / "results.json"
+    MODULE.run_campaign(
+        bz_manifest, output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=0,
+    )
+
+    gz_manifest = one_execution()
+    try:
+        MODULE.run_campaign(
+            gz_manifest, output, executor, cases=[47], stable_samples=3,
+            max_samples=7, max_actions=0,
+        )
+    except MODULE.InvalidArtifact as exc:
+        assert "identity mismatch" in str(exc)
+    else:
+        raise AssertionError("BZ checkpoint was reused for a GZ campaign")
+
+    try:
+        MODULE.merge_results(gz_manifest, [output])
+    except MODULE.InvalidArtifact as exc:
+        assert "manifest mismatch" in str(exc)
+    else:
+        raise AssertionError("BZ checkpoint was merged into a GZ campaign")
+
+
+def test_runner_rejects_missing_or_inconsistent_execution_environment(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "unused.py"
+    executor.write_text("raise SystemExit('must not execute')\n")
+    executor.chmod(0o755)
+    missing = one_execution()
+    del missing["environment"]["runtime_activation"]
+    inconsistent = one_execution()
+    inconsistent["environment"]["target"] = "bz-a3-1"
+
+    for manifest in (missing, inconsistent):
+        try:
+            MODULE.run_campaign(
+                manifest, tmp_path / f"{id(manifest)}.json", executor,
+                cases=[47], stable_samples=3, max_samples=7, max_actions=0,
+            )
+        except MODULE.InvalidArtifact as exc:
+            assert "execution environment" in str(exc)
+        else:
+            raise AssertionError("invalid execution environment was accepted")
 
 
 def test_runner_profiles_all_discovered_components_and_aggregates_max_duration(
@@ -477,8 +563,9 @@ def test_production_mode_rejects_wrong_target_runtime_and_invalid_digest(
     assert "A3 target" in failure["diagnostics"]
 
     provenance.update({
-        "target": "bz-a3-1", "runtime": "py311-torch",
-        "handle": "remote:bz-a3-1:job:right",
+        "target": "gz-a3", "runtime": "py311-torch",
+        "runtime_activation": "target-default",
+        "handle": "remote:gz-a3:job:right",
     })
     make_executor(executor, [{
         "status": "ok", "kernel_names": ["block_sparse_attention_kernel"],

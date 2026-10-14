@@ -55,7 +55,11 @@ The executor is a local adapter which may dispatch only through the global
 self-contained A3 bundle; it must not open SSH or use a raw remote client.
 Every request uses schema
 `profiling-skill/bsa-candidate-executor-request/v1` and contains the complete
-candidate source and parameters.
+candidate source and parameters. It also carries an `execution_environment`
+with the exact target, logical runtime, and runtime activation mode. `gz-a3`
+uses `target-default`: the executor omits `--runtime`, while still recording
+`py311-torch` as the logical runtime. `bz-a3-1` and `bz-a3-2` use
+`named-runtime` and activate that logical runtime explicitly.
 
 For `action=discover`, the executor must run all requested correctness cases,
 then perform an unfiltered `msprof op` BasicInfo capture. Success is:
@@ -70,9 +74,10 @@ then perform an unfiltered `msprof op` BasicInfo capture. Success is:
   "basic_info": {"rows": 1},
   "evidence_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "provenance": {
-    "target": "bz-a3-1", "runtime": "py311-torch",
+    "target": "gz-a3", "runtime": "py311-torch",
+    "runtime_activation": "target-default",
     "physical_device": 0, "command": ["..."],
-    "handle": "remote:bz-a3-1:job:..."
+    "handle": "remote:gz-a3:job:..."
   }
 }
 ```
@@ -96,9 +101,10 @@ and the component descriptor from discovery:
   "pipe_utilization": {"rows": []},
   "evidence_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "provenance": {
-    "target": "bz-a3-1", "runtime": "py311-torch",
+    "target": "gz-a3", "runtime": "py311-torch",
+    "runtime_activation": "target-default",
     "physical_device": 0, "command": ["..."],
-    "handle": "remote:bz-a3-1:job:..."
+    "handle": "remote:gz-a3:job:..."
   }
 }
 ```
@@ -110,8 +116,8 @@ profiler-tool, missing-response, and malformed-evidence failures use
 status permanently.
 
 Every successful discovery or capture must include a valid 64-hex-character
-`evidence_sha256`. In production mode, provenance must name one allowed A3
-target (`gz-a3`, `bz-a3-1`, or `bz-a3-2`), the manifest-requested runtime, a
+`evidence_sha256`. In production mode, provenance must exactly match the
+manifest-requested target, logical runtime, and activation mode, and include a
 physical device, exact command, and a handle belonging to that target.
 
 Infrastructure responses should include their provenance handle and
@@ -152,8 +158,11 @@ but unstable logical samples, the case becomes
 a compilation or runtime defect. Large vendor report trees remain remote.
 
 Version-1 checkpoints predate both consecutive-window selection and
-multi-component samples. The version-2 runner rejects them with an explicit
-regeneration message instead of silently changing their interpretation.
+multi-component samples. Early version-2 checkpoints also predate the bound
+target/runtime-activation identity. The runner rejects both with an explicit
+regeneration message instead of silently changing their interpretation. A BZ
+manifest or checkpoint therefore cannot be resumed or merged as a GZ
+campaign, even though both use the logical `py311-torch` runtime.
 
 Use `status --results RESULTS.json` for a compact terminal/retry summary.
 
@@ -194,8 +203,9 @@ a partial merge cannot look complete.
 
 Before dispatch, run `cpl-remote capabilities TARGET` and
 `cpl-remote preflight TARGET`. Stage the self-contained bundle with
-`cpl-remote upload`, submit it with the target's named runtime, and retain the
-printed handle. If observation is interrupted, observe that same handle; do
-not resubmit. The executor evidence must retain the selected target, physical
-device, exact command, handle, kernel selector, sample count, and compact
-BasicInfo/PipeUtilization output alongside this coordinator's result.
+`cpl-remote upload`. For BZ, submit with the named runtime; for GZ, use the
+target-default environment and omit `--runtime`. Retain the printed handle.
+If observation is interrupted, observe that same handle; do not resubmit. The
+executor evidence must retain the selected target, runtime activation mode,
+physical device, exact command, handle, kernel selector, sample count, and
+compact BasicInfo/PipeUtilization output alongside this coordinator's result.

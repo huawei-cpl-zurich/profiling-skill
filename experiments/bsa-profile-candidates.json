@@ -3,7 +3,9 @@
   "cases": [47, 46, 49, 44, 43],
   "environment": {
     "product": "a3",
+    "target": "gz-a3",
     "runtime": "py311-torch",
+    "runtime_activation": "target-default",
     "benchmark": "ascendc-kernelgen-data/level4/54_BlockSparseAttnFwd.py",
     "campaign_protocol": "bsa-candidate-profile-v1"
   },

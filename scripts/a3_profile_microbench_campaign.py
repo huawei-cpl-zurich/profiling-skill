@@ -20,10 +20,23 @@ DEFAULT_MANIFEST = ROOT / "experiments" / "a3-profile-hypotheses.json"
 ACQUIRE = ROOT / "scripts" / "acquire_profile.py"
 INFRA_FAILURES = {"transport_error", "host_environment", "device_unavailable"}
 RETRYABLE_ACQUISITION_FAILURES = INFRA_FAILURES | {"evidence_failure", "profiler_failure"}
+TARGET_RUNTIMES = {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": None}
+QUALIFICATION_PROBES = (
+    "loop-bound/short-local/before",
+    "head-rank/heads-16/after",
+)
 
 
 def canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _acquire_module():
+    module_spec = importlib.util.spec_from_file_location("campaign_acquire_profile", ACQUIRE)
+    module = importlib.util.module_from_spec(module_spec)
+    assert module_spec.loader
+    module_spec.loader.exec_module(module)
+    return module
 
 
 def enumerate_cells(manifest: dict) -> list[dict]:
@@ -75,10 +88,7 @@ def invoke_acquisition(
     """Run or resume one acquire_profile pass and return compact evidence."""
     receipt = Path(str(evidence_path) + ".dispatch.json")
     if evidence_path.exists():
-        module_spec = importlib.util.spec_from_file_location("campaign_acquire_profile", ACQUIRE)
-        module = importlib.util.module_from_spec(module_spec)
-        assert module_spec.loader
-        module_spec.loader.exec_module(module)
+        module = _acquire_module()
         identity = module.build_bundle(
             bundle=bundle, entrypoint=entrypoint, arguments=workload_args
         ).identity
@@ -132,7 +142,7 @@ def invoke_acquisition(
             "ok": False,
             "classification": match.group(1) if match else "controller_failure",
             "phase": match.group(2) if match else phase,
-            "handle": handle,
+            "handle": _receipt_handle(receipt) or (match.group(3) if match else None) or handle,
             "message": result.stderr[-2000:],
         }
         # Transport loss may leave a live job and must retain its receipt for
@@ -176,15 +186,26 @@ def _numeric_rows(pipe_results: list[dict]) -> tuple[float, dict[str, list[float
 
 
 def _summary(samples: list[float], required: int, threshold: float) -> dict:
-    median = statistics.median(samples) if samples else None
-    relative_range = ((max(samples) - min(samples)) / median
-                      if samples and median and len(samples) >= required else None)
-    stable = bool(len(samples) >= required and
-                  (required == 1 or relative_range <= threshold))
+    selected = None
+    relative_range = None
+    if len(samples) >= required:
+        for start in range(len(samples) - required + 1):
+            window = samples[start:start + required]
+            center = statistics.median(window)
+            spread = ((max(window) - min(window)) / center) if center else float("inf")
+            if required == 1 or spread <= threshold:
+                selected = window
+                relative_range = spread
+                break
+    median = statistics.median(selected) if selected else (
+        statistics.median(samples) if samples else None
+    )
+    stable = selected is not None
     return {
         "metric": "PipeUtilization reported core-time proxy",
         "unit": "us", "samples": samples, "median": median,
         "relative_range": relative_range, "stable": stable,
+        "selected_window": selected,
         "required_samples": required, "maximum_relative_range": threshold,
     }
 
@@ -192,6 +213,7 @@ def _summary(samples: list[float], required: int, threshold: float) -> dict:
 def run_cell(
     cell: dict, cell_dir: Path, acquire, *, samples: int, max_attempts: int,
     max_relative_range: float, campaign_identity_sha256: str | None = None,
+    attempt_limit: int | None = None,
 ) -> dict:
     campaign_identity_sha256 = campaign_identity_sha256 or hashlib.sha256(canonical({
         "cell": cell, "samples": samples, "max_attempts": max_attempts,
@@ -203,15 +225,23 @@ def run_cell(
         if prior.get("campaign_identity_sha256") != campaign_identity_sha256:
             raise ValueError("stale cached cell does not match campaign identity")
         if prior.get("status") in {
-            "success", "candidate_failure", "profiling_failure", "inconclusive"
+            "success", "candidate_failure", "profiling_failure", "inconclusive",
+            "infrastructure_exhausted",
         }:
             return prior
     prior = prior if state_path.exists() else {}
     attempts = list(prior.get("attempts", []))
     values = [float(item["duration_proxy_us"]) for item in attempts
               if item.get("classification") == "valid" and item.get("duration_proxy_us")]
-    signal_values = {name: list(item.get("values", []))
-                     for name, item in prior.get("signals", {}).items()}
+    signal_values: dict[str, list[float]] = {}
+    for item in attempts:
+        if item.get("classification") != "valid":
+            continue
+        for name, observations in item.get("signals", {}).items():
+            signal_values.setdefault(name, []).extend(observations)
+    if not signal_values:
+        signal_values = {name: list(item.get("values", []))
+                         for name, item in prior.get("signals", {}).items()}
     infra = int(prior.get("discarded_infrastructure_attempts", 0))
     provenance = prior.get("provenance", {})
     handles = list(provenance.get("handles", []))
@@ -225,31 +255,46 @@ def run_cell(
         _atomic_json(state_path, result)
         return result
     consumed_attempts = sum(item.get("identity_consumed", True) for item in attempts)
-    for attempt in range(consumed_attempts, max_attempts):
-        basic = acquire("basic", cell, attempt, None)
-        handles.extend(x for x in [basic.get("handle")] if x)
-        if not basic["ok"]:
-            record = {k: basic.get(k) for k in ("classification", "phase", "message", "handle")}
-            record["identity_consumed"] = basic.get("classification") != "transport_error"
-            attempts.append(record)
-            if basic.get("classification") in RETRYABLE_ACQUISITION_FAILURES:
-                infra += basic.get("classification") in INFRA_FAILURES
-                partial = persist(_result(
-                    cell, "running", _summary(values, samples, max_relative_range),
-                    signal_values, attempts, handles, sources, devices, placements, infra,
-                    timeline_evidence,
-                ))
-                if basic.get("classification") == "transport_error":
-                    return partial
-                continue
-            result = _failure_result(cell, attempts, handles, infra, basic)
-            return persist(result)
-        observed = basic["evidence"]["capture"]["observed_kernel_names"]
-        if not all(selector in observed for selector in cell["kernel_names"]):
-            failure = {"classification": "evidence_failure", "phase": "basic",
-                       "message": f"expected {cell['kernel_names']!r}, observed {observed!r}"}
-            result = _failure_result(cell, attempts, handles, infra, failure)
-            return persist(result)
+    stop = min(max_attempts, attempt_limit if attempt_limit is not None else max_attempts)
+    basic = None
+    while basic is None and consumed_attempts < stop:
+        basic_attempt = consumed_attempts
+        candidate = acquire("basic", cell, basic_attempt, None)
+        handles.extend(x for x in [candidate.get("handle")] if x)
+        if candidate["ok"]:
+            basic = candidate
+            break
+        record = {k: candidate.get(k) for k in ("classification", "phase", "message", "handle")}
+        record["identity_consumed"] = candidate.get("classification") != "transport_error"
+        attempts.append(record)
+        if candidate.get("classification") not in RETRYABLE_ACQUISITION_FAILURES:
+            return persist(_failure_result(cell, attempts, handles, infra, candidate))
+        infra += candidate.get("classification") in INFRA_FAILURES
+        partial = persist(_result(
+            cell, "running", _summary(values, samples, max_relative_range),
+            signal_values, attempts, handles, sources, devices, placements, infra,
+            timeline_evidence,
+        ))
+        if candidate.get("classification") == "transport_error":
+            return partial
+        consumed_attempts += 1
+    if basic is None:
+        acquisition_failed = any(item.get("classification") in {
+            "evidence_failure", "profiler_failure"
+        } for item in attempts)
+        status = ("running" if stop < max_attempts else
+                  ("profiling_failure" if acquisition_failed else "infrastructure_exhausted"))
+        return persist(_result(
+            cell, status, _summary(values, samples, max_relative_range), signal_values,
+            attempts, handles, sources, devices, placements, infra, timeline_evidence,
+        ))
+    observed = basic["evidence"]["capture"]["observed_kernel_names"]
+    if not all(selector in observed for selector in cell["kernel_names"]):
+        failure = {"classification": "evidence_failure", "phase": "basic",
+                   "message": f"expected {cell['kernel_names']!r}, observed {observed!r}"}
+        return persist(_failure_result(cell, attempts, handles, infra, failure))
+
+    for attempt in range(consumed_attempts, stop):
         pipes = []
         for selector in cell["kernel_names"]:
             pipe = acquire("pipe", cell, attempt, selector)
@@ -275,36 +320,6 @@ def run_cell(
             pipes.append(pipe)
         if not pipes:
             continue
-        if cell["kind"] == "timeline":
-            timeline = acquire("timeline", cell, attempt, cell["kernel_names"][0])
-            handles.extend(x for x in [timeline.get("handle")] if x)
-            if not timeline["ok"]:
-                record = {k: timeline.get(k) for k in
-                          ("classification", "phase", "message", "handle")}
-                record["identity_consumed"] = timeline.get("classification") != "transport_error"
-                attempts.append(record)
-                if timeline.get("classification") in RETRYABLE_ACQUISITION_FAILURES:
-                    infra += timeline.get("classification") in INFRA_FAILURES
-                    partial = persist(_result(
-                        cell, "running", _summary(values, samples, max_relative_range),
-                        signal_values, attempts, handles, sources, devices, placements, infra,
-                        timeline_evidence,
-                    ))
-                    if timeline.get("classification") == "transport_error":
-                        return partial
-                    continue
-                result = _failure_result(cell, attempts, handles, infra, timeline)
-                return persist(result)
-            capture = timeline["evidence"]["capture"]
-            timeline_evidence = {
-                "status": capture.get("availability", "unavailable"),
-                "reason": capture.get(
-                    "reason", "attempted acquisition exported no TimelineDetail availability"
-                ),
-                "sources": capture.get("sources", []),
-                "handle": timeline.get("handle"),
-            }
-            sources.extend(capture.get("sources", []))
         try:
             duration, current_signals = _numeric_rows(pipes)
         except ValueError as exc:
@@ -323,15 +338,46 @@ def run_cell(
                                    "physical_id": evidence["device"].get("physical_id")})
             sources.extend(evidence["capture"].get("sources", []))
         attempts.append({"classification": "valid", "attempt": attempt,
-                         "selectors": cell["kernel_names"], "duration_proxy_us": duration})
+                         "selectors": cell["kernel_names"], "duration_proxy_us": duration,
+                         "signals": current_signals})
         measurements = _summary(values, samples, max_relative_range)
+        selected_signals = _selected_signal_values(attempts, measurements, signal_values)
         partial = _result(cell, "success" if measurements["stable"] else "running",
-                          measurements, signal_values, attempts, handles, sources,
+                          measurements, selected_signals, attempts, handles, sources,
                           devices, placements, infra, timeline_evidence)
         persist(partial)
         if measurements["stable"]:
-            return partial
+            if cell["kind"] != "timeline":
+                return partial
+            timeline = acquire("timeline", cell, attempt + 1, cell["kernel_names"][0])
+            handles.extend(x for x in [timeline.get("handle")] if x)
+            if timeline["ok"]:
+                capture = timeline["evidence"]["capture"]
+                timeline_evidence = {
+                    "status": capture.get("availability", "unavailable"),
+                    "reason": capture.get(
+                        "reason", "attempted acquisition exported no TimelineDetail availability"
+                    ),
+                    "sources": capture.get("sources", []),
+                    "handle": timeline.get("handle"),
+                }
+                sources.extend(capture.get("sources", []))
+            else:
+                timeline_evidence = {
+                    "status": "unavailable",
+                    "reason": timeline.get("message", "TimelineDetail acquisition unavailable"),
+                    "handle": timeline.get("handle"),
+                }
+            return persist(_result(
+                cell, "success", measurements, selected_signals, attempts, handles,
+                sources, devices, placements, infra, timeline_evidence,
+            ))
     measurements = _summary(values, samples, max_relative_range)
+    if stop < max_attempts:
+        return persist(_result(
+            cell, "running", measurements, signal_values, attempts, handles,
+            sources, devices, placements, infra, timeline_evidence,
+        ))
     acquisition_failed = any(item.get("classification") in {
         "evidence_failure", "profiler_failure"
     } for item in attempts)
@@ -340,6 +386,175 @@ def run_cell(
     result = _result(cell, status, measurements, signal_values, attempts, handles,
                      sources, devices, placements, infra, timeline_evidence)
     return persist(result)
+
+
+def _selected_signal_values(
+    attempts: list[dict], measurements: dict, fallback: dict[str, list[float]],
+) -> dict[str, list[float]]:
+    window = measurements.get("selected_window")
+    if not window:
+        return fallback
+    valid = [item for item in attempts if item.get("classification") == "valid"]
+    durations = [float(item["duration_proxy_us"]) for item in valid]
+    width = len(window)
+    for start in range(len(durations) - width + 1):
+        if durations[start:start + width] != window:
+            continue
+        selected: dict[str, list[float]] = {}
+        for item in valid[start:start + width]:
+            for name, observations in item.get("signals", {}).items():
+                selected.setdefault(name, []).extend(observations)
+        return selected or fallback
+    return fallback
+
+
+def run_pair_interleaved(
+    cells: list[dict], root: Path, acquire_for, *, samples: int, max_attempts: int,
+    max_relative_range: float, identities: dict[str, str],
+) -> list[dict]:
+    """Advance paired cells one capture at a time in before/after order."""
+    if len(cells) != 2 or {cell["variant"] for cell in cells} != {"before", "after"}:
+        raise ValueError("interleaved execution requires one before/after pair")
+    cells = sorted(cells, key=lambda item: item["variant"] != "before")
+    acquisitions = {}
+    for cell in cells:
+        raw = acquire_for(cell, root / cell["id"].replace("/", "__"))
+        cached_basic = {}
+        def cache(phase, current, attempt, selector, *, _raw=raw, _cache=cached_basic):
+            if phase == "basic" and "value" in _cache:
+                return _cache["value"]
+            value = _raw(phase, current, attempt, selector)
+            if phase == "basic" and value.get("ok"):
+                _cache["value"] = value
+            return value
+        acquisitions[cell["id"]] = cache
+    results = {}
+    for limit in range(1, max_attempts + 1):
+        for cell in cells:
+            if results.get(cell["id"], {}).get("status") in {
+                "success", "candidate_failure", "profiling_failure", "inconclusive",
+                "infrastructure_exhausted",
+            }:
+                continue
+            cell_dir = root / cell["id"].replace("/", "__")
+            results[cell["id"]] = run_cell(
+                cell, cell_dir, acquisitions[cell["id"]], samples=samples,
+                max_attempts=max_attempts, max_relative_range=max_relative_range,
+                campaign_identity_sha256=identities[cell["id"]], attempt_limit=limit,
+            )
+    return [results[cell["id"]] for cell in cells]
+
+
+def build_qualification_receipt(identity: dict, probes: list[dict]) -> dict:
+    reasons = []
+    normalized = []
+    for probe in probes:
+        reasons.extend(f"{probe.get('id')}: {reason}"
+                       for reason in probe.get("acquisition_reasons", []))
+        samples = [float(value) for value in probe.get("samples", [])]
+        stable = _summary(samples, 3, 0.05)
+        center = statistics.median(samples) if samples else None
+        all_range = ((max(samples) - min(samples)) / center
+                     if len(samples) == 5 and center else None)
+        handles = probe.get("handles", [])
+        devices = probe.get("devices", [])
+        sources = probe.get("sources", [])
+        provenance_complete = (
+            len(handles) >= 5 and len(devices) == 5 and len(sources) >= 5
+            and all(isinstance(item, dict) and item.get("sha256") for item in sources)
+        )
+        passed = (len(samples) == 5 and all_range is not None and all_range <= 0.10
+                  and stable["stable"] and provenance_complete)
+        if not passed:
+            reasons.append(
+                f"{probe.get('id')}: all-five range must be <=10%, include a stable-3 "
+                "window, and retain handle/device/source provenance"
+            )
+        normalized.append({**probe, "samples": samples, "all_five_relative_range": all_range,
+                           "stable_window": stable["selected_window"], "passed": passed})
+    return {"schema_version": 1, "kind": "a3-profile-qualification",
+            "identity": identity, "passed": len(probes) == 2 and not reasons,
+            "reasons": reasons, "probes": normalized}
+
+
+def validate_qualification(path: Path, identity: dict) -> dict:
+    try:
+        receipt = json.loads(path.read_bytes())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"qualification receipt is unreadable: {exc}") from exc
+    if receipt.get("identity") != identity:
+        raise ValueError("qualification identity does not match campaign identity")
+    rebuilt = build_qualification_receipt(identity, receipt.get("probes", []))
+    if (receipt.get("schema_version") != 1
+            or receipt.get("kind") != "a3-profile-qualification"
+            or not receipt.get("passed") or not rebuilt["passed"]):
+        raise ValueError("qualification did not pass")
+    return receipt
+
+
+def campaign_identity(target: str, manifest: dict) -> dict:
+    return {
+        "target": target,
+        "runtime": TARGET_RUNTIMES[target],
+        "manifest_sha256": hashlib.sha256(canonical(manifest)).hexdigest(),
+        "benchmark_sha256": hashlib.sha256(
+            (ROOT / "benchmarks/a3_profile_microbench.py").read_bytes()
+        ).hexdigest(),
+    }
+
+
+def run_qualification_probe(cell: dict, acquire) -> dict:
+    """Collect exactly five timing captures after one successful discovery."""
+    handles, devices, sources, samples, reasons = [], [], [], [], []
+    basic = acquire("basic", cell, 0, None)
+    handles.extend(x for x in [basic.get("handle")] if x)
+    if not basic.get("ok"):
+        reasons.append(f"BasicInfo {basic.get('classification', 'failure')}: {basic.get('message', '')}")
+    elif not all(name in basic["evidence"]["capture"]["observed_kernel_names"]
+                 for name in cell["kernel_names"]):
+        reasons.append("BasicInfo did not export every expected exact selector")
+    else:
+        for attempt in range(5):
+            pipes = [acquire("pipe", cell, attempt, selector)
+                     for selector in cell["kernel_names"]]
+            handles.extend(result.get("handle") for result in pipes if result.get("handle"))
+            failed = next((result for result in pipes if not result.get("ok")), None)
+            if failed:
+                reasons.append(
+                    f"capture {attempt}: {failed.get('classification', 'failure')}: "
+                    f"{failed.get('message', '')}"
+                )
+                break
+            try:
+                duration, _ = _numeric_rows(pipes)
+            except ValueError as exc:
+                reasons.append(f"capture {attempt}: {exc}")
+                break
+            samples.append(duration)
+            for result in pipes:
+                value = result["evidence"]
+                if value.get("device"):
+                    devices.append(value["device"])
+                sources.extend(value["capture"].get("sources", []))
+    return {"id": cell["id"], "samples": samples, "handles": handles,
+            "devices": devices, "sources": sources, "acquisition_reasons": reasons}
+
+
+def _remote_qualification_gate(cpl_remote: Path, target: str) -> tuple[list[dict], list[str]]:
+    checks, reasons = [], []
+    for action in ("capabilities", "preflight"):
+        result = subprocess.run(
+            [str(cpl_remote), action, target], text=True, capture_output=True, check=False
+        )
+        checks.append({
+            "command": ["cpl-remote", action, target],
+            "exit_code": result.returncode,
+            "stdout_sha256": hashlib.sha256(result.stdout.encode()).hexdigest(),
+            "stderr_sha256": hashlib.sha256(result.stderr.encode()).hexdigest(),
+        })
+        if result.returncode:
+            reasons.append(f"cpl-remote {action} failed with exit {result.returncode}")
+    return checks, reasons
 
 
 def _signals(values: dict[str, list[float]]) -> dict:
@@ -572,6 +787,15 @@ def merge_shards(shards: list[dict], manifest: dict) -> dict:
     expected_digest = hashlib.sha256(canonical(manifest)).hexdigest()
     if digests != {expected_digest}:
         raise ValueError("shard manifest identity does not match the merge manifest")
+    identities = {canonical(item.get("campaign_identity")) for item in shards}
+    if len(identities) != 1:
+        raise ValueError("shard campaign identity mismatch; cross-target merge is forbidden")
+    merged_identity = shards[0].get("campaign_identity")
+    if not isinstance(merged_identity, dict) or merged_identity.get("manifest_sha256") != expected_digest:
+        raise ValueError("shard campaign identity does not match the merge manifest")
+    target = merged_identity.get("target")
+    if target not in TARGET_RUNTIMES or merged_identity != campaign_identity(target, manifest):
+        raise ValueError("shard campaign identity does not match current frozen sources")
     results, ids = [], set()
     for shard in shards:
         for result in shard["raw_cells"]:
@@ -581,6 +805,7 @@ def merge_shards(shards: list[dict], manifest: dict) -> dict:
             results.append(result)
     raw_cells = sorted(results, key=lambda item: item["id"])
     value = {"schema_version": 1, "manifest_sha256": expected_digest,
+             "campaign_identity": merged_identity,
              "raw_cells": raw_cells,
              "results": summarize_hypotheses(raw_cells, manifest)}
     validate_report_hypotheses(value)
@@ -602,6 +827,7 @@ def parse_args(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     plan = sub.add_parser("plan")
     run = sub.add_parser("run")
+    qualify = sub.add_parser("qualify")
     merge = sub.add_parser("merge")
     for command in (plan, run):
         command.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -609,12 +835,17 @@ def parse_args(argv=None):
         command.add_argument("--shard-count", type=int, default=1)
     plan.add_argument("--output", type=Path)
     run.add_argument("--output-dir", type=Path, required=True)
-    run.add_argument("--target", choices=("bz-a3-1", "bz-a3-2"), required=True)
+    run.add_argument("--target", choices=tuple(TARGET_RUNTIMES), required=True)
     run.add_argument("--samples", type=int, default=3)
     run.add_argument("--max-attempts", type=int, default=7)
     run.add_argument("--max-relative-range", type=float, default=0.05)
     run.add_argument("--cell-limit", type=int)
     run.add_argument("--cpl-remote", type=Path)
+    run.add_argument("--qualification", type=Path, required=True)
+    qualify.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    qualify.add_argument("--output-dir", type=Path, required=True)
+    qualify.add_argument("--target", choices=tuple(TARGET_RUNTIMES), required=True)
+    qualify.add_argument("--cpl-remote", type=Path)
     merge.add_argument("--input", type=Path, nargs="+", required=True)
     merge.add_argument("--output", type=Path, required=True)
     merge.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -629,6 +860,53 @@ def main(argv=None) -> int:
         _atomic_json(args.output, value)
         return 0
     manifest = json.loads(args.manifest.read_bytes())
+    identity_base = campaign_identity(getattr(args, "target", "bz-a3-1"), manifest) \
+        if args.command in {"run", "qualify"} else None
+    if args.command == "qualify":
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        bundle = _bundle(args.output_dir, args.manifest)
+        client = _acquire_module().resolve_cpl_remote(args.cpl_remote)
+        checks, gate_reasons = _remote_qualification_gate(client, args.target)
+        cells_by_id = {cell["id"]: cell for cell in enumerate_cells(manifest)}
+        probes = []
+        if not gate_reasons:
+            for cell_id in QUALIFICATION_PROBES:
+                cell = cells_by_id[cell_id]
+                cell_dir = args.output_dir / "probes" / cell_id.replace("/", "__")
+
+                def acquire(phase, current, attempt, selector, *, _cell_dir=cell_dir):
+                    basic_path = _cell_dir / "discovery" / "basic.json"
+                    if phase == "basic":
+                        evidence_path = basic_path
+                        dispatch_attempt = 0
+                    else:
+                        evidence_path = _cell_dir / f"capture-{attempt}" / f"pipe-{selector}.json"
+                        dispatch_attempt = attempt
+                    return invoke_acquisition(
+                        phase=phase, target=args.target,
+                        dispatch_key=hashlib.sha256(
+                            f"a3-profile-qualification/v1/{current['id']}/{dispatch_attempt}/{phase}/{selector}".encode()
+                        ).hexdigest(), bundle=bundle,
+                        entrypoint="benchmarks/a3_profile_microbench.py",
+                        workload_args=["--experiment", current["experiment"], "--sweep",
+                                       current["sweep"], "--variant", current["variant"],
+                                       "--launches", "1"], evidence_path=evidence_path,
+                        selector=selector,
+                        basic_evidence=basic_path if phase == "pipe" else None,
+                        cpl_remote=client,
+                        launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
+                    )
+
+                probes.append(run_qualification_probe(cell, acquire))
+        receipt = build_qualification_receipt(identity_base, probes)
+        receipt["remote_checks"] = checks
+        receipt["reasons"] = gate_reasons + receipt["reasons"]
+        receipt["passed"] = receipt["passed"] and not gate_reasons
+        output = args.output_dir / "qualification.json"
+        _atomic_json(output, receipt)
+        print(json.dumps({"qualification": str(output), "passed": receipt["passed"]},
+                         sort_keys=True))
+        return 0 if receipt["passed"] else 2
     cells = select_shard(enumerate_cells(manifest), args.shard_index, args.shard_count)
     if args.command == "plan":
         value = {"schema_version": 1, "shard": {"index": args.shard_index,
@@ -640,49 +918,68 @@ def main(argv=None) -> int:
         return 0
     if args.samples < 1 or args.max_attempts < args.samples:
         raise SystemExit("samples must be positive and no greater than max-attempts")
+    validate_qualification(args.qualification, identity_base)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     bundle = _bundle(args.output_dir, args.manifest)
     manifest_sha256 = hashlib.sha256(canonical(manifest)).hexdigest()
     cells = cells[:args.cell_limit] if args.cell_limit else cells
-    results = []
-    for cell in cells:
-        cell_dir = args.output_dir / "cells" / cell["id"].replace("/", "__")
-
-        def acquire(phase, current, attempt, selector):
-            base = cell_dir / f"attempt-{attempt}" / phase
-            suffix = "" if selector is None else "-" + selector
-            basic_path = cell_dir / f"attempt-{attempt}" / "basic.json"
-            return invoke_acquisition(
-                phase=phase, target=args.target,
-                dispatch_key=hashlib.sha256(
-                    f"a3-profile-microbench/v1/{current['id']}/{attempt}/{phase}/{selector}".encode()
-                ).hexdigest(), bundle=bundle,
-                entrypoint="benchmarks/a3_profile_microbench.py",
-                workload_args=["--experiment", current["experiment"], "--sweep",
-                               current["sweep"], "--variant", current["variant"],
-                               "--launches", "1"],
-                evidence_path=Path(str(base) + suffix + ".json"), selector=selector,
-                basic_evidence=basic_path if phase in {"pipe", "timeline"} else None,
-                cpl_remote=args.cpl_remote,
-                launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
-            )
-
-        identity = hashlib.sha256(canonical({
+    cells_root = args.output_dir / "cells"
+    identities = {cell["id"]: hashlib.sha256(canonical({
             "schema_version": 1, "manifest_sha256": manifest_sha256,
             "cell": cell, "target": args.target, "samples": args.samples,
             "max_attempts": args.max_attempts,
             "max_relative_range": args.max_relative_range,
-            "benchmark_sha256": hashlib.sha256(
-                (ROOT / "benchmarks/a3_profile_microbench.py").read_bytes()
-            ).hexdigest(),
-        })).hexdigest()
-        results.append(run_cell(cell, cell_dir, acquire, samples=args.samples,
-                                max_attempts=args.max_attempts,
-                                max_relative_range=args.max_relative_range,
-                                campaign_identity_sha256=identity))
+            "runtime": TARGET_RUNTIMES[args.target],
+            "benchmark_sha256": identity_base["benchmark_sha256"],
+        })).hexdigest() for cell in cells}
+
+    def acquire_for(cell, cell_dir):
+        def acquire(phase, current, attempt, selector):
+            basic_path = cell_dir / "discovery" / "basic.json"
+            if phase == "basic":
+                evidence_path = basic_path
+                dispatch_attempt = 0
+            else:
+                suffix = "" if selector is None else "-" + selector
+                evidence_path = Path(str(cell_dir / f"attempt-{attempt}" / phase) + suffix + ".json")
+                dispatch_attempt = attempt
+            return invoke_acquisition(
+                phase=phase, target=args.target,
+                dispatch_key=hashlib.sha256(
+                    f"a3-profile-microbench/v2/{current['id']}/{dispatch_attempt}/{phase}/{selector}".encode()
+                ).hexdigest(), bundle=bundle,
+                entrypoint="benchmarks/a3_profile_microbench.py",
+                workload_args=["--experiment", current["experiment"], "--sweep",
+                               current["sweep"], "--variant", current["variant"],
+                               "--launches", "1"], evidence_path=evidence_path,
+                selector=selector,
+                basic_evidence=basic_path if phase in {"pipe", "timeline"} else None,
+                cpl_remote=args.cpl_remote,
+                launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
+            )
+        return acquire
+
+    results = []
+    for position in range(0, len(cells), 2):
+        pair = cells[position:position + 2]
+        if len(pair) == 2:
+            results.extend(run_pair_interleaved(
+                pair, cells_root, acquire_for, samples=args.samples,
+                max_attempts=args.max_attempts, max_relative_range=args.max_relative_range,
+                identities=identities,
+            ))
+        else:
+            cell = pair[0]
+            cell_dir = cells_root / cell["id"].replace("/", "__")
+            results.append(run_cell(
+                cell, cell_dir, acquire_for(cell, cell_dir), samples=args.samples,
+                max_attempts=args.max_attempts, max_relative_range=args.max_relative_range,
+                campaign_identity_sha256=identities[cell["id"]],
+            ))
     value = {
         "schema_version": 1,
         "manifest_sha256": manifest_sha256,
+        "campaign_identity": identity_base,
         "target": args.target,
         "shard": {"index": args.shard_index, "count": args.shard_count},
         "raw_cells": results,

@@ -92,10 +92,12 @@ into compiler or correctness failures.
 ## Resumable campaign
 
 The campaign coordinator expands the manifest into 52 variant/sweep cells. It
-uses `scripts/acquire_profile.py` for a discovery pass followed by an exact
-PipeUtilization pass for every expected kernel. Three samples whose relative
-range is at most 5% are required by default; acquisition is capped at seven
-attempts. The retained dispatch receipt is authoritative after observer loss,
+uses `scripts/acquire_profile.py` for one reusable discovery pass followed by
+an exact PipeUtilization pass for every expected kernel. The first consecutive
+three-sample window whose relative range is at most 5% is accepted; acquisition
+is capped at seven captures, so an early outlier does not poison a later stable
+window. Before and after captures are interleaved within each pair. The retained
+dispatch receipt is authoritative after observer loss,
 so rerunning a cell resumes its handle instead of creating another job.
 Terminal infrastructure or malformed-evidence attempts retire that receipt
 and advance to a numbered retry identity. A nonterminal transport interruption
@@ -104,16 +106,36 @@ nonblocking physical-device lease from probe through evidence emission. The
 shared convention is `$HOME/.cpl-device-leases/device-lease-N.lock`, so jobs
 from different remote working directories still contend for the same device.
 
-Run two deterministic shards concurrently on the two configured A3 targets:
+Qualify a server before spending hours on the full campaign. Qualification runs
+global `cpl-remote` capabilities and preflight checks, then profiles two
+known-good probes five times each. Both probes must have an all-five relative
+range no greater than 10% and contain a consecutive stable-three window within
+5%. The compact receipt binds the target, target-default or named runtime,
+manifest and benchmark hashes, handles, devices, samples, and failure reasons.
+Every `run` requires the matching passing receipt.
+
+GZ-A3 uses the target's default environment; it deliberately does not pass a
+named `--runtime`:
 
 ```bash
+python scripts/a3_profile_microbench_campaign.py qualify \
+  --target gz-a3 --output-dir artifacts/gz-a3-qualification
 python scripts/a3_profile_microbench_campaign.py run \
-  --target bz-a3-1 --shard-index 0 --shard-count 2 --output-dir artifacts/a3-shard-0
+  --target gz-a3 --qualification artifacts/gz-a3-qualification/qualification.json \
+  --shard-index 0 --shard-count 1 --output-dir artifacts/gz-a3-campaign
+```
+
+BZ-A3 continues to select its configured `py311-torch` runtime. A qualified BZ
+example is:
+
+```bash
+python scripts/a3_profile_microbench_campaign.py qualify \
+  --target bz-a3-1 --output-dir artifacts/bz-a3-qualification
 python scripts/a3_profile_microbench_campaign.py run \
-  --target bz-a3-2 --shard-index 1 --shard-count 2 --output-dir artifacts/a3-shard-1
+  --target bz-a3-1 --qualification artifacts/bz-a3-qualification/qualification.json \
+  --shard-index 0 --shard-count 1 --output-dir artifacts/bz-a3-campaign
 python scripts/a3_profile_microbench_campaign.py merge \
-  --input artifacts/a3-shard-0/shard-result.json \
-          artifacts/a3-shard-1/shard-result.json \
+  --input artifacts/bz-a3-campaign/shard-result.json \
   --output artifacts/a3-hypothesis-results.json
 ```
 
@@ -130,13 +152,16 @@ are `candidate_failure`; profiler or malformed-evidence failures are
 the sum of each exact kernel's maximum AIC/AIV reported time. It is explicitly
 a PipeUtilization core-time proxy, not BasicInfo task latency.
 
-Before/after cells are assigned to the same shard and are paired only when
-their retained target and physical-device placement match. Shard merge also
-verifies the canonical manifest digest, while cached terminal cells are bound
-to the manifest, benchmark source, target, sampling policy, and cell contract.
+Before/after cells are assigned to the same shard and paired only when their
+retained server target matches. Physical-device changes within one server are
+accepted and preserved as provenance; cross-target pairs are rejected. Shard
+merge verifies the canonical manifest digest, while cached terminal cells are
+bound to the manifest, benchmark source, target, runtime activation mode,
+sampling policy, and cell contract. Consequently a BZ checkpoint cannot be
+resumed as GZ work.
 
-Timeline cells make a real `--aic-metrics=TimelineDetail` acquisition after
-BasicInfo discovery. Compact identities for any timeline files are retained;
+Timeline cells make at most one real `--aic-metrics=TimelineDetail` acquisition
+after timing has stabilized. Compact identities for any timeline files are retained;
 otherwise the attempted command's log digest and explicit absence are recorded
 as `unavailable`. On the validated A3 runtime, handle
 `remote:bz-a3-1:job:20261013T225304Z-fdae1c669479` accepted the attempt but

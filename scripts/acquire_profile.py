@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 
 TARGETS = {
-    "a3": {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch"},
+    "a3": {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": None},
     "a5": {"bz-a5": "cann91"},
 }
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -857,16 +857,11 @@ def main(argv=None):
                 args.launch_count,
             )
             script = _stage_payload(payload, args.evidence)
-            run_argv = [
-                "run",
-                args.target,
-                "--runtime",
-                TARGETS[args.product][args.target],
-                "--file",
-                str(script),
-                "--timeout",
-                "900",
-            ]
+            run_argv = ["run", args.target]
+            runtime = TARGETS[args.product][args.target]
+            if runtime is not None:
+                run_argv.extend(["--runtime", runtime])
+            run_argv.extend(["--file", str(script), "--timeout", "900"])
             if os.environ.get("CPL_REMOTE_MODE") == "retained-broker":
                 run_argv.extend(["--dispatch-key", args.dispatch_key])
             try:
@@ -920,10 +915,19 @@ def main(argv=None):
                 handle=handle,
             )
         if result.get("state") != "completed" or result.get("exit") not in (None, 0):
-            raise remote_failure(
-                _logs(args.cpl_remote, handle, "stderr", 80, args.transport_attempts),
-                handle,
-            )
+            try:
+                stderr = _logs(
+                    args.cpl_remote, handle, "stderr", 80, args.transport_attempts
+                )
+            except AcquisitionError as exc:
+                raise AcquisitionError(
+                    "terminal remote job failed but its diagnostic log is unavailable",
+                    phase="logs",
+                    classification="host_environment",
+                    handle=handle,
+                    excerpt=exc.excerpt or str(exc),
+                ) from exc
+            raise remote_failure(stderr, handle)
         raw = _decode(
             _logs(args.cpl_remote, handle, "stdout", 20, args.transport_attempts),
             args.mode,

@@ -92,7 +92,8 @@ def evidence_bytes(
         "status": "success",
         "product": product,
         "target": target,
-        "runtime": "py311-torch" if product == "a3" else "cann91",
+        "runtime": (None if target == "gz-a3" else
+                    ("py311-torch" if product == "a3" else "cann91")),
         "dispatch_key": "test-key",
         "phase": phase,
         "device": {"physical_id": 2, "logical_id": 0},
@@ -130,7 +131,9 @@ args = sys.argv[1:]
 log = pathlib.Path(os.environ["CPL_TEST_LOG"])
 with log.open("a") as f: f.write(json.dumps(args) + "\\n")
 joined = " ".join(args)
-target = "bz-a5" if "bz-a5" in joined else ("bz-a3-2" if "bz-a3-2" in joined else "bz-a3-1")
+target = ("bz-a5" if "bz-a5" in joined else
+          ("gz-a3" if "gz-a3" in joined else
+           ("bz-a3-2" if "bz-a3-2" in joined else "bz-a3-1")))
 handle = "remote:" + target + ":job:job-7"
 action = next(x for x in args if x in ("run", "observe", "result", "logs"))
 scenario = {scenario!r}
@@ -400,6 +403,17 @@ def test_basic_uses_product_runtime_and_writes_exact_remote_bytes(
     assert run[run.index("--runtime") + 1] == runtime
     assert run[run.index("run") + 1] == target
     assert hashlib.sha256(expected).hexdigest() in result.stdout
+
+
+def test_gz_a3_uses_target_default_environment_without_runtime_flag(tmp_path):
+    result, output, expected, calls, _ = run_cli(
+        tmp_path, "basic", product="a3", target="gz-a3"
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.read_bytes() == expected
+    run = next(call for call in calls if "run" in call)
+    assert run[run.index("run") + 1] == "gz-a3"
+    assert "--runtime" not in run
 
 
 def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):

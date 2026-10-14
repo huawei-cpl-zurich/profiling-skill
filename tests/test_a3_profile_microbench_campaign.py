@@ -83,8 +83,35 @@ def test_cell_collects_three_stable_exact_pipe_samples(tmp_path):
     assert len(result["measurements"]["samples"]) == 3
     assert result["measurements"]["median"] == 10.0
     assert result["signals"]["aiv_vec_ratio"]["mean"] == 0.6
-    assert [call[0] for call in calls] == ["basic", "pipe"] * 3
-    assert len(result["provenance"]["handles"]) == 6
+    assert [call[0] for call in calls] == ["basic", "pipe", "pipe", "pipe"]
+    assert len(result["provenance"]["handles"]) == 4
+
+
+def test_early_outlier_does_not_poison_first_consecutive_stable_window(tmp_path):
+    module = load_module()
+    cell = module.enumerate_cells(json.loads(MANIFEST.read_text()))[0]
+    values = iter((100.0, 10.0, 10.2, 9.9))
+
+    pipe_index = 0
+
+    def acquire(phase, current, attempt, selector):
+        nonlocal pipe_index
+        if phase == "basic":
+            return evidence(current["kernel_names"][0], 0)
+        result = evidence(selector, next(values))
+        result["evidence"]["capture"]["rows"][0]["aiv_vec_ratio"] = str(
+            (9.0, 0.4, 0.5, 0.6)[pipe_index]
+        )
+        pipe_index += 1
+        return result
+
+    result = module.run_cell(cell, tmp_path, acquire, samples=3, max_attempts=7,
+                             max_relative_range=0.05)
+    assert result["status"] == "success"
+    assert result["measurements"]["samples"] == [100.0, 10.0, 10.2, 9.9]
+    assert result["measurements"]["selected_window"] == [10.0, 10.2, 9.9]
+    assert result["measurements"]["median"] == 10.0
+    assert result["signals"]["aiv_vec_ratio"]["values"] == [0.4, 0.5, 0.6]
 
 
 def test_infrastructure_failure_is_discarded_but_candidate_failure_is_counted(tmp_path):
@@ -159,6 +186,78 @@ def test_timeline_absence_is_unavailable_not_failure(tmp_path):
     assert result["timeline"]["handle"] == "remote:bz-a3-1:job:x"
 
 
+def test_timeline_runs_once_only_after_stable_timing(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["kind"] == "timeline")
+    calls = []
+
+    def acquire(phase, current, attempt, selector):
+        calls.append((phase, attempt))
+        return evidence(current["kernel_names"][0], 3.0)
+
+    result = module.run_cell(cell, tmp_path, acquire, samples=3, max_attempts=7,
+                             max_relative_range=0.05)
+    assert result["status"] == "success"
+    assert calls == [("basic", 0), ("pipe", 0), ("pipe", 1), ("pipe", 2),
+                     ("timeline", 3)]
+
+
+def test_pair_runner_interleaves_before_and_after_attempts(tmp_path):
+    module = load_module()
+    cells = module.enumerate_cells(json.loads(MANIFEST.read_text()))[:2]
+    calls = []
+
+    def acquire_for(cell, cell_dir):
+        def acquire(phase, current, attempt, selector):
+            calls.append((current["variant"], phase, attempt))
+            return evidence(current["kernel_names"][0], 10.0)
+        return acquire
+
+    results = module.run_pair_interleaved(
+        cells, tmp_path, acquire_for, samples=3, max_attempts=7,
+        max_relative_range=0.05, identities={cell["id"]: cell["id"] for cell in cells}
+    )
+    assert [result["status"] for result in results] == ["success", "success"]
+    pipe_order = [variant for variant, phase, _ in calls if phase == "pipe"]
+    assert pipe_order == ["before", "after"] * 3
+
+
+def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
+    module = load_module()
+    identity = {"target": "gz-a3", "runtime": None,
+                "manifest_sha256": "a" * 64, "benchmark_sha256": "b" * 64}
+    probes = []
+    for probe_id in ("one", "two"):
+        probes.append({
+            "id": probe_id, "samples": [10.0, 10.2, 9.9, 10.1, 10.0],
+            "handles": [f"remote:gz-a3:job:{probe_id}-{i}" for i in range(5)],
+            "devices": [{"physical_id": i % 2, "logical_id": 0} for i in range(5)],
+            "sources": [{"sha256": f"{i:064x}", "role": "PipeUtilization"}
+                        for i in range(5)],
+        })
+    receipt = module.build_qualification_receipt(identity, probes)
+    assert receipt["passed"] is True
+    path = tmp_path / "qualification.json"
+    path.write_bytes(module.canonical(receipt) + b"\n")
+    module.validate_qualification(path, identity)
+    with pytest.raises(ValueError, match="identity"):
+        module.validate_qualification(path, {**identity, "target": "bz-a3-1"})
+
+
+def test_qualification_rejects_all_five_range_above_ten_percent():
+    module = load_module()
+    identity = {"target": "gz-a3", "runtime": None,
+                "manifest_sha256": "a" * 64, "benchmark_sha256": "b" * 64}
+    probes = [{"id": "one", "samples": [10, 10, 10, 10, 12],
+               "handles": [], "devices": [], "sources": []},
+              {"id": "two", "samples": [10, 10, 10, 10, 10],
+               "handles": [], "devices": [], "sources": []}]
+    receipt = module.build_qualification_receipt(identity, probes)
+    assert receipt["passed"] is False
+    assert "all-five" in receipt["reasons"][0]
+
+
 def test_existing_dispatch_receipt_resumes_same_handle(tmp_path, monkeypatch):
     module = load_module()
     evidence_path = tmp_path / "basic.json"
@@ -181,6 +280,30 @@ def test_existing_dispatch_receipt_resumes_same_handle(tmp_path, monkeypatch):
     assert result["ok"] is True
     assert "--resume-handle" in observed["command"]
     assert "remote:bz-a3-1:job:kept" in observed["command"]
+
+
+def test_failed_new_dispatch_preserves_handle_written_by_acquirer(tmp_path, monkeypatch):
+    module = load_module()
+    receipt_path = tmp_path / "basic.json.dispatch.json"
+
+    def fake_run(command, **kwargs):
+        receipt_path.write_text(json.dumps({"handle": "remote:gz-a3:job:kept"}))
+        return module.subprocess.CompletedProcess(
+            command, 2, "",
+            "acquisition failed: classification=host_environment phase=logs "
+            "handle=remote:gz-a3:job:kept: missing diagnostics\n",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    result = module.invoke_acquisition(
+        phase="basic", target="gz-a3", dispatch_key="key", bundle=tmp_path,
+        entrypoint="main.py", workload_args=[], evidence_path=tmp_path / "basic.json",
+        selector=None, basic_evidence=None, cpl_remote=None,
+    )
+    assert result["ok"] is False
+    assert result["classification"] == "host_environment"
+    assert result["handle"] == "remote:gz-a3:job:kept"
+    assert result["retired_receipt"].endswith(".retired")
 
 
 def test_cached_acquisition_is_bound_to_bundle_and_dispatch_identity(tmp_path):
@@ -244,9 +367,12 @@ def test_merge_rejects_overlap_and_combines_disjoint_results(tmp_path):
     module = load_module()
     manifest = {"hypotheses": [], "timeline_probes": []}
     digest = hashlib.sha256(module.canonical(manifest)).hexdigest()
-    one = {"schema_version": 1, "manifest_sha256": digest, "shard": {"index": 0, "count": 2},
+    identity = module.campaign_identity("gz-a3", manifest)
+    one = {"schema_version": 1, "manifest_sha256": digest,
+           "campaign_identity": identity, "shard": {"index": 0, "count": 2},
            "raw_cells": [{"id": "a"}]}
-    two = {"schema_version": 1, "manifest_sha256": digest, "shard": {"index": 1, "count": 2},
+    two = {"schema_version": 1, "manifest_sha256": digest,
+           "campaign_identity": identity, "shard": {"index": 1, "count": 2},
            "raw_cells": [{"id": "b"}]}
     merged = module.merge_shards([one, two], manifest)
     assert [x["id"] for x in merged["raw_cells"]] == ["a", "b"]
@@ -262,13 +388,28 @@ def test_merge_rejects_overlap_and_combines_disjoint_results(tmp_path):
 
 def test_merge_rejects_manifest_digest_mismatch():
     module = load_module()
-    shard = {"schema_version": 1, "manifest_sha256": "stale", "raw_cells": []}
+    shard = {"schema_version": 1, "manifest_sha256": "stale",
+             "campaign_identity": {}, "raw_cells": []}
     try:
         module.merge_shards([shard], {"hypotheses": [], "timeline_probes": []})
     except ValueError as error:
         assert "manifest" in str(error)
     else:
         raise AssertionError("stale manifest was accepted")
+
+
+def test_merge_rejects_cross_target_shards():
+    module = load_module()
+    manifest = {"hypotheses": [], "timeline_probes": []}
+    digest = hashlib.sha256(module.canonical(manifest)).hexdigest()
+    one = {"manifest_sha256": digest,
+           "campaign_identity": module.campaign_identity("gz-a3", manifest),
+           "raw_cells": [{"id": "a"}]}
+    two = {"manifest_sha256": digest,
+           "campaign_identity": module.campaign_identity("bz-a3-1", manifest),
+           "raw_cells": [{"id": "b"}]}
+    with pytest.raises(ValueError, match="campaign identity"):
+        module.merge_shards([one, two], manifest)
 
 
 def cell(experiment, sweep, variant, median, signals, status="success"):

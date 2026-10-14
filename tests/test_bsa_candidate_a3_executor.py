@@ -24,7 +24,8 @@ def load():
     return module
 
 
-def request(action="discover"):
+def request(action="discover", *, target="bz-a3-1"):
+    activation = "target-default" if target == "gz-a3" else "named-runtime"
     value = {
         "schema": "profiling-skill/bsa-candidate-executor-request/v1",
         "action": action,
@@ -36,6 +37,11 @@ def request(action="discover"):
             "parameters": {"BLOCK_N": 128},
             "environment": {"product": "a3", "runtime": "py311-torch"},
             "declared_kernel_name": "block_sparse_attention_kernel",
+        },
+        "execution_environment": {
+            "target": target,
+            "runtime": "py311-torch",
+            "runtime_activation": activation,
         },
     }
     if action == "discover":
@@ -145,6 +151,30 @@ def test_invalid_request_is_rejected_before_remote_calls(tmp_path):
     assert not transport.probes
 
 
+@pytest.mark.parametrize("mutation", [
+    lambda value: value.pop("execution_environment"),
+    lambda value: value["execution_environment"].update(target="gz-a3"),
+    lambda value: value["execution_environment"].update(runtime="other-runtime"),
+    lambda value: value["execution_environment"].update(
+        runtime_activation="target-default"),
+    lambda value: value["execution_environment"].update(extra="not-exact"),
+])
+def test_execution_environment_mismatch_is_rejected_before_remote_calls(
+    tmp_path, mutation,
+):
+    module = load()
+    transport = FakeTransport(module, success())
+    cfg, _ = config(module, tmp_path, transport)
+    invalid = request()
+    mutation(invalid)
+
+    result = module.Executor(cfg, transport).execute(invalid)
+
+    assert result["status"] == "infrastructure_error"
+    assert "execution environment" in result["diagnostics"]
+    assert not transport.probes
+
+
 def test_staged_remote_driver_is_valid_python():
     module = load()
 
@@ -233,7 +263,7 @@ def test_gz_uses_target_default_activation_and_requires_matching_qualification(t
     })
     cfg.qualification_receipt.write_text(json.dumps(qualification_receipt(module, cfg)))
 
-    result = module.Executor(cfg, transport).execute(request())
+    result = module.Executor(cfg, transport).execute(request(target="gz-a3"))
 
     assert result["status"] == "ok"
     assert result["provenance"]["runtime"] == "py311-torch"
@@ -261,7 +291,7 @@ def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_pat
         "qualification_receipt": receipt,
     })
 
-    missing = module.Executor(cfg, transport).execute(request())
+    missing = module.Executor(cfg, transport).execute(request(target="gz-a3"))
     assert missing["status"] == "infrastructure_error"
     assert "qualification" in missing["diagnostics"]
     assert not transport.probes
@@ -269,7 +299,7 @@ def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_pat
     stale = qualification_receipt(module, cfg)
     stale["executor_sha256"] = "0" * 64
     receipt.write_text(json.dumps(stale))
-    drifted = module.Executor(cfg, transport).execute(request())
+    drifted = module.Executor(cfg, transport).execute(request(target="gz-a3"))
     assert drifted["status"] == "infrastructure_error"
     assert "qualification" in drifted["diagnostics"]
     assert not transport.probes
@@ -390,6 +420,11 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
     assert receipt["compile_failure"]["status"] == "compile_error"
     assert "static assertion" in receipt["compile_failure"]["diagnostics"]
     assert len(calls) == 1 + len(module.QUALIFICATION_CASES) * 3 + 1
+    assert all(call["execution_environment"] == {
+        "target": "gz-a3",
+        "runtime": "py311-torch",
+        "runtime_activation": "target-default",
+    } for call in calls)
 
 
 def test_failed_qualification_receipt_is_not_accepted(tmp_path):
@@ -406,7 +441,7 @@ def test_failed_qualification_receipt_is_not_accepted(tmp_path):
     document["passed"] = False
     receipt.write_text(json.dumps(document))
 
-    result = module.Executor(cfg, transport).execute(request())
+    result = module.Executor(cfg, transport).execute(request(target="gz-a3"))
 
     assert result["status"] == "infrastructure_error"
     assert "did not pass" in result["diagnostics"]
@@ -609,7 +644,8 @@ def test_target_is_part_of_identity_and_persisted_handle_target_is_checked(tmp_p
 
     second_transport = FakeTransport(module, success())
     second_cfg = module.ExecutorConfig(**{**cfg.__dict__, "target": "bz-a3-2"})
-    second = module.Executor(second_cfg, second_transport).execute(request())
+    second = module.Executor(second_cfg, second_transport).execute(
+        request(target="bz-a3-2"))
     assert second["status"] == "ok"
     assert second["provenance"]["target"] == "bz-a3-2"
     assert len(second_transport.runs) == 1

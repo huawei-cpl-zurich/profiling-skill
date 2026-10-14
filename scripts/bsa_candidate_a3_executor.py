@@ -29,6 +29,7 @@ QUALIFICATION_SCHEMA = "profiling-skill/bsa-a3-qualification/v1"
 QUALIFICATION_CASES = [47, 46, 49, 44, 43]
 CANDIDATE_FAILURES = {"compile_error", "runtime_error", "correctness_error"}
 TARGETS = {"bz-a3-1", "bz-a3-2", "gz-a3"}
+LOGICAL_RUNTIME = "py311-torch"
 
 
 class ExecutorError(RuntimeError):
@@ -54,6 +55,14 @@ class ExecutorConfig:
 
 def runtime_activation(target: str) -> str:
     return "target-default" if target == "gz-a3" else "named-runtime"
+
+
+def execution_environment(target: str) -> dict[str, str]:
+    return {
+        "target": target,
+        "runtime": LOGICAL_RUNTIME,
+        "runtime_activation": runtime_activation(target),
+    }
 
 
 def canonical(value: object) -> bytes:
@@ -86,7 +95,7 @@ def atomic_json(path: Path, value: object) -> None:
             os.unlink(name)
 
 
-def validate_request(value: object) -> dict[str, Any]:
+def validate_request(value: object, target: str) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("schema") != REQUEST_SCHEMA:
         raise ExecutorError("infrastructure_error", "unsupported executor request schema")
     if value.get("action") not in {"discover", "capture"}:
@@ -99,9 +108,14 @@ def validate_request(value: object) -> dict[str, Any]:
         raise ExecutorError("infrastructure_error", "candidate source SHA-256 mismatch")
     environment = candidate.get("environment")
     if (not isinstance(environment, dict) or environment.get("product") != "a3"
-            or not isinstance(environment.get("runtime"), str)
-            or not environment["runtime"]):
-        raise ExecutorError("infrastructure_error", "candidate lacks an A3 named runtime")
+            or environment.get("runtime") != LOGICAL_RUNTIME):
+        raise ExecutorError(
+            "infrastructure_error", "candidate lacks the required A3 logical runtime")
+    if value.get("execution_environment") != execution_environment(target):
+        raise ExecutorError(
+            "infrastructure_error",
+            "request execution environment does not match the configured A3 target",
+        )
     if not isinstance(candidate.get("declared_kernel_name"), str):
         raise ExecutorError("infrastructure_error", "candidate kernel declaration is missing")
     if value["action"] == "discover":
@@ -530,7 +544,8 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
     """Exercise the complete GZ BSA path and return a compact gate receipt."""
     source = candidate_path.read_text()
     candidate = _candidate(source, kernel_name)
-    identity = qualification_identity(config, "py311-torch", campaign_revision)
+    identity = qualification_identity(config, LOGICAL_RUNTIME, campaign_revision)
+    environment = execution_environment(config.target)
     handles: list[str] = []
 
     def record_handle(result: dict) -> None:
@@ -549,6 +564,7 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
     discovery_request = {
         "schema": REQUEST_SCHEMA, "action": "discover", "candidate": candidate,
         "correctness_cases": QUALIFICATION_CASES, "metric": "BasicInfo",
+        "execution_environment": environment,
     }
     discovery = executor.execute(discovery_request)
     record_handle(discovery)
@@ -577,6 +593,7 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
                     "case": case, "sample_index": sample_index,
                     "kernel_name": component["selector"], "component": component,
                     "metric": "PipeUtilization",
+                    "execution_environment": environment,
                 }
                 capture = executor.execute(capture_request)
                 record_handle(capture)
@@ -612,6 +629,7 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
         "schema": REQUEST_SCHEMA, "action": "discover",
         "candidate": _candidate(bad_source, "intentional_compile_failure"),
         "correctness_cases": [QUALIFICATION_CASES[0]], "metric": "BasicInfo",
+        "execution_environment": environment,
     }
     compile_failure = executor.execute(compile_request)
     record_handle(compile_failure)
@@ -707,14 +725,21 @@ class Executor:
         command: list[str] = []
         runtime = ""
         try:
-            request = validate_request(raw_request)
+            request = validate_request(raw_request, self.config.target)
             retry = request.get("retry")
             base_request = {key: value for key, value in request.items() if key != "retry"}
             if base_request["action"] == "capture":
                 base_request["sample_index"] = (base_request["sample_index"] // 3) * 3
             request_sha = digest_json(base_request)
-            runtime = request["candidate"]["environment"]["runtime"]
-            activation, qualification_sha = self._qualification(runtime)
+            environment = request["execution_environment"]
+            runtime = environment["runtime"]
+            activation = environment["runtime_activation"]
+            qualification_activation, qualification_sha = self._qualification(runtime)
+            if activation != qualification_activation:
+                raise ExecutorError(
+                    "infrastructure_error",
+                    "request execution environment changed during qualification",
+                )
             execution_sha = digest_json({
                 "request_sha256": request_sha,
                 "product": "a3",

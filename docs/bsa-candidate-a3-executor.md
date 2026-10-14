@@ -72,10 +72,13 @@ scripts/bsa_candidate_a3_executor.py \
 
 ## Execution and evidence
 
-The adapter validates the request and source digest before remote work. It uses
-only the installed global remote-access client to run capabilities and
-preflight checks, upload the deterministic tar bundle, dispatch a file-backed
-script under the named runtime, and observe the retained handle.
+The adapter validates the request, source digest, and exact
+`execution_environment` before remote work. The contract must name the
+configured target, logical `py311-torch` runtime, and the target's activation
+mode, with no additional fields. It uses only the installed global
+remote-access client to run capabilities and preflight checks, upload the
+deterministic tar bundle, dispatch a file-backed script under the selected
+activation mode, and observe the retained handle.
 
 The remote driver takes a nonblocking `flock` lease before probing each
 physical device and holds it for the entire retained job. It uses the shared

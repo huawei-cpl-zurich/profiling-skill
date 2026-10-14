@@ -426,7 +426,7 @@ def test_runner_resumes_partial_multi_component_sample_without_recapturing(
     executor = tmp_path / "executor.py"
     make_executor(executor, [
         {"status": "ok", "components": [{"selector": "aic"}, {"selector": "aiv"}],
-         "evidence_sha256": "1" * 64},
+         "basic_info": {}, "evidence_sha256": "1" * 64},
         {"status": "ok", "duration_us": 80.0, "pipe_utilization": {},
          "evidence_sha256": "2" * 64},
         {"status": "infrastructure_error", "diagnostics": "profiler unavailable",
@@ -616,6 +616,56 @@ def test_runner_marks_instability_only_after_capped_valid_samples(tmp_path: Path
     assert execution["status"] == "measurement_unstable"
     assert len(execution["cases"]["47"]["samples"]) == 7
     assert execution["failure"]["category"] == "infrastructure"
+
+
+def test_runner_accepts_first_stable_window_ending_at_sample_cap(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {"status": "ok", "kernel_names": ["block_sparse_attention_kernel"],
+         "basic_info": {}, "evidence_sha256": "1" * 64},
+        *[
+            {"status": "ok", "duration_us": value, "pipe_utilization": {"p": value},
+             "evidence_sha256": f"{index:x}" * 64}
+            for index, value in enumerate(
+                [100, 130, 170, 220, 200, 201, 199], start=2
+            )
+        ],
+    ])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=None,
+    )
+
+    execution = result["executions"]["exec-1"]
+    assert execution["status"] == "completed"
+    case = execution["cases"]["47"]
+    assert len(case["samples"]) == 7
+    assert case["accepted_sample_indexes"] == [4, 5, 6]
+    assert case["median_us"] == 200.0
+
+
+def test_terminal_malformed_basic_info_requests_a_new_attempt(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    handle = "remote:gz-a3:job:malformed-basic"
+    make_executor(executor, [{
+        "status": "ok",
+        "kernel_names": ["block_sparse_attention_kernel"],
+        "basic_info": 42,
+        "evidence_sha256": "1" * 64,
+        "terminal": True,
+        "provenance": gz_provenance(handle),
+    }])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=None, require_provenance=True,
+    )
+
+    state = result["executions"]["exec-1"]
+    assert state["status"] == "retryable_infrastructure"
+    assert state["retry"] == {"mode": "new_attempt", "prior_handle": handle}
+    assert state["infrastructure_failures"][-1]["kind"] == "invalid_basic_info"
 
 
 def test_production_mode_rejects_success_without_remote_provenance(tmp_path: Path) -> None:

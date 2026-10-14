@@ -599,6 +599,24 @@ def _stable_window(samples: list[dict[str, Any]], wanted: int, threshold: float)
     return None
 
 
+def _complete_stable_case(
+    state: dict[str, Any], wanted: int, threshold: float
+) -> bool:
+    if len(state["samples"]) < wanted:
+        return False
+    stable = _stable_window(state["samples"], wanted, threshold)
+    if stable is None:
+        return False
+    spread, indexes, median = stable
+    state.update({
+        "status": "completed",
+        "accepted_sample_indexes": list(indexes),
+        "median_us": median,
+        "relative_range": spread,
+    })
+    return True
+
+
 def _failure(response: dict[str, Any]) -> dict[str, Any]:
     kind = response.get("status", "infrastructure_error")
     failure = {
@@ -837,6 +855,15 @@ def run_campaign(
                 )
                 _atomic_json(output, results)
                 continue
+            if not isinstance(response.get("basic_info"), (dict, list)):
+                state["status"] = "retryable_infrastructure"
+                _record_malformed_success(
+                    state, response,
+                    kind="invalid_basic_info",
+                    diagnostics="BasicInfo response lacks compact dict/list evidence",
+                )
+                _atomic_json(output, results)
+                continue
             raw_components = response.get("components")
             components = None
             if (
@@ -892,17 +919,9 @@ def run_campaign(
             if case_state["status"] == "completed":
                 continue
             while len(case_state["samples"]) < max_samples:
-                stable = _stable_window(
-                    case_state["samples"], stable_samples, variability_threshold
-                ) if len(case_state["samples"]) >= stable_samples else None
-                if stable is not None:
-                    spread, indexes, median = stable
-                    case_state.update({
-                        "status": "completed",
-                        "accepted_sample_indexes": list(indexes),
-                        "median_us": median,
-                        "relative_range": spread,
-                    })
+                if _complete_stable_case(
+                    case_state, stable_samples, variability_threshold
+                ):
                     break
                 if max_actions is not None and actions >= max_actions:
                     interrupted = True
@@ -1004,6 +1023,9 @@ def run_campaign(
                 _atomic_json(output, results)
             if interrupted:
                 break
+            _complete_stable_case(
+                case_state, stable_samples, variability_threshold
+            )
             if case_state["status"] != "completed":
                 state["status"] = "measurement_unstable"
                 state["failure"] = {

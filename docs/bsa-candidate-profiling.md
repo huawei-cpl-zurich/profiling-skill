@@ -93,7 +93,9 @@ deterministic order. A one-component adapter may instead return the legacy
 `kernel_names` list when it resolves unambiguously to the declared name or a
 single observed name. Multiple ungrouped legacy names remain invalid because
 the coordinator cannot prove that unrelated framework tasks belong to the
-candidate.
+candidate. `basic_info` must be compact structured evidence represented as a
+JSON object or array; missing or scalar evidence is retryable infrastructure,
+not a successful discovery.
 
 For `action=capture`, it must execute exactly the requested case and exact
 discovered component selector with `PipeUtilization`, analyze the report in
@@ -162,7 +164,8 @@ separate per exact selector.
 A case completes at the first chronological consecutive three-sample window
 whose relative range `(max-min)/median <= 5%`. This predefined scan cannot
 assemble a favorable subset from nonadjacent observations. After seven valid
-but unstable logical samples, the case becomes
+but unstable logical samples, the seventh sample is evaluated first and only
+then does the case become
 `measurement_unstable`, classified as infrastructure/measurement rather than
 a compilation or runtime defect. Large vendor report trees remain remote.
 

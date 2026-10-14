@@ -361,8 +361,8 @@ def test_pair_runner_interleaves_before_and_after_attempts(tmp_path):
 
 def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
     module = load_module()
-    identity = {"target": "gz-a3", "runtime": None,
-                "manifest_sha256": "a" * 64, "benchmark_sha256": "b" * 64}
+    identity = module.campaign_identity("gz-a3", json.loads(MANIFEST.read_text()))
+    assert identity["runtime"] == "py311-torch"
     probes = []
     for probe_id in module.QUALIFICATION_PROBES:
         probes.append({
@@ -379,6 +379,13 @@ def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
     module.validate_qualification(path, identity)
     with pytest.raises(ValueError, match="identity"):
         module.validate_qualification(path, {**identity, "target": "bz-a3-1"})
+    # A previously passing default-runtime gate must not admit named-runtime work.
+    receipt["identity"]["runtime"] = None
+    path.write_bytes(module.canonical(receipt) + b"\n")
+    with pytest.raises(ValueError, match="identity"):
+        module.validate_qualification(path, module.campaign_identity(
+            "gz-a3", json.loads(MANIFEST.read_text())
+        ))
 
 
 @pytest.mark.parametrize(
@@ -825,6 +832,38 @@ def test_cached_cell_is_bound_to_exact_run_contract_and_identical_resume(tmp_pat
     assert changed["run_contract"]["max_relative_range"] == 0.02
     assert len(calls) > len(first_calls)
     assert list(tmp_path.glob("result.json.retired*"))
+
+
+def test_default_runtime_checkpoint_is_retired_before_named_runtime_work(tmp_path):
+    module = load_module()
+    manifest = json.loads(MANIFEST.read_text())
+    cell = module.enumerate_cells(manifest)[0]
+    identity = module.campaign_identity("gz-a3", manifest)
+    legacy_identity = {**identity, "runtime": None}
+    legacy_digest = hashlib.sha256(module.canonical(legacy_identity)).hexdigest()
+    current_digest = hashlib.sha256(module.canonical(identity)).hexdigest()
+    calls = []
+
+    def acquire(phase, current, attempt, selector):
+        calls.append((phase, attempt))
+        return evidence(current["kernel_names"][0] if phase == "basic" else selector, 3.0)
+
+    old = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05, campaign_identity_sha256=legacy_digest,
+    )
+    assert old["status"] == "success"
+    calls.clear()
+    new = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05, campaign_identity_sha256=current_digest,
+    )
+    assert calls
+    assert new["status"] == "success"
+    retired = list(tmp_path.glob("result.json.retired*"))
+    assert len(retired) == 1
+    assert json.loads(retired[0].read_text()) == old
+    assert new["run_contract"]["campaign_identity_sha256"] == current_digest
 
 
 @pytest.mark.parametrize(

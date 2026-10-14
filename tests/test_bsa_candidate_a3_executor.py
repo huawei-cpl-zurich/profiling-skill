@@ -38,7 +38,7 @@ def load_qualification_candidate():
 
 
 def request(action="discover", *, target="bz-a3-1"):
-    activation = "target-default" if target == "gz-a3" else "named-runtime"
+    activation = "named-runtime"
     value = {
         "schema": "profiling-skill/bsa-candidate-executor-request/v1",
         "action": action,
@@ -104,9 +104,7 @@ class FakeTransport:
 
     def run(self, target, runtime, script, cwd):
         self.runs.append((target, runtime, script, cwd))
-        self.last_command = ["cpl-remote", "run", target]
-        if target != "gz-a3":
-            self.last_command.extend(["--runtime", runtime])
+        self.last_command = ["cpl-remote", "run", target, "--runtime", runtime]
         self.last_command.extend(["--file", str(script), "--cwd", cwd])
         return f"remote:{target}:job:retained-{len(self.runs)}"
 
@@ -303,7 +301,7 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     assert '"device-lease-%d.lock"%physical' in driver
 
 
-def test_gz_uses_target_default_activation_and_requires_matching_qualification(tmp_path):
+def test_gz_uses_named_runtime_and_requires_matching_qualification(tmp_path):
     module = load()
     transport = FakeTransport(module, success())
     bz, _ = config(module, tmp_path, transport)
@@ -319,16 +317,17 @@ def test_gz_uses_target_default_activation_and_requires_matching_qualification(t
 
     assert result["status"] == "ok"
     assert result["provenance"]["runtime"] == "py311-torch"
-    assert result["provenance"]["runtime_activation"] == "target-default"
+    assert result["provenance"]["runtime_activation"] == "named-runtime"
     assert transport.runs[0][0:2] == ("gz-a3", "py311-torch")
     assert transport.uploads[0][2].startswith("profiling-skill-bsa-qualification-pr100/")
     assert transport.runs[0][3] == "profiling-skill-bsa-qualification-pr100"
     script = Path(transport.runs[0][2]).read_text()
     assert "archive=payload-" in script
     assert "run_root=runs/" in script
-    assert "--runtime" not in result["provenance"]["command"]
+    assert "unset PYTHONHOME\nexport PYTHONPATH=" in script
+    assert result["provenance"]["command"][3:5] == ["--runtime", "py311-torch"]
     dispatch = json.loads(next((tmp_path / "state").rglob("dispatch.json")).read_text())
-    assert dispatch["runtime_activation"] == "target-default"
+    assert dispatch["runtime_activation"] == "named-runtime"
     assert dispatch["campaign_revision"] == "a" * 40
 
 
@@ -396,7 +395,7 @@ def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_pat
     assert not transport.probes
 
 
-def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
+def test_cpl_remote_gz_run_uses_named_runtime(monkeypatch, tmp_path):
     module = load()
     executable = tmp_path / "cpl-remote"
     executable.write_text("#!/bin/sh\n")
@@ -418,8 +417,9 @@ def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
         "gz-a3", "py311-torch", script, "/remote/work")
 
     assert handle == "remote:gz-a3:job:abc"
-    assert "--runtime" not in calls[0]
-    assert calls[0][2:6] == ["run", "gz-a3", "--file", str(script)]
+    assert calls[0][2:8] == [
+        "run", "gz-a3", "--runtime", "py311-torch", "--file", str(script),
+    ]
     assert calls[0][-4:] == ["--cwd", "/remote/work", "--timeout", "900"]
 
 
@@ -663,7 +663,7 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
     assert all(call["execution_environment"] == {
         "target": "gz-a3",
         "runtime": "py311-torch",
-        "runtime_activation": "target-default",
+        "runtime_activation": "named-runtime",
     } for call in calls)
 
 

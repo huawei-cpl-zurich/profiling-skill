@@ -6,7 +6,7 @@
     "product": "a3",
     "target": "gz-a3",
     "runtime": "py311-torch",
-    "runtime_activation": "target-default",
+    "runtime_activation": "named-runtime",
     "benchmark": "ascendc-kernelgen-data/level4/54_BlockSparseAttnFwd.py",
     "campaign_protocol": "bsa-candidate-profile-v1"
   },

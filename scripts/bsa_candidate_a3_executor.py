@@ -55,7 +55,7 @@ class ExecutorConfig:
 
 
 def runtime_activation(target: str) -> str:
-    return "target-default" if target == "gz-a3" else "named-runtime"
+    return "named-runtime"
 
 
 def execution_environment(target: str) -> dict[str, str]:
@@ -243,9 +243,7 @@ class CplRemoteTransport:
             )
 
     def run(self, target: str, runtime: str, script: Path, cwd: str) -> str:
-        arguments = ["run", target]
-        if runtime_activation(target) == "named-runtime":
-            arguments.extend(["--runtime", runtime])
+        arguments = ["run", target, "--runtime", runtime]
         arguments.extend(["--file", str(script), "--cwd", cwd, "--timeout", "900"])
         self.last_command = [str(self.executable), "--json", *arguments]
         receipt = self._call(arguments, 930)
@@ -1018,14 +1016,9 @@ class Executor:
                     "qualification_receipt_sha256": qualification_sha,
                 })
                 archive = self._bundle(base_request, attempt)
-                if activation == "target-default":
-                    remote_archive = (
-                        f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
-                    remote_cwd = self.config.remote_root
-                else:
-                    remote_archive = (
-                        f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
-                    remote_cwd = self.config.remote_root
+                remote_archive = (
+                    f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
+                remote_cwd = self.config.remote_root
                 upload_path = attempt / "upload.json"
                 if upload_path.is_file():
                     upload = json.loads(upload_path.read_text())
@@ -1108,7 +1101,7 @@ class Executor:
                         "handle": transfer_handle, "terminal": True,
                         "status": "completed",
                     })
-                if activation == "target-default":
+                if self.config.target == "gz-a3":
                     script_archive = PurePosixPath(remote_archive).name
                     run_root = f"runs/{execution_sha}/{attempt.name}"
                 else:
@@ -1117,9 +1110,13 @@ class Executor:
                 quoted = {"archive": shlex.quote(str(script_archive)),
                           "digest": shlex.quote(file_digest(archive)),
                           "run_root": shlex.quote(run_root)}
+                runtime_environment = (
+                    "unset PYTHONHOME\nexport PYTHONPATH=\n"
+                    if self.config.target == "gz-a3" else ""
+                )
                 script = f'''#!/usr/bin/env bash
 set -euo pipefail
-archive={quoted["archive"]}; run_root={quoted["run_root"]}
+{runtime_environment}archive={quoted["archive"]}; run_root={quoted["run_root"]}
 test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
 export CPL_DEVICE_LEASE_ROOT="$HOME/.cpl-device-leases"
 export BSA_MIN_FREE_DEVICE_BYTES={self.config.min_free_device_bytes}

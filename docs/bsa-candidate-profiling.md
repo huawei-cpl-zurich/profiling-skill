@@ -56,10 +56,9 @@ self-contained A3 bundle; it must not open SSH or use a raw remote client.
 Every request uses schema
 `profiling-skill/bsa-candidate-executor-request/v1` and contains the complete
 candidate source and parameters. It also carries an `execution_environment`
-with the exact target, logical runtime, and runtime activation mode. `gz-a3`
-uses `target-default`: the executor omits `--runtime`, while still recording
-`py311-torch` as the logical runtime. `bz-a3-1` and `bz-a3-2` use
-`named-runtime` and activate that logical runtime explicitly.
+with the exact target, logical runtime, and runtime activation mode. `gz-a3`,
+`bz-a3-1`, and `bz-a3-2` use `named-runtime` and explicitly activate the
+logical `py311-torch` runtime.
 
 The campaign configuration also declares a nonempty `campaign_revision`. The
 result contract binds that revision and the SHA-256 digest of the exact
@@ -81,7 +80,7 @@ then perform an unfiltered `msprof op` BasicInfo capture. Success is:
   "evidence_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "provenance": {
     "target": "gz-a3", "runtime": "py311-torch",
-    "runtime_activation": "target-default",
+    "runtime_activation": "named-runtime",
     "physical_device": 0, "command": ["..."],
     "handle": "remote:gz-a3:job:..."
   }
@@ -110,7 +109,7 @@ and the component descriptor from discovery:
   "evidence_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "provenance": {
     "target": "gz-a3", "runtime": "py311-torch",
-    "runtime_activation": "target-default",
+    "runtime_activation": "named-runtime",
     "physical_device": 0, "command": ["..."],
     "handle": "remote:gz-a3:job:..."
   }
@@ -219,8 +218,8 @@ a partial merge cannot look complete.
 
 Before dispatch, run `cpl-remote capabilities TARGET` and
 `cpl-remote preflight TARGET`. Stage the self-contained bundle with
-`cpl-remote upload`. For BZ, submit with the named runtime; for GZ, use the
-target-default environment and omit `--runtime`. Retain the printed handle.
+`cpl-remote upload`. Submit every supported A3 target with
+`--runtime py311-torch`. Retain the printed handle.
 If observation is interrupted, observe that same handle; do not resubmit. The
 executor evidence must retain the selected target, runtime activation mode,
 physical device, exact command, handle, kernel selector, sample count, and

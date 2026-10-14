@@ -20,13 +20,16 @@ export BSA_A3_CAMPAIGN_REVISION=<frozen-campaign-revision>
 export BSA_A3_QUALIFICATION_RECEIPT=/a/durable/local/gz-qualification.json
 ```
 
-`BSA_A3_TARGET` may be `gz-a3`, `bz-a3-1`, or `bz-a3-2`. BZ targets receive
+`BSA_A3_TARGET` may be `gz-a3`, `bz-a3-1`, or `bz-a3-2`. Every target receives
 the logical runtime from the candidate manifest through `cpl-remote run
---runtime`. GZ uses its registry-provided default activation and deliberately
-omits `--runtime`; responses and receipts still record `py311-torch` as the
-logical runtime and `target-default` as its activation mode. `BSA_A3_STATE_DIR` is
-optional and defaults beside the response file, but campaign runs should set a
-durable ignored directory explicitly.
+--runtime py311-torch`; responses and receipts bind `named-runtime` as the
+activation mode. `BSA_A3_STATE_DIR` is optional and defaults beside the
+response file, but campaign runs should set a durable ignored directory
+explicitly.
+
+The GZ file-backed launcher clears inherited `PYTHONHOME` and `PYTHONPATH`
+before invoking `python`, so the named runtime's interpreter and installed
+Torch-NPU/Triton packages cannot be shadowed by the listener environment.
 
 For GZ, `BSA_A3_REMOTE_ROOT` is a normalized path relative to the registry's
 configured workspace. For either BZ target it remains an absolute provisioned

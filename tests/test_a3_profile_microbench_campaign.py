@@ -300,6 +300,45 @@ def test_timeline_profiler_failure_is_not_reported_as_unavailable(tmp_path):
     assert result["timeline"]["status"] == "profiling_failure"
 
 
+def test_timeline_passes_every_expected_selector_and_retains_semantics(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["id"] == "fused-vs-split/balanced/after")
+    selectors = []
+
+    def acquire(phase, current, attempt, selector):
+        if phase == "timeline":
+            selectors.append(selector)
+            result = evidence(current["kernel_names"][0], 3.0)
+            result["evidence"]["capture"].update({
+                "availability": "available",
+                "reason": "semantic timeline parsed",
+                "timeline_semantics": {
+                    "selectors_complete": True,
+                    "kernel_order": current["kernel_names"],
+                    "phase_order": ["load", "compute"],
+                    "phase_duration_us": {"load": 3.0, "compute": 7.0},
+                    "load_compute_overlap_us": 0.0,
+                    "kernel_boundaries": [
+                        {"name": name, "start_us": index * 3.0, "duration_us": 3.0}
+                        for index, name in enumerate(current["kernel_names"])
+                    ],
+                },
+            })
+            return result
+        result = evidence(current["kernel_names"][0] if phase == "basic" else selector, 3.0)
+        if phase == "basic":
+            result["evidence"]["capture"]["observed_kernel_names"] = current["kernel_names"]
+        return result
+
+    result = module.run_cell(cell, tmp_path, acquire, samples=1, max_attempts=1,
+                             max_relative_range=0.05)
+
+    assert selectors == [["a3_phase_copy", "a3_phase_compute"]]
+    assert result["timeline"]["semantics"]["selectors_complete"] is True
+    assert len(result["timeline"]["semantics"]["kernel_boundaries"]) == 2
+
+
 def test_pair_runner_interleaves_before_and_after_attempts(tmp_path):
     module = load_module()
     cells = module.enumerate_cells(json.loads(MANIFEST.read_text()))[:2]
@@ -443,7 +482,7 @@ def test_cached_acquisition_is_bound_to_bundle_and_dispatch_identity(tmp_path):
     request = {
         "schema_version": 1, "mode": "basic", "product": "a3",
         "target": "bz-a3-1", "runtime": "py311-torch", "dispatch_key": "test-key",
-        "workload": identity_value, "kernel_name": None, "launch_count": 1,
+        "workload": identity_value, "kernel_names": [], "launch_count": 1,
     }
     output = tmp_path / "evidence.json"
     empty_digest = hashlib.sha256(b"").hexdigest()
@@ -484,19 +523,27 @@ def test_cached_acquisition_is_bound_to_bundle_and_dispatch_identity(tmp_path):
 
 def test_merge_rejects_overlap_and_combines_disjoint_results(tmp_path):
     module = load_module()
-    manifest = {"hypotheses": [], "timeline_probes": []}
+    manifest = {
+        "hypotheses": [{
+            "id": "pair", "expected": {"direction": "no_change", "minimum_relative_change": 0.1},
+            "signal_predictions": [], "variants": {"before": "b", "after": "a"},
+            "kernel_names": {"before": ["k"], "after": ["k"]},
+            "sweeps": [{"id": "one"}], "expected_evidence": "pair", "falsifier": "none",
+        }],
+        "timeline_probes": [],
+    }
     digest = hashlib.sha256(module.canonical(manifest)).hexdigest()
     identity = module.campaign_identity("gz-a3", manifest)
+    expected = module.enumerate_cells(manifest)
     one = {"schema_version": 1, "manifest_sha256": digest,
            "campaign_identity": identity, "shard": {"index": 0, "count": 2},
-           "raw_cells": [{"id": "a"}]}
+           "raw_cells": [expected[0]]}
     two = {"schema_version": 1, "manifest_sha256": digest,
            "campaign_identity": identity, "shard": {"index": 1, "count": 2},
-           "raw_cells": [{"id": "b"}]}
+           "raw_cells": [expected[1]]}
     merged = module.merge_shards([one, two], manifest)
-    assert [x["id"] for x in merged["raw_cells"]] == ["a", "b"]
-    assert merged["results"] == []
-    two["raw_cells"] = [{"id": "a"}]
+    assert [x["id"] for x in merged["raw_cells"]] == sorted(x["id"] for x in expected)
+    two["raw_cells"] = [expected[0]]
     try:
         module.merge_shards([one, two], manifest)
     except ValueError as error:
@@ -529,6 +576,68 @@ def test_merge_rejects_cross_target_shards():
            "raw_cells": [{"id": "b"}]}
     with pytest.raises(ValueError, match="campaign identity"):
         module.merge_shards([one, two], manifest)
+
+
+def test_merge_rejects_missing_duplicate_or_incomplete_shards():
+    module = load_module()
+    manifest = json.loads(MANIFEST.read_text())
+    digest = hashlib.sha256(module.canonical(manifest)).hexdigest()
+    identity = module.campaign_identity("gz-a3", manifest)
+    cells = module.enumerate_cells(manifest)
+    shard_zero = {
+        "manifest_sha256": digest, "campaign_identity": identity,
+        "shard": {"index": 0, "count": 2},
+        "raw_cells": module.select_shard(cells, 0, 2),
+    }
+    shard_one = {
+        "manifest_sha256": digest, "campaign_identity": identity,
+        "shard": {"index": 1, "count": 2},
+        "raw_cells": module.select_shard(cells, 1, 2),
+    }
+    with pytest.raises(ValueError, match="missing shard"):
+        module.merge_shards([shard_zero], manifest)
+    with pytest.raises(ValueError, match="duplicate shard"):
+        module.merge_shards([shard_zero, shard_zero], manifest)
+    shard_one["raw_cells"] = shard_one["raw_cells"][:-1]
+    with pytest.raises(ValueError, match="cell coverage"):
+        module.merge_shards([shard_zero, shard_one], manifest)
+
+
+def test_campaign_identity_binds_coordinator_and_acquisition_sources():
+    module = load_module()
+    manifest = json.loads(MANIFEST.read_text())
+    value = module.campaign_identity("gz-a3", manifest)
+    assert value["coordinator_sha256"] == hashlib.sha256(SCRIPT.read_bytes()).hexdigest()
+    assert value["acquisition_sha256"] == hashlib.sha256(
+        (ROOT / "scripts/acquire_profile.py").read_bytes()
+    ).hexdigest()
+
+
+def test_cached_evidence_without_valid_receipt_is_retired(tmp_path):
+    module = load_module()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    entry = bundle / "work.py"
+    entry.write_text("print('ok')\n")
+    evidence_path = tmp_path / "basic.json"
+    evidence_path.write_text("{}")
+    receipt = Path(str(evidence_path) + ".dispatch.json")
+    receipt.write_text("not-json")
+
+    result = module.invoke_acquisition(
+        phase="basic", target="gz-a3", dispatch_key="attempt-0",
+        bundle=bundle, entrypoint="work.py", workload_args=[],
+        evidence_path=evidence_path, selector=None, basic_evidence=None,
+        cpl_remote=None,
+    )
+
+    assert result["ok"] is False
+    assert result["classification"] == "evidence_failure"
+    assert not evidence_path.exists()
+    assert not receipt.exists()
+    assert list(tmp_path.glob("basic.json.retired*"))
+    assert list(tmp_path.glob("basic.json.dispatch.json.retired*"))
+    assert module._fresh_artifact_path(evidence_path).name == "basic-retry-1.json"
 
 
 def cell(experiment, sweep, variant, median, signals, status="success"):
@@ -602,6 +711,50 @@ def test_summary_propagates_failure_and_timeline_not_exported():
         "name": "timeline_phase_order", "relationship": "not_exported",
         "summary": "TimelineDetail was unavailable for every controlled capture",
     }]
+
+
+@pytest.mark.parametrize(
+    ("experiment", "signal", "before_semantics", "after_semantics"),
+    [
+        ("reversed-phases", "timeline_phase_order",
+         {"phase_order": ["load", "compute"]}, {"phase_order": ["compute", "load"]}),
+        ("duration-scaled-phases", "timeline_phase_duration",
+         {"phase_duration_us": {"compute": 4.0}},
+         {"phase_duration_us": {"compute": 8.0}}),
+        ("serialized-vs-overlapped", "timeline_pipe_overlap",
+         {"load_compute_overlap_us": 0.0}, {"load_compute_overlap_us": 2.0}),
+        ("fused-vs-split", "timeline_kernel_boundaries",
+         {"kernel_boundaries": [{"name": "fused"}]},
+         {"kernel_boundaries": [{"name": "copy"}, {"name": "compute"}]}),
+    ],
+)
+def test_summary_evaluates_compact_timeline_semantics(
+    experiment, signal, before_semantics, after_semantics,
+):
+    module = load_module()
+    manifest = {
+        "hypotheses": [],
+        "timeline_probes": [{
+            "id": experiment, "question": "timeline", "falsifier": "absent",
+            "expected": {"direction": "increase", "minimum_relative_change": 0.1},
+            "signal_predictions": [{"name": signal, "availability": "required"}],
+            "variants": {"before": "b", "after": "a"}, "kernel_names": {},
+            "sweeps": [{"id": "control"}],
+        }],
+    }
+    before = cell(experiment, "control", "before", 2.0, {})
+    after = cell(experiment, "control", "after", 3.0, {})
+    for item, semantics in ((before, before_semantics), (after, after_semantics)):
+        item["kind"] = "timeline"
+        item["timeline"] = {
+            "status": "available",
+            "semantics": {"selectors_complete": True, **semantics},
+        }
+
+    result = module.summarize_hypotheses([before, after], manifest)[0]
+
+    assert result["signals"][0]["relationship"] == "tracks_outcome"
+    assert "context_only" not in result["signals"][0]["summary"]
 
 
 def test_summary_accepts_same_server_devices_but_rejects_cross_server_pair():

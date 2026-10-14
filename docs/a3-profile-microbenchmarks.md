@@ -152,20 +152,35 @@ are `candidate_failure`; profiler or malformed-evidence failures are
 the sum of each exact kernel's maximum AIC/AIV reported time. It is explicitly
 a PipeUtilization core-time proxy, not BasicInfo task latency.
 
+Merge is an acceptance boundary rather than a partial-progress viewer. It
+requires every declared shard index exactly once and the exact 52-cell set;
+missing, duplicate, or unexpected shards/cells are rejected. Inspect an
+individual `shard-result.json` directly while a campaign is incomplete.
+
 Before/after cells are assigned to the same shard and paired only when their
 retained server target matches. Physical-device changes within one server are
 accepted and preserved as provenance; cross-target pairs are rejected. Shard
-merge verifies the canonical manifest digest, while cached terminal cells are
-bound to the manifest, benchmark source, target, runtime activation mode,
-sampling policy, and cell contract. Consequently a BZ checkpoint cannot be
-resumed as GZ work.
+merge verifies the canonical manifest digest, while qualification, shards, and
+cached terminal cells are bound to the manifest, benchmark source, coordinator
+source, acquisition-helper source, target, runtime activation mode, sampling
+policy, and cell contract. Consequently a BZ checkpoint cannot be resumed as
+GZ work, and helper/coordinator changes require fresh qualification and cells.
 
 Timeline cells make at most one real `--aic-metrics=TimelineDetail` acquisition
-after timing has stabilized. Compact identities for any timeline files are retained;
-only a successfully completed command that exports no timeline files is recorded
-as `unavailable`. Observer loss resumes the same retained handle, while terminal
-host or device failures remain retryable infrastructure evidence and profiler
-failures remain profiling failures. On the validated A3 runtime, handle
+after timing has stabilized. The pass is unfiltered after BasicInfo has bound
+every expected selector, allowing the fused/split control to retain both task
+boundaries. Timeline JSON/CSV is parsed in place into at most 256 normalized
+events plus kernel order/bounds, attributed phase order and duration, and
+load/compute overlap. Only that compact semantic summary and bounded source
+identities leave the server; report trees are never downloaded. The paired
+summarizer evaluates each declared timeline signal from these fields rather
+than treating file existence as evidence. A successful profiler command with
+no supported events is `unavailable`; any nonzero exit or missing success
+marker is a profiler/device failure. Observer loss resumes the same retained
+handle, while terminal host or device failures remain retryable infrastructure
+evidence. Unreadable or identity-mismatched cached evidence/receipts are
+retained under numbered `.retired` names and the next call advances to a fresh
+attempt identity. On the validated A3 runtime, handle
 `remote:bz-a3-1:job:20261013T225304Z-fdae1c669479` accepted the attempt but
 exported no inspectable TimelineDetail files. This is not a candidate failure
 and does not authorize phase-order claims from aggregate pipe activity.

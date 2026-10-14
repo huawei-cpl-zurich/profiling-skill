@@ -740,6 +740,105 @@ def test_timeline_payload_retains_attempted_export_absence(tmp_path):
     assert '"availability":"unavailable"' in payload or "availability" in payload
 
 
+def test_timeline_payload_does_not_hide_profiler_failure(tmp_path):
+    module = load_module()
+    workload = tmp_path / "workload.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\nclass NPU:\n def set_device(self, value): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\nclass V:\n def __add__(self, value): return self\n"
+        " def cpu(self): return self\n def __getitem__(self, key): return 4.0\n"
+        "def arange(*args, **kwargs): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    msprof = tmp_path / "msprof"
+    msprof.write_text("#!/bin/sh\necho profiler-crashed >&2\nexit 7\n")
+    msprof.chmod(0o755)
+    payload = tmp_path / "payload.py"
+    payload.write_text(module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "failed-timeline", workload, [],
+        ["copy_kernel", "compute_kernel"], 2,
+    ))
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PYTHONPATH"] = str(modules)
+    env["HOME"] = str(tmp_path / "home")
+    Path(env["HOME"]).mkdir()
+
+    run = subprocess.run(
+        ["python3", str(payload)], cwd=tmp_path, env=env,
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode != 0
+    failure = next(
+        json.loads(line.split("=", 1)[1]) for line in run.stderr.splitlines()
+        if line.startswith("ACQUIRE_FAILURE_JSON=")
+    )
+    assert failure["classification"] == "profiler_failure"
+    assert "profiler-crashed" in failure["message"]
+
+
+def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp_path):
+    module = load_module()
+    workload = tmp_path / "workload.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\nclass NPU:\n def set_device(self, value): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\nclass V:\n def __add__(self, value): return self\n"
+        " def cpu(self): return self\n def __getitem__(self, key): return 4.0\n"
+        "def arange(*args, **kwargs): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    msprof = tmp_path / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json,pathlib,sys\n"
+        "root=pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output=')))\n"
+        "root.mkdir(parents=True)\n"
+        "events=[\n"
+        " {'name':'copy_kernel','cat':'kernel mte load','ph':'X','ts':0,'dur':4},\n"
+        " {'name':'compute_kernel','cat':'kernel vector compute','ph':'X','ts':3,'dur':5},\n"
+        " {'name':'store result','cat':'mte store','ph':'X','ts':8,'dur':2}]\n"
+        "(root/'timeline.json').write_text(json.dumps({'traceEvents':events}))\n"
+        "print('Profiling running finished. All task success.')\n"
+    )
+    msprof.chmod(0o755)
+    payload = tmp_path / "payload.py"
+    payload.write_text(module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "semantic-timeline", workload, [],
+        ["copy_kernel", "compute_kernel"], 2,
+    ))
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PYTHONPATH"] = str(modules)
+    env["HOME"] = str(tmp_path / "home")
+    Path(env["HOME"]).mkdir()
+
+    run = subprocess.run(
+        ["python3", str(payload)], cwd=tmp_path, env=env,
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode == 0, run.stderr
+    raw = next(line.split("=", 1)[1] for line in run.stdout.splitlines()
+               if line.startswith("ACQUIRE_EVIDENCE_B64="))
+    capture = json.loads(base64.b64decode(raw))["capture"]
+    semantic = capture["timeline_semantics"]
+    assert capture["expected_kernel_names"] == ["copy_kernel", "compute_kernel"]
+    assert semantic["selectors_complete"] is True
+    assert semantic["kernel_order"] == ["copy_kernel", "compute_kernel"]
+    assert semantic["phase_order"] == ["load", "compute", "store"]
+    assert semantic["phase_duration_us"] == {"compute": 5.0, "load": 4.0, "store": 2.0}
+    assert semantic["load_compute_overlap_us"] == 1.0
+    assert semantic["event_count"] == 3
+    assert len(semantic["events"]) <= 256
+
+
 @pytest.mark.parametrize("mode", ["basic", "pipe"])
 def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     module = load_module()

@@ -80,9 +80,35 @@ def _receipt_handle(path: Path) -> str | None:
     return handle if isinstance(handle, str) else None
 
 
+def _retire(paths: list[Path]) -> list[str]:
+    retired = []
+    for path in paths:
+        if not path.exists():
+            continue
+        destination = path.with_name(path.name + ".retired")
+        counter = 1
+        while destination.exists():
+            destination = path.with_name(path.name + f".retired-{counter}")
+            counter += 1
+        path.replace(destination)
+        retired.append(str(destination))
+    return retired
+
+
+def _fresh_artifact_path(preferred: Path) -> Path:
+    if not list(preferred.parent.glob(preferred.name + ".retired*")):
+        return preferred
+    counter = 1
+    candidate = preferred.with_name(f"{preferred.stem}-retry-{counter}{preferred.suffix}")
+    while candidate.exists() or list(candidate.parent.glob(candidate.name + ".retired*")):
+        counter += 1
+        candidate = preferred.with_name(f"{preferred.stem}-retry-{counter}{preferred.suffix}")
+    return candidate
+
+
 def invoke_acquisition(
     *, phase: str, target: str, dispatch_key: str, bundle: Path, entrypoint: str,
-    workload_args: list[str], evidence_path: Path, selector: str | None,
+    workload_args: list[str], evidence_path: Path, selector: str | list[str] | None,
     basic_evidence: Path | None, cpl_remote: Path | None, launch_count: int = 1,
 ) -> dict:
     """Run or resume one acquire_profile pass and return compact evidence."""
@@ -92,27 +118,33 @@ def invoke_acquisition(
         identity = module.build_bundle(
             bundle=bundle, entrypoint=entrypoint, arguments=workload_args
         ).identity
+        selectors = ([selector] if isinstance(selector, str) else list(selector or []))
         expected = {
             "schema_version": 1, "mode": phase, "product": "a3", "target": target,
             "runtime": module.TARGETS["a3"][target], "dispatch_key": dispatch_key,
-            "workload": identity, "kernel_name": selector,
+            "workload": identity, "kernel_names": selectors,
             "launch_count": launch_count,
         }
         try:
             receipt_value = json.loads(receipt.read_bytes())
             evidence = json.loads(evidence_path.read_bytes())
         except (OSError, json.JSONDecodeError) as exc:
+            retired = _retire([evidence_path, receipt])
             return {"ok": False, "classification": "evidence_failure", "phase": phase,
-                    "message": f"cached acquisition metadata is unreadable: {exc}"}
+                    "message": f"cached acquisition metadata is unreadable: {exc}",
+                    "retired_artifacts": retired}
         if (receipt_value.get("request") != expected or
                 receipt_value.get("request_sha256") != hashlib.sha256(canonical(expected)).hexdigest()):
+            retired = _retire([evidence_path, receipt])
             return {"ok": False, "classification": "evidence_failure", "phase": phase,
-                    "message": "cached acquisition does not match current dispatch identity"}
+                    "message": "cached acquisition does not match current dispatch identity",
+                    "retired_artifacts": retired}
         try:
             module.validate_evidence(evidence, phase, "a3", target, dispatch_key, identity)
         except module.AcquisitionError as exc:
+            retired = _retire([evidence_path, receipt])
             return {"ok": False, "classification": "evidence_failure", "phase": phase,
-                    "message": str(exc)}
+                    "message": str(exc), "retired_artifacts": retired}
         return {"ok": True, "handle": _receipt_handle(receipt),
                 "evidence": evidence}
     command = [
@@ -125,11 +157,17 @@ def invoke_acquisition(
         command.append("--workload-arg=" + argument)
     if cpl_remote:
         command.extend(("--cpl-remote", str(cpl_remote)))
-    if selector:
-        command.extend(("--kernel-name", selector))
+    selectors = [selector] if isinstance(selector, str) else list(selector or [])
+    for name in selectors:
+        command.extend(("--kernel-name", name))
     if basic_evidence:
         command.extend(("--basic-evidence", str(basic_evidence)))
     handle = _receipt_handle(receipt)
+    if receipt.exists() and handle is None:
+        retired = _retire([receipt])
+        return {"ok": False, "classification": "evidence_failure", "phase": phase,
+                "message": "cached dispatch receipt is unreadable",
+                "retired_artifacts": retired}
     if handle:
         command.extend(("--resume-handle", handle))
     result = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -257,7 +295,7 @@ def run_cell(
 
     def finish_timeline(attempt, measurements, selected_signals):
         nonlocal infra, timeline_evidence
-        timeline = acquire("timeline", cell, attempt, cell["kernel_names"][0])
+        timeline = acquire("timeline", cell, attempt, cell["kernel_names"])
         handles.extend(x for x in [timeline.get("handle")] if x)
         if timeline["ok"]:
             capture = timeline["evidence"]["capture"]
@@ -267,6 +305,7 @@ def run_cell(
                     "reason", "attempted acquisition exported no TimelineDetail availability"
                 ),
                 "sources": capture.get("sources", []),
+                "semantics": capture.get("timeline_semantics"),
                 "handle": timeline.get("handle"),
             }
             sources.extend(capture.get("sources", []))
@@ -557,6 +596,8 @@ def campaign_identity(target: str, manifest: dict) -> dict:
         "benchmark_sha256": hashlib.sha256(
             (ROOT / "benchmarks/a3_profile_microbench.py").read_bytes()
         ).hexdigest(),
+        "coordinator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "acquisition_sha256": hashlib.sha256(ACQUIRE.read_bytes()).hexdigest(),
     }
 
 
@@ -674,6 +715,59 @@ def _measurement_status(before: dict | None, after: dict | None) -> str:
     return "unavailable"
 
 
+def _timeline_signal(spec: dict, name: str, before: dict | None, after: dict | None):
+    timelines = [(item or {}).get("timeline", {}) for item in (before, after)]
+    if any(item.get("status") != "available" for item in timelines):
+        return "not_exported", "TimelineDetail semantic evidence was unavailable"
+    semantics = [item.get("semantics") for item in timelines]
+    if any(not isinstance(item, dict) or not item.get("selectors_complete") for item in semantics):
+        return "not_exported", "TimelineDetail did not cover every declared selector"
+    left, right = semantics
+    supported = None
+    detail = ""
+    if name == "timeline_phase_order":
+        left_order, right_order = left.get("phase_order", []), right.get("phase_order", [])
+        if not left_order or not right_order:
+            return "not_exported", "TimelineDetail exported no attributable phase order"
+        if spec["id"] == "ordered-phases":
+            supported = left_order == right_order and all(
+                phase in left_order for phase in ("load", "compute", "store")
+            )
+        elif spec["id"] == "reversed-phases":
+            supported = left_order != right_order
+        else:
+            supported = len(right_order) > len(left_order)
+        detail = f"before={left_order!r}; after={right_order!r}"
+    elif name == "timeline_phase_duration":
+        before_duration = left.get("phase_duration_us", {}).get("compute")
+        after_duration = right.get("phase_duration_us", {}).get("compute")
+        if not isinstance(before_duration, (int, float)) or not isinstance(
+            after_duration, (int, float)
+        ):
+            return "not_exported", "TimelineDetail exported no compute-phase duration"
+        threshold = spec["expected"].get("minimum_relative_change", 0.0)
+        supported = before_duration > 0 and after_duration >= before_duration * (1 + threshold)
+        detail = f"compute before={before_duration:g}us; after={after_duration:g}us"
+    elif name == "timeline_pipe_overlap":
+        before_overlap = left.get("load_compute_overlap_us")
+        after_overlap = right.get("load_compute_overlap_us")
+        if not isinstance(before_overlap, (int, float)) or not isinstance(
+            after_overlap, (int, float)
+        ):
+            return "not_exported", "TimelineDetail exported no load/compute overlap"
+        supported = after_overlap > before_overlap
+        detail = f"overlap before={before_overlap:g}us; after={after_overlap:g}us"
+    elif name == "timeline_kernel_boundaries":
+        before_boundaries = left.get("kernel_boundaries", [])
+        after_boundaries = right.get("kernel_boundaries", [])
+        supported = len(after_boundaries) > len(before_boundaries)
+        detail = f"boundaries before={len(before_boundaries)}; after={len(after_boundaries)}"
+    else:
+        return "context_only", f"unrecognized timeline signal {name!r} retained for review"
+    relationship = "tracks_outcome" if supported else "contradicts_outcome"
+    return relationship, detail
+
+
 def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
     """Pair variant cells into build_profile_reverse_report's input contract."""
     by_key = {
@@ -757,13 +851,8 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                 for prediction in spec["signal_predictions"]:
                     name = prediction["name"]
                     if prediction.get("availability") == "required":
-                        timeline_states = {
-                            (cell or {}).get("timeline", {}).get("status")
-                            for cell in (before, after)
-                        }
-                        relationship = ("context_only" if timeline_states == {"available"}
-                                        else "not_exported")
-                        assessments[name].append((sweep_id, relationship, None, None))
+                        relationship, detail = _timeline_signal(spec, name, before, after)
+                        assessments[name].append((sweep_id, relationship, detail, None))
                         continue
                     left = (before or {}).get("signals", {}).get(name, {}).get("mean")
                     right = (after or {}).get("signals", {}).get(name, {}).get("mean")
@@ -788,8 +877,8 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                 else:
                     details = []
                     for sweep_id, relation, left, right in rows:
-                        if left is None or right is None:
-                            details.append(f"{sweep_id}: {relation}")
+                        if right is None:
+                            details.append(f"{sweep_id}: {relation}; {left or ''}".rstrip("; "))
                         else:
                             details.append(
                                 f"{sweep_id}: before={left:g}, after={right:g}; "
@@ -853,6 +942,23 @@ def merge_shards(shards: list[dict], manifest: dict) -> dict:
     target = merged_identity.get("target")
     if target not in TARGET_RUNTIMES or merged_identity != campaign_identity(target, manifest):
         raise ValueError("shard campaign identity does not match current frozen sources")
+    shard_descriptors = [item.get("shard") for item in shards]
+    if any(not isinstance(item, dict) for item in shard_descriptors):
+        raise ValueError("every shard requires count/index identity")
+    counts = {item.get("count") for item in shard_descriptors}
+    if len(counts) != 1:
+        raise ValueError("shard count mismatch")
+    count = next(iter(counts))
+    indexes = [item.get("index") for item in shard_descriptors]
+    if type(count) is not int or count < 1 or any(
+        type(index) is not int or not 0 <= index < count for index in indexes
+    ):
+        raise ValueError("invalid shard count/index identity")
+    if len(indexes) != len(set(indexes)):
+        raise ValueError("duplicate shard index")
+    missing_shards = sorted(set(range(count)) - set(indexes))
+    if missing_shards:
+        raise ValueError(f"missing shard indexes: {missing_shards}")
     results, ids = [], set()
     for shard in shards:
         for result in shard["raw_cells"]:
@@ -860,6 +966,12 @@ def merge_shards(shards: list[dict], manifest: dict) -> dict:
                 raise ValueError(f"duplicate cell {result['id']}")
             ids.add(result["id"])
             results.append(result)
+    expected_ids = {item["id"] for item in enumerate_cells(manifest)}
+    if ids != expected_ids:
+        raise ValueError(
+            "merged cell coverage mismatch: "
+            f"missing={sorted(expected_ids - ids)!r} unexpected={sorted(ids - expected_ids)!r}"
+        )
     raw_cells = sorted(results, key=lambda item: item["id"])
     value = {"schema_version": 1, "manifest_sha256": expected_digest,
              "campaign_identity": merged_identity,
@@ -930,16 +1042,26 @@ def main(argv=None) -> int:
             for cell_id in QUALIFICATION_PROBES:
                 cell = cells_by_id[cell_id]
                 cell_dir = args.output_dir / "probes" / cell_id.replace("/", "__")
+                successful_basic: dict[str, Path] = {}
 
                 def acquire(phase, current, attempt, selector, *, _cell_dir=cell_dir):
-                    basic_path = _cell_dir / "discovery" / "basic.json"
                     if phase == "basic":
+                        basic_path = _fresh_artifact_path(
+                            _cell_dir / "discovery" / f"basic-{attempt}.json"
+                        )
                         evidence_path = basic_path
-                        dispatch_attempt = 0
+                        dispatch_attempt = evidence_path.name
                     else:
-                        evidence_path = _cell_dir / f"capture-{attempt}" / f"pipe-{selector}.json"
-                        dispatch_attempt = attempt
-                    return invoke_acquisition(
+                        basic_path = successful_basic.get("path")
+                        if basic_path is None:
+                            return {"ok": False, "classification": "evidence_failure",
+                                    "phase": phase,
+                                    "message": "successful BasicInfo evidence is unavailable"}
+                        evidence_path = _fresh_artifact_path(
+                            _cell_dir / f"capture-{attempt}" / f"pipe-{selector}.json"
+                        )
+                        dispatch_attempt = evidence_path.name
+                    result = invoke_acquisition(
                         phase=phase, target=args.target,
                         dispatch_key=hashlib.sha256(
                             f"a3-profile-qualification/v1/{current['id']}/{dispatch_attempt}/{phase}/{selector}".encode()
@@ -953,6 +1075,9 @@ def main(argv=None) -> int:
                         cpl_remote=client,
                         launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
                     )
+                    if phase == "basic" and result.get("ok"):
+                        successful_basic["path"] = basic_path
+                    return result
 
                 probes.append(run_qualification_probe(cell, acquire))
         receipt = build_qualification_receipt(identity_base, probes)
@@ -988,19 +1113,32 @@ def main(argv=None) -> int:
             "max_relative_range": args.max_relative_range,
             "runtime": TARGET_RUNTIMES[args.target],
             "benchmark_sha256": identity_base["benchmark_sha256"],
+            "coordinator_sha256": identity_base["coordinator_sha256"],
+            "acquisition_sha256": identity_base["acquisition_sha256"],
         })).hexdigest() for cell in cells}
 
     def acquire_for(cell, cell_dir):
+        successful_basic: dict[str, Path] = {}
         def acquire(phase, current, attempt, selector):
-            basic_path = cell_dir / "discovery" / "basic.json"
             if phase == "basic":
+                basic_path = _fresh_artifact_path(
+                    cell_dir / "discovery" / f"basic-{attempt}.json"
+                )
                 evidence_path = basic_path
-                dispatch_attempt = 0
+                dispatch_attempt = evidence_path.name
             else:
-                suffix = "" if selector is None else "-" + selector
-                evidence_path = Path(str(cell_dir / f"attempt-{attempt}" / phase) + suffix + ".json")
-                dispatch_attempt = attempt
-            return invoke_acquisition(
+                basic_path = successful_basic.get("path")
+                if basic_path is None:
+                    return {"ok": False, "classification": "evidence_failure",
+                            "phase": phase,
+                            "message": "successful BasicInfo evidence is unavailable"}
+                suffix = ("-all" if isinstance(selector, list) else
+                          ("" if selector is None else "-" + selector))
+                evidence_path = _fresh_artifact_path(
+                    Path(str(cell_dir / f"attempt-{attempt}" / phase) + suffix + ".json")
+                )
+                dispatch_attempt = evidence_path.name
+            result = invoke_acquisition(
                 phase=phase, target=args.target,
                 dispatch_key=hashlib.sha256(
                     f"a3-profile-microbench/v2/{current['id']}/{dispatch_attempt}/{phase}/{selector}".encode()
@@ -1014,6 +1152,9 @@ def main(argv=None) -> int:
                 cpl_remote=args.cpl_remote,
                 launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
             )
+            if phase == "basic" and result.get("ok"):
+                successful_basic["path"] = basic_path
+            return result
         return acquire
 
     results = []

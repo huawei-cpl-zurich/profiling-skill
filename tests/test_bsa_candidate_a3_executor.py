@@ -554,6 +554,171 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
     } for call in calls)
 
 
+@pytest.mark.parametrize("stage", ["discover", "capture", "compile"])
+@pytest.mark.parametrize("terminal", [False, True])
+@pytest.mark.parametrize("handle_kind", ["job", "transfer"])
+def test_qualification_retries_exact_infrastructure_handle_for_every_stage(
+    tmp_path, stage, terminal, handle_kind,
+):
+    module = load()
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("# known good\n")
+    calls = []
+    failed = False
+    failed_handle = f"remote:gz-a3:{handle_kind}:{stage}-failure"
+
+    class FakeExecutor:
+        config = SimpleNamespace(target="gz-a3")
+
+        def execute(self, value):
+            nonlocal failed
+            calls.append(value)
+            is_compile = "intentional_compile_failure" in value["candidate"]["source"]
+            matches = (
+                (stage == "discover" and value["action"] == "discover" and not is_compile)
+                or (stage == "capture" and value["action"] == "capture")
+                or (stage == "compile" and is_compile)
+            )
+            if matches and not failed:
+                failed = True
+                return {
+                    "status": "infrastructure_error",
+                    "diagnostics": "remote observer failed",
+                    "terminal": terminal,
+                    "provenance": {"handle": failed_handle},
+                }
+            if is_compile:
+                return {
+                    "status": "compile_error",
+                    "diagnostics": "CompilationError: static assertion",
+                    "terminal": True,
+                    "provenance": {"handle": "remote:gz-a3:job:compile-success"},
+                }
+            if value["action"] == "discover":
+                return {
+                    "status": "ok",
+                    "components": [{
+                        "selector": "block_sparse_attention_kernel_mix_aiv",
+                        "kind": "aiv",
+                    }],
+                    "correctness": [
+                        {"case": case, "passed": True}
+                        for case in module.QUALIFICATION_CASES
+                    ],
+                    "provenance": {"handle": "remote:gz-a3:job:discover-success"},
+                }
+            return {
+                "status": "ok",
+                "duration_us": [10.0, 10.2, 10.1][value["sample_index"]],
+                "pipe_utilization": {"selector": value["kernel_name"], "rows": [{}]},
+                "provenance": {"handle": "remote:gz-a3:job:capture-success"},
+            }
+
+    cfg = SimpleNamespace(
+        target="gz-a3", baseline=ROOT / "benchmarks/bsa/baseline.py",
+        cases=ROOT / "benchmarks/bsa/cases.jsonl",
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        qualification_candidate=candidate,
+    )
+    receipt = module.qualify(
+        FakeExecutor(), cfg, candidate, "block_sparse_attention_kernel", "a" * 40)
+
+    assert receipt["passed"] is True
+    failed_index = next(
+        index for index, call in enumerate(calls)
+        if call.get("retry", {}).get("handle") == failed_handle
+        or call.get("retry", {}).get("prior_handle") == failed_handle
+    )
+    expected = ({"mode": "new_attempt", "prior_handle": failed_handle}
+                if terminal else {"mode": "observe", "handle": failed_handle})
+    assert calls[failed_index]["retry"] == expected
+    retried = {key: value for key, value in calls[failed_index].items() if key != "retry"}
+    assert retried == calls[failed_index - 1]
+    assert failed_handle in receipt["durable_handles"]
+
+
+def test_remote_driver_classifies_correctness_timeout_as_candidate_runtime_error(
+    tmp_path, monkeypatch,
+):
+    module = load()
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(module.remote_driver_source(), "remote_driver.py", "exec"), namespace)
+
+    def timeout(*_args, **_kwargs):
+        raise namespace["subprocess"].TimeoutExpired("runner.py", 300)
+
+    monkeypatch.setattr(namespace["subprocess"], "run", timeout)
+    result = namespace["run_workload"](
+        request(), {}, tmp_path / "correctness.json")
+
+    assert result["status"] == "runtime_error"
+    assert result["case_evidence"] == []
+    assert "timed out after 300" in result["diagnostics"]
+    assert len(result["diagnostics"]) < 300
+
+
+def test_qualification_infrastructure_retry_budget_is_bounded():
+    module = load()
+    calls, handles, retry_evidence = [], [], []
+
+    class AlwaysUnavailable:
+        def execute(self, value):
+            calls.append(value)
+            index = len(calls)
+            return {
+                "status": "infrastructure_error",
+                "diagnostics": "still unavailable",
+                "terminal": True,
+                "provenance": {"handle": f"remote:gz-a3:job:attempt-{index}"},
+            }
+
+    original = request(target="gz-a3")
+    result = module._qualification_execute(
+        AlwaysUnavailable(), original, "gz-a3", handles, retry_evidence,
+        "discovery",
+    )
+
+    assert result["status"] == "infrastructure_error"
+    assert len(calls) == module.QUALIFICATION_INFRA_RETRIES + 1
+    assert len(retry_evidence) == module.QUALIFICATION_INFRA_RETRIES
+    assert calls[0] == original
+    assert calls[-1]["retry"] == {
+        "mode": "new_attempt",
+        "prior_handle": f"remote:gz-a3:job:attempt-{len(calls) - 1}",
+    }
+
+
+@pytest.mark.parametrize("state", ["cancelled", "observation-unavailable", "error"])
+def test_cpl_remote_preflight_rejects_nonsuccess_state_before_upload(
+    monkeypatch, tmp_path, state,
+):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=0, stdout=json.dumps({
+                            "target": "gz-a3", "state": state,
+                        }) + "\n", stderr=""))
+
+    with pytest.raises(module.ExecutorError, match="preflight"):
+        module.CplRemoteTransport(executable).preflight("gz-a3")
+
+
+def test_cpl_remote_preflight_rejects_nonzero_client_exit(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=7, stdout=json.dumps({
+                            "target": "gz-a3", "state": "completed",
+                        }) + "\n", stderr="preflight failed"))
+
+    with pytest.raises(module.ExecutorError, match="exited 7"):
+        module.CplRemoteTransport(executable).preflight("gz-a3")
+
+
 def test_failed_qualification_receipt_is_not_accepted(tmp_path):
     module = load()
     transport = FakeTransport(module, success())

@@ -54,7 +54,12 @@ The qualification runs the frozen fully fused candidate over cases 47, 46,
 independent PipeUtilization captures per case. It accepts the first consecutive
 three-sample logical-kernel window with relative range at most 5%. It then runs
 an intentionally invalid Triton kernel and requires nonempty compiler
-diagnostics classified as `compile_error`. Any failed step writes a compact
+diagnostics classified as `compile_error`. Discovery, every capture, and the
+intentional compiler check preserve infrastructure handles: nonterminal
+failures observe the exact handle, while terminal infrastructure failures use
+an explicit `new_attempt` tied to the prior handle. Qualification permits three
+bounded infrastructure retries per stage and retains their compact retry trail
+in the receipt. Any failed step writes a compact
 `passed:false` receipt and exits nonzero; the production GZ executor rejects a
 missing, failed, or identity-drifted receipt before any remote call. A passing
 receipt retains the exact ordered five-case correctness evidence, and dispatch
@@ -66,6 +71,10 @@ Before a campaign, independently confirm the selected route:
 ~/.agents/skills/remote-access/scripts/cpl-remote capabilities "$BSA_A3_TARGET"
 ~/.agents/skills/remote-access/scripts/cpl-remote preflight "$BSA_A3_TARGET"
 ```
+
+Both checks must exit successfully and report the selected target in a
+documented `completed` or `available` state. Cancelled, unavailable, error, or
+nonzero-exit checks stop before bundle upload.
 
 The coordinator then invokes the executable without adapter-specific flags:
 
@@ -102,7 +111,9 @@ output and rejects framework compute or multiple Triton launches. Compiler
 AIC/AIV components of that logical kernel are permitted. Candidate
 compilation, execution, and comparison failures remain `compile_error`,
 `runtime_error`, or `correctness_error`, including failures raised inside the
-profiled repeat. TsdOpen, LazySetDevice, device OOM/unavailability, transport,
+profiled repeat. A correctness subprocess that exceeds its bounded 300-second
+deadline is a candidate `runtime_error`, not infrastructure. TsdOpen,
+LazySetDevice, device OOM/unavailability, transport,
 profiler, selector-evidence, and malformed-result failures are
 `infrastructure_error`.
 

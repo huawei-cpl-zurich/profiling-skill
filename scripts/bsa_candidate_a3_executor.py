@@ -27,6 +27,7 @@ REQUEST_SCHEMA = "profiling-skill/bsa-candidate-executor-request/v1"
 REMOTE_SCHEMA = "profiling-skill/bsa-candidate-remote-result/v1"
 QUALIFICATION_SCHEMA = "profiling-skill/bsa-a3-qualification/v1"
 QUALIFICATION_CASES = [47, 46, 49, 44, 43]
+QUALIFICATION_INFRA_RETRIES = 3
 CANDIDATE_FAILURES = {"compile_error", "runtime_error", "correctness_error"}
 TARGETS = {"bz-a3-1", "bz-a3-2", "gz-a3"}
 LOGICAL_RUNTIME = "py311-torch"
@@ -158,7 +159,8 @@ class CplRemoteTransport:
         if not self.executable.is_file() or not os.access(self.executable, os.X_OK):
             raise ExecutorError("infrastructure_error", "global cpl-remote is unavailable")
 
-    def _call(self, arguments: list[str], timeout: int = 930) -> dict:
+    def _call(self, arguments: list[str], timeout: int = 930, *,
+              allow_nonzero_receipt: bool = False) -> dict:
         try:
             run = subprocess.run([str(self.executable), "--json", *arguments], text=True,
                                  capture_output=True, timeout=timeout, check=False)
@@ -176,24 +178,31 @@ class CplRemoteTransport:
             excerpt = (run.stderr or run.stdout)[-2000:]
             raise ExecutorError("infrastructure_error",
                                 "cpl-remote returned no unambiguous receipt: " + excerpt)
+        if run.returncode and not allow_nonzero_receipt:
+            excerpt = (run.stderr or run.stdout)[-2000:]
+            raise ExecutorError(
+                "infrastructure_error",
+                f"cpl-remote exited {run.returncode}: {excerpt}",
+            )
         return objects[0]
 
     def capabilities(self, target: str) -> None:
         receipt = self._call(["capabilities", target], 60)
-        if (receipt.get("target") not in {None, target}
-                or receipt.get("state") not in {None, "available", "completed"}):
+        if (receipt.get("target") != target
+                or receipt.get("state") not in {"available", "completed"}):
             raise ExecutorError("infrastructure_error", "capabilities target is unavailable")
 
     def preflight(self, target: str) -> None:
         receipt = self._call(["preflight", target], 120)
-        if receipt.get("target") not in {None, target} or receipt.get("state") == "failed":
+        if (receipt.get("target") != target
+                or receipt.get("state") not in {"available", "completed"}):
             raise ExecutorError("infrastructure_error", "remote preflight failed")
 
     def upload(self, target: str, source: Path, destination: str) -> dict | None:
         arguments = ["upload", target, str(source), destination]
         if target == "gz-a3":
             arguments.extend(["--timeout", "0"])
-        receipt = self._call(arguments, 900)
+        receipt = self._call(arguments, 900, allow_nonzero_receipt=True)
         handle = receipt.get("handle")
         if receipt.get("target") != target:
             raise ExecutorError(
@@ -215,7 +224,9 @@ class CplRemoteTransport:
                 "infrastructure_error", "transfer handle target mismatch", handle=handle)
         try:
             receipt = self._call(
-                ["observe", handle, "--wait", "--timeout", "900"], 930)
+                ["observe", handle, "--wait", "--timeout", "900"], 930,
+                allow_nonzero_receipt=True,
+            )
         except ExecutorError as exc:
             raise ExecutorError(
                 "infrastructure_error", str(exc), handle=handle, terminal=False) from exc
@@ -245,7 +256,10 @@ class CplRemoteTransport:
 
     def observe_result(self, target: str, handle: str) -> dict:
         try:
-            observed = self._call(["observe", handle, "--wait", "--timeout", "900"], 930)
+            observed = self._call(
+                ["observe", handle, "--wait", "--timeout", "900"], 930,
+                allow_nonzero_receipt=True,
+            )
         except ExecutorError as exc:
             raise ExecutorError("infrastructure_error", str(exc), handle=handle,
                                 terminal=False) from exc
@@ -329,8 +343,13 @@ def is_device_infra(text):
 
 def run_workload(req,env,output):
     job=job_for(req); jobpath=output.with_suffix(".job.json"); jobpath.write_text(json.dumps(job))
-    run=subprocess.run([sys.executable,"runner.py","--job",str(jobpath),"--output",str(output)],
-                       text=True,capture_output=True,env=env,timeout=300)
+    try:
+      run=subprocess.run([sys.executable,"runner.py","--job",str(jobpath),"--output",str(output)],
+                         text=True,capture_output=True,env=env,timeout=300)
+    except subprocess.TimeoutExpired as exc:
+      return {"status":"runtime_error",
+              "diagnostics":"candidate correctness timed out after %s seconds"%exc.timeout,
+              "case_evidence":[]}
     try: result=json.loads(output.read_text())
     except Exception as exc: return {"status":"infrastructure_error","diagnostics":"runner response missing: "+repr(exc)}
     if run.returncode and result.get("status")=="ok":
@@ -563,6 +582,42 @@ class Model(nn.Module):
 '''
 
 
+def _qualification_execute(executor, request: dict[str, Any], target: str,
+                           handles: list[str], retry_evidence: list[dict[str, Any]],
+                           stage: str) -> dict[str, Any]:
+    """Resume exact handles or number a new terminal-infrastructure attempt."""
+    current = request
+    for attempt in range(QUALIFICATION_INFRA_RETRIES + 1):
+        result = executor.execute(current)
+        provenance = result.get("provenance")
+        handle = provenance.get("handle") if isinstance(provenance, dict) else None
+        if isinstance(handle, str) and handle not in handles:
+            handles.append(handle)
+        if result.get("status") != "infrastructure_error":
+            return result
+        if (not isinstance(handle, str)
+                or not handle.startswith((f"remote:{target}:job:",
+                                          f"remote:{target}:transfer:"))
+                or not isinstance(result.get("terminal"), bool)):
+            return result
+        if attempt == QUALIFICATION_INFRA_RETRIES:
+            return result
+        retry = (
+            {"mode": "new_attempt", "prior_handle": handle}
+            if result["terminal"]
+            else {"mode": "observe", "handle": handle}
+        )
+        retry_evidence.append({
+            "stage": stage,
+            "handle": handle,
+            "terminal": result["terminal"],
+            "retry": retry,
+            "diagnostics": str(result.get("diagnostics", ""))[-1000:],
+        })
+        current = {**request, "retry": retry}
+    return result
+
+
 def qualify(executor, config: ExecutorConfig, candidate_path: Path,
             kernel_name: str, campaign_revision: str) -> dict[str, Any]:
     """Exercise the complete GZ BSA path and return a compact gate receipt."""
@@ -571,15 +626,12 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
     identity = qualification_identity(config, LOGICAL_RUNTIME, campaign_revision)
     environment = execution_environment(config.target)
     handles: list[str] = []
-
-    def record_handle(result: dict) -> None:
-        handle = result.get("provenance", {}).get("handle")
-        if isinstance(handle, str) and handle not in handles:
-            handles.append(handle)
+    retry_evidence: list[dict[str, Any]] = []
 
     def failed(reason: str, **evidence: Any) -> dict[str, Any]:
         return {"schema": QUALIFICATION_SCHEMA, "passed": False, **identity,
                 "cases": QUALIFICATION_CASES, "durable_handles": handles,
+                "infrastructure_retries": retry_evidence,
                 "failure": reason, **evidence}
 
     if candidate["source_sha256"] != identity["known_good_candidate_sha256"]:
@@ -590,8 +642,10 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
         "correctness_cases": QUALIFICATION_CASES, "metric": "BasicInfo",
         "execution_environment": environment,
     }
-    discovery = executor.execute(discovery_request)
-    record_handle(discovery)
+    discovery = _qualification_execute(
+        executor, discovery_request, config.target, handles, retry_evidence,
+        "discovery",
+    )
     if discovery.get("status") != "ok":
         return failed("known-good discovery failed", discovery=discovery)
     correctness = discovery.get("correctness")
@@ -619,8 +673,10 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
                     "metric": "PipeUtilization",
                     "execution_environment": environment,
                 }
-                capture = executor.execute(capture_request)
-                record_handle(capture)
+                capture = _qualification_execute(
+                    executor, capture_request, config.target, handles,
+                    retry_evidence, f"capture:{case}:{sample_index}:{component['selector']}",
+                )
                 if capture.get("status") != "ok":
                     return failed(f"known-good capture failed for case {case}",
                                   discovery=discovery, measurements=measurements,
@@ -655,8 +711,10 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
         "correctness_cases": [QUALIFICATION_CASES[0]], "metric": "BasicInfo",
         "execution_environment": environment,
     }
-    compile_failure = executor.execute(compile_request)
-    record_handle(compile_failure)
+    compile_failure = _qualification_execute(
+        executor, compile_request, config.target, handles, retry_evidence,
+        "intentional-compile-failure",
+    )
     if (compile_failure.get("status") != "compile_error"
             or not str(compile_failure.get("diagnostics", "")).strip()):
         return failed("intentional compiler failure was not returned as compile_error",
@@ -668,6 +726,7 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
         "correctness": correctness,
         "measurements": measurements,
         "compile_failure": compile_failure, "durable_handles": handles,
+        "infrastructure_retries": retry_evidence,
     }
 
 

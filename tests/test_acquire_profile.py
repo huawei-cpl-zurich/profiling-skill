@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -91,7 +92,8 @@ def evidence_bytes(
         "status": "success",
         "product": product,
         "target": target,
-        "runtime": "py311-torch" if product == "a3" else "cann91",
+        "runtime": (None if target == "gz-a3" else
+                    ("py311-torch" if product == "a3" else "cann91")),
         "dispatch_key": "test-key",
         "phase": phase,
         "device": {"physical_id": 2, "logical_id": 0},
@@ -129,7 +131,9 @@ args = sys.argv[1:]
 log = pathlib.Path(os.environ["CPL_TEST_LOG"])
 with log.open("a") as f: f.write(json.dumps(args) + "\\n")
 joined = " ".join(args)
-target = "bz-a5" if "bz-a5" in joined else ("bz-a3-2" if "bz-a3-2" in joined else "bz-a3-1")
+target = ("bz-a5" if "bz-a5" in joined else
+          ("gz-a3" if "gz-a3" in joined else
+           ("bz-a3-2" if "bz-a3-2" in joined else "bz-a3-1")))
 handle = "remote:" + target + ":job:job-7"
 action = next(x for x in args if x in ("run", "observe", "result", "logs"))
 scenario = {scenario!r}
@@ -401,6 +405,17 @@ def test_basic_uses_product_runtime_and_writes_exact_remote_bytes(
     assert hashlib.sha256(expected).hexdigest() in result.stdout
 
 
+def test_gz_a3_uses_target_default_environment_without_runtime_flag(tmp_path):
+    result, output, expected, calls, _ = run_cli(
+        tmp_path, "basic", product="a3", target="gz-a3"
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.read_bytes() == expected
+    run = next(call for call in calls if "run" in call)
+    assert run[run.index("run") + 1] == "gz-a3"
+    assert "--runtime" not in run
+
+
 def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):
     module = load_module()
     workload = tmp_path / "anything.sh"
@@ -634,6 +649,196 @@ def test_activity_evidence_cannot_claim_saturation(tmp_path):
         )
 
 
+def test_a3_payload_leases_device_and_classifies_runtime_device_failures(tmp_path):
+    module = load_module()
+    workload = tmp_path / "w.py"
+    workload.write_text("print('ok')\n")
+    payload = module.render_remote_payload(
+        "basic", "a3", "bz-a3-1", "lease", workload, [], None, 1
+    )
+    assert "fcntl.flock" in payload
+    assert "LOCK_EX|fcntl.LOCK_NB" in payload
+    assert "device-lease" in payload
+    assert 'pathlib.Path.home()/".cpl-device-leases"' in payload
+    for marker in ("tsdopen", "lazysetdevice", "out of memory"):
+        assert marker in payload.lower()
+
+
+def test_generated_payload_shares_home_device_leases_across_cwds(tmp_path):
+    module = load_module()
+    workload = tmp_path / "work.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\n"
+        "class NPU:\n def set_device(self,x): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\n"
+        "class V:\n def __add__(self,x): return self\n def cpu(self): return self\n def __getitem__(self,x): return 4.0\n"
+        "def arange(*a,**k): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    msprof = tools / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib,sys,time\n"
+        "out=pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output=')))/'OPPROF'\n"
+        "out.mkdir(parents=True)\n"
+        "(out/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\nprobe,1\\n')\n"
+        "time.sleep(0.5)\n"
+        "print('Profiling running finished. All task success.')\n"
+    )
+    msprof.chmod(0o755)
+    scripts, processes = [], []
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {
+        **os.environ, "HOME": str(home),
+        "PATH": f"{tools}:{os.environ['PATH']}", "PYTHONPATH": str(modules),
+    }
+    for index in range(2):
+        cwd = tmp_path / f"cwd-{index}"
+        cwd.mkdir()
+        script = cwd / "payload.py"
+        script.write_text(module.render_remote_payload(
+            "basic", "a3", "bz-a3-1", f"lease-{index}", workload, [], None, 1
+        ))
+        scripts.append(script)
+    processes.append(subprocess.Popen(
+        ["python3", str(scripts[0])], cwd=scripts[0].parent, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+    ))
+    lock = home / ".cpl-device-leases/device-lease-0.lock"
+    deadline = time.monotonic() + 3
+    while not lock.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert lock.exists()
+    processes.append(subprocess.Popen(
+        ["python3", str(scripts[1])], cwd=scripts[1].parent, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+    ))
+    devices = []
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 0, stderr
+        encoded = next(line.split("=", 1)[1] for line in stdout.splitlines()
+                       if line.startswith("ACQUIRE_EVIDENCE_B64="))
+        devices.append(json.loads(base64.b64decode(encoded))["device"]["physical_id"])
+    assert sorted(devices) == [0, 1]
+
+
+def test_timeline_payload_retains_attempted_export_absence(tmp_path):
+    module = load_module()
+    workload = tmp_path / "w.py"
+    workload.write_text("print('ok')\n")
+    payload = module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "timeline", workload, [], "kernel", 1
+    )
+    assert "TimelineDetail" in payload
+    assert '"availability":"unavailable"' in payload or "availability" in payload
+
+
+def test_timeline_payload_does_not_hide_profiler_failure(tmp_path):
+    module = load_module()
+    workload = tmp_path / "workload.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\nclass NPU:\n def set_device(self, value): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\nclass V:\n def __add__(self, value): return self\n"
+        " def cpu(self): return self\n def __getitem__(self, key): return 4.0\n"
+        "def arange(*args, **kwargs): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    msprof = tmp_path / "msprof"
+    msprof.write_text("#!/bin/sh\necho profiler-crashed >&2\nexit 7\n")
+    msprof.chmod(0o755)
+    payload = tmp_path / "payload.py"
+    payload.write_text(module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "failed-timeline", workload, [],
+        ["copy_kernel", "compute_kernel"], 2,
+    ))
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PYTHONPATH"] = str(modules)
+    env["HOME"] = str(tmp_path / "home")
+    Path(env["HOME"]).mkdir()
+
+    run = subprocess.run(
+        ["python3", str(payload)], cwd=tmp_path, env=env,
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode != 0
+    failure = next(
+        json.loads(line.split("=", 1)[1]) for line in run.stderr.splitlines()
+        if line.startswith("ACQUIRE_FAILURE_JSON=")
+    )
+    assert failure["classification"] == "profiler_failure"
+    assert "profiler-crashed" in failure["message"]
+
+
+def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp_path):
+    module = load_module()
+    workload = tmp_path / "workload.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\nclass NPU:\n def set_device(self, value): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\nclass V:\n def __add__(self, value): return self\n"
+        " def cpu(self): return self\n def __getitem__(self, key): return 4.0\n"
+        "def arange(*args, **kwargs): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    msprof = tmp_path / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json,pathlib,sys\n"
+        "root=pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output=')))\n"
+        "root.mkdir(parents=True)\n"
+        "events=[\n"
+        " {'name':'copy_kernel','cat':'kernel mte load','ph':'X','ts':0,'dur':4},\n"
+        " {'name':'compute_kernel','cat':'kernel vector compute','ph':'X','ts':3,'dur':5},\n"
+        " {'name':'store result','cat':'mte store','ph':'X','ts':8,'dur':2}]\n"
+        "(root/'timeline.json').write_text(json.dumps({'traceEvents':events}))\n"
+        "print('Profiling running finished. All task success.')\n"
+    )
+    msprof.chmod(0o755)
+    payload = tmp_path / "payload.py"
+    payload.write_text(module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "semantic-timeline", workload, [],
+        ["copy_kernel", "compute_kernel"], 2,
+    ))
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PYTHONPATH"] = str(modules)
+    env["HOME"] = str(tmp_path / "home")
+    Path(env["HOME"]).mkdir()
+
+    run = subprocess.run(
+        ["python3", str(payload)], cwd=tmp_path, env=env,
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode == 0, run.stderr
+    raw = next(line.split("=", 1)[1] for line in run.stdout.splitlines()
+               if line.startswith("ACQUIRE_EVIDENCE_B64="))
+    capture = json.loads(base64.b64decode(raw))["capture"]
+    semantic = capture["timeline_semantics"]
+    assert capture["expected_kernel_names"] == ["copy_kernel", "compute_kernel"]
+    assert semantic["selectors_complete"] is True
+    assert semantic["kernel_order"] == ["copy_kernel", "compute_kernel"]
+    assert semantic["phase_order"] == ["load", "compute", "store"]
+    assert semantic["phase_duration_us"] == {"compute": 5.0, "load": 4.0, "store": 2.0}
+    assert semantic["load_compute_overlap_us"] == 1.0
+    assert semantic["event_count"] == 3
+    assert len(semantic["events"]) <= 256
+
+
 @pytest.mark.parametrize("mode", ["basic", "pipe"])
 def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     module = load_module()
@@ -748,6 +953,17 @@ def test_bundle_manifest_binds_sibling_imports_and_data(tmp_path):
         bundle=bundle, entrypoint="main.py", arguments=["--x"]
     )
     assert changed.identity["manifest_sha256"] != original
+
+
+def test_bundle_compresses_repetitive_sources_without_changing_manifest_identity(tmp_path):
+    module = load_module()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    source = bundle / "main.py"
+    source.write_text("value = 1\n" * 2000)
+    spec = module.build_bundle(bundle=bundle, entrypoint="main.py", arguments=[])
+    assert spec.files[0]["encoding"] == "zlib+base64"
+    assert spec.identity == identity(source, [])
 
 
 def test_pipe_rejects_changed_sibling_file_before_dispatch(tmp_path):

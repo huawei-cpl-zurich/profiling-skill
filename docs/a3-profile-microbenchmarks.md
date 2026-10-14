@@ -162,8 +162,10 @@ resumed as GZ work.
 
 Timeline cells make at most one real `--aic-metrics=TimelineDetail` acquisition
 after timing has stabilized. Compact identities for any timeline files are retained;
-otherwise the attempted command's log digest and explicit absence are recorded
-as `unavailable`. On the validated A3 runtime, handle
+only a successfully completed command that exports no timeline files is recorded
+as `unavailable`. Observer loss resumes the same retained handle, while terminal
+host or device failures remain retryable infrastructure evidence and profiler
+failures remain profiling failures. On the validated A3 runtime, handle
 `remote:bz-a3-1:job:20261013T225304Z-fdae1c669479` accepted the attempt but
 exported no inspectable TimelineDetail files. This is not a candidate failure
 and does not authorize phase-order claims from aggregate pipe activity.

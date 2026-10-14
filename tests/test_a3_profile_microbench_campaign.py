@@ -203,6 +203,103 @@ def test_timeline_runs_once_only_after_stable_timing(tmp_path):
                      ("timeline", 3)]
 
 
+def test_timeline_transport_failure_stays_running_and_resumes_same_attempt(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["kind"] == "timeline")
+    calls = []
+    timeline_calls = 0
+
+    def acquire(phase, current, attempt, selector):
+        nonlocal timeline_calls
+        calls.append((phase, attempt))
+        if phase == "timeline":
+            timeline_calls += 1
+            if timeline_calls == 1:
+                return {
+                    "ok": False, "classification": "transport_error",
+                    "phase": "observe", "message": "observer disconnected",
+                    "handle": "remote:gz-a3:job:timeline-kept",
+                }
+        return evidence(current["kernel_names"][0], 3.0,
+                        handle="remote:gz-a3:job:timeline-kept")
+
+    interrupted = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05,
+    )
+    assert interrupted["status"] == "running"
+    assert interrupted["timeline"]["status"] == "pending"
+    assert interrupted["timeline"]["handle"] == "remote:gz-a3:job:timeline-kept"
+
+    resumed = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05,
+    )
+    assert resumed["status"] == "success"
+    assert resumed["timeline"]["status"] == "unavailable"
+    assert [item for item in calls if item[0] == "pipe"] == [("pipe", 0)]
+    assert [item for item in calls if item[0] == "timeline"] == [
+        ("timeline", 1), ("timeline", 1),
+    ]
+
+
+def test_timeline_terminal_infrastructure_failure_retries_without_kernel_failure(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["kind"] == "timeline")
+    timeline_calls = 0
+
+    def acquire(phase, current, attempt, selector):
+        nonlocal timeline_calls
+        if phase == "timeline":
+            timeline_calls += 1
+            if timeline_calls == 1:
+                return {
+                    "ok": False, "classification": "host_environment",
+                    "phase": "logs", "message": "terminal logs missing",
+                    "handle": "remote:gz-a3:job:timeline-host-failure",
+                }
+        return evidence(current["kernel_names"][0], 3.0)
+
+    interrupted = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05,
+    )
+    assert interrupted["status"] == "running"
+    assert interrupted["discarded_infrastructure_attempts"] == 1
+    assert "remote:gz-a3:job:timeline-host-failure" in interrupted["provenance"]["handles"]
+
+    resumed = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05,
+    )
+    assert resumed["status"] == "success"
+    assert resumed["timeline"]["status"] == "unavailable"
+
+
+def test_timeline_profiler_failure_is_not_reported_as_unavailable(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["kind"] == "timeline")
+
+    def acquire(phase, current, attempt, selector):
+        if phase == "timeline":
+            return {
+                "ok": False, "classification": "profiler_failure",
+                "phase": "profiler", "message": "capture failed",
+                "handle": "remote:gz-a3:job:timeline-profiler-failure",
+            }
+        return evidence(current["kernel_names"][0], 3.0)
+
+    result = module.run_cell(
+        cell, tmp_path, acquire, samples=1, max_attempts=2,
+        max_relative_range=0.05,
+    )
+    assert result["status"] == "profiling_failure"
+    assert result["timeline"]["status"] == "profiling_failure"
+
+
 def test_pair_runner_interleaves_before_and_after_attempts(tmp_path):
     module = load_module()
     cells = module.enumerate_cells(json.loads(MANIFEST.read_text()))[:2]
@@ -228,7 +325,7 @@ def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
     identity = {"target": "gz-a3", "runtime": None,
                 "manifest_sha256": "a" * 64, "benchmark_sha256": "b" * 64}
     probes = []
-    for probe_id in ("one", "two"):
+    for probe_id in module.QUALIFICATION_PROBES:
         probes.append({
             "id": probe_id, "samples": [10.0, 10.2, 9.9, 10.1, 10.0],
             "handles": [f"remote:gz-a3:job:{probe_id}-{i}" for i in range(5)],
@@ -245,13 +342,35 @@ def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
         module.validate_qualification(path, {**identity, "target": "bz-a3-1"})
 
 
+@pytest.mark.parametrize(
+    "probe_ids",
+    [
+        ("wrong-probe-one", "wrong-probe-two"),
+        ("loop-bound/short-local/before", "loop-bound/short-local/before"),
+        ("loop-bound/short-local/before",),
+    ],
+)
+def test_qualification_requires_exact_unique_designated_probes(probe_ids):
+    module = load_module()
+    identity = {"target": "gz-a3", "runtime": None,
+                "manifest_sha256": "a" * 64, "benchmark_sha256": "b" * 64}
+    probes = [{
+        "id": probe_id, "samples": [10.0] * 5,
+        "handles": [f"remote:gz-a3:job:{index}" for index in range(5)],
+        "devices": [{"physical_id": index, "logical_id": 0} for index in range(5)],
+        "sources": [{"sha256": f"{index:064x}", "role": "PipeUtilization"}
+                    for index in range(5)],
+    } for probe_id in probe_ids]
+    assert module.build_qualification_receipt(identity, probes)["passed"] is False
+
+
 def test_qualification_rejects_all_five_range_above_ten_percent():
     module = load_module()
     identity = {"target": "gz-a3", "runtime": None,
                 "manifest_sha256": "a" * 64, "benchmark_sha256": "b" * 64}
-    probes = [{"id": "one", "samples": [10, 10, 10, 10, 12],
+    probes = [{"id": module.QUALIFICATION_PROBES[0], "samples": [10, 10, 10, 10, 12],
                "handles": [], "devices": [], "sources": []},
-              {"id": "two", "samples": [10, 10, 10, 10, 10],
+              {"id": module.QUALIFICATION_PROBES[1], "samples": [10, 10, 10, 10, 10],
                "handles": [], "devices": [], "sources": []}]
     receipt = module.build_qualification_receipt(identity, probes)
     assert receipt["passed"] is False

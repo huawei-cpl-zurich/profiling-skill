@@ -254,6 +254,63 @@ def run_cell(
         result["campaign_identity_sha256"] = campaign_identity_sha256
         _atomic_json(state_path, result)
         return result
+
+    def finish_timeline(attempt, measurements, selected_signals):
+        nonlocal infra, timeline_evidence
+        timeline = acquire("timeline", cell, attempt, cell["kernel_names"][0])
+        handles.extend(x for x in [timeline.get("handle")] if x)
+        if timeline["ok"]:
+            capture = timeline["evidence"]["capture"]
+            timeline_evidence = {
+                "status": capture.get("availability", "unavailable"),
+                "reason": capture.get(
+                    "reason", "attempted acquisition exported no TimelineDetail availability"
+                ),
+                "sources": capture.get("sources", []),
+                "handle": timeline.get("handle"),
+            }
+            sources.extend(capture.get("sources", []))
+            return persist(_result(
+                cell, "success", measurements, selected_signals, attempts, handles,
+                sources, devices, placements, infra, timeline_evidence,
+            ))
+
+        classification = timeline.get("classification")
+        record = {k: timeline.get(k) for k in
+                  ("classification", "phase", "message", "handle")}
+        record["identity_consumed"] = classification != "transport_error"
+        attempts.append(record)
+        infra += classification in INFRA_FAILURES
+        timeline_evidence = {
+            "status": "pending",
+            "reason": timeline.get("message", "TimelineDetail acquisition interrupted"),
+            "handle": timeline.get("handle"),
+        }
+        if classification in RETRYABLE_ACQUISITION_FAILURES:
+            consumed = sum(item.get("identity_consumed", True) for item in attempts)
+            if classification == "transport_error" or consumed < max_attempts:
+                return persist(_result(
+                    cell, "running", measurements, selected_signals, attempts, handles,
+                    sources, devices, placements, infra, timeline_evidence,
+                ))
+            status = ("infrastructure_exhausted" if classification in INFRA_FAILURES
+                      else "profiling_failure")
+            timeline_evidence["status"] = (
+                "infrastructure_failure" if status == "infrastructure_exhausted"
+                else "profiling_failure"
+            )
+            return persist(_result(
+                cell, status, measurements, selected_signals, attempts, handles,
+                sources, devices, placements, infra, timeline_evidence,
+            ))
+        status = "candidate_failure" if classification == "workload_failure" \
+            else "profiling_failure"
+        timeline_evidence["status"] = status
+        return persist(_result(
+            cell, status, measurements, selected_signals, attempts, handles,
+            sources, devices, placements, infra, timeline_evidence,
+        ))
+
     consumed_attempts = sum(item.get("identity_consumed", True) for item in attempts)
     stop = min(max_attempts, attempt_limit if attempt_limit is not None else max_attempts)
     basic = None
@@ -293,6 +350,14 @@ def run_cell(
         failure = {"classification": "evidence_failure", "phase": "basic",
                    "message": f"expected {cell['kernel_names']!r}, observed {observed!r}"}
         return persist(_failure_result(cell, attempts, handles, infra, failure))
+
+    existing_measurements = _summary(values, samples, max_relative_range)
+    if (cell["kind"] == "timeline" and existing_measurements["stable"]
+            and (timeline_evidence or {}).get("status") not in {"available", "unavailable"}):
+        return finish_timeline(
+            consumed_attempts, existing_measurements,
+            _selected_signal_values(attempts, existing_measurements, signal_values),
+        )
 
     for attempt in range(consumed_attempts, stop):
         pipes = []
@@ -349,29 +414,10 @@ def run_cell(
         if measurements["stable"]:
             if cell["kind"] != "timeline":
                 return partial
-            timeline = acquire("timeline", cell, attempt + 1, cell["kernel_names"][0])
-            handles.extend(x for x in [timeline.get("handle")] if x)
-            if timeline["ok"]:
-                capture = timeline["evidence"]["capture"]
-                timeline_evidence = {
-                    "status": capture.get("availability", "unavailable"),
-                    "reason": capture.get(
-                        "reason", "attempted acquisition exported no TimelineDetail availability"
-                    ),
-                    "sources": capture.get("sources", []),
-                    "handle": timeline.get("handle"),
-                }
-                sources.extend(capture.get("sources", []))
-            else:
-                timeline_evidence = {
-                    "status": "unavailable",
-                    "reason": timeline.get("message", "TimelineDetail acquisition unavailable"),
-                    "handle": timeline.get("handle"),
-                }
-            return persist(_result(
-                cell, "success", measurements, selected_signals, attempts, handles,
-                sources, devices, placements, infra, timeline_evidence,
-            ))
+            return finish_timeline(
+                sum(item.get("identity_consumed", True) for item in attempts),
+                measurements, selected_signals,
+            )
     measurements = _summary(values, samples, max_relative_range)
     if stop < max_attempts:
         return persist(_result(
@@ -448,6 +494,17 @@ def run_pair_interleaved(
 def build_qualification_receipt(identity: dict, probes: list[dict]) -> dict:
     reasons = []
     normalized = []
+    probe_ids = [probe.get("id") for probe in probes]
+    exact_probes = (
+        len(probe_ids) == len(QUALIFICATION_PROBES)
+        and len(set(probe_ids)) == len(probe_ids)
+        and set(probe_ids) == set(QUALIFICATION_PROBES)
+    )
+    if not exact_probes:
+        reasons.append(
+            "qualification requires each designated probe exactly once: "
+            + ", ".join(QUALIFICATION_PROBES)
+        )
     for probe in probes:
         reasons.extend(f"{probe.get('id')}: {reason}"
                        for reason in probe.get("acquisition_reasons", []))
@@ -473,7 +530,7 @@ def build_qualification_receipt(identity: dict, probes: list[dict]) -> dict:
         normalized.append({**probe, "samples": samples, "all_five_relative_range": all_range,
                            "stable_window": stable["selected_window"], "passed": passed})
     return {"schema_version": 1, "kind": "a3-profile-qualification",
-            "identity": identity, "passed": len(probes) == 2 and not reasons,
+            "identity": identity, "passed": exact_probes and not reasons,
             "reasons": reasons, "probes": normalized}
 
 

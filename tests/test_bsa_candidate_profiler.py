@@ -200,6 +200,17 @@ def one_execution() -> dict:
     }
 
 
+def gz_provenance(handle: str = "remote:gz-a3:job:valid") -> dict:
+    return {
+        "target": "gz-a3",
+        "runtime": "py311-torch",
+        "runtime_activation": "target-default",
+        "physical_device": 0,
+        "command": ["cpl-remote", "run", "gz-a3"],
+        "handle": handle,
+    }
+
+
 def many_executions(count: int = 5) -> dict:
     manifest = one_execution()
     manifest["executions"] = []
@@ -472,6 +483,87 @@ def test_runner_classifies_candidate_failure_and_keeps_diagnostics(tmp_path: Pat
     assert execution["status"] == "candidate_failure"
     assert execution["failure"]["kind"] == "compile_error"
     assert "unsupported layout" in execution["failure"]["diagnostics"]
+
+
+def test_production_rejects_wrong_target_compile_failure_as_infrastructure(
+    tmp_path: Path,
+) -> None:
+    executor = tmp_path / "executor.py"
+    wrong = {
+        **gz_provenance("remote:bz-a3-1:job:wrong"),
+        "target": "bz-a3-1",
+        "runtime_activation": "named-runtime",
+    }
+    make_executor(executor, [{
+        "status": "compile_error", "diagnostics": "candidate did not compile",
+        "terminal": True, "provenance": wrong,
+    }])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=1, require_provenance=True,
+    )
+
+    execution = result["executions"]["exec-1"]
+    assert execution["status"] == "retryable_infrastructure"
+    assert "failure" not in execution
+    assert "retry" not in execution
+    assert execution["infrastructure_failures"][-1]["kind"] == "invalid_provenance"
+    assert execution["infrastructure_failures"][-1]["rejected_provenance"] == wrong
+
+
+def test_production_accepts_matching_candidate_failure_provenance(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{
+        "status": "compile_error", "diagnostics": "candidate did not compile",
+        "terminal": True, "provenance": gz_provenance(),
+    }])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=1, require_provenance=True,
+    )
+
+    execution = result["executions"]["exec-1"]
+    assert execution["status"] == "candidate_failure"
+    assert execution["failure"]["kind"] == "compile_error"
+
+
+def test_production_rejects_wrong_target_capture_candidate_failures(
+    tmp_path: Path,
+) -> None:
+    wrong = {
+        **gz_provenance("remote:bz-a3-1:job:wrong"),
+        "target": "bz-a3-1",
+        "runtime_activation": "named-runtime",
+    }
+    for status in ("runtime_error", "correctness_error"):
+        case_dir = tmp_path / status
+        case_dir.mkdir()
+        executor = case_dir / "executor.py"
+        make_executor(executor, [
+            {
+                "status": "ok", "kernel_names": ["block_sparse_attention_kernel"],
+                "basic_info": {}, "evidence_sha256": "1" * 64,
+                "provenance": gz_provenance("remote:gz-a3:job:discovery"),
+            },
+            {
+                "status": status, "diagnostics": "candidate launch failed",
+                "terminal": True, "provenance": wrong,
+            },
+        ])
+
+        result = MODULE.run_campaign(
+            one_execution(), case_dir / "results.json", executor, cases=[47],
+            stable_samples=3, max_samples=7, max_actions=2, require_provenance=True,
+        )
+
+        execution = result["executions"]["exec-1"]
+        assert execution["status"] == "retryable_infrastructure"
+        assert "failure" not in execution
+        assert "retry" not in execution
+        assert execution["infrastructure_failures"][-1]["kind"] == "invalid_provenance"
+        assert execution["infrastructure_failures"][-1]["rejected_provenance"] == wrong
 
 
 def test_runner_preserves_infrastructure_failure_for_resume(tmp_path: Path) -> None:

@@ -683,6 +683,27 @@ def _record_infrastructure_failure(
         state["retry"] = retry
 
 
+def _reject_inexact_response_provenance(
+    state: dict[str, Any], response: dict[str, Any], environment: dict[str, Any],
+    evidence_name: str,
+) -> bool:
+    """Reject success/candidate evidence that came from another environment."""
+    if _valid_provenance(response.get("provenance"), environment):
+        return False
+    state.pop("retry", None)
+    state["status"] = "retryable_infrastructure"
+    state["infrastructure_failures"].append({
+        "kind": "invalid_provenance",
+        "category": "infrastructure",
+        "diagnostics": (
+            f"{evidence_name} provenance must match the requested A3 target, "
+            "runtime activation, device, command, and handle"
+        ),
+        "rejected_provenance": response.get("provenance"),
+    })
+    return True
+
+
 def _with_retry(request: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     if isinstance(state.get("retry"), dict):
         request["retry"] = state["retry"]
@@ -739,6 +760,15 @@ def run_campaign(
             }, state))
             actions += 1
             status = response.get("status")
+            if (
+                require_provenance
+                and status in CANDIDATE_FAILURES | {"ok"}
+                and _reject_inexact_response_provenance(
+                    state, response, manifest["environment"], "BasicInfo"
+                )
+            ):
+                _atomic_json(output, results)
+                continue
             if status in CANDIDATE_FAILURES:
                 state["status"] = "candidate_failure"
                 state["failure"] = _failure(response)
@@ -752,20 +782,6 @@ def run_campaign(
                 _atomic_json(output, results)
                 continue
             state.pop("retry", None)
-            if require_provenance and not _valid_provenance(
-                response.get("provenance"), manifest["environment"]
-            ):
-                state["status"] = "retryable_infrastructure"
-                state["infrastructure_failures"].append({
-                    "kind": "invalid_provenance",
-                    "category": "infrastructure",
-                    "diagnostics": (
-                        "BasicInfo provenance must match the requested A3 target, "
-                        "runtime activation, device, command, and handle"
-                    ),
-                })
-                _atomic_json(output, results)
-                continue
             if not _valid_evidence_digest(response.get("evidence_sha256")):
                 state["status"] = "retryable_infrastructure"
                 state["infrastructure_failures"].append({
@@ -868,6 +884,16 @@ def run_campaign(
                     }, state))
                     actions += 1
                     status = response.get("status")
+                    if (
+                        require_provenance
+                        and status in CANDIDATE_FAILURES | {"ok"}
+                        and _reject_inexact_response_provenance(
+                            state, response, manifest["environment"],
+                            "PipeUtilization",
+                        )
+                    ):
+                        interrupted = True
+                        break
                     if status in CANDIDATE_FAILURES:
                         state["status"] = "candidate_failure"
                         state["failure"] = _failure(response)
@@ -881,20 +907,6 @@ def run_campaign(
                         interrupted = True
                         break
                     state.pop("retry", None)
-                    if require_provenance and not _valid_provenance(
-                        response.get("provenance"), manifest["environment"]
-                    ):
-                        state["status"] = "retryable_infrastructure"
-                        state["infrastructure_failures"].append({
-                            "kind": "invalid_provenance",
-                            "category": "infrastructure",
-                            "diagnostics": (
-                                "PipeUtilization provenance must match the requested "
-                                "A3 target, runtime activation, device, command, and handle"
-                            ),
-                        })
-                        interrupted = True
-                        break
                     if not _valid_evidence_digest(response.get("evidence_sha256")):
                         state["status"] = "retryable_infrastructure"
                         state["infrastructure_failures"].append({

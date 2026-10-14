@@ -1,5 +1,6 @@
 {
   "schema": "profiling-skill/bsa-profile-candidates-config/v1",
+  "campaign_revision": "gz-a3-candidate-corpus-v1",
   "cases": [47, 46, 49, 44, 43],
   "environment": {
     "product": "a3",

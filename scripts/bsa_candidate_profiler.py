@@ -35,6 +35,7 @@ RESULT_SCHEMA = "profiling-skill/bsa-candidate-results/v2"
 MERGED_RESULT_SCHEMA = "profiling-skill/bsa-candidate-merged-results/v1"
 SHARD_ALGORITHM = "sha256-mod-v1"
 SAMPLE_SELECTION = "first-stable-consecutive-window-v1"
+DIRECT_API_CAMPAIGN_REVISION = "direct-api-v1"
 TARGET_ACTIVATION = {
     "gz-a3": "target-default",
     "bz-a3-1": "named-runtime",
@@ -127,6 +128,13 @@ def _canonical(value: object) -> bytes:
 
 def _sha(value: object) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise InvalidArtifact(f"cannot hash executor {path}: {exc}") from exc
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -449,7 +457,7 @@ def _execution_environment(environment: object) -> dict[str, str]:
 def _run_contract(
     cases: list[int], stable_samples: int, max_samples: int,
     variability_threshold: float, require_provenance: bool,
-    environment: dict[str, Any],
+    environment: dict[str, Any], executor_identity: dict[str, str],
 ) -> dict[str, Any]:
     return {
         "cases": cases,
@@ -459,6 +467,18 @@ def _run_contract(
         "require_provenance": require_provenance,
         "sample_selection": SAMPLE_SELECTION,
         "execution_environment": _execution_environment(environment),
+        "executor_identity": executor_identity,
+    }
+
+
+def _executor_identity(executable: Path, campaign_revision: str) -> dict[str, str]:
+    if not isinstance(campaign_revision, str) or not campaign_revision.strip():
+        raise InvalidArtifact("campaign revision must be a nonempty string")
+    if not executable.is_file():
+        raise InvalidArtifact(f"executor is not a regular file: {executable}")
+    return {
+        "campaign_revision": campaign_revision,
+        "executable_sha256": _file_sha256(executable),
     }
 
 
@@ -518,9 +538,11 @@ def _load_results(
     if (
         not isinstance(checkpoint_contract, dict)
         or "execution_environment" not in checkpoint_contract
+        or "executor_identity" not in checkpoint_contract
     ):
         raise InvalidArtifact(
-            "checkpoint predates target/runtime activation identity; regenerate it"
+            "checkpoint predates target/runtime activation or executor identity; "
+            "regenerate it"
         )
     if checkpoint_contract != contract:
         raise InvalidArtifact("result run contract mismatch")
@@ -683,6 +705,26 @@ def _record_infrastructure_failure(
         state["retry"] = retry
 
 
+def _record_malformed_success(
+    state: dict[str, Any], response: dict[str, Any], *, kind: str, diagnostics: str
+) -> None:
+    """Retain malformed terminal evidence and force a distinct remote attempt."""
+    state.pop("retry", None)
+    failure = {
+        "kind": kind,
+        "category": "infrastructure",
+        "diagnostics": diagnostics,
+        "evidence_sha256": response.get("evidence_sha256"),
+        "provenance": response.get("provenance"),
+    }
+    if "terminal" in response:
+        failure["terminal"] = response["terminal"]
+    state["infrastructure_failures"].append(failure)
+    retry = _retry_from_failure(response)
+    if retry is not None:
+        state["retry"] = retry
+
+
 def _reject_inexact_response_provenance(
     state: dict[str, Any], response: dict[str, Any], environment: dict[str, Any],
     evidence_name: str,
@@ -723,6 +765,7 @@ def run_campaign(
     require_provenance: bool = False,
     shard_count: int = 1,
     shard_index: int = 0,
+    campaign_revision: str = DIRECT_API_CAMPAIGN_REVISION,
 ) -> dict[str, Any]:
     _validate_manifest(manifest)
     execution_environment = _execution_environment(manifest.get("environment"))
@@ -732,6 +775,7 @@ def run_campaign(
     contract = _run_contract(
         cases, stable_samples, max_samples, variability_threshold,
         require_provenance, manifest["environment"],
+        _executor_identity(executor, campaign_revision),
     )
     results = _load_results(
         output, manifest, contract, shard_count, shard_index
@@ -784,11 +828,13 @@ def run_campaign(
             state.pop("retry", None)
             if not _valid_evidence_digest(response.get("evidence_sha256")):
                 state["status"] = "retryable_infrastructure"
-                state["infrastructure_failures"].append({
-                    "kind": "invalid_evidence_digest",
-                    "category": "infrastructure",
-                    "diagnostics": "BasicInfo response lacks a valid SHA-256 evidence digest",
-                })
+                _record_malformed_success(
+                    state, response,
+                    kind="invalid_evidence_digest",
+                    diagnostics=(
+                        "BasicInfo response lacks a valid SHA-256 evidence digest"
+                    ),
+                )
                 _atomic_json(output, results)
                 continue
             raw_components = response.get("components")
@@ -815,13 +861,14 @@ def run_campaign(
                     components = [{"selector": selected}]
             if components is None:
                 state["status"] = "retryable_infrastructure"
-                state["infrastructure_failures"].append({
-                    "kind": "invalid_basic_info",
-                    "diagnostics": (
+                _record_malformed_success(
+                    state, response,
+                    kind="invalid_basic_info",
+                    diagnostics=(
                         "BasicInfo returned neither distinct explicit components nor "
                         "one unambiguous legacy kernel selector"
                     ),
-                })
+                )
                 _atomic_json(output, results)
                 continue
             state["components"] = components
@@ -909,14 +956,14 @@ def run_campaign(
                     state.pop("retry", None)
                     if not _valid_evidence_digest(response.get("evidence_sha256")):
                         state["status"] = "retryable_infrastructure"
-                        state["infrastructure_failures"].append({
-                            "kind": "invalid_evidence_digest",
-                            "category": "infrastructure",
-                            "diagnostics": (
+                        _record_malformed_success(
+                            state, response,
+                            kind="invalid_evidence_digest",
+                            diagnostics=(
                                 "PipeUtilization response lacks a valid SHA-256 "
                                 "evidence digest"
                             ),
-                        })
+                        )
                         interrupted = True
                         break
                     duration = response.get("duration_us")
@@ -927,10 +974,14 @@ def run_campaign(
                         or not isinstance(response.get("pipe_utilization"), (dict, list))
                     ):
                         state["status"] = "retryable_infrastructure"
-                        state["infrastructure_failures"].append({
-                            "kind": "invalid_pipe_evidence",
-                            "diagnostics": "capture lacks positive duration or compact PipeUtilization",
-                        })
+                        _record_malformed_success(
+                            state, response,
+                            kind="invalid_pipe_evidence",
+                            diagnostics=(
+                                "capture lacks positive duration or compact "
+                                "PipeUtilization"
+                            ),
+                        )
                         interrupted = True
                         break
                     partial["components"][selector] = {
@@ -998,9 +1049,13 @@ def merge_results(
         current_contract = value.get("run_contract")
         if not isinstance(current_contract, dict):
             raise InvalidArtifact(f"invalid run contract in {path}")
-        if "execution_environment" not in current_contract:
+        if (
+            "execution_environment" not in current_contract
+            or "executor_identity" not in current_contract
+        ):
             raise InvalidArtifact(
-                f"run contract predates target/runtime activation identity in {path}"
+                "run contract predates target/runtime activation or executor "
+                f"identity in {path}"
             )
         if contract is None:
             contract = current_contract
@@ -1056,6 +1111,9 @@ def _config(path: Path) -> dict[str, Any]:
     value = _read_json(path)
     if value.get("schema") != "profiling-skill/bsa-profile-candidates-config/v1":
         raise InvalidArtifact("configuration schema mismatch")
+    revision = value.get("campaign_revision")
+    if not isinstance(revision, str) or not revision.strip():
+        raise InvalidArtifact("configuration requires a nonempty campaign_revision")
     return value
 
 
@@ -1079,6 +1137,7 @@ def main() -> int:
     merge = subparsers.add_parser("merge-results")
     merge.add_argument("--manifest", type=Path, required=True)
     merge.add_argument("--config", type=Path, required=True)
+    merge.add_argument("--executor", type=Path, required=True)
     merge.add_argument("--input", type=Path, action="append", required=True)
     merge.add_argument("--output", type=Path, required=True)
     status = subparsers.add_parser("status")
@@ -1115,6 +1174,7 @@ def main() -> int:
                 max_actions=args.max_actions,
                 shard_count=args.shard_count,
                 shard_index=args.shard_index,
+                campaign_revision=config["campaign_revision"],
             )
             counts: dict[str, int] = {}
             for item in result["executions"].values():
@@ -1130,6 +1190,7 @@ def main() -> int:
                 config["sampling"]["relative_range_threshold"],
                 config.get("require_provenance", True),
                 config["environment"],
+                _executor_identity(args.executor, config["campaign_revision"]),
             )
             result = merge_results(manifest, args.input, expected_contract=expected)
             _atomic_json(args.output, result)

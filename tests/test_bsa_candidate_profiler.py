@@ -303,6 +303,10 @@ def test_run_contract_and_executor_request_bind_target_and_runtime_activation(
         "runtime_activation": "target-default",
     }
     assert result["run_contract"]["execution_environment"] == expected
+    assert result["run_contract"]["executor_identity"] == {
+        "campaign_revision": MODULE.DIRECT_API_CAMPAIGN_REVISION,
+        "executable_sha256": hashlib.sha256(executor.read_bytes()).hexdigest(),
+    }
     requests = json.loads(
         (tmp_path / "results.protocol" / "response.requests").read_text()
     )
@@ -672,6 +676,86 @@ def test_production_mode_rejects_wrong_target_runtime_and_invalid_digest(
     )
     digest_failure = digest_result["executions"]["exec-1"]["infrastructure_failures"][0]
     assert digest_failure["kind"] == "invalid_evidence_digest"
+
+
+def test_terminal_malformed_success_requests_a_new_attempt(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    handle = "remote:gz-a3:job:malformed-terminal"
+    make_executor(executor, [{
+        "status": "ok",
+        "kernel_names": ["block_sparse_attention_kernel"],
+        "basic_info": {},
+        "evidence_sha256": "not-a-digest",
+        "terminal": True,
+        "provenance": gz_provenance(handle),
+    }])
+
+    result = MODULE.run_campaign(
+        one_execution(), tmp_path / "results.json", executor, cases=[47],
+        stable_samples=3, max_samples=7, max_actions=None, require_provenance=True,
+    )
+
+    state = result["executions"]["exec-1"]
+    assert state["status"] == "retryable_infrastructure"
+    assert state["retry"] == {"mode": "new_attempt", "prior_handle": handle}
+
+
+def test_resume_rejects_executor_or_campaign_revision_drift(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status": "infrastructure_error", "diagnostics": "stop"}])
+    output = tmp_path / "results.json"
+    MODULE.run_campaign(
+        one_execution(), output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=1, campaign_revision="campaign-one",
+    )
+
+    executor.write_text(executor.read_text() + "\n# changed harness\n")
+    try:
+        MODULE.run_campaign(
+            one_execution(), output, executor, cases=[47], stable_samples=3,
+            max_samples=7, max_actions=1, campaign_revision="campaign-one",
+        )
+    except MODULE.InvalidArtifact as exc:
+        assert "run contract mismatch" in str(exc)
+    else:
+        raise AssertionError("executor drift was accepted")
+
+    make_executor(executor, [{"status": "infrastructure_error", "diagnostics": "stop"}])
+    try:
+        MODULE.run_campaign(
+            one_execution(), output, executor, cases=[47], stable_samples=3,
+            max_samples=7, max_actions=1, campaign_revision="campaign-two",
+        )
+    except MODULE.InvalidArtifact as exc:
+        assert "run contract mismatch" in str(exc)
+    else:
+        raise AssertionError("campaign revision drift was accepted")
+
+
+def test_merge_rejects_executor_identity_drift(tmp_path: Path) -> None:
+    manifest = many_executions(2)
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status": "infrastructure_error", "diagnostics": "stop"}])
+    first = tmp_path / "first.json"
+    MODULE.run_campaign(
+        manifest, first, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=0,
+        campaign_revision="campaign-one",
+    )
+    executor.write_text(executor.read_text() + "\n# changed harness\n")
+    second = tmp_path / "second.json"
+    MODULE.run_campaign(
+        manifest, second, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=0,
+        campaign_revision="campaign-one",
+    )
+
+    try:
+        MODULE.merge_results(manifest, [first, second])
+    except MODULE.InvalidArtifact as exc:
+        assert "run contract mismatch" in str(exc)
+    else:
+        raise AssertionError("shards from different executors were merged")
 
 
 def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt(

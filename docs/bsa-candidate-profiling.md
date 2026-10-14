@@ -61,6 +61,12 @@ uses `target-default`: the executor omits `--runtime`, while still recording
 `py311-torch` as the logical runtime. `bz-a3-1` and `bz-a3-2` use
 `named-runtime` and activate that logical runtime explicitly.
 
+The campaign configuration also declares a nonempty `campaign_revision`. The
+result contract binds that revision and the SHA-256 digest of the exact
+executor executable. Resume therefore fails closed after either identity
+changes; use a new output path or deliberately regenerate the checkpoint after
+updating the harness.
+
 For `action=discover`, the executor must run all requested correctness cases,
 then perform an unfiltered `msprof op` BasicInfo capture. Success is:
 
@@ -129,6 +135,9 @@ becomes `{"mode":"new_attempt","prior_handle":"..."}`, authorizing a fresh
 attempt while preserving its predecessor. Legacy responses which omit
 `terminal` are conservatively observe-only; the adapter must eventually return
 explicit terminal state or a migration/observation timeout, never redispatch.
+The same rule applies when an otherwise successful terminal response contains
+malformed BasicInfo, PipeUtilization, or digest evidence: it is retained as an
+infrastructure failure and the next request explicitly starts a new attempt.
 
 ## Resume and stability
 
@@ -159,8 +168,9 @@ a compilation or runtime defect. Large vendor report trees remain remote.
 
 Version-1 checkpoints predate both consecutive-window selection and
 multi-component samples. Early version-2 checkpoints also predate the bound
-target/runtime-activation identity. The runner rejects both with an explicit
-regeneration message instead of silently changing their interpretation. A BZ
+target/runtime-activation or executor identity. The runner rejects both with
+an explicit regeneration message instead of silently changing their
+interpretation. A BZ
 manifest or checkpoint therefore cannot be resumed or merged as a GZ
 campaign, even though both use the logical `py311-torch` runtime.
 
@@ -188,6 +198,7 @@ same count and index. Merge any completed or checkpointed subset with:
 python scripts/bsa_candidate_profiler.py merge-results \
   --manifest "$EVIDENCE_ROOT/manifest.json" \
   --config experiments/bsa-profile-candidates.json \
+  --executor "$BUNDLE_EXECUTOR" \
   --input "$EVIDENCE_ROOT/shard-0.json" \
   --input "$EVIDENCE_ROOT/shard-1.json" \
   --output "$EVIDENCE_ROOT/merged.json"
@@ -196,6 +207,8 @@ python scripts/bsa_candidate_profiler.py merge-results \
 The merger preserves each execution state, sample, diagnostic, and provenance
 object verbatim. It rejects repeated shard indexes, overlapping executions,
 wrong-shard assignments, and manifest, sample-policy, or shard-count mismatch.
+It recomputes the executor identity from `--executor` and rejects a campaign
+revision or executable digest mismatch.
 The merged result explicitly lists missing shard indexes and execution IDs, so
 a partial merge cannot look complete.
 

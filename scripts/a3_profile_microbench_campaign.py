@@ -20,7 +20,7 @@ DEFAULT_MANIFEST = ROOT / "experiments" / "a3-profile-hypotheses.json"
 ACQUIRE = ROOT / "scripts" / "acquire_profile.py"
 INFRA_FAILURES = {"transport_error", "host_environment", "device_unavailable"}
 RETRYABLE_ACQUISITION_FAILURES = INFRA_FAILURES | {"evidence_failure", "profiler_failure"}
-TARGET_RUNTIMES = {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": None}
+TARGET_RUNTIMES = {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": "py311-torch"}
 QUALIFICATION_PROBES = (
     "loop-bound/short-local/before",
     "head-rank/heads-16/after",

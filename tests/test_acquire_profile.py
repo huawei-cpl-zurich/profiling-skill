@@ -92,8 +92,7 @@ def evidence_bytes(
         "status": "success",
         "product": product,
         "target": target,
-        "runtime": (None if target == "gz-a3" else
-                    ("py311-torch" if product == "a3" else "cann91")),
+        "runtime": "py311-torch" if product == "a3" else "cann91",
         "dispatch_key": "test-key",
         "phase": phase,
         "device": {"physical_id": 2, "logical_id": 0},
@@ -388,6 +387,7 @@ def test_text_receipt_rejects_conflicting_duplicate_metadata():
     [
         ("a3", "bz-a3-1", "py311-torch"),
         ("a3", "bz-a3-2", "py311-torch"),
+        ("a3", "gz-a3", "py311-torch"),
         ("a5", "bz-a5", "cann91"),
     ],
 )
@@ -405,15 +405,32 @@ def test_basic_uses_product_runtime_and_writes_exact_remote_bytes(
     assert hashlib.sha256(expected).hexdigest() in result.stdout
 
 
-def test_gz_a3_uses_target_default_environment_without_runtime_flag(tmp_path):
-    result, output, expected, calls, _ = run_cli(
-        tmp_path, "basic", product="a3", target="gz-a3"
+def test_gz_payload_cleans_python_environment_before_runtime_start(tmp_path):
+    module = load_module()
+    workload = tmp_path / "work.py"
+    workload.write_text("print('ok')\n")
+    tools = tmp_path / "runtime-bin"
+    tools.mkdir()
+    python = tools / "python"
+    python.write_text(
+        "#!/bin/sh\n"
+        "test -z \"${PYTHONHOME+x}\" || exit 31\n"
+        "test -z \"${PYTHONPATH+x}\" || exit 32\n"
+        "printf '%s\\n' \"$PATH\"\n"
+    )
+    python.chmod(0o755)
+    payload = tmp_path / "payload.sh"
+    payload.write_text(module.render_remote_payload(
+        "basic", "a3", "gz-a3", "key", workload, [], None, 1
+    ))
+    selected_path = f"{tools}:{os.environ['PATH']}"
+    result = subprocess.run(
+        ["/bin/sh", str(payload)], text=True, capture_output=True,
+        env={**os.environ, "PATH": selected_path, "PYTHONHOME": "/invalid",
+             "PYTHONPATH": "/invalid"},
     )
     assert result.returncode == 0, result.stderr
-    assert output.read_bytes() == expected
-    run = next(call for call in calls if "run" in call)
-    assert run[run.index("run") + 1] == "gz-a3"
-    assert "--runtime" not in run
+    assert result.stdout.strip() == selected_path
 
 
 def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):

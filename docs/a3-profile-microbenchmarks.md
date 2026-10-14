@@ -110,12 +110,15 @@ Qualify a server before spending hours on the full campaign. Qualification runs
 global `cpl-remote` capabilities and preflight checks, then profiles two
 known-good probes five times each. Both probes must have an all-five relative
 range no greater than 10% and contain a consecutive stable-three window within
-5%. The compact receipt binds the target, target-default or named runtime,
+5%. The compact receipt binds the target and named runtime,
 manifest and benchmark hashes, handles, devices, samples, and failure reasons.
 Every `run` requires the matching passing receipt.
 
-GZ-A3 uses the target's default environment; it deliberately does not pass a
-named `--runtime`:
+GZ-A3 selects the configured `py311-torch` runtime through global `cpl-remote`
+and clears inherited `PYTHONHOME` and `PYTHONPATH` before starting Python.
+The runtime supplies PATH. Previous target-default qualification receipts and
+cell checkpoints do not authorize this campaign; use fresh output directories
+and retain previous artifacts as historical evidence:
 
 ```bash
 python scripts/a3_profile_microbench_campaign.py qualify \

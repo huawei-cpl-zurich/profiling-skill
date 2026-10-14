@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 
 TARGETS = {
-    "a3": {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": None},
+    "a3": {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": "py311-torch"},
     "a5": {"bz-a5": "cann91"},
 }
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -542,6 +542,12 @@ except Exception as exc: fail("controller","host_environment",repr(exc))
 '''
     for marker, value in encoded.items():
         program = program.replace(marker, value)
+    if target == "gz-a3":
+        # The named runtime supplies PATH. Remove inherited listener Python
+        # overrides before interpreter startup, including subprocess probes.
+        program = ("#!/bin/sh\nset -eu\nunset PYTHONHOME PYTHONPATH\n"
+                   "exec python - <<'CPL_ACQUIRE_PROGRAM'\n" + program
+                   + "\nCPL_ACQUIRE_PROGRAM\n")
     return program
 
 

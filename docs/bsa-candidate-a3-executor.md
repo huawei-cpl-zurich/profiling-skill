@@ -141,7 +141,8 @@ provenance.
 Every terminal response records product, target, logical runtime, activation mode, selected
 physical device, normalized `cpl-remote run` command, durable handle, and an
 explicit terminal flag. The evidence digest covers the complete compact
-remote result.
+remote result. Observation and both stdout/stderr log receipts must repeat the
+exact configured target and durable handle before compact output is parsed.
 
 ## Interruption and recovery
 

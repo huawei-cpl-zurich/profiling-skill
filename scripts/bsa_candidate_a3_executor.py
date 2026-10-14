@@ -255,6 +255,11 @@ class CplRemoteTransport:
         return handle
 
     def observe_result(self, target: str, handle: str) -> dict:
+        if not handle.startswith(f"remote:{target}:job:"):
+            raise ExecutorError(
+                "infrastructure_error", "observation handle target mismatch",
+                handle=handle,
+            )
         try:
             observed = self._call(
                 ["observe", handle, "--wait", "--timeout", "900"], 930,
@@ -263,7 +268,7 @@ class CplRemoteTransport:
         except ExecutorError as exc:
             raise ExecutorError("infrastructure_error", str(exc), handle=handle,
                                 terminal=False) from exc
-        if observed.get("handle") != handle:
+        if observed.get("target") != target or observed.get("handle") != handle:
             raise ExecutorError("infrastructure_error", "observation identity mismatch",
                                 handle=handle)
         if observed.get("state") not in {"completed", "failed", "cancelled"}:
@@ -271,6 +276,13 @@ class CplRemoteTransport:
                                 handle=handle, terminal=False)
         stdout = self._call(["logs", handle, "--stream", "stdout", "--tail", "8"], 120)
         stderr = self._call(["logs", handle, "--stream", "stderr", "--tail", "100"], 120)
+        if any(
+            receipt.get("target") != target or receipt.get("handle") != handle
+            for receipt in (stdout, stderr)
+        ):
+            raise ExecutorError(
+                "infrastructure_error", "log receipt identity mismatch", handle=handle,
+            )
         marker = "BSA_CANDIDATE_RESULT="
         rows = [line[len(marker):] for line in str(stdout.get("content", "")).splitlines()
                 if line.startswith(marker)]

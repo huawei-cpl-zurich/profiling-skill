@@ -381,6 +381,77 @@ def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
     assert calls[0][-4:] == ["--cwd", "/remote/work", "--timeout", "900"]
 
 
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+@pytest.mark.parametrize("field", ["target", "handle"])
+def test_observe_result_rejects_mismatched_log_receipt_identity(
+    monkeypatch, tmp_path, stream, field,
+):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    handle = "remote:gz-a3:job:retained-1"
+    compact = {
+        "schema": module.REMOTE_SCHEMA,
+        "status": "infrastructure_error",
+        "diagnostics": "expected test result",
+    }
+
+    def fake_run(command, **_kwargs):
+        action = command[2]
+        if action == "observe":
+            receipt = {"target": "gz-a3", "state": "completed", "handle": handle}
+        else:
+            selected = command[command.index("--stream") + 1]
+            content = ("BSA_CANDIDATE_RESULT=" + json.dumps(compact) + "\n"
+                       if selected == "stdout" else "")
+            receipt = {
+                "target": "gz-a3", "state": "completed", "handle": handle,
+                "content": content,
+            }
+            if selected == stream:
+                receipt[field] = (
+                    "bz-a3-1" if field == "target"
+                    else "remote:gz-a3:job:different"
+                )
+        return SimpleNamespace(returncode=0, stdout=json.dumps(receipt) + "\n", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    with pytest.raises(module.ExecutorError, match="log receipt identity mismatch"):
+        module.CplRemoteTransport(executable).observe_result("gz-a3", handle)
+
+
+def test_observe_result_rejects_wrong_target_observation_receipt(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    handle = "remote:gz-a3:job:retained-1"
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=0, stdout=json.dumps({
+                            "target": "bz-a3-1", "state": "completed", "handle": handle,
+                        }) + "\n", stderr=""))
+
+    with pytest.raises(module.ExecutorError, match="observation identity mismatch"):
+        module.CplRemoteTransport(executable).observe_result("gz-a3", handle)
+
+
+def test_observe_result_rejects_wrong_target_handle_before_transport(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    calls = []
+    monkeypatch.setattr(module.subprocess, "run", lambda *args, **_kwargs: calls.append(args))
+
+    with pytest.raises(module.ExecutorError, match="handle target mismatch"):
+        module.CplRemoteTransport(executable).observe_result(
+            "gz-a3", "remote:bz-a3-1:job:retained-1")
+
+    assert calls == []
+
+
 def test_cpl_remote_upload_returns_then_observes_retained_transfer(monkeypatch, tmp_path):
     module = load()
     executable = tmp_path / "cpl-remote"

@@ -47,9 +47,9 @@ The six timeline controls cover an ordered stability replicate, reversed
 source order, repeated load/compute regions, compute-duration scaling,
 serialized versus independent dataflow, and fused versus split launches.
 Compiler scheduling is part of the observation: source order does not prove
-executed order. The fused/split control supplies known task boundaries; the
-other probes test whether any exported timeline field tracks the intended
-change.
+executed order. The fused/split control supplies three known load, compute,
+and store task boundaries; the other probes test whether any exported
+timeline field tracks the intended change.
 
 ## Profiling protocol
 

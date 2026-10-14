@@ -59,6 +59,10 @@ def test_manifest_has_ten_hypotheses_and_six_timeline_controls():
     assert split["launch_contract"] == {
         variant: len(split["kernel_names"][variant]) for variant in ("before", "after")
     }
+    assert split["kernel_names"]["after"] == [
+        "a3_phase_copy", "a3_phase_compute", "a3_phase_store",
+    ]
+    assert split["launch_contract"]["after"] == 3
 
 
 def test_contract_is_deterministic_and_enumerates_every_manifest_experiment():
@@ -160,6 +164,38 @@ def test_reference_models_make_before_after_outputs_equivalent():
         before = module.reference_output(experiment["id"], "before", inputs)
         after = module.reference_output(experiment["id"], "after", inputs)
         assert module.outputs_close(before, after), experiment["id"]
+
+
+def test_split_control_launches_distinct_load_compute_store_kernels(monkeypatch):
+    module = load_module()
+    calls = []
+    allocations = [object(), object()]
+
+    class Kernel:
+        def __init__(self, name):
+            self.name = name
+
+        def __getitem__(self, grid):
+            def launch(source, destination, **kwargs):
+                calls.append((self.name, grid, source, destination, kwargs))
+            return launch
+
+    monkeypatch.setattr(module, "a3_phase_copy", Kernel("copy"))
+    monkeypatch.setattr(module, "a3_phase_compute", Kernel("compute"))
+    monkeypatch.setattr(module, "a3_phase_store", Kernel("store"), raising=False)
+    monkeypatch.setattr(module.torch, "empty_like", lambda _value: allocations.pop(0))
+    source, output = type("Tensor", (), {"shape": (4096,)})(), object()
+
+    names = module._launch(
+        "fused-vs-split", "after", {"x": source, "selected": None, "work": 64}, output
+    )
+
+    assert names == ["a3_phase_copy", "a3_phase_compute", "a3_phase_store"]
+    assert [item[0] for item in calls] == ["copy", "compute", "store"]
+    assert calls[0][2:] == (source, calls[0][3], {"n": 4096, "block": 128})
+    assert calls[1][2] is calls[0][3]
+    assert calls[2][2] is calls[1][3]
+    assert calls[2][3] is output
 
 
 def test_runtime_control_inputs_are_nontrivial_and_feed_reference_addresses():

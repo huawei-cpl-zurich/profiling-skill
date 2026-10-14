@@ -670,7 +670,7 @@
       ],
       "variants": {
         "before": "one fused multi-phase kernel",
-        "after": "two separate phase kernels"
+        "after": "three separate load, compute, and store phase kernels"
       },
       "kernel_names": {
         "before": [
@@ -678,7 +678,8 @@
         ],
         "after": [
           "a3_phase_copy",
-          "a3_phase_compute"
+          "a3_phase_compute",
+          "a3_phase_store"
         ]
       },
       "sweeps": [
@@ -688,11 +689,11 @@
           "work": 64
         }
       ],
-      "expected_evidence": "Split launches form a known control timeline; fused evidence is compared against it.",
+      "expected_evidence": "Three split load, compute, and store launches form a known control timeline; fused evidence is compared against it.",
       "falsifier": "Kernel/task boundaries or phase relationships cannot be recovered.",
       "launch_contract": {
         "before": 1,
-        "after": 2
+        "after": 3
       }
     }
   ]

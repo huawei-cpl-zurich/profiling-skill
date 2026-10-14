@@ -48,6 +48,7 @@ def enumerate_cells(manifest: dict) -> list[dict]:
                     cells.append({
                         "id": f"{experiment['id']}/{sweep['id']}/{variant}",
                         "experiment": experiment["id"], "sweep": sweep["id"],
+                        "sweep_parameters": sweep,
                         "variant": variant, "kind": kind,
                         "kernel_names": experiment["kernel_names"][variant],
                         "expected_evidence": experiment["expected_evidence"],
@@ -253,21 +254,34 @@ def run_cell(
     max_relative_range: float, campaign_identity_sha256: str | None = None,
     attempt_limit: int | None = None,
 ) -> dict:
-    campaign_identity_sha256 = campaign_identity_sha256 or hashlib.sha256(canonical({
-        "cell": cell, "samples": samples, "max_attempts": max_attempts,
+    run_contract = {
+        "schema_version": 1,
+        "campaign_identity_sha256": campaign_identity_sha256,
+        "cell": cell,
+        "samples": samples,
+        "max_attempts": max_attempts,
         "max_relative_range": max_relative_range,
-    })).hexdigest()
+    }
+    cell_identity_sha256 = hashlib.sha256(canonical(run_contract)).hexdigest()
     state_path = cell_dir / "result.json"
+    prior = {}
     if state_path.exists():
-        prior = json.loads(state_path.read_bytes())
-        if prior.get("campaign_identity_sha256") != campaign_identity_sha256:
-            raise ValueError("stale cached cell does not match campaign identity")
-        if prior.get("status") in {
+        try:
+            prior = json.loads(state_path.read_bytes())
+        except (OSError, json.JSONDecodeError):
+            _retire([state_path])
+            prior = {}
+        if prior and (
+            prior.get("campaign_identity_sha256") != cell_identity_sha256
+            or prior.get("run_contract") != run_contract
+        ):
+            _retire([state_path])
+            prior = {}
+        elif prior.get("status") in {
             "success", "candidate_failure", "profiling_failure", "inconclusive",
             "infrastructure_exhausted",
         }:
             return prior
-    prior = prior if state_path.exists() else {}
     attempts = list(prior.get("attempts", []))
     values = [float(item["duration_proxy_us"]) for item in attempts
               if item.get("classification") == "valid" and item.get("duration_proxy_us")]
@@ -289,7 +303,8 @@ def run_cell(
     timeline_evidence = prior.get("timeline")
 
     def persist(result):
-        result["campaign_identity_sha256"] = campaign_identity_sha256
+        result["campaign_identity_sha256"] = cell_identity_sha256
+        result["run_contract"] = run_contract
         _atomic_json(state_path, result)
         return result
 

@@ -316,8 +316,8 @@ def test_timeline_passes_every_expected_selector_and_retains_semantics(tmp_path)
                 "timeline_semantics": {
                     "selectors_complete": True,
                     "kernel_order": current["kernel_names"],
-                    "phase_order": ["load", "compute"],
-                    "phase_duration_us": {"load": 3.0, "compute": 7.0},
+                    "phase_order": ["load", "compute", "store"],
+                    "phase_duration_us": {"load": 3.0, "compute": 7.0, "store": 3.0},
                     "load_compute_overlap_us": 0.0,
                     "kernel_boundaries": [
                         {"name": name, "start_us": index * 3.0, "duration_us": 3.0}
@@ -334,9 +334,9 @@ def test_timeline_passes_every_expected_selector_and_retains_semantics(tmp_path)
     result = module.run_cell(cell, tmp_path, acquire, samples=1, max_attempts=1,
                              max_relative_range=0.05)
 
-    assert selectors == [["a3_phase_copy", "a3_phase_compute"]]
+    assert selectors == [["a3_phase_copy", "a3_phase_compute", "a3_phase_store"]]
     assert result["timeline"]["semantics"]["selectors_complete"] is True
-    assert len(result["timeline"]["semantics"]["kernel_boundaries"]) == 2
+    assert len(result["timeline"]["semantics"]["kernel_boundaries"]) == 3
 
 
 def test_pair_runner_interleaves_before_and_after_attempts(tmp_path):
@@ -793,20 +793,102 @@ def test_summary_accepts_same_server_devices_but_rejects_cross_server_pair():
     assert "sanity" in result["measurements"][0]["reason"]
 
 
-def test_cached_cell_is_bound_to_campaign_identity(tmp_path):
+def test_cached_cell_is_bound_to_exact_run_contract_and_identical_resume(tmp_path):
     module = load_module()
     cell_value = module.enumerate_cells(json.loads(MANIFEST.read_text()))[0]
-    path = tmp_path / "result.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"status": "success", "campaign_identity_sha256": "old"}))
-    try:
-        module.run_cell(cell_value, tmp_path, lambda *_: None, samples=3,
-                        max_attempts=7, max_relative_range=0.05,
-                        campaign_identity_sha256="new")
-    except ValueError as error:
-        assert "stale" in str(error)
+    calls = []
+
+    def acquire(phase, current, attempt, selector):
+        calls.append((phase, attempt, selector))
+        return evidence(current["kernel_names"][0] if phase == "basic" else selector, 3.0)
+
+    first = module.run_cell(
+        cell_value, tmp_path, acquire, samples=1, max_attempts=3,
+        max_relative_range=0.05, campaign_identity_sha256="campaign-a",
+    )
+    assert first["status"] == "success"
+    first_calls = list(calls)
+    resumed = module.run_cell(
+        cell_value, tmp_path, lambda *_: pytest.fail("identical terminal cell reran"),
+        samples=1, max_attempts=3, max_relative_range=0.05,
+        campaign_identity_sha256="campaign-a",
+    )
+    assert resumed == first
+
+    changed = module.run_cell(
+        cell_value, tmp_path, acquire, samples=2, max_attempts=4,
+        max_relative_range=0.02, campaign_identity_sha256="campaign-a",
+    )
+    assert changed["status"] == "success"
+    assert changed["run_contract"]["samples"] == 2
+    assert changed["run_contract"]["max_attempts"] == 4
+    assert changed["run_contract"]["max_relative_range"] == 0.02
+    assert len(calls) > len(first_calls)
+    assert list(tmp_path.glob("result.json.retired*"))
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["campaign", "samples", "max_attempts", "max_relative_range", "cell"],
+)
+def test_each_run_contract_dimension_retires_a_terminal_cache(tmp_path, mutation):
+    module = load_module()
+    cell_value = module.enumerate_cells(json.loads(MANIFEST.read_text()))[0]
+    calls = []
+
+    def acquire(phase, current, attempt, selector):
+        calls.append((phase, attempt, selector))
+        return evidence(current["kernel_names"][0] if phase == "basic" else selector, 3.0)
+
+    initial = {
+        "samples": 1,
+        "max_attempts": 3,
+        "max_relative_range": 0.05,
+        "campaign_identity_sha256": "campaign-a",
+    }
+    first = module.run_cell(cell_value, tmp_path, acquire, **initial)
+    call_count = len(calls)
+    changed_cell = json.loads(json.dumps(cell_value))
+    changed = dict(initial)
+    if mutation == "cell":
+        changed_cell["sweep_parameters"]["n"] += 1
+    elif mutation == "campaign":
+        changed["campaign_identity_sha256"] = "campaign-b"
+    elif mutation == "samples":
+        changed["samples"] = 2
+    elif mutation == "max_attempts":
+        changed["max_attempts"] = 4
     else:
-        raise AssertionError("stale cached cell was reused")
+        changed["max_relative_range"] = 0.02
+
+    second = module.run_cell(changed_cell, tmp_path, acquire, **changed)
+
+    assert len(calls) > call_count
+    assert second["campaign_identity_sha256"] != first["campaign_identity_sha256"]
+    assert second["run_contract"]["cell"] == changed_cell
+    assert list(tmp_path.glob("result.json.retired*"))
+
+
+def test_legacy_terminal_cache_without_exact_contract_is_retired(tmp_path):
+    module = load_module()
+    cell_value = module.enumerate_cells(json.loads(MANIFEST.read_text()))[0]
+    state = tmp_path / "result.json"
+    state.write_text(json.dumps({
+        "status": "success", "campaign_identity_sha256": "campaign-a",
+    }))
+
+    result = module.run_cell(
+        cell_value, tmp_path,
+        lambda phase, current, attempt, selector: evidence(
+            current["kernel_names"][0] if phase == "basic" else selector, 3.0
+        ),
+        samples=1, max_attempts=3, max_relative_range=0.05,
+        campaign_identity_sha256="campaign-a",
+    )
+
+    assert result["status"] == "success"
+    assert result["run_contract"]["cell"]["sweep_parameters"]["n"] > 0
+    assert (tmp_path / "result.json.retired").exists()
 
 
 def test_real_summary_is_accepted_by_current_report_classifier():

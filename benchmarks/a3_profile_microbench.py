@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import time
 from pathlib import Path
 
@@ -270,10 +269,16 @@ if triton is not None:
         valid = offsets < n
         value = tl.load(x + offsets, mask=valid)
         tl.store(output + offsets, value * 1.5 + 2.0, mask=valid)
+
+    @triton.jit
+    def a3_phase_store(x, output, n: tl.constexpr, block: tl.constexpr):
+        offsets = tl.program_id(0) * block + tl.arange(0, block)
+        valid = offsets < n
+        tl.store(output + offsets, tl.load(x + offsets, mask=valid), mask=valid)
 else:
     a3_vector_probe = a3_head_rank_probe = a3_key_tile_probe = None
     a3_row_reduce_probe = a3_empty_skip_probe = a3_dot_probe = None
-    a3_phase_probe = a3_phase_copy = a3_phase_compute = None
+    a3_phase_probe = a3_phase_copy = a3_phase_compute = a3_phase_store = None
 
 
 def _classify_exception(exc: Exception) -> str:
@@ -340,10 +345,13 @@ def _launch(experiment_id: str, variant: str, inputs: dict, output: torch.Tensor
         elif experiment_id == "serialized-vs-overlapped":
             phase_mode = 4 if variant == "before" else 3
         if experiment_id == "fused-vs-split" and variant == "after":
-            scratch = torch.empty_like(x)
-            a3_phase_copy[(triton.cdiv(n, block),)](x, scratch, n=n, block=block)
-            a3_phase_compute[(triton.cdiv(n, block),)](scratch, output, n=n, block=block)
-            return ["a3_phase_copy", "a3_phase_compute"]
+            loaded = torch.empty_like(x)
+            computed = torch.empty_like(x)
+            grid = (triton.cdiv(n, block),)
+            a3_phase_copy[grid](x, loaded, n=n, block=block)
+            a3_phase_compute[grid](loaded, computed, n=n, block=block)
+            a3_phase_store[grid](computed, output, n=n, block=block)
+            return ["a3_phase_copy", "a3_phase_compute", "a3_phase_store"]
         # Reuse the deterministic input as the second stream. Allocating or
         # zeroing scratch here would add a setup operator ahead of the probe,
         # breaking the BasicInfo launch contract.

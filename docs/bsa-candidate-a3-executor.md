@@ -30,9 +30,12 @@ durable ignored directory explicitly.
 
 For GZ, `BSA_A3_REMOTE_ROOT` is a normalized path relative to the registry's
 configured workspace. For either BZ target it remains an absolute provisioned
-path. Uploads are retained transfers; a nonterminal upload is observed by its
-original transfer handle before dispatch, and a failed transfer handle is
-included in the compact failure receipt.
+path. GZ uploads are retained transfers; a nonterminal upload is observed by
+its original transfer handle before dispatch. The local attempt records that
+handle before observation, so `retry:{mode:observe,handle}` resumes the same
+transfer and continues to job dispatch without uploading the bundle again.
+A failed transfer handle is included in the compact failure receipt. BZ
+uploads retain their existing synchronous SSH behavior.
 
 GZ dispatch additionally requires a passing qualification receipt bound to
 the frozen campaign revision and the exact executor, remote driver, baseline,
@@ -53,7 +56,9 @@ three-sample logical-kernel window with relative range at most 5%. It then runs
 an intentionally invalid Triton kernel and requires nonempty compiler
 diagnostics classified as `compile_error`. Any failed step writes a compact
 `passed:false` receipt and exits nonzero; the production GZ executor rejects a
-missing, failed, or identity-drifted receipt before any remote call.
+missing, failed, or identity-drifted receipt before any remote call. A passing
+receipt retains the exact ordered five-case correctness evidence, and dispatch
+also rejects missing, partial, failed, or reordered correctness evidence.
 
 Before a campaign, independently confirm the selected route:
 

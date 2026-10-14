@@ -13,6 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "scripts/bsa_candidate_a3_executor.py"
+QUALIFICATION_CANDIDATE = ROOT / "benchmarks/bsa/qualification_candidate.py"
 
 
 def load():
@@ -20,6 +21,15 @@ def load():
     module = importlib.util.module_from_spec(spec)
     assert spec.loader
     sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_qualification_candidate():
+    spec = importlib.util.spec_from_file_location(
+        "bsa_qualification_candidate", QUALIFICATION_CANDIDATE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
     spec.loader.exec_module(module)
     return module
 
@@ -55,12 +65,16 @@ def request(action="discover", *, target="bz-a3-1"):
 
 
 class FakeTransport:
-    def __init__(self, module, remote_result, *, interrupted=False):
+    def __init__(self, module, remote_result, *, interrupted=False,
+                 transfer_interrupted=False, upload_state="observation-unavailable"):
         self.module = module
         self.remote_result = remote_result
         self.interrupted = interrupted
+        self.transfer_interrupted = transfer_interrupted
+        self.upload_state = upload_state
         self.probes = []
         self.uploads = []
+        self.transfer_observations = []
         self.runs = []
         self.observations = []
 
@@ -72,6 +86,18 @@ class FakeTransport:
 
     def upload(self, target, source, destination):
         self.uploads.append((target, source, destination))
+        return {
+            "handle": f"remote:{target}:transfer:retained-{len(self.uploads)}",
+            "state": self.upload_state,
+        }
+
+    def observe_transfer(self, target, handle):
+        self.transfer_observations.append((target, handle))
+        if self.transfer_interrupted:
+            raise self.module.ExecutorError(
+                "infrastructure_error", "transfer observer unavailable",
+                handle=handle, terminal=False,
+            )
 
     def run(self, target, runtime, script, cwd):
         self.runs.append((target, runtime, script, cwd))
@@ -105,6 +131,10 @@ def qualification_receipt(module, cfg, *, campaign_revision="a" * 40):
         "passed": True,
         **identity,
         "cases": module.QUALIFICATION_CASES,
+        "correctness": [
+            {"case": case, "passed": True, "max_abs_error": 0.0}
+            for case in module.QUALIFICATION_CASES
+        ],
         "measurements": {str(case): {
             "samples_us": [10.0, 10.1, 10.2],
             "stable_window_us": [10.0, 10.1, 10.2],
@@ -179,6 +209,25 @@ def test_staged_remote_driver_is_valid_python():
     module = load()
 
     compile(module.remote_driver_source(), "remote_driver.py", "exec")
+
+
+@pytest.mark.parametrize("heads", [3, 24, 48, 96])
+def test_qualification_candidate_blockmask_access_plan_is_bounded(heads):
+    candidate = load_qualification_candidate()
+    blocks = heads // 3
+
+    plan = candidate.blockmask_access_plan(heads, blocks)
+
+    active = [(head, rank) for head, rank, should_load in plan if should_load]
+    assert active == [
+        (head, head - (heads - 2 * blocks))
+        for head in range(heads - 2 * blocks, heads - blocks)
+    ]
+    assert all(0 <= rank < blocks for _head, rank, _should_load in plan)
+
+    source = QUALIFICATION_CANDIDATE.read_text()
+    assert "mask=valid & sparse_head" in source
+    assert "safe_block_rank" in source
 
 
 def test_remote_classifier_uses_bounded_out_of_memory_markers():
@@ -332,14 +381,14 @@ def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
     assert calls[0][-4:] == ["--cwd", "/remote/work", "--timeout", "900"]
 
 
-def test_cpl_remote_upload_observes_retained_transfer(monkeypatch, tmp_path):
+def test_cpl_remote_upload_returns_then_observes_retained_transfer(monkeypatch, tmp_path):
     module = load()
     executable = tmp_path / "cpl-remote"
     executable.write_text("#!/bin/sh\n")
     executable.chmod(0o755)
     calls = []
     replies = [
-        {"target": "gz-a3", "state": "running",
+        {"target": "gz-a3", "state": "observation-unavailable",
          "handle": "remote:gz-a3:transfer:upload-1"},
         {"target": "gz-a3", "state": "completed",
          "handle": "remote:gz-a3:transfer:upload-1"},
@@ -354,14 +403,42 @@ def test_cpl_remote_upload_observes_retained_transfer(monkeypatch, tmp_path):
     source = tmp_path / "payload.tar"
     source.write_bytes(b"payload")
 
-    module.CplRemoteTransport(executable).upload(
-        "gz-a3", source, "qualification/payload.tar")
+    transport = module.CplRemoteTransport(executable)
+    upload = transport.upload("gz-a3", source, "qualification/payload.tar")
+    transport.observe_transfer("gz-a3", upload["handle"])
 
+    assert calls[0][-2:] == ["--timeout", "0"]
     assert calls[1][2:] == ["observe", "remote:gz-a3:transfer:upload-1",
                             "--wait", "--timeout", "900"]
 
 
-def test_cpl_remote_upload_failure_preserves_transfer_handle(monkeypatch, tmp_path):
+def test_cpl_remote_bz_upload_remains_synchronous(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"target": "bz-a3-1", "state": "completed"}) + "\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    source = tmp_path / "payload.tar"
+    source.write_bytes(b"payload")
+
+    handle = module.CplRemoteTransport(executable).upload(
+        "bz-a3-1", source, "/srv/profiling/payload.tar")
+
+    assert handle is None
+    assert "--timeout" not in calls[0]
+
+
+def test_cpl_remote_upload_failure_returns_terminal_transfer_receipt(monkeypatch, tmp_path):
     module = load()
     executable = tmp_path / "cpl-remote"
     executable.write_text("#!/bin/sh\n")
@@ -374,11 +451,57 @@ def test_cpl_remote_upload_failure_preserves_transfer_handle(monkeypatch, tmp_pa
     source = tmp_path / "payload.tar"
     source.write_bytes(b"payload")
 
-    with pytest.raises(module.ExecutorError) as error:
-        module.CplRemoteTransport(executable).upload(
-            "gz-a3", source, "qualification-payload.tar")
+    upload = module.CplRemoteTransport(executable).upload(
+        "gz-a3", source, "qualification-payload.tar")
 
-    assert error.value.handle == "remote:gz-a3:transfer:upload-failed"
+    assert upload == {
+        "handle": "remote:gz-a3:transfer:upload-failed", "state": "failed",
+    }
+
+
+def test_terminal_transfer_failure_is_persisted_and_new_attempt_can_upload(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success(), upload_state="failed")
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+
+    first = executor.execute(request())
+
+    assert first["status"] == "infrastructure_error"
+    assert first["terminal"] is True
+    failed_handle = first["provenance"]["handle"]
+    assert failed_handle == "remote:bz-a3-1:transfer:retained-1"
+    upload_receipt = next((tmp_path / "state").rglob("upload.json"))
+    assert json.loads(upload_receipt.read_text())["handle"] == failed_handle
+
+    transport.upload_state = "observation-unavailable"
+    retry = request()
+    retry["retry"] = {"mode": "new_attempt", "prior_handle": failed_handle}
+    second = executor.execute(retry)
+
+    assert second["status"] == "ok"
+    assert len(transport.uploads) == 2
+    assert len(transport.runs) == 1
+    assert len(list((tmp_path / "state").rglob("attempt-*"))) == 2
+
+
+def test_transfer_observer_error_preserves_known_handle(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    monkeypatch.setattr(
+        module.subprocess, "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=1, stdout="", stderr="controller disconnected"),
+    )
+
+    with pytest.raises(module.ExecutorError) as error:
+        module.CplRemoteTransport(executable).observe_transfer(
+            "gz-a3", "remote:gz-a3:transfer:upload-1")
+
+    assert error.value.handle == "remote:gz-a3:transfer:upload-1"
+    assert error.value.terminal is False
 
 
 def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path):
@@ -418,6 +541,10 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
     assert list(receipt["measurements"]) == [str(case) for case in module.QUALIFICATION_CASES]
     assert all(len(item["samples_us"]) == 3 for item in receipt["measurements"].values())
     assert receipt["compile_failure"]["status"] == "compile_error"
+    assert receipt["correctness"] == [
+        {"case": case, "passed": True}
+        for case in module.QUALIFICATION_CASES
+    ]
     assert "static assertion" in receipt["compile_failure"]["diagnostics"]
     assert len(calls) == 1 + len(module.QUALIFICATION_CASES) * 3 + 1
     assert all(call["execution_environment"] == {
@@ -445,6 +572,34 @@ def test_failed_qualification_receipt_is_not_accepted(tmp_path):
 
     assert result["status"] == "infrastructure_error"
     assert "did not pass" in result["diagnostics"]
+    assert not transport.probes
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda value: value.pop("correctness"),
+    lambda value: value.__setitem__("correctness", value["correctness"][:-1]),
+    lambda value: value["correctness"][2].update(passed=False),
+    lambda value: value["correctness"].reverse(),
+])
+def test_gz_rejects_missing_partial_false_or_reordered_correctness_receipt(
+    tmp_path, mutation,
+):
+    module = load()
+    transport = FakeTransport(module, success())
+    bz, _ = config(module, tmp_path, transport)
+    receipt = tmp_path / "qualification.json"
+    cfg = module.ExecutorConfig(**{
+        **bz.__dict__, "target": "gz-a3", "remote_root": "profiling-gz",
+        "campaign_revision": "a" * 40, "qualification_receipt": receipt,
+    })
+    document = qualification_receipt(module, cfg)
+    mutation(document)
+    receipt.write_text(json.dumps(document))
+
+    result = module.Executor(cfg, transport).execute(request(target="gz-a3"))
+
+    assert result["status"] == "infrastructure_error"
+    assert "correctness" in result["diagnostics"]
     assert not transport.probes
 
 
@@ -566,6 +721,58 @@ def test_observer_interruption_preserves_handle_and_resume_does_not_redispatch(t
     ]
 
 
+def test_transfer_interruption_resumes_exact_handle_then_dispatches_without_reupload(
+    tmp_path,
+):
+    module = load()
+    transport = FakeTransport(
+        module, success(), transfer_interrupted=True)
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+
+    first = executor.execute(request())
+
+    assert first["status"] == "infrastructure_error"
+    assert first["terminal"] is False
+    transfer = first["provenance"]["handle"]
+    assert transfer == "remote:bz-a3-1:transfer:retained-1"
+    assert len(transport.uploads) == 1
+    assert not transport.runs
+    upload_receipt = next((tmp_path / "state").rglob("upload.json"))
+    assert json.loads(upload_receipt.read_text())["handle"] == transfer
+
+    transport.transfer_interrupted = False
+    retry = request()
+    retry["retry"] = {"mode": "observe", "handle": transfer}
+    second = executor.execute(retry)
+
+    assert second["status"] == "ok"
+    assert len(transport.uploads) == 1
+    assert len(transport.runs) == 1
+    assert transport.transfer_observations == [
+        ("bz-a3-1", transfer), ("bz-a3-1", transfer),
+    ]
+
+
+def test_nonterminal_transfer_cannot_be_replaced_by_new_attempt(tmp_path):
+    module = load()
+    transport = FakeTransport(
+        module, success(), transfer_interrupted=True)
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+    first = executor.execute(request())
+    transfer = first["provenance"]["handle"]
+
+    retry = request()
+    retry["retry"] = {"mode": "new_attempt", "prior_handle": transfer}
+    second = executor.execute(retry)
+
+    assert second["status"] == "infrastructure_error"
+    assert "nonterminal transfer" in second["diagnostics"]
+    assert len(transport.uploads) == 1
+    assert not transport.runs
+
+
 def test_terminal_infrastructure_requires_numbered_new_attempt(tmp_path):
     module = load()
     remote = {"schema": module.REMOTE_SCHEMA, "status": "infrastructure_error",
@@ -624,7 +831,7 @@ def test_upload_failure_does_not_poison_attempt_identity(tmp_path):
         failures += 1
         if failures == 1:
             raise module.ExecutorError("infrastructure_error", "upload unavailable")
-        upload(*args)
+        return upload(*args)
 
     transport.upload = fail_once
     assert executor.execute(request())["status"] == "infrastructure_error"

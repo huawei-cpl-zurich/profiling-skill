@@ -189,22 +189,46 @@ class CplRemoteTransport:
         if receipt.get("target") not in {None, target} or receipt.get("state") == "failed":
             raise ExecutorError("infrastructure_error", "remote preflight failed")
 
-    def upload(self, target: str, source: Path, destination: str) -> None:
-        receipt = self._call(["upload", target, str(source), destination], 900)
-        if receipt.get("state") not in {"completed", "failed", "cancelled"}:
-            handle = receipt.get("handle")
-            if (not isinstance(handle, str)
-                    or not handle.startswith(f"remote:{target}:transfer:")):
-                raise ExecutorError("infrastructure_error",
-                                    "bundle upload returned no retained transfer handle")
+    def upload(self, target: str, source: Path, destination: str) -> dict | None:
+        arguments = ["upload", target, str(source), destination]
+        if target == "gz-a3":
+            arguments.extend(["--timeout", "0"])
+        receipt = self._call(arguments, 900)
+        handle = receipt.get("handle")
+        if receipt.get("target") != target:
+            raise ExecutorError(
+                "infrastructure_error", "bundle upload target mismatch")
+        if target != "gz-a3":
+            if receipt.get("state") != "completed":
+                raise ExecutorError(
+                    "infrastructure_error", "synchronous bundle upload did not complete")
+            return None
+        if (not isinstance(handle, str)
+                or not handle.startswith(f"remote:{target}:transfer:")):
+            raise ExecutorError(
+                "infrastructure_error", "bundle upload returned no retained transfer handle")
+        return {"handle": handle, "state": str(receipt.get("state", "unknown"))}
+
+    def observe_transfer(self, target: str, handle: str) -> None:
+        if not handle.startswith(f"remote:{target}:transfer:"):
+            raise ExecutorError(
+                "infrastructure_error", "transfer handle target mismatch", handle=handle)
+        try:
             receipt = self._call(
                 ["observe", handle, "--wait", "--timeout", "900"], 930)
-        if receipt.get("target") != target or receipt.get("state") != "completed":
-            handle = receipt.get("handle")
+        except ExecutorError as exc:
+            raise ExecutorError(
+                "infrastructure_error", str(exc), handle=handle, terminal=False) from exc
+        if receipt.get("target") != target or receipt.get("handle") != handle:
+            raise ExecutorError(
+                "infrastructure_error", "transfer observation identity mismatch",
+                handle=handle,
+            )
+        if receipt.get("state") != "completed":
             raise ExecutorError(
                 "infrastructure_error", "bundle upload did not complete",
-                handle=handle if isinstance(handle, str) else None,
-                terminal=receipt.get("state") in {"completed", "failed", "cancelled"},
+                handle=handle,
+                terminal=receipt.get("state") in {"failed", "cancelled"},
             )
 
     def run(self, target: str, runtime: str, script: Path, cwd: str) -> str:
@@ -641,6 +665,7 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
     return {
         "schema": QUALIFICATION_SCHEMA, "passed": True, **identity,
         "cases": QUALIFICATION_CASES, "components": components,
+        "correctness": correctness,
         "measurements": measurements,
         "compile_failure": compile_failure, "durable_handles": handles,
     }
@@ -682,6 +707,20 @@ class Executor:
             raise ExecutorError("infrastructure_error", "GZ qualification identity drifted")
         if receipt.get("cases") != QUALIFICATION_CASES:
             raise ExecutorError("infrastructure_error", "GZ qualification case coverage drifted")
+        correctness = receipt.get("correctness")
+        if (
+            not isinstance(correctness, list)
+            or [item.get("case") if isinstance(item, dict) else None
+                for item in correctness] != QUALIFICATION_CASES
+            or not all(
+                isinstance(item, dict) and item.get("passed") is True
+                for item in correctness
+            )
+        ):
+            raise ExecutorError(
+                "infrastructure_error",
+                "GZ qualification lacks exact five-case correctness evidence",
+            )
         compile_failure = receipt.get("compile_failure")
         if (not isinstance(compile_failure, dict)
                 or compile_failure.get("status") != "compile_error"
@@ -815,14 +854,50 @@ class Executor:
                                 != qualification_sha):
                             raise ExecutorError("infrastructure_error",
                                                 "incomplete attempt intent mismatch")
-                    if retry is not None:
+                    upload_path = attempt / "upload.json"
+                    if upload_path.is_file():
+                        upload = json.loads(upload_path.read_text())
+                        transfer_handle = upload.get("handle")
+                        if transfer_handle is None and upload.get("status") == "completed":
+                            if retry is not None:
+                                raise ExecutorError(
+                                    "infrastructure_error",
+                                    "synchronous upload has no retained retry handle",
+                                )
+                        elif not isinstance(transfer_handle, str):
+                            raise ExecutorError(
+                                "infrastructure_error", "upload receipt lacks a handle")
+                        elif retry is not None and retry["mode"] == "observe":
+                            if retry["handle"] != transfer_handle:
+                                raise ExecutorError(
+                                    "infrastructure_error",
+                                    "retry handle does not match retained transfer handle",
+                                )
+                        elif retry is not None:
+                            if retry["prior_handle"] != transfer_handle:
+                                raise ExecutorError(
+                                    "infrastructure_error",
+                                    "prior handle does not match retained transfer handle",
+                                )
+                            terminal_path = attempt / "upload-terminal.json"
+                            terminal = (
+                                json.loads(terminal_path.read_text())
+                                if terminal_path.is_file() else {}
+                            )
+                            if (terminal.get("handle") != transfer_handle
+                                    or terminal.get("terminal") is not True):
+                                raise ExecutorError(
+                                    "infrastructure_error",
+                                    "cannot replace a nonterminal transfer handle",
+                                    handle=transfer_handle, terminal=False,
+                                )
+                            attempt = state / f"attempt-{len(attempts) + 1:04d}"
+                    elif retry is not None:
                         raise ExecutorError(
                             "infrastructure_error",
                             "incomplete attempt has no handle for explicit retry",
                             terminal=False,
                         )
-                    # The remote script is idempotent for this attempt root. Reissuing a
-                    # lost dispatch therefore observes or joins the same device work.
                     dispatch = True
                 else:
                     receipt = self._receipt(
@@ -857,8 +932,6 @@ class Executor:
                     "campaign_revision": self.config.campaign_revision,
                     "qualification_receipt_sha256": qualification_sha,
                 })
-                self.transport.capabilities(self.config.target)
-                self.transport.preflight(self.config.target)
                 archive = self._bundle(base_request, attempt)
                 if activation == "target-default":
                     remote_archive = (
@@ -868,7 +941,88 @@ class Executor:
                     remote_archive = (
                         f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
                     remote_cwd = self.config.remote_root
-                self.transport.upload(self.config.target, archive, remote_archive)
+                upload_path = attempt / "upload.json"
+                if upload_path.is_file():
+                    upload = json.loads(upload_path.read_text())
+                    expected_upload = {
+                        "schema_version": 1,
+                        "request_sha256": request_sha,
+                        "target": self.config.target,
+                        "archive_sha256": file_digest(archive),
+                        "destination": remote_archive,
+                    }
+                    if any(upload.get(key) != value
+                           for key, value in expected_upload.items()):
+                        raise ExecutorError(
+                            "infrastructure_error", "upload receipt identity mismatch")
+                    transfer_handle = upload.get("handle")
+                    upload_state = upload.get("status")
+                    if (transfer_handle is not None
+                            and (not isinstance(transfer_handle, str)
+                            or not transfer_handle.startswith(
+                                f"remote:{self.config.target}:transfer:"))):
+                        raise ExecutorError(
+                            "infrastructure_error", "upload receipt handle target mismatch")
+                else:
+                    self.transport.capabilities(self.config.target)
+                    self.transport.preflight(self.config.target)
+                    upload_result = self.transport.upload(
+                        self.config.target, archive, remote_archive)
+                    if upload_result is None:
+                        transfer_handle, upload_state = None, "completed"
+                    elif isinstance(upload_result, dict):
+                        transfer_handle = upload_result.get("handle")
+                        upload_state = upload_result.get("state")
+                    else:
+                        transfer_handle, upload_state = None, None
+                    if (transfer_handle is not None
+                            and (not isinstance(transfer_handle, str)
+                            or not transfer_handle.startswith(
+                                f"remote:{self.config.target}:transfer:"))):
+                        raise ExecutorError(
+                            "infrastructure_error",
+                            "bundle upload returned no valid retained transfer handle",
+                        )
+                    if transfer_handle is None and upload_state != "completed":
+                        raise ExecutorError(
+                            "infrastructure_error",
+                            "bundle upload returned no valid retained transfer receipt",
+                        )
+                    atomic_json(upload_path, {
+                        "schema_version": 1,
+                        "request_sha256": request_sha,
+                        "target": self.config.target,
+                        "archive_sha256": file_digest(archive),
+                        "destination": remote_archive,
+                        "handle": transfer_handle,
+                        "status": upload_state,
+                    })
+                if transfer_handle is not None:
+                    if upload_state in {"failed", "cancelled"}:
+                        atomic_json(attempt / "upload-terminal.json", {
+                            "handle": transfer_handle, "terminal": True,
+                            "status": upload_state,
+                        })
+                        raise ExecutorError(
+                            "infrastructure_error", "bundle upload did not complete",
+                            handle=transfer_handle, terminal=True,
+                        )
+                    try:
+                        if upload_state != "completed":
+                            self.transport.observe_transfer(
+                                self.config.target, transfer_handle)
+                    except ExecutorError as exc:
+                        atomic_json(attempt / "upload-terminal.json", {
+                            "handle": transfer_handle,
+                            "terminal": exc.terminal,
+                            "status": (
+                                "failed" if exc.terminal else "observation-unavailable"),
+                        })
+                        raise
+                    atomic_json(attempt / "upload-terminal.json", {
+                        "handle": transfer_handle, "terminal": True,
+                        "status": "completed",
+                    })
                 if activation == "target-default":
                     script_archive = PurePosixPath(remote_archive).name
                     run_root = f"runs/{execution_sha}/{attempt.name}"

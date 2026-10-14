@@ -5,6 +5,19 @@ import triton
 import triton.language as tl
 
 
+def blockmask_access_plan(heads, blocks):
+    """Describe the bounded block-mask access made by each official head."""
+    if blocks <= 0 or blocks != heads // 3:
+        raise ValueError("qualification layout requires one third block-sparse heads")
+    sparse_start = heads - 2 * blocks
+    sparse_end = sparse_start + blocks
+    return [
+        (head, min(max(head - sparse_start, 0), blocks - 1),
+         sparse_start <= head < sparse_end)
+        for head in range(heads)
+    ]
+
+
 @triton.jit
 def block_sparse_attention_kernel(
     q_ptr, k_ptr, v_ptr, cuq_ptr, cuk_ptr, head_type_ptr,
@@ -15,7 +28,7 @@ def block_sparse_attention_kernel(
     NROW: tl.constexpr, NCOL: tl.constexpr,
     SCALE: tl.constexpr, CAUSAL: tl.constexpr,
     EXACT: tl.constexpr, MAX_K: tl.constexpr,
-    BLOCK_K: tl.constexpr,
+    BLOCK_K: tl.constexpr, DENSE_HEADS: tl.constexpr,
 ):
     pid = tl.program_id(0)
     q_idx = pid // H
@@ -35,7 +48,9 @@ def block_sparse_attention_kernel(
 
     q = tl.load(q_ptr + (q_idx * H + head) * D + d).to(tl.float32)
     htype = tl.load(head_type_ptr + head)
-    block_rank = head - (H - 2 * (H // 3))
+    block_rank = head - DENSE_HEADS
+    sparse_head = (block_rank >= 0) & (block_rank < NBLK)
+    safe_block_rank = tl.maximum(0, tl.minimum(block_rank, NBLK - 1))
     sink = tl.load(stream_ptr + 2 * head)
     local = tl.load(stream_ptr + 2 * head + 1)
     kv_head = head // (H // HK)
@@ -59,8 +74,12 @@ def block_sparse_attention_kernel(
             keep = keep & (ko <= q_local + sk - sq)
         qb = q_local // 128
         kb = ko // 128
-        bm_off = (((batch * NBLK + block_rank) * NROW + qb) * NCOL + kb)
-        bm = tl.load(blockmask_ptr + bm_off, mask=valid, other=0).to(tl.int1)
+        bm_off = (((batch * NBLK + safe_block_rank) * NROW + qb) * NCOL + kb)
+        bm = tl.load(
+            blockmask_ptr + bm_off,
+            mask=valid & sparse_head,
+            other=0,
+        ).to(tl.int1)
         keep = keep & ((htype != 1) | bm)
 
         if EXACT:
@@ -110,6 +129,8 @@ class Model:
         blocks = base_blockmask.shape[1]
         rows = base_blockmask.shape[2]
         columns = base_blockmask.shape[3]
+        layout = blockmask_access_plan(heads, blocks)
+        dense_heads = next(head for head, _rank, should_load in layout if should_load)
         scale = float(softmax_scale) if softmax_scale is not None else depth ** -0.5
         output = torch.empty_like(q)
         block_sparse_attention_kernel[(total_q * heads,)](
@@ -118,7 +139,7 @@ class Model:
             total_q=total_q, total_k=total_k, H=heads, HK=kv_heads, D=depth,
             B=batch, NBLK=blocks, NROW=rows, NCOL=columns,
             SCALE=scale, CAUSAL=bool(is_causal), EXACT=bool(exact_streaming),
-            MAX_K=columns * 128, BLOCK_K=128,
+            MAX_K=columns * 128, BLOCK_K=128, DENSE_HEADS=dense_heads,
         )
         return output
 

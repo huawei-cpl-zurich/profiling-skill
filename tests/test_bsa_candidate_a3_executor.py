@@ -69,8 +69,10 @@ class FakeTransport:
 
     def run(self, target, runtime, script, cwd):
         self.runs.append((target, runtime, script, cwd))
-        self.last_command = ["cpl-remote", "run", target, "--runtime", runtime,
-                             "--file", str(script), "--cwd", cwd]
+        self.last_command = ["cpl-remote", "run", target]
+        if target != "gz-a3":
+            self.last_command.extend(["--runtime", runtime])
+        self.last_command.extend(["--file", str(script), "--cwd", cwd])
         return f"remote:{target}:job:retained-{len(self.runs)}"
 
     def observe_result(self, target, handle):
@@ -88,6 +90,23 @@ def config(module, tmp_path, transport):
         cases=ROOT / "benchmarks/bsa/cases.jsonl",
         runner=ROOT / "scripts/a3_benchmark_runner.py",
     ), transport
+
+
+def qualification_receipt(module, cfg, *, campaign_revision="a" * 40):
+    identity = module.qualification_identity(cfg, "py311-torch", campaign_revision)
+    return {
+        "schema": module.QUALIFICATION_SCHEMA,
+        "passed": True,
+        **identity,
+        "cases": module.QUALIFICATION_CASES,
+        "measurements": {str(case): {
+            "samples_us": [10.0, 10.1, 10.2],
+            "stable_window_us": [10.0, 10.1, 10.2],
+            "relative_range": 0.02,
+        } for case in module.QUALIFICATION_CASES},
+        "compile_failure": {"status": "compile_error", "diagnostics": "expected"},
+        "durable_handles": [],
+    }
 
 
 def success(action="discover"):
@@ -200,6 +219,198 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     with tarfile.open(archive) as bundle:
         driver = bundle.extractfile("remote_driver.py").read().decode()
     assert '"device-lease-%d.lock"%physical' in driver
+
+
+def test_gz_uses_target_default_activation_and_requires_matching_qualification(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    bz, _ = config(module, tmp_path, transport)
+    cfg = module.ExecutorConfig(**{
+        **bz.__dict__, "target": "gz-a3",
+        "remote_root": "profiling-skill-bsa-qualification-pr100",
+        "campaign_revision": "a" * 40,
+        "qualification_receipt": tmp_path / "qualification.json",
+    })
+    cfg.qualification_receipt.write_text(json.dumps(qualification_receipt(module, cfg)))
+
+    result = module.Executor(cfg, transport).execute(request())
+
+    assert result["status"] == "ok"
+    assert result["provenance"]["runtime"] == "py311-torch"
+    assert result["provenance"]["runtime_activation"] == "target-default"
+    assert transport.runs[0][0:2] == ("gz-a3", "py311-torch")
+    assert transport.uploads[0][2].startswith("profiling-skill-bsa-qualification-pr100/")
+    assert transport.runs[0][3] == "profiling-skill-bsa-qualification-pr100"
+    script = Path(transport.runs[0][2]).read_text()
+    assert "archive=payload-" in script
+    assert "run_root=runs/" in script
+    assert "--runtime" not in result["provenance"]["command"]
+    dispatch = json.loads(next((tmp_path / "state").rglob("dispatch.json")).read_text())
+    assert dispatch["runtime_activation"] == "target-default"
+    assert dispatch["campaign_revision"] == "a" * 40
+
+
+def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    bz, _ = config(module, tmp_path, transport)
+    receipt = tmp_path / "qualification.json"
+    cfg = module.ExecutorConfig(**{
+        **bz.__dict__, "target": "gz-a3", "remote_root": "profiling-gz",
+        "campaign_revision": "a" * 40,
+        "qualification_receipt": receipt,
+    })
+
+    missing = module.Executor(cfg, transport).execute(request())
+    assert missing["status"] == "infrastructure_error"
+    assert "qualification" in missing["diagnostics"]
+    assert not transport.probes
+
+    stale = qualification_receipt(module, cfg)
+    stale["executor_sha256"] = "0" * 64
+    receipt.write_text(json.dumps(stale))
+    drifted = module.Executor(cfg, transport).execute(request())
+    assert drifted["status"] == "infrastructure_error"
+    assert "qualification" in drifted["diagnostics"]
+    assert not transport.probes
+
+
+def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout=json.dumps({
+            "target": "gz-a3", "state": "running",
+            "handle": "remote:gz-a3:job:abc",
+        }) + "\n", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    script = tmp_path / "run.sh"
+    script.write_text("true\n")
+
+    handle = module.CplRemoteTransport(executable).run(
+        "gz-a3", "py311-torch", script, "/remote/work")
+
+    assert handle == "remote:gz-a3:job:abc"
+    assert "--runtime" not in calls[0]
+    assert calls[0][2:6] == ["run", "gz-a3", "--file", str(script)]
+    assert calls[0][-4:] == ["--cwd", "/remote/work", "--timeout", "900"]
+
+
+def test_cpl_remote_upload_observes_retained_transfer(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    calls = []
+    replies = [
+        {"target": "gz-a3", "state": "running",
+         "handle": "remote:gz-a3:transfer:upload-1"},
+        {"target": "gz-a3", "state": "completed",
+         "handle": "remote:gz-a3:transfer:upload-1"},
+    ]
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout=json.dumps(replies.pop(0)) + "\n",
+                               stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    source = tmp_path / "payload.tar"
+    source.write_bytes(b"payload")
+
+    module.CplRemoteTransport(executable).upload(
+        "gz-a3", source, "qualification/payload.tar")
+
+    assert calls[1][2:] == ["observe", "remote:gz-a3:transfer:upload-1",
+                            "--wait", "--timeout", "900"]
+
+
+def test_cpl_remote_upload_failure_preserves_transfer_handle(monkeypatch, tmp_path):
+    module = load()
+    executable = tmp_path / "cpl-remote"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs:
+                        SimpleNamespace(returncode=1, stdout=json.dumps({
+                            "target": "gz-a3", "state": "failed",
+                            "handle": "remote:gz-a3:transfer:upload-failed",
+                        }) + "\n", stderr=""))
+    source = tmp_path / "payload.tar"
+    source.write_bytes(b"payload")
+
+    with pytest.raises(module.ExecutorError) as error:
+        module.CplRemoteTransport(executable).upload(
+            "gz-a3", source, "qualification-payload.tar")
+
+    assert error.value.handle == "remote:gz-a3:transfer:upload-failed"
+
+
+def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path):
+    module = load()
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("# known good\n")
+    calls = []
+
+    class FakeExecutor:
+        config = SimpleNamespace(target="gz-a3")
+
+        def execute(self, value):
+            calls.append(value)
+            if "intentional_compile_failure" in value["candidate"]["source"]:
+                return {"status": "compile_error", "diagnostics": "CompilationError: static assertion",
+                        "terminal": True, "provenance": {"handle": "remote:gz-a3:job:bad"}}
+            if value["action"] == "discover":
+                return {"status": "ok", "components": [{
+                    "selector": "block_sparse_attention_kernel_mix_aiv", "kind": "aiv"}],
+                    "correctness": [{"case": case, "passed": True}
+                                    for case in module.QUALIFICATION_CASES],
+                    "provenance": {"handle": "remote:gz-a3:job:discover"}}
+            return {"status": "ok", "duration_us": [10.0, 10.2, 10.1][value["sample_index"]],
+                    "pipe_utilization": {"selector": value["kernel_name"], "rows": [{}]},
+                    "provenance": {"handle": f"remote:gz-a3:job:{value['case']}"}}
+
+    cfg = SimpleNamespace(
+        target="gz-a3", baseline=ROOT / "benchmarks/bsa/baseline.py",
+        cases=ROOT / "benchmarks/bsa/cases.jsonl",
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        qualification_candidate=candidate,
+    )
+    receipt = module.qualify(
+        FakeExecutor(), cfg, candidate, "block_sparse_attention_kernel", "a" * 40)
+
+    assert receipt["passed"] is True
+    assert list(receipt["measurements"]) == [str(case) for case in module.QUALIFICATION_CASES]
+    assert all(len(item["samples_us"]) == 3 for item in receipt["measurements"].values())
+    assert receipt["compile_failure"]["status"] == "compile_error"
+    assert "static assertion" in receipt["compile_failure"]["diagnostics"]
+    assert len(calls) == 1 + len(module.QUALIFICATION_CASES) * 3 + 1
+
+
+def test_failed_qualification_receipt_is_not_accepted(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    bz, _ = config(module, tmp_path, transport)
+    receipt = tmp_path / "qualification.json"
+    cfg = module.ExecutorConfig(**{
+        **bz.__dict__, "target": "gz-a3", "remote_root": "profiling-gz",
+        "campaign_revision": "a" * 40,
+        "qualification_receipt": receipt,
+    })
+    document = qualification_receipt(module, cfg)
+    document["passed"] = False
+    receipt.write_text(json.dumps(document))
+
+    result = module.Executor(cfg, transport).execute(request())
+
+    assert result["status"] == "infrastructure_error"
+    assert "did not pass" in result["diagnostics"]
+    assert not transport.probes
 
 
 def test_device_probe_rejects_low_free_memory_with_compact_diagnostics(

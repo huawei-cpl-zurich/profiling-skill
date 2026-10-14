@@ -12,17 +12,48 @@ The adapter intentionally contains no machine-specific workspace, device, or
 credential values. Configure an invocation with ignored local environment:
 
 ```bash
-export BSA_A3_TARGET=bz-a3-1
-export BSA_A3_REMOTE_ROOT=/the/provisioned/writable/workspace
+export BSA_A3_TARGET=gz-a3
+export BSA_A3_REMOTE_ROOT=profiling-skill-bsa-campaign
 export BSA_A3_STATE_DIR=/a/durable/local/state/directory
 export BSA_A3_MIN_FREE_DEVICE_BYTES=34359738368
+export BSA_A3_CAMPAIGN_REVISION=<frozen-campaign-revision>
+export BSA_A3_QUALIFICATION_RECEIPT=/a/durable/local/gz-qualification.json
 ```
 
-`BSA_A3_TARGET` may be `bz-a3-1` or `bz-a3-2`. The named runtime is taken from
-the candidate manifest's frozen A3 environment and passed to `cpl-remote run
---runtime`; it is never expanded to a runtime path. `BSA_A3_STATE_DIR` is
+`BSA_A3_TARGET` may be `gz-a3`, `bz-a3-1`, or `bz-a3-2`. BZ targets receive
+the logical runtime from the candidate manifest through `cpl-remote run
+--runtime`. GZ uses its registry-provided default activation and deliberately
+omits `--runtime`; responses and receipts still record `py311-torch` as the
+logical runtime and `target-default` as its activation mode. `BSA_A3_STATE_DIR` is
 optional and defaults beside the response file, but campaign runs should set a
 durable ignored directory explicitly.
+
+For GZ, `BSA_A3_REMOTE_ROOT` is a normalized path relative to the registry's
+configured workspace. For either BZ target it remains an absolute provisioned
+path. Uploads are retained transfers; a nonterminal upload is observed by its
+original transfer handle before dispatch, and a failed transfer handle is
+included in the compact failure receipt.
+
+GZ dispatch additionally requires a passing qualification receipt bound to
+the frozen campaign revision and the exact executor, remote driver, baseline,
+case data, and runner hashes. Generate it before starting a campaign:
+
+```bash
+scripts/qualify_bsa_candidate_a3.py \
+  --candidate benchmarks/bsa/qualification_candidate.py \
+  --kernel-name block_sparse_attention_kernel \
+  --campaign-revision "$BSA_A3_CAMPAIGN_REVISION" \
+  --output "$BSA_A3_QUALIFICATION_RECEIPT"
+```
+
+The qualification runs the frozen fully fused candidate over cases 47, 46,
+49, 44, and 43, discovers exact BasicInfo components, and collects up to seven
+independent PipeUtilization captures per case. It accepts the first consecutive
+three-sample logical-kernel window with relative range at most 5%. It then runs
+an intentionally invalid Triton kernel and requires nonempty compiler
+diagnostics classified as `compile_error`. Any failed step writes a compact
+`passed:false` receipt and exits nonzero; the production GZ executor rejects a
+missing, failed, or identity-drifted receipt before any remote call.
 
 Before a campaign, independently confirm the selected route:
 
@@ -88,14 +119,16 @@ a multi-component logical kernel the coordinator takes the maximum component
 duration for the sample and retains every component's pipe rows and
 provenance.
 
-Every terminal response records product, target, named runtime, selected
+Every terminal response records product, target, logical runtime, activation mode, selected
 physical device, normalized `cpl-remote run` command, durable handle, and an
 explicit terminal flag. The evidence digest covers the complete compact
 remote result.
 
 ## Interruption and recovery
 
-Dispatch state is keyed by product, target, named runtime, canonical request,
+Dispatch state is keyed by product, target, logical runtime, activation mode,
+campaign revision, qualification receipt,
+canonical request,
 and frozen baseline, case data, runner, remote-driver, and executor hashes.
 The durable handle is written before observation and its target is validated
 before reuse. An observer interruption returns `terminal=false` with the

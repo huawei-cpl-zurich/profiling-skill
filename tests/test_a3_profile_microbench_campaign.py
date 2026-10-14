@@ -344,7 +344,7 @@ def test_summary_propagates_failure_and_timeline_not_exported():
     }]
 
 
-def test_summary_rejects_cross_device_pair_and_identical_sanity_signal():
+def test_summary_accepts_same_server_devices_but_rejects_cross_server_pair():
     module = load_module()
     spec = {
         "id": "loop", "question": "Local bound", "falsifier": "no",
@@ -362,8 +362,14 @@ def test_summary_rejects_cross_device_pair_and_identical_sanity_signal():
     result = module.summarize_hypotheses(
         [before, after], {"hypotheses": [spec], "timeline_probes": []}
     )[0]
+    assert result["measurements"][0]["status"] == "valid"
+
+    after["provenance"] = {"placements": [{"target": "bz-a3-2", "physical_id": 0}]}
+    result = module.summarize_hypotheses(
+        [before, after], {"hypotheses": [spec], "timeline_probes": []}
+    )[0]
     assert result["measurements"][0]["status"] == "infrastructure_failure"
-    assert result["measurements"][0]["reason"] == "before/after were not measured on one physical target/device"
+    assert result["measurements"][0]["reason"] == "before/after were not measured on one server target"
 
     after["provenance"] = before["provenance"]
     after["signals"]["aiv_scalar_ratio"]["mean"] = 0.5

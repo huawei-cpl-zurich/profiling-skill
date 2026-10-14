@@ -47,7 +47,7 @@ def select_shard(cells: list[dict], index: int, count: int) -> list[dict]:
     if count < 1 or not 0 <= index < count:
         raise ValueError("shard index must be in [0, shard count)")
     # Before/after cells are adjacent by construction. Keep each pair on one
-    # shard so attribution never crosses independently leased devices.
+    # shard so attribution stays within one campaign supervisor/server.
     return [cell for position, cell in enumerate(cells) if (position // 2) % count == index]
 
 
@@ -430,7 +430,14 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                     (item.get("target"), item.get("physical_id"))
                     for item in placement_rows if item.get("physical_id") is not None
                 }
-                placement_valid = not placement_rows or len(placements) == 1
+                # Devices within one server target are equivalent for this
+                # experiment. Preserve their IDs as provenance, but do not
+                # reject a pair merely because retries used another device on
+                # the same server.
+                placement_targets = {
+                    item.get("target") for item in placement_rows if item.get("target")
+                }
+                placement_valid = not placement_rows or len(placement_targets) == 1
                 sanity = spec.get("sanity", {})
                 sanity_changes = []
                 for name in sanity.get("signals", []):
@@ -458,7 +465,7 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                 elif valid and not placement_valid:
                     measurements.append({
                         "status": "infrastructure_failure", "sweep": sweep_id,
-                        "reason": "before/after were not measured on one physical target/device",
+                        "reason": "before/after were not measured on one server target",
                         "placements": [list(item) for item in sorted(placements)],
                     })
                     outcome = "unavailable"

@@ -20,13 +20,16 @@ export BSA_A3_CAMPAIGN_REVISION=<frozen-campaign-revision>
 export BSA_A3_QUALIFICATION_RECEIPT=/a/durable/local/gz-qualification.json
 ```
 
-`BSA_A3_TARGET` may be `gz-a3`, `bz-a3-1`, or `bz-a3-2`. BZ targets receive
+`BSA_A3_TARGET` may be `gz-a3`, `bz-a3-1`, or `bz-a3-2`. Every target receives
 the logical runtime from the candidate manifest through `cpl-remote run
---runtime`. GZ uses its registry-provided default activation and deliberately
-omits `--runtime`; responses and receipts still record `py311-torch` as the
-logical runtime and `target-default` as its activation mode. `BSA_A3_STATE_DIR` is
-optional and defaults beside the response file, but campaign runs should set a
-durable ignored directory explicitly.
+--runtime py311-torch`; responses and receipts bind `named-runtime` as the
+activation mode. `BSA_A3_STATE_DIR` is optional and defaults beside the
+response file, but campaign runs should set a durable ignored directory
+explicitly.
+
+The GZ file-backed launcher clears inherited `PYTHONHOME` and `PYTHONPATH`
+before invoking `python`, so the named runtime's interpreter and installed
+Torch-NPU/Triton packages cannot be shadowed by the listener environment.
 
 For GZ, `BSA_A3_REMOTE_ROOT` is a normalized path relative to the registry's
 configured workspace. For either BZ target it remains an absolute provisioned
@@ -39,7 +42,8 @@ uploads retain their existing synchronous SSH behavior.
 
 GZ dispatch additionally requires a passing qualification receipt bound to
 the frozen campaign revision and the exact executor, remote driver, baseline,
-case data, and runner hashes. Generate it before starting a campaign:
+case data, runner hashes, and resolved remote runtime fingerprint. Generate it
+before starting a campaign:
 
 ```bash
 scripts/qualify_bsa_candidate_a3.py \
@@ -64,6 +68,22 @@ in the receipt. Any failed step writes a compact
 missing, failed, or identity-drifted receipt before any remote call. A passing
 receipt retains the exact ordered five-case correctness evidence, and dispatch
 also rejects missing, partial, failed, or reordered correctness evidence.
+Discovery, every capture, and the intentional compiler failure must report the
+same runtime fingerprint. Production results must match that qualified
+fingerprint, so changing a registry mapping or reprovisioning a named runtime
+invalidates the old qualification even when its logical name is unchanged.
+
+The fingerprint schema is
+`profiling-skill/a3-python-runtime-fingerprint/v1`. It contains only:
+
+- the executable basename, SHA-256 of its resolved path, and SHA-256 of its
+  contents (never the raw remote path);
+- Python implementation and version;
+- Torch, Torch-NPU, and Triton module versions; and
+- the installed `triton` or `triton-ascend` distribution name and version.
+
+Unknown or additional fields are rejected to keep compact evidence from
+accidentally carrying machine paths or environment data.
 
 Before a campaign, independently confirm the selected route:
 
@@ -138,11 +158,12 @@ a multi-component logical kernel the coordinator takes the maximum component
 duration for the sample and retains every component's pipe rows and
 provenance.
 
-Every terminal response records product, target, logical runtime, activation mode, selected
-physical device, normalized `cpl-remote run` command, durable handle, and an
-explicit terminal flag. The evidence digest covers the complete compact
-remote result. Observation and both stdout/stderr log receipts must repeat the
-exact configured target and durable handle before compact output is parsed.
+Every terminal response records product, target, logical runtime, activation
+mode, validated runtime fingerprint, selected physical device, normalized
+`cpl-remote run` command, durable handle, and an explicit terminal flag. The
+evidence digest covers the complete compact remote result. Observation and
+both stdout/stderr log receipts must repeat the exact configured target and
+durable handle before compact output is parsed.
 
 ## Interruption and recovery
 

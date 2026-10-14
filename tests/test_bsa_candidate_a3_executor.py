@@ -38,7 +38,7 @@ def load_qualification_candidate():
 
 
 def request(action="discover", *, target="bz-a3-1"):
-    activation = "target-default" if target == "gz-a3" else "named-runtime"
+    activation = "named-runtime"
     value = {
         "schema": "profiling-skill/bsa-candidate-executor-request/v1",
         "action": action,
@@ -104,9 +104,7 @@ class FakeTransport:
 
     def run(self, target, runtime, script, cwd):
         self.runs.append((target, runtime, script, cwd))
-        self.last_command = ["cpl-remote", "run", target]
-        if target != "gz-a3":
-            self.last_command.extend(["--runtime", runtime])
+        self.last_command = ["cpl-remote", "run", target, "--runtime", runtime]
         self.last_command.extend(["--file", str(script), "--cwd", cwd])
         return f"remote:{target}:job:retained-{len(self.runs)}"
 
@@ -127,12 +125,34 @@ def config(module, tmp_path, transport):
     ), transport
 
 
-def qualification_receipt(module, cfg, *, campaign_revision="a" * 40):
+def runtime_fingerprint(tag="a"):
+    return {
+        "schema": "profiling-skill/a3-python-runtime-fingerprint/v1",
+        "executable": {
+            "basename": "python",
+            "realpath_sha256": tag * 64,
+            "content_sha256": tag * 64,
+        },
+        "python": {"implementation": "CPython", "version": "3.11.10"},
+        "packages": {
+            "torch": "2.10.0",
+            "torch_npu": "2.10.0",
+            "triton": "3.2.0",
+            "triton_distribution": {"name": "triton-ascend", "version": "3.2.0"},
+        },
+    }
+
+
+def qualification_receipt(module, cfg, *, campaign_revision="a" * 40,
+                          fingerprint=None):
     identity = module.qualification_identity(cfg, "py311-torch", campaign_revision)
+    fingerprint = fingerprint or runtime_fingerprint()
     return {
         "schema": module.QUALIFICATION_SCHEMA,
         "passed": True,
         **identity,
+        "runtime_fingerprint": fingerprint,
+        "runtime_fingerprint_sha256": module.digest_json(fingerprint),
         "cases": module.QUALIFICATION_CASES,
         "correctness": [
             {"case": case, "passed": True, "max_abs_error": 0.0}
@@ -150,8 +170,9 @@ def qualification_receipt(module, cfg, *, campaign_revision="a" * 40):
 
 def success(action="discover"):
     base = {
-        "schema": "profiling-skill/bsa-candidate-remote-result/v1",
+        "schema": "profiling-skill/bsa-candidate-remote-result/v2",
         "status": "ok", "physical_device": 3,
+        "runtime_fingerprint": runtime_fingerprint(),
         "correctness": [{"case": 47, "passed": True}],
     }
     if action == "discover":
@@ -303,7 +324,7 @@ def test_discover_stages_self_contained_bundle_and_returns_compact_evidence(tmp_
     assert '"device-lease-%d.lock"%physical' in driver
 
 
-def test_gz_uses_target_default_activation_and_requires_matching_qualification(tmp_path):
+def test_gz_uses_named_runtime_and_requires_matching_qualification(tmp_path):
     module = load()
     transport = FakeTransport(module, success())
     bz, _ = config(module, tmp_path, transport)
@@ -319,16 +340,17 @@ def test_gz_uses_target_default_activation_and_requires_matching_qualification(t
 
     assert result["status"] == "ok"
     assert result["provenance"]["runtime"] == "py311-torch"
-    assert result["provenance"]["runtime_activation"] == "target-default"
+    assert result["provenance"]["runtime_activation"] == "named-runtime"
     assert transport.runs[0][0:2] == ("gz-a3", "py311-torch")
     assert transport.uploads[0][2].startswith("profiling-skill-bsa-qualification-pr100/")
     assert transport.runs[0][3] == "profiling-skill-bsa-qualification-pr100"
     script = Path(transport.runs[0][2]).read_text()
     assert "archive=payload-" in script
     assert "run_root=runs/" in script
-    assert "--runtime" not in result["provenance"]["command"]
+    assert "unset PYTHONHOME\nexport PYTHONPATH=" in script
+    assert result["provenance"]["command"][3:5] == ["--runtime", "py311-torch"]
     dispatch = json.loads(next((tmp_path / "state").rglob("dispatch.json")).read_text())
-    assert dispatch["runtime_activation"] == "target-default"
+    assert dispatch["runtime_activation"] == "named-runtime"
     assert dispatch["campaign_revision"] == "a" * 40
 
 
@@ -354,6 +376,9 @@ def test_gz_rendered_script_keeps_result_paths_valid_after_entering_workdir(tmp_
     fake_python = fake_bin / "python"
     fake_python.write_text(
         "#!/bin/sh\n"
+        "test -z \"${PYTHONHOME+x}\" || exit 41\n"
+        "test \"${PYTHONPATH+x}\" = x || exit 42\n"
+        "test -z \"$PYTHONPATH\" || exit 43\n"
         "printf '%s\\n' 'BSA_CANDIDATE_RESULT={\"status\":\"ok\"}'\n"
     )
     fake_python.chmod(0o755)
@@ -361,7 +386,9 @@ def test_gz_rendered_script_keeps_result_paths_valid_after_entering_workdir(tmp_
 
     completed = subprocess.run(
         ["bash", str(rendered)], cwd=remote, text=True, capture_output=True,
-        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}, check=False,
+        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}",
+             "PYTHONHOME": "/hostile/python/home", "PYTHONPATH": "/hostile/python/path"},
+        check=False,
     )
 
     assert completed.returncode == 0, completed.stderr
@@ -369,6 +396,25 @@ def test_gz_rendered_script_keeps_result_paths_valid_after_entering_workdir(tmp_
     result_logs = list((remote / "runs").rglob("compact-result.log"))
     assert len(result_logs) == 1
     assert result_logs[0].read_text() == completed.stdout
+
+
+def test_gz_rejects_runtime_fingerprint_drift_since_qualification(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    bz, _ = config(module, tmp_path, transport)
+    receipt = tmp_path / "qualification.json"
+    cfg = module.ExecutorConfig(**{
+        **bz.__dict__, "target": "gz-a3", "remote_root": "profiling-gz",
+        "campaign_revision": "a" * 40, "qualification_receipt": receipt,
+    })
+    receipt.write_text(json.dumps(qualification_receipt(
+        module, cfg, fingerprint=runtime_fingerprint("b"))))
+
+    result = module.Executor(cfg, transport).execute(request(target="gz-a3"))
+
+    assert result["status"] == "infrastructure_error"
+    assert "runtime fingerprint" in result["diagnostics"]
+    assert result["terminal"] is True
 
 
 def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_path):
@@ -396,7 +442,7 @@ def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_pat
     assert not transport.probes
 
 
-def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
+def test_cpl_remote_gz_run_uses_named_runtime(monkeypatch, tmp_path):
     module = load()
     executable = tmp_path / "cpl-remote"
     executable.write_text("#!/bin/sh\n")
@@ -418,8 +464,9 @@ def test_cpl_remote_gz_run_omits_named_runtime(monkeypatch, tmp_path):
         "gz-a3", "py311-torch", script, "/remote/work")
 
     assert handle == "remote:gz-a3:job:abc"
-    assert "--runtime" not in calls[0]
-    assert calls[0][2:6] == ["run", "gz-a3", "--file", str(script)]
+    assert calls[0][2:8] == [
+        "run", "gz-a3", "--runtime", "py311-torch", "--file", str(script),
+    ]
     assert calls[0][-4:] == ["--cwd", "/remote/work", "--timeout", "900"]
 
 
@@ -630,14 +677,17 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
             calls.append(value)
             if "intentional_compile_failure" in value["candidate"]["source"]:
                 return {"status": "compile_error", "diagnostics": "CompilationError: static assertion",
-                        "terminal": True, "provenance": {"handle": "remote:gz-a3:job:bad"}}
+                        "terminal": True, "runtime_fingerprint": runtime_fingerprint(),
+                        "provenance": {"handle": "remote:gz-a3:job:bad"}}
             if value["action"] == "discover":
                 return {"status": "ok", "components": [{
                     "selector": "block_sparse_attention_kernel_mix_aiv", "kind": "aiv"}],
+                    "runtime_fingerprint": runtime_fingerprint(),
                     "correctness": [{"case": case, "passed": True}
                                     for case in module.QUALIFICATION_CASES],
                     "provenance": {"handle": "remote:gz-a3:job:discover"}}
             return {"status": "ok", "duration_us": [10.0, 10.2, 10.1][value["sample_index"]],
+                    "runtime_fingerprint": runtime_fingerprint(),
                     "pipe_utilization": {"selector": value["kernel_name"], "rows": [{}]},
                     "provenance": {"handle": f"remote:gz-a3:job:{value['case']}"}}
 
@@ -651,6 +701,8 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
         FakeExecutor(), cfg, candidate, "block_sparse_attention_kernel", "a" * 40)
 
     assert receipt["passed"] is True
+    assert receipt["runtime_fingerprint"] == runtime_fingerprint()
+    assert receipt["runtime_fingerprint_sha256"] == module.digest_json(runtime_fingerprint())
     assert list(receipt["measurements"]) == [str(case) for case in module.QUALIFICATION_CASES]
     assert all(len(item["samples_us"]) == 3 for item in receipt["measurements"].values())
     assert receipt["compile_failure"]["status"] == "compile_error"
@@ -663,8 +715,65 @@ def test_qualification_runs_five_cases_stability_and_compile_diagnostic(tmp_path
     assert all(call["execution_environment"] == {
         "target": "gz-a3",
         "runtime": "py311-torch",
-        "runtime_activation": "target-default",
+        "runtime_activation": "named-runtime",
     } for call in calls)
+
+
+def test_qualification_rejects_runtime_change_between_remote_stages(tmp_path):
+    module = load()
+    candidate = tmp_path / "candidate.py"
+    candidate.write_text("# known good\n")
+
+    class FakeExecutor:
+        config = SimpleNamespace(target="gz-a3")
+
+        def execute(self, value):
+            if value["action"] == "discover":
+                return {
+                    "status": "ok",
+                    "components": [{"selector": "kernel", "kind": "aiv"}],
+                    "correctness": [
+                        {"case": case, "passed": True}
+                        for case in module.QUALIFICATION_CASES
+                    ],
+                    "runtime_fingerprint": runtime_fingerprint("a"),
+                    "provenance": {"handle": "remote:gz-a3:job:discover"},
+                }
+            return {
+                "status": "ok", "duration_us": 10.0,
+                "pipe_utilization": {"selector": "kernel", "rows": [{}]},
+                "runtime_fingerprint": runtime_fingerprint("b"),
+                "provenance": {"handle": "remote:gz-a3:job:capture"},
+            }
+
+    cfg = SimpleNamespace(
+        target="gz-a3", baseline=ROOT / "benchmarks/bsa/baseline.py",
+        cases=ROOT / "benchmarks/bsa/cases.jsonl",
+        runner=ROOT / "scripts/a3_benchmark_runner.py",
+        qualification_candidate=candidate,
+    )
+
+    receipt = module.qualify(
+        FakeExecutor(), cfg, candidate, "kernel", "a" * 40)
+
+    assert receipt["passed"] is False
+    assert "resolved runtime changed" in receipt["failure"]
+    assert receipt["runtime_fingerprint"] == runtime_fingerprint("a")
+    assert receipt["observed_runtime_fingerprint"] == runtime_fingerprint("b")
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda value: value["executable"].update(raw_path="/must/not/leak"),
+    lambda value: value["executable"].update(content_sha256="not-a-digest"),
+    lambda value: value["packages"]["triton_distribution"].update(name="unknown"),
+])
+def test_runtime_fingerprint_schema_rejects_unbounded_or_invalid_identity(mutation):
+    module = load()
+    value = runtime_fingerprint()
+    mutation(value)
+
+    with pytest.raises(module.ExecutorError, match="runtime|executable|Triton"):
+        module.validate_runtime_fingerprint(value)
 
 
 @pytest.mark.parametrize("stage", ["discover", "capture", "compile"])
@@ -705,6 +814,7 @@ def test_qualification_retries_exact_infrastructure_handle_for_every_stage(
                     "status": "compile_error",
                     "diagnostics": "CompilationError: static assertion",
                     "terminal": True,
+                    "runtime_fingerprint": runtime_fingerprint(),
                     "provenance": {"handle": "remote:gz-a3:job:compile-success"},
                 }
             if value["action"] == "discover":
@@ -718,12 +828,14 @@ def test_qualification_retries_exact_infrastructure_handle_for_every_stage(
                         {"case": case, "passed": True}
                         for case in module.QUALIFICATION_CASES
                     ],
+                    "runtime_fingerprint": runtime_fingerprint(),
                     "provenance": {"handle": "remote:gz-a3:job:discover-success"},
                 }
             return {
                 "status": "ok",
                 "duration_us": [10.0, 10.2, 10.1][value["sample_index"]],
                 "pipe_utilization": {"selector": value["kernel_name"], "rows": [{}]},
+                "runtime_fingerprint": runtime_fingerprint(),
                 "provenance": {"handle": "remote:gz-a3:job:capture-success"},
             }
 
@@ -949,9 +1061,10 @@ def test_capture_samples_use_independent_captures_in_one_retained_batch(tmp_path
 ])
 def test_candidate_failures_are_preserved(remote_status, tmp_path):
     module = load()
-    remote = {"schema": "profiling-skill/bsa-candidate-remote-result/v1",
+    remote = {"schema": module.REMOTE_SCHEMA,
               "status": remote_status, "diagnostics": "candidate broke",
-              "physical_device": 2}
+              "physical_device": 2,
+              "runtime_fingerprint": runtime_fingerprint()}
     transport = FakeTransport(module, remote)
     cfg, _ = config(module, tmp_path, transport)
 
@@ -959,12 +1072,15 @@ def test_candidate_failures_are_preserved(remote_status, tmp_path):
 
     assert result["status"] == remote_status
     assert result["diagnostics"] == "candidate broke"
+    assert result["runtime_fingerprint"] == runtime_fingerprint()
+    assert result["provenance"]["runtime_fingerprint"] == runtime_fingerprint()
 
 
 def test_prelease_memory_failure_preserves_compact_remote_diagnostics(tmp_path):
     module = load()
     remote = {"schema": module.REMOTE_SCHEMA, "status": "infrastructure_error",
-              "diagnostics": "no device passed: 3:free=5410 required=10000"}
+              "diagnostics": "no device passed: 3:free=5410 required=10000",
+              "runtime_fingerprint": runtime_fingerprint()}
     transport = FakeTransport(module, remote)
     cfg, _ = config(module, tmp_path, transport)
 

@@ -24,8 +24,9 @@ from typing import Any
 
 
 REQUEST_SCHEMA = "profiling-skill/bsa-candidate-executor-request/v1"
-REMOTE_SCHEMA = "profiling-skill/bsa-candidate-remote-result/v1"
-QUALIFICATION_SCHEMA = "profiling-skill/bsa-a3-qualification/v1"
+REMOTE_SCHEMA = "profiling-skill/bsa-candidate-remote-result/v2"
+QUALIFICATION_SCHEMA = "profiling-skill/bsa-a3-qualification/v2"
+RUNTIME_FINGERPRINT_SCHEMA = "profiling-skill/a3-python-runtime-fingerprint/v1"
 QUALIFICATION_CASES = [47, 46, 49, 44, 43]
 QUALIFICATION_INFRA_RETRIES = 3
 CANDIDATE_FAILURES = {"compile_error", "runtime_error", "correctness_error"}
@@ -55,7 +56,7 @@ class ExecutorConfig:
 
 
 def runtime_activation(target: str) -> str:
-    return "target-default" if target == "gz-a3" else "named-runtime"
+    return "named-runtime"
 
 
 def execution_environment(target: str) -> dict[str, str]:
@@ -80,6 +81,45 @@ def file_digest(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_runtime_fingerprint(value: object) -> dict[str, Any]:
+    """Validate the compact, non-secret identity of a resolved Python runtime."""
+    if not isinstance(value, dict) or set(value) != {
+        "schema", "executable", "python", "packages"
+    } or value.get("schema") != RUNTIME_FINGERPRINT_SCHEMA:
+        raise ExecutorError("infrastructure_error", "remote runtime fingerprint is invalid")
+    executable, python, packages = (
+        value.get("executable"), value.get("python"), value.get("packages")
+    )
+    if (not isinstance(executable, dict)
+            or set(executable) != {"basename", "realpath_sha256", "content_sha256"}
+            or not isinstance(executable.get("basename"), str)
+            or not executable["basename"]
+            or any(not isinstance(executable.get(field), str)
+                   or len(executable[field]) != 64
+                   or any(character not in "0123456789abcdef"
+                          for character in executable[field])
+                   for field in ("realpath_sha256", "content_sha256"))):
+        raise ExecutorError("infrastructure_error", "remote runtime executable identity is invalid")
+    if (not isinstance(python, dict)
+            or set(python) != {"implementation", "version"}
+            or any(not isinstance(python.get(field), str) or not python[field]
+                   for field in ("implementation", "version"))):
+        raise ExecutorError("infrastructure_error", "remote Python identity is invalid")
+    if (not isinstance(packages, dict)
+            or set(packages) != {"torch", "torch_npu", "triton", "triton_distribution"}
+            or any(not isinstance(packages.get(field), str) or not packages[field]
+                   for field in ("torch", "torch_npu", "triton"))):
+        raise ExecutorError("infrastructure_error", "remote package identity is invalid")
+    distribution = packages.get("triton_distribution")
+    if (not isinstance(distribution, dict)
+            or set(distribution) != {"name", "version"}
+            or distribution.get("name") not in {"triton", "triton-ascend"}
+            or not isinstance(distribution.get("version"), str)
+            or not distribution["version"]):
+        raise ExecutorError("infrastructure_error", "remote Triton distribution is invalid")
+    return value
 
 
 def atomic_json(path: Path, value: object) -> None:
@@ -243,9 +283,7 @@ class CplRemoteTransport:
             )
 
     def run(self, target: str, runtime: str, script: Path, cwd: str) -> str:
-        arguments = ["run", target]
-        if runtime_activation(target) == "named-runtime":
-            arguments.extend(["--runtime", runtime])
+        arguments = ["run", target, "--runtime", runtime]
         arguments.extend(["--file", str(script), "--cwd", cwd, "--timeout", "900"])
         self.last_command = [str(self.executable), "--json", *arguments]
         receipt = self._call(arguments, 930)
@@ -301,15 +339,52 @@ class CplRemoteTransport:
 def remote_driver_source() -> str:
     """Return the dependency-free program executed inside the staged bundle."""
     return r'''#!/usr/bin/env python3
-import csv, fcntl, hashlib, importlib.util, json, math, os, pathlib, re, shlex, statistics, subprocess, sys, time, traceback
+import csv, fcntl, hashlib, importlib.metadata, importlib.util, json, math, os, pathlib, platform, re, shlex, statistics, subprocess, sys, time, traceback
 
-SCHEMA="profiling-skill/bsa-candidate-remote-result/v1"
+SCHEMA="profiling-skill/bsa-candidate-remote-result/v2"
+RUNTIME_SCHEMA="profiling-skill/a3-python-runtime-fingerprint/v1"
 SUCCESS="Profiling running finished. All task success."
 NAMES=("Op Name","OpName","Kernel Name","kernel_name","Name")
 DURATIONS=("Task Duration(us)","Task Duration (us)","task_duration_us")
+_RUNTIME_FINGERPRINT=None
+
+def package_version(module,names):
+    value=getattr(module,"__version__",None)
+    if isinstance(value,str) and value: return value
+    for name in names:
+      try: return importlib.metadata.version(name)
+      except importlib.metadata.PackageNotFoundError: pass
+    raise RuntimeError("package version unavailable for "+repr(names))
+
+def runtime_fingerprint():
+    global _RUNTIME_FINGERPRINT
+    if _RUNTIME_FINGERPRINT is not None: return _RUNTIME_FINGERPRINT
+    import torch, torch_npu, triton
+    resolved=pathlib.Path(sys.executable).resolve(strict=True)
+    digest=hashlib.sha256()
+    with resolved.open("rb") as stream:
+      for chunk in iter(lambda:stream.read(1024*1024),b""): digest.update(chunk)
+    distribution=None
+    for name in ("triton-ascend","triton"):
+      try: distribution={"name":name,"version":importlib.metadata.version(name)}; break
+      except importlib.metadata.PackageNotFoundError: pass
+    if distribution is None: raise RuntimeError("Triton distribution metadata unavailable")
+    _RUNTIME_FINGERPRINT={
+      "schema":RUNTIME_SCHEMA,
+      "executable":{"basename":pathlib.Path(sys.executable).name,
+        "realpath_sha256":hashlib.sha256(str(resolved).encode()).hexdigest(),
+        "content_sha256":digest.hexdigest()},
+      "python":{"implementation":platform.python_implementation(),
+                "version":platform.python_version()},
+      "packages":{"torch":package_version(torch,("torch",)),
+                  "torch_npu":package_version(torch_npu,("torch-npu","torch_npu")),
+                  "triton":package_version(triton,("triton-ascend","triton")),
+                  "triton_distribution":distribution}}
+    return _RUNTIME_FINGERPRINT
 
 def emit(value):
     value.setdefault("schema",SCHEMA)
+    value.setdefault("runtime_fingerprint",runtime_fingerprint())
     print("BSA_CANDIDATE_RESULT="+json.dumps(value,sort_keys=True,separators=(",",":")),flush=True)
 
 def pick_device():
@@ -639,12 +714,30 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
     environment = execution_environment(config.target)
     handles: list[str] = []
     retry_evidence: list[dict[str, Any]] = []
+    runtime_fingerprint: dict[str, Any] | None = None
 
     def failed(reason: str, **evidence: Any) -> dict[str, Any]:
-        return {"schema": QUALIFICATION_SCHEMA, "passed": False, **identity,
-                "cases": QUALIFICATION_CASES, "durable_handles": handles,
-                "infrastructure_retries": retry_evidence,
-                "failure": reason, **evidence}
+        receipt = {"schema": QUALIFICATION_SCHEMA, "passed": False, **identity,
+                   "cases": QUALIFICATION_CASES, "durable_handles": handles,
+                   "infrastructure_retries": retry_evidence,
+                   "failure": reason, **evidence}
+        if runtime_fingerprint is not None:
+            receipt.update(
+                runtime_fingerprint=runtime_fingerprint,
+                runtime_fingerprint_sha256=digest_json(runtime_fingerprint),
+            )
+        return receipt
+
+    def require_same_runtime(result: dict[str, Any], stage: str) -> dict[str, Any] | None:
+        try:
+            observed = validate_runtime_fingerprint(result.get("runtime_fingerprint"))
+        except ExecutorError as exc:
+            return failed(f"{stage} returned no valid runtime fingerprint",
+                          runtime_diagnostics=str(exc), failed_result=result)
+        if runtime_fingerprint is not None and observed != runtime_fingerprint:
+            return failed(f"resolved runtime changed during {stage}", failed_result=result,
+                          observed_runtime_fingerprint=observed)
+        return None
 
     if candidate["source_sha256"] != identity["known_good_candidate_sha256"]:
         return failed("known-good candidate does not match the frozen qualification source")
@@ -660,6 +753,12 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
     )
     if discovery.get("status") != "ok":
         return failed("known-good discovery failed", discovery=discovery)
+    try:
+        runtime_fingerprint = validate_runtime_fingerprint(
+            discovery.get("runtime_fingerprint"))
+    except ExecutorError as exc:
+        return failed("known-good discovery returned no valid runtime fingerprint",
+                      runtime_diagnostics=str(exc), discovery=discovery)
     correctness = discovery.get("correctness")
     if (not isinstance(correctness, list)
             or [item.get("case") for item in correctness] != QUALIFICATION_CASES
@@ -693,6 +792,10 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
                     return failed(f"known-good capture failed for case {case}",
                                   discovery=discovery, measurements=measurements,
                                   failed_capture=capture)
+                mismatch = require_same_runtime(
+                    capture, f"capture for case {case} sample {sample_index}")
+                if mismatch is not None:
+                    return mismatch
                 duration = capture.get("duration_us")
                 if (isinstance(duration, bool) or not isinstance(duration, (int, float))
                         or not math.isfinite(duration) or duration <= 0):
@@ -727,6 +830,9 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
         executor, compile_request, config.target, handles, retry_evidence,
         "intentional-compile-failure",
     )
+    mismatch = require_same_runtime(compile_failure, "intentional compiler check")
+    if mismatch is not None:
+        return mismatch
     if (compile_failure.get("status") != "compile_error"
             or not str(compile_failure.get("diagnostics", "")).strip()):
         return failed("intentional compiler failure was not returned as compile_error",
@@ -734,6 +840,8 @@ def qualify(executor, config: ExecutorConfig, candidate_path: Path,
                       compile_failure=compile_failure)
     return {
         "schema": QUALIFICATION_SCHEMA, "passed": True, **identity,
+        "runtime_fingerprint": runtime_fingerprint,
+        "runtime_fingerprint_sha256": digest_json(runtime_fingerprint),
         "cases": QUALIFICATION_CASES, "components": components,
         "correctness": correctness,
         "measurements": measurements,
@@ -759,10 +867,12 @@ class Executor:
         self.config, self.transport = config, transport
         self.enforce_qualification = enforce_qualification
 
-    def _qualification(self, logical_runtime: str) -> tuple[str, str]:
+    def _qualification(
+        self, logical_runtime: str
+    ) -> tuple[str, str, dict[str, Any] | None]:
         activation = runtime_activation(self.config.target)
         if self.config.target != "gz-a3" or not self.enforce_qualification:
-            return activation, ""
+            return activation, "", None
         if not self.config.campaign_revision or not self.config.qualification_receipt:
             raise ExecutorError("infrastructure_error",
                                 "GZ dispatch requires campaign revision and qualification receipt")
@@ -776,6 +886,10 @@ class Executor:
             self.config, logical_runtime, self.config.campaign_revision)
         if any(receipt.get(key) != value for key, value in expected.items()):
             raise ExecutorError("infrastructure_error", "GZ qualification identity drifted")
+        fingerprint = validate_runtime_fingerprint(receipt.get("runtime_fingerprint"))
+        if receipt.get("runtime_fingerprint_sha256") != digest_json(fingerprint):
+            raise ExecutorError(
+                "infrastructure_error", "GZ qualification runtime fingerprint drifted")
         if receipt.get("cases") != QUALIFICATION_CASES:
             raise ExecutorError("infrastructure_error", "GZ qualification case coverage drifted")
         correctness = receipt.get("correctness")
@@ -808,7 +922,7 @@ class Executor:
                     or _stable_window([float(value) for value in window]) is None):
                 raise ExecutorError("infrastructure_error",
                                     "GZ qualification has unstable case evidence")
-        return activation, file_digest(path)
+        return activation, file_digest(path), fingerprint
 
     def _bundle(self, request: dict, state: Path) -> Path:
         state.mkdir(parents=True, exist_ok=True)
@@ -845,7 +959,8 @@ class Executor:
             environment = request["execution_environment"]
             runtime = environment["runtime"]
             activation = environment["runtime_activation"]
-            qualification_activation, qualification_sha = self._qualification(runtime)
+            (qualification_activation, qualification_sha,
+             qualified_runtime_fingerprint) = self._qualification(runtime)
             if activation != qualification_activation:
                 raise ExecutorError(
                     "infrastructure_error",
@@ -877,7 +992,8 @@ class Executor:
                 "terminal": True, "evidence_sha256": digest_json(remote),
             })
             response = self._response(
-                request, remote, runtime, activation, command, handle)
+                request, remote, runtime, activation, command, handle,
+                qualified_runtime_fingerprint)
             atomic_json(attempt / "terminal.json", {
                 "handle": handle, "status": response["status"], "terminal": True,
                 "evidence_sha256": response.get("evidence_sha256"),
@@ -1018,14 +1134,9 @@ class Executor:
                     "qualification_receipt_sha256": qualification_sha,
                 })
                 archive = self._bundle(base_request, attempt)
-                if activation == "target-default":
-                    remote_archive = (
-                        f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
-                    remote_cwd = self.config.remote_root
-                else:
-                    remote_archive = (
-                        f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
-                    remote_cwd = self.config.remote_root
+                remote_archive = (
+                    f"{self.config.remote_root}/payload-{file_digest(archive)}.tar")
+                remote_cwd = self.config.remote_root
                 upload_path = attempt / "upload.json"
                 if upload_path.is_file():
                     upload = json.loads(upload_path.read_text())
@@ -1108,7 +1219,7 @@ class Executor:
                         "handle": transfer_handle, "terminal": True,
                         "status": "completed",
                     })
-                if activation == "target-default":
+                if self.config.target == "gz-a3":
                     script_archive = PurePosixPath(remote_archive).name
                     run_root = f"runs/{execution_sha}/{attempt.name}"
                 else:
@@ -1117,9 +1228,13 @@ class Executor:
                 quoted = {"archive": shlex.quote(str(script_archive)),
                           "digest": shlex.quote(file_digest(archive)),
                           "run_root": shlex.quote(run_root)}
+                runtime_environment = (
+                    "unset PYTHONHOME\nexport PYTHONPATH=\n"
+                    if self.config.target == "gz-a3" else ""
+                )
                 script = f'''#!/usr/bin/env bash
 set -euo pipefail
-archive={quoted["archive"]}; run_root={quoted["run_root"]}
+{runtime_environment}archive={quoted["archive"]}; run_root={quoted["run_root"]}
 test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
 export CPL_DEVICE_LEASE_ROOT="$HOME/.cpl-device-leases"
 export BSA_MIN_FREE_DEVICE_BYTES={self.config.min_free_device_bytes}
@@ -1171,10 +1286,19 @@ cat "$run_root/compact-result.log"
             raise ExecutorError("infrastructure_error", "dispatch command is missing")
         return receipt
 
-    def _response(self, request, remote, runtime, activation, command, handle):
+    def _response(self, request, remote, runtime, activation, command, handle,
+                  qualified_runtime_fingerprint=None):
         if not isinstance(remote, dict) or remote.get("schema") != REMOTE_SCHEMA:
             raise ExecutorError("infrastructure_error", "remote result schema mismatch",
                                 handle=handle)
+        fingerprint = validate_runtime_fingerprint(remote.get("runtime_fingerprint"))
+        if (qualified_runtime_fingerprint is not None
+                and fingerprint != qualified_runtime_fingerprint):
+            raise ExecutorError(
+                "infrastructure_error",
+                "remote runtime fingerprint changed since qualification",
+                handle=handle,
+            )
         status = remote.get("status")
         physical = remote.get("physical_device")
         if isinstance(physical, bool) or not isinstance(physical, int) or physical < 0:
@@ -1185,18 +1309,22 @@ cat "$run_root/compact-result.log"
                                     handle=handle)
         provenance = {"product": "a3", "target": self.config.target, "runtime": runtime,
                       "runtime_activation": activation,
+                      "runtime_fingerprint": fingerprint,
                       "physical_device": physical, "command": command, "handle": handle}
         if status in CANDIDATE_FAILURES:
             return {"status": status, "diagnostics": str(remote.get("diagnostics", "")),
                     "terminal": True, "evidence_sha256": digest_json(remote),
+                    "runtime_fingerprint": fingerprint,
                     "provenance": provenance}
         if status != "ok":
             return {"status": "infrastructure_error",
                     "diagnostics": str(remote.get("diagnostics", "remote execution failed")),
                     "terminal": True, "evidence_sha256": digest_json(remote),
+                    "runtime_fingerprint": fingerprint,
                     "provenance": provenance}
         result = {"status": "ok", "diagnostics": "", "evidence_sha256": digest_json(remote),
-                  "terminal": True, "provenance": provenance}
+                  "terminal": True, "runtime_fingerprint": fingerprint,
+                  "provenance": provenance}
         if isinstance(remote.get("correctness"), list):
             result["correctness"] = remote["correctness"]
         if request["action"] == "discover":
@@ -1235,6 +1363,7 @@ cat "$run_root/compact-result.log"
             if capture is not remote:
                 result["evidence_sha256"] = digest_json({
                     "schema": REMOTE_SCHEMA, "status": "ok", "physical_device": physical,
+                    "runtime_fingerprint": fingerprint,
                     "correctness": remote.get("correctness", []), "capture": capture,
                 })
         return result

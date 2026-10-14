@@ -182,7 +182,7 @@ def one_execution() -> dict:
             "product": "a3",
             "target": "gz-a3",
             "runtime": "py311-torch",
-            "runtime_activation": "target-default",
+            "runtime_activation": "named-runtime",
         },
         "executions": [{
             "execution_id": "exec-1",
@@ -204,9 +204,11 @@ def gz_provenance(handle: str = "remote:gz-a3:job:valid") -> dict:
     return {
         "target": "gz-a3",
         "runtime": "py311-torch",
-        "runtime_activation": "target-default",
+        "runtime_activation": "named-runtime",
         "physical_device": 0,
-        "command": ["cpl-remote", "run", "gz-a3"],
+        "command": [
+            "cpl-remote", "run", "gz-a3", "--runtime", "py311-torch",
+        ],
         "handle": handle,
     }
 
@@ -300,7 +302,7 @@ def test_run_contract_and_executor_request_bind_target_and_runtime_activation(
     expected = {
         "target": "gz-a3",
         "runtime": "py311-torch",
-        "runtime_activation": "target-default",
+        "runtime_activation": "named-runtime",
     }
     assert result["run_contract"]["execution_environment"] == expected
     assert result["run_contract"]["executor_identity"] == {
@@ -355,7 +357,7 @@ def test_runner_rejects_missing_or_inconsistent_execution_environment(
     missing = one_execution()
     del missing["environment"]["runtime_activation"]
     inconsistent = one_execution()
-    inconsistent["environment"]["target"] = "bz-a3-1"
+    inconsistent["environment"]["runtime_activation"] = "target-default"
 
     for manifest in (missing, inconsistent):
         try:
@@ -710,7 +712,7 @@ def test_production_mode_rejects_wrong_target_runtime_and_invalid_digest(
 
     provenance.update({
         "target": "gz-a3", "runtime": "py311-torch",
-        "runtime_activation": "target-default",
+        "runtime_activation": "named-runtime",
         "handle": "remote:gz-a3:job:right",
     })
     make_executor(executor, [{
@@ -879,7 +881,7 @@ def test_retry_rejects_inconsistent_failure_provenance(tmp_path: Path) -> None:
         "provenance": {
             "target": "gz-a3",
             "runtime": "py311-torch",
-            "runtime_activation": "named-runtime",
+            "runtime_activation": "target-default",
             "handle": "remote:gz-a3:job:right-target",
         },
     }])

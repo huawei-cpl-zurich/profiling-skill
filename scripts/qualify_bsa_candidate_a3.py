@@ -15,6 +15,7 @@ from bsa_candidate_a3_executor import (  # noqa: E402
     Executor,
     ExecutorConfig,
     ExecutorError,
+    QUALIFICATION_SCHEMA,
     atomic_json,
     qualify,
 )
@@ -55,7 +56,7 @@ def main(argv=None) -> int:
         receipt = qualify(
             executor, config, args.candidate, args.kernel_name, args.campaign_revision)
     except (OSError, ValueError, ExecutorError) as exc:
-        receipt = {"schema": "profiling-skill/bsa-a3-qualification/v1",
+        receipt = {"schema": QUALIFICATION_SCHEMA,
                    "passed": False, "failure": str(exc)}
     atomic_json(args.output, receipt)
     return 0 if receipt.get("passed") is True else 2

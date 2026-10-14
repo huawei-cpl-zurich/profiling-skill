@@ -37,7 +37,7 @@ SHARD_ALGORITHM = "sha256-mod-v1"
 SAMPLE_SELECTION = "first-stable-consecutive-window-v1"
 DIRECT_API_CAMPAIGN_REVISION = "direct-api-v1"
 TARGET_ACTIVATION = {
-    "gz-a3": "target-default",
+    "gz-a3": "named-runtime",
     "bz-a3-1": "named-runtime",
     "bz-a3-2": "named-runtime",
 }
@@ -445,7 +445,7 @@ def _execution_environment(environment: object) -> dict[str, str]:
         raise InvalidArtifact(
             "execution environment requires an allowed A3 target, a logical "
             "runtime, and its matching runtime_activation "
-            "(gz-a3=target-default; bz-a3-1/bz-a3-2=named-runtime)"
+            "(gz-a3/bz-a3-1/bz-a3-2=named-runtime)"
         )
     return {
         "target": target,

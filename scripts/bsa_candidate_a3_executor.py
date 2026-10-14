@@ -270,7 +270,7 @@ class CplRemoteTransport:
                                 terminal=False) from exc
         if observed.get("target") != target or observed.get("handle") != handle:
             raise ExecutorError("infrastructure_error", "observation identity mismatch",
-                                handle=handle)
+                                handle=handle, terminal=False)
         if observed.get("state") not in {"completed", "failed", "cancelled"}:
             raise ExecutorError("infrastructure_error", "retained job is not terminal",
                                 handle=handle, terminal=False)

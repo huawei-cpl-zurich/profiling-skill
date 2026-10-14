@@ -1056,6 +1056,41 @@ def test_nonterminal_observe_error_does_not_create_terminal_receipt(tmp_path):
     assert not list((tmp_path / "state").rglob("terminal.json"))
 
 
+def test_observation_identity_mismatch_cannot_authorize_replacement(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+
+    def mismatched_observation(target, handle):
+        transport.observations.append((target, handle))
+        client = module.CplRemoteTransport.__new__(module.CplRemoteTransport)
+        client._call = lambda *args, **kwargs: {
+            "target": target,
+            "handle": f"remote:{target}:job:different",
+            "state": "completed",
+        }
+        return client.observe_result(target, handle)
+
+    transport.observe_result = mismatched_observation
+    first = executor.execute(request())
+
+    assert first["status"] == "infrastructure_error"
+    assert first["terminal"] is False
+    handle = first["provenance"]["handle"]
+    assert not list((tmp_path / "state").rglob("terminal.json"))
+
+    retry = request()
+    retry["retry"] = {"mode": "new_attempt", "prior_handle": handle}
+    replacement = executor.execute(retry)
+
+    assert replacement["status"] == "infrastructure_error"
+    assert replacement["terminal"] is False
+    assert "cannot replace a nonterminal retained handle" in replacement["diagnostics"]
+    assert len(transport.runs) == 1
+    assert not list((tmp_path / "state").rglob("attempt-0002"))
+
+
 def test_transfer_interruption_resumes_exact_handle_then_dispatches_without_reupload(
     tmp_path,
 ):

@@ -586,7 +586,7 @@ def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt
     tmp_path: Path,
 ) -> None:
     executor = tmp_path / "executor.py"
-    handle = "remote:bz-a3-1:job:still-running"
+    handle = "remote:gz-a3:job:still-running"
     make_executor(executor, [
         {"status": "infrastructure_error", "diagnostics": "observer disconnected",
          "terminal": False, "provenance": {"handle": handle}},
@@ -616,6 +616,57 @@ def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt
     )
     assert requests[1]["retry"] == {"mode": "observe", "handle": handle}
     assert requests[2]["retry"] == {"mode": "new_attempt", "prior_handle": handle}
+
+
+def test_retry_rejects_wrong_target_failure_handle(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{
+        "status": "infrastructure_error",
+        "diagnostics": "observer disconnected",
+        "terminal": False,
+        "provenance": {
+            "target": "bz-a3-1",
+            "runtime": "py311-torch",
+            "runtime_activation": "named-runtime",
+            "handle": "remote:bz-a3-1:job:wrong-target",
+        },
+    }])
+    output = tmp_path / "results.json"
+
+    result = MODULE.run_campaign(
+        one_execution(), output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=1,
+    )
+
+    state = result["executions"]["exec-1"]
+    assert state["status"] == "retryable_infrastructure"
+    assert state["infrastructure_failures"][-1]["kind"] == "invalid_provenance"
+    assert "retry" not in state
+
+
+def test_retry_rejects_inconsistent_failure_provenance(tmp_path: Path) -> None:
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{
+        "status": "infrastructure_error",
+        "diagnostics": "observer disconnected",
+        "terminal": False,
+        "provenance": {
+            "target": "gz-a3",
+            "runtime": "py311-torch",
+            "runtime_activation": "named-runtime",
+            "handle": "remote:gz-a3:job:right-target",
+        },
+    }])
+    output = tmp_path / "results.json"
+
+    result = MODULE.run_campaign(
+        one_execution(), output, executor, cases=[47], stable_samples=3,
+        max_samples=7, max_actions=1,
+    )
+
+    state = result["executions"]["exec-1"]
+    assert state["infrastructure_failures"][-1]["kind"] == "invalid_provenance"
+    assert "retry" not in state
 
 
 def test_sharding_is_deterministic_exhaustive_and_does_not_change_identity(tmp_path: Path) -> None:

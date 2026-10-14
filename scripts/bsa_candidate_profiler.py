@@ -645,6 +645,44 @@ def _retry_from_failure(response: dict[str, Any]) -> dict[str, Any] | None:
     return retry
 
 
+def _valid_failure_provenance(value: object, environment: dict[str, Any]) -> bool:
+    """Allow sparse failure provenance, but never cross execution identities."""
+    if value is None:
+        return True
+    if not isinstance(value, dict):
+        return False
+    expected = _execution_environment(environment)
+    for field in ("target", "runtime", "runtime_activation"):
+        if field in value and value[field] != expected[field]:
+            return False
+    handle = value.get("handle")
+    return handle is None or (
+        isinstance(handle, str)
+        and handle.startswith(f"remote:{expected['target']}:")
+    )
+
+
+def _record_infrastructure_failure(
+    state: dict[str, Any], response: dict[str, Any], environment: dict[str, Any]
+) -> None:
+    state.pop("retry", None)
+    if not _valid_failure_provenance(response.get("provenance"), environment):
+        state["infrastructure_failures"].append({
+            "kind": "invalid_provenance",
+            "category": "infrastructure",
+            "diagnostics": (
+                "infrastructure failure provenance does not match the requested "
+                "target, runtime activation, or handle namespace"
+            ),
+            "rejected_provenance": response.get("provenance"),
+        })
+        return
+    state["infrastructure_failures"].append(_failure(response))
+    retry = _retry_from_failure(response)
+    if retry is not None:
+        state["retry"] = retry
+
+
 def _with_retry(request: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     if isinstance(state.get("retry"), dict):
         request["retry"] = state["retry"]
@@ -708,8 +746,9 @@ def run_campaign(
                 continue
             if status != "ok":
                 state["status"] = "retryable_infrastructure"
-                state["infrastructure_failures"].append(_failure(response))
-                state["retry"] = _retry_from_failure(response)
+                _record_infrastructure_failure(
+                    state, response, manifest["environment"]
+                )
                 _atomic_json(output, results)
                 continue
             state.pop("retry", None)
@@ -836,8 +875,9 @@ def run_campaign(
                         break
                     if status != "ok":
                         state["status"] = "retryable_infrastructure"
-                        state["infrastructure_failures"].append(_failure(response))
-                        state["retry"] = _retry_from_failure(response)
+                        _record_infrastructure_failure(
+                            state, response, manifest["environment"]
+                        )
                         interrupted = True
                         break
                     state.pop("retry", None)

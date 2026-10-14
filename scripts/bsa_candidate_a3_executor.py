@@ -832,6 +832,7 @@ class Executor:
 
     def execute(self, raw_request: object) -> dict:
         handle = None
+        attempt: Path | None = None
         command: list[str] = []
         runtime = ""
         try:
@@ -883,13 +884,26 @@ class Executor:
             })
             return response
         except ExecutorError as exc:
+            error_handle = exc.handle or handle
+            if (exc.terminal and attempt is not None and handle is not None
+                    and error_handle == handle
+                    and (attempt / "dispatch.json").is_file()):
+                error_evidence = {
+                    "diagnostics": str(exc),
+                    "handle": handle,
+                    "status": exc.status,
+                }
+                atomic_json(attempt / "terminal.json", {
+                    "handle": handle, "status": exc.status, "terminal": True,
+                    "evidence_sha256": digest_json(error_evidence),
+                })
             provenance = None
-            if exc.handle or handle:
+            if error_handle:
                 provenance = {"product": "a3", "target": self.config.target,
                               "runtime": runtime,
                               "runtime_activation": runtime_activation(self.config.target),
                               "physical_device": -1,
-                              "command": command, "handle": exc.handle or handle}
+                              "command": command, "handle": error_handle}
             return {"status": "infrastructure_error", "diagnostics": str(exc),
                     "terminal": exc.terminal,
                     **({"provenance": provenance} if provenance else {})}
@@ -1109,7 +1123,8 @@ archive={quoted["archive"]}; run_root={quoted["run_root"]}
 test "$(sha256sum "$archive" | cut -d' ' -f1)" = {quoted["digest"]}
 export CPL_DEVICE_LEASE_ROOT="$HOME/.cpl-device-leases"
 export BSA_MIN_FREE_DEVICE_BYTES={self.config.min_free_device_bytes}
-mkdir -p "$run_root"; exec 9>"$run_root/execution.lock"; flock 9
+mkdir -p "$run_root"; run_root="$(cd "$run_root" && pwd -P)"
+exec 9>"$run_root/execution.lock"; flock 9
 if test -s "$run_root/compact-result.log"; then cat "$run_root/compact-result.log"; exit 0; fi
 work="$run_root/work"; mkdir -p "$work"; tar -xf "$archive" -C "$work"
 cd "$work"; python remote_driver.py >"$run_root/result.tmp"

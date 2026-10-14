@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import shutil
+import subprocess
 import sys
 import tarfile
 from types import SimpleNamespace
@@ -327,6 +330,45 @@ def test_gz_uses_target_default_activation_and_requires_matching_qualification(t
     dispatch = json.loads(next((tmp_path / "state").rglob("dispatch.json")).read_text())
     assert dispatch["runtime_activation"] == "target-default"
     assert dispatch["campaign_revision"] == "a" * 40
+
+
+def test_gz_rendered_script_keeps_result_paths_valid_after_entering_workdir(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    bz, _ = config(module, tmp_path, transport)
+    cfg = module.ExecutorConfig(**{
+        **bz.__dict__, "target": "gz-a3", "remote_root": "profiling-gz",
+        "campaign_revision": "a" * 40,
+        "qualification_receipt": tmp_path / "qualification.json",
+    })
+    cfg.qualification_receipt.write_text(json.dumps(qualification_receipt(module, cfg)))
+
+    assert module.Executor(cfg, transport).execute(request(target="gz-a3"))["status"] == "ok"
+
+    uploaded = Path(transport.uploads[0][1])
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    shutil.copy2(uploaded, remote / Path(transport.uploads[0][2]).name)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python"
+    fake_python.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' 'BSA_CANDIDATE_RESULT={\"status\":\"ok\"}'\n"
+    )
+    fake_python.chmod(0o755)
+    rendered = Path(transport.runs[0][2])
+
+    completed = subprocess.run(
+        ["bash", str(rendered)], cwd=remote, text=True, capture_output=True,
+        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"}, check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == 'BSA_CANDIDATE_RESULT={"status":"ok"}\n'
+    result_logs = list((remote / "runs").rglob("compact-result.log"))
+    assert len(result_logs) == 1
+    assert result_logs[0].read_text() == completed.stdout
 
 
 def test_gz_rejects_missing_or_drifted_qualification_before_remote_calls(tmp_path):
@@ -955,6 +997,63 @@ def test_observer_interruption_preserves_handle_and_resume_does_not_redispatch(t
         ("bz-a3-1", "remote:bz-a3-1:job:retained-1"),
         ("bz-a3-1", "remote:bz-a3-1:job:retained-1"),
     ]
+
+
+def test_terminal_observe_error_is_persisted_and_new_attempt_can_dispatch(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success())
+    cfg, _ = config(module, tmp_path, transport)
+    executor = module.Executor(cfg, transport)
+    observe = transport.observe_result
+
+    def terminal_log_failure(target, handle):
+        transport.observations.append((target, handle))
+        raise module.ExecutorError(
+            "infrastructure_error", "terminal job logs unavailable",
+            handle=handle, terminal=True,
+        )
+
+    transport.observe_result = terminal_log_failure
+    first = executor.execute(request())
+
+    assert first["status"] == "infrastructure_error"
+    assert first["terminal"] is True
+    handle = first["provenance"]["handle"]
+    terminal_path = next((tmp_path / "state").rglob("attempt-0001/terminal.json"))
+    assert json.loads(terminal_path.read_text()) == {
+        "handle": handle,
+        "status": "infrastructure_error",
+        "terminal": True,
+        "evidence_sha256": hashlib.sha256(
+            json.dumps({
+                "diagnostics": "terminal job logs unavailable",
+                "handle": handle,
+                "status": "infrastructure_error",
+            }, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+    transport.observe_result = observe
+    retry = request()
+    retry["retry"] = {"mode": "new_attempt", "prior_handle": handle}
+    second = executor.execute(retry)
+
+    assert second["status"] == "ok"
+    assert len(transport.runs) == 2
+    assert [path.name for path in sorted((tmp_path / "state").rglob("attempt-*"))] == [
+        "attempt-0001", "attempt-0002",
+    ]
+
+
+def test_nonterminal_observe_error_does_not_create_terminal_receipt(tmp_path):
+    module = load()
+    transport = FakeTransport(module, success(), interrupted=True)
+    cfg, _ = config(module, tmp_path, transport)
+
+    first = module.Executor(cfg, transport).execute(request())
+
+    assert first["terminal"] is False
+    assert not list((tmp_path / "state").rglob("terminal.json"))
 
 
 def test_transfer_interruption_resumes_exact_handle_then_dispatches_without_reupload(

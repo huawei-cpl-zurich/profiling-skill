@@ -66,6 +66,14 @@ executor executable. Resume therefore fails closed after either identity
 changes; use a new output path or deliberately regenerate the checkpoint after
 updating the harness.
 
+Remote result schema `profiling-skill/bsa-candidate-remote-result/v2` also
+includes the validated `profiling-skill/a3-python-runtime-fingerprint/v1`
+object. Qualification schema `profiling-skill/bsa-a3-qualification/v2` binds
+that object and its canonical SHA-256. A production GZ result is accepted only
+when its resolved executable, Python, Torch, Torch-NPU, and Triton identities
+exactly match qualification. The compact fingerprint hashes the resolved
+executable path instead of exposing it and rejects unrecognized fields.
+
 For `action=discover`, the executor must run all requested correctness cases,
 then perform an unfiltered `msprof op` BasicInfo capture. Success is:
 

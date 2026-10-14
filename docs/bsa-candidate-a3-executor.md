@@ -42,7 +42,8 @@ uploads retain their existing synchronous SSH behavior.
 
 GZ dispatch additionally requires a passing qualification receipt bound to
 the frozen campaign revision and the exact executor, remote driver, baseline,
-case data, and runner hashes. Generate it before starting a campaign:
+case data, runner hashes, and resolved remote runtime fingerprint. Generate it
+before starting a campaign:
 
 ```bash
 scripts/qualify_bsa_candidate_a3.py \
@@ -67,6 +68,22 @@ in the receipt. Any failed step writes a compact
 missing, failed, or identity-drifted receipt before any remote call. A passing
 receipt retains the exact ordered five-case correctness evidence, and dispatch
 also rejects missing, partial, failed, or reordered correctness evidence.
+Discovery, every capture, and the intentional compiler failure must report the
+same runtime fingerprint. Production results must match that qualified
+fingerprint, so changing a registry mapping or reprovisioning a named runtime
+invalidates the old qualification even when its logical name is unchanged.
+
+The fingerprint schema is
+`profiling-skill/a3-python-runtime-fingerprint/v1`. It contains only:
+
+- the executable basename, SHA-256 of its resolved path, and SHA-256 of its
+  contents (never the raw remote path);
+- Python implementation and version;
+- Torch, Torch-NPU, and Triton module versions; and
+- the installed `triton` or `triton-ascend` distribution name and version.
+
+Unknown or additional fields are rejected to keep compact evidence from
+accidentally carrying machine paths or environment data.
 
 Before a campaign, independently confirm the selected route:
 
@@ -141,11 +158,12 @@ a multi-component logical kernel the coordinator takes the maximum component
 duration for the sample and retains every component's pipe rows and
 provenance.
 
-Every terminal response records product, target, logical runtime, activation mode, selected
-physical device, normalized `cpl-remote run` command, durable handle, and an
-explicit terminal flag. The evidence digest covers the complete compact
-remote result. Observation and both stdout/stderr log receipts must repeat the
-exact configured target and durable handle before compact output is parsed.
+Every terminal response records product, target, logical runtime, activation
+mode, validated runtime fingerprint, selected physical device, normalized
+`cpl-remote run` command, durable handle, and an explicit terminal flag. The
+evidence digest covers the complete compact remote result. Observation and
+both stdout/stderr log receipts must repeat the exact configured target and
+durable handle before compact output is parsed.
 
 ## Interruption and recovery
 

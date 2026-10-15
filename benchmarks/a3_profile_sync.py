@@ -75,6 +75,8 @@ def main():
             summary['cells'][case['id']] = result
             (args.output / 'summary.json').write_text(json.dumps(summary, indent=2))
             print(json.dumps({'case': case['id'], 'result': result}), flush=True)
+            if 'failure' in result:
+                break  # A failed acquisition pilot must not expand the family.
     finally:
         lease.close()
     return int(any('failure' in value for value in summary['cells'].values()))

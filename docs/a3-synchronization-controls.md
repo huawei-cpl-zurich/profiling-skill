@@ -7,6 +7,8 @@ BasicInfo and three PipeUtilization replays with the existing batch runner.
 The runner acquires one idle device lease for the batch and applications use
 logical device zero. Submit through the global remote-access client; never
 invoke these scripts over an alternate transport.
+The batch stops on its first failed correctness/acquisition cell; inspect its
+retained command and diagnostics before scheduling any remaining variants.
 
 All variants preserve useful loads, vector work, and outputs. Intra-core
 controls compare early signal/late wait (`overlap`), early wait, and late

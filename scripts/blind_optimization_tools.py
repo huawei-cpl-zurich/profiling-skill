@@ -198,11 +198,33 @@ class Tools:
         return self.dispatch(folder, receipt)
 
     def dispatch(self, folder, receipt):
-        dispatch = self.remote('run', receipt['target'], '--runtime', receipt['runtime'],
-                               '--cwd', receipt['cwd'], '--file', folder / 'run.sh')
+        if receipt.get('dispatch_intent'):
+            return self.unconfirmed(receipt)
+        # Commit the per-call intent before crossing the external dispatch boundary.
+        # A lost response must never turn an observation into a second run.
+        receipt['dispatch_intent'] = True
+        save(folder / 'receipt.json', receipt)
+        try:
+            dispatch = self.remote('run', receipt['target'], '--runtime', receipt['runtime'],
+                                   '--cwd', receipt['cwd'], '--file', folder / 'run.sh')
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            receipt.update(state='dispatch-unconfirmed', error=str(error))
+            save(folder / 'receipt.json', receipt)
+            return self.unconfirmed(receipt)
+        if not dispatch.get('handle'):
+            receipt.update(state='dispatch-unconfirmed', dispatch_response=dispatch)
+            save(folder / 'receipt.json', receipt)
+            return self.unconfirmed(receipt)
         receipt.update(state=dispatch['state'], handle=dispatch['handle'])
         save(folder / 'receipt.json', receipt)
         return self.observe(receipt['call_id'])
+
+    @staticmethod
+    def unconfirmed(receipt):
+        return dict(receipt, state='dispatch-unconfirmed',
+                    recovery='DO NOT REDISPATCH: dispatch was attempted but its handle is unknown. '
+                    'Recover the original handle from managed remote-access diagnostics before continuing; '
+                    'this call will never automatically submit another workload.')
 
     def transfer(self, receipt, name):
         transfer = receipt[name]
@@ -218,6 +240,8 @@ class Tools:
         folder = self.state / ident
         receipt = json.loads((folder / 'receipt.json').read_text())
         if not receipt.get('handle'):
+            if receipt.get('dispatch_intent'):
+                return self.unconfirmed(receipt)
             if 'upload' not in receipt:
                 return dict(receipt, state='infrastructure-unavailable', error='submission has no retained job or transfer')
             try:

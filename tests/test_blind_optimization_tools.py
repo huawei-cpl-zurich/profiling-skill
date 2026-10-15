@@ -87,6 +87,30 @@ def test_transport_timeout_keeps_call_id_and_same_handle(tmp_path):
     assert result['next'] == 'experiment-tool observe abc123'
 
 
+@pytest.mark.parametrize('failure', ['lost-response', 'missing-handle'])
+def test_dispatch_intent_prevents_duplicate_after_unknown_submission(tmp_path, failure):
+    obj = instance(tmp_path)
+    folder = obj.state / 'abc123'
+    folder.mkdir()
+    receipt = dict(call_id='abc123', target='saved-target', runtime='saved-runtime', cwd='/saved-cwd',
+                   upload=dict(state='completed'))
+    calls = []
+    def remote(*args):
+        calls.append(args)
+        # The durable intent must already exist when the remote accepts the run.
+        assert json.loads((folder / 'receipt.json').read_text())['dispatch_intent'] is True
+        if failure == 'lost-response': raise RuntimeError('accepted remotely, JSON response lost')
+        return dict(state='reconnecting')
+    obj.remote = remote
+    submitted = obj.dispatch(folder, receipt)
+    assert submitted['state'] == 'dispatch-unconfirmed'
+    assert submitted['call_id'] == 'abc123'
+    assert 'DO NOT REDISPATCH' in submitted['recovery']
+    observed = obj.observe('abc123')
+    assert observed['state'] == 'dispatch-unconfirmed'
+    assert len(calls) == 1 and calls[0][0] == 'run'
+
+
 def test_terminal_retrieval_materializes_compact_result(tmp_path):
     obj = instance(tmp_path)
     folder = obj.state / 'abc123'

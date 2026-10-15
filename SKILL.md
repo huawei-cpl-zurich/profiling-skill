@@ -66,8 +66,11 @@ timeline occupancy, and composition are useful localization evidence but are
 not capacity denominators and cannot establish saturation by themselves.
 
 Read [Pipe saturation contract](references/pipe-saturation-contract.md) before
-creating model or evidence JSON. No built-in A2/A3 or A5 capacity model is
-provided yet; return `unknown` rather than borrowing another product's model.
+creating model or evidence JSON. No built-in A2/A3 capacity model is provided.
+For A5, `references/a5-pipe-capacity-model.json` covers only its narrowly
+reviewed Cube and GM-to-L1 resources with the documented product and metric
+definitions; it is not a universal capacity model. Unmodeled resources and
+missing capacity evidence remain `unknown`; never borrow another product's model.
 A2/A3 `PipeUtilization` block rows are non-temporal activity observations, not
 phase evidence, and must never be passed to this analyzer.
 

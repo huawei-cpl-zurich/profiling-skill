@@ -81,3 +81,41 @@ def test_omitting_small_loop_contribution_is_rejected(tmp_path):
     runner.validate_output(spec, expected.clone(), expected)
     with pytest.raises(AssertionError):
         runner.validate_output(spec, inputs['x'] * 1.5 + 2, expected)
+
+
+def repetition_ir(*, optimized=False, volatile=True, loop=True, bound='runtime'):
+    attribute = '{isVolatile = true}' if volatile else '{isVolatile = false}'
+    body = [f'%predicate = tt.load %maskptr {attribute} : tensor<128x!tt.ptr<i8>>']
+    mask = ', %predicate' if optimized else ''
+    body += [f'%value = tt.load %dataptr{mask} {attribute} : tensor<128x!tt.ptr<f32>>',
+             '%scaled = arith.mulf %value, %one : tensor<128xf32>',
+             '%result = arith.select %predicate, %scaled, %zero : tensor<128xi1>',
+             'tt.store %destptr, %result : tensor<128x!tt.ptr<f32>>']
+    upper = '%repeat' if bound == 'runtime' else '%one'
+    region = ['scf.for %iteration = %zero to ' + upper + ' step %one : i32 {', *body, '}'] if loop else body
+    return '\n'.join(['module {', 'tt.func public @optimized(%a: !tt.ptr<f32>, %b: !tt.ptr<i8>, %c: !tt.ptr<i32>, %d: !tt.ptr<f32>) {',
+        '%zero = arith.constant 0 : i32', '%one = arith.constant 1 : i32',
+        '%repeat = tt.load %c : !tt.ptr<i32>',
+        '%dataptr = tt.splat %a : !tt.ptr<f32> -> tensor<128x!tt.ptr<f32>>',
+        '%maskptr = tt.splat %b : !tt.ptr<i8> -> tensor<128x!tt.ptr<i8>>',
+        '%destptr = tt.splat %d : !tt.ptr<f32> -> tensor<128x!tt.ptr<f32>>',
+        *region, 'tt.return', '}', '}'])
+
+
+@pytest.mark.parametrize('optimized', [False, True])
+def test_compiled_repetition_gate_accepts_preserving_optimization(tmp_path, optimized):
+    export('task04', tmp_path / 'bundle')
+    runner = load_runner(tmp_path / 'bundle')
+    evidence = runner.validate_repetition_ir(repetition_ir(optimized=optimized),
+        dict(x='%a', selected='%b', repetitions='%c', output='%d'))
+    assert evidence['qualified'] is True
+    assert evidence['output_store_lines']
+
+
+@pytest.mark.parametrize('changes', [dict(loop=False), dict(volatile=False), dict(bound='constant')])
+def test_compiled_repetition_gate_rejects_shortcuts(tmp_path, changes):
+    export('task04', tmp_path / 'bundle')
+    runner = load_runner(tmp_path / 'bundle')
+    with pytest.raises(ValueError, match='semantic contract'):
+        runner.validate_repetition_ir(repetition_ir(**changes),
+            dict(x='%a', selected='%b', repetitions='%c', output='%d'))

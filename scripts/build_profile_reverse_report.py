@@ -498,15 +498,34 @@ def validate_saturation(rows: list[dict[str, Any]]) -> None:
             )
 
 
-def classify_hypothesis(item: dict[str, Any]) -> tuple[str, str]:
-    # The producer's timeline controls currently report scalar core-time proxies,
-    # not semantic order/duration/overlap observations. Their timing changes are
-    # retained below but cannot validate (or refute) a timeline interpretation.
-    if any(
-        str(signal.get("name", "")).startswith("timeline_")
-        for signal in objects(item.get("signals", []), "hypothesis.signals")
-    ):
-        return "unavailable", "scalar timing controls do not establish semantic timeline evidence"
+def classify_hypothesis(
+    item: dict[str, Any], *, raw_cells: list[dict[str, Any]] | None = None,
+) -> tuple[str, str]:
+    temporal = [signal for signal in objects(item.get("signals", []), "hypothesis.signals")
+                if str(signal.get("name", "")).startswith("timeline_")]
+    if temporal:
+        # The campaign assesses phase order/duration/overlap separately from its
+        # scalar timing controls. Require retained, selector-complete semantics
+        # before consuming those assessments; scalar speedups are not evidence.
+        referenced = {
+            row.get(key) for row in item.get("measurements", [])
+            for key in ("before_cell_id", "after_cell_id") if row.get(key)
+        }
+        cells = [cell for cell in (raw_cells or [])
+                 if cell.get("id") in referenced
+                 or cell.get("experiment") == item.get("hypothesis_id")]
+        relationships = {signal.get("relationship") for signal in temporal}
+        if ({cell.get("variant") for cell in cells} != {"before", "after"}
+                or any(cell.get("timeline", {}).get("status") != "available"
+                       or not cell.get("timeline", {}).get("semantics", {}).get("selectors_complete")
+                       for cell in cells)
+                or "not_exported" in relationships):
+            return "unavailable", "no complete retained semantic timeline evidence; scalar timing is insufficient"
+        if relationships == {"tracks_outcome"}:
+            return "supported", "retained temporal assessment supports the declared control"
+        if relationships == {"contradicts_outcome"}:
+            return "refuted", "retained temporal assessment contradicts the declared control"
+        return "inconclusive", "retained temporal assessments are contextual or mixed"
     measurements = objects(item.get("measurements", []), "hypothesis.measurements")
     valid = [row for row in measurements if row.get("status") == "valid"]
     if not valid:
@@ -563,6 +582,19 @@ def compile_report(
         if lineage_state in {"incomplete", "unrecoverable", "unlinked"}:
             identifier(candidate.get("lineage_note"), f"candidate {candidate_id!r}.lineage_note")
         candidates[candidate_id] = candidate
+    visited: set[str] = set()
+    for candidate_id in candidates:
+        path: set[str] = set()
+        current = candidate_id
+        while current is not None and current not in visited:
+            if current in path:
+                raise InvalidReportInput(f"parent cycle includes candidate {current!r}")
+            if current not in candidates:
+                raise InvalidReportInput(f"candidate parent references unknown candidate {current!r}")
+            path.add(current)
+            parent = candidates[current].get("parent_candidate_id")
+            current = identifier(parent, f"candidate {current!r}.parent_candidate_id") if parent is not None else None
+        visited.update(path)
     starter_id = manifest.get("starter_candidate_id")
     if starter_id is not None:
         starter_id = identifier(starter_id, "starter_candidate_id")
@@ -641,9 +673,9 @@ def compile_report(
                 if latency is not None and parent and parent["median_latency_us"] is not None
                 else None
             )
-            if starter_speedup is not None:
+            if starter_speedup is not None and case_id in coverage["required_case_ids"]:
                 starter_ratios.append(starter_speedup)
-            if parent_speedup is not None:
+            if parent_speedup is not None and case_id in coverage["required_case_ids"]:
                 parent_ratios.append(parent_speedup)
             case_results[case_id] = {
                 **summary,
@@ -718,7 +750,7 @@ def compile_report(
     compiled_hypotheses, raw_signal_rows = [], []
     for item in objects(hypothesis_doc.get("results"), "hypotheses.results"):
         hypothesis_id = identifier(item.get("hypothesis_id"), "hypothesis_id")
-        classification, reason = classify_hypothesis(item)
+        classification, reason = classify_hypothesis(item, raw_cells=hypothesis_doc.get("raw_cells", []))
         compiled_hypotheses.append({
             "hypothesis_id": hypothesis_id,
             "title": item.get("title", hypothesis_id),

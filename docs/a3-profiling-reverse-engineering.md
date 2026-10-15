@@ -39,6 +39,8 @@ declared by the run contract before an aggregate latency or speedup is emitted.
 Rejected samples remain in the report even when a case has no accepted timing.
 Producer-schema cases require explicit `accepted_sample_indexes`: when absent,
 all captured samples remain diagnostic-only and produce no median or aggregate.
+Auxiliary cases remain visible but do not enter declared-suite speedups. Parent
+lineage cycles are rejected rather than emitted as comparative evidence.
 
 Activity fractions are non-temporal observations. They do not provide a
 validated A3 capacity denominator or saturation threshold, so this A3 report
@@ -172,12 +174,13 @@ are preserved rather than reduced to an error label. A legacy snapshot lacking
 modern environment bindings must remain explicitly legacy; do not assign it a
 new target contract or merge its timings with another server's measurements.
 
-Timeline controls currently carry scalar core-time measurements, not a validated
-semantic evaluator for phase order, duration, overlap, or kernel boundaries.
-Their hypothesis classification is therefore `unavailable`, even if scalar
-timing changes match the expected direction. Retained timing pairs remain useful
-controls but are not proof that the timeline can recover the injected pattern.
-No scalar timing result can promote those controls to supported or refuted.
+Scalar core-time measurements cannot validate phase order, duration, overlap, or
+kernel boundaries. A timeline hypothesis remains `unavailable` unless retained
+before/after cells have available, selector-complete semantic evidence. When
+present, the campaign's separate temporal assessments determine support,
+refutation, or inconclusiveness, independently of scalar timing changes. The
+current preliminary captures lack that evidence; their timing pairs remain
+controls, not proof that timelines recover the injected pattern.
 
 For large preliminary corpora, `--compact-markdown` keeps verbose sample and
 profile bodies in the canonical JSON appendix and bounds each displayed failure

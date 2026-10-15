@@ -207,6 +207,49 @@ def test_builds_joined_outputs_and_preserves_failures_and_duplicates(tmp_path: P
     ]
 
 
+def test_auxiliary_cases_do_not_change_declared_aggregate_speedups(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    manifest_doc = json.loads(manifest.read_text())
+    manifest_doc["required_case_ids"] = ["43", "44"]
+    write_json(manifest, manifest_doc)
+    payload = json.loads(captures.read_text())
+    payload["captures"].extend([
+        {"candidate_id": "starter", "case_id": "auxiliary", "status": "valid", "latency_us": 1000.0},
+        {"candidate_id": "fast", "case_id": "auxiliary", "status": "valid", "latency_us": 10.0},
+    ])
+    write_json(captures, payload)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    candidate = next(item for item in json.loads((output / "report.json").read_text())["candidates"]
+                     if item["candidate_id"] == "fast")
+    expected = (101.0 / 51.0 * 2.0) ** 0.5
+    assert candidate["geometric_mean"]["starter_speedup"] == pytest.approx(expected)
+    assert candidate["geometric_mean"]["parent_speedup"] == pytest.approx(expected)
+    assert candidate["cases"]["auxiliary"]["parent_speedup"] == 100.0
+
+
+@pytest.mark.parametrize("parent_id", ["fast", "fast-copy"])
+def test_rejects_self_and_multicandidate_parent_cycles(tmp_path: Path, parent_id: str):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(manifest.read_text())
+    payload["candidates"][1]["parent_candidate_id"] = parent_id
+    write_json(manifest, payload)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 2
+    assert "parent cycle" in run.stderr
+    assert not (output / "report.json").exists()
+
+
 def test_rejects_unknown_candidate_and_does_not_infer_saturation(tmp_path: Path):
     manifest, captures, hypotheses = fixtures(tmp_path)
     payload = json.loads(captures.read_text())
@@ -731,6 +774,46 @@ def test_timing_controls_do_not_validate_timeline_and_retain_provenance(
     assert report["hypothesis_evidence"]["reporting_revision"] == "reporter-only"
     assert report["hypothesis_evidence"]["raw_cells"] == raw_cells
     assert report["report_state"] == "partial"
+
+
+@pytest.mark.parametrize("relationship,expected", [
+    ("tracks_outcome", "supported"), ("contradicts_outcome", "refuted"),
+    ("context_only", "inconclusive"),
+])
+def test_validated_timeline_assessments_are_separate_from_scalar_timing(
+    tmp_path: Path, relationship: str, expected: str,
+):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    raw_cells = [
+        {"id": f"phase/{variant}", "experiment": "reversed-phases", "variant": variant,
+         "timeline": {"status": "available", "semantics": {
+             "selectors_complete": True, "event_count": 3,
+             "phase_order": order,
+         }}}
+        for variant, order in (("before", ["load", "compute", "store"]),
+                               ("after", ["compute", "load", "store"]))
+    ]
+    payload = {
+        "schema_version": 1, "manifest_sha256": "a" * 64, "raw_cells": raw_cells,
+        "results": [{"hypothesis_id": "reversed-phases", "title": "Reversed phase order",
+                     "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+                     "measurements": [{"status": "valid", "before": 100.0, "after": 100.0,
+                                       "before_cell_id": "phase/before", "after_cell_id": "phase/after"}],
+                     "signals": [{"name": "timeline_phase_order", "relationship": relationship}]}],
+    }
+    for mode in ("complete", "incomplete"):
+        if mode == "incomplete":
+            raw_cells[1]["timeline"]["semantics"]["selectors_complete"] = False
+        write_json(hypotheses, payload)
+        output = tmp_path / mode
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+             "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+            text=True, capture_output=True, check=False,
+        )
+        assert run.returncode == 0, run.stderr
+        report = json.loads((output / "report.json").read_text())
+        assert report["hypotheses"][0]["classification"] == (expected if mode == "complete" else "unavailable")
 
 
 def test_compact_markdown_does_not_discard_json_or_csv_evidence(tmp_path: Path):

@@ -8,7 +8,7 @@ import sys
 
 def cases():
     return [dict(id=f'{impl}/{m}x{n}x{k}', implementation=impl, m=m, n=n, k=k,
-                 selector='a3_small_mmad' if impl == 'native' else None)
+                 selector='a3_small_mmad' if impl == 'native' else 'a3_small_dot')
             for impl in ('native', 'triton')
             for m, n, k in ((16, 16, 16), (32, 32, 32), (64, 64, 64),
                             (128, 128, 128), (16, 64, 32), (64, 16, 32))]

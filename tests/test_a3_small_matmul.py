@@ -49,3 +49,32 @@ def test_packed_cpu_product_uses_asymmetric_inputs():
                   for q in range(k)) for r in range(m) for c in range(n)]
     assert actual == reference(a, b, m, n, k)
     assert len(set(actual)) > 8
+
+
+def test_triton_case_profiles_through_real_process_and_csv_boundary(tmp_path):
+    import os
+    sys.path.insert(0, str(ROOT / 'scripts'))
+    from a3_memory_batch import run_case
+    from a3_profile_small_matmul import cases
+    profiler = tmp_path / 'msprof'
+    profiler.write_text('#!' + sys.executable + '\n'
+        'import sys\nfrom pathlib import Path\n'
+        'args=sys.argv[1:]\n'
+        'selector=next((a.split("=",1)[1] for a in args if a.startswith("--kernel-name=")),None)\n'
+        'if selector not in (None,"a3_small_dot"): raise SystemExit(3)\n'
+        'out=Path(next(a.split("=",1)[1] for a in args if a.startswith("--output=")))\n'
+        'out.mkdir(parents=True)\n'
+        '(out/"OpBasicInfo.csv").write_text("Op Name,Op Type,Task Duration(us),Block Dim\\na3_small_dot,cube,2.5,1\\n")\n'
+        'if "--aic-metrics=PipeUtilization" in args:\n'
+        ' (out/"PipeUtilization.csv").write_text("Op Name,Block Id,mac_ratio\\na3_small_dot,0,0.25\\n")\n'
+        'print("Profiling running finished. All task success.")\n')
+    profiler.chmod(0o700)
+    env = dict(os.environ, PATH=str(tmp_path) + os.pathsep + os.environ['PATH'])
+    case = next(c for c in cases() if c['id'] == 'triton/16x16x16')
+    result = run_case([sys.executable, '-c', 'print(\'{"correctness":true}\')'],
+                      tmp_path / 'case', env, case['selector'])
+    assert result['selector'] == 'a3_small_dot'
+    assert result['timing']['samples_us'] == [2.5] * 5
+    assert len(result['pipe_captures']) == 3
+    assert all(capture['pipe_rows'][0]['Op Name'] == 'a3_small_dot'
+               for capture in result['pipe_captures'])

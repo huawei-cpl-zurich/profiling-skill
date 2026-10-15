@@ -62,10 +62,19 @@ def execute(command: list[str], cwd: Path, timeout: float,
 class ToolHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         owner = self.server.owner
+        args = None
+        command = None
         try:
             args = json.loads(self.rfile.readline())["arguments"]
             if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
                 raise ValueError("arguments must be a string array")
+            managed = {"--workspace", "--bundle", "--target", "--runtime"}
+            overrides = sorted({arg.split("=", 1)[0] for arg in args} & managed)
+            if overrides:
+                raise ValueError("Managed configuration " + ", ".join(overrides) +
+                                 " is assigned by the harness; omit these flags. Use experiment-tool help.")
+            if any(arg in {"-h", "--help"} for arg in args):
+                args = ["help"]
             # A domain helper receives candidate files; it is not a transport adapter.
             command = [*owner.tool_command, "--workspace", str(owner.workspace), *args]
             with owner.tool_lock:
@@ -74,7 +83,11 @@ class ToolHandler(socketserver.StreamRequestHandler):
                 with owner.journal.open("a") as stream:
                     stream.write(json.dumps({"command": command, **result}) + "\n")
         except (OSError, ValueError, KeyError) as error:
-            result = {"returncode": 74, "stdout": "", "stderr": str(error) + "\n"}
+            result = {"returncode": 74 if isinstance(error, OSError) else 2,
+                      "stdout": "", "stderr": str(error) + "\n"}
+            if command is None:
+                with owner.journal.open("a") as stream:
+                    stream.write(json.dumps({"arguments": args, "dispatched": False, **result}) + "\n")
         try:
             self.wfile.write(json.dumps(result).encode() + b"\n")
         except BrokenPipeError:
@@ -126,19 +139,33 @@ class BlindLauncher(ProductionLauncher):
     def prepare(self) -> None:
         if self.root.exists():
             raise LaunchError("output already exists; inspect its receipt rather than restarting")
-        self.root.mkdir(parents=True, mode=0o700)
-        self.workspace = self.root / "workspace"
-        self.workspace.mkdir()
         # The exporter explicitly declares the public boundary. Never copy repository history.
-        manifest = json.loads((self.bundle / "task.json").read_text())
-        files = manifest["public_files"]
-        if not isinstance(files, list) or not files:
+        try:
+            manifest = json.loads((self.bundle / "task.json").read_text())
+            files = manifest["public_files"]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise LaunchError("invalid task manifest: " + str(error)) from error
+        if not isinstance(files, list) or not files or not all(isinstance(name, str) for name in files):
             raise LaunchError("task.json must declare public_files")
         for name in files:
             relative = Path(name)
             source = self.bundle / relative
             if relative.is_absolute() or ".." in relative.parts or source.is_symlink() or not source.is_file():
                 raise LaunchError("invalid public bundle file")
+        if not self.prompt_source.is_file():
+            raise LaunchError("prompt file is unavailable")
+        if self.skill_source:
+            if not self.skill_source.is_dir() or not (self.skill_source / "SKILL.md").is_file():
+                raise LaunchError("skill snapshot is unavailable")
+            if any(p.is_symlink() for p in self.skill_source.rglob("*")):
+                raise LaunchError("skill snapshot must not contain symlinks")
+        # Ordinary bad inputs must not reserve an output path that cannot be retried.
+        self.root.mkdir(parents=True, mode=0o700)
+        self.workspace = self.root / "workspace"
+        self.workspace.mkdir()
+        for name in files:
+            relative = Path(name)
+            source = self.bundle / relative
             target = self.workspace / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
@@ -146,8 +173,6 @@ class BlindLauncher(ProductionLauncher):
         self.frozen.mkdir()
         shutil.copy2(self.prompt_source, self.frozen / "prompt.md")
         if self.skill_source:
-            if any(p.is_symlink() for p in self.skill_source.rglob("*")):
-                raise LaunchError("skill snapshot must not contain symlinks")
             shutil.copytree(self.skill_source, self.frozen / "skill")
         self.state = self.root / "codex-state"
         self.state.mkdir()

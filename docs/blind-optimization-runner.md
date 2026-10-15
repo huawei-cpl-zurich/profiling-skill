@@ -12,6 +12,9 @@ runner and CPU reference remain outside the agent's filesystem. Public files
 other than `candidate.*` are read-only. The optional skill is a read-only
 snapshot; global skills, campaign reports and repository history are not mounted.
 The evaluation output must be outside the orchestration workspace.
+Invalid manifest, public-file, prompt or skill inputs are checked before an output
+directory is reserved, so correcting an ordinary input error permits the same
+output path to be retried. Existing outputs are never removed automatically.
 
 ```bash
 python scripts/blind_optimization_launcher.py \
@@ -31,6 +34,10 @@ helper receives a host-configured frozen bundle path separately and must use
 the resolved user-wide `remote-access/scripts/cpl-remote` for every real remote
 operation. `experiment-tool` is an experiment API, not a renamed or copied
 transport client. Both arms must receive identical help and capabilities.
+Agent `-h`/`--help` requests map to the public tool help. Configuration flags
+`--workspace`, `--bundle`, `--target` and `--runtime` belong to the host, not
+the agent interface; accidental overrides return an actionable error before
+helper dispatch and may be retried without these flags.
 
 `commands.jsonl` retains every helper argv, full stdout/stderr and exit status.
 `agent.jsonl` retains Codex command events and messages; `agent.stderr` retains

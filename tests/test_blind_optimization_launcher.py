@@ -60,6 +60,25 @@ def test_public_file_escape_rejected(tmp_path):
     (instance.bundle / "task.json").write_text(json.dumps({"public_files": ["../prompt.md"]}))
     with pytest.raises(module.LaunchError, match="invalid public"):
         instance.prepare()
+    assert not instance.root.exists()
+
+
+@pytest.mark.parametrize("failure", ["manifest", "prompt", "skill"])
+def test_invalid_input_does_not_reserve_output_and_valid_retry_succeeds(tmp_path, failure):
+    instance = make_launcher(tmp_path, skill=failure == "skill")
+    path = {"manifest": instance.bundle / "task.json", "prompt": instance.prompt_source,
+            "skill": instance.skill_source / "SKILL.md" if instance.skill_source else None}[failure]
+    original = path.read_text()
+    if failure == "manifest":
+        path.write_text("{not json")
+    else:
+        path.unlink()
+    with pytest.raises(module.LaunchError):
+        instance.prepare()
+    assert not instance.root.exists()
+    path.write_text(original)
+    instance.prepare()
+    assert (instance.workspace / "candidate.py").is_file()
 
 
 def test_timeout_keeps_partial_diagnostics_and_stops_child_group(tmp_path):
@@ -176,6 +195,37 @@ def test_preflight_does_not_require_agent_commit(tmp_path):
     result = instance.launch(preflight_only=True)
     assert result["exit_code"] == 0
     assert result["candidate_commits"] == 0
+
+
+def test_wrapper_managed_flags_are_recoverable_without_dispatch_and_help_is_public(tmp_path):
+    instance = make_launcher(tmp_path)
+    helper = Path(instance.tool_command[1])
+    helper.write_text("""import argparse
+p = argparse.ArgumentParser()
+p.add_argument('--workspace', required=True)
+p.add_argument('operation')
+a = p.parse_args()
+assert a.operation == 'help'
+print('experiment-tool check|timing|pipes|ir|sanitize')
+""")
+    fake_model(instance, """import subprocess
+for args in (['--workspace', '/workspace', 'timing'], ['--bundle=other', 'timing'],
+             ['--target', 'other', 'check'], ['--runtime=other', 'pipes']):
+    p = subprocess.run(['experiment-tool', *args], capture_output=True, text=True)
+    assert p.returncode == 2, p
+    assert 'Managed configuration' in p.stderr and 'experiment-tool help' in p.stderr
+for args in (['--help'], ['-h'], ['timing', '--help'], ['help']):
+    p = subprocess.run(['experiment-tool', *args], capture_output=True, text=True)
+    assert p.returncode == 0, p
+    assert '--workspace' not in p.stdout and '--bundle' not in p.stdout
+subprocess.run(['git', 'commit', '--allow-empty', '-m', 'Record recovered interface test'], check=True)
+""")
+    result = instance.launch()
+    assert result["exit_code"] == 0
+    rows = [json.loads(line) for line in instance.journal.read_text().splitlines()]
+    assert len(rows) == 8
+    assert all(row["dispatched"] is False and "command" not in row for row in rows[:4])
+    assert all(row["command"][-1] == "help" for row in rows[4:])
 
 
 def test_cli_propagates_receipt_exit_code(tmp_path):

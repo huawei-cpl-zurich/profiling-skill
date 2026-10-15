@@ -145,6 +145,8 @@ def main():
                             return 2
                         if not mutant and summary['checks'][label]['workload_correctness'] is not True:
                             return 3
+                        if not mutant and tool == 'racecheck' and summary['checks'][label]['classification'] == 'detected':
+                            return 4
     finally:
         lease.close()
     return 0

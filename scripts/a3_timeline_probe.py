@@ -59,7 +59,7 @@ def _run(argv, output, label, timeout, runner):
 
 
 def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
-            soc_version=None, launch_count=1, timeout=180, runner=_execute):
+            language="ascendc", soc_version=None, launch_count=1, timeout=180, runner=_execute):
     """Caller holds an idle physical-device lease for this complete operation.
 
     Reports are intentionally not overwritten or resumed here. The outer queue
@@ -68,8 +68,14 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
     """
     if mode not in {"hardware", "simulation"}:
         raise ValueError("mode must be hardware or simulation")
+    if language not in {"triton", "ascendc"}:
+        raise ValueError("language must be triton or ascendc")
+    if mode == "hardware" and language == "triton":
+        raise ValueError("automatic TimelineDetail does not support Triton; use explicit simulation")
     if mode == "simulation" and not soc_version:
         raise ValueError("simulation requires observed --soc-version")
+    if mode == "simulation" and launch_count != 1:
+        raise ValueError("simulation normalization requires one invocation per retained capture")
     if not selector.strip() or launch_count < 1 or timeout < 1:
         raise ValueError("selector, launch count and timeout must be valid")
     if not application.is_file() or not os.access(application, os.X_OK):
@@ -77,7 +83,7 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
     if not os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
         raise ValueError("caller must select the leased physical device")
     output.mkdir(parents=True, exist_ok=False)
-    result = {"schema_version": 1, "mode": mode, "selector": selector,
+    result = {"schema_version": 1, "mode": mode, "language": language, "selector": selector,
               "soc_version": soc_version, "physical_device_mask": os.environ["ASCEND_RT_VISIBLE_DEVICES"],
               "source_phase_interpretation": "unavailable: requires independent source mapping",
               "hardware_timeline_available": False, "clean_acquisition_gate_passed": False}
@@ -133,12 +139,14 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--kernel-name", required=True)
     parser.add_argument("--mode", choices=("hardware", "simulation"), default="hardware")
+    parser.add_argument("--language", choices=("triton", "ascendc"), required=True,
+                        help="Triton requires explicit simulation; automatic TimelineDetail excludes it")
     parser.add_argument("--soc-version")
     parser.add_argument("--launch-count", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
     try:
-        result = acquire(args.application, args.output, args.kernel_name, mode=args.mode,
+        result = acquire(args.application, args.output, args.kernel_name, mode=args.mode, language=args.language,
                          soc_version=args.soc_version, launch_count=args.launch_count, timeout=args.timeout)
     except (ValueError, OSError) as exc:
         parser.exit(2, str(exc) + "\n")

@@ -108,11 +108,27 @@ def test_timeout_retains_partial_transcript(application, tmp_path):
 
 def test_hardware_does_not_accept_simulator_files(application, tmp_path):
     runner, commands = capture_runner()
-    result = probe.acquire(application, tmp_path / "capture", "probe", runner=runner)
+    result = probe.acquire(application, tmp_path / "capture", "probe", language="ascendc", runner=runner)
     assert result["status"] == "requires_hardware_normalization"
     assert not result["clean_acquisition_gate_passed"]
     assert "--aic-metrics=TimelineDetail" in commands[1]
     assert "simulator" not in commands[1]
+
+
+def test_triton_hardware_timeline_rejected_before_launch(application, tmp_path):
+    runner, commands = capture_runner()
+    with pytest.raises(ValueError, match="TimelineDetail.*Triton"):
+        probe.acquire(application, tmp_path / "capture", "probe", language="triton", runner=runner)
+    assert not commands
+    assert not (tmp_path / "capture").exists()
+
+
+def test_simulation_requires_one_invocation_binding(application, tmp_path):
+    runner, commands = capture_runner()
+    with pytest.raises(ValueError, match="one invocation"):
+        probe.acquire(application, tmp_path / "capture", "probe", mode="simulation",
+                      soc_version="ObservedSoC", launch_count=2, runner=runner)
+    assert not commands
 
 
 def test_simulation_requires_explicit_observed_soc(application, tmp_path):

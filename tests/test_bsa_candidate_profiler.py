@@ -846,6 +846,132 @@ def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt
     assert requests[2]["retry"] == {"mode": "new_attempt", "prior_handle": handle}
 
 
+def test_acquisition_budget_stops_new_attempts_but_never_retained_observation(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
+                              "diagnostics":"missing_pipe_rows: no report"}]*3)
+    output = tmp_path / "results.json"
+    for _ in range(5):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[47],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["status"] == "measurement_unstable"
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    requests = json.loads((tmp_path / "results.protocol/response.requests").read_text())
+    assert len(requests) == 2
+    state["retry"] = {"mode":"observe", "handle":"remote:gz-a3:job:alive"}
+    assert MODULE._acquisition_exhausted(state) is False
+
+
+def test_acquisition_success_resets_failure_budget():
+    state = {"infrastructure_failures":[{"terminal":True,"diagnostics":"old"}]*3}
+    MODULE._acquisition_succeeded(state)
+    assert MODULE._acquisition_exhausted(state) is False
+    state["infrastructure_failures"].extend(
+        {"terminal":True,"diagnostics":str(index)} for index in range(3))
+    assert MODULE._acquisition_exhausted(state) is True
+
+
+def test_distinct_terminal_infra_failures_allow_only_two_retries(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
+                              "diagnostics":f"transport failure {index}"}
+                             for index in range(4)])
+    output = tmp_path / "results.json"
+    for _ in range(6):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[43],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    assert len(state["infrastructure_failures"]) == 3
+
+
+def test_identical_transport_timeouts_are_not_evidence_fast_fail(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
+                              "diagnostics":"capabilities timed out"}]*4)
+    output = tmp_path / "results.json"
+    for _ in range(5):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[43],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert len(state["infrastructure_failures"]) == 3
+
+
+def test_unavailable_case_does_not_block_independent_case(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {"status":"ok", "kernel_names":["block_sparse_attention_kernel"],
+         "basic_info":{"rows":1}, "evidence_sha256":"a"*64},
+        *[{"status":"infrastructure_error", "terminal":True,
+           "diagnostics":"missing_pipe_rows: no report"}]*2,
+        *[{"status":"ok", "duration_us":100.0,
+           "pipe_utilization":{"aiv_vec_ratio":0.7}, "evidence_sha256":"b"*64}]*3,
+    ])
+    output = tmp_path / "results.json"
+    for _ in range(3):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[47,43],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["cases"]["47"]["status"] == "acquisition_exhausted"
+    assert state["cases"]["43"]["status"] == "completed"
+    assert state["cases"]["43"]["median_us"] == 100
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    assert "geomean_us" not in state
+
+
+def test_mixed_absence_and_variability_preserves_both_case_failures(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {"status":"ok", "kernel_names":["block_sparse_attention_kernel"],
+         "basic_info":{}, "evidence_sha256":"a"*64},
+        *[{"status":"infrastructure_error", "terminal":True,
+           "diagnostics":"missing_pipe_rows: no report"}]*2,
+        *[{"status":"ok", "duration_us":value,
+           "pipe_utilization":{}, "evidence_sha256":"b"*64}
+          for value in [100.,200.,100.]],
+        *[{"status":"ok", "duration_us":100.,
+           "pipe_utilization":{}, "evidence_sha256":"c"*64}]*3,
+    ])
+    output = tmp_path / "results.json"
+    for _ in range(3):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[47,43,44],
+                                     stable_samples=3, max_samples=3, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["cases"]["47"]["failure"]["kind"] == "acquisition_exhausted"
+    assert state["cases"]["43"]["status"] == "measurement_unstable"
+    assert state["cases"]["43"]["failure"]["kind"] == "measurement_instability"
+    assert state["cases"]["44"]["status"] == "completed"
+    assert state["failure"]["kind"] == "mixed_measurement_failures"
+
+
+def test_repeated_coordinator_malformed_evidence_fast_stops(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"ok", "terminal":True,
+                              "kernel_names":["kernel"], "evidence_sha256":"a"*64}]*3)
+    output = tmp_path / "results.json"
+    for _ in range(4):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[43],
+                                     stable_samples=3, max_samples=3, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    assert len(state["infrastructure_failures"]) == 2
+    assert state["infrastructure_failures"][0]["kind"] == "invalid_basic_info"
+
+
+def test_candidate_failure_keeps_remote_diagnostic_log_pointers(tmp_path):
+    executor = tmp_path / "executor.py"
+    logs = [{"path":"/retained/compile.stderr.log", "sha256":"c"*64,
+             "bytes":100, "stream":"stderr"}]
+    make_executor(executor, [{"status":"compile_error", "diagnostics":"compiler rejected code",
+                              "retained_logs":logs}])
+    result = MODULE.run_campaign(one_execution(), tmp_path / "results.json", executor,
+             cases=[43], stable_samples=3, max_samples=3, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["status"] == "candidate_failure"
+    assert state["failure"]["retained_logs"] == logs
+
+
 def test_retry_rejects_wrong_target_failure_handle(tmp_path: Path) -> None:
     executor = tmp_path / "executor.py"
     make_executor(executor, [{

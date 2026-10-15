@@ -235,6 +235,19 @@ def test_staged_remote_driver_is_valid_python():
     compile(module.remote_driver_source(), "remote_driver.py", "exec")
 
 
+@pytest.mark.parametrize("rows,pipe,expected", [
+    ([{"Op Name":"kernel", "Task Duration(us)":"NA"}], [], "missing_pipe_rows"),
+    ([{"Op Name":"kernel", "Task Duration(us)":"NA"}], [{}], "invalid_duration"),
+    ([{"Op Name":"kernel", "Task Duration(us)":"1"}]*2, [{}], "duration_row_count"),
+    ([{"Op Name":"kernel", "Task Duration(us)":"1"}], [{}], None),
+])
+def test_capture_diagnostics_distinguishes_missing_and_invalid_evidence(rows, pipe, expected):
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(load().remote_driver_source(), "remote_driver.py", "exec"), namespace)
+    result = namespace["capture_diagnostics"](rows, pipe, "kernel")
+    assert result is None if expected is None else result.startswith(expected + ":")
+
+
 @pytest.mark.parametrize("heads", [3, 24, 48, 96])
 def test_qualification_candidate_blockmask_access_plan_is_bounded(heads):
     candidate = load_qualification_candidate()
@@ -1047,13 +1060,54 @@ def test_capture_samples_use_independent_captures_in_one_retained_batch(tmp_path
     first = executor.execute(request("capture"))
     second_request = request("capture")
     second_request["sample_index"] = 1
-    second = executor.execute(second_request)
+    offline = FakeTransport(module, None, interrupted=True)
+    second = module.Executor(cfg, offline).execute(second_request)
 
     assert first["duration_us"] == 10.0
     assert second["duration_us"] == 11.0
     assert second["provenance"]["handle"] == first["provenance"]["handle"]
     assert first["evidence_sha256"] != second["evidence_sha256"]
     assert len(transport.runs) == 1
+    assert offline.observations == []
+    assert offline.runs == []
+
+
+def test_zero_exit_invalid_capture_retains_vendor_transcript(tmp_path, monkeypatch, capsys):
+    module = load()
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(module.remote_driver_source(), "remote_driver.py", "exec"), namespace)
+    monkeypatch.chdir(tmp_path)
+    req = request("capture")
+    (tmp_path / "request.json").write_text(json.dumps(req))
+    namespace["pick_device"] = lambda: (0, {}, None)
+    namespace["run_workload"] = lambda *_: {"status":"ok", "case_evidence":[]}
+    namespace["valid_fusion"] = lambda *_: True
+    namespace["runtime_fingerprint"] = runtime_fingerprint
+    stdout = namespace["SUCCESS"] + "\nvendor: no PMU records\n"
+    stderr = "vendor counter diagnostic\n"
+
+    def fake_profile(command, **_kwargs):
+        report = Path(next(arg.split("=", 1)[1] for arg in command if arg.startswith("--output=")))
+        report.mkdir()
+        (report / "OpBasicInfo.csv").write_text(
+            "Op Name,Task Duration(us)\nblock_sparse_attention_kernel,NA\n")
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr(namespace["subprocess"], "run", fake_profile)
+    namespace["main"]()
+    payload = json.loads(capsys.readouterr().out.split("BSA_CANDIDATE_RESULT=", 1)[1])
+    assert payload["status"] == "infrastructure_error"
+    assert payload["diagnostics"].startswith("missing_pipe_rows:")
+    assert len(payload["retained_logs"]) == 2
+    for log in payload["retained_logs"]:
+        data = Path(log["path"]).read_bytes()
+        assert data.decode() == (stdout if log["stream"] == "stdout" else stderr)
+        assert hashlib.sha256(data).hexdigest() == log["sha256"]
+        assert len(data) == log["bytes"]
+    transport = FakeTransport(module, payload)
+    cfg, _ = config(module, tmp_path, transport)
+    response = module.Executor(cfg, transport).execute(request("capture"))
+    assert response["retained_logs"] == payload["retained_logs"]
 
 
 @pytest.mark.parametrize("remote_status", [

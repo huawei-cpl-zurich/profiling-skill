@@ -191,3 +191,15 @@ attempt rather than permanently poisoning its identity.
 Do not delete the executor state while a handle may still be running. A changed
 candidate, case, selector, action, or harness revision produces a different
 execution identity and therefore a separate retained job.
+
+Once a terminal compact result is retrieved, the executor caches that complete
+batch locally. Later samples reuse its validated handle/request identity,
+including when remote observation is unavailable; they do not launch another
+workload or re-observe the completed job.
+
+Correctness and every profiler invocation retain separate stdout/stderr files
+remotely, including zero-exit captures with missing counters and timeouts with
+partial output. Compact responses and coordinator checkpoints expose
+`retained_logs` entries containing path, stream, byte count, and SHA-256. Read
+these logs in place through `cpl-remote` when diagnosing compiler or acquisition
+failures; raw vendor report trees are not downloaded.

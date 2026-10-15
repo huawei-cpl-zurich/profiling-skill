@@ -628,6 +628,8 @@ def _failure(response: dict[str, Any]) -> dict[str, Any]:
     }
     if "terminal" in response:
         failure["terminal"] = response["terminal"]
+    if isinstance(response.get("retained_logs"), list):
+        failure["retained_logs"] = response["retained_logs"]
     return failure
 
 
@@ -770,6 +772,46 @@ def _with_retry(request: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
     return request
 
 
+def _acquisition_exhausted(state: dict[str, Any]) -> bool:
+    """Bound new submissions, never observations of an unresolved remote job."""
+    if state.get("retry", {}).get("mode") == "observe":
+        return False
+    failures = state.get("infrastructure_failures", [])
+    terminal = [item for item in failures if item.get("terminal") is not False]
+    # A successful discovery/capture resets the consecutive failure window.
+    terminal = terminal[state.get("acquisition_failure_offset", 0):]
+    diagnostics = [item.get("diagnostics", "") for item in terminal]
+    deterministic_prefixes = (
+        "missing_pipe_rows:", "invalid_duration:", "duration_row_count:",
+        "capture lacks one exact PipeUtilization or duration row",
+    )
+    malformed_kinds = {"invalid_evidence_digest", "invalid_basic_info",
+                       "invalid_pipe_evidence", "invalid_provenance"}
+    repeated = (len(diagnostics) >= 2 and diagnostics[-1] == diagnostics[-2]
+                and (diagnostics[-1].startswith(deterministic_prefixes)
+                     or terminal[-1].get("kind") in malformed_kinds))
+    if len(terminal) < 3 and not repeated:
+        return False
+    state["status"] = "measurement_unstable"
+    state["failure"] = {
+        "kind": "acquisition_exhausted", "category": "infrastructure",
+        "diagnostics": (
+            "Acquisition stopped after repeated deterministic evidence failure"
+            if repeated else "Acquisition exhausted initial attempt plus two retries"
+        ),
+        "last_diagnostics": diagnostics[-1],
+    }
+    state.pop("retry", None)
+    return True
+
+
+def _acquisition_succeeded(state: dict[str, Any]) -> None:
+    state["acquisition_failure_offset"] = sum(
+        item.get("terminal") is not False
+        for item in state.get("infrastructure_failures", [])
+    )
+
+
 def run_campaign(
     manifest: dict[str, Any],
     output: Path,
@@ -807,6 +849,16 @@ def run_campaign(
         state = results["executions"][candidate["execution_id"]]
         if state["status"] in {"completed", "candidate_failure", "measurement_unstable"}:
             continue
+        if _acquisition_exhausted(state):
+            active_case = state.get("active_case")
+            if active_case is None or state.get("selectors") is None:
+                _atomic_json(output, results)
+                continue
+            failed_case = state["cases"][str(active_case)]
+            failed_case["status"] = "acquisition_exhausted"
+            failed_case["failure"] = state.pop("failure")
+            state["status"] = "running"
+            _acquisition_succeeded(state)
         if state.get("selectors") is None:
             if max_actions is not None and actions >= max_actions:
                 _atomic_json(output, results)
@@ -910,13 +962,17 @@ def run_campaign(
                 "compact": response.get("basic_info"),
                 "evidence_sha256": response.get("evidence_sha256"),
                 "provenance": response.get("provenance"),
+                **({"retained_logs": response["retained_logs"]}
+                   if isinstance(response.get("retained_logs"), list) else {}),
             }
+            _acquisition_succeeded(state)
             _atomic_json(output, results)
 
         interrupted = False
         for case in cases:
             case_state = state["cases"][str(case)]
-            if case_state["status"] == "completed":
+            if case_state["status"] in {"completed", "acquisition_exhausted",
+                                        "measurement_unstable"}:
                 continue
             while len(case_state["samples"]) < max_samples:
                 if _complete_stable_case(
@@ -937,6 +993,7 @@ def run_campaign(
                     if max_actions is not None and actions >= max_actions:
                         interrupted = True
                         break
+                    state["active_case"] = case
                     response = _invoke_executor(executor, protocol_dir, _with_retry({
                         "schema": "profiling-skill/bsa-candidate-executor-request/v1",
                         "action": "capture",
@@ -1008,7 +1065,10 @@ def run_campaign(
                         "pipe_utilization": response["pipe_utilization"],
                         "evidence_sha256": response.get("evidence_sha256"),
                         "provenance": response.get("provenance"),
+                        **({"retained_logs": response["retained_logs"]}
+                           if isinstance(response.get("retained_logs"), list) else {}),
                     }
+                    _acquisition_succeeded(state)
                     _atomic_json(output, results)
                 if interrupted:
                     break
@@ -1027,8 +1087,8 @@ def run_campaign(
                 case_state, stable_samples, variability_threshold
             )
             if case_state["status"] != "completed":
-                state["status"] = "measurement_unstable"
-                state["failure"] = {
+                case_state["status"] = "measurement_unstable"
+                case_state["failure"] = {
                     "kind": "measurement_instability",
                     "category": "infrastructure",
                     "diagnostics": (
@@ -1036,8 +1096,20 @@ def run_campaign(
                         f"{variability_threshold:.1%} after {max_samples} valid samples"
                     ),
                 }
-                break
-        if not interrupted and all(
+        failed_cases = {
+            case: item["failure"] for case, item in state["cases"].items()
+            if item["status"] in {"acquisition_exhausted", "measurement_unstable"}
+        }
+        if not interrupted and failed_cases:
+            state["status"] = "measurement_unstable"
+            kinds = {item["kind"] for item in failed_cases.values()}
+            state["failure"] = {
+                "kind": next(iter(kinds)) if len(kinds) == 1 else "mixed_measurement_failures",
+                "category": "infrastructure",
+                "diagnostics": "Independent case failures retained; no full-suite aggregate",
+                "cases": failed_cases,
+            }
+        elif not interrupted and all(
             item["status"] == "completed" for item in state["cases"].values()
         ):
             state["status"] = "completed"

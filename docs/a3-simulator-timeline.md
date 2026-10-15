@@ -44,6 +44,37 @@ describes the explicit simulator route and simulator library setup. Check the
 installed tool's help and resolved tool/runtime library identities rather than
 mixing toolkit versions or copying machine-specific paths into source.
 
+### Binary replay when the Python simulator application fails at teardown
+
+The BZ qualification isolated a Python/Torch simulator teardown failure: native
+correctness passed and instruction events were emitted, but the Python application
+received signal 11. Replaying the **same binary** through the documented
+`msprof op simulator --config=...` route completed cleanly. Fresh caches and
+disabled NPU memory caching did not fix the Python route.
+
+The worker accepts optional `--binary-config`, `--binary-sha256` and
+`--simulator-library` for this route. The application wrapper still performs the
+native correctness check first. The caller must prove the supplied binary is the
+artifact verified by that application and supply its hash; this is not automatic
+ABI discovery. The config must contain the exact `kernel_name`, an absolute
+existing `kernel_path`, and `mode: ca`. The supplied library is resolved through
+the selected profile/install and observed SoC. It is prepended only in the
+profiler subprocess, never the native correctness check or shared runtime.
+
+**Do not pass `--soc-version` in config mode:** the installed profiler rejects it
+while returning exit 0. Choose the model through the simulator library instead.
+The worker omits ineffective application/kernel filters in config mode and still
+requires the terminal success marker plus exact observed selector/core events.
+
+The two fixed vector controls have two leading hidden pointer arguments
+(`SyncBlockLockArgIdx=0`, `WorkspaceArgIdx=1` in TTAdapter), followed by input and
+output pointers. Their one-program bodies do not use the trailing grid scalar
+arguments. Their explicit qualification configs use two 4096-byte workspaces,
+one 128-element float32 input and one matching output. **Do not copy this ABI to
+arbitrary Triton kernels:** scalar, grid-dependent, workspace or mixed-Cube
+signatures need their own compiler/launcher evidence and validated configuration.
+The worker deliberately does not generate or guess these configurations.
+
 ## Retained trace interpretation
 
 `scripts/summarize_a3_simulator.py --report RETAINED_ROOT/report --kernel-name EXACT_NAME`

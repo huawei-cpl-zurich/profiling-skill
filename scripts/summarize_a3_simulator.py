@@ -112,7 +112,10 @@ def summarize(report: Path, selector: str, *, acquisition_status="unknown", acqu
     log_bytes = log.read_bytes() if log.is_file() else b""
     observed = sorted(set(KERNEL.findall(log_bytes.decode(errors="replace"))))
     bound = len(candidates) == 1 and observed == [selector]
-    capture_id = candidates[0].parent.name if len(candidates) == 1 else None
+    # Vendor basenames may repeat (e.g. OPPROF_0). Bind to this retained
+    # attempt's resolved identity, not a globally ambiguous directory label.
+    capture_id = (hashlib.sha256(str(candidates[0].resolve()).encode() + b"\0" + log_bytes).hexdigest()
+                  if len(candidates) == 1 else None)
     for simulator in candidates:
         aggregate = simulator / "trace.json"
         per_core = sorted(simulator.glob("core*.*/trace.json"))

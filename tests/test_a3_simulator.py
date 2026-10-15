@@ -68,6 +68,19 @@ def test_malformed_trace_still_retains_raw_evidence_identity(tmp_path):
     assert result["diagnostics"]["invalid_json"] == 1
 
 
+def test_identical_vendor_directory_names_do_not_merge_distinct_attempts(tmp_path):
+    roots = []
+    for attempt in ("first", "second"):
+        directory = tmp_path / attempt
+        directory.mkdir()
+        root, _ = report(directory)
+        roots.append(root)
+    first, second = [sim.summarize(root, "a3_phase_probe") for root in roots]
+    assert first["capture_id"] != second["capture_id"]
+    assert first["capture_id"] == sim.summarize(roots[0], "a3_phase_probe")["capture_id"]
+    assert {event["capture_id"] for event in first["events"]} == {first["capture_id"]}
+
+
 def test_failed_acquisition_cannot_be_marked_clean(tmp_path):
     root, _ = report(tmp_path)
     with pytest.raises(ValueError, match="partial"):

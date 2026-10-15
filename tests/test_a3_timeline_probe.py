@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -128,6 +129,57 @@ def test_simulation_requires_one_invocation_binding(application, tmp_path):
     with pytest.raises(ValueError, match="one invocation"):
         probe.acquire(application, tmp_path / "capture", "probe", mode="simulation",
                       soc_version="ObservedSoC", launch_count=2, runner=runner)
+    assert not commands
+
+
+def binary_inputs(tmp_path):
+    binary = tmp_path / "kernel.o"
+    binary.write_bytes(b"verified binary")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"kernel_name": "probe", "kernel_path": str(binary), "mode": "ca"}))
+    library = tmp_path / "simulator-lib"
+    library.mkdir()
+    return config, hashlib.sha256(binary.read_bytes()).hexdigest(), library
+
+
+def test_binary_replay_uses_explicit_abi_config_and_private_simulator_env(application, tmp_path, monkeypatch):
+    config, digest, library = binary_inputs(tmp_path)
+    runner, commands = capture_runner()
+    environments = []
+
+    def recording_runner(argv, **kwargs):
+        environments.append(kwargs.get("env"))
+        return runner(argv, **kwargs)
+
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/original/runtime")
+    result = probe.acquire(application, tmp_path / "capture", "probe", mode="simulation",
+                           language="triton", soc_version="ObservedSoC", runner=recording_runner,
+                           binary_config=config, binary_sha256=digest, simulator_library=library)
+    assert result["clean_acquisition_gate_passed"]
+    assert result["binary_replay"]["sha256"] == digest
+    assert "--config=" + str(config) in commands[1]
+    assert not any(arg.startswith(("--soc-version=", "--kernel-name=", "--application=")) for arg in commands[1])
+    assert environments[0] is None  # native correctness must not load simulator libs
+    assert environments[1]["LD_LIBRARY_PATH"] == str(library) + ":/original/runtime"
+    assert __import__("os").environ["LD_LIBRARY_PATH"] == "/original/runtime"
+
+
+@pytest.mark.parametrize("failure", ["hash", "selector", "library", "mode"])
+def test_invalid_binary_replay_fails_before_subprocess(application, tmp_path, failure):
+    config, digest, library = binary_inputs(tmp_path)
+    if failure == "hash":
+        digest = "0" * 64
+    elif failure == "selector":
+        config.write_text(config.read_text().replace('"probe"', '"other"'))
+    elif failure == "library":
+        library = tmp_path / "absent"
+    else:
+        config.write_text(config.read_text().replace('"ca"', '"onboard"'))
+    runner, commands = capture_runner()
+    with pytest.raises(ValueError):
+        probe.acquire(application, tmp_path / "capture", "probe", mode="simulation",
+                      soc_version="ObservedSoC", binary_config=config, binary_sha256=digest,
+                      simulator_library=library, runner=runner)
     assert not commands
 
 

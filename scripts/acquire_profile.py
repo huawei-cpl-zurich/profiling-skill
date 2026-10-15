@@ -312,7 +312,7 @@ torch.npu.synchronize(); assert float(y.cpu()[3]) == 4.0
 def pick_device():
     def probe(env):
         try:
-            result=subprocess.run([sys.executable,"-c",PROBE],text=True,capture_output=True,env=env,timeout=20)
+            result=bounded_run([sys.executable,"-c",PROBE],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=20)
         except subprocess.TimeoutExpired:
             return False,"runtime probe exceeded 20 seconds"
         return result.returncode == 0,(result.stderr or result.stdout)[-1000:]
@@ -483,7 +483,7 @@ root=pathlib.Path(tempfile.mkdtemp(prefix=retention+"-",dir=retained_parent))
 try:
     bundle=materialize(root); entry=bundle/pathlib.PurePosixPath(IDENTITY["entrypoint"])
     argv=([sys.executable,str(entry)] if entry.suffix==".py" else [str(entry)])+IDENTITY["arguments"]
-    try: check=subprocess.run(argv,cwd=bundle,text=True,capture_output=True,env=env,timeout=300)
+    try: check=bounded_run(argv,cwd=bundle,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=300)
     except subprocess.TimeoutExpired as exc: fail("workload","workload_failure","timeout: "+str(exc))
     (root/"workload.stdout.log").write_text(check.stdout)
     (root/"workload.stderr.log").write_text(check.stderr)
@@ -496,7 +496,7 @@ try:
     command=["msprof","op","--application="+str(wrapper),"--output="+str(report),METRIC_ARG,
              "--warm-up=0","--launch-count="+str(LAUNCH_COUNT),"--kill=off"]
     if MODE=="pipe": command.append("--kernel-name="+KERNEL_NAME)
-    try: result=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
+    try: result=bounded_run(command,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=600)
     except subprocess.TimeoutExpired as exc: fail("profiler","profiler_failure","timeout: "+str(exc))
     transcript=result.stdout+result.stderr
     (root/"profiler.stdout.log").write_text(result.stdout)

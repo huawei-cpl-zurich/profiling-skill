@@ -1,5 +1,8 @@
 import importlib.util
 import fcntl
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -100,3 +103,21 @@ def test_malformed_observation_fails_clearly_without_probe(tmp_path, mapping, st
     with pytest.raises(RuntimeError):
         device.wait_for_device(lambda env: pytest.fail("must not allocate"),
             query=lambda *args: mapping if args else status, lease_root=tmp_path)
+
+
+def test_bounded_run_kills_descendants_without_harming_caller(tmp_path):
+    child_pid = tmp_path / "child.pid"
+    script = ("import subprocess,sys,time,pathlib\n"
+              "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])\n"
+              f"pathlib.Path({str(child_pid)!r}).write_text(str(p.pid))\n"
+              "time.sleep(60)\n")
+    with pytest.raises(subprocess.TimeoutExpired):
+        device.bounded_run([sys.executable, "-c", script], timeout=0.4,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    pid = int(child_pid.read_text())
+    proc = Path(f"/proc/{pid}/stat")
+    # A reparented zombie can await host init reaping but cannot execute NPU work.
+    assert not proc.exists() or proc.read_text().split()[2] == "Z"
+    result = device.bounded_run([sys.executable, "-c", "print('alive')"],
+        timeout=3, text=True, stdout=subprocess.PIPE)
+    assert result.returncode == 0 and result.stdout == "alive\n"

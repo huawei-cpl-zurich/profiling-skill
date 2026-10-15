@@ -8,9 +8,25 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
+
+
+def bounded_run(argv, *, timeout, **kwargs):
+    """Bound a subprocess and descendants without killing the retained job."""
+    with subprocess.Popen(argv, start_new_session=True, **kwargs) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except BaseException:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.communicate()
+            raise
+        return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def discover_devices(mapping):

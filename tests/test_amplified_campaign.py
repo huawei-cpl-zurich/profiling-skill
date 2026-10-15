@@ -89,6 +89,48 @@ def test_pending_reuses_same_path_without_attempt_budget(pair, tmp_path):
     assert all(not row["attempts"] for row in second["cells"])
 
 
+def test_one_pending_side_yields_after_other_side_one_acquisition(pair, tmp_path):
+    calls = []
+    def acquire(phase, cell, attempt, path, selector, basic):
+        calls.append((cell["variant"], path))
+        if cell["variant"] == "before":
+            return {"ok": False, "classification": "transport_error", "handle": "retained"}
+        return evidence(phase)
+    output = tmp_path / "r"
+    first = campaign.run_pair(pair, output, acquire, campaign="fresh")
+    assert not first["terminal"]
+    assert [side for side, _ in calls] == ["before", "after"]
+    assert first["cells"][1]["discovery"] is not None
+    second = campaign.run_pair(pair, output, acquire, campaign="fresh")
+    assert not second["terminal"]
+    assert [side for side, _ in calls] == ["before", "after", "before", "after"]
+    assert calls[0][1] == calls[2][1]
+    assert len(second["cells"][1]["timing_samples_us"]) == 1
+
+
+def test_cli_acquisition_arguments_match_real_parser(tmp_path, monkeypatch, capsys):
+    import acquire_profile
+    modes = []
+    def invoke(**kwargs):
+        argv = [kwargs["phase"], "--product", "a3", "--target", kwargs["target"],
+                "--dispatch-key", kwargs["dispatch_key"], "--bundle", str(kwargs["bundle"]),
+                "--entrypoint", kwargs["entrypoint"], "--evidence", str(kwargs["evidence_path"])]
+        if kwargs["basic_evidence"] is not None:
+            argv.extend(["--basic-evidence", str(kwargs["basic_evidence"])])
+        if kwargs["selector"]:
+            argv.extend(["--kernel-name", kwargs["selector"]])
+        parsed = acquire_profile.parse_args(argv)
+        modes.append(parsed.mode)
+        result = evidence(parsed.mode, amplified=True)
+        result["evidence"]["capture"]["rows"][0]["Op Name"] = "a3_amplified_probe"
+        return result
+    monkeypatch.setattr(campaign, "invoke_acquisition", invoke)
+    assert campaign.main(["pair", "--pair-id", "amplified/load-masking/1", "--campaign", "fresh",
+                          "--output", str(tmp_path / "cli")]) == 0
+    assert modes.count("basic") == 8
+    assert modes.count("pipe") == 6
+
+
 @pytest.mark.parametrize("classification,count,status", [
     ("device_unavailable", 3, "infrastructure_exhausted"),
     ("host_environment", 3, "infrastructure_exhausted"),

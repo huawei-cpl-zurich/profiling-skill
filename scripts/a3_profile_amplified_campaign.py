@@ -165,7 +165,7 @@ def run_pair(spec: dict, output: Path, acquire, *, campaign: str) -> dict:
             attempt = len(errors)
             folder = output / cell["variant"]
             path = folder / f"{token}-attempt-{attempt}.json"
-            basic = Path(row["discovery"]["path"]) if row["discovery"] else None
+            basic = Path(row["discovery"]["path"]) if phase == "pipe" else None
             result = acquire(phase, cell, attempt, path, selector, basic)
             if not result.get("ok"):
                 classification = result.get("classification", "controller_failure")
@@ -230,7 +230,8 @@ def run_pair(spec: dict, output: Path, acquire, *, campaign: str) -> dict:
             row["attempts"].append({"token": token, **entry})
             save(checkpoint, state)
             progress = True
-        if not progress or all(row["status"] not in {"running", "pending"} for row in state["cells"]):
+        if (not progress or any(row["status"] == "pending" for row in state["cells"])
+                or all(row["status"] not in {"running", "pending"} for row in state["cells"])):
             state["terminal"] = all(row["status"] not in {"running", "pending"} for row in state["cells"])
             save(checkpoint, state)
             return state
@@ -265,7 +266,7 @@ def main(argv=None):
         return invoke_acquisition(phase=phase, target="bz-a3-1", dispatch_key=key,
                                   bundle=bundle, entrypoint=cell["entrypoint"],
                                   workload_args=cell["arguments"], evidence_path=path,
-                                  selector=selector, basic_evidence=basic,
+                                  selector=selector, basic_evidence=basic if phase == "pipe" else None,
                                   cpl_remote=args.cpl_remote,
                                   launch_count=len(cell["kernel_names"]) if phase == "basic" else 1)
     result = run_pair(pair, args.output, acquire, campaign=args.campaign)

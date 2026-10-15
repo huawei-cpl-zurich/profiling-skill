@@ -59,6 +59,9 @@ def test_runtime_contract_inputs(tmp_path):
             assert inputs0['work'].item() == 64 and inputs1['work'].item() == 0
         if task == 'task02':
             assert torch.equal(expected1, inputs1['x'][inputs1['index'].long()])
+            duplicate, expected2 = runner.inputs_and_reference(spec, 9, 2)
+            assert duplicate['index'].unique().numel() <= 64
+            assert torch.equal(expected2, duplicate['x'][duplicate['index'].long()])
         if task == 'task04':
             assert torch.equal(expected1, torch.where(inputs1['selected'], inputs1['x'] * 1.5 + 2, 0))
 

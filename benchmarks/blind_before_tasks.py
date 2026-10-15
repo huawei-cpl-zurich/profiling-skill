@@ -139,6 +139,7 @@ def export(task, output):
     (output / 'TASK.md').write_text(
         'Optimize candidate without changing runner.py, native_host.asc, task.json or baseline.\n'
         'Preserve all input-dependent outputs, float32 arithmetic accuracy and one fused kernel.\n'
+        'Do not calculate outputs on the host or dispatch auxiliary computation kernels.\n'
         'For task01 support runtime work in [0,256]. For task02 support arbitrary valid runtime indices.\n'
         'For task04 preserve the runtime repetition loop and volatile input accesses;\n'
         'repeat count can be 1,32,128. Other tasks use shapes/constants in task.json.\n'

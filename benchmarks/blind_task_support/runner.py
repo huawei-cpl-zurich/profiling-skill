@@ -20,7 +20,12 @@ def inputs_and_reference(spec, seed, check=0):
         inputs['work'] = torch.tensor([work], dtype=torch.int32)
         expected = x * (1 + work * 1e-6) * 1.5 + 2
     elif task == 'task02':
-        indices = torch.arange(n, dtype=torch.int32) if check % 2 == 0 else torch.randperm(n, generator=generator).int()
+        if check % 3 == 0:
+            indices = torch.arange(n, dtype=torch.int32)
+        elif check % 3 == 1:
+            indices = torch.randperm(n, generator=generator).int()
+        else:
+            indices = torch.randint(0, 64, (n,), generator=generator, dtype=torch.int32)
         inputs['index'] = indices
         expected = x[indices.long()]
     elif task == 'task03':

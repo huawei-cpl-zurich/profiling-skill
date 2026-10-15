@@ -129,3 +129,14 @@ def test_no_device_mask_or_reused_directory_is_rejected(application, tmp_path, m
     (tmp_path / "capture").mkdir()
     with pytest.raises(FileExistsError):
         probe.acquire(application, tmp_path / "capture", "probe")
+
+
+def test_real_timeout_retains_stdout_and_stops_descendants(tmp_path):
+    # The child inherits our profiler-like process group and output descriptors.
+    # Leaving it alive would prevent communicate() from completing promptly.
+    command = [sys.executable, "-c", "import subprocess,sys,time;print('started',flush=True);"
+               "subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);time.sleep(60)"]
+    result, transcript = probe._run(command, tmp_path, "timeout", 0.1, probe._execute)
+    assert result["exit_code"] == 124
+    assert "started" in transcript
+    assert "timeout" in transcript

@@ -8,9 +8,28 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 
 from summarize_a3_simulator import summarize
+
+
+def _execute(argv, *, capture_output, text, timeout):
+    # A timed-out profiler may own an application/simulator process tree. Keep
+    # the caller's device lease until that entire process group has terminated.
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=text, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            stdout, stderr = process.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(argv, timeout, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def _run(argv, output, label, timeout, runner):
@@ -34,7 +53,7 @@ def _run(argv, output, label, timeout, runner):
 
 
 def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
-            soc_version=None, launch_count=1, timeout=180, runner=subprocess.run):
+            soc_version=None, launch_count=1, timeout=180, runner=_execute):
     """Caller holds an idle physical-device lease for this complete operation.
 
     Reports are intentionally not overwritten or resumed here. The outer queue

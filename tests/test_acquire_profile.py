@@ -870,8 +870,8 @@ def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp
     assert capture["observed_kernel_names"] == ["compute_kernel", "copy_kernel"]
 
 
-@pytest.mark.parametrize("mode", ["basic", "pipe"])
-def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
+@pytest.mark.parametrize("mode,count", [("basic", 1), ("pipe", 1), ("basic", 5000)])
+def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode, count):
     module = load_module()
     workload = tmp_path / "workload.sh"
     workload.write_text("#!/bin/sh\nprintf '%s\\n' '{\"old\":1}' 'not json' '[]' '{\"correct\":true,\"compiler\":\"retained\"}'\n")
@@ -897,7 +897,7 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
         "import pathlib, sys\n"
         "output = pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output='))) / 'OPPROF_live'\n"
         "output.mkdir(parents=True)\n"
-        "(output/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\nexact.kernel/7,3.5\\n')\n"
+        f"(output/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\n'+ 'exact.kernel/7,3.5\\n'*{count})\n"
         "if '--aic-metrics=PipeUtilization' in sys.argv:\n"
         " (output/'PipeUtilization.csv').write_text('block_id,sub_block_id,aic_cube_ratio\\n0,cube0,0.75\\n')\n"
         "print('Profiling running finished. All task success. output='+str(output))\n"
@@ -964,9 +964,11 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     assert set(evidence["normal_run"]) == {"exit_code", "stdout", "stderr", "workload_result"}
     assert evidence["normal_run"]["workload_result"] == {"correct": True, "compiler": "retained"}
     assert evidence["capture"]["observed_kernel_names"] == ["exact.kernel/7"]
-    assert len(evidence["capture"]["rows"]) == 1
+    assert len(evidence["capture"]["rows"]) == (min(count, 128) if mode == "basic" else 1)
+    assert evidence["capture"]["row_count"] == count
+    assert evidence["capture"]["rows_truncated"] == (count > 128)
     if mode == "basic":
-        assert evidence["capture"]["rows"] == [{"Op Name": "exact.kernel/7", "Task Duration(us)": "3.5"}]
+        assert evidence["capture"]["rows"] == [{"Op Name": "exact.kernel/7", "Task Duration(us)": "3.5"}] * min(count, 128)
     if mode == "pipe":
         assert evidence["capture"]["sources"][0]["role"] == "PipeUtilization"
         assert evidence["capture"]["sources"][1]["role"] == "selector_binding"

@@ -528,7 +528,9 @@ try:
     selected=([row for name,row in rows] if MODE=="basic" else
               [] if MODE=="timeline" else [row for name,row in rows if name==KERNEL_NAME])
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
-    if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
+    row_count=len(selected)
+    if MODE=="basic": selected=selected[:128]
+    elif len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
     def normalized(value):
         return value.replace(str(root),"$RETAINED_ROOT")
     def stream_digest(value):
@@ -545,7 +547,7 @@ try:
       "capture":{"metric":metric,"observed_kernel_names":names,
       "inventory_scope":{"launch_bound":LAUNCH_COUNT,"complete":False,
       "reason":"msprof exports observed names but no total application launch count"},
-      "selected_kernel":KERNEL_NAME,"expected_kernel_names":KERNEL_NAMES,"rows":selected,"sources":sources,
+      "selected_kernel":KERNEL_NAME,"expected_kernel_names":KERNEL_NAMES,"rows":selected,"row_count":row_count,"rows_truncated":row_count>len(selected),"sources":sources,
       "log_sha256":hashlib.sha256(normalized(transcript).encode()).hexdigest()},
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
     if MODE=="timeline":

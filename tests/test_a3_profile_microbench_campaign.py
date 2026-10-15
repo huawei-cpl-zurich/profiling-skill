@@ -409,7 +409,7 @@ def test_pair_runner_interleaves_before_and_after_attempts(tmp_path):
     assert pipe_order == ["before", "after"] * 3
 
 
-def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
+def test_qualification_receipt_requires_target_sources_and_stability(tmp_path, monkeypatch):
     module = load_module()
     identity = module.campaign_identity("gz-a3", json.loads(MANIFEST.read_text()))
     assert identity["runtime"] == "py311-torch"
@@ -427,6 +427,11 @@ def test_qualification_receipt_requires_target_sources_and_stability(tmp_path):
     path = tmp_path / "qualification.json"
     path.write_bytes(module.canonical(receipt) + b"\n")
     module.validate_qualification(path, identity)
+    helper = tmp_path / "profile_device.py"
+    helper.write_bytes(module.DEVICE_HELPER.read_bytes() + b"\n# changed selector\n")
+    monkeypatch.setattr(module, "DEVICE_HELPER", helper)
+    with pytest.raises(ValueError, match="identity"):
+        module.validate_qualification(path, module.campaign_identity("gz-a3", json.loads(MANIFEST.read_text())))
     with pytest.raises(ValueError, match="identity"):
         module.validate_qualification(path, {**identity, "target": "bz-a3-1"})
     # A previously passing default-runtime gate must not admit named-runtime work.
@@ -668,6 +673,7 @@ def test_campaign_identity_binds_coordinator_and_acquisition_sources():
     assert value["acquisition_sha256"] == hashlib.sha256(
         (ROOT / "scripts/acquire_profile.py").read_bytes()
     ).hexdigest()
+    assert value["device_helper_sha256"] == hashlib.sha256(module.DEVICE_HELPER.read_bytes()).hexdigest()
 
 
 def test_cached_evidence_without_valid_receipt_is_retired(tmp_path):

@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "experiments" / "a3-profile-hypotheses.json"
 ACQUIRE = ROOT / "scripts" / "acquire_profile.py"
+DEVICE_HELPER = ROOT / "scripts" / "profile_device.py"
 INFRA_FAILURES = {"transport_error", "host_environment", "device_unavailable"}
 RETRYABLE_ACQUISITION_FAILURES = INFRA_FAILURES | {"evidence_failure", "profiler_failure"}
 TARGET_RUNTIMES = {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": "py311-torch"}
@@ -644,6 +645,7 @@ def campaign_identity(target: str, manifest: dict) -> dict:
         ).hexdigest(),
         "coordinator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "acquisition_sha256": hashlib.sha256(ACQUIRE.read_bytes()).hexdigest(),
+        "device_helper_sha256": hashlib.sha256(DEVICE_HELPER.read_bytes()).hexdigest(),
     }
 
 

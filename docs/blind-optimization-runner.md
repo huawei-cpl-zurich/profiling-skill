@@ -35,11 +35,23 @@ transport client. Both arms must receive identical help and capabilities.
 `commands.jsonl` retains every helper argv, full stdout/stderr and exit status.
 `agent.jsonl` retains Codex command events and messages; `agent.stderr` retains
 client diagnostics. `receipt.json` records model, runtime, commits, dirty files
-and timeout status. A timeout retains partial output and stops the local process
+and timeout status. CLI exit status is nonzero for agent/client failure, timeout
+(124), or a successful model process with no agent commit (3). Preflight-only
+runs do not require an agent commit. A timeout retains partial output and stops the local process
 group; it does not assert that retained remote jobs stopped. Observe existing
 remote handles through the global client. An existing output directory is never
 silently relaunched: inspect its receipt and handles before considering a new
 run. A zero agent exit without candidate commits is not successful completion.
+
+The v2 common prompt states the 600-second wall-clock limit, including tool
+waiting; agents read read-only `execution.json` for the UTC start/deadline,
+reserve approximately 120 seconds for notes and commits, log incrementally and
+commit validated progress early. The exact v1 prompt remains available as
+`PROMPT_V1` for interpreting calibration runs. Do not combine v1 and v2 cohorts
+as matched experimental observations. Socket paths use a short temporary
+directory independent of the evidence-root path length. Tool execution is
+bounded by the remaining agent wall budget; retained remote jobs are still
+observed through their original handles after local interruption.
 
 Run the functional isolation and process tests with:
 

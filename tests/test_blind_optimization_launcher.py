@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import socketserver
@@ -118,3 +119,75 @@ def test_output_inside_workspace_forbidden(tmp_path):
         module.BlindLauncher(instance.bundle / "run", instance.bundle, instance.prompt_source,
                              instance.model, instance.tool_command, auth_home=instance.auth_home,
                              forbidden=(instance.bundle,))
+
+
+def fake_model(instance, behavior):
+    runtime = instance.root.parent / "fake-runtime"
+    (runtime / "bin").mkdir(parents=True)
+    (runtime / "lib" / "node_modules").mkdir(parents=True)
+    (runtime / "bin" / "node").touch()
+    instance.codex = runtime / "bin" / "codex"
+    instance.codex.write_text("#!/usr/bin/python3\n" + behavior)
+    instance.codex.chmod(0o755)
+
+
+@pytest.mark.parametrize("behavior, expected", [
+    ("raise SystemExit(7)\n", 7),
+    ("print('no commit')\n", 3),
+    ("import time\nprint('partial', flush=True)\ntime.sleep(20)\n", 124),
+])
+def test_real_launch_receipt_rejects_failed_uncommitted_and_timed_out_agents(tmp_path, behavior, expected):
+    instance = make_launcher(tmp_path)
+    fake_model(instance, behavior)
+    instance.timeout = .15 if expected == 124 else 5
+    result = instance.launch()
+    assert result["exit_code"] == expected
+    assert json.loads((instance.root / "receipt.json").read_text())["exit_code"] == expected
+    if expected == 124:
+        assert "partial" in (instance.root / "agent.jsonl").read_text()
+
+
+def test_long_evidence_path_real_tool_call_and_budget_visible_to_agent(tmp_path):
+    instance = make_launcher(tmp_path)
+    instance.root = tmp_path / ("long-" + "a" * 90) / ("nested-" + "b" * 90)
+    fake_model(instance, """import json, subprocess
+from datetime import datetime
+from pathlib import Path
+budget = json.loads(Path('/workspace/execution.json').read_text())
+assert budget['wall_budget_seconds'] == 600
+assert budget['finish_reserve_seconds'] == 120
+assert (datetime.fromisoformat(budget['utc_deadline']) - datetime.fromisoformat(budget['utc_start'])).total_seconds() == 600
+subprocess.run(['experiment-tool', 'help'], check=True)
+Path('notes.md').write_text('Noted start ' + budget['utc_start'])
+subprocess.run(['git', 'add', 'notes.md'], check=True)
+subprocess.run(['git', 'commit', '-m', 'Record validated work early'], check=True)
+""")
+    result = instance.launch()
+    assert result["exit_code"] == 0
+    assert result["candidate_commits"] == 1
+    assert len(str(instance.socket_dir / "tool.sock").encode()) < 108
+    assert json.loads(instance.journal.read_text())["returncode"] == 0
+
+
+def test_preflight_does_not_require_agent_commit(tmp_path):
+    instance = make_launcher(tmp_path)
+    result = instance.launch(preflight_only=True)
+    assert result["exit_code"] == 0
+    assert result["candidate_commits"] == 0
+
+
+def test_cli_propagates_receipt_exit_code(tmp_path):
+    instance = make_launcher(tmp_path)
+    fake_model(instance, "raise SystemExit(9)\n")
+    model = tmp_path / "model.json"
+    model.write_text(json.dumps(instance.model))
+    tool = tmp_path / "tool.json"
+    tool.write_text(json.dumps(instance.tool_command))
+    environment = dict(os.environ, CODEX_HOME=str(instance.auth_home),
+                       PATH=str(instance.codex.parent) + ":" + os.environ["PATH"])
+    run = subprocess.run([sys.executable, str(Path(module.__file__)),
+                          "--bundle", str(instance.bundle), "--prompt", str(instance.prompt_source),
+                          "--output", str(instance.root), "--model-json", str(model),
+                          "--tool-command-json", str(tool)], env=environment, capture_output=True, text=True)
+    assert run.returncode == 9, run.stderr
+    assert json.loads(run.stdout)["exit_code"] == 9

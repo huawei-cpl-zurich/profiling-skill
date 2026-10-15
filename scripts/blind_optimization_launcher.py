@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ import socket
 import socketserver
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -20,7 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from production_launcher import LaunchError, ProductionLauncher
 
 
-PROMPT = """Optimize the supplied kernel while preserving its public interface, supported inputs, numerical correctness and single-kernel execution contract. Measure the starting implementation and your final candidate using the supplied benchmark interface. Use available tools and guidance as you find useful. Record experiments, commands, results, and the evidence supporting your decisions. Explain what improved, what did not, and what remains uncertain. Commit your work on the assigned branch; do not merge it.
+PROMPT_V1 = """Optimize the supplied kernel while preserving its public interface, supported inputs, numerical correctness and single-kernel execution contract. Measure the starting implementation and your final candidate using the supplied benchmark interface. Use available tools and guidance as you find useful. Record experiments, commands, results, and the evidence supporting your decisions. Explain what improved, what did not, and what remains uncertain. Commit your work on the assigned branch; do not merge it.
+"""
+PROMPT = PROMPT_V1 + """
+You have a 600-second wall-clock budget, including all tool waiting. Read /workspace/execution.json and note its UTC start and deadline before beginning. Reserve approximately the final 120 seconds for notes and commits; do not start new tool calls near the cutoff. Commit validated work early and update your experiment log incrementally so partial progress survives interruption. Prefer a small completed evidence-backed experiment to an unfinished search. Use experiment-tool help to learn the neutral tool interface. Every operational tool call already performs correctness checks; avoid redundant checks unless investigating a specific failure.
 """
 
 
@@ -57,12 +62,16 @@ class ToolHandler(socketserver.StreamRequestHandler):
             # A domain helper receives candidate files; it is not a transport adapter.
             command = [*owner.tool_command, "--workspace", str(owner.workspace), *args]
             with owner.tool_lock:
-                result = execute(command, owner.workspace, owner.tool_timeout)
+                remaining = getattr(owner, "deadline_monotonic", time.monotonic() + owner.tool_timeout) - time.monotonic()
+                result = execute(command, owner.workspace, max(.1, min(owner.tool_timeout, remaining)))
                 with owner.journal.open("a") as stream:
                     stream.write(json.dumps({"command": command, **result}) + "\n")
         except (OSError, ValueError, KeyError) as error:
             result = {"returncode": 74, "stdout": "", "stderr": str(error) + "\n"}
-        self.wfile.write(json.dumps(result).encode() + b"\n")
+        try:
+            self.wfile.write(json.dumps(result).encode() + b"\n")
+        except BrokenPipeError:
+            pass  # Caller reached its wall deadline; full result remains in the journal.
 
 
 def tool_client(path: Path, args: list[str]) -> int:
@@ -136,8 +145,9 @@ class BlindLauncher(ProductionLauncher):
         self.state = self.root / "codex-state"
         self.state.mkdir()
         (self.state / "auth.json").touch(mode=0o600)
-        self.socket_dir = self.root / "tools"
-        self.socket_dir.mkdir()
+        # sockaddr_un has a small platform limit independent of evidence path length.
+        self.socket_temporary = tempfile.TemporaryDirectory(prefix="blind-tool-")
+        self.socket_dir = Path(self.socket_temporary.name)
         self.journal = self.root / "commands.jsonl"
         self.wrapper = self.root / "experiment-tool"
         self.wrapper.write_text('#!/bin/sh\nexec python3 /experiment/launcher.py client /experiment-state/tool.sock "$@"\n')
@@ -147,7 +157,7 @@ class BlindLauncher(ProductionLauncher):
                      ["config", "user.email", "experiment@localhost"], ["add", "."],
                      ["commit", "-m", "Starting implementation"]):
             subprocess.run([*git, *args], capture_output=True, text=True, check=True)
-        (self.workspace / ".git" / "info" / "exclude").write_text(".agents/\n")
+        (self.workspace / ".git" / "info" / "exclude").write_text(".agents/\nexecution.json\n")
 
     def base_command(self) -> list[str]:
         command = [self.bwrap, "--die-with-parent", "--new-session", "--unshare-all", "--share-net",
@@ -194,6 +204,13 @@ class BlindLauncher(ProductionLauncher):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         started = time.monotonic()
+        self.deadline_monotonic = started + self.timeout
+        utc_start = datetime.now(timezone.utc)
+        write_json(self.workspace / "execution.json", {
+            "utc_start": utc_start.isoformat(),
+            "utc_deadline": (utc_start + timedelta(seconds=self.timeout)).isoformat(),
+            "wall_budget_seconds": self.timeout, "finish_reserve_seconds": min(120, self.timeout),
+        })
         try:
             if preflight_only:
                 command = [*self.base_command(), "experiment-tool", "help"]
@@ -207,6 +224,7 @@ class BlindLauncher(ProductionLauncher):
             server.shutdown()
             server.server_close()
             thread.join()
+            self.socket_temporary.cleanup()
         (self.root / "agent.jsonl").write_text(result.pop("stdout"))
         (self.root / "agent.stderr").write_text(result.pop("stderr"))
         git = subprocess.run(["git", "-C", str(self.workspace), "log", "--format=%H %s"],
@@ -215,8 +233,19 @@ class BlindLauncher(ProductionLauncher):
         result.update(elapsed_seconds=time.monotonic() - started, commits=git.stdout.splitlines(),
                       candidate_commits=max(0, len(git.stdout.splitlines()) - 1),
                       worktree_dirty=dirty.splitlines(), model=self.model, preflight_only=preflight_only)
+        result["exit_code"] = completion_exit_code(result)
         write_json(self.root / "receipt.json", result)
         return result
+
+
+def completion_exit_code(result: dict) -> int:
+    if result["timed_out"]:
+        return 124
+    if result["returncode"]:
+        return result["returncode"] if result["returncode"] > 0 else 1
+    if not result["preflight_only"] and not result["candidate_commits"]:
+        return 3
+    return 0
 
 
 def main() -> int:
@@ -232,8 +261,9 @@ def main() -> int:
     instance = BlindLauncher(args.output, args.bundle, args.prompt, json.loads(args.model_json.read_text()),
                              json.loads(args.tool_command_json.read_text()), skill=args.skill,
                              forbidden=tuple(args.forbidden))
-    print(json.dumps(instance.launch(args.preflight_only)))
-    return 0
+    result = instance.launch(args.preflight_only)
+    print(json.dumps(result))
+    return result["exit_code"]
 
 
 if __name__ == "__main__":

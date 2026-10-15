@@ -94,6 +94,11 @@ def capture(command, folder, env, metric, selector=None):
                 evidence['pipe_rows'].extend(dict(row) for row in csv.DictReader(stream))
         if not evidence['pipe_rows']:
             raise RuntimeError('missing pipe rows despite profiler exit zero')
+        for row in evidence['pipe_rows']:
+            names = [value for key, value in row.items() if 'name' in key.lower()
+                     and ('kernel' in key.lower() or 'op' in key.lower())]
+            if names and any(name != selector for name in names):
+                raise RuntimeError('pipe export contains a different kernel selector')
     (folder / 'evidence.json').write_text(json.dumps(evidence, indent=2))
     return evidence
 
@@ -155,6 +160,7 @@ def main():
     physical, env, lease = wait_for_device(probe)
     summary = dict(physical_device=physical, logical_device=0, cells={})
     try:
+        execute(['msprof', '--version'], args.output / 'profiler-version', env, timeout=30)
         for case in selected:
             folder = args.output / case['id'].replace('/', '-')
             command = [sys.executable, str(Path(__file__).resolve().parents[1] / 'benchmarks'

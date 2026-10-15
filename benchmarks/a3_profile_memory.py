@@ -50,10 +50,13 @@ def footprint(case, addresses):
 
 
 def run(case, artifact_root):
+    # Triton's AST compiler resolves language symbols through function globals.
+    global tl
     import torch
     import torch_npu  # noqa: F401
     import triton
     import triton.language as tl
+    import importlib.metadata
     from compile_evidence import retain_compiler_evidence
 
     @triton.jit
@@ -78,7 +81,10 @@ def run(case, artifact_root):
     torch.npu.synchronize()
     correct = torch.equal(out.cpu(), expected)
     artifacts = retain_compiler_evidence(compiled.asm, artifact_root, case['id'], 'probe', 1)
-    return dict(case=case, correctness=correct, footprint=traffic, compiler=artifacts)
+    return dict(case=case, correctness=correct, footprint=traffic, compiler=artifacts,
+                environment={'torch': torch.__version__, 'triton_module': triton.__version__,
+                             'triton_distribution': importlib.metadata.version('triton'),
+                             'device_name': torch.npu.get_device_name(0)})
 
 
 def main():

@@ -169,7 +169,26 @@ are distinct evidence. The independent AIC copy in mode 2 is not numerically
 checked; the checked outputs and handshake must not be presented as a proof of
 that copy's contents.
 
-Inter-core captures completed for all eight variants:
+All 20 variants completed five timing and three pipe captures. Sixteen timing
+distributions exceed 5% spread; none of their samples were discarded.
+
+| Intra-core source control | Overlap median us (spread) | Early-wait median us (spread) | Late-set median us (spread) |
+| --- | ---: | ---: | ---: |
+| MTE2-to-vector, 1 round | 4.340 (7.4%) | 4.340 (12.0%) | 4.040 (11.9%) |
+| MTE2-to-vector, 32 rounds | 4.420 (9.5%) | 5.700 (7.7%) | 4.440 (3.2%) |
+| Vector-to-MTE3, 1 round | 2.680 (6.7%) | 2.900 (23.4%) | 2.820 (12.1%) |
+| Vector-to-MTE3, 32 rounds | 3.900 (8.7%) | 3.840 (8.9%) | 4.320 (6.9%) |
+
+For the 32-round MTE2-to-vector control, the matched vector-active median stays
+1.767 us across all placements, while scalar/vector-stall rises from 0.787 us
+with overlap placement to 1.843 us with early wait. That is a useful measured
+association with retained useful work, not proof that this counter measures a
+particular `WaitFlag` instruction. The timing increase is observable, but its
+exact speedup is not accepted under the spread gate. Conversely, moving the
+vector-to-MTE3 wait does not yield a consistent large stall or latency change.
+Do not teach "every wait change must move every wait-like counter."
+
+Inter-core captures:
 
 | Source control | Overlap median us (spread) | Early-wait median us (spread) | Block 0/vector0 wait-IB us, overlap / early |
 | --- | ---: | ---: | ---: |

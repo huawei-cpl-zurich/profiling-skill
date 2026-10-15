@@ -61,9 +61,12 @@ existing `kernel_path`, and `mode: ca`. The supplied library is resolved through
 the selected profile/install and observed SoC. It is prepended only in the
 profiler subprocess, never the native correctness check or shared runtime.
 
-**Do not pass `--soc-version` in config mode:** the installed profiler rejects it
-while returning exit 0. Choose the model through the simulator library instead.
-The worker omits ineffective application/kernel filters in config mode and still
+**Pass the observed `--soc-version` to this worker**, including with
+`--binary-config`: it is required acquisition provenance. The worker deliberately
+omits it from the child `msprof op simulator --config=...` command because the
+installed profiler rejects that combination while returning exit 0. The child
+selects the model through the supplied simulator library instead.
+The worker also omits ineffective application/kernel filters in config mode and still
 requires the terminal success marker plus exact observed selector/core events.
 
 The two fixed vector controls have two leading hidden pointer arguments

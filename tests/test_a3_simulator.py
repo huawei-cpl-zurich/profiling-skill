@@ -124,6 +124,41 @@ def test_union_activity_and_overlap_are_per_core_not_cross_core(tmp_path):
     assert result["cores"]["core1.veccore0"]["pipeline_overlap_us"] == {}
 
 
+@pytest.mark.parametrize("left,right,expected", [
+    ([], [(1, 4)], 0), ([(1, 4)], [], 0),
+    ([(0, 1)], [(1, 2)], 0),
+    ([(0, 10)], [(1, 2), (4, 5)], 2),
+    ([(1, 2), (4, 5)], [(0, 10)], 2),
+    ([(0, 2), (1, 3)], [(2, 5)], 1),
+    ([(0, 2), (4, 8)], [(1, 5), (7, 9)], 3),
+])
+def test_interval_union_overlap_boundaries_and_nesting(left, right, expected):
+    assert sim.overlap(sim.union(left), sim.union(right)) == expected
+
+
+def test_long_disjoint_interval_trains_use_linear_read_budget():
+    reads, count = [0], 2048
+
+    class BudgetSequence:
+        def __init__(self, offset):
+            self.values = [(4*i + offset, 4*i + offset + 2) for i in range(count)]
+
+        def __len__(self):
+            return len(self.values)
+
+        def __getitem__(self, index):
+            reads[0] += 1
+            assert reads[0] <= 4 * (2 * count), "nonlinear interval intersection"
+            return self.values[index]
+
+        def __iter__(self):
+            for index in range(len(self)):
+                yield self[index]
+
+    assert sim.overlap(BudgetSequence(0), BudgetSequence(1)) == count
+    assert reads[0] <= 4 * (2 * count)
+
+
 @pytest.mark.parametrize("failure", ["no-log", "wrong-selector", "ambiguous-log", "multiple-reports"])
 def test_no_kernel_binding_fails_closed(tmp_path, failure):
     root, path = report(tmp_path)
@@ -174,3 +209,9 @@ def test_hardware_acquisition_excludes_simulator_and_operand_phase_guesses(tmp_p
     assert result["simulator_inputs_excluded"] == 1
     barrier = payload()["traceEvents"][1]
     assert "phase" not in namespace["normalize_event"](barrier)
+    hardware = root / "hardware-timeline.json"
+    hardware.write_text(json.dumps({"traceEvents":[{"name":"a3_phase_probe","cat":"compute","ts":0,"dur":1}]}))
+    simulator_paths = [root / "simulator" / f"core{i}/trace.json" for i in range(128)]
+    result = namespace["compact_timeline"](simulator_paths + [hardware])
+    assert result["event_count"] == 1 and result["selectors_complete"]
+    assert result["simulator_inputs_excluded"] == 128

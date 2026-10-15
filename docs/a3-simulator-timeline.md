@@ -22,6 +22,11 @@ exists, it reads the per-core files instead. Interval unions and overlaps are
 computed independently per vector/cube core over all events; only the returned
 example event list is capped at 256. `displayTimeUnit` is a viewer hint: Chrome
 trace `ts`/`dur` retain their microsecond convention.
+This was also checked against the native vendor simulator table: the four core
+instruction windows span 1.00424, 1.00788, 1.00788 and 1.00000 trace units;
+rounding them to the vendor table precision gives its 1.00, 1.01, 1.01 and
+1.00 microseconds. Treating the viewer's `ns` hint as timestamp units would be
+off by 1000. This check establishes simulator units, not hardware timing.
 
 BAR, wait/event, and flow-control instructions remain controls, even when their
 operands mention MTE2 or MTE3. Their durations do not become data-movement

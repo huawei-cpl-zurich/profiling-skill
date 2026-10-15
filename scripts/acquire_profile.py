@@ -421,11 +421,9 @@ def timeline_items(path):
 
 def compact_timeline(paths):
     events=[]
-    simulator_inputs=0
-    for path in paths[:128]:
-      if "simulator" in path.parts:
-        simulator_inputs+=1
-        continue  # Simulator instruction traces are not hardware TimelineDetail.
+    hardware_paths=[path for path in paths if "simulator" not in path.parts]
+    simulator_inputs=len(paths)-len(hardware_paths)
+    for path in hardware_paths[:128]:
       for item in timeline_items(path):
         event=normalize_event(item)
         if event is not None: events.append(event)
@@ -516,7 +514,8 @@ try:
         inventory=[{"name":str(p.relative_to(report)),"bytes":p.stat().st_size}
                    for p in sorted(report.rglob("*")) if p.is_file()]
         timeline_files=sorted(p for p in report.rglob("*") if p.is_file() and p.suffix.lower() in {".json",".csv"} and any(word in str(p.relative_to(report)).lower() for word in ("timeline","trace","event")))
-        sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":file_sha256(p)} for p in timeline_files[:128]]
+        hardware_timeline_files=[p for p in timeline_files if "simulator" not in p.parts]
+        sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":file_sha256(p)} for p in hardware_timeline_files[:128]]
         timeline_semantics=compact_timeline(timeline_files)
         availability="available" if timeline_semantics["event_count"] and timeline_semantics["selectors_complete"] and "TimelineDetail data collection failed" not in transcript else "unavailable"
         basic_rows,basic_sources=collect(report,"BasicInfo") if csv_files(report,"BasicInfo") else ([],[])

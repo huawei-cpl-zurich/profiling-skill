@@ -30,8 +30,17 @@ def union(intervals):
 
 
 def overlap(left, right):
-    return sum(max(0, min(a1, b1) - max(a0, b0))
-               for a0, a1 in left for b0, b1 in right)
+    """Intersect sorted disjoint interval unions in linear time."""
+    total, i, j = 0.0, 0, 0
+    while i < len(left) and j < len(right):
+        a0, a1 = left[i]
+        b0, b1 = right[j]
+        total += max(0, min(a1, b1) - max(a0, b0))
+        if a1 <= b1:
+            i += 1
+        else:
+            j += 1
+    return total
 
 
 def parse_trace(payload, path):

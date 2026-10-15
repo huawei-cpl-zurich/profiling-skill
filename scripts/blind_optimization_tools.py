@@ -48,35 +48,36 @@ try:
     if not any(isinstance(r, dict) and r.get('correctness') is True for r in records):
         raise RuntimeError('trusted runner omitted correctness evidence')
     summary['correctness'] = records
-    if request['verb'] in ('timing', 'pipes', 'sanitize'):
+    if request['verb'] in ('check', 'timing', 'pipes', 'ir', 'sanitize'):
         stage = 'profiling'
         wrapper = root / 'application.sh'
         wrapper.write_text('#!/bin/sh\nexec ' + shlex.join(command) + '\n')
         wrapper.chmod(0o700)
         folder = output / 'discovery'
         argv = ['msprof', 'op', '--application=' + str(wrapper), '--output=' + str(folder / 'report'),
-                '--aic-metrics=BasicInfo', '--warm-up=0', '--launch-count=1', '--kill=off']
+                '--aic-metrics=BasicInfo', '--warm-up=0', '--launch-count=5000', '--kill=off']
         discovery = execute(argv, folder, env)
         validate_capture(discovery.returncode, discovery.stdout + discovery.stderr)
         rows = []
         for path in (folder / 'report').rglob('*OpBasicInfo*.csv'):
             with path.open(encoding='utf-8-sig', newline='') as stream:
                 rows.extend(csv.DictReader(stream))
-        selector_hint = json.loads((root / 'task.json').read_text())['selector']
         names = {value for row in rows for key,value in row.items() if value and
-                 'name' in key.lower() and ('kernel' in key.lower() or 'op' in key.lower())
-                 and (value == selector_hint or value.startswith(selector_hint + '_'))}
-        if len(names) != 1:
-            raise RuntimeError('discovery requires one exported task kernel; observed: ' + repr(sorted(names)))
+                 'name' in key.lower() and ('kernel' in key.lower() or 'op' in key.lower())}
+        summary['discovered_compute_rows'] = rows
+        if len(rows) != 1 or len(names) != 1:
+            stage = 'candidate-contract'
+            raise RuntimeError('single-kernel contract requires exactly one compute launch in the complete bounded stream; observed ' + str(len(rows)) + ' rows: ' + repr(sorted(names)))
         selector = names.pop()
         summary['selector'] = selector
+        stage = 'profiling'
         if request['verb'] in ('timing', 'pipes'):
             metric, count = ('BasicInfo', 5) if request['verb'] == 'timing' else ('PipeUtilization', 3)
             captures = [capture(command, output / ('capture-' + str(i)), env, metric, selector) for i in range(count)]
             summary['captures'] = captures
             if request['verb'] == 'timing':
                 summary['timing'] = summarize([duration(item['basic_rows'][0]) for item in captures])
-        else:
+        elif request['verb'] == 'sanitize':
             stage = 'sanitizer'
             spec = json.loads((root / 'task.json').read_text())
             if spec['language'] != 'triton':
@@ -90,7 +91,7 @@ try:
             text = result.stdout + result.stderr + ''.join(p.read_text(errors='replace') for p in output.glob('sanitizer-report.log*') if p.is_file())
             starts = re.findall(r'Start \w+ sanitizer on kernel (\S+)', text)
             finishes = [x.rstrip('.') for x in re.findall(r'Sanitizer finished on kernel (\S+)', text)]
-            target = [x for x in starts if x == selector or x.startswith(selector_hint + '_') or x == selector_hint]
+            target = [x for x in starts if x == selector]
             qualified = bool(target) and all(x in finishes for x in target)
             summary['sanitizer'] = dict(tool=tool, exit_code=result.returncode, analysis_completed=qualified,
                 analyzed_kernels=starts, target_kernels=target, instrumented_performance=False,
@@ -98,6 +99,7 @@ try:
             if result.returncode or not qualified:
                 raise RuntimeError('sanitizer did not complete analysis of the selected task kernel; see retained logs')
     if request['verb'] == 'ir':
+        stage = 'compiler-evidence'
         artifacts = root / 'compiler-evidence' / request['implementation']
         summary['compiler_artifacts'] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in artifacts.glob('*') if p.is_file()}
         if not summary['compiler_artifacts']:
@@ -108,12 +110,13 @@ except BaseException as error:
 finally:
     if lease: lease.close()
     (output / 'summary.json').write_text(json.dumps(summary, indent=2))
-    # Only compact text artifacts: never ship profiler binaries or raw profiling payloads.
+    # Compact reports and inventoried compiler outputs, never raw profiler payloads.
     with tarfile.open(root / 'evidence.tar.gz', 'w:gz') as archive:
         for base in (output, root / 'compiler-evidence', root / 'build'):
             if base.exists():
                 for path in base.rglob('*'):
-                    if path.is_file() and path.suffix in ('.json', '.log', '.csv', '.txt'):
+                    if path.is_file() and (base.name == 'compiler-evidence' or path.suffix in
+                            ('.json', '.log', '.csv', '.txt', '.mlir', '.ll', '.s', '.asci', '.stdout', '.stderr')):
                         archive.add(path, arcname=str(path.relative_to(root)))
     print(json.dumps(summary), flush=True)
 sys.exit(0 if summary['state'] == 'completed' else 1)
@@ -151,10 +154,13 @@ class Tools:
         return payload
 
     def start(self, verb, implementation, sanitizer):
+        spec = json.loads((self.bundle / 'task.json').read_text())
+        if spec['language'] != 'triton' and verb in ('ir', 'sanitize'):
+            return dict(state='unsupported', failure_stage='capability', operation=verb,
+                        implementation=implementation, error=verb + ' is supported for Triton tasks only')
         ident = uuid.uuid4().hex[:16]
         folder = self.state / ident
         folder.mkdir()
-        spec = json.loads((self.bundle / 'task.json').read_text())
         extension = 'py' if spec['language'] == 'triton' else 'asc'
         source = (self.workspace if implementation == 'candidate' else self.bundle) / (implementation + '.' + extension)
         # Copy bytes once: subsequent edits cannot alter the submitted experiment.
@@ -176,30 +182,54 @@ class Tools:
                 if path != archive: out.add(path, arcname=path.name)
         remote_archive = self.cwd.rstrip('/') + '/' + archive.name
         remote_folder = self.cwd.rstrip('/') + '/blind-tools-' + ident
-        receipt = dict(call_id=ident, remote_folder=remote_folder, request=request, state='prepared')
+        receipt = dict(call_id=ident, target=self.target, runtime=self.runtime, cwd=self.cwd,
+                       remote_archive=remote_archive, remote_folder=remote_folder, request=request, state='prepared')
         save(folder / 'receipt.json', receipt)
         for command in (('targets',), ('capabilities', self.target), ('preflight', self.target)):
             self.remote(*command)
-        transfer = self.remote('upload', self.target, archive, remote_archive)
-        if transfer.get('state') != 'completed':
-            receipt.update(state='transfer-pending', transfer=transfer)
-            save(folder / 'receipt.json', receipt)
-            return receipt
         script = folder / 'run.sh'
         script.write_text('#!/bin/bash\nset -eu\nmkdir -p ' + shlex.quote(remote_folder) + '\n' +
                           'tar -xzf ' + shlex.quote(remote_archive) + ' -C ' + shlex.quote(remote_folder) + '\n' +
                           'cd ' + shlex.quote(remote_folder) + '\nexec python execute.py\n')
-        dispatch = self.remote('run', self.target, '--runtime', self.runtime, '--cwd', self.cwd, '--file', script)
+        receipt['upload'] = self.remote('upload', self.target, archive, remote_archive)
+        save(folder / 'receipt.json', receipt)
+        if receipt['upload'].get('state') != 'completed':
+            return self.observe(ident)
+        return self.dispatch(folder, receipt)
+
+    def dispatch(self, folder, receipt):
+        dispatch = self.remote('run', receipt['target'], '--runtime', receipt['runtime'],
+                               '--cwd', receipt['cwd'], '--file', folder / 'run.sh')
         receipt.update(state=dispatch['state'], handle=dispatch['handle'])
         save(folder / 'receipt.json', receipt)
-        return self.observe(ident)
+        return self.observe(receipt['call_id'])
+
+    def transfer(self, receipt, name):
+        transfer = receipt[name]
+        if transfer.get('state') not in ('completed', 'failed', 'cancelled'):
+            if not transfer.get('handle'):
+                return dict(state='failed', error='nonterminal transfer omitted retained handle')
+            transfer = self.remote('observe', transfer['handle'], '--wait', '--timeout', '120')
+        receipt[name] = transfer
+        return transfer
 
     def observe(self, ident):
         if not ident.isalnum(): raise ValueError('invalid call id')
         folder = self.state / ident
         receipt = json.loads((folder / 'receipt.json').read_text())
         if not receipt.get('handle'):
-            return receipt
+            if 'upload' not in receipt:
+                return dict(receipt, state='infrastructure-unavailable', error='submission has no retained job or transfer')
+            try:
+                transfer = self.transfer(receipt, 'upload')
+            except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+                return dict(receipt, error=str(error), next='experiment-tool observe ' + ident)
+            save(folder / 'receipt.json', receipt)
+            if transfer['state'] in ('failed', 'cancelled'):
+                return dict(receipt, state='failed', failure_stage='infrastructure', error='upload ' + transfer['state'], transfer=transfer)
+            if transfer['state'] != 'completed':
+                return dict(receipt, state='transfer-pending', next='experiment-tool observe ' + ident)
+            return self.dispatch(folder, receipt)
         try:
             result = self.remote('observe', receipt['handle'], '--wait', '--timeout', '120')
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
@@ -213,12 +243,23 @@ class Tools:
         evidence = self.workspace / 'evidence' / ident
         evidence.mkdir(parents=True, exist_ok=True)
         try:
-            download = self.remote('download', self.target, receipt['remote_folder'] + '/evidence.tar.gz', evidence / 'evidence.tar.gz')
+            if 'download' not in receipt:
+                target = receipt.get('target', receipt['handle'].split(':', 3)[1])
+                receipt['download'] = self.remote('download', target, receipt['remote_folder'] + '/evidence.tar.gz', evidence / 'evidence.tar.gz')
+                save(folder / 'receipt.json', receipt)
+            download = self.transfer(receipt, 'download')
+            save(folder / 'receipt.json', receipt)
+            if download.get('state') == 'completed' and download.get('handle'):
+                fetched = self.remote('fetch', download['handle'], evidence / 'evidence.tar.gz')
+                if fetched.get('state') != 'completed':
+                    return dict(receipt, state='failed', failure_stage='infrastructure', error='evidence fetch did not complete', fetch=fetched)
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
             # A completed workload and a failed evidence transfer are different events.
             return dict(receipt, evidence_error=str(error), next='experiment-tool observe ' + ident)
         if download.get('state') != 'completed':
-            return dict(receipt, evidence_transfer=download)
+            if download.get('state') in ('failed', 'cancelled'):
+                return dict(receipt, state='failed', failure_stage='infrastructure', error='evidence transfer ' + download['state'])
+            return dict(receipt, evidence_transfer=download, next='experiment-tool observe ' + ident)
         with tarfile.open(evidence / 'evidence.tar.gz') as archive:
             for entry in archive.getmembers():
                 if entry.issym() or entry.islnk() or not entry.isfile() or not (evidence / entry.name).resolve().is_relative_to(evidence.resolve()):
@@ -245,8 +286,10 @@ def main(argv=None):
         print('experiment-tool {check,timing,pipes,ir,sanitize} [--implementation baseline|candidate]\n'
               'sanitize [--sanitizer memcheck|racecheck|synccheck] (Triton only)\n'
               'experiment-tool observe CALL_ID resumes an existing retained job.\n'
+              'All supported execution operations (check, timing, pipes, ir, sanitize) include four correctness checks\n'
+              'and complete bounded single-kernel verification; a separate check call is unnecessary before timing.\n'
               'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
-              'pipes returns three PipeUtilization captures. ir returns compiler artifacts from execution.\n'
+              'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
         return 0
     try:

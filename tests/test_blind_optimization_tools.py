@@ -91,11 +91,12 @@ def test_terminal_retrieval_materializes_compact_result(tmp_path):
     obj = instance(tmp_path)
     folder = obj.state / 'abc123'
     folder.mkdir()
-    tools.save(folder / 'receipt.json', dict(handle='remote:t:job:same', remote_folder='/remote/call'))
+    tools.save(folder / 'receipt.json', dict(target='original-target', handle='remote:t:job:same', remote_folder='/remote/call'))
     payload = tmp_path / 'summary.json'
     tools.save(payload, dict(state='failed', failure_stage='candidate', error='compiler diagnostic'))
     def remote(*args):
         if args[0] == 'observe': return dict(state='failed')
+        assert args[0:2] == ('download', 'original-target')
         with tarfile.open(args[-1], 'w:gz') as archive: archive.add(payload, arcname='results/summary.json')
         return dict(state='completed')
     obj.remote = remote
@@ -122,8 +123,60 @@ def test_neutral_help_runs_without_remote_configuration(capsys):
     assert 'observe CALL_ID' in capsys.readouterr().out
 
 
-@pytest.mark.parametrize('verb,count', [('timing', 5), ('pipes', 3)])
-def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count):
+@pytest.mark.parametrize('verb', ['ir', 'sanitize'])
+def test_native_optional_diagnostics_are_capability_results_without_remote_calls(tmp_path, verb):
+    obj = instance(tmp_path)
+    tools.save(obj.bundle / 'task.json', dict(language='ascendc'))
+    obj.remote = lambda *args: pytest.fail('unsupported operation must not dispatch')
+    result = obj.start(verb, 'candidate', 'racecheck')
+    assert result['state'] == 'unsupported'
+    assert result['failure_stage'] == 'capability'
+
+
+@pytest.mark.parametrize('state', ['running', 'completed', 'failed', 'cancelled'])
+def test_upload_resume_observes_same_transfer_then_dispatches_once(tmp_path, state):
+    obj = instance(tmp_path)
+    folder = obj.state / 'abc123'
+    folder.mkdir()
+    tools.save(folder / 'receipt.json', dict(call_id='abc123', target='saved-target',
+               upload=dict(state='running', handle='remote:t:transfer:upload')))
+    calls = []
+    def remote(*args):
+        calls.append(args)
+        return dict(state=state, handle='remote:t:transfer:upload')
+    obj.remote = remote
+    obj.dispatch = lambda folder,receipt: dict(dispatched_to=receipt['target'])
+    result = obj.observe('abc123')
+    assert calls == [('observe', 'remote:t:transfer:upload', '--wait', '--timeout', '120')]
+    if state == 'completed': assert result == dict(dispatched_to='saved-target')
+    elif state == 'running': assert result['next'] == 'experiment-tool observe abc123'
+    else:
+        assert result['state'] == 'failed'
+        assert result['failure_stage'] == 'infrastructure'
+
+
+def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
+    obj = instance(tmp_path)
+    folder = obj.state / 'abc123'
+    folder.mkdir()
+    tools.save(folder / 'receipt.json', dict(call_id='abc123', handle='remote:t:job:same',
+               download=dict(state='running',handle='remote:t:transfer:download')))
+    payload = tmp_path / 'summary.json'
+    tools.save(payload, dict(state='completed'))
+    calls = []
+    def remote(*args):
+        calls.append(args)
+        if args[0] == 'fetch':
+            with tarfile.open(args[-1], 'w:gz') as archive: archive.add(payload, arcname='results/summary.json')
+        return dict(state='completed',handle=args[1])
+    obj.remote = remote
+    assert obj.observe('abc123')['state'] == 'completed'
+    assert [c[0] for c in calls] == ['observe', 'observe', 'fetch']
+    assert calls[1][1] == calls[2][1] == 'remote:t:transfer:download'
+
+
+@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('check', 0, True)])
+def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra):
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate'))
     tools.save(tmp_path / 'task.json', dict(selector='task_kernel', language='triton'))
@@ -135,27 +188,48 @@ def bounded_run(*args, **kwargs): raise AssertionError('unused probe')
 ''')
     (tmp_path / 'a3_memory_batch.py').write_text('''
 import json
+from pathlib import Path
 from types import SimpleNamespace
 def execute(argv, folder, env, **kwargs):
     folder.mkdir(parents=True)
     if argv[0] == 'msprof':
         report = folder / 'report'
         report.mkdir()
-        (report / 'OpBasicInfo.csv').write_text('Kernel Name,Duration(us)\\ntorch_fill,1\\ntask_kernel_compiled_123,2\\n')
+        assert '--launch-count=5000' in argv
+        (report / 'OpBasicInfo.csv').write_text('Kernel Name,Duration(us)\\nrenamed_kernel_compiled_123,2\\n')
         return SimpleNamespace(returncode=0,stdout='profiler completed',stderr='')
+    artifact = Path(__file__).parent / 'compiler-evidence/candidate'
+    artifact.mkdir(parents=True, exist_ok=True)
+    (artifact / 'lowered.ll').write_text('lowered IR')
+    (artifact / 'lowered.bc').write_bytes(b'compiler bitcode')
+    build = Path(__file__).parent / 'build'
+    build.mkdir(exist_ok=True)
+    (build / 'compile.stderr').write_text('compiler diagnostics')
     return SimpleNamespace(returncode=0,stdout='{"correctness":true}',stderr='')
 def validate_capture(code,text): assert code == 0
 def capture(command,folder,env,metric,selector):
-    assert selector == 'task_kernel_compiled_123'
+    assert selector == 'renamed_kernel_compiled_123'
     folder.mkdir()
     return {'metric':metric,'selector':selector,'basic_rows':[{'Duration(us)':'2'}]}
 def duration(row): return float(row['Duration(us)'])
 def summarize(samples): return {'samples_us':samples,'median_us':2}
 ''')
+    if extra:
+        helper = tmp_path / 'a3_memory_batch.py'
+        helper.write_text(helper.read_text().replace('renamed_kernel_compiled_123,2\\n', 'renamed_kernel_compiled_123,2\\nsecond_compute,3\\n'))
     result = subprocess.run(['python', str(tmp_path / 'execute.py')], capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr + result.stdout
     summary = json.loads((tmp_path / 'results/summary.json').read_text())
-    assert summary['selector'] == 'task_kernel_compiled_123'
-    assert len(summary['captures']) == count
+    if extra:
+        assert result.returncode == 1
+        assert summary['failure_stage'] == 'candidate-contract'
+        assert 'exactly one compute launch' in summary['error']
+        return
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert summary['selector'] == 'renamed_kernel_compiled_123'
+    assert len(summary.get('captures', [])) == count
     assert summary['physical_device'] == 7
     assert (tmp_path / 'evidence.tar.gz').is_file()
+    with tarfile.open(tmp_path / 'evidence.tar.gz') as archive:
+        assert 'build/compile.stderr' in archive.getnames()
+        assert 'compiler-evidence/candidate/lowered.ll' in archive.getnames()
+        assert 'compiler-evidence/candidate/lowered.bc' in archive.getnames()

@@ -6,9 +6,7 @@ loads prevent hoisting the input operations. The added loop and volatility can
 change compiler scheduling; use only paired evidence with matching repetitions.
 """
 import argparse
-import hashlib
 import json
-from pathlib import Path
 
 import torch
 import torch_npu  # noqa: F401
@@ -16,6 +14,7 @@ import triton
 import triton.language as tl
 
 from a3_profile_microbench import a3_vector_probe, generate_inputs, reference_output, outputs_close
+from compile_evidence import retain_compiler_evidence
 
 
 @triton.jit
@@ -49,18 +48,8 @@ def main():
     )
     torch.npu.synchronize()
     correct = outputs_close(output.cpu(), expected)
-    artifacts = []
-    root = Path('compiler-evidence'); root.mkdir(exist_ok=True)
-    for key, value in compiled.asm.items():
-        if not isinstance(value, str): continue
-        path = root / (key + '.txt'); path.write_text(value)
-        lines = value.splitlines()
-        artifacts.append({'stage': key, 'sha256': hashlib.sha256(value.encode()).hexdigest(),
-                          'bytes': len(value.encode()),
-                          'loop_evidence': [line.strip() for line in lines if
-                                            any(token in line for token in
-                                                ('scf.for', 'scf.while', 'cf.cond_br', 'llvm.cond_br',
-                                                 'volatile', 'br i1'))][:20]})
+    artifacts = retain_compiler_evidence(compiled.asm, 'compiler-evidence',
+                                         args.experiment, args.variant, args.repetitions)
     print(json.dumps({'status': 'success' if correct else 'failure',
                       'derived': True, 'repetitions': args.repetitions,
                       'correctness': correct, 'compiler': artifacts}))

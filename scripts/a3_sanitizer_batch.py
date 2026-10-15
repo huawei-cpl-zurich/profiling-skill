@@ -57,16 +57,28 @@ def run_check(command, folder, env, tool):
             reports.append(dict(path=path.name, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                                 text=path.read_text(errors='replace')))
     text = '\n'.join([str(stdout), str(stderr), *(item['text'] for item in reports)])
-    started = bool(re.search(r'Start \w+ sanitizer on kernel \S+', text))
-    finished = bool(re.search(r'Sanitizer finished on kernel \S+', text))
+    kernels = re.findall(r'Start \w+ sanitizer on kernel (\S+)', text)
+    completed = re.findall(r'Sanitizer finished on kernel (\S+)', text)
+    target_kernels = [name for name in kernels if 'a3_sanitizer_' in name]
+    started = bool(target_kernels)
+    finished = any(name in completed for name in target_kernels)
     classification = classify(text, code, timeout=timeout)
     if classification == 'no-finding' and not (started and finished):
         classification = 'unqualified-report'
     relevant = [line for line in text.splitlines() if re.search(
         r'hazard|race|\b(?:RAW|WAR|WAW|UB|GM|MTE[123]|PIPE_V)\b|0x[\da-f]+|warning|error', line, re.I)]
-    result = dict(classification=classification, exit_code=code,
+    correctness = None
+    for line in str(stdout).splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and isinstance(record.get('correctness'), bool):
+            correctness = record['correctness']
+    result = dict(classification=classification, exit_code=code, workload_correctness=correctness,
                   timed_out=timeout, reports=reports, diagnostic_lines=relevant,
                   analysis_started=started, analysis_finished=finished,
+                  analyzed_kernels=kernels, target_kernels=target_kernels,
                   limitation='no-finding is not proof of race freedom; instrumentation must be audited')
     (folder / 'result.json').write_text(json.dumps(result, indent=2))
     return result
@@ -114,6 +126,8 @@ def main():
                         print(json.dumps({'check': label, 'classification': summary['checks'][label]['classification']}), flush=True)
                         if summary['checks'][label]['classification'] in ('instrumentation-failure', 'unqualified-report', 'timeout'):
                             return 2
+                        if not mutant and summary['checks'][label]['workload_correctness'] is not True:
+                            return 3
     finally:
         lease.close()
     return 0

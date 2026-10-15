@@ -73,6 +73,20 @@ def test_reconnecting_observation_never_redispatches(tmp_path):
     assert calls == [('observe', 'remote:t:job:same', '--wait', '--timeout', '120')]
 
 
+def test_transport_timeout_keeps_call_id_and_same_handle(tmp_path):
+    obj = instance(tmp_path)
+    folder = obj.state / 'abc123'
+    folder.mkdir()
+    tools.save(folder / 'receipt.json', dict(call_id='abc123', handle='remote:t:job:same'))
+    def remote(*args): raise subprocess.TimeoutExpired(args, 240)
+    obj.remote = remote
+    result = obj.observe('abc123')
+    assert result['state'] == 'observation-unavailable'
+    assert result['call_id'] == 'abc123'
+    assert result['handle'] == 'remote:t:job:same'
+    assert result['next'] == 'experiment-tool observe abc123'
+
+
 def test_terminal_retrieval_materializes_compact_result(tmp_path):
     obj = instance(tmp_path)
     folder = obj.state / 'abc123'

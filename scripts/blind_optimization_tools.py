@@ -200,14 +200,23 @@ class Tools:
         receipt = json.loads((folder / 'receipt.json').read_text())
         if not receipt.get('handle'):
             return receipt
-        result = self.remote('observe', receipt['handle'], '--wait', '--timeout', '120')
+        try:
+            result = self.remote('observe', receipt['handle'], '--wait', '--timeout', '120')
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            receipt.update(state='observation-unavailable', error=str(error))
+            save(folder / 'receipt.json', receipt)
+            return dict(receipt, next='experiment-tool observe ' + ident)
         receipt['state'] = result['state']
         save(folder / 'receipt.json', receipt)
         if result['state'] not in ('completed', 'failed', 'cancelled'):
             return dict(receipt, next='experiment-tool observe ' + ident)
         evidence = self.workspace / 'evidence' / ident
         evidence.mkdir(parents=True, exist_ok=True)
-        download = self.remote('download', self.target, receipt['remote_folder'] + '/evidence.tar.gz', evidence / 'evidence.tar.gz')
+        try:
+            download = self.remote('download', self.target, receipt['remote_folder'] + '/evidence.tar.gz', evidence / 'evidence.tar.gz')
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            # A completed workload and a failed evidence transfer are different events.
+            return dict(receipt, evidence_error=str(error), next='experiment-tool observe ' + ident)
         if download.get('state') != 'completed':
             return dict(receipt, evidence_transfer=download)
         with tarfile.open(evidence / 'evidence.tar.gz') as archive:

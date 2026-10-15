@@ -66,6 +66,10 @@ def native_run(root, args):
         subprocess.run([str(executable), str(args.seed + check), str(args.launches), str(args.device)], check=True, timeout=300)
 
 
+def validate_output(spec, actual, expected):
+    torch.testing.assert_close(actual, expected, **spec['tolerances'])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--implementation', choices=['baseline', 'candidate'], default='candidate')
@@ -103,10 +107,7 @@ def main():
                 compiled = module.launch(device_inputs, output)
             torch.npu.synchronize()
             actual = output.cpu()
-            if spec['id'] == 'task02':
-                assert torch.equal(actual, expected), 'indexed copy differs from CPU reference'
-            else:
-                torch.testing.assert_close(actual, expected, rtol=.02, atol=.02)
+            validate_output(spec, actual, expected)
             if compiled is not None and hasattr(compiled, 'asm'):
                 artifacts = root / 'compiler-evidence' / args.implementation
                 artifacts.mkdir(parents=True, exist_ok=True)

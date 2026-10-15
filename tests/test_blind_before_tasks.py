@@ -69,3 +69,12 @@ def test_invalid_launch_count_fails_before_device_import(tmp_path):
                             capture_output=True, text=True)
     assert result.returncode != 0
     assert 'must be positive' in result.stderr
+
+
+def test_omitting_small_loop_contribution_is_rejected(tmp_path):
+    spec = export('task01', tmp_path / 'bundle')
+    runner = load_runner(tmp_path / 'bundle')
+    inputs, expected = runner.inputs_and_reference(spec, 87)
+    runner.validate_output(spec, expected.clone(), expected)
+    with pytest.raises(AssertionError):
+        runner.validate_output(spec, inputs['x'] * 1.5 + 2, expected)

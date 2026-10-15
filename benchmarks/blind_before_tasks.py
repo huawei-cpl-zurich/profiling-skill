@@ -121,6 +121,9 @@ extern "C" __global__ __aicore__ void task_kernel(GM_ADDR input, GM_ADDR output)
 
 def export(task, output):
     spec = dict(TASKS[task], id=task, selector='task_kernel', single_kernel=True)
+    spec['tolerances'] = (dict(rtol=.02, atol=.02) if task == 'task03' else
+                          dict(rtol=0., atol=0.) if task in ('task02', 'task06') else
+                          dict(rtol=1e-6, atol=1e-6))
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     extension = 'asc' if spec['language'] == 'ascendc' else 'py'
@@ -142,7 +145,7 @@ def export(task, output):
         'Public API: Python launch(inputs, output) returns compiled kernel; native task_kernel(input,output).\n'
         'Use experiment-tool help for checking, timing, pipe metrics and compiler inspection.\n'
         'The controller supplies independent seeded correctness checks through that tool.\n'
-        'Every output must match the CPU oracle, rtol=atol=0.02 (indexed copy is exact).\n')
+        'Every output must match task.json tolerances (indexed copy and native outputs exact).\n')
     return spec
 
 

@@ -71,7 +71,7 @@ def wait_for_device(probe, *, poll_seconds=15, lease_root=None,
                     query=smi, sleep=time.sleep, notify=None):
     """Wait without consuming capture attempts, then probe only an idle chip.
 
-    ``probe(env)`` returns bool. Query/parse failures are explicit infrastructure
+    ``probe(env)`` returns bool or (bool, diagnostic). Query/parse failures are infrastructure
     errors, not evidence that every device is busy. OS flock releases on exit.
     """
     root = Path(lease_root) if lease_root else Path.home() / ".cpl-device-leases"
@@ -80,6 +80,7 @@ def wait_for_device(probe, *, poll_seconds=15, lease_root=None,
     while True:
         inventory = discover_devices(query("-m"))
         eligible = inspect_devices(query(), inventory)
+        failures = []
         for card, chip, physical in eligible:
             lease = open(root / ("device-lease-%d.lock" % physical), "a+")
             try:
@@ -96,12 +97,17 @@ def wait_for_device(probe, *, poll_seconds=15, lease_root=None,
                 env = os.environ.copy()
                 env["ASCEND_RT_VISIBLE_DEVICES"] = str(physical)
                 env["ASCEND_DEVICE_ID"] = "0"
-                if probe(env):
+                result = probe(env)
+                ok, detail = result if isinstance(result, tuple) else (result, "probe returned false")
+                if ok:
                     notify({"state": "selected", "physical_id": physical, "logical_id": 0})
                     return physical, env, lease
+                failures.append("%d: %s" % (physical, str(detail)[-1000:]))
             except BaseException:
                 lease.close()
                 raise
             lease.close()
+        if failures:
+            raise RuntimeError("idle-device runtime probes failed: " + "; ".join(failures))
         notify({"state": "waiting", "devices": len(inventory), "eligible": len(eligible)})
         sleep(poll_seconds)

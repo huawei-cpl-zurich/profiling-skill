@@ -10,7 +10,9 @@ after taking the lock. Keep the returned lease open until profiling finishes.
 Jobs wait indefinitely in 15-second intervals when all devices are occupied;
 waiting does not consume measurement attempts. Observation loss must resume the
 same remote handle, not launch another worker. Locks release automatically when
-the owning process exits, allowing restart without stale lock removal.
+the owning process exits, allowing restart without stale lock removal. If idle
+devices are actually probed but all probes fail, fail explicitly with bounded
+diagnostics instead of misreporting a broken runtime as device occupancy.
 
 `scripts/profile_device.py` provides `wait_for_device(probe)` returning
 `(physical_id, environment, open_lease)`. The environment exposes only the chosen

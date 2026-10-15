@@ -314,8 +314,8 @@ def pick_device():
         try:
             result=subprocess.run([sys.executable,"-c",PROBE],text=True,capture_output=True,env=env,timeout=20)
         except subprocess.TimeoutExpired:
-            return False
-        return result.returncode == 0
+            return False,"runtime probe exceeded 20 seconds"
+        return result.returncode == 0,(result.stderr or result.stdout)[-1000:]
     try: return wait_for_device(probe)
     except Exception as exc: fail("device-probe","host_environment",str(exc))
 

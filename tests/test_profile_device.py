@@ -72,15 +72,17 @@ def test_shared_lease_and_restart_release(tmp_path):
     competing.close()
 
 
-def test_probe_failure_waits_and_releases_lease(tmp_path):
+def test_probe_failure_fails_clearly_and_releases_lease(tmp_path):
     probes, sleeps = [], []
     def probe(env):
         probes.append(env)
-        return len(probes) == 2
-    _, _, lease = device.wait_for_device(probe, query=lambda *args: MAPPING if args else table(),
-        sleep=sleeps.append, lease_root=tmp_path, notify=lambda value: None)
-    assert sleeps == [15] and len(probes) == 2
-    lease.close()
+        return False, "torch import failed"
+    with pytest.raises(RuntimeError, match="idle-device runtime probes failed: 15: torch import failed"):
+        device.wait_for_device(probe, query=lambda *args: MAPPING if args else table(),
+            sleep=sleeps.append, lease_root=tmp_path, notify=lambda value: None)
+    assert sleeps == [] and len(probes) == 1
+    with open(tmp_path / "device-lease-15.lock", "a+") as lease:
+        fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 def test_external_occupancy_race_rechecked_under_lock(tmp_path):

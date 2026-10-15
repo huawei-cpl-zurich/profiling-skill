@@ -37,6 +37,8 @@ cases are unavailable rather than silently removed from a claimed common-case
 aggregate. Candidate, starter, and parent must each cover the complete case set
 declared by the run contract before an aggregate latency or speedup is emitted.
 Rejected samples remain in the report even when a case has no accepted timing.
+Producer-schema cases require explicit `accepted_sample_indexes`: when absent,
+all captured samples remain diagnostic-only and produce no median or aggregate.
 
 Activity fractions are non-temporal observations. They do not provide a
 validated A3 capacity denominator or saturation threshold, so this A3 report

@@ -341,7 +341,9 @@ def normalize_producer_inputs(
         for case_id, case in cases.items():
             if not isinstance(case, dict):
                 raise InvalidReportInput(f"result case {case_id!r} must be an object")
-            accepted = set(case.get("accepted_sample_indexes", range(len(case.get("samples", [])))))
+            # Captures can exist before the producer finds a stable window.
+            # Missing selection is not implicit approval, even for a terminal case.
+            accepted = set(case.get("accepted_sample_indexes", []))
             for sample_index, sample in enumerate(objects(case.get("samples", []), "result samples")):
                 profile = sample_profile(sample)
                 captures.append({

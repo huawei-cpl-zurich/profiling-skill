@@ -376,6 +376,45 @@ def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage
     assert report["report_state"] == "partial"
 
 
+@pytest.mark.parametrize("case_status", ["pending", "measurement_unstable", "acquisition_exhausted", "completed"])
+def test_missing_producer_acceptance_does_not_create_timings(tmp_path: Path, case_status: str):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "occurrences": [{"occurrence_id": "only", "execution_id": "exec", "recoverability": "recoverable"}],
+        "executions": [{"execution_id": "exec", "occurrence_ids": ["only"], "parameters": {}}],
+    }
+    results = {
+        "schema": "profiling-skill/bsa-candidate-results/v1",
+        "cases": [47],
+        "executions": {"exec": {
+            "status": case_status,
+            "cases": {"47": {"status": case_status, "samples": [
+                {"duration_us": value, "pipe_utilization": {}, "provenance": {}}
+                for value in (10.0, 40.0, 80.0)
+            ]}},
+            "infrastructure_failures": [],
+        }},
+    }
+    manifest_path, results_path = tmp_path / "manifest.json", tmp_path / "results.json"
+    write_json(manifest_path, manifest)
+    write_json(results_path, results)
+    output = tmp_path / "out"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--results", str(results_path),
+         "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    candidate = json.loads((output / "report.json").read_text())["candidates"][0]
+    case = candidate["cases"]["47"]
+    assert len(case["samples"]) == 3
+    assert all(sample["accepted"] is False for sample in case["samples"])
+    assert case["latency_samples_us"] == []
+    assert case["median_latency_us"] is None
+    assert candidate["geometric_mean"]["latency_us"] is None
+    assert candidate["aggregate_coverage"]["missing_case_ids"] == ["47"]
+
+
 def test_producer_schema_without_explicit_starter_or_parent_has_no_speedups(tmp_path: Path):
     manifest = {
         "schema": "profiling-skill/bsa-candidate-manifest/v1",

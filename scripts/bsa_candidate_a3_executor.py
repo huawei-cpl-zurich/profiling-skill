@@ -531,6 +531,20 @@ def compact_pipe(rows):
         result.append(merged)
     return result
 
+def capture_diagnostics(basic,pipe,selector):
+    selected=[row for row in basic if name(row)==selector]
+    values=[duration(row) for row in selected]
+    if not pipe:
+        return "missing_pipe_rows: no PipeUtilization rows; raw duration fields="+repr([
+            {field:row.get(field) for field in DURATIONS if field in row}
+            for row in selected])
+    if len(selected)!=1:
+        return "duration_row_count: expected one exact BasicInfo row, got "+str(len(selected))
+    if values[0] is None:
+        return "invalid_duration: exact BasicInfo row has no positive duration; fields="+repr({
+            field:selected[0].get(field) for field in DURATIONS if field in selected[0]})
+    return None
+
 def run_profile(req,env,report,physical,correctness):
     failure=pathlib.Path("profile-failure.json"); failure.unlink(missing_ok=True)
     application=shlex.join([sys.executable,"remote_driver.py","--profile-workload"])
@@ -597,8 +611,9 @@ def main():
           emit({"status":"infrastructure_error","diagnostics":str(exc),"physical_device":physical}); return
       values=[duration(row) for row in basic if name(row)==selector]
       values=[value for value in values if value is not None]
-      if not pipe or len(values)!=1:
-          emit({"status":"infrastructure_error","diagnostics":"capture lacks one exact PipeUtilization or duration row","physical_device":physical}); return
+      diagnostics=capture_diagnostics(basic,pipe,selector)
+      if diagnostics:
+          emit({"status":"infrastructure_error","diagnostics":diagnostics,"physical_device":physical}); return
       captures.append({"sample_index":sample_index,"duration_us":values[0],
                        "pipe_utilization":{"metric":"PipeUtilization","selector":selector,"rows":pipe}})
     emit({"status":"ok","physical_device":physical,"correctness":correctness["case_evidence"],

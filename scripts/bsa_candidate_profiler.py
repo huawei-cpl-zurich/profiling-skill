@@ -770,6 +770,38 @@ def _with_retry(request: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
     return request
 
 
+def _acquisition_exhausted(state: dict[str, Any]) -> bool:
+    """Bound new submissions, never observations of an unresolved remote job."""
+    if state.get("retry", {}).get("mode") == "observe":
+        return False
+    failures = state.get("infrastructure_failures", [])
+    terminal = [item for item in failures if item.get("terminal") is not False]
+    # A successful discovery/capture resets the consecutive failure window.
+    terminal = terminal[state.get("acquisition_failure_offset", 0):]
+    diagnostics = [item.get("diagnostics", "") for item in terminal]
+    repeated = len(diagnostics) >= 2 and diagnostics[-1] == diagnostics[-2]
+    if len(terminal) < 3 and not repeated:
+        return False
+    state["status"] = "measurement_unstable"
+    state["failure"] = {
+        "kind": "acquisition_exhausted", "category": "infrastructure",
+        "diagnostics": (
+            "Acquisition stopped after repeated deterministic evidence failure"
+            if repeated else "Acquisition exhausted initial attempt plus two retries"
+        ),
+        "last_diagnostics": diagnostics[-1],
+    }
+    state.pop("retry", None)
+    return True
+
+
+def _acquisition_succeeded(state: dict[str, Any]) -> None:
+    state["acquisition_failure_offset"] = sum(
+        item.get("terminal") is not False
+        for item in state.get("infrastructure_failures", [])
+    )
+
+
 def run_campaign(
     manifest: dict[str, Any],
     output: Path,
@@ -806,6 +838,9 @@ def run_campaign(
             continue
         state = results["executions"][candidate["execution_id"]]
         if state["status"] in {"completed", "candidate_failure", "measurement_unstable"}:
+            continue
+        if _acquisition_exhausted(state):
+            _atomic_json(output, results)
             continue
         if state.get("selectors") is None:
             if max_actions is not None and actions >= max_actions:
@@ -911,6 +946,7 @@ def run_campaign(
                 "evidence_sha256": response.get("evidence_sha256"),
                 "provenance": response.get("provenance"),
             }
+            _acquisition_succeeded(state)
             _atomic_json(output, results)
 
         interrupted = False
@@ -1009,6 +1045,7 @@ def run_campaign(
                         "evidence_sha256": response.get("evidence_sha256"),
                         "provenance": response.get("provenance"),
                     }
+                    _acquisition_succeeded(state)
                     _atomic_json(output, results)
                 if interrupted:
                     break

@@ -235,6 +235,19 @@ def test_staged_remote_driver_is_valid_python():
     compile(module.remote_driver_source(), "remote_driver.py", "exec")
 
 
+@pytest.mark.parametrize("rows,pipe,expected", [
+    ([{"Op Name":"kernel", "Task Duration(us)":"NA"}], [], "missing_pipe_rows"),
+    ([{"Op Name":"kernel", "Task Duration(us)":"NA"}], [{}], "invalid_duration"),
+    ([{"Op Name":"kernel", "Task Duration(us)":"1"}]*2, [{}], "duration_row_count"),
+    ([{"Op Name":"kernel", "Task Duration(us)":"1"}], [{}], None),
+])
+def test_capture_diagnostics_distinguishes_missing_and_invalid_evidence(rows, pipe, expected):
+    namespace = {"__name__": "staged_remote_driver"}
+    exec(compile(load().remote_driver_source(), "remote_driver.py", "exec"), namespace)
+    result = namespace["capture_diagnostics"](rows, pipe, "kernel")
+    assert result is None if expected is None else result.startswith(expected + ":")
+
+
 @pytest.mark.parametrize("heads", [3, 24, 48, 96])
 def test_qualification_candidate_blockmask_access_plan_is_bounded(heads):
     candidate = load_qualification_candidate()

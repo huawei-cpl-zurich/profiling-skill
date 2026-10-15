@@ -186,6 +186,15 @@ campaign, even though both use the logical `py311-torch` runtime.
 
 Use `status --results RESULTS.json` for a compact terminal/retry summary.
 
+New acquisition attempts are bounded: an initial terminal failure permits at
+most two retries; two consecutive identical diagnostics stop earlier. A
+successful discovery or capture resets that consecutive-failure window.
+Unresolved retained handles are always observed, never charged as new attempts
+or replaced merely because observation failed. Exhaustion is reported as
+`measurement_unstable` with failure kind `acquisition_exhausted`, not as a
+candidate compile/runtime failure. Keep the prior attempts and raw reports;
+investigate the named missing/invalid evidence before creating a new cohort.
+
 ## Parallel shards
 
 Execution assignment is `sha256(execution_id) mod shard_count`, so it is

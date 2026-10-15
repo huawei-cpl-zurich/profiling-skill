@@ -846,6 +846,46 @@ def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt
     assert requests[2]["retry"] == {"mode": "new_attempt", "prior_handle": handle}
 
 
+def test_acquisition_budget_stops_new_attempts_but_never_retained_observation(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
+                              "diagnostics":"duration unavailable"}]*3)
+    output = tmp_path / "results.json"
+    for _ in range(5):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[47],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["status"] == "measurement_unstable"
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    requests = json.loads((tmp_path / "results.protocol/response.requests").read_text())
+    assert len(requests) == 2
+    state["retry"] = {"mode":"observe", "handle":"remote:gz-a3:job:alive"}
+    assert MODULE._acquisition_exhausted(state) is False
+
+
+def test_acquisition_success_resets_failure_budget():
+    state = {"infrastructure_failures":[{"terminal":True,"diagnostics":"old"}]*3}
+    MODULE._acquisition_succeeded(state)
+    assert MODULE._acquisition_exhausted(state) is False
+    state["infrastructure_failures"].extend(
+        {"terminal":True,"diagnostics":str(index)} for index in range(3))
+    assert MODULE._acquisition_exhausted(state) is True
+
+
+def test_distinct_terminal_infra_failures_allow_only_two_retries(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
+                              "diagnostics":f"transport failure {index}"}
+                             for index in range(4)])
+    output = tmp_path / "results.json"
+    for _ in range(6):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[43],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    assert len(state["infrastructure_failures"]) == 3
+
+
 def test_retry_rejects_wrong_target_failure_handle(tmp_path: Path) -> None:
     executor = tmp_path / "executor.py"
     make_executor(executor, [{

@@ -59,7 +59,7 @@ def saved(tmp_path):
 
 
 def record_path(saved):
-    return next((saved.campaign / "shard-0/cells").glob("*/result.json"))
+    return saved.campaign / "shard-0/cells/loop-bound__short-local__before/result.json"
 
 
 @pytest.mark.parametrize("left,right", [(None, 0.4), (0.5, None), (None, None), (0.5, 0.4)])
@@ -131,7 +131,18 @@ def make_retryable(saved, classification="host_environment", message="host unava
     return path, value
 
 
-def test_selective_retry_preserves_valid_captures_and_other_cells(saved, monkeypatch):
+@pytest.mark.parametrize("directory_order", ["reverse", "timeline_first"])
+def test_selective_retry_preserves_valid_captures_and_other_cells(saved, monkeypatch, directory_order):
+    original_glob = Path.glob
+    def reordered_glob(directory, pattern):
+        matches = list(original_glob(directory, pattern))
+        if pattern == "*/result.json":
+            if directory_order == "timeline_first":
+                matches.sort(key=lambda path: (json.loads(path.read_bytes())["kind"] != "timeline", str(path)))
+            else:
+                matches.sort(reverse=True)
+        return iter(matches)
+    monkeypatch.setattr(Path, "glob", reordered_glob)
     path, prior = make_retryable(saved, "remote_failure", "remote job failed without one valid failure receipt")
     before = {p.relative_to(saved.campaign): p.read_bytes() for p in
               saved.campaign.glob("shard-0/cells/*/result.json") if p != path}

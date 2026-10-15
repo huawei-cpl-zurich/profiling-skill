@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -52,7 +53,12 @@ def build(output, *, source=None, compiler=None, extra_flags=()):
             path = obj.with_suffix('.disasm')
             path.write_text(dump.stdout)
             path.with_suffix('.stderr').write_text(dump.stderr)
-            entry.update(command=argv, available=dump.returncode == 0, path=str(path),
+            decoded = bool(re.search(r'^\s*[0-9a-f]+:\s+(?:[0-9a-f]{2,16}\s+)+[a-z]',
+                                     dump.stdout, re.MULTILINE | re.IGNORECASE))
+            available = (dump.returncode == 0 and decoded and
+                         not any(token in dump.stdout.lower() for token in ('<not available>', '<unknown>')))
+            entry.update(command=argv, available=available, path=str(path),
+                         reason=None if available else 'machine instructions not decoded',
                          sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
                          synchronization_lines=[{'line': i, 'text': line.strip()} for i, line in
                            enumerate(dump.stdout.splitlines(), 1) if any(word in line.lower()

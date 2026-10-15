@@ -36,6 +36,12 @@ Compiler/disassembly evidence must establish actual emitted placement before
 attributing a metric change. Missing metrics remain unavailable, not zero;
 independent replays cannot establish simultaneous overlap.
 
+The installed CANN 9.1 HIIPU objdump may exit zero while every instruction is
+`<not available>`. The builder records this as unavailable, retaining the
+objects and preprocessed `.asci` rather than calling that decoded assembly.
+Such runs compare source-controlled placement variants; instruction-level
+placement and absence of extra compiler synchronization remain unverified.
+
 Primary API reference: CANN Ascend C `SetFlag/WaitFlag`,
 `CrossCoreSetFlag/CrossCoreWaitFlag` (A3 modes 0 and 2), and the
 [direct compilation guide](https://asc.gitcode.com/guide/programming_guide/compilation_and_execution/operator_compilation/ai_core_operator_compilation.html).

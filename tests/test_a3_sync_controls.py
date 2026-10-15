@@ -76,3 +76,21 @@ def test_commands_cover_cross_core_modes_without_late_unmatched_waits():
         if case['family'].startswith('mode'):
             assert argv[1] in ('2', '3')
             assert argv[2] in ('0', '1')
+
+
+def test_objdump_zero_exit_without_decoder_is_unavailable(tmp_path, monkeypatch):
+    import json
+    import a3_native_build as native
+    compiler = tmp_path / 'compiler'
+    compiler.write_text('#!/usr/bin/env python3\nimport sys\nfrom pathlib import Path\n'
+                        'p=Path(sys.argv[sys.argv.index("-o")+1]); p.write_bytes(b"binary")\n'
+                        '(p.parent / "target-vec.o").write_bytes(b"object")\n')
+    compiler.chmod(0o700)
+    objdump = tmp_path / 'objdump'
+    objdump.write_text('#!/bin/sh\necho "0: 00112233 <not available>"\n')
+    objdump.chmod(0o700)
+    monkeypatch.setattr(native.shutil, 'which', lambda name: str(objdump))
+    native.build(tmp_path / 'out', compiler=str(compiler))
+    evidence = json.loads((tmp_path / 'out' / 'build.json').read_text())['disassembly'][0]
+    assert evidence['available'] is False
+    assert evidence['reason'] == 'machine instructions not decoded'

@@ -15,6 +15,13 @@ the compiler audit. New compile-only reconstructions cannot establish what a
 historical measured binary did unless their equivalence is verified. Native
 timing/counters and simulator scheduling are separate evidence classes.
 
+The extension completed 54 new profiling cases: 22 memory, 20 synchronization,
+and 12 small-matmul cases, each with five timing and three pipe captures. All
+passed numerical correctness. Thirty-seven timing distributions exceed 5%
+spread and remain explicitly low confidence. Separately, 108 sanitizer captures
+qualify detection rather than performance, and four clean simulator captures
+qualify the binary replay route. No historical kernel was relaunched.
+
 ## Code changes that produced useful profiler signals
 
 Pipe values below are medians from three separate profiling captures for
@@ -67,8 +74,9 @@ a child signal after numerical success. Replaying the same compiled kernel
 through the simulator's binary configuration route fixes acquisition: two clean
 repeats each of an add control and a 32-round multiply/add control completed.
 The route verifies the binary and configuration, uses the observed product's
-simulator library, and does not guess an unknown kernel ABI. Config mode must
-omit `--soc-version`: the installed tool otherwise rejects the combination
+simulator library, and does not guess an unknown kernel ABI. The worker still
+requires the observed `--soc-version` for provenance, but its child `msprof`
+config-mode command must omit that flag: the installed tool rejects the combination
 despite returning zero. Exit status alone is therefore not an acquisition gate.
 
 | Simulator control | Events | Core-local VECTOR active | MTE2 active | MTE3 active |
@@ -207,16 +215,104 @@ source's waits or the critical path. Other comparisons exceed the timing-spread
 threshold and are not accepted as precise speedups. These observations motivate
 instruction-trace validation rather than inventing a direct counter-to-API map.
 
-### Remaining controls
+### Small matmuls
 
-Intra-core profiling, small-matmul profiles, and sanitizer qualification are
-still in progress. Their final entries must include:
+Six shapes each completed native low-level Mmad and single-program Triton dot
+correctness, discovery, five timing captures, and three pipe captures. Nonuniform
+deterministic FP16 inputs with FP32 accumulation match the CPU reference exactly.
+Native A ZZ / B ZN / output NZ packing includes asymmetric shape checks. These
+are one-block/one-dot controls, not optimized device-wide GEMM implementations.
 
-1. Exact controlled code difference and correctness/reference contract.
-2. Original or reconstructed compiler evidence and confidence.
-3. Matched per-core counter changes, timing distribution, or race diagnostics.
-4. Competing explanations, counterexamples, and unsupported observations.
-5. Practical agent guidance that follows only from the observed evidence.
+| M x N x K | Native median us (spread) | Triton median us (spread) | Native / Triton Cube-active median us |
+| --- | ---: | ---: | ---: |
+| 16 x 16 x 16 | 2.260 (8.0%) | 2.400 (10.0%) | 0.025000 / 0.025000 |
+| 32 x 32 x 32 | 2.380 (11.8%) | 1.900 (14.7%) | 0.028333 / 0.028333 |
+| 64 x 64 x 64 | 2.880 (9.0%) | 2.060 (15.5%) | 0.059444 / 0.059444 |
+| 128 x 128 x 128 | 6.140 (22.8%) | 3.060 (2.6%) | 0.308333 / 0.308333 |
+| 16 x 64 x 32 | 2.340 (18.8%) | 1.820 (12.1%) | 0.028333 / 0.028333 |
+| 64 x 16 x 32 | 2.320 (11.2%) | 2.600 (5.4%) | 0.028333 / 0.028333 |
+
+Pipe values are three-capture medians for block 0 / cube0. Equal Cube-active
+time at each shape coexists with different whole-kernel durations. For 128-cubed,
+native versus Triton MTE2 is 2.207 / 0.968 us, FIXPIPE 1.978 / 0.451 us, and
+scalar 1.285 / 0.206 us. These overlapping intervals must not be summed or
+subtracted to manufacture a latency decomposition. Only the Triton 128-cubed
+timing distribution passes the spread gate, so this table is not an accepted
+precise native-versus-Triton speedup ranking.
+
+The useful direction for further work is transfer, output layout and issue
+overhead, not different measured Cube-arithmetic time. Native runtime dimensions
+and TPipe setup versus Triton constexpr dimensions are candidate explanations,
+not machine-code-verified causes. These small controls do not saturate Cube.
+Tiny MTE3 intervals with implausibly high active-bandwidth values must not be
+used as a bottleneck diagnosis when the actual output path is FIXPIPE.
+
+### Race-detector qualification
+
+Native racecheck completed three positive-mutant and three repaired/disjoint
+captures for each family: UB RAW, UB WAR, UB WAW, inter-core GM overlapping
+writes, and inter-core GM producer/consumer. All five families produced 3/3
+positive detections and 0/3 repaired detections. Reports retain source lines,
+PCs, pipes and memory spaces. The RAW-labelled mutant produces multiple related
+hazards: MTE2 writes at source line 35 / PC 0x3f6c and vector reads/writes at
+line 40 / PC 0x4714, plus a downstream transfer hazard. Do not pretend that a
+source-labelled control isolates exactly one reported dependency.
+
+Native synccheck produced no finding for all 30 runs, including the intentional
+race mutants. It is not a substitute for racecheck. Most native memcheck runs
+warn about `FFTS_BASE_ADDR` reset; these are retained as other findings, not
+silently converted to clean memory checks. The GM-overlap mutant additionally
+receives an out-of-bounds warning despite recorded allocation/address ranges
+appearing sufficient. That warning needs a bounds/ownership audit; it is neither
+an established true out-of-bounds access nor a race diagnosis merely because it
+mentions the same source.
+
+The Triton overlapping-GM-write mutant also produced racecheck detections in
+3/3 captures, with 0/3 for disjoint ownership. All six synccheck captures were
+no-finding. Disjoint memcheck runs retain vector-register warnings; overlapping
+ones report bounds warnings, which are not automatically accepted as true
+out-of-bounds accesses. Current-parser offline validation bound all 108 native
+and Triton reports to completed target-kernel analysis, without rerunning tools
+or kernels. Both language qualification gates passed the complete three-repeat
+positive/negative racecheck matrix. An undetected positive control would instead
+produce an explicit inconclusive qualification, never a silent success.
+
+For reproducible use, run an exact-target canary first, use native debug and
+sanitizer compilation or a fresh sanitizer-enabled Triton cache, and delimit
+tool options from the workload with `--`. The installed tool rejects the bare
+`--full-backtrace` flag despite advertising it. Require completed analysis of
+the exact kernel for positive as well as negative results: an auxiliary Torch
+warning, partial report, successful exit, or quiet log does not qualify detection.
+See [the sanitizer workflow](a3-sanitizer-characterization.md).
+
+## Implications for the profiling skill
+
+The defensible rules from this battery are:
+
+1. Inspect the compiled memory path before mapping a tensor load to MTE2.
+   Scalarized gathers are a measured counterexample to that shortcut.
+2. Inspect late scheduling, not only TTIR: buffering and cross-pipe flags can
+   change after identical early IR.
+3. Treat high activity as occupancy of a pipe's measurement scope, not proof
+   of efficient physical transfer or a terminal optimization condition.
+4. Interpret wait-like fields by their documented scope. Neither their sum nor
+   a zero-valued generic-looking field is a source-level wait reconstruction.
+5. Use the A3 simulator for qualified instruction-order hypotheses, not hardware
+   latency. Preserve exact binary, core, lane, PC, units and acquisition status.
+6. Use racecheck for the hazard coverage actually demonstrated; retain repaired
+   controls and tool warnings. Numerical correctness and profiler counters do
+   not establish race freedom.
+
+Remaining hypotheses should be tested before becoming stronger skill rules:
+
+| Hypothesis | Before / after microbenchmark | Evidence that would support it |
+| --- | --- | --- |
+| Indirect-load scalarization, not just locality, dominates indexed-contiguous cost | Identical contiguous logical addresses supplied through a runtime index tensor / compile-time direct address arithmetic, then a verified specialized indirect lowering | Late IR changes scalar GM loads to an efficient copy/gather; scalar time falls with lower total latency. Existing controls support the path difference, not a universal remedy. |
+| Nonmonotonic strides reflect transaction/locality behavior | Strides 2/4/8/16/32/64 in a common fixed allocation and controlled working set / current stride-dependent spans | Same compiled transfer path and stable repetitions, plus relevant bytes/cache/transaction metrics; MTE2 activity alone is insufficient. |
+| Native small-dot overhead is transfer/layout/setup, not Cube arithmetic | Current runtime-dimension native control / constexpr-specialized dimensions and an independently controlled output-layout change | Identical Cube work and numerical outputs, lower transfer/FIXPIPE/scalar costs, verified scheduled code. Change one factor at a time. |
+| Source wait placement changes realized overlap | Current matched-work early-wait / overlap variants, with explicitly verified simulator ABI and instruction trace | Bound set/wait PCs and pipe intervals move as intended. Source order or a generic wait counter is not enough. |
+
+These are report hypotheses, not automatically scheduled follow-up tasks.
 
 New profiling controls retain all five BasicInfo samples and three pipe
 captures per variant; timing spread above 5% lowers confidence without deleting

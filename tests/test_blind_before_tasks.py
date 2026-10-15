@@ -119,3 +119,14 @@ def test_compiled_repetition_gate_rejects_shortcuts(tmp_path, changes):
     with pytest.raises(ValueError, match='semantic contract'):
         runner.validate_repetition_ir(repetition_ir(**changes),
             dict(x='%a', selected='%b', repetitions='%c', output='%d'))
+
+
+def test_pointer_index_dependency_does_not_qualify_nonvolatile_input(tmp_path):
+    export('task04', tmp_path / 'bundle')
+    runner = load_runner(tmp_path / 'bundle')
+    ir = repetition_ir().replace('%predicate = tt.load %maskptr {isVolatile = true}',
+                                 '%predicate = tt.load %maskptr {isVolatile = false}')
+    ir = ir.replace('%value = tt.load %dataptr',
+                    '%indexed = tt.addptr %dataptr, %predicate : tensor<128x!tt.ptr<f32>>\n%value = tt.load %indexed')
+    with pytest.raises(ValueError, match='semantic contract'):
+        runner.validate_repetition_ir(ir, dict(x='%a', selected='%b', repetitions='%c', output='%d'))

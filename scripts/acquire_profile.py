@@ -392,8 +392,10 @@ def normalize_event(item):
     name_value,_=first(item,("name","op name","kernel name","task name"))
     name=str(name_value or "").strip()
     args=item.get("args") if isinstance(item.get("args"),dict) else {}
+    # Instruction details can mention a waited-on pipe (e.g. BAR PIPE:MTE2).
+    # Such operands do not identify either the execution lane or a source phase.
     label=" ".join((name,str(item.get("cat","")),str(item.get("type","")),
-                    " ".join("%s %s"%(key,value) for key,value in args.items())))
+                    str(args.get("pipe",""))))
     start,start_field=first(item,("ts","start(us)","start time(us)","start time","start(ns)"))
     duration,duration_field=first(item,("dur","duration(us)","task duration(us)","duration","duration(ns)"))
     start=number(start); duration=number(duration)
@@ -419,7 +421,11 @@ def timeline_items(path):
 
 def compact_timeline(paths):
     events=[]
+    simulator_inputs=0
     for path in paths[:128]:
+      if "simulator" in path.parts:
+        simulator_inputs+=1
+        continue  # Simulator instruction traces are not hardware TimelineDetail.
       for item in timeline_items(path):
         event=normalize_event(item)
         if event is not None: events.append(event)
@@ -445,6 +451,7 @@ def compact_timeline(paths):
     observed=sorted({item["selector"] for item in kernel_events})
     starts=[item["start_us"] for item in events]; ends=[item["start_us"]+item["duration_us"] for item in events]
     return {"schema_version":1,"event_count":len(events),"events":events,
+      "simulator_inputs_excluded":simulator_inputs,
       "truncated":len(events)>=256,"expected_selectors":KERNEL_NAMES,
       "observed_selectors":observed,"selectors_complete":set(KERNEL_NAMES)<=set(observed),
       "kernel_order":kernel_order,"kernel_boundaries":kernel_events,

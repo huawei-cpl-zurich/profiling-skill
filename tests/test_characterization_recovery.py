@@ -120,6 +120,15 @@ def test_recovery_rejects_invalid_original_coverage_and_identity(saved, mutation
     assert not saved.output.exists()
 
 
+def test_recovery_rejects_changed_current_device_helper(saved, tmp_path, monkeypatch):
+    changed = tmp_path / "changed_device_helper.py"
+    changed.write_bytes(recovery.reporting.DEVICE_HELPER.read_bytes() + b"\n# changed\n")
+    monkeypatch.setattr(recovery.reporting, "DEVICE_HELPER", changed)
+    with pytest.raises(ValueError, match="recovery measurement source mismatch: device_helper_sha256"):
+        recovery.recover_report(saved.campaign, saved.output, saved.producer, saved.qualification, 4)
+    assert not saved.output.exists()
+
+
 def make_retryable(saved, classification="host_environment", message="host unavailable"):
     path = record_path(saved)
     value = json.loads(path.read_bytes())

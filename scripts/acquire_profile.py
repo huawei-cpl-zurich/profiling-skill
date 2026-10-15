@@ -281,6 +281,7 @@ def _remote_program(mode, product, target, dispatch_key, spec, kernel_names, lau
                   else "--aic-metrics=TimelineDetail")
         ),
         "__LAUNCHES__": str(launches),
+        "__DEVICE_HELPER__": (Path(__file__).with_name("profile_device.py")).read_text(),
     }
     program = r'''#!/usr/bin/env python3
 import base64, csv, fcntl, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile, zlib
@@ -309,22 +310,16 @@ torch.npu.synchronize(); assert float(y.cpu()[3]) == 4.0
 """
 
 def pick_device():
-    failures=[]
-    lease_root=pathlib.Path.home()/".cpl-device-leases"; lease_root.mkdir(exist_ok=True)
-    for physical in range(8):
-        lease=open(lease_root/("device-lease-%d.lock"%physical),"a+")
-        try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError:
-            lease.close(); failures.append("%d:leased"%physical); continue
-        env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
+    def probe(env):
         try:
             result=subprocess.run([sys.executable,"-c",PROBE],text=True,capture_output=True,env=env,timeout=20)
         except subprocess.TimeoutExpired:
-            lease.close(); failures.append("%d:timeout"%physical); continue
-        if result.returncode == 0: return physical,env,lease
-        lease.close()
-        failures.append("%d:%s"%(physical,(result.stderr or result.stdout)[-160:]))
-    fail("device-probe","device_unavailable","no device passed bounded probe: "+"; ".join(failures))
+            return False
+        return result.returncode == 0
+    try: return wait_for_device(probe)
+    except Exception as exc: fail("device-probe","host_environment",str(exc))
+
+__DEVICE_HELPER__
 
 def name_field(fields):
     direct=next((field for field in NAME_FIELDS if field in fields),None)
@@ -530,17 +525,23 @@ try:
     else:
         rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
     if len(names)>256: fail("evidence","evidence_failure","observed kernel count exceeds compact bound")
-    selected=[] if MODE in ("basic","timeline") else [row for name,row in rows if name==KERNEL_NAME]
+    selected=([row for name,row in rows] if MODE=="basic" else
+              [] if MODE=="timeline" else [row for name,row in rows if name==KERNEL_NAME])
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
     if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
     def normalized(value):
         return value.replace(str(root),"$RETAINED_ROOT")
     def stream_digest(value):
         raw=normalized(value).encode(); return {"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+    workload_result=None
+    for line in check.stdout[-65536:].splitlines():
+        try: value=json.loads(line)
+        except (ValueError,TypeError): continue
+        if isinstance(value,dict): workload_result=value
     evidence={"schema_version":2,"schema":"cpl.profile-acquisition.v2","status":"success","phase":MODE,"product":PRODUCT,"target":TARGET,
       "runtime":RUNTIME,"dispatch_key":DISPATCH_KEY,"device":{"physical_id":physical,"logical_id":0},
       "provenance":{"product":PRODUCT,"target":TARGET},"workload":IDENTITY,
-      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr)},
+      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr),"workload_result":workload_result},
       "capture":{"metric":metric,"observed_kernel_names":names,
       "inventory_scope":{"launch_bound":LAUNCH_COUNT,"complete":False,
       "reason":"msprof exports observed names but no total application launch count"},

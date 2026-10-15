@@ -17,6 +17,16 @@ ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "acquire_profile.py"
 
 
+@pytest.fixture(autouse=True)
+def idle_inventory(tmp_path, monkeypatch):
+    smi = tmp_path / "npu-smi"
+    smi.write_text("#!/usr/bin/env python3\nimport sys\n"
+                   "print('0 0 0 0 Ascend910\\n0 1 12 12 Ascend910' if '-m' in sys.argv else "
+                   "'| 0 Ascend910 | OK | 20 |\\n| 0 0 | bus | 0 0 / 0 100 / 65536 |\\n| 0 Ascend910 | OK | 20 |\\n| 1 12 | bus | 0 0 / 0 100 / 65536 |\\n| NPU Chip | Process id | Process name |')\n")
+    smi.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+
+
 def load_module():
     spec = importlib.util.spec_from_file_location("acquire_profile", SCRIPT)
     module = importlib.util.module_from_spec(spec)
@@ -447,7 +457,6 @@ def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):
     assert '"--kill=off"' in payload
     assert "--replay-mode" not in payload
     assert "ASCEND_RT_VISIBLE_DEVICES" in payload
-    assert "range(8)" in payload and "timeout=20" in payload
     assert "matmul" not in payload.lower()
     assert "FILES=json.loads(base64.b64decode(" in payload
     assert payload.count('print("ACQUIRE_EVIDENCE_B64="') == 1
@@ -674,9 +683,7 @@ def test_a3_payload_leases_device_and_classifies_runtime_device_failures(tmp_pat
         "basic", "a3", "bz-a3-1", "lease", workload, [], None, 1
     )
     assert "fcntl.flock" in payload
-    assert "LOCK_EX|fcntl.LOCK_NB" in payload
     assert "device-lease" in payload
-    assert 'pathlib.Path.home()/".cpl-device-leases"' in payload
     for marker in ("tsdopen", "lazysetdevice", "out of memory"):
         assert marker in payload.lower()
 
@@ -743,7 +750,7 @@ def test_generated_payload_shares_home_device_leases_across_cwds(tmp_path):
         encoded = next(line.split("=", 1)[1] for line in stdout.splitlines()
                        if line.startswith("ACQUIRE_EVIDENCE_B64="))
         devices.append(json.loads(base64.b64decode(encoded))["device"]["physical_id"])
-    assert sorted(devices) == [0, 1]
+    assert sorted(devices) == [0, 12]
 
 
 def test_timeline_payload_retains_attempted_export_absence(tmp_path):
@@ -867,7 +874,7 @@ def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp
 def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     module = load_module()
     workload = tmp_path / "workload.sh"
-    workload.write_text("#!/bin/sh\nexit 0\n")
+    workload.write_text("#!/bin/sh\nprintf '%s\\n' '{\"old\":1}' 'not json' '[]' '{\"correct\":true,\"compiler\":\"retained\"}'\n")
     workload.chmod(0o755)
     modules = tmp_path / "modules"
     modules.mkdir()
@@ -954,9 +961,12 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     assert evidence["schema"] == "cpl.profile-acquisition.v2"
     assert evidence["provenance"] == {"product": "a3", "target": "bz-a3-1"}
     assert evidence["normal_run"]["exit_code"] == 0
-    assert set(evidence["normal_run"]) == {"exit_code", "stdout", "stderr"}
+    assert set(evidence["normal_run"]) == {"exit_code", "stdout", "stderr", "workload_result"}
+    assert evidence["normal_run"]["workload_result"] == {"correct": True, "compiler": "retained"}
     assert evidence["capture"]["observed_kernel_names"] == ["exact.kernel/7"]
-    assert len(evidence["capture"]["rows"]) == (1 if mode == "pipe" else 0)
+    assert len(evidence["capture"]["rows"]) == 1
+    if mode == "basic":
+        assert evidence["capture"]["rows"] == [{"Op Name": "exact.kernel/7", "Task Duration(us)": "3.5"}]
     if mode == "pipe":
         assert evidence["capture"]["sources"][0]["role"] == "PipeUtilization"
         assert evidence["capture"]["sources"][1]["role"] == "selector_binding"

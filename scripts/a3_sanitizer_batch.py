@@ -42,6 +42,14 @@ def memory_events(text):
     return events
 
 
+def qualification(checks):
+    races = [row for row in checks if row['tool'] == 'racecheck']
+    if not races or any(row['classification'] != ('detected' if row['mutant'] else 'no-finding')
+                        for row in races):
+        return 'inconclusive'
+    return 'passed'
+
+
 def run_check(command, folder, env, tool):
     folder.mkdir(parents=True, exist_ok=False)
     env = dict(env, TRITON_ENABLE_SANITIZER='1', TRITON_ALWAYS_COMPILE='1',
@@ -123,7 +131,8 @@ def main():
                         env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
         return p.returncode == 0, p.stderr[-1000:]
     physical, env, lease = wait_for_device(probe)
-    summary = dict(physical_device=physical, logical_device=0, instrumented_performance=False, checks={})
+    summary = dict(physical_device=physical, logical_device=0, instrumented_performance=False,
+                   qualification='running', checks={})
     try:
         for family in ((0,) if args.canary else range(5)) if executable else (None,):
             for mutant in ((False,) if args.canary else (False, True)):
@@ -139,17 +148,25 @@ def main():
                             if mutant:
                                 command.append('--mutant')
                         summary['checks'][label] = run_check(command, folder, env, tool)
+                        summary['checks'][label].update(tool=tool, mutant=mutant)
+                        failure_code = 0
+                        if summary['checks'][label]['classification'] in ('instrumentation-failure', 'unqualified-report', 'timeout'):
+                            failure_code = 2
+                        elif not mutant and summary['checks'][label]['workload_correctness'] is not True:
+                            failure_code = 3
+                        elif not mutant and tool == 'racecheck' and summary['checks'][label]['classification'] == 'detected':
+                            failure_code = 4
+                        if failure_code:
+                            summary['qualification'] = 'inconclusive'
                         (output / 'summary.json').write_text(json.dumps(summary, indent=2))
                         print(json.dumps({'check': label, 'classification': summary['checks'][label]['classification']}), flush=True)
-                        if summary['checks'][label]['classification'] in ('instrumentation-failure', 'unqualified-report', 'timeout'):
-                            return 2
-                        if not mutant and summary['checks'][label]['workload_correctness'] is not True:
-                            return 3
-                        if not mutant and tool == 'racecheck' and summary['checks'][label]['classification'] == 'detected':
-                            return 4
+                        if failure_code:
+                            return failure_code
+        summary['qualification'] = qualification(summary['checks'].values())
+        (output / 'summary.json').write_text(json.dumps(summary, indent=2))
     finally:
         lease.close()
-    return 0
+    return 0 if summary['qualification'] == 'passed' else 5
 
 
 if __name__ == '__main__':

@@ -2,7 +2,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from a3_sanitizer_batch import classify, memory_events, run_check
+from a3_sanitizer_batch import classify, memory_events, qualification, run_check
 
 
 def test_report_detection_does_not_depend_on_nonzero_exit():
@@ -80,3 +80,13 @@ def test_incomplete_target_or_auxiliary_hazard_is_not_qualified(tmp_path):
         tool.chmod(0o700)
         result = run_check(['unused'], tmp_path / str(index), dict(os.environ, PATH=str(tmp_path)), 'racecheck')
         assert result['classification'] == 'unqualified-report'
+
+
+def test_qualification_requires_positive_and_negative_race_controls():
+    negative = dict(tool='racecheck', mutant=False, classification='no-finding')
+    positive = dict(tool='racecheck', mutant=True, classification='detected')
+    assert qualification([negative, positive]) == 'passed'
+    for result in ('no-finding', 'other-finding', 'unsupported'):
+        assert qualification([negative, dict(positive, classification=result)]) == 'inconclusive'
+    assert qualification([dict(negative, classification='detected'), positive]) == 'inconclusive'
+    assert qualification([]) == 'inconclusive'

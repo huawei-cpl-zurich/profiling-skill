@@ -9,7 +9,7 @@ TASKS = {
     'task01': dict(n=256, work=64, language='triton'),
     'task02': dict(n=1048576, language='triton'),
     'task03': dict(n=32, language='triton'),
-    'task04': dict(n=4096, repetitions=128, language='triton'),
+    'task04': dict(n=1024, repetitions=128, language='triton'),
     'task05': dict(n=4096, language='triton'),
     'task06': dict(n=4096, rounds=32, language='ascendc'),
 }

@@ -920,6 +920,45 @@ def test_unavailable_case_does_not_block_independent_case(tmp_path):
     assert "geomean_us" not in state
 
 
+def test_mixed_absence_and_variability_preserves_both_case_failures(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {"status":"ok", "kernel_names":["block_sparse_attention_kernel"],
+         "basic_info":{}, "evidence_sha256":"a"*64},
+        *[{"status":"infrastructure_error", "terminal":True,
+           "diagnostics":"missing_pipe_rows: no report"}]*2,
+        *[{"status":"ok", "duration_us":value,
+           "pipe_utilization":{}, "evidence_sha256":"b"*64}
+          for value in [100.,200.,100.]],
+        *[{"status":"ok", "duration_us":100.,
+           "pipe_utilization":{}, "evidence_sha256":"c"*64}]*3,
+    ])
+    output = tmp_path / "results.json"
+    for _ in range(3):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[47,43,44],
+                                     stable_samples=3, max_samples=3, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["cases"]["47"]["failure"]["kind"] == "acquisition_exhausted"
+    assert state["cases"]["43"]["status"] == "measurement_unstable"
+    assert state["cases"]["43"]["failure"]["kind"] == "measurement_instability"
+    assert state["cases"]["44"]["status"] == "completed"
+    assert state["failure"]["kind"] == "mixed_measurement_failures"
+
+
+def test_repeated_coordinator_malformed_evidence_fast_stops(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"ok", "terminal":True,
+                              "kernel_names":["kernel"], "evidence_sha256":"a"*64}]*3)
+    output = tmp_path / "results.json"
+    for _ in range(4):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[43],
+                                     stable_samples=3, max_samples=3, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    assert len(state["infrastructure_failures"]) == 2
+    assert state["infrastructure_failures"][0]["kind"] == "invalid_basic_info"
+
+
 def test_retry_rejects_wrong_target_failure_handle(tmp_path: Path) -> None:
     executor = tmp_path / "executor.py"
     make_executor(executor, [{

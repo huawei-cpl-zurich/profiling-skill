@@ -783,8 +783,11 @@ def _acquisition_exhausted(state: dict[str, Any]) -> bool:
         "missing_pipe_rows:", "invalid_duration:", "duration_row_count:",
         "capture lacks one exact PipeUtilization or duration row",
     )
+    malformed_kinds = {"invalid_evidence_digest", "invalid_basic_info",
+                       "invalid_pipe_evidence", "invalid_provenance"}
     repeated = (len(diagnostics) >= 2 and diagnostics[-1] == diagnostics[-2]
-                and diagnostics[-1].startswith(deterministic_prefixes))
+                and (diagnostics[-1].startswith(deterministic_prefixes)
+                     or terminal[-1].get("kind") in malformed_kinds))
     if len(terminal) < 3 and not repeated:
         return False
     state["status"] = "measurement_unstable"
@@ -964,7 +967,8 @@ def run_campaign(
         interrupted = False
         for case in cases:
             case_state = state["cases"][str(case)]
-            if case_state["status"] in {"completed", "acquisition_exhausted"}:
+            if case_state["status"] in {"completed", "acquisition_exhausted",
+                                        "measurement_unstable"}:
                 continue
             while len(case_state["samples"]) < max_samples:
                 if _complete_stable_case(
@@ -1077,8 +1081,8 @@ def run_campaign(
                 case_state, stable_samples, variability_threshold
             )
             if case_state["status"] != "completed":
-                state["status"] = "measurement_unstable"
-                state["failure"] = {
+                case_state["status"] = "measurement_unstable"
+                case_state["failure"] = {
                     "kind": "measurement_instability",
                     "category": "infrastructure",
                     "diagnostics": (
@@ -1086,16 +1090,18 @@ def run_campaign(
                         f"{variability_threshold:.1%} after {max_samples} valid samples"
                     ),
                 }
-                break
-        if not interrupted and any(
-            item["status"] == "acquisition_exhausted" for item in state["cases"].values()
-        ):
+        failed_cases = {
+            case: item["failure"] for case, item in state["cases"].items()
+            if item["status"] in {"acquisition_exhausted", "measurement_unstable"}
+        }
+        if not interrupted and failed_cases:
             state["status"] = "measurement_unstable"
+            kinds = {item["kind"] for item in failed_cases.values()}
             state["failure"] = {
-                "kind": "acquisition_exhausted", "category": "infrastructure",
-                "diagnostics": "Some cases lack profiling evidence; available independent cases retained",
-                "cases": [case for case, item in state["cases"].items()
-                          if item["status"] == "acquisition_exhausted"],
+                "kind": next(iter(kinds)) if len(kinds) == 1 else "mixed_measurement_failures",
+                "category": "infrastructure",
+                "diagnostics": "Independent case failures retained; no full-suite aggregate",
+                "cases": failed_cases,
             }
         elif not interrupted and all(
             item["status"] == "completed" for item in state["cases"].values()

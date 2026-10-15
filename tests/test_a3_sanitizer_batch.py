@@ -2,7 +2,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from a3_sanitizer_batch import classify, run_check
+from a3_sanitizer_batch import classify, memory_events, run_check
 
 
 def test_report_detection_does_not_depend_on_nonzero_exit():
@@ -59,3 +59,11 @@ def test_unrelated_unsupported_kernel_does_not_hide_target_analysis(tmp_path):
     assert result['classification'] == 'no-finding'
     assert result['target_kernels'] == ['a3_sanitizer_write']
     assert result['analysis_finished']
+
+
+def test_instrumented_store_evidence_preserves_core_and_address():
+    text = 'serialNo:155, type:STORE, coreId:0, srcAddr:0x0, dstAddr:0x12c0c0014000, memInfoDesc:default, memInfoSrc:BYPASS, srcSpace:GM, dstSpace:GM, memSize:16384, moduleId:-1, lineNo:17, fileName:'
+    rows = memory_events(text)
+    assert rows[0]['dstAddr'] == '0x12c0c0014000'
+    assert rows[0]['coreId'] == '0'
+    assert rows[0]['lineNo'] == '17'

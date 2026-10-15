@@ -30,6 +30,18 @@ def classify(text, exit_code, *, timeout=False):
     return 'unqualified-report'
 
 
+def memory_events(text):
+    """Instrumented accesses provide positive lowering evidence, not timings."""
+    events = []
+    for line in text.splitlines():
+        if not line.startswith('serialNo:'):
+            continue
+        row = dict(field.split(':', 1) for field in line.split(', ') if ':' in field)
+        if row.get('type') in ('LOAD', 'STORE') and row.get('coreId', '-1') != '-1':
+            events.append(row)
+    return events
+
+
 def run_check(command, folder, env, tool):
     folder.mkdir(parents=True, exist_ok=False)
     env = dict(env, TRITON_ENABLE_SANITIZER='1', TRITON_ALWAYS_COMPILE='1',
@@ -83,6 +95,7 @@ def run_check(command, folder, env, tool):
                   analysis_started=started, analysis_finished=finished,
                   analyzed_kernels=kernels, target_kernels=target_kernels,
                   target_report=target_text,
+                  memory_events=memory_events(target_text),
                   limitation='no-finding is not proof of race freedom; instrumentation must be audited')
     (folder / 'result.json').write_text(json.dumps(result, indent=2))
     return result

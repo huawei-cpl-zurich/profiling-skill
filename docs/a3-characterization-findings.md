@@ -158,13 +158,40 @@ compiler text are retained separately from this compact report. All 198 raw
 BasicInfo exports contain exactly one row; none needed selector-based removal
 of another computation kernel.
 
+### Synchronization placement
+
+All 20 native controls passed full-array numerical checks. They preserve work
+within each comparison group while moving source-level event set/wait calls.
+The installed HIIPU object decoder prints `<not available>` for every machine
+instruction, so emitted flag placement and compiler-inserted synchronization
+remain unverified. Source intent, numerical correctness, and measured metrics
+are distinct evidence. The independent AIC copy in mode 2 is not numerically
+checked; the checked outputs and handshake must not be presented as a proof of
+that copy's contents.
+
+Inter-core captures completed for all eight variants:
+
+| Source control | Overlap median us (spread) | Early-wait median us (spread) | Block 0/vector0 wait-IB us, overlap / early |
+| --- | ---: | ---: | ---: |
+| Mode 0, balanced | 7.680 (8.3%) | 7.920 (12.9%) | 0.836 / 0.843 |
+| Mode 0, imbalanced | 7.920 (10.9%) | 9.200 (7.8%) | 0.684 / 0.739 |
+| Mode 2, balanced | 8.780 (4.8%) | 9.600 (4.8%) | 0.687 / 0.668 |
+| Mode 2, imbalanced | 8.780 (2.1%) | 10.220 (5.7%) | 0.777 / 0.874 |
+
+Every matched AIV `scalar_wait_time` median is zero despite explicit
+synchronization in the source controls. Mode 2 also exports zero AIC
+`scalar_wait_time`. A zero in that field therefore must not be translated to
+"the kernel has no synchronization cost." Balanced mode 2 has a measured
+0.820-us increase with early-wait source placement without an increase in
+matched wait-IB time; exported wait metrics do not directly reconstruct the
+source's waits or the critical path. Other comparisons exceed the timing-spread
+threshold and are not accepted as precise speedups. These observations motivate
+instruction-trace validation rather than inventing a direct counter-to-API map.
+
 ### Remaining controls
 
-Native synchronization baselines have passed numerical checks for intra-core
-MTE2-to-vector and vector-to-MTE3, inter-AIV mode 0, and mixed AIC/AIV mode 2.
-Full placement comparisons and their profiling are still in progress. No causal
-conclusions are accepted yet for flag/wait placement, small matmuls, or sanitizer
-detection coverage. Their final entries must include:
+Intra-core profiling, small-matmul profiles, and sanitizer qualification are
+still in progress. Their final entries must include:
 
 1. Exact controlled code difference and correctness/reference contract.
 2. Original or reconstructed compiler evidence and confidence.

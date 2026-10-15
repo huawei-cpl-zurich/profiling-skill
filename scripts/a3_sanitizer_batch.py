@@ -58,11 +58,14 @@ def run_check(command, folder, env, tool):
                                 text=path.read_text(errors='replace')))
     text = '\n'.join([str(stdout), str(stderr), *(item['text'] for item in reports)])
     kernels = re.findall(r'Start \w+ sanitizer on kernel (\S+)', text)
-    completed = re.findall(r'Sanitizer finished on kernel (\S+)', text)
+    completed = [name.rstrip('.') for name in re.findall(r'Sanitizer finished on kernel (\S+)', text)]
     target_kernels = [name for name in kernels if 'a3_sanitizer_' in name]
     started = bool(target_kernels)
     finished = any(name in completed for name in target_kernels)
-    classification = classify(text, code, timeout=timeout)
+    sections = re.findall(r'(Start \w+ sanitizer on kernel (a3_sanitizer_\S+).*?'
+                          r'Sanitizer finished on kernel \2[^\n]*)', text, re.S)
+    target_text = '\n'.join(section for section, _ in sections)
+    classification = classify(target_text or text, code, timeout=timeout)
     if classification == 'no-finding' and not (started and finished):
         classification = 'unqualified-report'
     relevant = [line for line in text.splitlines() if re.search(
@@ -79,6 +82,7 @@ def run_check(command, folder, env, tool):
                   timed_out=timeout, reports=reports, diagnostic_lines=relevant,
                   analysis_started=started, analysis_finished=finished,
                   analyzed_kernels=kernels, target_kernels=target_kernels,
+                  target_report=target_text,
                   limitation='no-finding is not proof of race freedom; instrumentation must be audited')
     (folder / 'result.json').write_text(json.dumps(result, indent=2))
     return result

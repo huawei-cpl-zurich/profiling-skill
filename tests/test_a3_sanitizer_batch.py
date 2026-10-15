@@ -42,9 +42,20 @@ def test_missing_tool_is_retained_failure(tmp_path):
 
 def test_clean_summary_without_kernel_analysis_is_unqualified(tmp_path):
     tool = tmp_path / 'mssanitizer'
-    tool.write_text('#!/bin/sh\nprintf "No error detected.\\n"\n')
+    tool.write_text('#!/bin/sh\nprintf "Start racecheck sanitizer on kernel unrelated\\nSanitizer finished on kernel unrelated. No error detected.\\n"\n')
     tool.chmod(0o700)
     import os
     result = run_check(['unused'], tmp_path / 'capture', dict(os.environ, PATH=str(tmp_path)), 'racecheck')
     assert result['classification'] == 'unqualified-report'
     assert not result['analysis_started']
+
+
+def test_unrelated_unsupported_kernel_does_not_hide_target_analysis(tmp_path):
+    tool = tmp_path / 'mssanitizer'
+    tool.write_text('#!/bin/sh\nprintf "racecheck not supported on unrelated\\nStart racecheck sanitizer on kernel a3_sanitizer_write\\nSanitizer finished on kernel a3_sanitizer_write. No error detected.\\n"\n')
+    tool.chmod(0o700)
+    import os
+    result = run_check(['unused'], tmp_path / 'capture', dict(os.environ, PATH=str(tmp_path)), 'racecheck')
+    assert result['classification'] == 'no-finding'
+    assert result['target_kernels'] == ['a3_sanitizer_write']
+    assert result['analysis_finished']

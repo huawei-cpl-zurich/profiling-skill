@@ -60,6 +60,11 @@ def execute(argv, folder, env, *, timeout=600):
         result = bounded_run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              env=env, timeout=timeout)
     except Exception as exc:
+        for name in ('stdout', 'stderr'):
+            value = getattr(exc, name, '') or ''
+            if isinstance(value, bytes):
+                value = value.decode(errors='replace')
+            (folder / (name + '.log')).write_text(value)
         (folder / 'failure.json').write_text(json.dumps({'error': str(exc), 'type': type(exc).__name__}))
         raise
     (folder / 'stdout.log').write_text(result.stdout)
@@ -99,15 +104,14 @@ def run_case(command, folder, env, selector=None):
     result = execute(command, folder / 'correctness', env, timeout=300)
     if result.returncode:
         raise RuntimeError('workload correctness process failed: ' + result.stderr[-2000:])
-    if command[0] == sys.executable:
-        records = []
-        for line in result.stdout.splitlines():
-            try:
-                records.append(json.loads(line))
-            except ValueError:
-                pass
-        if not any(isinstance(row, dict) and row.get('correctness') is True for row in records):
-            raise RuntimeError('workload omitted explicit correctness evidence')
+    records = []
+    for line in result.stdout.splitlines():
+        try:
+            records.append(json.loads(line))
+        except ValueError:
+            pass
+    if not any(isinstance(row, dict) and row.get('correctness') is True for row in records):
+        raise RuntimeError('workload omitted explicit correctness evidence')
     discovery = capture(command, folder / 'discovery', env, 'BasicInfo', selector)
     if selector is None:
         row = discovery['basic_rows'][0]

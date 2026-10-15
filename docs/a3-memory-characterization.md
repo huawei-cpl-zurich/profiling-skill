@@ -38,7 +38,7 @@ not additive latency components. Compiler text artifacts are retained per
 invocation for later lowering inspection; presence alone proves no causal claim.
 
 The reusable Python interface is `run_case(command, folder, leased_env,
-selector=None)`. Native commands must exit nonzero on numerical failure and
-provide their exact selector. Python workloads additionally emit a JSON object
-with `correctness: true`. The caller owns the lease and environment. This is
+selector=None)`. Native commands must provide their exact selector. All commands
+must exit nonzero on numerical failure and emit a JSON object with
+`correctness: true` after verification. The caller owns the lease and environment. This is
 not a scheduler or transport client; staging and observation use remote-access.

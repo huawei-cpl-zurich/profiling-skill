@@ -73,7 +73,8 @@ def test_execute_keeps_command_and_error_logs(tmp_path):
 
 def test_run_case_keeps_all_captures_and_exact_selector(tmp_path, monkeypatch):
     batch = load('scripts', 'a3_memory_batch')
-    monkeypatch.setattr(batch, 'execute', lambda *a, **kw: subprocess.CompletedProcess(a, 0, '', ''))
+    monkeypatch.setattr(batch, 'execute', lambda *a, **kw: subprocess.CompletedProcess(
+        a, 0, '{"correctness":true}', ''))
     calls = []
     def capture(command, folder, env, metric, selector=None):
         calls.append((metric, selector))
@@ -96,3 +97,20 @@ def test_partial_pipe_is_not_success(tmp_path, monkeypatch):
     monkeypatch.setattr(batch, 'execute', execute)
     with pytest.raises(RuntimeError, match='missing pipe rows'):
         batch.capture(['/bin/test'], tmp_path / 'capture', {}, 'PipeUtilization', 'exact')
+
+
+def test_timeout_keeps_partial_diagnostics(tmp_path):
+    batch = load('scripts', 'a3_memory_batch')
+    with pytest.raises(subprocess.TimeoutExpired):
+        batch.execute([sys.executable, '-c',
+                       'import time; print("compile started",flush=True); time.sleep(30)'],
+                      tmp_path / 'timeout', None, timeout=.2)
+    assert 'compile started' in (tmp_path / 'timeout/stdout.log').read_text()
+    assert json.loads((tmp_path / 'timeout/failure.json').read_text())['type'] == 'TimeoutExpired'
+
+
+def test_zero_exit_without_correctness_rejected(tmp_path, monkeypatch):
+    batch = load('scripts', 'a3_memory_batch')
+    monkeypatch.setattr(batch, 'execute', lambda *a, **kw: subprocess.CompletedProcess(a, 0, '', ''))
+    with pytest.raises(RuntimeError, match='correctness evidence'):
+        batch.run_case(['/bin/true'], tmp_path / 'case', {}, 'exact')

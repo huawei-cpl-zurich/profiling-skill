@@ -1,0 +1,50 @@
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from a3_sanitizer_batch import classify, run_check
+
+
+def test_report_detection_does_not_depend_on_nonzero_exit():
+    assert classify('WARNING: WAW hazard at UB address 0x10', 0) == 'detected'
+    assert classify('ERROR: invalid write at GM address 0x20', 0) == 'detected'
+
+
+def test_zero_exit_alone_is_not_clean_evidence():
+    assert classify('', 0) == 'unqualified-report'
+    assert classify('ERROR SUMMARY: 0 errors', 0) == 'no-finding'
+    assert classify('racecheck not supported', 1) == 'unsupported'
+    assert classify('compiler failed to instrument', 1) == 'instrumentation-failure'
+    assert classify('WAW hazard', 0, timeout=True) == 'timeout'
+    assert classify("ERROR: param 'full-backtrace' contains invalid characters\nUsage: mssanitizer\nout of bounds detection", 0) == 'instrumentation-failure'
+    assert classify('Warning:Register FFTS_BASE_ADDR was not reset\nSanitizer finished on kernel foo. See all detected errors above.', 0) == 'other-finding'
+
+
+def test_actual_process_report_retained(tmp_path, monkeypatch):
+    tool = tmp_path / 'mssanitizer'
+    tool.write_text('#!/usr/bin/env python3\nimport pathlib,sys\nassert sys.argv[sys.argv.index("--") + 1:] == ["unused", "--artifacts", "output"]\np=next(x.split("=",1)[1] for x in sys.argv if x.startswith("--log-file="))\npathlib.Path(p).write_text("WAW hazard at GM address 0x10")\n')
+    tool.chmod(0o700)
+    import os
+    env = dict(os.environ, PATH=str(tmp_path) + ':' + os.environ['PATH'])
+    folder = tmp_path / 'capture'
+    result = run_check(['unused', '--artifacts', 'output'], folder, env, 'racecheck')
+    assert result['classification'] == 'detected'
+    assert result['reports'][0]['sha256']
+    assert result['diagnostic_lines'] == ['WAW hazard at GM address 0x10']
+    assert (folder / 'command.json').exists()
+
+
+def test_missing_tool_is_retained_failure(tmp_path):
+    result = run_check(['unused'], tmp_path / 'missing', {'PATH': str(tmp_path)}, 'racecheck')
+    assert result['classification'] == 'instrumentation-failure'
+    assert result['exit_code'] == 127
+
+
+def test_clean_summary_without_kernel_analysis_is_unqualified(tmp_path):
+    tool = tmp_path / 'mssanitizer'
+    tool.write_text('#!/bin/sh\nprintf "No error detected.\\n"\n')
+    tool.chmod(0o700)
+    import os
+    result = run_check(['unused'], tmp_path / 'capture', dict(os.environ, PATH=str(tmp_path)), 'racecheck')
+    assert result['classification'] == 'unqualified-report'
+    assert not result['analysis_started']

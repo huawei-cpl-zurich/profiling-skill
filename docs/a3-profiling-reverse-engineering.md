@@ -161,6 +161,27 @@ The JSON is the canonical joined result; Markdown and CSV are deterministic
 views. Invalid lineage, unknown candidates, bad latencies, and unvalidated
 saturation claims fail closed with exit status 2.
 
+### Preliminary evidence and timeline controls
+
+The report retains each paired measurement, its falsification condition, all
+raw microbenchmark cells, the measurement campaign identity, and the separate
+reporting revision. Original failure diagnostics, hashes, and remote provenance
+are preserved rather than reduced to an error label. A legacy snapshot lacking
+modern environment bindings must remain explicitly legacy; do not assign it a
+new target contract or merge its timings with another server's measurements.
+
+Timeline controls currently carry scalar core-time measurements, not a validated
+semantic evaluator for phase order, duration, overlap, or kernel boundaries.
+Their hypothesis classification is therefore `unavailable`, even if scalar
+timing changes match the expected direction. Retained timing pairs remain useful
+controls but are not proof that the timeline can recover the injected pattern.
+No scalar timing result can promote those controls to supported or refuted.
+
+For large preliminary corpora, `--compact-markdown` keeps verbose sample and
+profile bodies in the canonical JSON appendix and bounds each displayed failure
+diagnostic to 2,000 characters. CSV and JSON evidence are unchanged; the default
+Markdown output remains fully expanded.
+
 ## Evidence provenance
 
 - Query: `8dfb07b37dc34532974f00418ea65306`

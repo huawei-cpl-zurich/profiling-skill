@@ -365,14 +365,14 @@ def normalize_producer_inputs(
                 "candidate_id": candidate_id,
                 "case_id": "__execution__",
                 "status": "infrastructure_failure" if category == "infrastructure" else "candidate_failure",
-                "failure": {"kind": failure.get("kind", "unknown"), "message": failure.get("diagnostics", "")},
+                "failure": {**failure, "kind": failure.get("kind", "unknown"), "message": failure.get("diagnostics", "")},
             })
         for failure in objects(state.get("infrastructure_failures", []), "infrastructure_failures"):
             captures.append({
                 "candidate_id": candidate_id,
                 "case_id": "__execution__",
                 "status": "infrastructure_failure",
-                "failure": {"kind": failure.get("kind", "unknown"), "message": failure.get("diagnostics", "")},
+                "failure": {**failure, "kind": failure.get("kind", "unknown"), "message": failure.get("diagnostics", "")},
             })
     normalized_manifest = {
         "schema_version": 1,
@@ -497,6 +497,14 @@ def validate_saturation(rows: list[dict[str, Any]]) -> None:
 
 
 def classify_hypothesis(item: dict[str, Any]) -> tuple[str, str]:
+    # The producer's timeline controls currently report scalar core-time proxies,
+    # not semantic order/duration/overlap observations. Their timing changes are
+    # retained below but cannot validate (or refute) a timeline interpretation.
+    if any(
+        str(signal.get("name", "")).startswith("timeline_")
+        for signal in objects(item.get("signals", []), "hypothesis.signals")
+    ):
+        return "unavailable", "scalar timing controls do not establish semantic timeline evidence"
     measurements = objects(item.get("measurements", []), "hypothesis.measurements")
     valid = [row for row in measurements if row.get("status") == "valid"]
     if not valid:
@@ -649,6 +657,7 @@ def compile_report(
                 continue
             failure = row.get("failure") if isinstance(row.get("failure"), dict) else {}
             failures.append({
+                **failure,
                 "case_id": str(row.get("case_id", "unknown")),
                 "status": row["status"],
                 "kind": str(failure.get("kind", "unknown")),
@@ -713,6 +722,10 @@ def compile_report(
             "title": item.get("title", hypothesis_id),
             "classification": classification,
             "reason": reason,
+            "expected": item.get("expected"),
+            "falsification": item.get("falsification"),
+            "measurements": item.get("measurements", []),
+            "signals": item.get("signals", []),
         })
         for signal in objects(item.get("signals", []), f"hypothesis {hypothesis_id!r}.signals"):
             relationship = signal.get("relationship")
@@ -773,9 +786,12 @@ def compile_report(
         "references": manifest.get("references", []),
         "campaign_evidence": campaign_evidence,
         "hypothesis_evidence": {
+            "campaign_identity": hypothesis_doc.get("campaign_identity"),
+            "reporting_revision": hypothesis_doc.get("reporting_revision"),
             "manifest_sha256": hypothesis_doc.get("manifest_sha256"),
             "raw_cell_count": len(hypothesis_doc.get("raw_cells", [])),
             "paired_result_count": len(compiled_hypotheses),
+            "raw_cells": hypothesis_doc.get("raw_cells", []),
         },
         "candidates": compiled_candidates,
         "hypotheses": sorted(compiled_hypotheses, key=lambda row: row["hypothesis_id"]),
@@ -795,7 +811,7 @@ def compact_json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-def render_markdown(report: dict[str, Any]) -> str:
+def render_markdown(report: dict[str, Any], *, compact_evidence: bool = False) -> str:
     state = report["report_state"]
     if state == "complete":
         banner = "**Complete retained evidence.** All declared candidates and controlled hypotheses reached terminal evidence states."
@@ -849,12 +865,17 @@ def render_markdown(report: dict[str, Any]) -> str:
             lines.append(f"- Candidate hypothesis for `{item['candidate_id']}`: {item['hypothesis']}.")
         if item["failures"]:
             for failure in item["failures"]:
+                message = failure["message"]
+                if compact_evidence and len(message) > 2000:
+                    message = message[:2000] + "… [full diagnostic in report.json]"
                 lines.append(
                     f"- Failure `{item['candidate_id']}` case `{failure['case_id']}`: "
-                    f"{failure['status']}/{failure['kind']} — {failure['message']}"
+                    f"{failure['status']}/{failure['kind']} — {message}"
                 )
     lines.extend(["", "### Auditable candidate evidence", ""])
-    for item in report["candidates"]:
+    if compact_evidence:
+        lines.append("Full samples, per-component profiles and failure provenance are retained in [report.json](report.json).")
+    for item in ([] if compact_evidence else report["candidates"]):
         candidate_id = item["candidate_id"]
         coverage = item["aggregate_coverage"]
         lines.extend([
@@ -932,10 +953,10 @@ def render_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_outputs(report: dict[str, Any], output_dir: Path) -> None:
+def write_outputs(report: dict[str, Any], output_dir: Path, *, compact_markdown: bool = False) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (output_dir / "report.md").write_text(render_markdown(report), encoding="utf-8")
+    (output_dir / "report.md").write_text(render_markdown(report, compact_evidence=compact_markdown), encoding="utf-8")
     fields = ["candidate_id", "treatment", "round", "option", "source_hash", "parent_candidate_id", "duplicate_of", "lineage_state", "lineage_note", "evidence_source_candidate_id", "geomean_latency_us", "starter_speedup", "parent_speedup", "failure_count"]
     with (output_dir / "candidates.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
@@ -961,6 +982,7 @@ def parser() -> argparse.ArgumentParser:
     evidence.add_argument("--captures", type=Path, help="legacy alias for --results")
     result.add_argument("--hypotheses", required=True, type=Path)
     result.add_argument("--output-dir", required=True, type=Path)
+    result.add_argument("--compact-markdown", action="store_true", help="keep verbose sample evidence in JSON only and bound Markdown diagnostics")
     return result
 
 
@@ -972,7 +994,7 @@ def main() -> int:
             read_object(args.results or args.captures, "results"),
         )
         report = compile_report(manifest, captures, read_object(args.hypotheses, "hypotheses"))
-        write_outputs(report, args.output_dir)
+        write_outputs(report, args.output_dir, compact_markdown=args.compact_markdown)
     except InvalidReportInput as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

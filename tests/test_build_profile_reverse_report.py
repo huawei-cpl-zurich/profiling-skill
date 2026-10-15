@@ -252,6 +252,34 @@ def test_checked_in_hypotheses_are_valid_unavailable_scaffold(tmp_path: Path):
     assert report["report_state"] == "partial"
 
 
+def test_failed_starter_preserves_failure_evidence_without_relative_speedup(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(captures.read_text())
+    payload["captures"] = [row for row in payload["captures"] if row["candidate_id"] != "starter"]
+    provenance = {"target": "bz-a3-1", "handle": "remote:retained-contract-failure"}
+    payload["captures"].append({
+        "candidate_id": "starter", "case_id": "__execution__", "status": "candidate_failure",
+        "failure": {"kind": "correctness_error", "message": "not one fused logical launch",
+                    "provenance": provenance, "evidence_sha256": "f" * 64, "terminal": True},
+    })
+    write_json(captures, payload)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    by_id = {item["candidate_id"]: item for item in report["candidates"]}
+    failure = by_id["starter"]["failures"][0]
+    assert failure["provenance"] == provenance
+    assert failure["evidence_sha256"] == "f" * 64
+    assert failure["terminal"] is True
+    assert all(item["geometric_mean"]["starter_speedup"] is None for item in by_id.values())
+    assert by_id["fast"]["geometric_mean"]["latency_us"] is not None
+
+
 def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage(
     tmp_path: Path,
 ):
@@ -624,3 +652,61 @@ def test_consumes_final_multi_component_candidate_and_hypothesis_shapes(tmp_path
     markdown = (output / "report.md").read_text()
     assert "component=`bsa_aiv` selector=`bsa_aiv`" in markdown
     assert "remote:component" in markdown
+
+
+@pytest.mark.parametrize("direction,after", [("decrease", 50.0), ("increase", 200.0), ("no_change", 100.0)])
+def test_timing_controls_do_not_validate_timeline_and_retain_provenance(
+    tmp_path: Path, direction: str, after: float,
+):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    identity = {"target": "gz-a3", "runtime": "named", "benchmark_sha256": "b" * 64}
+    raw_cells = [
+        {"id": "phase/before", "variant": "before", "status": "success",
+         "timeline": {"availability": "unavailable", "events": []}},
+        {"id": "phase/after", "variant": "after", "status": "success",
+         "timeline": {"availability": "unavailable", "events": []}},
+    ]
+    measurement = {"status": "valid", "before": 100.0, "after": after,
+                   "before_cell_id": "phase/before", "after_cell_id": "phase/after",
+                   "metric": "core-time proxy", "unit": "us"}
+    write_json(hypotheses, {
+        "schema_version": 1, "manifest_sha256": "a" * 64,
+        "campaign_identity": identity, "reporting_revision": "reporter-only",
+        "raw_cells": raw_cells,
+        "results": [{"hypothesis_id": "ordered-phases", "title": "Known phase order",
+                     "expected": {"direction": direction, "minimum_relative_change": 0.05},
+                     "measurements": [measurement],
+                     "signals": [{"name": "timeline_phase_order", "relationship": "not_exported"}]}],
+    })
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    assert report["hypotheses"][0]["classification"] == "unavailable"
+    assert report["hypotheses"][0]["measurements"] == [measurement]
+    assert report["hypothesis_evidence"]["campaign_identity"] == identity
+    assert report["hypothesis_evidence"]["reporting_revision"] == "reporter-only"
+    assert report["hypothesis_evidence"]["raw_cells"] == raw_cells
+    assert report["report_state"] == "partial"
+
+
+def test_compact_markdown_does_not_discard_json_or_csv_evidence(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(captures.read_text())
+    payload["captures"][-2]["failure"]["message"] = "retained diagnostic " * 2000
+    write_json(captures, payload)
+    for mode in ("full", "compact"):
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+             "--hypotheses", str(hypotheses), "--output-dir", str(tmp_path / mode),
+             *(["--compact-markdown"] if mode == "compact" else [])],
+            text=True, capture_output=True, check=False,
+        )
+        assert run.returncode == 0, run.stderr
+    assert (tmp_path / "full/report.json").read_bytes() == (tmp_path / "compact/report.json").read_bytes()
+    assert (tmp_path / "full/candidates.csv").read_bytes() == (tmp_path / "compact/candidates.csv").read_bytes()
+    assert (tmp_path / "compact/report.md").stat().st_size < (tmp_path / "full/report.md").stat().st_size / 2

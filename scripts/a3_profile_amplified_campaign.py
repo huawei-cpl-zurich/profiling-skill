@@ -62,6 +62,13 @@ def bundle_identity(bundle: Path) -> str:
     return hashlib.sha256(canonical(rows)).hexdigest()
 
 
+def measurement_identity() -> dict:
+    """Bind standalone checkpoints to the actual acquisition implementation."""
+    scripts = [Path(__file__).resolve(), *(ROOT / "scripts" / name for name in
+               ("acquire_profile.py", "profile_device.py", "a3_profile_microbench_campaign.py"))]
+    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in scripts}
+
+
 def save(path: Path, value: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
@@ -113,6 +120,7 @@ def run_pair(spec: dict, output: Path, acquire, *, campaign: str) -> dict:
     if len(spec["cells"]) != 2 or [cell["variant"] for cell in spec["cells"]] != ["before", "after"]:
         raise ValueError("pair must contain exactly before and after cells in that order")
     contract = {"campaign": campaign, "spec": spec, "source": bundle_identity(Path(spec["bundle"])),
+                "measurement_identity": measurement_identity(),
                 "timing": {"required": 3, "max_valid": 7, "range": .05}, "pipe_samples": 3}
     checkpoint = output / "pair-result.json"
     if checkpoint.exists():

@@ -65,6 +65,15 @@ def test_source_or_campaign_change_rejected(pair, tmp_path):
         campaign.run_pair(pair, output, lambda *a: None, campaign="fresh")
 
 
+def test_changed_measurement_producer_rejected_before_acquire(pair, tmp_path, monkeypatch):
+    output = tmp_path / "results"
+    monkeypatch.setattr(campaign, "measurement_identity", lambda: {"acquire_profile.py": "v1"})
+    campaign.run_pair(pair, output, lambda *a: evidence(a[0]), campaign="fresh")
+    monkeypatch.setattr(campaign, "measurement_identity", lambda: {"acquire_profile.py": "v2"})
+    with pytest.raises(ValueError, match="contract"):
+        campaign.run_pair(pair, output, lambda *a: pytest.fail("redispatched"), campaign="fresh")
+
+
 def test_pending_reuses_same_path_without_attempt_budget(pair, tmp_path):
     paths = []
     def unavailable(phase, cell, attempt, path, selector, basic):

@@ -140,3 +140,38 @@ def test_real_timeout_retains_stdout_and_stops_descendants(tmp_path):
     assert result["exit_code"] == 124
     assert "started" in transcript
     assert "timeout" in transcript
+
+
+def test_missing_executable_retains_startup_error(tmp_path):
+    missing = tmp_path / "nonexistent-program"
+    result, transcript = probe._run([str(missing)], tmp_path, "missing", 1, probe._execute)
+    assert result["exit_code"] == 127
+    assert result["startup_failure"]["exception"] == "FileNotFoundError"
+    assert str(missing) in transcript
+    assert (tmp_path / "missing.stdout.log").read_bytes() == b""
+    assert "startup failed" in (tmp_path / "missing.stderr.log").read_text()
+
+
+def test_missing_workload_interpreter_writes_terminal_result(application, tmp_path):
+    application.write_text("#!/nonexistent/interpreter\n")
+    result = probe.acquire(application, tmp_path / "capture", "probe")
+    assert result["status"] == "workload_startup_failed"
+    assert result["classification"] == "host_environment"
+    assert result["correctness"]["exit_code"] == 127
+    assert "profiler" not in result
+    assert not result["clean_acquisition_gate_passed"]
+    assert json.loads((tmp_path / "capture/result.json").read_text()) == result
+
+
+@pytest.mark.parametrize("mode", ["hardware", "simulation"])
+def test_missing_profiler_writes_terminal_result_and_logs(application, tmp_path, monkeypatch, mode):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    result = probe.acquire(application, tmp_path / "capture", "probe", mode=mode,
+                           soc_version="ObservedSoC" if mode == "simulation" else None)
+    assert result["correctness"]["exit_code"] == 0
+    assert result["status"] == "profiler_startup_failed"
+    assert result["classification"] == "host_environment"
+    assert result["profiler"]["exit_code"] == 127
+    assert "msprof" in (tmp_path / "capture/profiler.stderr.log").read_text()
+    assert not result["clean_acquisition_gate_passed"]
+    assert json.loads((tmp_path / "capture/result.json").read_text()) == result

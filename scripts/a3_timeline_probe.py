@@ -33,6 +33,7 @@ def _execute(argv, *, capture_output, text, timeout):
 
 
 def _run(argv, output, label, timeout, runner):
+    startup_failure = None
     try:
         process = runner(argv, capture_output=True, text=True, timeout=timeout)
         code, stdout, stderr = process.returncode, process.stdout, process.stderr
@@ -42,6 +43,10 @@ def _run(argv, output, label, timeout, runner):
         stdout = stdout.decode(errors="replace") if isinstance(stdout, bytes) else stdout
         stderr = stderr.decode(errors="replace") if isinstance(stderr, bytes) else stderr
         stderr += "\nacquisition timeout (child terminated by subprocess timeout)"
+    except OSError as exc:
+        code, stdout, stderr = 127, "", f"subprocess startup failed: {exc}\n"
+        startup_failure = {"exception": type(exc).__name__, "errno": exc.errno,
+                           "message": str(exc)}
     logs = {}
     for stream, text in (("stdout", stdout), ("stderr", stderr)):
         raw = text.encode()
@@ -49,7 +54,8 @@ def _run(argv, output, label, timeout, runner):
         path.write_bytes(raw)
         logs[stream] = {"path": path.name, "bytes": len(raw),
                         "sha256": hashlib.sha256(raw).hexdigest()}
-    return {"argv": argv, "exit_code": code, "logs": logs}, stdout + stderr
+    return {"argv": argv, "exit_code": code, "logs": logs,
+            **({"startup_failure": startup_failure} if startup_failure else {})}, stdout + stderr
 
 
 def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
@@ -78,7 +84,9 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
     check, _ = _run([str(application.resolve())], output, "workload", timeout, runner)
     result["correctness"] = check
     if check["exit_code"]:
-        result["status"] = "workload_failed"
+        result["status"] = "workload_startup_failed" if check.get("startup_failure") else "workload_failed"
+        if check.get("startup_failure"):
+            result["classification"] = "host_environment"
     else:
         command = ["msprof", "op"]
         if mode == "simulation":
@@ -113,6 +121,8 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
             # Hardware normalization stays in the acquisition harness, which
             # validates selector coverage and never consumes simulator paths.
             result["status"] = "profiler_failed" if failed else "requires_hardware_normalization"
+        if profile.get("startup_failure"):
+            result.update(status="profiler_startup_failed", classification="host_environment")
     (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     return result
 

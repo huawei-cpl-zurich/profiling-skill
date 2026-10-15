@@ -34,16 +34,28 @@ Five lowered cases are directly established: UB-to-UB `CopyOp` uses `PIPE_V`,
 L0C-to-GM `CopyOp` uses `PIPE_FIX`, GM-to-L1 `CopyOp` uses `PIPE_MTE2`, and
 `VBrc` uses `PIPE_MTE2` for L1 destinations or `PIPE_V` for UB destinations.
 General loads/stores, dot, elementwise operations, reductions, layout
-execution, synchronization, Scalar, MTE1, and MTE3 remain unknown.
+execution, synchronization, Scalar, MTE1, and MTE3 remain unknown in this
+pinned source inventory. That status does not forbid a more narrowly scoped
+observation from actual artifacts: identify its compiler, target and stage,
+and do not silently relabel the inventory's unreviewed general case.
+
+In particular, a tensor load can become a scalar indirect-load loop, a masked
+load can retain a contiguous copy followed by vector predicates, and equal
+early IR can acquire different buffers and flags later. `tl.dot` requires
+evidence of the actual matrix path. See [A3 performance reasoning](a3-performance-reasoning.md)
+for how these distinctions change profiler interpretation.
 
 ## Resolve an unknown mapping
 
-Run exactly one case from `benchmarks/triton_pipe_probe.py`. Capture it with
-the installed `mlir-triton-dump` workflow so the manifest retains TTIR,
-adapter, and compiler-consumer inputs. Then collect a compact product-correct
-profiler capture through `remote-access`. A pipe timeline can correlate
-activity with emitted instructions; activity alone neither proves source
-attribution nor capacity saturation.
+When exact attribution matters, optionally capture the candidate or a focused
+single-operation probe with the installed `mlir-triton-dump` workflow so its
+manifest retains TTIR, adapter and compiler-consumer inputs. Inspect later
+scheduled IR when buffering/flags are the question. Collect product-correct
+profiler evidence through `remote-access` or the supplied benchmark interface.
+A qualified instruction trace can relate activity to emitted instructions;
+activity alone proves neither source attribution nor capacity saturation.
+Keep A3 simulation separate from A5 hardware timelines. This escalation is not
+a mandatory compiler-dump gate for every optimization.
 
 The probe's `--contract` output uses `constructs[]`; every identifier is an
 independent lookup key for this inventory. Do not join several constructs into

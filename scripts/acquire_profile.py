@@ -384,7 +384,7 @@ def timeline_phase(label):
     text=label.lower()
     if any(word in text for word in ("store","write","copy out","mte3")): return "store"
     if any(word in text for word in ("load","read","copy","dma","mte2","mte1")): return "load"
-    if any(word in text for word in ("compute","vector","aiv","cube","aic","dot")): return "compute"
+    if any(word in text for word in ("compute","vector","cube","dot")): return "compute"
     return None
 
 def normalize_event(item):
@@ -485,6 +485,8 @@ try:
     argv=([sys.executable,str(entry)] if entry.suffix==".py" else [str(entry)])+IDENTITY["arguments"]
     try: check=subprocess.run(argv,cwd=bundle,text=True,capture_output=True,env=env,timeout=300)
     except subprocess.TimeoutExpired as exc: fail("workload","workload_failure","timeout: "+str(exc))
+    (root/"workload.stdout.log").write_text(check.stdout)
+    (root/"workload.stderr.log").write_text(check.stderr)
     if check.returncode:
         detail=(check.stderr or check.stdout)[-2000:]
         fail("workload","device_unavailable" if device_failure(detail) else "workload_failure","exit %d: %s"%(check.returncode,detail))
@@ -497,16 +499,28 @@ try:
     try: result=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
     except subprocess.TimeoutExpired as exc: fail("profiler","profiler_failure","timeout: "+str(exc))
     transcript=result.stdout+result.stderr
+    (root/"profiler.stdout.log").write_text(result.stdout)
+    (root/"profiler.stderr.log").write_text(result.stderr)
     if result.returncode and device_failure(transcript):
         fail("profiler","device_unavailable","exit %d: %s"%(result.returncode,transcript[-2000:]))
     if result.returncode: fail("profiler","device_unavailable" if device_failure(transcript) else "profiler_failure","exit %d: %s"%(result.returncode,transcript[-2000:]))
     if SUCCESS not in transcript: fail("profiler","profiler_failure","terminal success marker missing: "+transcript[-1000:])
     if MODE=="timeline":
+        inventory=[{"name":str(p.relative_to(report)),"bytes":p.stat().st_size}
+                   for p in sorted(report.rglob("*")) if p.is_file()]
         timeline_files=sorted(p for p in report.rglob("*") if p.is_file() and p.suffix.lower() in {".json",".csv"} and any(word in str(p.relative_to(report)).lower() for word in ("timeline","trace","event")))
         sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":file_sha256(p)} for p in timeline_files[:128]]
         timeline_semantics=compact_timeline(timeline_files)
-        availability="available" if timeline_semantics["event_count"] else "unavailable"
-        rows=[]; names=timeline_semantics["observed_selectors"] or KERNEL_NAMES
+        availability="available" if timeline_semantics["event_count"] and timeline_semantics["selectors_complete"] and "TimelineDetail data collection failed" not in transcript else "unavailable"
+        basic_rows,basic_sources=collect(report,"BasicInfo") if csv_files(report,"BasicInfo") else ([],[])
+        sources.extend(basic_sources)
+        rows=[]; names=sorted({name for name,_ in basic_rows}) or timeline_semantics["observed_selectors"]
+        timeline_diagnostic=("collection_failed" if "TimelineDetail data collection failed" in transcript else
+          "semantic_events" if availability=="available" else
+          "selector_coverage_incomplete" if timeline_semantics["event_count"] else
+          "unsupported_event_schema" if timeline_files else
+          "raw_binary_only" if any(item["name"].endswith(".bin") for item in inventory) else
+          "no_timeline_exports")
     else:
         rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
     if len(names)>256: fail("evidence","evidence_failure","observed kernel count exceeds compact bound")
@@ -529,8 +543,13 @@ try:
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
     if MODE=="timeline":
       evidence["capture"]["availability"]=availability
+      evidence["capture"]["diagnostics"]={"classification":timeline_diagnostic,
+        "inventory":inventory[:128],"inventory_truncated":len(inventory)>128,
+        "profiler_transcript_tail":normalized(transcript[-3000:])}
       evidence["capture"]["timeline_semantics"]=timeline_semantics
       evidence["capture"]["reason"]=("TimelineDetail export parsed into bounded semantic evidence" if availability=="available" else "successful TimelineDetail command produced no supported semantic events")
+      if timeline_diagnostic=="collection_failed":
+        evidence["capture"]["reason"]="TimelineDetail collection failed despite zero exit status; inspect retained profiler transcript"
     raw=(json.dumps(evidence,sort_keys=True,separators=(",",":"))+"\n").encode()
     if str(root).encode() in raw: fail("evidence","evidence_failure","retained report path leaked into compact evidence")
     digest=hashlib.sha256(raw).hexdigest()

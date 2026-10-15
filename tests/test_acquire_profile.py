@@ -798,7 +798,8 @@ def test_timeline_payload_does_not_hide_profiler_failure(tmp_path):
     assert "profiler-crashed" in failure["message"]
 
 
-def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp_path):
+@pytest.mark.parametrize("collection_failed", [False, True])
+def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp_path, collection_failed):
     module = load_module()
     workload = tmp_path / "workload.py"
     workload.write_text("print('ok')\n")
@@ -822,6 +823,8 @@ def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp
         " {'name':'compute_kernel','cat':'kernel vector compute','ph':'X','ts':3,'dur':5},\n"
         " {'name':'store result','cat':'mte store','ph':'X','ts':8,'dur':2}]\n"
         "(root/'timeline.json').write_text(json.dumps({'traceEvents':events}))\n"
+        "(root/'visualize_data.bin').write_bytes(b'raw vendor report')\n"
+        f"print('TimelineDetail data collection failed' if {collection_failed!r} else '')\n"
         "print('Profiling running finished. All task success.')\n"
     )
     msprof.chmod(0o755)
@@ -854,6 +857,10 @@ def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp
     assert semantic["load_compute_overlap_us"] == 1.0
     assert semantic["event_count"] == 3
     assert len(semantic["events"]) <= 256
+    assert capture["diagnostics"]["classification"] == ("collection_failed" if collection_failed else "semantic_events")
+    assert capture["availability"] == ("unavailable" if collection_failed else "available")
+    assert any(item["name"] == "visualize_data.bin" for item in capture["diagnostics"]["inventory"])
+    assert capture["observed_kernel_names"] == ["compute_kernel", "copy_kernel"]
 
 
 @pytest.mark.parametrize("mode", ["basic", "pipe"])

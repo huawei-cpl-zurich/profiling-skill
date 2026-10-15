@@ -53,12 +53,41 @@ def test_sample_summary_all_samples():
 def test_parser_selector_and_partial(tmp_path):
     batch = load('scripts', 'a3_memory_batch')
     report = tmp_path / 'OpBasicInfo.csv'
-    report.write_text('Kernel Name,Duration(us)\na3_memory_probe_x,2.5\nother,90\n')
+    report.write_text('Kernel Name,Duration(us)\na3_memory_probe_x,2.5\n')
     assert batch.basic_rows(tmp_path, 'a3_memory_probe_x')[0]['Duration(us)'] == '2.5'
     with pytest.raises(RuntimeError, match='selector'):
         batch.basic_rows(tmp_path, 'absent')
     with pytest.raises(RuntimeError, match='success'):
         batch.validate_capture(0, 'partial data collection failed')
+
+
+@pytest.mark.parametrize('names', [{'triton': '3.2.0'}, {'triton-ascend': '3.5.0'},
+                                   {'triton': '3.2.0', 'triton-ascend': '3.5.0'}, {}])
+def test_distribution_layouts(names, monkeypatch):
+    memory = load('benchmarks', 'a3_profile_memory')
+    def version(name):
+        if name not in names:
+            raise memory.importlib.metadata.PackageNotFoundError(name)
+        return names[name]
+    monkeypatch.setattr(memory.importlib.metadata, 'version', version)
+    assert memory.triton_distributions() == names
+
+
+@pytest.mark.parametrize('diagnostic', ['child received SIG11', 'Running task failed',
+                                        'Segmentation fault', 'process exited with code -11'])
+def test_success_marker_does_not_override_failure(diagnostic):
+    batch = load('scripts', 'a3_memory_batch')
+    with pytest.raises(RuntimeError, match='success'):
+        batch.validate_capture(0, diagnostic + '\n' + batch.SUCCESS)
+
+
+@pytest.mark.parametrize('selector', [None, 'a3_memory_probe_x'])
+def test_extra_basic_launch_rejected(tmp_path, selector):
+    batch = load('scripts', 'a3_memory_batch')
+    (tmp_path / 'OpBasicInfo.csv').write_text(
+        'Kernel Name,Duration(us)\na3_memory_probe_x,2.5\nother,90\n')
+    with pytest.raises(RuntimeError, match='one total'):
+        batch.basic_rows(tmp_path, selector)
 
 
 def test_execute_keeps_command_and_error_logs(tmp_path):

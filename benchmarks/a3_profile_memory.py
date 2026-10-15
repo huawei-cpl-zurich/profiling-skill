@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """Read-only memory controls; logical traffic is not measured physical traffic."""
 import argparse
+import importlib.metadata
 import json
 from pathlib import Path
 import random
+
+
+def triton_distributions():
+    """Module and wheel versions differ on supported Ascend installations."""
+    versions = {}
+    for name in ('triton', 'triton-ascend'):
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            pass
+    return versions
 
 
 def cases():
@@ -56,7 +68,6 @@ def run(case, artifact_root):
     import torch_npu  # noqa: F401
     import triton
     import triton.language as tl
-    import importlib.metadata
     from compile_evidence import retain_compiler_evidence
 
     @triton.jit
@@ -83,7 +94,7 @@ def run(case, artifact_root):
     artifacts = retain_compiler_evidence(compiled.asm, artifact_root, case['id'], 'probe', 1)
     return dict(case=case, correctness=correct, footprint=traffic, compiler=artifacts,
                 environment={'torch': torch.__version__, 'triton_module': triton.__version__,
-                             'triton_distribution': importlib.metadata.version('triton'),
+                             'triton_distributions': triton_distributions(),
                              'device_name': torch.npu.get_device_name(0)})
 
 

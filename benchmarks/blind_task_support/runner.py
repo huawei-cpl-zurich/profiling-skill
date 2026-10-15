@@ -20,6 +20,7 @@ def validate_repetition_ir(text, roles):
     if set(roles) != {'x', 'selected', 'repetitions', 'output'}:
         raise ValueError('semantic contract: executed kernel tensor bindings unavailable')
     origins = {value: {name} for name, value in roles.items()}
+    pointer_bases = dict(origins)
     constants, bounds, loops, stores = {}, set(), [], []
     active, depth = None, 0
     token = r'%[\w.$-]+(?:#[0-9]+)?'
@@ -40,6 +41,8 @@ def validate_repetition_ir(text, roles):
             result, operation = assignment.groups()
             operands = re.findall(token, operation)
             inherited = set().union(*(origins.get(value, set()) for value in operands))
+            if re.match(r'tt\.(?:splat|addptr|bitcast)\s+', operation) and operands:
+                pointer_bases[result] = pointer_bases.get(operands[0], set())
             constant = re.match(r'arith\.constant\s+(-?\d+)\s*:', operation)
             if constant:
                 constants[result] = int(constant[1])
@@ -47,7 +50,7 @@ def validate_repetition_ir(text, roles):
                 bounds.add(result)
             load = re.match(r'tt\.load\s+(' + token + ')', operation)
             if load:
-                pointer_roles = origins.get(load[1], set()) & set(roles)
+                pointer_roles = pointer_bases.get(load[1], set())
                 inherited.update('loaded:' + role for role in pointer_roles)
                 if pointer_roles == {'repetitions'}:
                     bounds.add(result)
@@ -57,7 +60,7 @@ def validate_repetition_ir(text, roles):
                         active['loads'].update(pointer_roles)
             origins[result] = inherited
         store = re.match(r'tt\.store\s+(' + token + r'),\s*(' + token + ')', line)
-        if store and 'output' in origins.get(store[1], set()):
+        if store and 'output' in pointer_bases.get(store[1], set()):
             if active is None:
                 raise ValueError('semantic contract: output store outside runtime repetition loop')
             if not {'volatile:x', 'volatile:selected'} <= origins.get(store[2], set()):

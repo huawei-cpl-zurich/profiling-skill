@@ -84,7 +84,7 @@ def test_incomplete_target_or_auxiliary_hazard_is_not_qualified(tmp_path):
 
 def test_qualification_requires_positive_and_negative_race_controls():
     negative = dict(tool='racecheck', mutant=False, classification='no-finding', family=0,
-                    analysis_finished=True)
+                    analysis_started=True, analysis_finished=True)
     positive = dict(negative, mutant=True, classification='detected')
     rows = [dict(row, repeat=repeat) for row in (negative, positive) for repeat in range(3)]
     assert qualification(rows, families=(0,)) == 'passed'

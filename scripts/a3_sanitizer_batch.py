@@ -50,7 +50,7 @@ def qualification(checks, *, families, canary=False):
     observed = [(row['family'], row['mutant'], row['repeat']) for row in races]
     if not expected or set(observed) != expected or len(observed) != len(expected):
         return 'inconclusive'
-    if any(not row['analysis_finished'] or row['classification'] !=
+    if any(not row['analysis_started'] or not row['analysis_finished'] or row['classification'] !=
            ('detected' if row['mutant'] else 'no-finding') for row in races):
         return 'inconclusive'
     return 'passed'

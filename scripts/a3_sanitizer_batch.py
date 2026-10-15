@@ -71,7 +71,7 @@ def run_check(command, folder, env, tool):
     text = '\n'.join([str(stdout), str(stderr), *(item['text'] for item in reports)])
     kernels = re.findall(r'Start \w+ sanitizer on kernel (\S+)', text)
     completed = [name.rstrip('.') for name in re.findall(r'Sanitizer finished on kernel (\S+)', text)]
-    target_kernels = [name for name in kernels if 'a3_sanitizer_' in name]
+    target_kernels = [name for name in kernels if name in ('a3_sanitizer_control', 'a3_sanitizer_write')]
     started = bool(target_kernels)
     finished = any(name in completed for name in target_kernels)
     sections = re.findall(r'(Start \w+ sanitizer on kernel (a3_sanitizer_\S+).*?'

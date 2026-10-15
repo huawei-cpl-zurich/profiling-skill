@@ -83,7 +83,12 @@ Five native families completed three mutant and three repaired/disjoint
 repeats per tool. Racecheck detected every mutant and reported no finding on
 every repaired/disjoint control. Synccheck reported no finding for all of these
 cases: it is not a substitute for racecheck. Memcheck emitted the register
-warnings above, not a clean result and not these data-race diagnoses.
+warnings above in 27/30 checks. The GM-overlap mutant additionally produced an
+out-of-bounds warning in 3/3 memcheck runs. Its allocation trace records a
+65,568-byte allocation and a 16,384-byte write at that allocation's base, so
+the warning does not establish an actual allocation-bound violation. Keep this
+warning distinct from racecheck's well-attributed GM WAW diagnosis and audit
+the tool's ownership/bounds assumptions before acting on it.
 
 | Source change | Racecheck diagnosis | Mutant/repaired finding count |
 | --- | --- | --- |

@@ -347,6 +347,15 @@ SUCCESS="Profiling running finished. All task success."
 NAMES=("Op Name","OpName","Kernel Name","kernel_name","Name")
 DURATIONS=("Task Duration(us)","Task Duration (us)","task_duration_us")
 _RUNTIME_FINGERPRINT=None
+_RETAINED_LOGS=[]
+
+def retain_transcript(prefix,stdout,stderr):
+    for stream,value in (("stdout",stdout),("stderr",stderr)):
+        raw=value if isinstance(value,bytes) else (value or "").encode()
+        path=pathlib.Path(str(prefix)+"."+stream+".log")
+        path.parent.mkdir(parents=True,exist_ok=True); path.write_bytes(raw)
+        _RETAINED_LOGS.append({"path":str(path.resolve()),"stream":stream,
+            "bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()})
 
 def package_version(module,names):
     value=getattr(module,"__version__",None)
@@ -385,6 +394,7 @@ def runtime_fingerprint():
 def emit(value):
     value.setdefault("schema",SCHEMA)
     value.setdefault("runtime_fingerprint",runtime_fingerprint())
+    value.setdefault("retained_logs",list(_RETAINED_LOGS))
     print("BSA_CANDIDATE_RESULT="+json.dumps(value,sort_keys=True,separators=(",",":")),flush=True)
 
 def pick_device():
@@ -434,9 +444,11 @@ def run_workload(req,env,output):
       run=subprocess.run([sys.executable,"runner.py","--job",str(jobpath),"--output",str(output)],
                          text=True,capture_output=True,env=env,timeout=300)
     except subprocess.TimeoutExpired as exc:
+      retain_transcript(output,exc.stdout,exc.stderr)
       return {"status":"runtime_error",
               "diagnostics":"candidate correctness timed out after %s seconds"%exc.timeout,
               "case_evidence":[]}
+    retain_transcript(output,run.stdout,run.stderr)
     try: result=json.loads(output.read_text())
     except Exception as exc: return {"status":"infrastructure_error","diagnostics":"runner response missing: "+repr(exc)}
     if run.returncode and result.get("status")=="ok":
@@ -554,7 +566,9 @@ def run_profile(req,env,report,physical,correctness):
     if req["action"]=="capture": command.append("--kernel-name="+req["kernel_name"])
     try: prof=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
     except subprocess.TimeoutExpired as exc:
+        retain_transcript(report,exc.stdout,exc.stderr)
         return None,{"status":"infrastructure_error","diagnostics":"msprof timeout: "+str(exc),"physical_device":physical}
+    retain_transcript(report,prof.stdout,prof.stderr)
     transcript=prof.stdout+prof.stderr
     if prof.returncode or SUCCESS not in transcript:
         if failure.is_file():
@@ -1001,7 +1015,20 @@ class Executor:
             attempt, handle, command = self._prepare_attempt(
                 base_request, request_sha, execution_sha, state, runtime, activation,
                 qualification_sha, retry)
-            remote = self.transport.observe_result(self.config.target, handle)
+            cache_path = attempt / "compact-result.json"
+            cached = json.loads(cache_path.read_text()) if cache_path.is_file() else None
+            if isinstance(cached, dict) and cached.get("handle") == handle:
+                if (cached.get("request_sha256") != request_sha
+                        or cached.get("remote_sha256") != digest_json(cached.get("remote"))):
+                    raise ExecutorError("infrastructure_error", "cached compact result identity mismatch",
+                                        handle=handle)
+                remote = cached["remote"]
+            else:
+                remote = self.transport.observe_result(self.config.target, handle)
+                atomic_json(cache_path, {
+                    "handle": handle, "request_sha256": request_sha,
+                    "remote_sha256": digest_json(remote), "remote": remote,
+                })
             atomic_json(attempt / "terminal.json", {
                 "handle": handle, "status": remote.get("status", "malformed"),
                 "terminal": True, "evidence_sha256": digest_json(remote),
@@ -1315,6 +1342,8 @@ cat "$run_root/compact-result.log"
                 handle=handle,
             )
         status = remote.get("status")
+        retained = ({"retained_logs": remote["retained_logs"]}
+                    if isinstance(remote.get("retained_logs"), list) else {})
         physical = remote.get("physical_device")
         if isinstance(physical, bool) or not isinstance(physical, int) or physical < 0:
             if status == "infrastructure_error":
@@ -1330,16 +1359,16 @@ cat "$run_root/compact-result.log"
             return {"status": status, "diagnostics": str(remote.get("diagnostics", "")),
                     "terminal": True, "evidence_sha256": digest_json(remote),
                     "runtime_fingerprint": fingerprint,
-                    "provenance": provenance}
+                    "provenance": provenance, **retained}
         if status != "ok":
             return {"status": "infrastructure_error",
                     "diagnostics": str(remote.get("diagnostics", "remote execution failed")),
                     "terminal": True, "evidence_sha256": digest_json(remote),
                     "runtime_fingerprint": fingerprint,
-                    "provenance": provenance}
+                    "provenance": provenance, **retained}
         result = {"status": "ok", "diagnostics": "", "evidence_sha256": digest_json(remote),
                   "terminal": True, "runtime_fingerprint": fingerprint,
-                  "provenance": provenance}
+                  "provenance": provenance, **retained}
         if isinstance(remote.get("correctness"), list):
             result["correctness"] = remote["correctness"]
         if request["action"] == "discover":
@@ -1380,6 +1409,7 @@ cat "$run_root/compact-result.log"
                     "schema": REMOTE_SCHEMA, "status": "ok", "physical_device": physical,
                     "runtime_fingerprint": fingerprint,
                     "correctness": remote.get("correctness", []), "capture": capture,
+                    **retained,
                 })
         return result
 

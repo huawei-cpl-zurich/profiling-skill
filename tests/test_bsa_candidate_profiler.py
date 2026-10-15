@@ -959,6 +959,19 @@ def test_repeated_coordinator_malformed_evidence_fast_stops(tmp_path):
     assert state["infrastructure_failures"][0]["kind"] == "invalid_basic_info"
 
 
+def test_candidate_failure_keeps_remote_diagnostic_log_pointers(tmp_path):
+    executor = tmp_path / "executor.py"
+    logs = [{"path":"/retained/compile.stderr.log", "sha256":"c"*64,
+             "bytes":100, "stream":"stderr"}]
+    make_executor(executor, [{"status":"compile_error", "diagnostics":"compiler rejected code",
+                              "retained_logs":logs}])
+    result = MODULE.run_campaign(one_execution(), tmp_path / "results.json", executor,
+             cases=[43], stable_samples=3, max_samples=3, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["status"] == "candidate_failure"
+    assert state["failure"]["retained_logs"] == logs
+
+
 def test_retry_rejects_wrong_target_failure_handle(tmp_path: Path) -> None:
     executor = tmp_path / "executor.py"
     make_executor(executor, [{

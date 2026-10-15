@@ -628,6 +628,8 @@ def _failure(response: dict[str, Any]) -> dict[str, Any]:
     }
     if "terminal" in response:
         failure["terminal"] = response["terminal"]
+    if isinstance(response.get("retained_logs"), list):
+        failure["retained_logs"] = response["retained_logs"]
     return failure
 
 
@@ -960,6 +962,8 @@ def run_campaign(
                 "compact": response.get("basic_info"),
                 "evidence_sha256": response.get("evidence_sha256"),
                 "provenance": response.get("provenance"),
+                **({"retained_logs": response["retained_logs"]}
+                   if isinstance(response.get("retained_logs"), list) else {}),
             }
             _acquisition_succeeded(state)
             _atomic_json(output, results)
@@ -1061,6 +1065,8 @@ def run_campaign(
                         "pipe_utilization": response["pipe_utilization"],
                         "evidence_sha256": response.get("evidence_sha256"),
                         "provenance": response.get("provenance"),
+                        **({"retained_logs": response["retained_logs"]}
+                           if isinstance(response.get("retained_logs"), list) else {}),
                     }
                     _acquisition_succeeded(state)
                     _atomic_json(output, results)

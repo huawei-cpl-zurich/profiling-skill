@@ -42,10 +42,16 @@ def memory_events(text):
     return events
 
 
-def qualification(checks):
+def qualification(checks, *, families, canary=False):
     races = [row for row in checks if row['tool'] == 'racecheck']
-    if not races or any(row['classification'] != ('detected' if row['mutant'] else 'no-finding')
-                        for row in races):
+    expected = {(family, mutant, repeat) for family in families
+                for mutant in ((False,) if canary else (False, True))
+                for repeat in range(1 if canary else 3)}
+    observed = [(row['family'], row['mutant'], row['repeat']) for row in races]
+    if not expected or set(observed) != expected or len(observed) != len(expected):
+        return 'inconclusive'
+    if any(not row['analysis_finished'] or row['classification'] !=
+           ('detected' if row['mutant'] else 'no-finding') for row in races):
         return 'inconclusive'
     return 'passed'
 
@@ -148,7 +154,7 @@ def main():
                             if mutant:
                                 command.append('--mutant')
                         summary['checks'][label] = run_check(command, folder, env, tool)
-                        summary['checks'][label].update(tool=tool, mutant=mutant)
+                        summary['checks'][label].update(tool=tool, mutant=mutant, family=family, repeat=repeat)
                         failure_code = 0
                         if summary['checks'][label]['classification'] in ('instrumentation-failure', 'unqualified-report', 'timeout'):
                             failure_code = 2
@@ -162,7 +168,9 @@ def main():
                         print(json.dumps({'check': label, 'classification': summary['checks'][label]['classification']}), flush=True)
                         if failure_code:
                             return failure_code
-        summary['qualification'] = qualification(summary['checks'].values())
+        families = ((0,) if args.canary else range(5)) if executable else (None,)
+        summary['qualification'] = qualification(summary['checks'].values(), families=families, canary=args.canary)
+        summary['canary_only'] = args.canary
         (output / 'summary.json').write_text(json.dumps(summary, indent=2))
     finally:
         lease.close()

@@ -83,10 +83,15 @@ def test_incomplete_target_or_auxiliary_hazard_is_not_qualified(tmp_path):
 
 
 def test_qualification_requires_positive_and_negative_race_controls():
-    negative = dict(tool='racecheck', mutant=False, classification='no-finding')
-    positive = dict(tool='racecheck', mutant=True, classification='detected')
-    assert qualification([negative, positive]) == 'passed'
+    negative = dict(tool='racecheck', mutant=False, classification='no-finding', family=0,
+                    analysis_finished=True)
+    positive = dict(negative, mutant=True, classification='detected')
+    rows = [dict(row, repeat=repeat) for row in (negative, positive) for repeat in range(3)]
+    assert qualification(rows, families=(0,)) == 'passed'
     for result in ('no-finding', 'other-finding', 'unsupported'):
-        assert qualification([negative, dict(positive, classification=result)]) == 'inconclusive'
-    assert qualification([dict(negative, classification='detected'), positive]) == 'inconclusive'
-    assert qualification([]) == 'inconclusive'
+        changed = [dict(row, classification=result) if row['mutant'] else row for row in rows]
+        assert qualification(changed, families=(0,)) == 'inconclusive'
+    assert qualification(rows[:-1], families=(0,)) == 'inconclusive'
+    assert qualification(rows + [rows[0]], families=(0,)) == 'inconclusive'
+    assert qualification(rows, families=(0, 1)) == 'inconclusive'
+    assert qualification([], families=(0,)) == 'inconclusive'

@@ -78,7 +78,7 @@ def run_check(command, folder, env, tool):
                           r'Sanitizer finished on kernel \2[^\n]*)', text, re.S)
     target_text = '\n'.join(section for section, _ in sections)
     classification = classify(target_text or text, code, timeout=timeout)
-    if classification == 'no-finding' and not (started and finished):
+    if classification in ('detected', 'other-finding', 'no-finding') and not (started and finished):
         classification = 'unqualified-report'
     relevant = [line for line in text.splitlines() if re.search(
         r'hazard|race|\b(?:RAW|WAR|WAW|UB|GM|MTE[123]|PIPE_V)\b|0x[\da-f]+|warning|error', line, re.I)]

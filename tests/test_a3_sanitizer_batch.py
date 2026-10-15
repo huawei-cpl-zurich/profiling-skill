@@ -22,7 +22,7 @@ def test_zero_exit_alone_is_not_clean_evidence():
 
 def test_actual_process_report_retained(tmp_path, monkeypatch):
     tool = tmp_path / 'mssanitizer'
-    tool.write_text('#!/usr/bin/env python3\nimport pathlib,sys\nassert sys.argv[sys.argv.index("--") + 1:] == ["unused", "--artifacts", "output"]\np=next(x.split("=",1)[1] for x in sys.argv if x.startswith("--log-file="))\npathlib.Path(p).write_text("WAW hazard at GM address 0x10")\n')
+    tool.write_text('#!/usr/bin/env python3\nimport pathlib,sys\nassert sys.argv[sys.argv.index("--") + 1:] == ["unused", "--artifacts", "output"]\np=next(x.split("=",1)[1] for x in sys.argv if x.startswith("--log-file="))\npathlib.Path(p).write_text("Start racecheck sanitizer on kernel a3_sanitizer_write\\nWAW hazard at GM address 0x10\\nSanitizer finished on kernel a3_sanitizer_write. See all detected errors above.")\n')
     tool.chmod(0o700)
     import os
     env = dict(os.environ, PATH=str(tmp_path) + ':' + os.environ['PATH'])
@@ -30,7 +30,7 @@ def test_actual_process_report_retained(tmp_path, monkeypatch):
     result = run_check(['unused', '--artifacts', 'output'], folder, env, 'racecheck')
     assert result['classification'] == 'detected'
     assert result['reports'][0]['sha256']
-    assert result['diagnostic_lines'] == ['WAW hazard at GM address 0x10']
+    assert 'WAW hazard at GM address 0x10' in result['diagnostic_lines']
     assert (folder / 'command.json').exists()
 
 
@@ -67,3 +67,16 @@ def test_instrumented_store_evidence_preserves_core_and_address():
     assert rows[0]['dstAddr'] == '0x12c0c0014000'
     assert rows[0]['coreId'] == '0'
     assert rows[0]['lineNo'] == '17'
+
+
+def test_incomplete_target_or_auxiliary_hazard_is_not_qualified(tmp_path):
+    import os
+    for index, report in enumerate((
+        'Start racecheck sanitizer on kernel a3_sanitizer_write\\nWAW hazard at UB address 0x0',
+        'Start racecheck sanitizer on kernel auxiliary\\nWAW hazard at GM address 0x10\\nSanitizer finished on kernel auxiliary. See all detected errors above.',
+    )):
+        tool = tmp_path / 'mssanitizer'
+        tool.write_text('#!/bin/sh\nprintf "' + report + '\\n"\n')
+        tool.chmod(0o700)
+        result = run_check(['unused'], tmp_path / str(index), dict(os.environ, PATH=str(tmp_path)), 'racecheck')
+        assert result['classification'] == 'unqualified-report'

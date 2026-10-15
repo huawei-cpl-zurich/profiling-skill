@@ -177,3 +177,25 @@ def test_timeline_cells_do_not_duplicate_separate_timeline_owner(pair, tmp_path)
         assert phase in {"basic", "pipe"}
         return evidence(phase)
     assert campaign.run_pair(pair, tmp_path / "r", acquire, campaign="fresh")["terminal"]
+
+
+@pytest.mark.parametrize("malformed", [None, {"correctness": True, "compiler": None},
+    {"correctness": True, "compiler": [None]},
+    {"correctness": True, "compiler": [{"loop_evidence": None}]},
+    {"correctness": True, "compiler": [{"loop_evidence": [None]}]}])
+def test_malformed_structured_proof_is_bounded_and_other_side_finishes(pair, tmp_path, malformed):
+    for cell in pair["cells"]:
+        cell["kind"] = "amplified"
+    def acquire(phase, cell, *args):
+        result = evidence(phase, amplified=True)
+        if cell["variant"] == "before":
+            result["evidence"]["normal_run"]["workload_result"] = malformed
+        return result
+    result = campaign.run_pair(pair, tmp_path / "r", acquire, campaign="fresh")
+    assert result["terminal"]
+    before, after = result["cells"]
+    assert before["status"] == "failure"
+    assert len(before["errors"]["discovery"]) == 2
+    assert all(error["classification"] == "evidence_failure" for error in before["errors"]["discovery"])
+    assert after["status"] == "success"
+    assert len(after["pipe"]) == 3

@@ -191,7 +191,16 @@ def run_pair(spec: dict, output: Path, acquire, *, campaign: str) -> dict:
                         raise ValueError("discovery missing expected exact selectors")
                     if cell.get("kind") == "amplified":
                         workload = result["evidence"].get("normal_run", {}).get("workload_result", {})
+                        if not isinstance(workload, dict):
+                            raise ValueError("amplified discovery lacks a structured workload result")
                         artifacts = workload.get("compiler", [])
+                        if not isinstance(artifacts, list) or any(
+                            not isinstance(artifact, dict)
+                            or not isinstance(artifact.get("loop_evidence", []), list)
+                            or any(not isinstance(line, str) for line in artifact.get("loop_evidence", []))
+                            for artifact in artifacts
+                        ):
+                            raise ValueError("amplified discovery has malformed compiler proof")
                         loops = [line for artifact in artifacts for line in artifact.get("loop_evidence", [])
                                  if any(token in line for token in ("scf.for", "scf.while", "cf.cond_br", "llvm.cond_br", "br i1"))]
                         if workload.get("correctness") is not True or not loops:

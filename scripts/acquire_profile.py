@@ -392,8 +392,10 @@ def normalize_event(item):
     name_value,_=first(item,("name","op name","kernel name","task name"))
     name=str(name_value or "").strip()
     args=item.get("args") if isinstance(item.get("args"),dict) else {}
+    # Instruction details can mention a waited-on pipe (e.g. BAR PIPE:MTE2).
+    # Such operands do not identify either the execution lane or a source phase.
     label=" ".join((name,str(item.get("cat","")),str(item.get("type","")),
-                    " ".join("%s %s"%(key,value) for key,value in args.items())))
+                    str(args.get("pipe",""))))
     start,start_field=first(item,("ts","start(us)","start time(us)","start time","start(ns)"))
     duration,duration_field=first(item,("dur","duration(us)","task duration(us)","duration","duration(ns)"))
     start=number(start); duration=number(duration)
@@ -419,7 +421,9 @@ def timeline_items(path):
 
 def compact_timeline(paths):
     events=[]
-    for path in paths[:128]:
+    hardware_paths=[path for path in paths if "simulator" not in path.parts]
+    simulator_inputs=len(paths)-len(hardware_paths)
+    for path in hardware_paths[:128]:
       for item in timeline_items(path):
         event=normalize_event(item)
         if event is not None: events.append(event)
@@ -445,6 +449,7 @@ def compact_timeline(paths):
     observed=sorted({item["selector"] for item in kernel_events})
     starts=[item["start_us"] for item in events]; ends=[item["start_us"]+item["duration_us"] for item in events]
     return {"schema_version":1,"event_count":len(events),"events":events,
+      "simulator_inputs_excluded":simulator_inputs,
       "truncated":len(events)>=256,"expected_selectors":KERNEL_NAMES,
       "observed_selectors":observed,"selectors_complete":set(KERNEL_NAMES)<=set(observed),
       "kernel_order":kernel_order,"kernel_boundaries":kernel_events,
@@ -509,7 +514,8 @@ try:
         inventory=[{"name":str(p.relative_to(report)),"bytes":p.stat().st_size}
                    for p in sorted(report.rglob("*")) if p.is_file()]
         timeline_files=sorted(p for p in report.rglob("*") if p.is_file() and p.suffix.lower() in {".json",".csv"} and any(word in str(p.relative_to(report)).lower() for word in ("timeline","trace","event")))
-        sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":file_sha256(p)} for p in timeline_files[:128]]
+        hardware_timeline_files=[p for p in timeline_files if "simulator" not in p.parts]
+        sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":file_sha256(p)} for p in hardware_timeline_files[:128]]
         timeline_semantics=compact_timeline(timeline_files)
         availability="available" if timeline_semantics["event_count"] and timeline_semantics["selectors_complete"] and "TimelineDetail data collection failed" not in transcript else "unavailable"
         basic_rows,basic_sources=collect(report,"BasicInfo") if csv_files(report,"BasicInfo") else ([],[])

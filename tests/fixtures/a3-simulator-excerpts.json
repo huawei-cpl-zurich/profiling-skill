@@ -1,0 +1,12 @@
+{
+  "displayTimeUnit": "ns",
+  "profilingType": "op",
+  "schemaVersion": 2,
+  "traceEvents": [
+    {"args":{"code":"","detail":"XD:X29=0x7fa0,IMM:0x7fa0,","pc_addr":"0x11512074"},"cname":"startup","dur":0.000606060610152781,"name":"MOV_XD_IMM","ph":"X","pid":"core0.veccore0","tid":"SCALAR","ts":11.847878456115723},
+    {"args":{"code":"","detail":"PIPE:MTE2","pc_addr":"0x115121a8"},"cname":"thread_state_iowait","dur":0.000606060610152781,"name":"BAR","ph":"X","pid":"core0.veccore0","tid":"MTE2","ts":12.120606422424316},
+    {"args":{"code":"","detail":"XN:X0=0xffffffffffffffff,Pos:0,Id:11","pc_addr":"0x10d0d02c"},"cname":"cq_build_failed","dur":0.009696969762444496,"name":"MOVEMASK","ph":"X","pid":"core10.veccore1","tid":"VECTOR","ts":15.050909042358398},
+    {"args":{"code":"","detail":"SPR:MOV_PAD_VAL,XN:X9=0,id:2","pc_addr":"0x10d0d234"},"cname":"thread_state_iowait","dur":0.002424242440611124,"name":"MOV_SPR_XN","ph":"X","pid":"core10.veccore1","tid":"MTE2","ts":15.532727241516113},
+    {"args":{"code":"","detail":"Src:UB,Dst:OUT,XD:X2=0x11319e00,XN:X10=0x600,XM:X9=0x2000010,XT:X8=0,Dtype:B32,id:8","pc_addr":"0x10d0d3a4","process_bytes":"512"},"cname":"rail_response","dur":0.14181818068027496,"name":"MOV_SRC_TO_DST_ALIGN","ph":"X","pid":"core10.veccore1","tid":"MTE3","ts":17.80727195739746}
+  ]
+}

@@ -912,7 +912,18 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                 name, rows = prediction["name"], assessments[prediction["name"]]
                 relationships = {row[1] for row in rows}
                 relationship = next(iter(relationships)) if len(relationships) == 1 else "context_only"
-                if relationship == "not_exported" and key == "timeline_probes":
+                timeline_statuses = [
+                    (by_key.get((spec["id"], sweep["id"], variant)) or {})
+                    .get("timeline", {}).get("status")
+                    for sweep in spec["sweeps"] for variant in ("before", "after")
+                ] if key == "timeline_probes" else []
+                if (relationship == "not_exported" and timeline_statuses and
+                        any(status not in {"available", "unavailable"}
+                            for status in timeline_statuses)):
+                    summary = ("TimelineDetail acquisition was absent or failed for one or more "
+                               "controlled captures; exporter support was not evaluated for those captures")
+                elif (relationship == "not_exported" and timeline_statuses and
+                      all(status == "unavailable" for status in timeline_statuses)):
                     summary = "TimelineDetail was unavailable for every controlled capture"
                 else:
                     details = []

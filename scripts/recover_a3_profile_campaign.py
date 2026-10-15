@@ -139,7 +139,8 @@ def verify_terminal(client: Path, record: dict) -> None:
         value = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise ValueError(f"cannot observe retained handle {handle}") from exc
-    if (result.returncode or value.get("handle") != handle or
+    if (not isinstance(value, dict) or value.get("handle") != handle or
+            value.get("target") != handle.split(":")[1] or
             value.get("state") not in {"failed", "cancelled"}):
         raise ValueError(f"retained handle has not proved terminal failure: {handle}")
 

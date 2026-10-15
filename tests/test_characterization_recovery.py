@@ -138,7 +138,7 @@ def test_selective_retry_preserves_valid_captures_and_other_cells(saved, monkeyp
     observations, acquisitions = [], []
     def observe(command, **kwargs):
         observations.append(command)
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"handle": command[3], "state": "failed"}))
+        return SimpleNamespace(returncode=1, stdout=json.dumps({"target": "gz-a3", "handle": command[3], "state": "failed"}))
     monkeypatch.setattr(recovery.subprocess, "run", observe)
     def acquire(**kwargs):
         acquisitions.append(kwargs)
@@ -164,7 +164,7 @@ def test_nonfailed_handle_is_observed_without_new_dispatch(saved, monkeypatch, s
     commands = []
     def observe(command, **kwargs):
         commands.append(command)
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"handle": command[3], "state": state}))
+        return SimpleNamespace(returncode=0, stdout=json.dumps({"target": "gz-a3", "handle": command[3], "state": state}))
     monkeypatch.setattr(recovery.subprocess, "run", observe)
     monkeypatch.setattr(saved.producer, "invoke_acquisition", lambda **k: pytest.fail("new dispatch"))
     with pytest.raises(ValueError, match="terminal failure"):
@@ -187,7 +187,7 @@ def test_retry_missing_diagnostic_retries_only_after_terminal_recheck(saved, mon
     observed = []
     def observe(command, **kwargs):
         observed.append(command[3])
-        return SimpleNamespace(returncode=0, stdout=json.dumps({"handle": command[3], "state": "failed"}))
+        return SimpleNamespace(returncode=1, stdout=json.dumps({"target": "gz-a3", "handle": command[3], "state": "failed"}))
     monkeypatch.setattr(recovery.subprocess, "run", observe)
     attempts = []
     def acquire(**kwargs):
@@ -210,7 +210,7 @@ def test_retry_missing_diagnostic_retries_only_after_terminal_recheck(saved, mon
 def test_recovery_budget_exhaustion_does_not_create_another_round(saved, monkeypatch):
     path, _ = make_retryable(saved)
     monkeypatch.setattr(recovery.subprocess, "run", lambda command, **k: SimpleNamespace(
-        returncode=0, stdout=json.dumps({"handle": command[3], "state": "failed"})))
+        returncode=1, stdout=json.dumps({"target": "gz-a3", "handle": command[3], "state": "failed"})))
     calls = []
     def acquire(**kwargs):
         calls.append(kwargs)
@@ -226,3 +226,33 @@ def test_recovery_budget_exhaustion_does_not_create_another_round(saved, monkeyp
                          saved.qualification, 4, 0, Path("cpl-remote"))
     result = json.loads((saved.output / path.relative_to(saved.campaign)).read_bytes())
     assert len(result["attempts"]) == 10
+
+
+@pytest.mark.parametrize("receipt", [
+    {"target": "bz-a3-1", "handle": "remote:gz-a3:job:failure", "state": "failed"},
+    {"target": "gz-a3", "handle": "remote:gz-a3:job:other", "state": "failed"},
+    [],
+])
+def test_terminal_failure_requires_exact_target_and_handle(monkeypatch, receipt):
+    monkeypatch.setattr(recovery.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=1, stdout=json.dumps(receipt)))
+    with pytest.raises(ValueError, match="terminal failure"):
+        recovery.verify_terminal(Path("cpl-remote"), {"id": "cell", "attempts": [
+            {"handle": "remote:gz-a3:job:failure"}]})
+
+
+@pytest.mark.parametrize("status", ["not_attempted", "infrastructure_failure", "unavailable"])
+def test_timeline_summary_distinguishes_missing_acquisition_from_missing_export(status):
+    module = recovery.reporting
+    manifest = json.loads(module.DEFAULT_MANIFEST.read_bytes())
+    spec = manifest["timeline_probes"][0]
+    rows = [{**cell, "status": "infrastructure_exhausted", "timeline": {"status": status}}
+            for cell in module.enumerate_cells(manifest) if cell["experiment"] == spec["id"]]
+    result = module.summarize_hypotheses(rows, {"hypotheses": [], "timeline_probes": [spec]})[0]
+    summary = result["signals"][0]
+    assert summary["relationship"] == "not_exported"
+    if status == "unavailable":
+        assert summary["summary"] == "TimelineDetail was unavailable for every controlled capture"
+    else:
+        assert "acquisition was absent or failed" in summary["summary"]
+        assert "exporter support was not evaluated" in summary["summary"]

@@ -340,8 +340,10 @@ def run_cell(
                 "handle": timeline.get("handle"),
             }
             sources.extend(capture.get("sources", []))
+            outcome = ("profiling_failure" if timeline_evidence["status"] == "profiling_failure" else
+                       "success" if measurements["stable"] else "inconclusive")
             return persist(_result(
-                cell, "success" if measurements["stable"] else "inconclusive", measurements, selected_signals, attempts, handles,
+                cell, outcome, measurements, selected_signals, attempts, handles,
                 sources, devices, placements, infra, timeline_evidence,
             ))
 

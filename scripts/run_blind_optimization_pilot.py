@@ -34,11 +34,14 @@ def prepare(source, output, model, forbidden):
     if not all(isinstance(model.get(key), str) and model[key].strip()
                for key in ('name', 'reasoning_effort')):
         raise ValueError('explicit model name and reasoning_effort required')
-    output.mkdir(parents=True, exist_ok=False, mode=0o700)
     snapshots = [(source / 'scripts' / name, output / 'runtime' / name) for name in HELPERS]
     snapshots += [(source / name, output / 'skill' / name) for name in GUIDANCE]
     snapshots += [(source / 'benchmarks' / name, output / 'exporter' / name) for name in (
         'blind_before_tasks.py', 'blind_task_support/runner.py', 'blind_task_support/native_host.asc')]
+    for original, _ in snapshots:
+        if not original.is_file():
+            raise FileNotFoundError('required source file missing: ' + str(original))
+    output.mkdir(parents=True, exist_ok=False, mode=0o700)
     for original, target in snapshots:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(original, target)

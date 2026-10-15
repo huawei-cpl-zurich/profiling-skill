@@ -137,6 +137,23 @@ class PilotTests(unittest.TestCase):
             pilot.run_cohort(self.output)
         self.assertFalse((self.output / 'started.json').exists())
 
+    def test_missing_source_can_be_repaired_without_reserving_output(self):
+        for relative in ('scripts/profile_device.py', 'references/a2-a3-msprof-op.md',
+                         'benchmarks/blind_task_support/runner.py'):
+            with self.subTest(source=relative):
+                original = self.source / relative
+                contents = original.read_bytes()
+                original.unlink()
+                with self.assertRaisesRegex(FileNotFoundError, 'required source file missing'):
+                    self.prepare()
+                self.assertFalse(self.output.exists())
+                original.write_bytes(contents)
+        self.prepare()
+        manifest = (self.output / 'manifest.json').read_bytes()
+        with self.assertRaises(FileExistsError):
+            self.prepare()
+        self.assertEqual((self.output / 'manifest.json').read_bytes(), manifest)
+
     def test_invalid_model_and_forbidden_output_fail_before_creation(self):
         self.model.pop('reasoning_effort')
         with self.assertRaises(ValueError):

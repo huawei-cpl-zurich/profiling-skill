@@ -23,6 +23,12 @@ three repeats per control and tool; canaries are not qualification repeats.
 Each subprocess has a 300-second process-group watchdog. Missing tools, malformed
 reports, timeouts and instrumentation failures stop the batch rather than
 consuming the remaining repeats.
+The final racecheck gate requires exactly three completed target analyses per
+mutant and repaired/disjoint control, with all positive controls detected and
+all negatives clean. Missing checks, unsupported coverage or a missed mutant
+make qualification explicitly `inconclusive` (exit 5), not a kernel error or
+a pass. Memcheck and synccheck findings are reported separately and do not
+stand in for this racecheck gate.
 
 Native compilation uses the shared retained builder with `-O2 -g --sanitizer`.
 The [Ascend C compiler documentation](https://asc.gitcode.com/guide/programming_guide/compilation_and_execution/operator_compilation/ai_core_operator_compilation.html)
@@ -110,4 +116,21 @@ isolated mechanism.
 
 This supports using racecheck to diagnose these A3 native synchronization and
 ownership mistakes. It does not establish complete race coverage, absence of
-false positives, or any performance effect. Triton qualification is pending.
+false positives, or any performance effect.
+
+## Triton results
+
+The target disjoint-write kernel completed three racecheck runs with no finding;
+the overlapping-write mutant produced GM WAW findings in all three runs.
+Synccheck reported no finding in all six runs. Memcheck produced vector-mask
+register reset warnings on disjoint controls and additionally out-of-bounds
+warnings on overlapping writes; as with the native overlap case, validate real
+allocation bounds instead of treating that diagnostic as the race type.
+
+The instrumented memcheck trace retains per-core STORE addresses and source
+locations for the target Triton stores. Disjoint programs write separate ranges;
+the overlapping mutant writes the same range from both cores. This is direct
+executed-access evidence that the intended overlap survived lowering. TTIR,
+TTAdapter and available binary metadata are also retained, but early IR alone
+does not prove final scheduling. Racecheck correctly distinguishes this
+ownership mistake despite numerical correctness passing with identical values.

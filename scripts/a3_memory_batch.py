@@ -6,6 +6,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shlex
 import statistics
 import subprocess
@@ -31,6 +32,8 @@ def basic_rows(report, selector=None):
     for path in sorted(report.rglob('*OpBasicInfo*.csv')):
         with path.open(encoding='utf-8-sig', newline='') as stream:
             rows.extend(dict(row) for row in csv.DictReader(stream))
+    if len(rows) != 1:
+        raise RuntimeError('expected exactly one total BasicInfo kernel launch; got ' + str(len(rows)))
     selected = [row for row in rows if any(
         ('kernel' in key.lower() or 'op' in key.lower()) and 'name' in key.lower()
         and (value == selector if selector else 'a3_memory_probe' in value)
@@ -49,7 +52,10 @@ def duration(row):
 
 
 def validate_capture(code, transcript):
-    if code or SUCCESS not in transcript or 'data collection failed' in transcript.lower():
+    failed = re.search(r'data collection failed|running task failed|segmentation fault|'
+                       r'\bsig(?:nal\s*)?(?:segv|11)\b|(?:signal|exit(?:ed)?(?: with)? code)\s*[:=]?\s*-?11\b',
+                       transcript, re.IGNORECASE)
+    if code or SUCCESS not in transcript or failed:
         raise RuntimeError('profiler success/complete collection not established: ' + transcript[-2000:])
 
 

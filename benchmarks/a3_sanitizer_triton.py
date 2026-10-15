@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import torch
 import torch_npu
@@ -28,15 +29,21 @@ def main():
     torch.npu.synchronize()
     artifacts = []
     for name, value in compiled.asm.items():
-        if isinstance(value, str):
-            destination = args.artifacts / (name + '.txt')
-            destination.write_text(value)
-            artifacts.append(dict(stage=name, sha256=hashlib.sha256(value.encode()).hexdigest()))
+        if isinstance(value, (str, bytes)):
+            content = value.encode() if isinstance(value, str) else value
+            destination = args.artifacts / (name + ('.txt' if isinstance(value, str) else '.bin'))
+            destination.write_bytes(content)
+            artifacts.append(dict(stage=name, sha256=hashlib.sha256(content).hexdigest()))
     expected = torch.ones_like(y)
     if args.mutant:
         expected[4096:] = 0
     correct = torch.equal(y.cpu(), expected.cpu())
-    print(json.dumps(dict(correctness=correct, mutant=args.mutant, artifacts=artifacts)))
+    identity = dict(correctness=correct, mutant=args.mutant, artifacts=artifacts,
+                    kernel_name=compiled.name,
+                    instrumentation_requested=os.environ.get('TRITON_ENABLE_SANITIZER'),
+                    metadata=str(compiled.metadata))
+    (args.artifacts / 'manifest.json').write_text(json.dumps(identity, indent=2))
+    print(json.dumps(identity))
     return int(not correct)
 
 

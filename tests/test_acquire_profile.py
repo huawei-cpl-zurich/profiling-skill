@@ -22,7 +22,7 @@ def idle_inventory(tmp_path, monkeypatch):
     smi = tmp_path / "npu-smi"
     smi.write_text("#!/usr/bin/env python3\nimport sys\n"
                    "print('0 0 0 0 Ascend910\\n0 1 12 12 Ascend910' if '-m' in sys.argv else "
-                   "'| 0 Ascend910 | OK | 20 |\\n| 0 0 | bus | 0 0 / 0 100 / 65536 |\\n| 0 Ascend910 | OK | 20 |\\n| 1 12 | bus | 0 0 / 0 100 / 65536 |\\n| NPU Chip | Process id | Process name |')\n")
+                   "'| 0 Ascend910 | OK | 20 |\\n| 0 0 | bus | 0 0 / 0 100 / 65536 |\\n| 0 Ascend910 | OK | 20 |\\n| 1 12 | bus | 0 0 / 0 100 / 65536 |\\n| NPU Chip | Process id | Process name |\\n| No running processes found in NPU 0 |')\n")
     smi.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
 

@@ -66,6 +66,22 @@ def test_missing_compiler_retains_diagnostic(tmp_path):
     assert json.loads((tmp_path / 'out' / 'build.json').read_text())['failure']['type'] == 'FileNotFoundError'
 
 
+def test_default_compiler_missing_from_path_retains_lookup_failure(tmp_path, monkeypatch):
+    import json
+    from a3_native_build import build
+    monkeypatch.setenv('PATH', '')
+    output = tmp_path / 'out'
+    with pytest.raises(RuntimeError, match='bisheng unavailable'):
+        build(output)
+    identity = json.loads((output / 'build.json').read_text())
+    assert identity['command'] is None
+    assert identity['failure']['stage'] == 'compiler_lookup'
+    assert identity['failure']['type'] == 'FileNotFoundError'
+    assert len(identity['source_sha256']) == 64
+    assert 'bisheng unavailable' in (output / 'build.stderr').read_text()
+    assert (output / 'build.stdout').read_text() == ''
+
+
 def test_commands_cover_cross_core_modes_without_late_unmatched_waits():
     from a3_profile_sync import cases, command
     for case in cases():

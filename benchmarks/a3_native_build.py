@@ -17,7 +17,13 @@ def build(output, *, source=None, compiler=None, extra_flags=()):
     source = Path(source).resolve() if source is not None else Path(__file__).with_name('a3_sync_control.asc')
     compiler = compiler or shutil.which('bisheng')
     if not compiler:
-        raise RuntimeError('bisheng unavailable in selected named runtime')
+        message = 'bisheng unavailable in selected named runtime'
+        identity = {'command': None, 'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
+                    'failure': {'stage': 'compiler_lookup', 'type': 'FileNotFoundError', 'message': message}}
+        (output / 'build.json').write_text(json.dumps(identity, indent=2))
+        (output / 'build.stdout').write_text('')
+        (output / 'build.stderr').write_text(message + '\n')
+        raise RuntimeError(f'native compilation failed: {message}; see {output}/build.json')
     executable = output / 'a3_sync_control'
     command = [compiler, str(source), '-O2', '-g', '-save-temps=obj', '--npu-arch=dav-2201',
                '-lascendcl', '-o', str(executable), *extra_flags]

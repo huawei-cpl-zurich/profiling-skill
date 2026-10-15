@@ -72,5 +72,37 @@ Native repaired controls have run numerically correctly. Racecheck emitted
 an exact-kernel start/finish with “No error detected.” Memcheck emitted a
 register warning about `FFTS_BASE_ADDR` not being reset; this is an
 `other-finding`, not a race or a clean memory result. Positive/negative
-qualification remains pending; these acquisition findings alone do not support
-a recommendation about race-detection coverage.
+Triton memcheck also reports `VECTOR_MASK_0/1` reset warnings. Uninstrumented
+Torch initialization kernels can report unsupported racecheck/synccheck while
+the target Triton kernel is instrumented and completes analysis. Target results
+therefore use exact start/finish sections, not whole-process keyword matching.
+
+## Native results
+
+Five native families completed three mutant and three repaired/disjoint
+repeats per tool. Racecheck detected every mutant and reported no finding on
+every repaired/disjoint control. Synccheck reported no finding for all of these
+cases: it is not a substitute for racecheck. Memcheck emitted the register
+warnings above, not a clean result and not these data-race diagnoses.
+
+| Source change | Racecheck diagnosis | Mutant/repaired finding count |
+| --- | --- | --- |
+| Omit MTE2→V flag before in-place Adds | UB RAW and WAW; secondary MTE2→MTE3 RAW | 3/3 versus 0/3 |
+| Omit MTE3→V flag before overwriting copied UB | UB WAR | 3/3 versus 0/3 |
+| Omit MTE2→V flag before Duplicate into copied UB | UB WAW; secondary MTE2→MTE3 RAW | 3/3 versus 0/3 |
+| Two AIVs write same GM range versus disjoint ranges | GM WAW between blocks 0 and 1, PIPE_MTE3 | 3/3 versus 0/3 |
+| Omit cross-core barrier before reading peer GM data | GM RAW/WAR plus local UB WAW/WAR | 3/3 versus 0/3 |
+
+For example, the first family identifies MTE2's write at PC `0x3f6c`
+(`a3_sanitizer_control.asc:35`) and vector read/write at PC `0x4714`
+(`:40`). The WAR family identifies MTE3 read PC `0x1770` (`:45`) and
+vector write PC `0x1ec0` (`:50`). Inter-core WAW attributes both writes to
+PC `0x6390` (`:65`) in different AIV blocks at the same GM address. These
+PCs belong to this retained build, not a portable mapping for other kernels.
+The producer/consumer mutation removes ordering for local UB reuse as well as
+peer GM accesses; its multiple findings must not be attributed to a single
+isolated mechanism.
+
+This supports using racecheck to diagnose these A3 native synchronization and
+ownership mistakes. It does not establish complete race coverage, absence of
+false positives, or any performance effect. Triton qualification is pending.

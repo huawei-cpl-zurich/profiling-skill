@@ -40,7 +40,6 @@ def main():
         return 0
     if args.output is None:
         parser.error('--output required')
-    import os
     import subprocess
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))

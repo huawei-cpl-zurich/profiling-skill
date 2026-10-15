@@ -39,9 +39,28 @@ def build(output, *, source=None, compiler=None, extra_flags=()):
     if result.returncode:
         raise RuntimeError(f'native compilation failed ({result.returncode}); see {output}/build.stderr')
     identity['binary_sha256'] = hashlib.sha256(executable.read_bytes()).hexdigest()
+    objdump = shutil.which('llvm-objdump')
+    identity['disassembly'] = []
+    for obj in sorted(output.glob('*-*.o')):
+        if not obj.name.endswith(('-vec.o', '-cube.o')):
+            continue
+        entry = {'object': str(obj), 'available': False}
+        if objdump:
+            argv = [objdump, '-d', '-S', str(obj)]
+            dump = bounded_run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, timeout=60)
+            path = obj.with_suffix('.disasm')
+            path.write_text(dump.stdout)
+            path.with_suffix('.stderr').write_text(dump.stderr)
+            entry.update(command=argv, available=dump.returncode == 0, path=str(path),
+                         sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                         synchronization_lines=[{'line': i, 'text': line.strip()} for i, line in
+                           enumerate(dump.stdout.splitlines(), 1) if any(word in line.lower()
+                           for word in ('set_flag', 'wait_flag', 'ffts'))][:120])
+        identity['disassembly'].append(entry)
     identity['compiler_artifacts'] = [
         {'path': str(path), 'bytes': path.stat().st_size,
          'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-        for path in sorted(output.rglob('*')) if path.suffix in ('.bc', '.ll', '.s')]
+        for path in sorted(output.rglob('*')) if path.suffix in ('.bc', '.ll', '.s', '.asci')]
     (output / 'build.json').write_text(json.dumps(identity, indent=2))
     return executable

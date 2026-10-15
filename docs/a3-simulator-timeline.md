@@ -1,5 +1,37 @@
 # A3 simulator instruction timelines
 
+## Acquisition under a shared device lease
+
+`scripts/a3_timeline_probe.py` is a one-capture remote worker, not a scheduler
+or transport client. Stage it with `summarize_a3_simulator.py` and a numerically
+checking executable application wrapper. A supervisor must first obtain an
+idle-device lease, export `ASCEND_RT_VISIBLE_DEVICES`, and hold that lease until
+the worker exits. Use the selected profile's named runtime through remote-access.
+
+```bash
+python scripts/a3_timeline_probe.py --mode simulation \
+  --application /retained/experiment/workload.sh --output /retained/experiment/capture-1 \
+  --kernel-name EXACT_EXPORTED_NAME --soc-version OBSERVED_SUPPORTED_SOC
+```
+
+Determine the actual SoC and installed simulator support on the selected target;
+there is no default simulator version. Each invocation checks the unprofiled
+application before capture, retains both subprocess transcripts and commands,
+and writes `result.json`, including raw file inventory and compact normalized
+simulation evidence. Output directories are new per attempt and cannot be
+overwritten. A failed correctness check stops before profiling.
+
+Process failure, timeout, a reported child signal, collection failure, or missing
+profiler terminal success marker prevents the clean gate even when traces exist.
+Partial traces remain inspectable, not successful acquisitions. Exact kernel
+binding is also mandatory. Hardware mode runs `TimelineDetail`, but its output
+must pass the existing hardware acquisition harness's normalization separately;
+this worker cannot promote simulator traces to hardware evidence. Select one
+kernel per simulation invocation for multi-launch controls, keeping their replays
+separate rather than inventing a shared clock across kernel captures.
+
+## Retained trace interpretation
+
 `scripts/summarize_a3_simulator.py --report RETAINED_ROOT/report --kernel-name EXACT_NAME`
 analyzes retained `OPPROF_*/simulator/trace.json` files **in place** and prints
 compact JSON. Run through the global remote-access client and a named runtime.

@@ -48,7 +48,7 @@ def validate_campaign(campaign: Path, producer, qualification: Path, count: int)
     producer.validate_qualification(qualification, identity)
     # Recovery is a reporting/lifecycle patch, never a measurement migration.
     current = reporting.campaign_identity(target, manifest)
-    for key in ("runtime", "benchmark_sha256", "acquisition_sha256", "manifest_sha256"):
+    for key in ("runtime", "benchmark_sha256", "acquisition_sha256", "device_helper_sha256", "manifest_sha256"):
         if current[key] != identity[key]:
             raise ValueError(f"recovery measurement source mismatch: {key}")
     shards, seen, policies = [], set(), set()

@@ -1168,14 +1168,10 @@ def main(argv=None) -> int:
     cells = cells[:args.cell_limit] if args.cell_limit else cells
     cells_root = args.output_dir / "cells"
     identities = {cell["id"]: hashlib.sha256(canonical({
-            "schema_version": 1, "manifest_sha256": manifest_sha256,
-            "cell": cell, "target": args.target, "samples": args.samples,
+            "schema_version": 1, **identity_base,
+            "cell": cell, "samples": args.samples,
             "max_attempts": args.max_attempts,
             "max_relative_range": args.max_relative_range,
-            "runtime": TARGET_RUNTIMES[args.target],
-            "benchmark_sha256": identity_base["benchmark_sha256"],
-            "coordinator_sha256": identity_base["coordinator_sha256"],
-            "acquisition_sha256": identity_base["acquisition_sha256"],
         })).hexdigest() for cell in cells}
 
     def acquire_for(cell, cell_dir):

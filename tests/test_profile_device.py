@@ -117,7 +117,11 @@ def test_bounded_run_kills_descendants_without_harming_caller(tmp_path):
     pid = int(child_pid.read_text())
     proc = Path(f"/proc/{pid}/stat")
     # A reparented zombie can await host init reaping but cannot execute NPU work.
-    assert not proc.exists() or proc.read_text().split()[2] == "Z"
+    try:
+        state = proc.read_text().split()[2]
+    except (FileNotFoundError, ProcessLookupError):
+        state = None  # The host reaped the dead child between lookup and read.
+    assert state in (None, "Z")
     result = device.bounded_run([sys.executable, "-c", "print('alive')"],
         timeout=3, text=True, stdout=subprocess.PIPE)
     assert result.returncode == 0 and result.stdout == "alive\n"

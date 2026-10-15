@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import zlib
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
@@ -723,7 +724,10 @@ def _logs(cpl, handle, stream, tail, attempts):
 
 def _observe_terminal(cpl, handle, attempts):
     last = None
-    for _ in range(max(attempts, 1)):
+    remaining = max(attempts, 1)
+    missing = False
+    while remaining:
+        remaining -= 1
         try:
             value = _invoke(
                 cpl,
@@ -734,6 +738,7 @@ def _observe_terminal(cpl, handle, attempts):
             )
         except AcquisitionError as exc:
             last = exc
+            missing = False
             if exc.classification != "transport_error":
                 raise
             continue
@@ -746,6 +751,22 @@ def _observe_terminal(cpl, handle, attempts):
             )
         if value.get("state") in TERMINAL:
             return value
+        if value.get("state") == "missing" and value.get("backend") == "ssh":
+            if missing:
+                raise AcquisitionError(
+                    "confirmed missing dispatch: same retained handle absent in two authoritative observations",
+                    phase="confirmed_missing_dispatch",
+                    classification="host_environment",
+                    handle=handle,
+                )
+            missing = True
+            # The SSH transport creates its directory before starting a job and
+            # never deletes it. Confirm absence rather than treating a dropped
+            # observer connection as proof. Allow confirmation at budget=1.
+            remaining = max(remaining, 1)
+            time.sleep(3)
+        else:
+            missing = False
         last = AcquisitionError(
             "retained job is not terminal",
             phase="observe",

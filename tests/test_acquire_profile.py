@@ -159,6 +159,16 @@ if action == "run":
     emit({{"target": target, "backend": "broker", "operation": "run", "state": "running", "handle": handle}})
 elif action == "observe":
     marker = log.with_suffix(".observe")
+    if scenario in ("missing-twice", "missing-running-completed", "missing-reconnecting-missing", "broker-missing"):
+        count = int(marker.read_text()) if marker.exists() else 0
+        marker.write_text(str(count + 1))
+        states = {{"missing-twice": ["missing", "missing"],
+                  "missing-running-completed": ["missing", "running", "completed"],
+                  "missing-reconnecting-missing": ["missing", "reconnecting", "missing"],
+                  "broker-missing": ["missing", "missing"]}}[scenario]
+        state = states[min(count, len(states)-1)]
+        emit({{"target": target, "backend": "broker" if scenario == "broker-missing" else "ssh", "operation": "observe", "state": state, "handle": handle}})
+        raise SystemExit(1 if state == "missing" else 0)
     if scenario == "interrupt-always" or (scenario == "interrupt-once" and not marker.exists()):
         marker.write_text("1")
         print("temporary observer loss", file=sys.stderr)
@@ -538,6 +548,43 @@ def test_nonterminal_observation_reobserves_same_handle(tmp_path):
     assert result.returncode == 0, result.stderr
     observes = [call for call in calls if "observe" in call]
     assert len(observes) == 2
+    assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_confirmed_missing_dispatch_is_infrastructure_not_infinite_pending(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="missing-twice", attempts=1)
+    assert result.returncode == 1 and not output.exists()
+    assert "classification=host_environment phase=confirmed_missing_dispatch" in result.stderr
+    assert len([call for call in calls if "observe" in call]) == 2
+    assert len([call for call in calls if "run" in call]) == 1
+    assert not any("result" in call or "logs" in call for call in calls)
+
+
+def test_missing_then_running_then_completed_preserves_same_handle(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="missing-running-completed", attempts=3)
+    assert result.returncode == 0 and output.exists(), result.stderr
+    observes = [call for call in calls if "observe" in call]
+    assert len(observes) == 3
+    assert all(call[call.index("observe") + 1] == "remote:bz-a3-1:job:job-7" for call in observes)
+    assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_reconnecting_breaks_missing_confirmation(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="missing-reconnecting-missing", attempts=3)
+    # A fourth authoritative missing is needed after the reconnect; no replacement
+    # launches while state could represent an existing workload.
+    assert "classification=host_environment phase=confirmed_missing_dispatch" in result.stderr
+    assert not output.exists()
+    assert len([call for call in calls if "observe" in call]) == 4
+    assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_non_ssh_missing_is_not_assumed_absent_dispatch(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="broker-missing", attempts=2)
+    assert result.returncode == 1 and not output.exists()
+    assert "classification=transport_error phase=observe" in result.stderr
+    assert "confirmed_missing_dispatch" not in result.stderr
+    assert len([call for call in calls if "observe" in call]) == 2
     assert len([call for call in calls if "run" in call]) == 1
 
 

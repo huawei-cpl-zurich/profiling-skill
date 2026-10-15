@@ -24,3 +24,10 @@ BasicInfo evidence retains vendor CSV headers in `capture.rows`. The optional
 `normal_run.workload_result` is the last dictionary-valued JSON line within the
 last 64 KiB of workload stdout, or null; raw stdout is not copied into evidence.
 Full workload and profiler transcripts remain in the retained remote directory.
+
+SSH observation confirms an absent dispatch only after two consecutive valid
+same-handle `missing` receipts, separated by three seconds. This becomes an
+explicit `host_environment` failure at `confirmed_missing_dispatch`, allowing
+the coordinator's bounded infrastructure retry policy. Running/reconnecting
+states and transport errors break this confirmation; the acquisition client
+never launches a replacement itself. Non-SSH missing states stay unresolved.

@@ -5,10 +5,12 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import socketserver
 import subprocess
 import sys
 import threading
+import time
 
 import pytest
 
@@ -191,3 +193,36 @@ def test_cli_propagates_receipt_exit_code(tmp_path):
                           "--tool-command-json", str(tool)], env=environment, capture_output=True, text=True)
     assert run.returncode == 9, run.stderr
     assert json.loads(run.stdout)["exit_code"] == 9
+
+
+def test_live_output_survives_launcher_interruption_before_completion(tmp_path):
+    stdout, stderr = tmp_path / "agent.jsonl", tmp_path / "agent.stderr"
+    script = f"""import importlib.util
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('launcher', {str(Path(module.__file__))!r})
+launcher = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(launcher)
+launcher.execute({[sys.executable, '-u', '-c', "import os, sys, time; print(os.getpid()); print('live error', file=sys.stderr); time.sleep(30)"]!r}, Path({str(tmp_path)!r}), 60,
+                 (Path({str(stdout)!r}), Path({str(stderr)!r})))
+"""
+    process = subprocess.Popen([sys.executable, "-c", script])
+    child_pid = None
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if stdout.exists() and stdout.read_text().strip() and stderr.exists() and "live error" in stderr.read_text():
+                child_pid = int(stdout.read_text().strip())
+                break
+            time.sleep(.02)
+        assert child_pid is not None
+        assert process.poll() is None  # Evidence exists before communicate returns.
+        process.terminate()
+        process.wait(timeout=5)
+        assert stdout.read_text().strip() == str(child_pid)
+        assert "live error" in stderr.read_text()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        if child_pid:
+            os.killpg(child_pid, signal.SIGTERM)

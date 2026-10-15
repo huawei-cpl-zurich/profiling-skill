@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -33,21 +34,27 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
-def execute(command: list[str], cwd: Path, timeout: float) -> dict:
+def execute(command: list[str], cwd: Path, timeout: float,
+            output_files: tuple[Path, Path] | None = None) -> dict:
     """Retain partial diagnostics and terminate the complete local process group."""
-    process = subprocess.Popen(command, cwd=cwd, text=True, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, start_new_session=True)
-    timed_out = False
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        os.killpg(process.pid, signal.SIGTERM)
+    with ExitStack() as stack:
+        sinks = [stack.enter_context(path.open("w")) for path in output_files] if output_files else []
+        process = subprocess.Popen(command, cwd=cwd, text=True,
+                                   stdout=sinks[0] if sinks else subprocess.PIPE,
+                                   stderr=sinks[1] if sinks else subprocess.PIPE, start_new_session=True)
+        timed_out = False
         try:
-            stdout, stderr = process.communicate(timeout=5)
+            stdout, stderr = process.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            stdout, stderr = process.communicate()
+            timed_out = True
+            os.killpg(process.pid, signal.SIGTERM)
+            try:
+                stdout, stderr = process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                stdout, stderr = process.communicate()
+    if output_files:
+        stdout, stderr = (path.read_text(errors="replace") for path in output_files)
     return {"returncode": process.returncode, "stdout": stdout, "stderr": stderr,
             "timed_out": timed_out}
 
@@ -219,14 +226,15 @@ class BlindLauncher(ProductionLauncher):
                            "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
                            "-m", self.model["name"], "-c", f'model_reasoning_effort="{self.model["reasoning_effort"]}"',
                            (self.frozen / "prompt.md").read_text()]
-            result = execute(command, self.root, self.timeout)
+            result = execute(command, self.root, self.timeout,
+                             (self.root / "agent.jsonl", self.root / "agent.stderr"))
         finally:
             server.shutdown()
             server.server_close()
             thread.join()
             self.socket_temporary.cleanup()
-        (self.root / "agent.jsonl").write_text(result.pop("stdout"))
-        (self.root / "agent.stderr").write_text(result.pop("stderr"))
+        result.pop("stdout")
+        result.pop("stderr")
         git = subprocess.run(["git", "-C", str(self.workspace), "log", "--format=%H %s"],
                              text=True, capture_output=True, check=True)
         dirty = subprocess.check_output(["git", "-C", str(self.workspace), "status", "--porcelain"], text=True)

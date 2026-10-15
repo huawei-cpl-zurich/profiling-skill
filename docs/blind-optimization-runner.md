@@ -34,7 +34,9 @@ transport client. Both arms must receive identical help and capabilities.
 
 `commands.jsonl` retains every helper argv, full stdout/stderr and exit status.
 `agent.jsonl` retains Codex command events and messages; `agent.stderr` retains
-client diagnostics. `receipt.json` records model, runtime, commits, dirty files
+client diagnostics. Both files are direct child-process output sinks while the
+agent runs, so already-written evidence survives an outer controller interruption
+even if the launcher never reaches receipt creation. `receipt.json` records model, runtime, commits, dirty files
 and timeout status. CLI exit status is nonzero for agent/client failure, timeout
 (124), or a successful model process with no agent commit (3). Preflight-only
 runs do not require an agent commit. A timeout retains partial output and stops the local process

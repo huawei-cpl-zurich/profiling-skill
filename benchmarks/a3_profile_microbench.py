@@ -132,31 +132,32 @@ if triton is not None:
     def a3_vector_probe(
         x, selected, work_ptr, output, n: tl.constexpr, work: tl.constexpr,
         block: tl.constexpr, mode: tl.constexpr, loops: tl.constexpr,
+        volatile_loads: tl.constexpr = False,
     ):
         offsets = tl.program_id(0) * block + tl.arange(0, block)
         valid = offsets < n
-        chosen = tl.load(selected + offsets, mask=valid, other=0).to(tl.int1)
+        chosen = tl.load(selected + offsets, mask=valid, other=0, volatile=volatile_loads).to(tl.int1)
         if mode == 4:
-            values = tl.load(x + offsets, mask=valid & chosen, other=0.0)
+            values = tl.load(x + offsets, mask=valid & chosen, other=0.0, volatile=volatile_loads)
         else:
-            values = tl.load(x + offsets, mask=valid, other=0.0)
+            values = tl.load(x + offsets, mask=valid, other=0.0, volatile=volatile_loads)
         if mode == 1:  # explicit fixed-bound control work
-            runtime_work = tl.load(work_ptr)
+            runtime_work = tl.load(work_ptr, volatile=volatile_loads)
             state = values * 0.0
             for index in range(0, loops):
                 state += tl.where(index < runtime_work, values * 0.000001, values * 0.0)
             values += state
         if mode == 2:  # replicated lane decision
-            decision = tl.load(selected + offsets, mask=valid, other=0).to(tl.int1)
+            decision = tl.load(selected + offsets, mask=valid, other=0, volatile=volatile_loads).to(tl.int1)
             values = tl.where(decision, values + 0.125, values - 0.125)
         if mode == 3:  # scalar decision broadcast over a block
-            decision = tl.load(selected + tl.program_id(0) * block, mask=True, other=0)
+            decision = tl.load(selected + tl.program_id(0) * block, mask=True, other=0, volatile=volatile_loads)
             values = tl.where(decision, values + 0.125, values - 0.125)
         result = values * 1.5 + 2.0
         if mode == 4:  # only this variant executes the final-predicate load
             result = values * 1.5 + 2.0
         if mode == 5:  # runtime-generic mode predicate
-            runtime_work = tl.load(work_ptr)
+            runtime_work = tl.load(work_ptr, volatile=volatile_loads)
             chosen = offsets < runtime_work
         if mode == 6:  # compile-time specialized equivalent
             chosen = offsets < work

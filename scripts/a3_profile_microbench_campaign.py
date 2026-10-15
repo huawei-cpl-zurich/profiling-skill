@@ -329,17 +329,21 @@ def run_cell(
         if timeline["ok"]:
             capture = timeline["evidence"]["capture"]
             timeline_evidence = {
-                "status": capture.get("availability", "unavailable"),
+                "status": ("profiling_failure" if capture.get("diagnostics", {}).get("classification") == "collection_failed"
+                           else capture.get("availability", "unavailable")),
                 "reason": capture.get(
                     "reason", "attempted acquisition exported no TimelineDetail availability"
                 ),
                 "sources": capture.get("sources", []),
+                "diagnostics": capture.get("diagnostics"),
                 "semantics": capture.get("timeline_semantics"),
                 "handle": timeline.get("handle"),
             }
             sources.extend(capture.get("sources", []))
+            outcome = ("profiling_failure" if timeline_evidence["status"] == "profiling_failure" else
+                       "success" if measurements["stable"] else "inconclusive")
             return persist(_result(
-                cell, "success", measurements, selected_signals, attempts, handles,
+                cell, outcome, measurements, selected_signals, attempts, handles,
                 sources, devices, placements, infra, timeline_evidence,
             ))
 
@@ -492,6 +496,8 @@ def run_cell(
             cell, "running", measurements, signal_values, attempts, handles,
             sources, devices, placements, infra, timeline_evidence,
         ))
+    if cell["kind"] == "timeline" and (timeline_evidence or {}).get("status") not in {"available", "unavailable"}:
+        return finish_timeline(stop, measurements, signal_values)
     acquisition_failed = any(item.get("classification") in {
         "evidence_failure", "profiler_failure"
     } for item in attempts)
@@ -1126,7 +1132,7 @@ def main(argv=None) -> int:
                         selector=selector,
                         basic_evidence=basic_path if phase == "pipe" else None,
                         cpl_remote=client,
-                        launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
+                        launch_count=(len(current["kernel_names"]) if phase in {"basic", "timeline"} else 1),
                     )
                     if phase == "basic" and result.get("ok"):
                         successful_basic["path"] = basic_path
@@ -1203,7 +1209,7 @@ def main(argv=None) -> int:
                 selector=selector,
                 basic_evidence=basic_path if phase in {"pipe", "timeline"} else None,
                 cpl_remote=args.cpl_remote,
-                launch_count=(len(current["kernel_names"]) if phase == "basic" else 1),
+                launch_count=(len(current["kernel_names"]) if phase in {"basic", "timeline"} else 1),
             )
             if phase == "basic" and result.get("ok"):
                 successful_basic["path"] = basic_path

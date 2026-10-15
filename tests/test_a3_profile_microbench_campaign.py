@@ -44,6 +44,56 @@ def evidence(selector: str, duration: float, *, handle="remote:bz-a3-1:job:x"):
     }
 
 
+def test_timeline_capture_is_not_blocked_by_unstable_latency(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["id"] == "repeated-phases/aba/before")
+    calls = []
+    values = iter([1.0, 2.0, 4.0])
+
+    def acquire(phase, current, attempt, selector):
+        calls.append(phase)
+        result = evidence(current["kernel_names"][0], 0)
+        if phase == "pipe":
+            return evidence(selector, next(values))
+        if phase == "timeline":
+            result["evidence"]["capture"].update(
+                availability="unavailable", diagnostics={"classification": "raw_binary_only"},
+                timeline_semantics={"event_count": 0, "events": []},
+            )
+        return result
+
+    result = module.run_cell(cell, tmp_path, acquire, samples=3,
+                             max_attempts=3, max_relative_range=0.05)
+    assert result["status"] == "inconclusive"
+    assert result["measurements"]["stable"] is False
+    assert calls == ["basic", "pipe", "pipe", "pipe", "timeline"]
+    assert result["timeline"]["status"] == "unavailable"
+    assert result["timeline"]["diagnostics"]["classification"] == "raw_binary_only"
+
+
+def test_zero_exit_timeline_collection_failure_preserves_timing_but_fails_cell(tmp_path):
+    module = load_module()
+    cell = next(x for x in module.enumerate_cells(json.loads(MANIFEST.read_text()))
+                if x["id"] == "ordered-phases/balanced/before")
+
+    def acquire(phase, current, attempt, selector):
+        result = evidence(current["kernel_names"][0], 3.0)
+        if phase == "timeline":
+            result["evidence"]["capture"].update(
+                availability="unavailable", diagnostics={"classification": "collection_failed"},
+                reason="kernel context save failed", timeline_semantics={"events": []},
+            )
+        return result
+
+    result = module.run_cell(cell, tmp_path, acquire, samples=3,
+                             max_attempts=3, max_relative_range=0.05)
+    assert result["status"] == "profiling_failure"
+    assert result["measurements"]["stable"] is True
+    assert result["measurements"]["median"] == 3.0
+    assert result["timeline"]["status"] == "profiling_failure"
+
+
 def test_enumeration_is_complete_and_shards_are_disjoint():
     module = load_module()
     manifest = json.loads(MANIFEST.read_text())

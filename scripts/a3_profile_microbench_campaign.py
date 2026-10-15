@@ -252,7 +252,7 @@ def _summary(samples: list[float], required: int, threshold: float) -> dict:
 def run_cell(
     cell: dict, cell_dir: Path, acquire, *, samples: int, max_attempts: int,
     max_relative_range: float, campaign_identity_sha256: str | None = None,
-    attempt_limit: int | None = None,
+    attempt_limit: int | None = None, recovery_budget: int = 0,
 ) -> dict:
     run_contract = {
         "schema_version": 1,
@@ -281,8 +281,20 @@ def run_cell(
             "success", "candidate_failure", "profiling_failure", "inconclusive",
             "infrastructure_exhausted",
         }:
-            return prior
+            if not recovery_budget or not recovery_eligible(prior):
+                return prior
     attempts = list(prior.get("attempts", []))
+    recovery = prior.get("recovery")
+    if recovery_budget:
+        if not recovery:
+            recovery = {"start_consumed": sum(
+                item.get("identity_consumed", True) for item in attempts
+            ), "budget": recovery_budget}
+        if recovery["budget"] != recovery_budget:
+            raise ValueError("recovery budget differs from retained recovery round")
+        max_attempts = recovery["start_consumed"] + recovery_budget
+        if attempt_limit is not None:
+            attempt_limit += recovery["start_consumed"]
     values = [float(item["duration_proxy_us"]) for item in attempts
               if item.get("classification") == "valid" and item.get("duration_proxy_us")]
     signal_values: dict[str, list[float]] = {}
@@ -305,6 +317,8 @@ def run_cell(
     def persist(result):
         result["campaign_identity_sha256"] = cell_identity_sha256
         result["run_contract"] = run_contract
+        if recovery:
+            result["recovery"] = recovery
         _atomic_json(state_path, result)
         return result
 
@@ -486,6 +500,17 @@ def run_cell(
     result = _result(cell, status, measurements, signal_values, attempts, handles,
                      sources, devices, placements, infra, timeline_evidence)
     return persist(result)
+
+
+def recovery_eligible(record: dict) -> bool:
+    """Only exhausted infrastructure or an absent terminal failure receipt."""
+    attempts = record.get("attempts", [])
+    last = attempts[-1] if attempts else {}
+    return record.get("status") == "infrastructure_exhausted" or (
+        record.get("status") == "profiling_failure"
+        and last.get("classification") == "remote_failure"
+        and "remote job failed without one valid failure receipt" in last.get("message", "")
+    )
 
 
 def _selected_signal_values(
@@ -887,16 +912,29 @@ def summarize_hypotheses(raw_cells: list[dict], manifest: dict) -> list[dict]:
                 name, rows = prediction["name"], assessments[prediction["name"]]
                 relationships = {row[1] for row in rows}
                 relationship = next(iter(relationships)) if len(relationships) == 1 else "context_only"
-                if relationship == "not_exported" and key == "timeline_probes":
+                timeline_statuses = [
+                    (by_key.get((spec["id"], sweep["id"], variant)) or {})
+                    .get("timeline", {}).get("status")
+                    for sweep in spec["sweeps"] for variant in ("before", "after")
+                ] if key == "timeline_probes" else []
+                if (relationship == "not_exported" and timeline_statuses and
+                        any(status not in {"available", "unavailable"}
+                            for status in timeline_statuses)):
+                    summary = ("TimelineDetail acquisition was absent or failed for one or more "
+                               "controlled captures; exporter support was not evaluated for those captures")
+                elif (relationship == "not_exported" and timeline_statuses and
+                      all(status == "unavailable" for status in timeline_statuses)):
                     summary = "TimelineDetail was unavailable for every controlled capture"
                 else:
                     details = []
                     for sweep_id, relation, left, right in rows:
-                        if right is None:
+                        if prediction.get("availability") == "required":
                             details.append(f"{sweep_id}: {relation}; {left or ''}".rstrip("; "))
                         else:
+                            before_text = "not_exported" if left is None else f"{left:g}"
+                            after_text = "not_exported" if right is None else f"{right:g}"
                             details.append(
-                                f"{sweep_id}: before={left:g}, after={right:g}; "
+                                f"{sweep_id}: before={before_text}, after={after_text}; "
                                 + ({
                                     "tracks_outcome": "signal and latency track the declared outcome",
                                     "contradicts_outcome": "signal contradicts the observed latency outcome",

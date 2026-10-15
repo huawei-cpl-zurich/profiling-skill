@@ -716,7 +716,8 @@ def test_summary_propagates_failure_and_timeline_not_exported():
     }]
     assert result["signals"] == [{
         "name": "timeline_phase_order", "relationship": "not_exported",
-        "summary": "TimelineDetail was unavailable for every controlled capture",
+        "summary": ("TimelineDetail acquisition was absent or failed for one or more "
+                    "controlled captures; exporter support was not evaluated for those captures"),
     }]
 
 

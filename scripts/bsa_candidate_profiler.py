@@ -779,7 +779,12 @@ def _acquisition_exhausted(state: dict[str, Any]) -> bool:
     # A successful discovery/capture resets the consecutive failure window.
     terminal = terminal[state.get("acquisition_failure_offset", 0):]
     diagnostics = [item.get("diagnostics", "") for item in terminal]
-    repeated = len(diagnostics) >= 2 and diagnostics[-1] == diagnostics[-2]
+    deterministic_prefixes = (
+        "missing_pipe_rows:", "invalid_duration:", "duration_row_count:",
+        "capture lacks one exact PipeUtilization or duration row",
+    )
+    repeated = (len(diagnostics) >= 2 and diagnostics[-1] == diagnostics[-2]
+                and diagnostics[-1].startswith(deterministic_prefixes))
     if len(terminal) < 3 and not repeated:
         return False
     state["status"] = "measurement_unstable"
@@ -840,8 +845,15 @@ def run_campaign(
         if state["status"] in {"completed", "candidate_failure", "measurement_unstable"}:
             continue
         if _acquisition_exhausted(state):
-            _atomic_json(output, results)
-            continue
+            active_case = state.get("active_case")
+            if active_case is None or state.get("selectors") is None:
+                _atomic_json(output, results)
+                continue
+            failed_case = state["cases"][str(active_case)]
+            failed_case["status"] = "acquisition_exhausted"
+            failed_case["failure"] = state.pop("failure")
+            state["status"] = "running"
+            _acquisition_succeeded(state)
         if state.get("selectors") is None:
             if max_actions is not None and actions >= max_actions:
                 _atomic_json(output, results)
@@ -952,7 +964,7 @@ def run_campaign(
         interrupted = False
         for case in cases:
             case_state = state["cases"][str(case)]
-            if case_state["status"] == "completed":
+            if case_state["status"] in {"completed", "acquisition_exhausted"}:
                 continue
             while len(case_state["samples"]) < max_samples:
                 if _complete_stable_case(
@@ -973,6 +985,7 @@ def run_campaign(
                     if max_actions is not None and actions >= max_actions:
                         interrupted = True
                         break
+                    state["active_case"] = case
                     response = _invoke_executor(executor, protocol_dir, _with_retry({
                         "schema": "profiling-skill/bsa-candidate-executor-request/v1",
                         "action": "capture",
@@ -1074,7 +1087,17 @@ def run_campaign(
                     ),
                 }
                 break
-        if not interrupted and all(
+        if not interrupted and any(
+            item["status"] == "acquisition_exhausted" for item in state["cases"].values()
+        ):
+            state["status"] = "measurement_unstable"
+            state["failure"] = {
+                "kind": "acquisition_exhausted", "category": "infrastructure",
+                "diagnostics": "Some cases lack profiling evidence; available independent cases retained",
+                "cases": [case for case, item in state["cases"].items()
+                          if item["status"] == "acquisition_exhausted"],
+            }
+        elif not interrupted and all(
             item["status"] == "completed" for item in state["cases"].values()
         ):
             state["status"] = "completed"

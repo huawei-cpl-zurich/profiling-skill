@@ -849,7 +849,7 @@ def test_retry_request_observes_nonterminal_handle_and_replaces_terminal_attempt
 def test_acquisition_budget_stops_new_attempts_but_never_retained_observation(tmp_path):
     executor = tmp_path / "executor.py"
     make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
-                              "diagnostics":"duration unavailable"}]*3)
+                              "diagnostics":"missing_pipe_rows: no report"}]*3)
     output = tmp_path / "results.json"
     for _ in range(5):
         result = MODULE.run_campaign(one_execution(), output, executor, cases=[47],
@@ -884,6 +884,40 @@ def test_distinct_terminal_infra_failures_allow_only_two_retries(tmp_path):
     state = next(iter(result["executions"].values()))
     assert state["failure"]["kind"] == "acquisition_exhausted"
     assert len(state["infrastructure_failures"]) == 3
+
+
+def test_identical_transport_timeouts_are_not_evidence_fast_fail(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [{"status":"infrastructure_error", "terminal":True,
+                              "diagnostics":"capabilities timed out"}]*4)
+    output = tmp_path / "results.json"
+    for _ in range(5):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[43],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert len(state["infrastructure_failures"]) == 3
+
+
+def test_unavailable_case_does_not_block_independent_case(tmp_path):
+    executor = tmp_path / "executor.py"
+    make_executor(executor, [
+        {"status":"ok", "kernel_names":["block_sparse_attention_kernel"],
+         "basic_info":{"rows":1}, "evidence_sha256":"a"*64},
+        *[{"status":"infrastructure_error", "terminal":True,
+           "diagnostics":"missing_pipe_rows: no report"}]*2,
+        *[{"status":"ok", "duration_us":100.0,
+           "pipe_utilization":{"aiv_vec_ratio":0.7}, "evidence_sha256":"b"*64}]*3,
+    ])
+    output = tmp_path / "results.json"
+    for _ in range(3):
+        result = MODULE.run_campaign(one_execution(), output, executor, cases=[47,43],
+                                     stable_samples=3, max_samples=7, max_actions=None)
+    state = next(iter(result["executions"].values()))
+    assert state["cases"]["47"]["status"] == "acquisition_exhausted"
+    assert state["cases"]["43"]["status"] == "completed"
+    assert state["cases"]["43"]["median_us"] == 100
+    assert state["failure"]["kind"] == "acquisition_exhausted"
+    assert "geomean_us" not in state
 
 
 def test_retry_rejects_wrong_target_failure_handle(tmp_path: Path) -> None:

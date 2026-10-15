@@ -25,7 +25,7 @@ def evidence(cell, duration=10):
 @pytest.fixture
 def saved(tmp_path):
     root = tmp_path / "producer"
-    for relative in ("scripts/a3_profile_microbench_campaign.py", "scripts/acquire_profile.py",
+    for relative in ("scripts/a3_profile_microbench_campaign.py", "scripts/acquire_profile.py", "scripts/profile_device.py",
                      "benchmarks/a3_profile_microbench.py", "experiments/a3-profile-hypotheses.json"):
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)

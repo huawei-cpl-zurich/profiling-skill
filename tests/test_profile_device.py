@@ -37,6 +37,21 @@ def test_real_two_chip_card_status_health_and_power_columns():
     assert device.inspect_devices(status, inventory) == [(3, 0, 6), (3, 1, 7)]
 
 
+@pytest.mark.parametrize("process_rows,expected", [
+    ("", []),
+    ("| No running processes found in NPU 8 |\n", []),
+    ("| 1 1 | 123 | python |\n", [(1, 0, 2)]),
+    ("| No running processes found in NPU 1 |\n", [(1, 0, 2), (1, 1, 3)]),
+])
+def test_process_coverage_is_required_for_each_card(process_rows, expected):
+    inventory = device.discover_devices("1 0 2 2 Ascend910\n1 1 3 3 Ascend910\n2 0 4 4 Ascend910")
+    status = ("| 1 Ascend910 | OK | 20 |\n| 0 2 | bus | 0 0/0 100/65536 |\n"
+              "| 1 Ascend910 | OK | - |\n| 1 3 | bus | 0 0/0 100/65536 |\n"
+              "| 2 Ascend910 | OK | 20 |\n| 0 4 | bus | 0 0/0 100/65536 |\n"
+              "| NPU Chip | Process id | Process name |\n")
+    assert device.inspect_devices(status + process_rows, inventory) == expected
+
+
 @pytest.mark.parametrize("kwargs", [{"busy": True}, {"health": "Warning"}, {"usage": 1}, {"used": 64000}])
 def test_occupancy_health_activity_memory_reject_before_probe(kwargs):
     assert device.inspect_devices(table(**kwargs), device.discover_devices(MAPPING)) == []

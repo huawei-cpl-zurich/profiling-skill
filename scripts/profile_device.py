@@ -43,7 +43,7 @@ def discover_devices(mapping):
 
 def inspect_devices(table, inventory, *, min_free_mb=4096):
     """Parse the native status/process table; missing observations fail closed."""
-    status, occupied = {}, set()
+    status, occupied, covered_cards = {}, set(), set()
     pending = None
     processes = False
     for line in table.splitlines():
@@ -54,8 +54,12 @@ def inspect_devices(table, inventory, *, min_free_mb=4096):
             continue
         first = fields[0].split()
         if processes:
+            empty = re.fullmatch(r"No running processes found in NPU\s+(\d+)", fields[0])
+            if empty:
+                covered_cards.add(int(empty.group(1)))
             if len(first) == 2 and all(v.isdigit() for v in first) and len(fields) > 1 and fields[1].isdigit():
                 occupied.add(tuple(map(int, first)))
+                covered_cards.add(int(first[0]))
             continue
         if len(first) >= 2 and first[0].isdigit() and "Ascend" in first[1]:
             pending = (int(first[0]), fields[1] == "OK")
@@ -72,7 +76,7 @@ def inspect_devices(table, inventory, *, min_free_mb=4096):
             pending = None
     if not processes:
         raise RuntimeError("npu-smi status omitted process inventory")
-    return [d for d in inventory if status.get(d, False) and d[:2] not in occupied]
+    return [d for d in inventory if d[0] in covered_cards and status.get(d, False) and d[:2] not in occupied]
 
 
 def smi(*arguments):

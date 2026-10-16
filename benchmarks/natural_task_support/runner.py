@@ -71,7 +71,21 @@ def validate_output(spec, actual, expected):
 
 
 def launch_with_contract(module, inputs, output, spec):
-    return module.launch(inputs, output), None
+    from triton.runtime.jit import JITFunction
+    original, records = JITFunction.run, []
+    def checked_run(kernel, *args, **kwargs):
+        compiled = original(kernel, *args, **kwargs)
+        records.append(compiled)
+        return compiled
+    JITFunction.run = checked_run
+    try:
+        compiled = module.launch(inputs, output)
+    finally:
+        JITFunction.run = original
+    if (len(records) != 1 or records[0] is not compiled or
+            not isinstance(getattr(compiled, 'asm', None), dict) or not compiled.asm):
+        raise ValueError('semantic contract: return the one executed compiled Triton kernel')
+    return compiled, None
 
 
 def main():

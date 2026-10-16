@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 import torch
@@ -80,3 +81,39 @@ def test_invalid_launch_count_rejected_without_device(tmp_path):
     result = subprocess.run([sys.executable, str(folder / 'runner.py'), '--launches', '0'],
                             capture_output=True, text=True)
     assert result.returncode != 0
+
+
+@pytest.mark.parametrize('mode', ['valid', 'none', 'torch', 'multiple', 'different', 'raises'])
+def test_launch_contract_counts_execution_and_restores_hook(tmp_path, monkeypatch, mode):
+    spec, runner, _ = bundle(tmp_path, 'task01')
+    compiled = SimpleNamespace(asm={'ttir': 'executed compiler artifact'})
+    calls = []
+    class JITFunction:
+        def run(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return compiled
+    jit = ModuleType('triton.runtime.jit')
+    jit.JITFunction = JITFunction
+    monkeypatch.setitem(sys.modules, 'triton.runtime.jit', jit)
+    original = JITFunction.run
+    def launch(inputs, output):
+        if mode == 'torch':
+            return torch.zeros(2)
+        result = JITFunction().run(inputs, output=output)
+        if mode == 'multiple':
+            JITFunction().run(inputs, output=output)
+        if mode == 'raises':
+            raise RuntimeError('launch failure')
+        if mode == 'none':
+            return None
+        if mode == 'different':
+            return SimpleNamespace(asm=compiled.asm)
+        return result
+    module = SimpleNamespace(launch=launch)
+    if mode == 'valid':
+        actual, evidence = runner.launch_with_contract(module, {}, None, spec)
+        assert actual is compiled and evidence is None and len(calls) == 1
+    else:
+        with pytest.raises(RuntimeError if mode == 'raises' else ValueError):
+            runner.launch_with_contract(module, {}, None, spec)
+    assert JITFunction.run is original

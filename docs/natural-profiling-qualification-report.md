@@ -66,15 +66,21 @@ for its own independent intervention comparison.
 
 Task03's predicated-load variant retains a full `memref.copy` followed by
 `arith.select` in TTAdapter, in both acquisitions. Task04's first batch shows
-the corresponding full-width copy at width4096. The source-level load mask
+the corresponding full-width copy at width 4096. The source-level load mask
 does not establish that physical memory transfers became sparse.
 
 Task03's higher vector activity and lower MTE3 activity repeat, but its timing
-response does not: near-equal medians in batch1 versus a lower predicated-load
-median in batch2. Do not turn either observation into "masking never helps" or
+response does not: near-equal medians in batch 1 versus a lower predicated-load
+median in batch 2. Do not turn either observation into "masking never helps" or
 "the mask saved HBM traffic." A ratio change alone does not measure bytes, and
 intermediate IR is not final-binary proof. This is a useful calibration lesson,
 not an isolated causal explanation of the timing difference.
+
+Baseline and warps8 TTAdapter module bodies are identical after removing only
+location annotations in both task03 batches and task04's first batch. That
+nominal launch-hint change does not change these retained intermediate
+operations. It does not prove identical final binaries or globally establish
+that the compiler ignores the hint.
 
 ### Matmul: tile changes have distinguishable cost and resource signatures
 
@@ -101,13 +107,13 @@ The initial acquisition attempt failed before any kernel because a bounded
 Popen-compatible helper was incorrectly called with `capture_output`. The fix
 and regression are retained; it is a harness bug, not a device failure. Eight
 qualification tests passed natively on A3. The final assembled local suite
-passed1925tests and15subtests before the documentation-only clarification.
+passed 1925 tests and 15 subtests before the documentation-only clarification.
 
-`msprof --version` is unsupported here (exit255); actual `msprof op` captures
+`msprof --version` is unsupported here (exit 255); actual `msprof op` captures
 succeed. Its diagnostic is retained rather than inventing a profiler version.
 Observer interruptions are recovered through the original retained handles;
 they do not authorize a duplicate workload or classify a kernel as failed.
-Compact per-task artifacts are about184-284KB for the first completed batches,
+Compact per-task artifacts are about 184-284 KB for the first completed batches,
 including logs, CSV/JSON and compiler text, without vendor binary capture trees.
 
 Finish independent batches for task02/task04/task06, retain exact samples and

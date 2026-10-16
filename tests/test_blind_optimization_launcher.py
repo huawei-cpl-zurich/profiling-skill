@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import socketserver
 import subprocess
 import sys
@@ -276,3 +277,83 @@ launcher.execute({[sys.executable, '-u', '-c', "import os, sys, time; print(os.g
             process.wait()
         if child_pid:
             os.killpg(child_pid, signal.SIGTERM)
+
+
+def request_socket(instance, operation):
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    client.settimeout(5)
+    client.connect(str(instance.socket_dir / "tool.sock"))
+    client.sendall(json.dumps({"arguments": [operation]}).encode() + b"\n")
+    return client
+
+
+def test_disconnected_queued_request_is_not_dispatched_but_active_request_is(tmp_path):
+    instance = make_launcher(tmp_path)
+    instance.prepare()
+    Path(instance.tool_command[1]).write_text("""import json, sys, time
+from pathlib import Path
+workspace = Path(sys.argv[2])
+operation = sys.argv[3]
+with (workspace / 'backend-calls.jsonl').open('a') as f:
+    f.write(json.dumps(operation) + '\\n')
+if operation == 'blocked':
+    (workspace / 'started').touch()
+    deadline = time.monotonic() + 5
+    while not (workspace / 'release').exists():
+        assert time.monotonic() < deadline
+        time.sleep(.01)
+print(operation)
+""")
+    server = socketserver.UnixStreamServer(str(instance.socket_dir / "tool.sock"), module.ToolHandler)
+    server.owner = instance
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    first = active = None
+    try:
+        first = request_socket(instance, "blocked")
+        deadline = time.monotonic() + 5
+        while not (instance.workspace / "started").exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert (instance.workspace / "started").exists()
+        obsolete = request_socket(instance, "obsolete")
+        obsolete.close()
+        active = request_socket(instance, "active")
+        (instance.workspace / "release").touch()
+        assert json.loads(first.makefile("rb").readline())["returncode"] == 0
+        assert json.loads(active.makefile("rb").readline())["returncode"] == 0
+        assert [json.loads(line) for line in (instance.workspace / "backend-calls.jsonl").read_text().splitlines()] == ["blocked", "active"]
+        rows = [json.loads(line) for line in instance.journal.read_text().splitlines()]
+        assert len(rows) == 3
+        assert rows[1]["dispatched"] is False
+        assert rows[1]["reason"] == "client-disconnected"
+        assert "command" not in rows[1]
+    finally:
+        (instance.workspace / "release").touch()
+        if first:
+            first.close()
+        if active:
+            active.close()
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_expired_request_is_not_dispatched(tmp_path):
+    instance = make_launcher(tmp_path)
+    instance.prepare()
+    instance.deadline_monotonic = time.monotonic() - 1
+    server = socketserver.UnixStreamServer(str(instance.socket_dir / "tool.sock"), module.ToolHandler)
+    server.owner = instance
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with request_socket(instance, "help") as client:
+            result = json.loads(client.makefile("rb").readline())
+        assert result["returncode"] == 124
+        row = json.loads(instance.journal.read_text())
+        assert row["dispatched"] is False and "command" not in row
+        assert row["reason"] == "deadline-expired"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()

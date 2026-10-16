@@ -61,6 +61,10 @@ as matched experimental observations. Socket paths use a short temporary
 directory independent of the evidence-root path length. Tool execution is
 bounded by the remaining agent wall budget; retained remote jobs are still
 observed through their original handles after local interruption.
+Before starting backend work, the local endpoint checks whether the requesting
+client disconnected or the agent deadline expired. Such requests are recorded
+as explicitly undispatched, rather than launching obsolete queued work. This
+does not cancel any backend operation that already started.
 
 Run the functional isolation and process tests with:
 

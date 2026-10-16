@@ -60,6 +60,14 @@ def execute(command: list[str], cwd: Path, timeout: float,
 
 
 class ToolHandler(socketserver.StreamRequestHandler):
+    def peer_disconnected(self) -> bool:
+        try:
+            return self.connection.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) == b""
+        except BlockingIOError:
+            return False
+        except ConnectionError:
+            return True
+
     def handle(self) -> None:
         owner = self.server.owner
         args = None
@@ -75,13 +83,21 @@ class ToolHandler(socketserver.StreamRequestHandler):
                                  " is assigned by the harness; omit these flags. Use experiment-tool help.")
             if any(arg in {"-h", "--help"} for arg in args):
                 args = ["help"]
-            # A domain helper receives candidate files; it is not a transport adapter.
-            command = [*owner.tool_command, "--workspace", str(owner.workspace), *args]
             with owner.tool_lock:
                 remaining = getattr(owner, "deadline_monotonic", time.monotonic() + owner.tool_timeout) - time.monotonic()
-                result = execute(command, owner.workspace, max(.1, min(owner.tool_timeout, remaining)))
+                if remaining <= 0 or self.peer_disconnected():
+                    reason = "deadline-expired" if remaining <= 0 else "client-disconnected"
+                    result = {"returncode": 124 if remaining <= 0 else 125,
+                              "stdout": "", "stderr": f"Request not dispatched: {reason}\n",
+                              "reason": reason}
+                    entry = {"arguments": args, "dispatched": False, **result}
+                else:
+                    # A domain helper receives candidate files; it is not a transport adapter.
+                    command = [*owner.tool_command, "--workspace", str(owner.workspace), *args]
+                    result = execute(command, owner.workspace, min(owner.tool_timeout, remaining))
+                    entry = {"command": command, "dispatched": True, **result}
                 with owner.journal.open("a") as stream:
-                    stream.write(json.dumps({"command": command, **result}) + "\n")
+                    stream.write(json.dumps(entry) + "\n")
         except (OSError, ValueError, KeyError) as error:
             result = {"returncode": 74 if isinstance(error, OSError) else 2,
                       "stdout": "", "stderr": str(error) + "\n"}

@@ -25,9 +25,17 @@ from production_launcher import LaunchError, ProductionLauncher
 
 PROMPT_V1 = """Optimize the supplied kernel while preserving its public interface, supported inputs, numerical correctness and single-kernel execution contract. Measure the starting implementation and your final candidate using the supplied benchmark interface. Use available tools and guidance as you find useful. Record experiments, commands, results, and the evidence supporting your decisions. Explain what improved, what did not, and what remains uncertain. Commit your work on the assigned branch; do not merge it.
 """
-PROMPT = PROMPT_V1 + """
-You have a 600-second wall-clock budget, including all tool waiting. Read /workspace/execution.json and note its UTC start and deadline before beginning. Reserve approximately the final 120 seconds for notes and commits; do not start new tool calls near the cutoff. Commit validated work early and update your experiment log incrementally so partial progress survives interruption. Prefer a small completed evidence-backed experiment to an unfinished search. Use experiment-tool help to learn the neutral tool interface. Every operational tool call already performs correctness checks; avoid redundant checks unless investigating a specific failure.
+
+
+def build_prompt(budget_seconds: int = 600) -> str:
+    if type(budget_seconds) is not int or budget_seconds <= 0:
+        raise ValueError("budget_seconds must be a positive integer")
+    return PROMPT_V1 + f"""
+You have a {budget_seconds}-second wall-clock budget, including all tool waiting. Read /workspace/execution.json and note its UTC start and deadline before beginning. Reserve approximately the final 120 seconds for notes and commits; do not start new tool calls near the cutoff. Commit validated work early and update your experiment log incrementally so partial progress survives interruption. Prefer a small completed evidence-backed experiment to an unfinished search. Use experiment-tool help to learn the neutral tool interface. Every operational tool call already performs correctness checks; avoid redundant checks unless investigating a specific failure.
 """
+
+
+PROMPT = build_prompt()
 
 
 def write_json(path: Path, value: object) -> None:
@@ -133,6 +141,8 @@ class BlindLauncher(ProductionLauncher):
         self.skill_source = skill.resolve() if skill else None
         self.model = model
         self.tool_command = tool_command
+        if type(timeout) is not int or timeout <= 0:
+            raise LaunchError("budget_seconds must be a positive integer")
         self.timeout = timeout
         self.tool_timeout = timeout
         self.tool_lock = threading.Lock()
@@ -297,6 +307,16 @@ def completion_exit_code(result: dict) -> int:
     return 0
 
 
+def positive_budget(value: str) -> int:
+    try:
+        result = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("budget must be a positive integer") from error
+    if result <= 0:
+        raise argparse.ArgumentTypeError("budget must be a positive integer")
+    return result
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "client":
         return tool_client(Path(sys.argv[2]), sys.argv[3:])
@@ -306,10 +326,11 @@ def main() -> int:
     parser.add_argument("--skill", type=Path)
     parser.add_argument("--forbidden", type=Path, action="append", default=[])
     parser.add_argument("--preflight-only", action="store_true")
+    parser.add_argument("--budget-seconds", type=positive_budget, default=600)
     args = parser.parse_args()
     instance = BlindLauncher(args.output, args.bundle, args.prompt, json.loads(args.model_json.read_text()),
                              json.loads(args.tool_command_json.read_text()), skill=args.skill,
-                             forbidden=tuple(args.forbidden))
+                             forbidden=tuple(args.forbidden), timeout=args.budget_seconds)
     result = instance.launch(args.preflight_only)
     print(json.dumps(result))
     return result["exit_code"]

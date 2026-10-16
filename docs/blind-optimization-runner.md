@@ -27,6 +27,12 @@ Use a distinct new output directory without `--preflight-only` for the actual
 run. Add `--skill "$FROZEN_SKILL"` only for the skill arm. Model JSON must contain
 `name` and `reasoning_effort`; the launcher does not select a replacement model.
 The common prompt is copied byte-for-byte without arm-specific additions.
+`--budget-seconds` accepts a positive integer and defaults to 600. Controllers
+can call `build_prompt(budget_seconds=1200)` and pass `--budget-seconds 1200`
+for a matched longer run; the launcher never rewrites a supplied custom prompt.
+The configured budget controls agent timeout, UTC metadata/deadline and the
+remaining tool-call deadline together. The default exported `PROMPT` remains
+`build_prompt()` with the original 600-second behavior.
 
 The tool JSON is an argv array for an approved domain helper. The launcher
 appends `--workspace HOST_CELL` and the agent's `experiment-tool` arguments. The
@@ -52,7 +58,7 @@ remote handles through the global client. An existing output directory is never
 silently relaunched: inspect its receipt and handles before considering a new
 run. A zero agent exit without candidate commits is not successful completion.
 
-The v2 common prompt states the 600-second wall-clock limit, including tool
+The v2 common prompt states the configured wall-clock limit (default 600 seconds), including tool
 waiting; agents read read-only `execution.json` for the UTC start/deadline,
 reserve approximately 120 seconds for notes and commits, log incrementally and
 commit validated progress early. The exact v1 prompt remains available as

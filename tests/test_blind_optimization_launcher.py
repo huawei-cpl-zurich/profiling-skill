@@ -350,9 +350,87 @@ def test_expired_request_is_not_dispatched(tmp_path):
         with request_socket(instance, "help") as client:
             result = json.loads(client.makefile("rb").readline())
         assert result["returncode"] == 124
-        row = json.loads(instance.journal.read_text())
+        row = json.loads((instance.root / "commands.jsonl").read_text())
         assert row["dispatched"] is False and "command" not in row
         assert row["reason"] == "deadline-expired"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+@pytest.mark.parametrize("budget", [1200, 1])
+def test_cli_budget_controls_real_agent_metadata_and_tool_deadline(tmp_path, budget):
+    instance = make_launcher(tmp_path)
+    instance.prompt_source.write_text(module.build_prompt(budget))
+    if budget == 1:
+        Path(instance.tool_command[1]).write_text("import time\nprint('tool started', flush=True)\ntime.sleep(20)\n")
+    fake_model(instance, f"""import json, subprocess
+from datetime import datetime
+from pathlib import Path
+budget = json.loads(Path('/workspace/execution.json').read_text())
+assert budget['wall_budget_seconds'] == {budget}
+assert budget['finish_reserve_seconds'] == min(120, {budget})
+assert (datetime.fromisoformat(budget['utc_deadline']) - datetime.fromisoformat(budget['utc_start'])).total_seconds() == {budget}
+print('observed configured budget', flush=True)
+subprocess.run(['experiment-tool', 'help'], check=True)
+subprocess.run(['git', 'commit', '--allow-empty', '-m', 'Record configured-budget experiment'], check=True)
+""")
+    model, tool = tmp_path / "model.json", tmp_path / "tool.json"
+    model.write_text(json.dumps(instance.model))
+    tool.write_text(json.dumps(instance.tool_command))
+    environment = dict(os.environ, CODEX_HOME=str(instance.auth_home),
+                       PATH=str(instance.codex.parent) + ":" + os.environ["PATH"])
+    started = time.monotonic()
+    run = subprocess.run([sys.executable, str(Path(module.__file__)), "--bundle", str(instance.bundle),
+                          "--prompt", str(instance.prompt_source), "--output", str(instance.root),
+                          "--model-json", str(model), "--tool-command-json", str(tool),
+                          "--budget-seconds", str(budget)], env=environment, capture_output=True, text=True, timeout=10)
+    assert run.returncode == (124 if budget == 1 else 0), run.stderr
+    assert "observed configured budget" in (instance.root / "agent.jsonl").read_text()
+    if budget == 1:
+        assert time.monotonic() - started < 8
+        row = json.loads((instance.root / "commands.jsonl").read_text())
+        assert row["timed_out"] and "tool started" in row["stdout"]
+    else:
+        assert json.loads(run.stdout)["candidate_commits"] == 1
+
+
+@pytest.mark.parametrize("budget", ["0", "-1", "1.5", "not-a-budget"])
+def test_invalid_cli_budget_is_rejected_before_output_creation(tmp_path, budget):
+    instance = make_launcher(tmp_path)
+    run = subprocess.run([sys.executable, str(Path(module.__file__)), "--bundle", str(instance.bundle),
+                          "--prompt", str(instance.prompt_source), "--output", str(instance.root),
+                          "--model-json", str(tmp_path / "missing-model.json"),
+                          "--tool-command-json", str(tmp_path / "missing-tool.json"),
+                          "--budget-seconds", budget], capture_output=True, text=True)
+    assert run.returncode == 2
+    assert "positive integer" in run.stderr
+    assert not instance.root.exists()
+
+
+def test_nondefault_budget_reaches_live_tool_boundary(tmp_path, monkeypatch):
+    template = make_launcher(tmp_path)
+    instance = module.BlindLauncher(template.root, template.bundle, template.prompt_source,
+                                    template.model, template.tool_command, auth_home=template.auth_home,
+                                    timeout=1200)
+    instance.prepare()
+    instance.deadline_monotonic = time.monotonic() + instance.timeout
+    observed = []
+    original_execute = module.execute
+    def measured_execute(command, cwd, timeout):
+        observed.append(timeout)
+        return original_execute(command, cwd, timeout)
+    monkeypatch.setattr(module, "execute", measured_execute)
+    server = socketserver.UnixStreamServer(str(instance.socket_dir / "tool.sock"), module.ToolHandler)
+    server.owner = instance
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with request_socket(instance, "help") as client:
+            result = json.loads(client.makefile("rb").readline())
+        assert result["returncode"] == 0
+        assert len(observed) == 1 and 1190 < observed[0] <= 1200
     finally:
         server.shutdown()
         server.server_close()

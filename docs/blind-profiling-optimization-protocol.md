@@ -30,6 +30,16 @@ snapshots, compiler errors and unfinished changes on timeout.
 
 > Optimize the supplied kernel while preserving its public interface, supported inputs, numerical correctness and single-kernel execution contract. Measure the starting implementation and your final candidate using the supplied benchmark interface. Use available tools and guidance as you find useful. Record experiments, commands, results, and the evidence supporting your decisions. Explain what improved, what did not, and what remains uncertain. Commit your work on the assigned branch; do not merge it.
 
+The scored cohort appends this exact paragraph to both arms:
+
+> You have a 600-second wall-clock budget, including all tool waiting. Read /workspace/execution.json and note its UTC start and deadline before beginning. Reserve approximately the final 120 seconds for notes and commits; do not start new tool calls near the cutoff. Commit validated work early and update your experiment log incrementally so partial progress survives interruption. Prefer a small completed evidence-backed experiment to an unfinished search. Use experiment-tool help to learn the neutral tool interface. Every operational tool call already performs correctness checks; avoid redundant checks unless investigating a specific failure.
+
+Freeze the exact versioned prompt with each cohort.
+
+The initial calibration omitted these instructions. Its timeouts remain
+reported as budget failures, not infrastructure failures. Do not combine
+different prompt versions as a single paired comparison.
+
 ## Order and infrastructure
 
 Run at most three agents concurrently and balance which arm starts first:
@@ -73,6 +83,11 @@ sound), or 2 (sound):
 Report correctness, speedup, elapsed/tool costs and actual profiling use
 separately. An unchanged but correctly investigated candidate is not a reasoning
 failure by definition. A faster incorrect candidate is not a performance success.
+Before accepting performance, independently audit the full candidate computation
+and compiled artifacts against the single-kernel and volatile-repetition
+contracts. A numerical pass alone cannot validate these properties. Required
+work moved to auxiliary Torch kernels or eliminated contrary to the contract
+invalidates a candidate even if its final tensor matches.
 
 Flag critical unsupported claims: activity proves saturation; scalar activity
 excludes memory cost; zero wait proves no synchronization; overlapping or

@@ -35,6 +35,9 @@ Every cell is attempted once. A failed cell retains its controller log, launcher
 receipt when available, and result JSON; subsequent scheduled cells still run.
 The driver exits nonzero if any controller fails. It never retries or replaces a
 cell, and refuses an existing output directory or a second cohort launch.
+Controller success means the agent completed with a commit; it does not by
+itself certify kernel correctness, valid timing, or a benefit from the skill.
+Assess the retained execution evidence and the blind rubric separately.
 
 `--prepare-only` freezes inputs without launching agents. Inspect the resulting
 manifest and, when ready, run the frozen cohort once from Python:

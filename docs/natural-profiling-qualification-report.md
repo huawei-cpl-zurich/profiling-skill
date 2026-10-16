@@ -42,6 +42,11 @@ loads / warps8 for masked rows, and BM16 / BK64 for matmul. Only declared task
 inputs and contracts will reach optimizer agents; interventions, this report
 and qualification evidence remain outside their isolated workspaces.
 
+[Retained sample data](data/natural-task-qualification.json) includes every
+downloaded timing sample, spread/confidence flags, source hashes, correctness
+counts and pipe-row counts. Missing second-batch results are explicitly pending,
+not silently dropped, zero-filled, or classified as failed kernels.
+
 ## Lessons supported so far
 
 ### Gather: unchanged relevant lowering is an informative negative

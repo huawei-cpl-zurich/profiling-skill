@@ -21,14 +21,22 @@ GUIDANCE = ('SKILL.md', *('references/' + name for name in (
     'a5-metric-semantics.md', 'a5-timeline-semantics.md')))
 WAVES = (((1, True), (2, False), (3, True)), ((1, False), (2, True), (3, False)),
          ((4, False), (5, True), (6, False)), ((4, True), (5, False), (6, True)))
+SUITES = {'original': ('blind_before_tasks.py', 'blind_task_support',
+                       'blind-profiling-optimization-protocol.md'),
+          'natural': ('natural_before_tasks.py', 'natural_task_support',
+                      'natural-profiling-evaluation-protocol.md')}
 
 
 def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def prepare(source, output, model, forbidden):
+def prepare(source, output, model, forbidden, budget_seconds=600, task_suite='original'):
     source, output = source.resolve(), output.resolve()
+    if type(budget_seconds) is not int or budget_seconds <= 0:
+        raise ValueError('budget_seconds must be a positive integer')
+    if task_suite not in SUITES:
+        raise ValueError('unknown task suite: ' + str(task_suite))
     if any(output.is_relative_to(path.resolve()) for path in (*forbidden, source)):
         raise ValueError('output must be outside source and forbidden workspaces')
     if not all(isinstance(model.get(key), str) and model[key].strip()
@@ -36,8 +44,10 @@ def prepare(source, output, model, forbidden):
         raise ValueError('explicit model name and reasoning_effort required')
     snapshots = [(source / 'scripts' / name, output / 'runtime' / name) for name in HELPERS]
     snapshots += [(source / name, output / 'skill' / name) for name in GUIDANCE]
+    exporter_name, support, protocol = SUITES[task_suite]
     snapshots += [(source / 'benchmarks' / name, output / 'exporter' / name) for name in (
-        'blind_before_tasks.py', 'blind_task_support/runner.py', 'blind_task_support/native_host.asc')]
+        exporter_name, support + '/runner.py', 'blind_task_support/native_host.asc')]
+    snapshots += [(source / 'docs' / protocol, output / 'protocol' / protocol)]
     for original, _ in snapshots:
         if not original.is_file():
             raise FileNotFoundError('required source file missing: ' + str(original))
@@ -45,7 +55,7 @@ def prepare(source, output, model, forbidden):
     for original, target in snapshots:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(original, target)
-    exporter = runpy.run_path(str(output / 'exporter/blind_before_tasks.py'))
+    exporter = runpy.run_path(str(output / 'exporter' / exporter_name))
     (output / 'bundles').mkdir()
     for index in range(1, 7):
         task = f'task{index:02}'
@@ -54,23 +64,39 @@ def prepare(source, output, model, forbidden):
                    str(output / 'runtime/blind_optimization_tools.py'),
                    '--bundle', str(output / 'bundles' / task)])
     launcher = runpy.run_path(str(output / 'runtime/blind_optimization_launcher.py'))
-    (output / 'prompt.md').write_text(launcher['PROMPT'])
+    (output / 'prompt.md').write_text(launcher['build_prompt'](budget_seconds))
     write_json(output / 'model.json', model)
     hashes = {str(p.relative_to(output)): hashlib.sha256(p.read_bytes()).hexdigest()
               for p in output.rglob('*') if p.is_file() and '__pycache__' not in p.parts}
     revision = subprocess.run(['git', '-C', str(source), 'rev-parse', 'HEAD'],
                               capture_output=True, text=True)
     write_json(output / 'manifest.json', dict(schema_version=1, source_revision=revision.stdout.strip(),
-               files=hashes, waves=WAVES, wall_budget_seconds=600, model=model,
+               files=hashes, waves=WAVES, wall_budget_seconds=budget_seconds,
+               task_suite=task_suite, protocol='protocol/' + protocol, model=model,
                forbidden=[str(p.resolve()) for p in forbidden]))
     return output
 
 
 def run_cohort(output):
     manifest = json.loads((output / 'manifest.json').read_text())
+    if (output / 'started.json').exists():
+        raise FileExistsError('cohort already started; inspect its retained results')
+    actual = {str(p.relative_to(output)) for p in output.rglob('*')
+              if p.is_file() and '__pycache__' not in p.parts and p != output / 'manifest.json'}
+    if actual != set(manifest['files']):
+        raise ValueError('changed frozen input file set')
     for name, expected in manifest['files'].items():
         if hashlib.sha256((output / name).read_bytes()).hexdigest() != expected:
             raise ValueError('changed frozen input: ' + name)
+    waves = manifest['waves']
+    if not isinstance(waves, list) or len(waves) != 4 or not all(
+            isinstance(wave, list) and len(wave) == 3 for wave in waves):
+        raise ValueError('invalid frozen wave schedule')
+    cells = [cell for wave in waves for cell in wave]
+    if not all(isinstance(cell, list) and len(cell) == 2 and type(cell[0]) is int
+               and 1 <= cell[0] <= 6 and type(cell[1]) is bool for cell in cells) or \
+            len({tuple(cell) for cell in cells}) != 12:
+        raise ValueError('invalid frozen wave schedule')
     # Exclusive creation prevents an accidental second launch, including after interruption.
     with (output / 'started.json').open('x') as stream:
         json.dump(dict(started=time.time()), stream)
@@ -82,7 +108,8 @@ def run_cohort(output):
         command = [sys.executable, str(output / 'runtime/blind_optimization_launcher.py'),
                    '--bundle', str(output / 'bundles' / task), '--prompt', str(output / 'prompt.md'),
                    '--output', str(output / name), '--model-json', str(output / 'model.json'),
-                   '--tool-command-json', str(output / f'{task}-tool.json')]
+                   '--tool-command-json', str(output / f'{task}-tool.json'),
+                   '--budget-seconds', str(manifest['wall_budget_seconds'])]
         for path in manifest['forbidden']:
             command += ['--forbidden', path]
         if guidance:
@@ -101,7 +128,7 @@ def run_cohort(output):
         return result
 
     results = []
-    for index, wave in enumerate(WAVES, 1):
+    for index, wave in enumerate(waves, 1):
         with ThreadPoolExecutor(max_workers=3) as pool:
             cells = list(pool.map(run, wave))
         write_json(output / f'wave-{index}.json', cells)
@@ -116,9 +143,11 @@ def main():
     parser.add_argument('--model-json', type=Path, required=True)
     parser.add_argument('--forbidden-workspace', type=Path, action='append', required=True)
     parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--budget-seconds', type=int, default=600)
+    parser.add_argument('--task-suite', choices=SUITES, default='original')
     args = parser.parse_args()
     output = prepare(args.source_root, args.output, json.loads(args.model_json.read_text()),
-                     args.forbidden_workspace)
+                     args.forbidden_workspace, args.budget_seconds, args.task_suite)
     return 0 if args.prepare_only else run_cohort(output)
 
 

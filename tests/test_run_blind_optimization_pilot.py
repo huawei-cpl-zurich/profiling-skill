@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/run_blind_optimization_pilot.py'
 SPEC = importlib.util.spec_from_file_location('pilot', SCRIPT)
@@ -21,7 +22,9 @@ def export(task, output):
     (output / 'task.json').write_text(json.dumps({'public_files': ['candidate.py', 'task.json']}))
 '''
 LAUNCHER = '''
-PROMPT = 'shared prompt v2 with 600 second budget'
+def build_prompt(budget_seconds=600):
+    return f'shared prompt v2 with {budget_seconds} second budget'
+PROMPT = build_prompt()
 if __name__ == '__main__':
     import argparse, json, os, time
     from pathlib import Path
@@ -29,6 +32,7 @@ if __name__ == '__main__':
     for name in ('bundle', 'prompt', 'output', 'model-json', 'tool-command-json', 'skill'):
         parser.add_argument('--' + name)
     parser.add_argument('--forbidden', action='append')
+    parser.add_argument('--budget-seconds', type=int, default=600)
     args = parser.parse_args()
     output = Path(args.output)
     output.mkdir()
@@ -47,7 +51,8 @@ if __name__ == '__main__':
     receipt = dict(prompt=Path(args.prompt).read_text(),
                    model=json.loads(Path(args.model_json).read_text()),
                    tool=json.loads(Path(args.tool_command_json).read_text()),
-                   guidance=bool(args.skill), forbidden=args.forbidden)
+                   guidance=bool(args.skill), forbidden=args.forbidden,
+                   budget_seconds=args.budget_seconds)
     (output / 'receipt.json').write_text(json.dumps(receipt))
     print('retained agent diagnostics', flush=True)
     event('end')
@@ -64,25 +69,35 @@ class PilotTests(unittest.TestCase):
         self.source.mkdir()
         for relative in [*('scripts/' + name for name in pilot.HELPERS), *pilot.GUIDANCE,
                          'benchmarks/blind_before_tasks.py',
+                         'benchmarks/natural_before_tasks.py',
+                         'benchmarks/natural_task_support/runner.py',
                          'benchmarks/blind_task_support/runner.py',
-                         'benchmarks/blind_task_support/native_host.asc']:
+                         'benchmarks/blind_task_support/native_host.asc',
+                         'docs/blind-profiling-optimization-protocol.md',
+                         'docs/natural-profiling-evaluation-protocol.md']:
             path = self.source / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('')
         (self.source / 'scripts/blind_optimization_launcher.py').write_text(LAUNCHER)
         (self.source / 'benchmarks/blind_before_tasks.py').write_text(EXPORTER)
+        (self.source / 'benchmarks/natural_before_tasks.py').write_text(
+            EXPORTER.replace('starting kernel', 'natural starting kernel'))
         # These source-only answers must not enter the guidance snapshot.
         (self.source / 'references/answers.json').write_text('private')
         self.output = self.root / 'cohort'
         self.model = dict(name='explicit-model', reasoning_effort='high')
         self.forbidden = [self.source, self.root / 'orchestration']
 
-    def prepare(self):
-        return pilot.prepare(self.source, self.output, self.model, self.forbidden)
+    def prepare(self, **kwargs):
+        return pilot.prepare(self.source, self.output, self.model, self.forbidden, **kwargs)
 
     def test_paired_execution_retains_failures_without_retries(self):
-        self.prepare()
-        self.assertEqual(pilot.run_cohort(self.output), 1)
+        self.prepare(budget_seconds=1200, task_suite='natural')
+        manifest = json.loads((self.output / 'manifest.json').read_text())
+        self.assertEqual(manifest['wall_budget_seconds'], 1200)
+        self.assertEqual(manifest['task_suite'], 'natural')
+        with patch.object(pilot, 'WAVES', ()):
+            self.assertEqual(pilot.run_cohort(self.output), 1)
         results = [json.loads(path.read_text()) for path in self.output.glob('*-result.json')]
         self.assertEqual(len(results), 12)
         self.assertEqual(sum(result['controller_exit'] != 0 for result in results), 1)
@@ -90,8 +105,11 @@ class PilotTests(unittest.TestCase):
         for index in range(1, 7):
             guidance, control = (next(r for r in results if r['cell'] == f'task{index:02}-{arm}')
                                  for arm in ('guidance', 'control'))
-            for key in ('prompt', 'model', 'tool', 'forbidden'):
+            for key in ('prompt', 'model', 'tool', 'forbidden', 'budget_seconds'):
                 self.assertEqual(guidance['receipt'][key], control['receipt'][key])
+            self.assertEqual(control['receipt']['budget_seconds'], 1200)
+            self.assertEqual(control['receipt']['prompt'], 'shared prompt v2 with 1200 second budget')
+            self.assertEqual(control['command'][control['command'].index('--budget-seconds') + 1], '1200')
             self.assertTrue(guidance['receipt']['guidance'])
             self.assertFalse(control['receipt']['guidance'])
             self.assertEqual(guidance['command'][:-2],
@@ -113,6 +131,7 @@ class PilotTests(unittest.TestCase):
                 previous = json.loads((self.output / f'wave-{wave-1}.json').read_text())
                 self.assertGreaterEqual(min(r['started'] for r in cells), max(r['ended'] for r in previous))
         self.assertFalse(any(self.output.glob('task*-*/workspace/private.py')))
+        self.assertFalse(any(self.output.glob('task*-*/workspace/*protocol*')))
         self.assertIn('retained agent diagnostics',
                       (self.output / 'task02-control-controller.log').read_text())
         with self.assertRaises(FileExistsError):
@@ -131,6 +150,11 @@ class PilotTests(unittest.TestCase):
                           (self.output / 'skill').rglob('*') if p.is_file()}, set(pilot.GUIDANCE))
         self.assertFalse(any(self.output.rglob('cpl-remote')))
         self.assertEqual(json.loads((self.output / 'model.json').read_text()), self.model)
+        manifest = json.loads((self.output / 'manifest.json').read_text())
+        self.assertEqual(manifest['wall_budget_seconds'], 600)
+        self.assertEqual(manifest['task_suite'], 'original')
+        self.assertEqual((self.output / 'bundles/task01/candidate.py').read_text(), 'starting kernel')
+        self.assertEqual((self.output / 'prompt.md').read_text(), 'shared prompt v2 with 600 second budget')
         self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
         (self.output / 'runtime/profile_device.py').write_text('changed')
         with self.assertRaisesRegex(ValueError, 'changed frozen input'):
@@ -154,6 +178,36 @@ class PilotTests(unittest.TestCase):
             self.prepare()
         self.assertEqual((self.output / 'manifest.json').read_bytes(), manifest)
 
+    def test_added_guidance_file_rejected_before_launch(self):
+        self.prepare()
+        (self.output / 'skill/extra-guidance.md').write_text('additional guidance')
+        with self.assertRaisesRegex(ValueError, 'changed frozen input file set'):
+            pilot.run_cohort(self.output)
+        self.assertFalse((self.output / 'started.json').exists())
+        self.assertFalse((self.output / 'events.jsonl').exists())
+
+    def test_protocol_snapshot_survives_source_changes(self):
+        source = self.source / 'docs/natural-profiling-evaluation-protocol.md'
+        source.write_text('frozen protocol and blind scoring rubric')
+        self.prepare(task_suite='natural')
+        source.write_text('later protocol revision')
+        snapshot = self.output / 'protocol/natural-profiling-evaluation-protocol.md'
+        self.assertEqual(snapshot.read_text(), 'frozen protocol and blind scoring rubric')
+        manifest = json.loads((self.output / 'manifest.json').read_text())
+        self.assertIn(str(snapshot.relative_to(self.output)), manifest['files'])
+        self.assertEqual(manifest['protocol'], str(snapshot.relative_to(self.output)))
+        self.assertFalse(any(self.output.glob('bundles/*/*protocol*')))
+
+    def test_invalid_frozen_schedule_rejected_before_launch(self):
+        self.prepare()
+        manifest_path = self.output / 'manifest.json'
+        manifest = json.loads(manifest_path.read_text())
+        manifest['waves'][0][0] = manifest['waves'][0][1]
+        manifest_path.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, 'invalid frozen wave schedule'):
+            pilot.run_cohort(self.output)
+        self.assertFalse((self.output / 'started.json').exists())
+
     def test_invalid_model_and_forbidden_output_fail_before_creation(self):
         self.model.pop('reasoning_effort')
         with self.assertRaises(ValueError):
@@ -164,6 +218,41 @@ class PilotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.prepare()
         self.assertFalse(self.output.exists())
+
+    def test_invalid_budget_or_suite_creates_no_output(self):
+        for budget in (0, -1, 1.5, True, '1200'):
+            with self.subTest(budget=budget), self.assertRaisesRegex(ValueError, 'positive integer'):
+                self.prepare(budget_seconds=budget)
+            self.assertFalse(self.output.exists())
+        with self.assertRaisesRegex(ValueError, 'unknown task suite'):
+            self.prepare(task_suite='missing')
+        self.assertFalse(self.output.exists())
+
+    def test_natural_suite_cli_checks_dependencies_before_output(self):
+        model = self.root / 'model.json'
+        model.write_text(json.dumps(self.model))
+        command = [sys.executable, str(SCRIPT), '--source-root', str(self.source),
+                   '--output', str(self.output), '--model-json', str(model),
+                   '--forbidden-workspace', str(self.source), '--prepare-only',
+                   '--budget-seconds', '1200', '--task-suite', 'natural']
+        for name in ('benchmarks/natural_before_tasks.py', 'benchmarks/natural_task_support/runner.py',
+                     'benchmarks/blind_task_support/native_host.asc',
+                     'docs/natural-profiling-evaluation-protocol.md'):
+            dependency = self.source / name
+            contents = dependency.read_bytes()
+            dependency.unlink()
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertFalse(self.output.exists())
+            dependency.write_bytes(contents)
+        for value in ('0', '-1', '1.5'):
+            invalid = command.copy()
+            invalid[invalid.index('--budget-seconds') + 1] = value
+            self.assertNotEqual(subprocess.run(invalid, capture_output=True).returncode, 0)
+            self.assertFalse(self.output.exists())
+        self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
+        self.assertEqual((self.output / 'bundles/task01/candidate.py').read_text(), 'natural starting kernel')
+        self.assertEqual(len(list((self.output / 'bundles').iterdir())), 6)
+        self.assertFalse((self.output / 'exporter/blind_before_tasks.py').exists())
 
 
 if __name__ == '__main__':

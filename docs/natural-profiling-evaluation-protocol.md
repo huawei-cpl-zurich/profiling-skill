@@ -17,11 +17,16 @@ and two scoped alternative implementations. Check numerical correctness and the
 single-kernel computation contract for each variant. Acquire five BasicInfo timing
 samples and three pipe captures per variant in each of two independent acquisition
 batches; preserve all samples, errors and failed attempts. Require reproducible
-resource distinctions and intervention responses that pipe evidence helps
-discriminate. Activity alone does not prove saturation, and overlapping pipes
+code-linked lessons that pipe evidence helps discriminate: resource distinctions
+and intervention responses, or an informative controlled negative. A negative
+may qualify when repeated captures and compiler evidence explain why a scoped
+change leaves the relevant execution structure and activity largely unchanged.
+Neither a speedup nor a large metric change is required. An unexplained null,
+noisy timing alone, or failure to reject a difference is not such a lesson.
+Activity alone does not prove saturation, and overlapping pipes
 must not be summed into a latency decomposition.
 
-All six tasks must exhibit useful resource contrasts before the cohort starts.
+All six tasks must establish useful positive or negative lessons before the cohort starts.
 If any fails qualification, report the failure and stop cohort inclusion. Do not
 replace a task with an easy control, retune guidance to exposed answers, or lower
 the gate to fill six slots. Freeze qualified sources, private observed diagnoses

@@ -9,6 +9,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1]/'scripts/qualify_natural_tasks.py'
 spec = importlib.util.spec_from_file_location('qualification', SCRIPT)
@@ -160,6 +161,27 @@ class QualificationTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.prepare()
         self.assertFalse(self.bundle.exists())
+
+    def test_popen_compatible_device_probe_and_lease_release(self):
+        self.prepare()
+        # The real helper has a Popen-compatible interface, not subprocess.run.
+        from io import StringIO
+        lease = StringIO()
+        def bounded(argv, **kwargs):
+            timeout = kwargs.pop('timeout')
+            with subprocess.Popen([sys.executable, '-c', 'print("probe-ok")'], **kwargs) as process:
+                stdout, stderr = process.communicate(timeout=timeout)
+                return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+        def wait(probe):
+            self.assertEqual(probe({}), (True, ''))
+            return 3, {}, lease
+        with patch.object(qualification.runpy, 'run_path', return_value=dict(
+                bounded_run=bounded, wait_for_device=wait)):
+            result = qualification.run(self.bundle, self.bundle/'batch-1',
+                                       helpers=Acquisition().helpers())
+        self.assertEqual(result['state'], 'completed')
+        self.assertEqual(result['physical_device'], 3)
+        self.assertTrue(lease.closed)
 
 
 if __name__ == '__main__':

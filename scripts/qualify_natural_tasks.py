@@ -8,6 +8,7 @@ from pathlib import Path
 import runpy
 import shlex
 import shutil
+import subprocess
 import sys
 import tarfile
 
@@ -127,7 +128,7 @@ def run(bundle, output, *, helpers=None, device=None):
             def probe(env):
                 p = device_helpers['bounded_run']([sys.executable, '-c',
                     'import torch,torch_npu; torch.empty(1,device="npu"); torch.npu.synchronize()'],
-                    env=env, text=True, capture_output=True, timeout=30)
+                    env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
                 return p.returncode == 0, p.stderr[-1000:]
             physical, env, lease = device_helpers['wait_for_device'](probe)
         else:

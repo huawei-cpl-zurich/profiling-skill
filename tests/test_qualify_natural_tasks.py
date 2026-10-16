@@ -162,6 +162,19 @@ class QualificationTests(unittest.TestCase):
             self.prepare()
         self.assertFalse(self.bundle.exists())
 
+    def test_changed_trusted_inputs_are_rejected_before_device_reservation(self):
+        for name in ('variant-0/runner.py', 'variant-1/task.json',
+                     'a3_memory_batch.py', 'profile_device.py', 'qualify_natural_tasks.py'):
+            with self.subTest(name=name):
+                self.bundle = self.root/name.replace('/', '-')
+                self.prepare()
+                (self.bundle/name).write_text('changed trusted input')
+                acquisition = Acquisition()
+                with self.assertRaisesRegex(ValueError, 'source changed'):
+                    self.run_batch(acquisition)
+                self.assertFalse((self.bundle/'batch-1').exists())
+                self.assertEqual(acquisition.calls, [])
+
     def test_popen_compatible_device_probe_and_lease_release(self):
         self.prepare()
         # The real helper has a Popen-compatible interface, not subprocess.run.

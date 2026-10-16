@@ -51,6 +51,8 @@ def prepare(source_root, task, output):
     manifest = dict(task=task, variants={f'variant-{index}':
         hashlib.sha256((output/f'variant-{index}/candidate.py').read_bytes()).hexdigest()
         for index in range(3)})
+    manifest['inputs'] = {str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest()
+                          for path in sorted(output.rglob('*')) if path.is_file()}
     save(output/'qualification.json', manifest)
     return manifest
 
@@ -115,8 +117,8 @@ def run(bundle, output, *, helpers=None, device=None):
     manifest = json.loads((bundle/'qualification.json').read_text())
     if not output.is_relative_to(bundle):
         raise ValueError('output must be inside the prepared bundle')
-    for name, expected in manifest['variants'].items():
-        if hashlib.sha256((bundle/name/'candidate.py').read_bytes()).hexdigest() != expected:
+    for name, expected in manifest['inputs'].items():
+        if hashlib.sha256((bundle/name).read_bytes()).hexdigest() != expected:
             raise ValueError('qualification source changed: '+name)
     output.mkdir(parents=True, exist_ok=False)
     helpers = helpers or runpy.run_path(str(bundle/'a3_memory_batch.py'))

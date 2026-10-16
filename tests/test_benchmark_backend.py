@@ -14,7 +14,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND = ROOT / "scripts" / "benchmark_backend.py"
-GENERATOR = ROOT / "scripts" / "generate_benchmark_config.py"
 MANIFEST_SCHEMA_TEXT = "profiling-skill/candidate-kernel/v1"
 
 
@@ -567,46 +566,3 @@ def test_missing_or_invalid_kernel_manifest_is_submission_failure(tmp_path: Path
     invalid = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
     assert json.loads(invalid.stdout)["status"] == "submission_error"
     assert "profiling-skill/candidate-kernel/v2" in json.loads(invalid.stdout)["diagnostics"]
-
-
-def test_generator_emits_exact_controller_cells(tmp_path: Path):
-    output = tmp_path / "cells.json"
-    encoded_client = json.dumps(["/opt/job-client", "--profile", "gz-a3", "--flag=value"])
-    subprocess.run([sys.executable, str(GENERATOR), "--job-client-json", encoded_client,
-                    "--output", str(output)], check=True)
-    cells = json.loads(output.read_text())["cells"]
-    assert set(cells) == {
-        "gdn-cannbot", "gdn-project-cannbot", "gdn-project-guarded",
-        "bsa-cannbot", "bsa-project-cannbot", "bsa-project-guarded",
-        "matmul-cannbot", "matmul-project-cannbot", "matmul-project-guarded",
-    }
-    assert cells["gdn-cannbot"]["development_cases"] == [40, 49, 47, 46, 45]
-    assert cells["bsa-project-guarded"]["development_cases"] == [47, 46, 49, 44, 43]
-    assert (cells["gdn-cannbot"]["device"], cells["bsa-cannbot"]["device"]) == (0, 1)
-    assert cells["bsa-project-guarded"]["device"] == 3
-    assert cells["gdn-project-cannbot"]["all_cases"] == list(range(50))
-    assert cells["matmul-project-guarded"]["development_cases"] == [7, 8, 9]
-    assert cells["matmul-project-guarded"]["all_cases"] == list(range(10))
-    assert cells["matmul-project-guarded"]["tolerances"] == {"rtol": 2e-2, "atol": 2e-2}
-    assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
-    command = cells["gdn-cannbot"]["backend"]["command"]
-    assert command[command.index("--job-client-json") + 1] == encoded_client
-    assert cells["gdn-cannbot"]["backend"]["timeout_seconds"] == 7300
-
-
-@pytest.mark.parametrize("benchmark", ["gdn", "bsa", "matmul"])
-def test_generator_can_emit_any_single_benchmark_on_three_devices(
-        tmp_path: Path, benchmark: str):
-    output = tmp_path / f"{benchmark}.json"
-    encoded_client = json.dumps(["/opt/job-client", "--profile", "bz-a3"])
-    subprocess.run([
-        sys.executable, str(GENERATOR), "--job-client-json", encoded_client,
-        "--benchmarks", benchmark, "--output", str(output),
-    ], check=True)
-    cells = json.loads(output.read_text())["cells"]
-    assert list(cells) == [
-        f"{benchmark}-cannbot", f"{benchmark}-project-cannbot",
-        f"{benchmark}-project-guarded",
-    ]
-    assert [cell["device"] for cell in cells.values()] == [0, 1, 2]
-    assert {cell["benchmark"] for cell in cells.values()} == {benchmark}

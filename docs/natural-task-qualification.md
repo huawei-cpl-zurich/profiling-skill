@@ -42,8 +42,11 @@ in the retained remote job workspace.
 
 Successful acquisition is not automatic task qualification. Compare both
 batches' baseline/intervention timing samples, per-pipe metrics and compiler
-artifacts against actual code changes. Require reproducible resource
-distinctions and intervention responses that pipe evidence helps discriminate.
+artifacts against actual code changes. Require a reproducible code-linked lesson:
+a resource distinction/intervention response, or an informative controlled
+negative whose compiler structure and activity explain why the scoped edit did
+not help. No speedup is required. Unexplained noise or failure to reject a timing
+difference is not evidence of an unchanged execution cost.
 Report noisy or inconclusive cases honestly; do not add overlapping pipe ratios
 or infer absolute saturation from a large ratio alone. If any of the six tasks
 fails this gate, stop cohort inclusion and report it, rather than filling the

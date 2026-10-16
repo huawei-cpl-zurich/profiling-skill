@@ -7,7 +7,9 @@ explicit model JSON, public task bundle, and executable tool command. Only
 `--skill` differs. Omit it for the genuine no-skill arm.
 
 Export a task bundle first. Its `task.json` declares `public_files`; the launcher
-copies only these files into a new independent Git repository. The trusted
+copies only these files into a new independent Git repository. Declared
+files are force-added to the initial snapshot even if a public
+`.gitignore` matches them, so ordinary subsequent candidate commits work. The trusted
 runner and CPU reference remain outside the agent's filesystem. Public files
 other than `candidate.*` are read-only. The optional skill is a read-only
 snapshot; global skills, campaign reports and repository history are not mounted.

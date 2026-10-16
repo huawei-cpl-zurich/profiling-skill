@@ -212,7 +212,7 @@ class BlindLauncher(ProductionLauncher):
         self.wrapper.chmod(0o755)
         git = ["git", "-C", str(self.workspace)]
         for args in (["init", "-b", "experiment"], ["config", "user.name", "Experiment Agent"],
-                     ["config", "user.email", "experiment@localhost"], ["add", "."],
+                     ["config", "user.email", "experiment@localhost"], ["add", "--force", "--", *files],
                      ["commit", "-m", "Starting implementation"]):
             subprocess.run([*git, *args], capture_output=True, text=True, check=True)
         (self.workspace / ".git" / "info" / "exclude").write_text(".agents/\nexecution.json\n")

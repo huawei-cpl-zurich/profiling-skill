@@ -56,6 +56,23 @@ def test_preparation_exports_only_declared_files_and_retains_git(tmp_path):
         instance.prepare()
 
 
+def test_ignored_declared_candidate_is_tracked_and_normally_committable(tmp_path):
+    instance = make_launcher(tmp_path)
+    manifest = json.loads((instance.bundle / "task.json").read_text())
+    manifest["public_files"].append(".gitignore")
+    (instance.bundle / "task.json").write_text(json.dumps(manifest))
+    (instance.bundle / ".gitignore").write_text("candidate.py\n")
+    instance.prepare()
+    git = ["git", "-C", str(instance.workspace)]
+    original = subprocess.check_output([*git, "show", "HEAD:candidate.py"], text=True)
+    assert original == "value = 1\n"
+    (instance.workspace / "candidate.py").write_text("value = 2\n")
+    subprocess.run([*git, "add", "candidate.py"], check=True, capture_output=True)
+    subprocess.run([*git, "commit", "-m", "Modify declared candidate"], check=True, capture_output=True)
+    assert subprocess.check_output([*git, "show", "HEAD:candidate.py"], text=True) == "value = 2\n"
+    assert subprocess.check_output([*git, "status", "--porcelain"], text=True) == ""
+
+
 def test_public_file_escape_rejected(tmp_path):
     instance = make_launcher(tmp_path)
     (instance.bundle / "task.json").write_text(json.dumps({"public_files": ["../prompt.md"]}))

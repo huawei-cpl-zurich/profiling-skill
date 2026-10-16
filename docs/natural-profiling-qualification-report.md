@@ -6,7 +6,9 @@ All six tasks qualify for the prospective comparison: four as bounded
 educational negatives and two as positive diagnostic lessons. All twelve
 acquisition batches completed successfully. This is not a scored agent
 comparison and does not establish that the profiling skill helps agents.
-No natural-suite optimizer has launched. The earlier negative pilot is unchanged.
+At this qualification-report freeze, no natural-suite optimizer had launched.
+The later [completed agent assessment](natural-profiling-evaluation-report.md)
+records the separate scored comparison. The earlier negative pilot is unchanged.
 
 Before any scored launch, the user clarified: "I think we can keep negative
 results as well if they teach us a lesson." Qualification therefore accepts

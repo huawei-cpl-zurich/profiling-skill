@@ -21,6 +21,14 @@ changes per case. Each case appears in four fresh, isolated contexts:
 | compiler | Source, baseline timing and all three implementations' compiler artifacts |
 | both | Source, baseline timing/pipe captures and all three implementations' compiler artifacts |
 
+The historical `pipes` arm name is retained by the interface, but its supplied
+profiling evidence includes three baseline PipeUtilization captures and three
+baseline Memory captures where supported. Preserve the raw CSVs and explicitly
+record unavailable Memory captures. Raw counter units and denominators remain
+unvalidated unless independently established; do not silently convert them to
+physical bandwidth. Describe this contrast as profiling evidence versus timing,
+not a pure pipe-counter ablation. No candidate profile is supplied.
+
 All twelve agents receive the same frozen profiling skill, prompt, explicit
 model/reasoning settings and 300-second budget, including tools and waiting.
 At most three contexts run concurrently. Every agent has a fresh repository;

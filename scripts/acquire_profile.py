@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import zlib
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
@@ -281,6 +282,7 @@ def _remote_program(mode, product, target, dispatch_key, spec, kernel_names, lau
                   else "--aic-metrics=TimelineDetail")
         ),
         "__LAUNCHES__": str(launches),
+        "__DEVICE_HELPER__": (Path(__file__).with_name("profile_device.py")).read_text(),
     }
     program = r'''#!/usr/bin/env python3
 import base64, csv, fcntl, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile, zlib
@@ -309,22 +311,16 @@ torch.npu.synchronize(); assert float(y.cpu()[3]) == 4.0
 """
 
 def pick_device():
-    failures=[]
-    lease_root=pathlib.Path.home()/".cpl-device-leases"; lease_root.mkdir(exist_ok=True)
-    for physical in range(8):
-        lease=open(lease_root/("device-lease-%d.lock"%physical),"a+")
-        try: fcntl.flock(lease,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except BlockingIOError:
-            lease.close(); failures.append("%d:leased"%physical); continue
-        env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
+    def probe(env):
         try:
-            result=subprocess.run([sys.executable,"-c",PROBE],text=True,capture_output=True,env=env,timeout=20)
+            result=bounded_run([sys.executable,"-c",PROBE],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=20)
         except subprocess.TimeoutExpired:
-            lease.close(); failures.append("%d:timeout"%physical); continue
-        if result.returncode == 0: return physical,env,lease
-        lease.close()
-        failures.append("%d:%s"%(physical,(result.stderr or result.stdout)[-160:]))
-    fail("device-probe","device_unavailable","no device passed bounded probe: "+"; ".join(failures))
+            return False,"runtime probe exceeded 20 seconds"
+        return result.returncode == 0,(result.stderr or result.stdout)[-1000:]
+    try: return wait_for_device(probe)
+    except Exception as exc: fail("device-probe","host_environment",str(exc))
+
+__DEVICE_HELPER__
 
 def name_field(fields):
     direct=next((field for field in NAME_FIELDS if field in fields),None)
@@ -488,7 +484,7 @@ root=pathlib.Path(tempfile.mkdtemp(prefix=retention+"-",dir=retained_parent))
 try:
     bundle=materialize(root); entry=bundle/pathlib.PurePosixPath(IDENTITY["entrypoint"])
     argv=([sys.executable,str(entry)] if entry.suffix==".py" else [str(entry)])+IDENTITY["arguments"]
-    try: check=subprocess.run(argv,cwd=bundle,text=True,capture_output=True,env=env,timeout=300)
+    try: check=bounded_run(argv,cwd=bundle,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=300)
     except subprocess.TimeoutExpired as exc: fail("workload","workload_failure","timeout: "+str(exc))
     (root/"workload.stdout.log").write_text(check.stdout)
     (root/"workload.stderr.log").write_text(check.stderr)
@@ -501,7 +497,7 @@ try:
     command=["msprof","op","--application="+str(wrapper),"--output="+str(report),METRIC_ARG,
              "--warm-up=0","--launch-count="+str(LAUNCH_COUNT),"--kill=off"]
     if MODE=="pipe": command.append("--kernel-name="+KERNEL_NAME)
-    try: result=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
+    try: result=bounded_run(command,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=600)
     except subprocess.TimeoutExpired as exc: fail("profiler","profiler_failure","timeout: "+str(exc))
     transcript=result.stdout+result.stderr
     (root/"profiler.stdout.log").write_text(result.stdout)
@@ -530,21 +526,29 @@ try:
     else:
         rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
     if len(names)>256: fail("evidence","evidence_failure","observed kernel count exceeds compact bound")
-    selected=[] if MODE in ("basic","timeline") else [row for name,row in rows if name==KERNEL_NAME]
+    selected=([row for name,row in rows] if MODE=="basic" else
+              [] if MODE=="timeline" else [row for name,row in rows if name==KERNEL_NAME])
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
-    if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
+    row_count=len(selected)
+    if MODE=="basic": selected=selected[:128]
+    elif len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
     def normalized(value):
         return value.replace(str(root),"$RETAINED_ROOT")
     def stream_digest(value):
         raw=normalized(value).encode(); return {"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+    workload_result=None
+    for line in check.stdout[-65536:].splitlines():
+        try: value=json.loads(line)
+        except (ValueError,TypeError): continue
+        if isinstance(value,dict): workload_result=value
     evidence={"schema_version":2,"schema":"cpl.profile-acquisition.v2","status":"success","phase":MODE,"product":PRODUCT,"target":TARGET,
       "runtime":RUNTIME,"dispatch_key":DISPATCH_KEY,"device":{"physical_id":physical,"logical_id":0},
       "provenance":{"product":PRODUCT,"target":TARGET},"workload":IDENTITY,
-      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr)},
+      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr),"workload_result":workload_result},
       "capture":{"metric":metric,"observed_kernel_names":names,
       "inventory_scope":{"launch_bound":LAUNCH_COUNT,"complete":False,
       "reason":"msprof exports observed names but no total application launch count"},
-      "selected_kernel":KERNEL_NAME,"expected_kernel_names":KERNEL_NAMES,"rows":selected,"sources":sources,
+      "selected_kernel":KERNEL_NAME,"expected_kernel_names":KERNEL_NAMES,"rows":selected,"row_count":row_count,"rows_truncated":row_count>len(selected),"sources":sources,
       "log_sha256":hashlib.sha256(normalized(transcript).encode()).hexdigest()},
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
     if MODE=="timeline":
@@ -720,7 +724,10 @@ def _logs(cpl, handle, stream, tail, attempts):
 
 def _observe_terminal(cpl, handle, attempts):
     last = None
-    for _ in range(max(attempts, 1)):
+    remaining = max(attempts, 1)
+    missing = False
+    while remaining:
+        remaining -= 1
         try:
             value = _invoke(
                 cpl,
@@ -731,6 +738,7 @@ def _observe_terminal(cpl, handle, attempts):
             )
         except AcquisitionError as exc:
             last = exc
+            missing = False
             if exc.classification != "transport_error":
                 raise
             continue
@@ -743,6 +751,22 @@ def _observe_terminal(cpl, handle, attempts):
             )
         if value.get("state") in TERMINAL:
             return value
+        if value.get("state") == "missing" and value.get("backend") == "ssh":
+            if missing:
+                raise AcquisitionError(
+                    "confirmed missing dispatch: same retained handle absent in two authoritative observations",
+                    phase="confirmed_missing_dispatch",
+                    classification="host_environment",
+                    handle=handle,
+                )
+            missing = True
+            # The SSH transport creates its directory before starting a job and
+            # never deletes it. Confirm absence rather than treating a dropped
+            # observer connection as proof. Allow confirmation at budget=1.
+            remaining = max(remaining, 1)
+            time.sleep(3)
+        else:
+            missing = False
         last = AcquisitionError(
             "retained job is not terminal",
             phase="observe",

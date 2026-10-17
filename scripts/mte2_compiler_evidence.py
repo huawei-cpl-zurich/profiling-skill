@@ -58,8 +58,10 @@ def inspect(manifest_path, assembly_root=None):
         item['kind'] = 'tool_query' if query else 'compiler'
         item.update({key: log_record(invocation.get(key)) for key in ('stdout', 'stderr')})
         invocations.append(item)
-        if invocation.get('exit_code') != 0:
+        if invocation.get('exit_code') != 0 and not query:
             errors.append('compiler failed: ' + str(invocation.get('id')))
+        if invocation.get('exit_code') != 0 and query:
+            item['warning'] = 'optional capability query failed; status retained'
         for key, kind in (('input_copy', 'compiler_input'), ('output_copy', 'compiler_output')):
             value = invocation.get(key)
             if value and Path(value).is_file():

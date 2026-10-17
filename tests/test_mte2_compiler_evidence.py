@@ -103,6 +103,23 @@ def test_queries_alone_and_compile_arguments_are_not_compilation_evidence(tmp_pa
     assert any('missing actual compiler input' in error for error in result['errors'])
 
 
+def test_failed_optional_query_does_not_discard_successful_actual_compile(tmp_path):
+    path = manifest(tmp_path)
+    data = json.loads(path.read_text())
+    data['invocations'].append(dict(id='query', tool='hivmc', argv=['hivmc', '--version'],
+                                    exit_code=1, input_copy=None))
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['status'] == 'captured'
+    assert result['invocations'][1]['exit_code'] == 1
+    assert result['invocations'][1]['warning']
+    data['invocations'][1]['argv'] = ['hivmc', '--unknown-option']
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['status'] == 'failed'
+    assert any('compiler failed' in item for item in result['errors'])
+
+
 def test_real_helper_capture_preserves_shared_runtime_and_error(tmp_path, monkeypatch):
     from types import SimpleNamespace
     package = tmp_path / 'shared/triton'

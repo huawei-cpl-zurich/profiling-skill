@@ -123,7 +123,10 @@ python3 scripts/normalize_a3_pipe_evidence.py \
 Each exported block/sub-block row becomes an `observation` with a reported
 duration, not a temporal phase or interval. Rows have no common clock and must
 never be aligned or used to infer overlap or temporal phases across blocks.
-Duplicate `(block_id, sub_block_id)` keys are rejected.
+Duplicate `(block_id, sub_block_id)` keys are rejected. Every observation must
+contain at least one finite activity fraction recognized by the pinned model;
+missing modeled columns or all-NA modeled values fail the entire capture rather
+than leaving a misleading empty observation.
 
 Pipe and Memory reports are distinct captures and retain distinct durable
 capture IDs. Automatic joining is permitted only when both single-launch

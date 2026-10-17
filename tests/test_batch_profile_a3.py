@@ -20,6 +20,14 @@ def load_client():
     return module
 
 
+def load_driver():
+    spec = importlib.util.spec_from_file_location("batch_profile_a3_test", DRIVER)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
 def fixture(tmp_path: Path, mode: str = "ok") -> tuple[list[str], Path, Path]:
     job = {
         "benchmark": "matmul", "action": "profile", "device": 2,
@@ -144,6 +152,98 @@ def test_batch_profiles_ordered_matrix_and_returns_compact_evidence(tmp_path: Pa
     assert result["profile"]["cases"] == result["profile_cases"]
 
 
+def test_managed_batch_adds_normalized_pipe_activity_after_timing(tmp_path: Path):
+    job = {
+        "benchmark": "matmul", "action": "profile", "device": 0,
+        "cases": [7], "repeats": 2, "round": 3,
+        "profiling": {"kernel_name": "chosen_kernel", "pipe_activity": True},
+    }
+    job_path = tmp_path / "job.json"
+    job_path.write_text(json.dumps(job))
+    runner = tmp_path / "runner.py"
+    runner.write_text("# invoked by fake profiler\n")
+    profiler = tmp_path / "profiler.py"
+    profiler.write_text('''#!/usr/bin/env python3
+import csv, hashlib, json, sys
+from pathlib import Path
+args=sys.argv[1:]
+def value(name): return args[args.index(name)+1]
+out=Path(value("--output")); out.mkdir(parents=True)
+job_path=Path(value("--job")); response_path=Path(args[-1])
+job=json.loads(job_path.read_text())
+response_path.write_text(json.dumps({"status":"ok","diagnostics":""}))
+log=out/"msprof.log"; log.write_text("capture\\n")
+if "--metric" in args and value("--metric") == "PipeUtilization":
+ raw=out/"raw"; raw.mkdir()
+ basic=raw/"OpBasicInfo.csv"; pipe=raw/"PipeUtilization.csv"
+ with basic.open("w", newline="") as stream:
+  writer=csv.DictWriter(stream, fieldnames=["Op Name","Task Duration(us)"])
+  writer.writeheader(); writer.writerow({"Op Name":"chosen_kernel","Task Duration(us)":"7.0"})
+ with pipe.open("w", newline="") as stream:
+  fields=["block_id","sub_block_id","aic_time(us)","aiv_time(us)","aic_total_cycles","aic_cube_ratio","aic_mte2_ratio"]
+  writer=csv.DictWriter(stream, fieldnames=fields); writer.writeheader()
+  writer.writerow({"block_id":"0","sub_block_id":"cube0","aic_time(us)":"7.0","aiv_time(us)":"NA","aic_total_cycles":"12600","aic_cube_ratio":"0.4","aic_mte2_ratio":"0.5"})
+ evidence={"status":"success","metric":"PipeUtilization","sources":[
+  {"role":"pipe_basic_info","path":"OpBasicInfo.csv","sha256":hashlib.sha256(basic.read_bytes()).hexdigest()},
+  {"role":"pipe_utilization","path":"PipeUtilization.csv","sha256":hashlib.sha256(pipe.read_bytes()).hexdigest()}]}
+else:
+ evidence={"status":"success","msprof_log_sha256":hashlib.sha256(log.read_bytes()).hexdigest(),
+           "kernels":[{"name":"chosen_kernel","duration_us":{"median":7.0}}]}
+(out/"evidence.json").write_text(json.dumps(evidence))
+''')
+    output, response = tmp_path / "profile", tmp_path / "response.json"
+    run = subprocess.run([
+        sys.executable, str(DRIVER), "--job", str(job_path), "--runner", str(runner),
+        "--profiler", str(profiler), "--normalizer",
+        str(ROOT / "scripts/normalize_a3_pipe_evidence.py"), "--activity-model",
+        str(ROOT / "references/a3-pipe-activity-model.json"), "--output", str(output),
+        "--response", str(response), "--kernel-name", "chosen_kernel",
+    ], text=True, capture_output=True, check=False)
+    assert run.returncode == 0, run.stderr
+    evidence = json.loads((output / "evidence.json").read_text())
+    activity = evidence["pipe_activity"]
+    assert activity["evidence_kind"] == "per-block-pipe-activity"
+    assert activity["observations"][0]["activity"] == {
+        "aic_cube": 0.4, "aic_mte2": 0.5,
+    }
+    assert activity["observations"][0]["saturation"]["state"] == "unknown"
+    assert activity["provenance"]["launch_count"] == 1
+
+
+def test_pipe_selector_miss_after_resolved_timing_is_infrastructure(tmp_path: Path):
+    profiler = tmp_path / "profiler.py"
+    profiler.write_text('''#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+args=sys.argv[1:]
+def value(name): return args[args.index(name)+1]
+out=Path(value("--output")); out.mkdir(parents=True)
+response=Path(args[-1]); response.write_text(json.dumps({"status":"ok","diagnostics":""}))
+(out/"msprof.log").write_text("clean selector miss\\n")
+(out/"evidence.json").write_text(json.dumps({
+ "status":"failure", "failure":{"kind":"profiling", "reason":"selector_miss",
+ "kernel_selector":"resolved_kernel", "message":"no PipeUtilization export for resolved_kernel",
+ "msprof_returncode":0}}))
+raise SystemExit(1)
+''')
+    work, output = tmp_path / "work", tmp_path / "output"
+    work.mkdir(); output.mkdir()
+    pipe, status, diagnostics = load_driver().capture_pipe(
+        {
+            "benchmark": "matmul", "action": "profile", "device": 0,
+            "cases": [7], "repeats": 3, "round": 2,
+            "profiling": {"kernel_name": "declared_mix_aic", "pipe_activity": True},
+        },
+        runner=tmp_path / "runner.py", profiler=profiler,
+        normalizer=ROOT / "scripts/normalize_a3_pipe_evidence.py",
+        activity_model=ROOT / "references/a3-pipe-activity-model.json",
+        work=work, output=output, selector="resolved_kernel", logs=[],
+    )
+    assert pipe is None
+    assert status == "infrastructure_error"
+    assert diagnostics == "no PipeUtilization export for resolved_kernel"
+
+
 def test_batch_preserves_candidate_failure_and_partial_evidence(tmp_path: Path):
     command, output, response = fixture(tmp_path, "compile")
     run = subprocess.run(command, text=True, capture_output=True, check=False)
@@ -179,6 +279,11 @@ def test_suffix_selector_falls_back_once_then_caches_resolution(tmp_path: Path):
                and capture["declared_kernel_name"] == declared
                and capture["resolved_kernel_name"] == "candidate_kernel"
                for capture in evidence["captures"])
+    # The established client-facing identity remains declared while the
+    # captures and explicit field carry the exact resolved export.
+    load_client().attach_profile_evidence(result, output / "evidence.json")
+    assert result["profile"]["kernel_name"] == declared
+    assert result["profile"]["resolved_kernel_name"] == "candidate_kernel"
 
 
 def test_arbitrary_selector_miss_is_counted_submission_failure(tmp_path: Path):

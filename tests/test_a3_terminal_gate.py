@@ -36,8 +36,14 @@ def manifest(task):
 
 
 def fake_modules(task, *, check_status="ok", profile_status="success",
-                 fusion_error: str | None = None):
+                 fusion_error: str | None = None, include_pipe_activity=True,
+                 resolved_kernel_name: str | None = None,
+                 pipe_kernel_name: str | None = None,
+                 pipe_selector_miss: bool = False,
+                 empty_pipe_activity: bool = False):
     spec = gate.SPECS[task]
+    resolved_kernel_name = resolved_kernel_name or spec["kernel_name"]
+    pipe_kernel_name = pipe_kernel_name or resolved_kernel_name
     fusion_rows = [
         {"schema": "profiling-skill/fusion-evidence/v1", "case": case,
          "output_launch_id": "launch-0", "operators": [{
@@ -73,17 +79,34 @@ def fake_modules(task, *, check_status="ok", profile_status="success",
     def batch_execute(job, **kwargs):
         output, response = kwargs["output"], kwargs["response_path"]
         output.mkdir(parents=True)
-        ok = profile_status == "success"
+        ok = profile_status == "success" and not pipe_selector_miss
         response.write_text(json.dumps({
             "status": "ok" if ok else "infrastructure_error",
-            "diagnostics": "msprof unavailable" if not ok else "",
+            "diagnostics": (
+                "no PipeUtilization export for resolved kernel"
+                if pipe_selector_miss else "msprof unavailable" if not ok else ""
+            ),
         }))
+        pipe_activity = {
+            "schema_version": 1, "product": "a3",
+            "evidence_kind": "per-block-pipe-activity",
+            "provenance": {"kernel_selector": pipe_kernel_name},
+            "observations": [{
+                "observation_id": f"{spec['kernel_name']}:block-0:cube0",
+                "activity": {} if empty_pipe_activity else {"aic_mte2": 0.5},
+                "saturation": {"state": "unknown", "reason": "no capacity denominator"},
+            }],
+        }
         (output / "evidence.json").write_text(json.dumps({
-            "status": profile_status, "profiler": "msprof-op",
+            "status": "failure" if pipe_selector_miss else profile_status,
+            "profiler": "msprof-op",
             "timing_scope": "device-task", "kernel_name": spec["kernel_name"],
+            "declared_kernel_name": spec["kernel_name"],
+            "resolved_kernel_name": resolved_kernel_name,
             "cases": [{"case": case, "median_us": 2.0, "samples_us": [2.0] * 3}
                       for case in spec["ranked"]],
             "repeats": 3, "geomean_us": 2.0, "captures": [],
+            **({"pipe_activity": pipe_activity} if include_pipe_activity else {}),
         }))
         return 0 if ok else 1
 
@@ -125,9 +148,51 @@ def test_gate_runs_full_correctness_before_ranked_profile(tmp_path, monkeypatch)
     )
     assert outcome == "success" and diagnostics == ""
     assert summary["correctness_cases"] == 50
-    assert [row["case"] for row in summary["cases"]] == [40, 49, 47, 46, 45]
-    assert summary["repeats"] == 3 and summary["profiler"] == "msprof-op"
+    assert summary["schema"] == "profiling-skill/a3-round-profile-summary/v1"
+    assert [row["case"] for row in summary["timing"]["cases"]] == [40, 49, 47, 46, 45]
+    assert summary["timing"]["repeats"] == 3
+    assert summary["timing"]["profiler"] == "msprof-op"
+    assert summary["timing"]["kernel_name"] == gate.SPECS["gdn"]["kernel_name"]
+    assert summary["pipe_activity"]["observations"][0]["saturation"]["state"] == "unknown"
+    assert summary["timeline"]["available"] is False
+    assert summary["timeline"]["kind"] == "a3-temporal-pipe-phases"
     assert summary["fusion"]["logical_launches_per_case"] == 1
+
+
+def test_gate_reports_suffix_fallback_as_exact_resolved_timing_identity(
+    tmp_path, monkeypatch
+):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    declared = gate.SPECS["matmul"]["kernel_name"]
+    resolved = "streaming_matmul_add_kernel"
+    modules = fake_modules("matmul", resolved_kernel_name=resolved)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 2,
+    )
+    assert outcome == "success" and diagnostics == ""
+    assert summary["timing"]["kernel_name"] == resolved
+    assert summary["timing"]["declared_kernel_name"] == declared
+    assert summary["timing"]["resolved_kernel_name"] == resolved
+    assert summary["pipe_activity"]["provenance"]["kernel_selector"] == resolved
+
+
+def test_gate_rejects_timing_and_pipe_selector_mismatch(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules(
+        "matmul", resolved_kernel_name="streaming_matmul_add_kernel",
+        pipe_kernel_name=gate.SPECS["matmul"]["kernel_name"],
+    )
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 2,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == (
+        "managed A3 timing and pipe activity use different exact kernel selectors"
+    )
 
 
 def test_compile_failure_stops_before_profiling(tmp_path, monkeypatch):
@@ -169,6 +234,71 @@ def test_profile_tool_failure_is_infrastructure(tmp_path, monkeypatch):
     )
     assert outcome == "infrastructure_failure"
     assert "msprof unavailable" in diagnostics and summary == {}
+
+
+def test_pipe_selector_miss_after_timing_success_is_infrastructure(
+    tmp_path, monkeypatch
+):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules("matmul", pipe_selector_miss=True)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == "no PipeUtilization export for resolved kernel"
+
+
+def test_missing_pipe_activity_fails_instead_of_claiming_profile_guidance(
+    tmp_path, monkeypatch
+):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules("matmul", include_pipe_activity=False)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == "managed A3 profile is missing pipe activity evidence"
+
+
+def test_claimed_a3_saturation_is_rejected(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = list(fake_modules("matmul"))
+    original = modules[2].execute
+
+    def saturated(job, **kwargs):
+        rc = original(job, **kwargs)
+        path = kwargs["output"] / "evidence.json"
+        evidence = json.loads(path.read_text())
+        evidence["pipe_activity"]["observations"][0]["saturation"]["state"] = "saturated"
+        path.write_text(json.dumps(evidence))
+        return rc
+
+    modules[2] = SimpleNamespace(execute=saturated)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert "keep saturation unknown" in diagnostics
+
+
+def test_empty_modeled_pipe_activity_is_rejected(tmp_path, monkeypatch):
+    root, candidate, declaration = prepare(tmp_path, "matmul")
+    modules = fake_modules("matmul", empty_pipe_activity=True)
+    loaded = iter(modules)
+    monkeypatch.setattr(gate, "load", lambda *_: next(loaded))
+    outcome, diagnostics, summary = gate.run_gate(
+        root, candidate, declaration, "matmul", tmp_path / "out", 1,
+    )
+    assert outcome == "infrastructure_failure" and summary == {}
+    assert diagnostics == (
+        "every managed A3 pipe observation requires a finite modeled activity fraction"
+    )
 
 
 def test_wrong_host_task_manifest_is_infrastructure_failure(tmp_path, monkeypatch):

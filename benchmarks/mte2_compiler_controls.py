@@ -7,7 +7,12 @@ import json
 from pathlib import Path
 
 
-def kernels(triton, tl):
+def kernels():
+    # JIT source resolution uses module globals; keep device imports lazy while
+    # avoiding closure-only aliases that differ between Triton versions.
+    global triton, tl
+    import triton
+    import triton.language as tl
     @triton.jit
     def mask_control(x, out, N: tl.constexpr, PREDICATE: tl.constexpr,
                      BLOCK: tl.constexpr):
@@ -44,8 +49,7 @@ def run(family, variant, output):
     import torch
     import torch_npu  # noqa: F401
     import triton
-    import triton.language as tl
-    mask, buffering = kernels(triton, tl)
+    mask, buffering = kernels()
     torch.manual_seed(0)
     device = 'npu:0'  # logical selected-device mapping belongs to remote runtime
     if family == 'mask':

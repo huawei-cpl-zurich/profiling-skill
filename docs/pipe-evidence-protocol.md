@@ -72,10 +72,34 @@ uncertainty calibration; discriminating next experiment; falsifiable predictions
 consistent with held-out outcomes. Do not penalize agents for unavailable
 evidence or reward metric repetition. Record critical unsupported claims.
 
-For each task compare before-to-after gains, first pipes versus timing repeat,
-then pipes-plus-skill versus pipes. A positive diagnostic signal requires
-substantive advantages on at least four of six tasks and no increase in critical
-unsupported claims. Report every task, ties, negative findings and uncertainty;
+Apply the same anchors to each dimension: **0** means absent or contradicted;
+**1** means generic or partly supported; **2** means specific, sound and bounded
+by the available evidence. Missing measurements are not themselves an error;
+explicit calibration of what remains unknown is a valid response. Private IR
+and candidate captures validate the assessor's mechanism claims, not additional
+agent requirements or grounds to penalize inaccessible evidence.
+
+Predeclared bounded outcome expectations are:
+
+| Tasks | Candidate A | Candidate B |
+| --- | --- | --- |
+| task01/02 | Latency indeterminate | Latency indeterminate |
+| task03 | Predicate latency unclear | Warp-hint latency unclear |
+| task04 | Predicate medians slower but noisy; indeterminate or qualified regression is admissible | Warp-hint latency unclear |
+| task05/06 | BM16 regresses | BK64 improves |
+
+No precise speedup or capacity/saturation claim is required. Appropriate
+uncertainty can earn full credit where held-out outcomes are inconclusive.
+
+For each task and arm, define delta as after-total minus before-total. Compare
+deltas first for pipes versus timing repeat, then pipes-plus-skill versus pipes.
+A contrast win requires both a strictly larger delta than the comparator and a
+substantive, correct, evidence-supported change; otherwise record a tie. Do not
+redefine wins after inspecting results. Report absolute after-scores secondarily
+to expose ceiling effects. A positive diagnostic signal requires at least four
+of six wins and a tested-arm critical-unsupported-claim after-count no greater
+than the comparator's after-count; report before-counts too.
+Report every task, ties, negative findings and uncertainty;
 these six pairs are a qualitative pilot, not a population estimate.
 
 Useful pipes without an incremental skill advantage suggest redundant guidance

@@ -113,6 +113,9 @@ small matmul or whether overhead/another resource dominates.
 
 ## Controlled memory: compiled path versus runtime locality
 
+The companion [controlled memory report](mte2-controlled-memory-findings.md)
+retains the full timings, counter scope and variability qualifications.
+
 The completed controlled memory matrix adds an important separation. Its source
 retains a direct load or loads runtime indices before loading selected values.
 The compact data's `controlled_memory` section binds10 actual first-correctness

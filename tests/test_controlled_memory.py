@@ -134,6 +134,10 @@ def test_memory_rows_raw_units_and_selector(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize('message,unavailable', [('Memory is not supported', True),
+                                               ('unsupported metric: Memory', True),
+                                               ('Invalid value for --aic-metrics: Memory', True),
+                                               ('invalid device memory', False),
+                                               ('Memory allocation failed: invalid device', False),
                                                ('compile error', False),
                                                ('data collection failed', False)])
 def test_memory_capability_not_runtime_failure(tmp_path, monkeypatch, message, unavailable):

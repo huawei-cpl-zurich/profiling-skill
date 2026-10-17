@@ -44,8 +44,10 @@ def memory_capture(command, folder, env, selector):
         transcript = '\n'.join(p.read_text() for p in folder.glob('*.log'))
         # Only a named metric rejection is a capability result. Runtime/compiler,
         # partial collection and transport errors must propagate as failures.
-        if not re.search(r'(?:unsupported|not support|invalid|unrecognized)[^\n]*Memory|'
-                         r'Memory[^\n]*(?:unsupported|not supported|invalid)',
+        if not re.search(r'\bMemory\s+(?:(?:metric|group)\s+)?(?:is\s+)?'
+                         r'(?:not supported|unsupported)\b|'
+                         r'\b(?:unsupported|invalid|unrecognized)[^\n]{0,80}'
+                         r'(?:--aic-metrics|\bmetric(?:\s+group)?\b)[^\n]{0,40}\bMemory\b',
                          transcript, re.IGNORECASE):
             raise
         return dict(metric='Memory', availability='unsupported', diagnostic=transcript[-4000:])

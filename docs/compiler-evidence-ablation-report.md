@@ -54,7 +54,8 @@ included. Missing/unvalidated counter units are not silently converted.
   76 files total. Do not substitute an installed skill.
 - [Model configuration](data/compiler-evidence-ablation-model.json): explicit
   `gpt-5.6-sol`, low reasoning effort.
-- Observed target: `Ascend910_9382`; Triton module3.2.0, distribution3.2.2.
+- Observed target: `Ascend910_9382`; Triton module3.2.0,
+  `triton-ascend` distribution3.2.2.
   Exact CANN/profiler version unavailable; retained as unknown rather than
   inferred from an image label.
 

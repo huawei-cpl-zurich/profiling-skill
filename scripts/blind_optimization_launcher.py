@@ -134,7 +134,8 @@ class BlindLauncher(ProductionLauncher):
     def __init__(self, output: Path, bundle: Path, prompt: Path, model: dict,
                  tool_command: list[str], *, skill: Path | None = None,
                  codex: str = "codex", auth_home: Path | None = None,
-                 forbidden: tuple[Path, ...] = (), timeout: int = 600):
+                 forbidden: tuple[Path, ...] = (), timeout: int = 600,
+                 finish_reserve_seconds: int = 120):
         self.root = output.resolve()
         self.bundle = bundle.resolve()
         self.prompt_source = prompt.resolve()
@@ -144,6 +145,9 @@ class BlindLauncher(ProductionLauncher):
         if type(timeout) is not int or timeout <= 0:
             raise LaunchError("budget_seconds must be a positive integer")
         self.timeout = timeout
+        if type(finish_reserve_seconds) is not int or finish_reserve_seconds < 0:
+            raise LaunchError("finish reserve must be a nonnegative integer")
+        self.finish_reserve_seconds = finish_reserve_seconds
         self.tool_timeout = timeout
         self.tool_lock = threading.Lock()
         self.codex = Path(shutil.which(codex) or codex).resolve()
@@ -267,7 +271,8 @@ class BlindLauncher(ProductionLauncher):
         write_json(self.workspace / "execution.json", {
             "utc_start": utc_start.isoformat(),
             "utc_deadline": (utc_start + timedelta(seconds=self.timeout)).isoformat(),
-            "wall_budget_seconds": self.timeout, "finish_reserve_seconds": min(120, self.timeout),
+            "wall_budget_seconds": self.timeout,
+            "finish_reserve_seconds": min(self.finish_reserve_seconds, self.timeout),
         })
         try:
             if preflight_only:

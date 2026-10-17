@@ -46,6 +46,10 @@ def validate_answer(answer):
 
 
 class DiagnosticLauncher(BlindLauncher):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('finish_reserve_seconds', 30)
+        super().__init__(*args, **kwargs)
+
     def base_command(self):
         command = super().base_command()
         # BlindLauncher normally leaves candidate.* writable for optimization.
@@ -104,6 +108,8 @@ def seal_result(workspace, bundle, receipt):
 def run(packets, skill, model, output, *, budget=240, forbidden=(), launcher=DiagnosticLauncher,
         launcher_kwargs=None, resume=False):
     packets, skill, output = (Path(p).resolve() for p in (packets, skill, output))
+    if any(output.is_relative_to(p) or p.is_relative_to(output) for p in (packets, skill)):
+        raise ValueError('output must not overlap packet or skill inputs')
     if type(budget) is not int or budget <= 0 or not all(isinstance(model.get(k), str) and model[k] for k in ('name', 'reasoning_effort')):
         raise ValueError('explicit model and positive budget required')
     tasks, files, skill_files = checked_files(packets, skill)
@@ -138,6 +144,10 @@ def run(packets, skill, model, output, *, budget=240, forbidden=(), launcher=Dia
     for name, sha in identities.items():
         if digest(frozen / 'packets' / name) != sha:
             raise ValueError('frozen packet changed')
+    frozen_skill_items = list((frozen / 'skill').rglob('*'))
+    if any(p.is_symlink() or not (p.is_file() or p.is_dir()) for p in frozen_skill_items) or {
+            str(p.relative_to(frozen / 'skill')) for p in frozen_skill_items if p.is_file()} != set(skill_identity):
+        raise ValueError('frozen skill file set or types changed')
     for name, sha in skill_identity.items():
         if digest(frozen / 'skill' / name) != sha:
             raise ValueError('frozen skill changed')
@@ -160,6 +170,13 @@ def run(packets, skill, model, output, *, budget=240, forbidden=(), launcher=Dia
             stage_root = root / f'stage{stage}'
             if result_path.exists():
                 result = json.loads(result_path.read_text())
+                if result.get('valid'):
+                    try:
+                        current = seal_result(stage_root / 'workspace', root / f'stage{stage}-bundle', result['receipt'])
+                        if any(current[k] != result[k] for k in ('commit', 'answer_sha256')):
+                            raise ValueError('retained sealed commit or answer changed')
+                    except Exception as error:
+                        return {'task': task, 'arm': arm, 'complete': False, 'error': str(error)}
             elif stage_root.exists():
                 return {'task': task, 'arm': arm, 'complete': False, 'error': 'stage exists without terminal result; inspect, never duplicate'}
             else:

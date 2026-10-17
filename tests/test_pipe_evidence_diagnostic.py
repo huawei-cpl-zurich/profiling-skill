@@ -170,6 +170,49 @@ def test_resume_never_duplicates_existing_stages(tmp_path):
     assert not FakeLauncher.calls
 
 
+@pytest.mark.parametrize('inside', ['skill', 'packets'])
+def test_output_must_not_overlap_inputs(tmp_path, monkeypatch, inside):
+    packets, skill = fixtures(tmp_path)
+    output = (skill if inside == 'skill' else packets) / 'output'
+    def no_copy(*args, **kwargs):
+        raise AssertionError('input overlap must fail before copying')
+    monkeypatch.setattr(module.shutil, 'copytree', no_copy)
+    with pytest.raises(ValueError, match='overlap'):
+        module.run(packets, skill, {'name': 'fake', 'reasoning_effort': 'low'}, output, launcher=FakeLauncher)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize('change', ['extra', 'symlink'])
+def test_resume_rejects_changed_frozen_skill_set(tmp_path, change):
+    run(tmp_path)
+    skill = tmp_path / 'output' / 'frozen' / 'skill'
+    if change == 'extra':
+        (skill / 'EXTRA.md').write_text('new guidance')
+    else:
+        original = (skill / 'SKILL.md').read_text()
+        (skill / 'SKILL.md').unlink()
+        (tmp_path / 'external-skill').write_text(original)
+        (skill / 'SKILL.md').symlink_to(tmp_path / 'external-skill')
+    with pytest.raises(ValueError, match='frozen skill'):
+        module.run(tmp_path / 'packets', tmp_path / 'skill', {'name': 'explicit', 'reasoning_effort': 'low'},
+                   tmp_path / 'output', launcher=FakeLauncher, resume=True)
+
+
+@pytest.mark.parametrize('change', ['source', 'head'])
+def test_resume_revalidates_retained_source_and_commit(tmp_path, change):
+    run(tmp_path)
+    workspace = tmp_path / 'output' / 'task01-timing' / 'stage1' / 'workspace'
+    if change == 'source':
+        (workspace / 'candidate-a.py').write_text('changed')
+    else:
+        subprocess.run(['git', '-C', str(workspace), 'commit', '--allow-empty', '-m', 'Different HEAD'], check=True, capture_output=True)
+    FakeLauncher.calls = []
+    result = module.run(tmp_path / 'packets', tmp_path / 'skill', {'name': 'explicit', 'reasoning_effort': 'low'},
+                        tmp_path / 'output', launcher=FakeLauncher, resume=True)
+    assert result['completed'] == 17
+    assert not FakeLauncher.calls
+
+
 @pytest.mark.parametrize('arm', module.ARMS)
 def test_real_bwrap_readonly_and_visibility(tmp_path, arm):
     if not shutil.which('bwrap') or not shutil.which('codex'):
@@ -214,3 +257,10 @@ Path('/workspace/answer.json').write_text('answer writable')
         assert result.returncode == 0, result.stderr
     finally:
         instance.socket_temporary.cleanup()
+    if arm == 'timing':
+        instance = module.DiagnosticLauncher(tmp_path / 'metadata-smoke', bundle, prompt,
+            {'name': 'explicit', 'reasoning_effort': 'low'}, [sys.executable, str(Path(module.__file__)), 'offline'],
+            auth_home=auth, timeout=240)
+        assert instance.launch(preflight_only=True)['exit_code'] == 0
+        execution = json.loads((instance.workspace / 'execution.json').read_text())
+        assert execution['finish_reserve_seconds'] == 30

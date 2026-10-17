@@ -73,6 +73,36 @@ def test_inspect_retains_assembly_and_separates_late_evidence(tmp_path):
     assert {item.get('stage') for item in result['artifacts']} >= {'ttir', 'llir'}
 
 
+@pytest.mark.parametrize('query', ['--help', '-h', '--version', '-version',
+                                  '-print-targets', '--print-targets'])
+def test_actual_compile_may_include_inputless_backend_queries(tmp_path, query):
+    path = manifest(tmp_path)
+    data = json.loads(path.read_text())
+    data['invocations'].append(dict(id='query', tool='bisheng',
+                                    argv=['bisheng', query], exit_code=0,
+                                    input_copy=None, output_copy=None))
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['status'] == 'captured'
+    assert result['invocations'][1]['kind'] == 'tool_query'
+    assert result['invocations'][1]['argv'] == ['bisheng', query]
+
+
+def test_queries_alone_and_compile_arguments_are_not_compilation_evidence(tmp_path):
+    path = manifest(tmp_path)
+    data = json.loads(path.read_text())
+    data['invocations'] = [dict(id='query', tool='bisheng', argv=['bisheng', '--help'],
+                               exit_code=0, input_copy=None)]
+    path.write_text(json.dumps(data))
+    assert evidence.inspect(path)['status'] == 'failed'
+    data['invocations'][0]['argv'].append('missing.mlir')
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['status'] == 'failed'
+    assert result['invocations'][0]['kind'] == 'compiler'
+    assert any('missing actual compiler input' in error for error in result['errors'])
+
+
 def test_real_helper_capture_preserves_shared_runtime_and_error(tmp_path, monkeypatch):
     from types import SimpleNamespace
     package = tmp_path / 'shared/triton'

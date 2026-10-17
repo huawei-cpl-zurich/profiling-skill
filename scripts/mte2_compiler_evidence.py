@@ -44,13 +44,18 @@ def inspect(manifest_path, assembly_root=None):
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
     errors, artifacts, invocations = [], [], []
+    real_compiles = 0
+    query_flags = {'--help', '-h', '--version', '-version', '-print-targets', '--print-targets'}
     if manifest['reference_exit_code'] != 0:
         errors.append('reference command failed')
     if not manifest.get('invocations'):
         errors.append('no actual compiler consumer invocation captured')
     for invocation in manifest.get('invocations', []):
+        argv = invocation.get('argv', [])
+        query = len(argv) == 2 and argv[1] in query_flags
         item = {key: invocation.get(key) for key in
                 ('id', 'tool', 'argv', 'real_path', 'exit_code', 'duration_seconds')}
+        item['kind'] = 'tool_query' if query else 'compiler'
         item.update({key: log_record(invocation.get(key)) for key in ('stdout', 'stderr')})
         invocations.append(item)
         if invocation.get('exit_code') != 0:
@@ -59,8 +64,12 @@ def inspect(manifest_path, assembly_root=None):
             value = invocation.get(key)
             if value and Path(value).is_file():
                 artifacts.append(file_record(value, kind))
-            elif key == 'input_copy':
+                if key == 'input_copy' and not query:
+                    real_compiles += 1
+            elif key == 'input_copy' and not query:
                 errors.append('missing actual compiler input: ' + str(invocation.get('id')))
+    if not real_compiles:
+        errors.append('no actual compiler invocation with a retained input')
     # Raw dumps preserve available stages beyond the helper's convenience adapter copy.
     roots = [manifest_path.parent / 'triton-dump']
     if assembly_root:

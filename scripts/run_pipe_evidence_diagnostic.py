@@ -59,6 +59,8 @@ class DiagnosticLauncher(BlindLauncher):
 
 def checked_files(packets, skill):
     packet_manifest = json.loads((packets / 'manifest.json').read_text())
+    if packet_manifest.get('schema_version') != 1 or not isinstance(packet_manifest.get('files'), dict):
+        raise ValueError('schema_version 1 and exporter files map required')
     tasks = packet_manifest['tasks']
     if tasks != [f'task{i:02}' for i in range(1, 7)]:
         raise ValueError('expected task01 through task06')
@@ -78,10 +80,9 @@ def checked_files(packets, skill):
             raise ValueError('symlink inputs unsupported')
         if path in files and not path.is_file():
             raise ValueError('missing packet file: ' + str(path))
-    if 'files' in packet_manifest:
-        for path in files[1:]:
-            if packet_manifest['files'].get(str(path.relative_to(packets))) != digest(path):
-                raise ValueError('packet differs from exporter manifest: ' + str(path))
+    for path in files[1:]:
+        if packet_manifest['files'].get(str(path.relative_to(packets))) != digest(path):
+            raise ValueError('packet differs from exporter manifest: ' + str(path))
     return tasks, files, [p for p in skill_files if p.is_file()]
 
 

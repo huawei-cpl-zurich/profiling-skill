@@ -20,7 +20,6 @@ def fixtures(tmp):
     packets = tmp / 'packets'
     packets.mkdir()
     tasks = [f'task{i:02}' for i in range(1, 7)]
-    dump(packets / 'manifest.json', {'tasks': tasks})
     for task in tasks:
         public = packets / 'public' / task
         public.mkdir(parents=True)
@@ -35,6 +34,8 @@ def fixtures(tmp):
     private = packets / 'private'
     private.mkdir()
     (private / 'gold.json').write_text('SECRET')
+    dump(packets / 'manifest.json', {'schema_version': 1, 'tasks': tasks, 'files': {
+        str(p.relative_to(packets)): module.digest(p) for p in packets.rglob('*') if p.is_file()}})
     skill = tmp / 'skill'
     skill.mkdir()
     (skill / 'SKILL.md').write_text('frozen guidance')
@@ -111,7 +112,24 @@ def test_bad_packet_rejected_before_output(tmp_path):
     packets, skill = fixtures(tmp_path)
     (packets / 'pipes' / 'task06' / 'pipe-2.csv').unlink()
     with pytest.raises(ValueError):
-        module.run(packets, skill, {'name': 'x', 'reasoning_effort': 'low'}, tmp_path / 'output')
+        module.run(packets, skill, {'name': 'x', 'reasoning_effort': 'low'}, tmp_path / 'output', launcher=FakeLauncher)
+    assert not (tmp_path / 'output').exists()
+
+
+@pytest.mark.parametrize('failure', ['missing-map', 'wrong-schema', 'tampered-input'])
+def test_exporter_provenance_required_before_output(tmp_path, failure):
+    packets, skill = fixtures(tmp_path)
+    path = packets / 'manifest.json'
+    manifest = json.loads(path.read_text())
+    if failure == 'missing-map':
+        del manifest['files']
+    elif failure == 'wrong-schema':
+        manifest['schema_version'] = 2
+    else:
+        (packets / 'public' / 'task03' / 'baseline.py').write_text('changed after export')
+    dump(path, manifest)
+    with pytest.raises(ValueError):
+        module.run(packets, skill, {'name': 'x', 'reasoning_effort': 'low'}, tmp_path / 'output', launcher=FakeLauncher)
     assert not (tmp_path / 'output').exists()
 
 

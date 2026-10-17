@@ -51,3 +51,8 @@ timing evidence. A `memref.copy` is not a particular pipe; early MLIR is not fin
 hardware scheduling. Missing later stages are explicitly reported, not inferred.
 Use actual scalar loads/loops versus transfers to formulate hypotheses, then
 test them against separate timings and correctly scoped pipe/memory counters.
+
+The [actual four-control findings](mte2-compiler-findings.md) include retained
+artifact hashes and line-numbered excerpts: source predication still produces
+load-plus-selection here, and identical adapter IR hides later buffer/event
+changes. Those findings are compiler mechanisms, not performance measurements.

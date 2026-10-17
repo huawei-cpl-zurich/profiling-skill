@@ -89,6 +89,10 @@ def parse_trace(payload, path):
         args = item.get("args") if isinstance(item.get("args"), dict) else {}
         kind = "control" if pipe in {"FLOWCTRL", "ALL"} or CONTROL.fullmatch(name.upper()) else "instruction"
         rows.append({"core": core, "pipeline": pipe, "lane_provenance": provenance,
+                     "raw_pid": pid, "raw_tid": tid,
+                     "raw_timestamp": item["ts"], "raw_duration": item["dur"],
+                     "timestamp_unit": "us",
+                     "timestamp_unit_provenance": "Chrome Trace Event Format ts/dur (not displayTimeUnit)",
                      "thread": thread or tid, "name": name, "kind": kind,
                      "start_us": start, "duration_us": duration,
                      "pc": str(args.get("pc_addr", "")),
@@ -108,6 +112,10 @@ def summarize(report: Path, selector: str, *, acquisition_status="unknown", acqu
     log_bytes = log.read_bytes() if log.is_file() else b""
     observed = sorted(set(KERNEL.findall(log_bytes.decode(errors="replace"))))
     bound = len(candidates) == 1 and observed == [selector]
+    # Vendor basenames may repeat (e.g. OPPROF_0). Bind to this retained
+    # attempt's resolved identity, not a globally ambiguous directory label.
+    capture_id = (hashlib.sha256(str(candidates[0].resolve()).encode() + b"\0" + log_bytes).hexdigest()
+                  if len(candidates) == 1 else None)
     for simulator in candidates:
         aggregate = simulator / "trace.json"
         per_core = sorted(simulator.glob("core*.*/trace.json"))
@@ -116,13 +124,19 @@ def summarize(report: Path, selector: str, *, acquisition_status="unknown", acqu
         diagnostics["duplicate_views_ignored"] += len(per_core) if aggregate.is_file() else 0
         for path in paths:
             raw = path.read_bytes()
-            sources.append({"name": str(path.relative_to(report)), "bytes": len(raw),
-                            "sha256": hashlib.sha256(raw).hexdigest()})
+            source_name = str(path.relative_to(report))
+            source = {"name": source_name, "bytes": len(raw),
+                      "sha256": hashlib.sha256(raw).hexdigest(), "display_time_unit": None}
+            sources.append(source)
             try:
-                parsed, skipped = parse_trace(json.loads(raw), path)
+                payload = json.loads(raw)
+                parsed, skipped = parse_trace(payload, path)
             except (ValueError, UnicodeError):
                 diagnostics["invalid_json"] += 1
                 continue
+            source["display_time_unit"] = payload.get("displayTimeUnit") if isinstance(payload, dict) else None
+            for event in parsed:
+                event.update(capture_id=capture_id, source_trace=source_name)
             diagnostics.update(skipped)
             rows.extend(parsed)
     # Different report identities are not a shared clock or selected invocation.
@@ -144,6 +158,7 @@ def summarize(report: Path, selector: str, *, acquisition_status="unknown", acqu
     return {
         "schema_version": 1, "evidence_kind": "simulation-instruction-timeline",
         "product": "a3", "clock": "simulator-trace-microseconds",
+        "capture_id": capture_id,
         "acquisition_status": acquisition_status,
         "partial_capture": acquisition_status == "partial",
         "acquisition_failure": acquisition_failure,

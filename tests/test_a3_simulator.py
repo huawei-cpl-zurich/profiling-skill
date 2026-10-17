@@ -42,6 +42,45 @@ def test_real_observed_string_lane_excerpts_are_simulation_only(tmp_path):
     assert result["partial_capture"] and result["acquisition_failure"] == "teardown_failed"
 
 
+def test_trace_retains_capture_lane_clock_and_instruction_identity(tmp_path):
+    root, path = report(tmp_path)
+    result = sim.summarize(root, "a3_phase_probe", acquisition_status="clean")
+    event = result["events"][0]
+    original = payload()["traceEvents"][0]
+    assert event["raw_pid"] == str(original["pid"])
+    assert event["raw_tid"] == str(original["tid"])
+    assert event["raw_timestamp"] == original["ts"]
+    assert event["timestamp_unit"] == "us"
+    assert event["timestamp_unit_provenance"] == "Chrome Trace Event Format ts/dur (not displayTimeUnit)"
+    assert event["pc"] == str(original["args"]["pc_addr"])
+    assert event["source_trace"] == str(path.relative_to(root))
+    assert event["capture_id"] == result["capture_id"]
+    assert result["sources"][0]["display_time_unit"] == payload().get("displayTimeUnit")
+
+
+def test_malformed_trace_still_retains_raw_evidence_identity(tmp_path):
+    root, path = report(tmp_path)
+    path.write_bytes(b"{truncated")
+    result = sim.summarize(root, "a3_phase_probe", acquisition_status="partial")
+    assert result["raw_trace_obtained"]
+    assert not result["interpretable"]
+    assert result["sources"][0]["bytes"] == 10
+    assert result["diagnostics"]["invalid_json"] == 1
+
+
+def test_identical_vendor_directory_names_do_not_merge_distinct_attempts(tmp_path):
+    roots = []
+    for attempt in ("first", "second"):
+        directory = tmp_path / attempt
+        directory.mkdir()
+        root, _ = report(directory)
+        roots.append(root)
+    first, second = [sim.summarize(root, "a3_phase_probe") for root in roots]
+    assert first["capture_id"] != second["capture_id"]
+    assert first["capture_id"] == sim.summarize(roots[0], "a3_phase_probe")["capture_id"]
+    assert {event["capture_id"] for event in first["events"]} == {first["capture_id"]}
+
+
 def test_failed_acquisition_cannot_be_marked_clean(tmp_path):
     root, _ = report(tmp_path)
     with pytest.raises(ValueError, match="partial"):

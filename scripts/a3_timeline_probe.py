@@ -14,11 +14,11 @@ import subprocess
 from summarize_a3_simulator import summarize
 
 
-def _execute(argv, *, capture_output, text, timeout):
+def _execute(argv, *, capture_output, text, timeout, env=None):
     # A timed-out profiler may own an application/simulator process tree. Keep
     # the caller's device lease until that entire process group has terminated.
     process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               text=text, start_new_session=True)
+                               text=text, start_new_session=True, env=env)
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -32,10 +32,11 @@ def _execute(argv, *, capture_output, text, timeout):
     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
-def _run(argv, output, label, timeout, runner):
+def _run(argv, output, label, timeout, runner, env=None):
     startup_failure = None
     try:
-        process = runner(argv, capture_output=True, text=True, timeout=timeout)
+        process = runner(argv, capture_output=True, text=True, timeout=timeout,
+                         **({"env": env} if env is not None else {}))
         code, stdout, stderr = process.returncode, process.stdout, process.stderr
     except subprocess.TimeoutExpired as exc:
         code = 124
@@ -59,7 +60,8 @@ def _run(argv, output, label, timeout, runner):
 
 
 def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
-            soc_version=None, launch_count=1, timeout=180, runner=_execute):
+            language="ascendc", soc_version=None, launch_count=1, timeout=180, runner=_execute,
+            binary_config=None, binary_sha256=None, simulator_library=None):
     """Caller holds an idle physical-device lease for this complete operation.
 
     Reports are intentionally not overwritten or resumed here. The outer queue
@@ -68,8 +70,35 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
     """
     if mode not in {"hardware", "simulation"}:
         raise ValueError("mode must be hardware or simulation")
+    if language not in {"triton", "ascendc"}:
+        raise ValueError("language must be triton or ascendc")
+    if mode == "hardware" and language == "triton":
+        raise ValueError("automatic TimelineDetail does not support Triton; use explicit simulation")
     if mode == "simulation" and not soc_version:
         raise ValueError("simulation requires observed --soc-version")
+    if mode == "simulation" and launch_count != 1:
+        raise ValueError("simulation normalization requires one invocation per retained capture")
+    replay, profile_env = None, None
+    if binary_config is not None:
+        if mode != "simulation" or not simulator_library or not binary_sha256:
+            raise ValueError("binary replay requires simulation, binary SHA256 and simulator library")
+        config_path = Path(binary_config).resolve()
+        config = json.loads(config_path.read_text())
+        if not isinstance(config, dict) or config.get("kernel_name") != selector or config.get("mode") != "ca":
+            raise ValueError("binary config must bind the exact kernel selector in ca mode")
+        binary = Path(config.get("kernel_path", ""))
+        library = Path(simulator_library)
+        if not binary.is_absolute() or not binary.is_file() or not library.is_absolute() or not library.is_dir():
+            raise ValueError("binary config needs an absolute existing kernel and simulator library")
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        if digest != binary_sha256:
+            raise ValueError("binary SHA256 differs from the verified workload artifact")
+        replay = {"config": str(config_path), "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+                  "binary": str(binary), "sha256": digest, "simulator_library": str(library)}
+        profile_env = os.environ.copy()
+        profile_env["LD_LIBRARY_PATH"] = str(library) + ":" + profile_env.get("LD_LIBRARY_PATH", "")
+    elif binary_sha256 is not None or simulator_library is not None:
+        raise ValueError("binary SHA256 and simulator library require a binary config")
     if not selector.strip() or launch_count < 1 or timeout < 1:
         raise ValueError("selector, launch count and timeout must be valid")
     if not application.is_file() or not os.access(application, os.X_OK):
@@ -77,10 +106,12 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
     if not os.environ.get("ASCEND_RT_VISIBLE_DEVICES"):
         raise ValueError("caller must select the leased physical device")
     output.mkdir(parents=True, exist_ok=False)
-    result = {"schema_version": 1, "mode": mode, "selector": selector,
+    result = {"schema_version": 1, "mode": mode, "language": language, "selector": selector,
               "soc_version": soc_version, "physical_device_mask": os.environ["ASCEND_RT_VISIBLE_DEVICES"],
               "source_phase_interpretation": "unavailable: requires independent source mapping",
               "hardware_timeline_available": False, "clean_acquisition_gate_passed": False}
+    if replay:
+        result["binary_replay"] = replay
     check, _ = _run([str(application.resolve())], output, "workload", timeout, runner)
     result["correctness"] = check
     if check["exit_code"]:
@@ -90,14 +121,16 @@ def acquire(application: Path, output: Path, selector: str, *, mode="hardware",
     else:
         command = ["msprof", "op"]
         if mode == "simulation":
-            command += ["simulator", "--soc-version=" + soc_version]
-        command += ["--application=" + str(application.resolve()),
-                    "--output=" + str((output / "report").resolve()),
-                    "--kernel-name=" + selector,
-                    "--launch-count=" + str(launch_count)]
+            command += ["simulator"]
+            if not replay:
+                command += ["--soc-version=" + soc_version]
+        command += ["--output=" + str((output / "report").resolve())]
+        command += (["--config=" + replay["config"]] if replay else
+                    ["--application=" + str(application.resolve()), "--kernel-name=" + selector,
+                     "--launch-count=" + str(launch_count)])
         command += (["--aic-metrics=PipeUtilization", "--dump=on", "--timeout=1"] if mode == "simulation"
                     else ["--aic-metrics=TimelineDetail", "--warm-up=0", "--kill=off"])
-        profile, transcript = _run(command, output, "profiler", timeout, runner)
+        profile, transcript = _run(command, output, "profiler", timeout, runner, env=profile_env)
         result["profiler"] = profile
         result["inventory"] = [
             {"path": str(path.relative_to(output)), "bytes": path.stat().st_size}
@@ -133,13 +166,20 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--kernel-name", required=True)
     parser.add_argument("--mode", choices=("hardware", "simulation"), default="hardware")
+    parser.add_argument("--language", choices=("triton", "ascendc"), required=True,
+                        help="Triton requires explicit simulation; automatic TimelineDetail excludes it")
     parser.add_argument("--soc-version")
+    parser.add_argument("--binary-config", type=Path, help="explicit verified binary ABI; no ABI guessing")
+    parser.add_argument("--binary-sha256", help="hash of the artifact verified by the application")
+    parser.add_argument("--simulator-library", type=Path, help="profile-resolved simulator lib directory")
     parser.add_argument("--launch-count", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=180)
     args = parser.parse_args()
     try:
-        result = acquire(args.application, args.output, args.kernel_name, mode=args.mode,
-                         soc_version=args.soc_version, launch_count=args.launch_count, timeout=args.timeout)
+        result = acquire(args.application, args.output, args.kernel_name, mode=args.mode, language=args.language,
+                         soc_version=args.soc_version, launch_count=args.launch_count, timeout=args.timeout,
+                         binary_config=args.binary_config, binary_sha256=args.binary_sha256,
+                         simulator_library=args.simulator_library)
     except (ValueError, OSError) as exc:
         parser.exit(2, str(exc) + "\n")
     print(json.dumps(result, sort_keys=True))

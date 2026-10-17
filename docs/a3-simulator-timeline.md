@@ -9,7 +9,7 @@ idle-device lease, export `ASCEND_RT_VISIBLE_DEVICES`, and hold that lease until
 the worker exits. Use the selected profile's named runtime through remote-access.
 
 ```bash
-python scripts/a3_timeline_probe.py --mode simulation \
+python scripts/a3_timeline_probe.py --mode simulation --language triton \
   --application /retained/experiment/workload.sh --output /retained/experiment/capture-1 \
   --kernel-name EXACT_EXPORTED_NAME --soc-version OBSERVED_SUPPORTED_SOC
 ```
@@ -24,11 +24,59 @@ overwritten. A failed correctness check stops before profiling.
 Process failure, timeout, a reported child signal, collection failure, or missing
 profiler terminal success marker prevents the clean gate even when traces exist.
 Partial traces remain inspectable, not successful acquisitions. Exact kernel
-binding is also mandatory. Hardware mode runs `TimelineDetail`, but its output
+binding is also mandatory. Automatic hardware `TimelineDetail` explicitly excludes
+Triton in the [official profiler guide](https://github.com/Ascend/msopprof/blob/master/docs/en/user_guide/msopprof_user_guide.md).
+The worker rejects `--language triton --mode hardware` before launching anything.
+Triton must use explicit simulation; prior context-save/argument-dump failures
+from the automatic route are not evidence that instruction simulation is unavailable.
+Hardware mode for `--language ascendc` runs `TimelineDetail`, but its output
 must pass the existing hardware acquisition harness's normalization separately;
 this worker cannot promote simulator traces to hardware evidence. Select one
-kernel per simulation invocation for multi-launch controls, keeping their replays
+kernel and one launch per simulation invocation for multi-launch controls, keeping their replays
 separate rather than inventing a shared clock across kernel captures.
+
+Qualify `benchmarks/a3_timeline_controls.py --control add` first, then `--control phase`.
+Inputs originate on the CPU to avoid capturing unrelated initialization kernels.
+The phase control keeps its vector result live and uses a volatile load; instruction
+or compiler evidence is still required before assigning source phases.
+The [Triton profiling guide](https://gitcode.com/Ascend/triton-ascend/blob/release%2F3.5.x/docs/zh/debug_guide/profiling.md)
+describes the explicit simulator route and simulator library setup. Check the
+installed tool's help and resolved tool/runtime library identities rather than
+mixing toolkit versions or copying machine-specific paths into source.
+
+### Binary replay when the Python simulator application fails at teardown
+
+The BZ qualification isolated a Python/Torch simulator teardown failure: native
+correctness passed and instruction events were emitted, but the Python application
+received signal 11. Replaying the **same binary** through the documented
+`msprof op simulator --config=...` route completed cleanly. Fresh caches and
+disabled NPU memory caching did not fix the Python route.
+
+The worker accepts optional `--binary-config`, `--binary-sha256` and
+`--simulator-library` for this route. The application wrapper still performs the
+native correctness check first. The caller must prove the supplied binary is the
+artifact verified by that application and supply its hash; this is not automatic
+ABI discovery. The config must contain the exact `kernel_name`, an absolute
+existing `kernel_path`, and `mode: ca`. The supplied library is resolved through
+the selected profile/install and observed SoC. It is prepended only in the
+profiler subprocess, never the native correctness check or shared runtime.
+
+**Pass the observed `--soc-version` to this worker**, including with
+`--binary-config`: it is required acquisition provenance. The worker deliberately
+omits it from the child `msprof op simulator --config=...` command because the
+installed profiler rejects that combination while returning exit 0. The child
+selects the model through the supplied simulator library instead.
+The worker also omits ineffective application/kernel filters in config mode and still
+requires the terminal success marker plus exact observed selector/core events.
+
+The two fixed vector controls have two leading hidden pointer arguments
+(`SyncBlockLockArgIdx=0`, `WorkspaceArgIdx=1` in TTAdapter), followed by input and
+output pointers. Their one-program bodies do not use the trailing grid scalar
+arguments. Their explicit qualification configs use two 4096-byte workspaces,
+one 128-element float32 input and one matching output. **Do not copy this ABI to
+arbitrary Triton kernels:** scalar, grid-dependent, workspace or mixed-Cube
+signatures need their own compiler/launcher evidence and validated configuration.
+The worker deliberately does not generate or guess these configurations.
 
 ## Retained trace interpretation
 
@@ -54,6 +102,9 @@ exists, it reads the per-core files instead. Interval unions and overlaps are
 computed independently per vector/cube core over all events; only the returned
 example event list is capped at 256. `displayTimeUnit` is a viewer hint: Chrome
 trace `ts`/`dur` retain their microsecond convention.
+Each normalized event retains raw PID/TID, timestamps, PC, timestamp-unit
+provenance, capture ID and source trace. Source hashes and the original display
+unit are retained even when malformed evidence cannot be interpreted.
 This was also checked against the native vendor simulator table: the four core
 instruction windows span 1.00424, 1.00788, 1.00788 and 1.00000 trace units;
 rounding them to the vendor table precision gives its 1.00, 1.01, 1.01 and

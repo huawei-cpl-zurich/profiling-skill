@@ -77,15 +77,26 @@ def checkpoint(folder, request, action):
             path = folder / name
             if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
                 raise RuntimeError('completed capture evidence changed: ' + str(path))
+        validate_compiler_artifacts(record['result'])
         return record['result']
     if folder.exists():
         raise RuntimeError('incomplete capture retained; inspect logs before explicit retry: ' + str(folder))
     result = action()
+    validate_compiler_artifacts(result)
     folder.mkdir(parents=True, exist_ok=True)
     files = {str(p.relative_to(folder)): hashlib.sha256(p.read_bytes()).hexdigest()
              for p in folder.rglob('*') if p.is_file()}
     save(done, dict(request=request, result=result, files=files))
     return result
+
+
+def validate_compiler_artifacts(result):
+    # Compiler artifacts live beside correctness/, not inside its phase subtree.
+    # Their existing retained pointers and digests are the authoritative binding.
+    for artifact in result.get('compiler', []):
+        path = Path(artifact['path'])
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != artifact['sha256']:
+            raise RuntimeError('referenced compiler evidence missing or changed: ' + str(path))
 
 
 def interleaved(selected, output, env, *, physical, resume=False):

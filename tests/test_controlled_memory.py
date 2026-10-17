@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -115,6 +116,33 @@ def test_checkpoint_rejects_partial_and_changed_evidence(tmp_path):
     (fresh / 'stdout.log').write_text('changed')
     with pytest.raises(RuntimeError, match='evidence changed'):
         b.checkpoint(fresh, {'a': 1}, action)
+
+
+@pytest.mark.parametrize('change', ['mutate', 'delete'])
+def test_checkpoint_validates_sibling_compiler_artifacts(tmp_path, change):
+    b = load('scripts', 'a3_controlled_memory_batch')
+    artifact = tmp_path / 'compiler-evidence/adapter.txt'
+    artifact.parent.mkdir()
+    artifact.write_text('actual compiler IR')
+    value = {'compiler': [{'path': str(artifact),
+                            'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest()}]}
+    phase = tmp_path / 'correctness'
+    assert b.checkpoint(phase, {}, lambda: value) == value
+    if change == 'mutate':
+        artifact.write_text('different IR')
+    else:
+        artifact.unlink()
+    with pytest.raises(RuntimeError, match='referenced compiler evidence'):
+        b.checkpoint(phase, {}, lambda: value)
+
+
+def test_checkpoint_rejects_invalid_compiler_pointer_before_completion(tmp_path):
+    b = load('scripts', 'a3_controlled_memory_batch')
+    phase = tmp_path / 'correctness'
+    with pytest.raises(RuntimeError, match='referenced compiler evidence'):
+        b.checkpoint(phase, {}, lambda: {'compiler': [{'path': str(tmp_path / 'missing'),
+                                                       'sha256': '0' * 64}]})
+    assert not (phase / 'completed.json').exists()
 
 
 def test_memory_rows_raw_units_and_selector(tmp_path, monkeypatch):

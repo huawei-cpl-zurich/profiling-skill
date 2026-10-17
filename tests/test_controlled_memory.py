@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -44,6 +45,20 @@ def test_runtime_indices_are_repeatable_permutations():
         assert m.footprint(c)['index_bytes'] == 280
         if c['pattern'] == 'local32':
             assert all(i // 32 == v // 32 for i, v in enumerate(values))
+
+
+def test_compiler_target_identity_and_explicit_unavailable():
+    m = load('benchmarks', 'a3_controlled_memory')
+    triton = SimpleNamespace(__file__='/runtime/triton/__init__.py')
+    direct = m.compiler_identity(SimpleNamespace(metadata={'target': 'actual-target'}), triton)
+    assert direct['target'] == 'actual-target'
+    assert direct['target_origin'] == 'compiled.metadata.target'
+    triton.runtime = SimpleNamespace(driver=SimpleNamespace(
+        active=SimpleNamespace(get_current_target=lambda: 'driver-target')))
+    assert m.compiler_identity(SimpleNamespace(), triton)['target'] == 'driver-target'
+    triton.runtime = None
+    missing = m.compiler_identity(SimpleNamespace(), triton)
+    assert missing['target'] is None and 'AttributeError' in missing['target_error']
 
 
 def fake_backend(batch, monkeypatch, calls):

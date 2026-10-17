@@ -8,6 +8,20 @@ import random
 STRIDES = (1, 2, 4, 8, 16, 32, 64)
 
 
+def compiler_identity(compiled, triton):
+    metadata = getattr(compiled, 'metadata', None)
+    target = metadata.get('target') if isinstance(metadata, dict) else getattr(metadata, 'target', None)
+    origin = 'compiled.metadata.target'
+    if target is None:
+        origin = 'triton.runtime.driver.active.get_current_target'
+        try:
+            target = triton.runtime.driver.active.get_current_target()
+        except Exception as exc:
+            return dict(module_file=triton.__file__, target=None, target_origin=origin,
+                        target_error=type(exc).__name__ + ': ' + str(exc))
+    return dict(module_file=triton.__file__, target=str(target), target_origin=origin)
+
+
 def cases(n=1048576):
     if n <= 0:
         raise ValueError('size must be positive')
@@ -81,6 +95,7 @@ def run(case, artifact_root):
                 compiler=retain_compiler_evidence(compiled.asm, artifact_root, case['id'], 'probe', 1),
                 environment=dict(torch=torch.__version__, triton_module=triton.__version__,
                                  triton_distributions=triton_distributions(),
+                                 compiler_identity=compiler_identity(compiled, triton),
                                  device_name=torch.npu.get_device_name(0)))
 
 

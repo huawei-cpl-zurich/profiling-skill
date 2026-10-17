@@ -154,6 +154,15 @@ def interleaved(selected, output, env, *, physical, resume=False):
     return summary
 
 
+def probe(env, *, executable=sys.executable, expression=None):
+    expression = expression or ('import torch,torch_npu; '
+                                'torch.empty(1,device="npu"); torch.npu.synchronize()')
+    result = base.bounded_run([executable, '-c', expression], env=env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=True, timeout=30)
+    return result.returncode == 0, result.stderr[-1000:]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
@@ -170,11 +179,6 @@ def main():
         selected = [c for c in selected if c['id'] in args.case]
         if {c['id'] for c in selected} != set(args.case):
             parser.error('unknown or excluded --case')
-    def probe(env):
-        result = base.bounded_run([sys.executable, '-c', 'import torch,torch_npu; '
-                                   'torch.empty(1,device="npu"); torch.npu.synchronize()'],
-                                  env=env, capture_output=True, text=True, timeout=30)
-        return result.returncode == 0, result.stderr[-1000:]
     physical, env, lease = base.wait_for_device(probe)
     try:
         interleaved(selected, args.output.resolve(), env, physical=physical, resume=args.resume)

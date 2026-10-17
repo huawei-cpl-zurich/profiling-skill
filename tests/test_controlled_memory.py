@@ -159,3 +159,11 @@ def test_correctness_requires_explicit_success():
         b.checked_output(subprocess.CompletedProcess([], 0, '{}', ''))
     with pytest.raises(RuntimeError, match='process failed'):
         b.checked_output(subprocess.CompletedProcess([], 7, '{"correctness":true}', 'compile error'))
+
+
+def test_runtime_probe_uses_real_subprocess_interface():
+    b = load('scripts', 'a3_controlled_memory_batch')
+    assert b.probe(None, expression='print("probe works")') == (True, '')
+    ok, diagnostic = b.probe(None, expression='import sys; print("runtime broken", '
+                             'file=sys.stderr); sys.exit(3)')
+    assert not ok and diagnostic.strip() == 'runtime broken'

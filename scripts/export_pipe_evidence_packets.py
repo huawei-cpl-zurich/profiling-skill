@@ -106,6 +106,9 @@ def verify_case(case, archives, bundles):
                 statistics.median(samples) == declared['timing']['median_us'], 'timing sample mismatch')
         captures = []
         for capture in range(3):
+            pipe_basic = rows(one_csv(members, prefix + f'/pipe-{capture}', 'OpBasicInfo.csv'))
+            require(len(pipe_basic) == 1 and pipe_basic[0]['Op Name'] == selector,
+                    'pipe selector binding mismatch')
             raw = one_csv(members, prefix + f'/pipe-{capture}', 'PipeUtilization.csv')
             parsed = rows(raw)
             require(len(parsed) == declared['pipe_capture_row_counts'][capture] and len(parsed) > 0 and

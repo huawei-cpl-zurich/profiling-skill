@@ -54,6 +54,8 @@ class PacketTests(unittest.TestCase):
                             f'Op Name,Task Duration(us)\ntask_kernel,{capture + 1}\n'.encode())
                     for capture in range(3):
                         files[f'{prefix}/pipe-{capture}/report/PipeUtilization.csv'] = self.csv
+                        files[f'{prefix}/pipe-{capture}/report/OpBasicInfo.csv'] = (
+                            b'Op Name,Task Duration(us)\ntask_kernel,1\n')
                     for kind in ('ttir', 'ttadapter'):
                         member = f'{name}/compiler-evidence/candidate/{kind}.txt'
                         files[member] = b'PRIVATE COMPILER EVIDENCE'
@@ -122,6 +124,33 @@ class PacketTests(unittest.TestCase):
         self.write_qualification()
         with self.assertRaisesRegex(ValueError, 'pipe'):
             self.export()
+
+    def mutate_archive(self, transform):
+        archive = self.root / self.cases[0]['archive']
+        with tarfile.open(archive) as stream:
+            files = {entry.name: stream.extractfile(entry).read() for entry in stream.getmembers()}
+        transform(files)
+        with tarfile.open(archive, 'w:gz') as stream:
+            for name, data in files.items():
+                entry = tarfile.TarInfo(name)
+                entry.size = len(data)
+                stream.addfile(entry, io.BytesIO(data))
+        self.cases[0]['archive_sha256'] = digest(archive.read_bytes())
+        self.write_qualification()
+
+    def test_missing_pipe_kernel_binding_rejected_before_output(self):
+        self.mutate_archive(lambda files: files.pop('batch-1/variant-0/pipe-1/report/OpBasicInfo.csv'))
+        with self.assertRaisesRegex(ValueError, 'capture CSV'):
+            self.export()
+        self.assertFalse((self.root / 'output').exists())
+
+    def test_wrong_pipe_kernel_binding_rejected_before_output(self):
+        self.mutate_archive(lambda files: files.update({
+            'batch-1/variant-0/pipe-2/report/OpBasicInfo.csv':
+                b'Op Name,Task Duration(us)\nwrong_kernel,1\n'}))
+        with self.assertRaisesRegex(ValueError, 'pipe selector'):
+            self.export()
+        self.assertFalse((self.root / 'output').exists())
 
     def test_wrong_selector_rejected(self):
         self.cases[0]['variants']['variant-0']['selector'] = 'wrong'

@@ -108,6 +108,40 @@ misleading guidance. No improvement establishes only no demonstrated benefit in
 these cases, not universal metric uselessness. No claim here changes the earlier
 skill merge gate or permits retrospective tuning.
 
+## Obtaining the unchanged candidate skill
+
+The frozen candidate is reachable through the profiling-skill repository's
+open PR121, branch `codex/profiling-lessons-update`, and its exact
+[commit](https://github.com/huawei-cpl-zurich/profiling-skill/commit/294f76fc602f9d121cb9826bfcdc6c9e524c1bd2).
+It need not be installed globally or vendored into this diagnostic repository.
+From a separate local checkout of that repository, fetch the explicit PR ref,
+verify the expected revision, and archive only the frozen pilot allowlist:
+
+```sh
+git fetch origin refs/pull/121/head:refs/remotes/origin/pipe-skill-candidate
+test "$(git rev-parse refs/remotes/origin/pipe-skill-candidate)" = \
+  294f76fc602f9d121cb9826bfcdc6c9e524c1bd2
+git archive --format=tar 294f76fc602f9d121cb9826bfcdc6c9e524c1bd2 \
+  SKILL.md \
+  references/triton-pipe-attribution.md \
+  references/a2-a3-msprof-op.md \
+  references/a3-performance-reasoning.md \
+  references/acquisition-workflow.md \
+  references/a3-timeline-and-correctness.md \
+  references/triton-pipe-attribution.json \
+  references/a3-pipe-activity-model.json \
+  references/pipe-saturation-contract.md \
+  references/a5-pipe-capacity-model.json \
+  references/a5-metric-semantics.md \
+  references/a5-timeline-semantics.md > candidate-skill.tar
+```
+
+This is twelve files total: SKILL.md plus eleven references, matching the prior
+pilot's `manifest.json` entries beneath `skill/`. If the PR head changes, the
+verification intentionally fails: use the exact frozen commit, not newer text.
+The diagnostic runner must retain its own frozen file hashes before model
+launch and expose the archive contents only to the skill condition.
+
 ## Functional checks
 
 ```sh

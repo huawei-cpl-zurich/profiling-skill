@@ -3,19 +3,23 @@
 This is a supplied-evidence diagnostic, not a performance campaign or a new
 skill-versus-no-skill experiment. It tests whether baseline compiler artifacts
 help agents connect Triton source to a measured mechanism, beyond pipe metrics
-or timing alone. Measurement and capture qualification must finish first.
+or timing alone. Compiler arms receive actual artifacts for the baseline and
+both proposed candidates; pipe metrics and timing describe only the baseline.
+This tests the incremental value of supplied compiler information, not whether
+agents successfully acquire profiling evidence. Measurement and capture
+qualification must finish first.
 
 ## Fixed experimental design
 
 Use exactly three independently qualified cases, with two proposed source
 changes per case. Each case appears in four fresh, isolated contexts:
 
-| Arm | Baseline evidence supplied |
+| Arm | Evidence supplied |
 | --- | --- |
 | timing | Source and timing |
 | pipes | Source, timing and pipe captures |
-| compiler | Source, timing and compiler artifacts |
-| both | Source, timing, pipe captures and compiler artifacts |
+| compiler | Source, baseline timing and all three implementations' compiler artifacts |
+| both | Source, baseline timing/pipe captures and all three implementations' compiler artifacts |
 
 All twelve agents receive the same frozen profiling skill, prompt, explicit
 model/reasoning settings and 300-second budget, including tools and waiting.
@@ -62,12 +66,16 @@ parent traversal are rejected. The existing snapshot/hash mechanism is reused.
 The coordinator must inspect *contents*, not just filenames, before freezing:
 no held-out candidate measurements, qualification outcomes, expert diagnoses,
 answer keys, or private provenance comments in public sources, task metadata,
-CSV names, compiler manifests, logs, or paths. Supply actual baseline compiler
-artifacts and commands from `$mlir-triton-dump`, bound to source, specialization,
-compiler options and target. Explain unavailable stages neutrally; early MLIR
-is not proof of final instruction order. Never copy a raw capture directory
-without selecting and checking its contents. Candidate outcomes and the expert
-key stay outside the packet input tree in a separately retained assessment area.
+CSV names, compiler manifests, logs, or paths. Supply actual baseline and both
+candidates' compiler artifacts and commands from `$mlir-triton-dump`, bound to
+source, specialization, compiler options and target, with neutral implementation
+labels. Candidate compilation artifacts are evidence; candidate timings, pipe
+profiles, measured speedups and expert annotations are not public inputs. Do
+not highlight answer-relevant IR passages. Explain unavailable stages neutrally;
+early MLIR is not proof of final instruction order. Never copy a raw capture
+directory without selecting and checking its contents. Candidate performance
+outcomes and the expert key stay outside the packet input tree in a separately
+retained assessment area.
 
 ## Running and interruptions
 

@@ -73,6 +73,28 @@ def test_inspect_retains_assembly_and_separates_late_evidence(tmp_path):
     assert {item.get('stage') for item in result['artifacts']} >= {'ttir', 'llir'}
 
 
+def test_suffixless_copied_llvm_input_uses_actual_manifest_binding(tmp_path):
+    path = manifest(tmp_path)
+    data = json.loads(path.read_text())
+    original = Path(data['invocations'][0]['input_copy'])
+    copied = original.with_name('captured-input')
+    original.rename(copied)
+    before = copied.read_bytes()
+    invocation = data['invocations'][0]
+    invocation.update(input_copy=str(copied), input_arg='/compile/kernel.ll',
+                      argv=['bisheng', '/compile/kernel.ll', '/linked/library.mlir'])
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['later_artifact_status'] == 'observed_not_hardware_schedule'
+    assert result['artifacts'][0]['stage'] == 'llvm'
+    assert result['invocations'][0]['input_arg'] == '/compile/kernel.ll'
+    assert copied.read_bytes() == before
+    invocation.update(input_arg='/compile/kernel.ttadapter.mlir',
+                      argv=['bisheng', '/compile/kernel.ttadapter.mlir', '/linked/library.ll'])
+    path.write_text(json.dumps(data))
+    assert evidence.inspect(path)['later_artifact_status'] == 'not_observed'
+
+
 @pytest.mark.parametrize('query', ['--help', '-h', '--version', '-version',
                                   '-print-targets', '--print-targets'])
 def test_actual_compile_may_include_inputless_backend_queries(tmp_path, query):

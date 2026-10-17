@@ -54,7 +54,7 @@ def inspect(manifest_path, assembly_root=None):
         argv = invocation.get('argv', [])
         query = len(argv) == 2 and argv[1] in query_flags
         item = {key: invocation.get(key) for key in
-                ('id', 'tool', 'argv', 'real_path', 'exit_code', 'duration_seconds')}
+                ('id', 'tool', 'argv', 'input_arg', 'real_path', 'exit_code', 'duration_seconds')}
         item['kind'] = 'tool_query' if query else 'compiler'
         item.update({key: log_record(invocation.get(key)) for key in ('stdout', 'stderr')})
         invocations.append(item)
@@ -65,7 +65,17 @@ def inspect(manifest_path, assembly_root=None):
         for key, kind in (('input_copy', 'compiler_input'), ('output_copy', 'compiler_output')):
             value = invocation.get(key)
             if value and Path(value).is_file():
-                artifacts.append(file_record(value, kind))
+                # The helper copies real inputs to suffixless captured-input.
+                # Classify only its explicitly bound input, never a linked .ll
+                # library elsewhere in argv. Preserve bytes/path unchanged.
+                bound = Path(invocation.get('input_arg') or '')
+                stage = ('llvm' if bound.suffix == '.ll' else
+                         'llvm_bitcode' if bound.suffix == '.bc' else
+                         bound.stem if bound.suffix == '.mlir' else None)
+                artifact = file_record(value, kind, stage if key == 'input_copy' else None)
+                if stage == 'llvm_bitcode' and key == 'input_copy':
+                    artifact.pop('operations', None)
+                artifacts.append(artifact)
                 if key == 'input_copy' and not query:
                     real_compiles += 1
             elif key == 'input_copy' and not query:
@@ -84,7 +94,7 @@ def inspect(manifest_path, assembly_root=None):
     for value in manifest.get('triton_dumps', []):
         if Path(value).is_file():
             artifacts.append(file_record(value, 'adapter_ir', 'ttadapter'))
-    later = any(item.get('stage', '').lower() in ('llir', 'llvm', 'kernel.ll', 'ptx', 'amdgcn')
+    later = any(item.get('stage', '').lower() in ('llir', 'llvm', 'llvm_bitcode', 'kernel.ll', 'ptx', 'amdgcn')
                 or Path(item['path']).suffix == '.ll' for item in artifacts)
     runtime = Path(assembly_root) / 'runtime.json' if assembly_root else None
     runtime_metadata = ({'file': file_record(runtime, 'runtime_metadata'),

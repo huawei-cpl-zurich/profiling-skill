@@ -82,7 +82,7 @@ def run(family, variant, output):
         path.write_bytes(data)
         artifacts.append({'stage': stage, 'path': str(path),
                           'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)})
-    result = {'family': family, 'variant': variant, 'correctness': 'passed',
+    result = {'family': family, 'variant': variant, 'correctness': True,
               'specialization': constants, 'options': options,
               'source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'target': str(triton.runtime.driver.active.get_current_target()),

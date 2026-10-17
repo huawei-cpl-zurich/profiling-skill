@@ -126,3 +126,38 @@ def test_control_manifest_without_triton_or_device():
     assert cases[1]['specialization']['PREDICATE'] is True
     assert cases[2]['specialization'] == cases[3]['specialization']
     assert [case['options'] for case in cases[2:]] == [{'num_stages': 1}, {'num_stages': 2}]
+
+
+def test_control_run_emits_boolean_correctness_contract(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    loader = importlib.util.spec_from_file_location('controls', ROOT / 'benchmarks/mte2_compiler_controls.py')
+    controls = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(controls)
+    class Tensor:
+        def to(self, *args): return self
+        def numel(self): return 1024
+        def __mod__(self, other): return self
+        def __eq__(self, other): return self
+        def cpu(self): return self
+    checks = []
+    torch = SimpleNamespace(manual_seed=lambda _: None, float32='fp32',
+        randn=lambda *a, **k: Tensor(), where=lambda *a: Tensor(),
+        arange=lambda *a, **k: Tensor(), empty_like=lambda *a: Tensor(),
+        npu=SimpleNamespace(synchronize=lambda: None),
+        testing=SimpleNamespace(assert_close=lambda *a, **k: checks.append(True)))
+    compiled = SimpleNamespace(asm={'ttir': '%v = tt.load %x'}, metadata='actual metadata')
+    class Kernel:
+        def __getitem__(self, grid):
+            return lambda *a, **k: compiled
+    triton = SimpleNamespace(__version__='test', cdiv=lambda n, b: (n+b-1)//b,
+        runtime=SimpleNamespace(driver=SimpleNamespace(active=SimpleNamespace(
+            get_current_target=lambda: 'test target'))))
+    monkeypatch.setitem(sys.modules, 'torch', torch)
+    monkeypatch.setitem(sys.modules, 'torch_npu', SimpleNamespace())
+    monkeypatch.setitem(sys.modules, 'triton', triton)
+    monkeypatch.setattr(controls, 'kernels', lambda: (Kernel(), Kernel()))
+    controls.run('mask', 'before', tmp_path / 'assembly')
+    result = json.loads(capsys.readouterr().out)
+    assert result['correctness'] is True
+    assert checks == [True]
+    assert json.loads((tmp_path / 'assembly/runtime.json').read_text()) == result

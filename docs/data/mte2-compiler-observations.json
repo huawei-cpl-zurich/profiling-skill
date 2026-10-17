@@ -7,6 +7,207 @@
   "all_reference_exit_codes": 0,
   "artifact_name_policy": "Names are stable local archive labels, not compiler stage filenames. Input stages are bound by the actual manifest input_arg.",
   "limitation": "LLVM is the input to final bisheng -O2, not final ISA. Static operations are not dynamic counts, measured waits, physical bandwidth or performance.",
+  "controlled_memory": {
+    "archive_sha256": "906f91a99215756f17ebf2d6b784255c0ccff897e950b83fbc7c971a59e154b6",
+    "artifacts": [
+      {
+        "case": "count-16-1048576",
+        "stage": "adapter",
+        "bytes": 4427,
+        "sha256": "f61dcdb045e3bf40b1bc1e28bad8991c1e258f78134b8e7e42034332e08bd5f0",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [16] : memref<?xf32> to memref<256xf32, strided<[16], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[16], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-2-1048576",
+        "stage": "adapter",
+        "bytes": 4402,
+        "sha256": "9df0b4480d3b869829487e35877a6baf364872021f06232031582502f55549ff",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [2] : memref<?xf32> to memref<256xf32, strided<[2], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[2], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-32-1048576",
+        "stage": "adapter",
+        "bytes": 4427,
+        "sha256": "3a0ee569270dc5d996f4159037d1b49e4b6be321d6fb6af16900d93d51c2d2e1",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [32] : memref<?xf32> to memref<256xf32, strided<[32], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[32], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-4-1048576",
+        "stage": "adapter",
+        "bytes": 4402,
+        "sha256": "245307b74d962ea3ccb9fd332e5454fec717c04db3e85de939d2d982c22bf9d9",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [4] : memref<?xf32> to memref<256xf32, strided<[4], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[4], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-64-1048576",
+        "stage": "adapter",
+        "bytes": 4427,
+        "sha256": "88e07ca838a63a89980870ee78a27c22b1103e9804e218847c75a2ab966b65e6",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [64] : memref<?xf32> to memref<256xf32, strided<[64], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[64], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-8-1048576",
+        "stage": "adapter",
+        "bytes": 4402,
+        "sha256": "6b0cca618b6f3d92febd1d1224313861171f8c08b409284f1310d05489380364",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [8] : memref<?xf32> to memref<256xf32, strided<[8], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[8], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-1-1048576",
+        "stage": "adapter",
+        "bytes": 4309,
+        "sha256": "638fd63014747e45281cd97b996e0a5864300aad2a015cf9013bcd91ab732109",
+        "excerpts": [
+          {
+            "line": 10,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%1], sizes: [256], strides: [1] : memref<?xf32> to memref<256xf32, strided<[1], offset: ?>> loc(#loc3)"
+          },
+          {
+            "line": 22,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[1], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "indexed-contiguous-1048576",
+        "stage": "adapter",
+        "bytes": 5355,
+        "sha256": "4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79",
+        "excerpts": [
+          {
+            "line": 25,
+            "text": "memref.copy %subview, %subview_0 : memref<?xi32, strided<[1], offset: ?>> to memref<?xi32, strided<[1]>> loc(#loc1)"
+          },
+          {
+            "line": 28,
+            "text": "%10 = scf.for %arg11 = %c0 to %9 step %c1 iter_args(%arg12 = %0) -> (tensor<256xf32>) {"
+          },
+          {
+            "line": 29,
+            "text": "%extracted = tensor.extract %8[%arg11] {DiscreteMemAccess} : tensor<256xi32> loc(#loc2)"
+          },
+          {
+            "line": 31,
+            "text": "%reinterpret_cast_3 = memref.reinterpret_cast %arg2 to offset: [%11], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 32,
+            "text": "%12 = memref.load %reinterpret_cast_3[%c0] : memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          }
+        ]
+      },
+      {
+        "case": "indexed-global-1048576",
+        "stage": "adapter",
+        "bytes": 5355,
+        "sha256": "4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79",
+        "excerpts": [
+          {
+            "line": 25,
+            "text": "memref.copy %subview, %subview_0 : memref<?xi32, strided<[1], offset: ?>> to memref<?xi32, strided<[1]>> loc(#loc1)"
+          },
+          {
+            "line": 28,
+            "text": "%10 = scf.for %arg11 = %c0 to %9 step %c1 iter_args(%arg12 = %0) -> (tensor<256xf32>) {"
+          },
+          {
+            "line": 29,
+            "text": "%extracted = tensor.extract %8[%arg11] {DiscreteMemAccess} : tensor<256xi32> loc(#loc2)"
+          },
+          {
+            "line": 31,
+            "text": "%reinterpret_cast_3 = memref.reinterpret_cast %arg2 to offset: [%11], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 32,
+            "text": "%12 = memref.load %reinterpret_cast_3[%c0] : memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          }
+        ]
+      },
+      {
+        "case": "indexed-local32-1048576",
+        "stage": "adapter",
+        "bytes": 5355,
+        "sha256": "4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79",
+        "excerpts": [
+          {
+            "line": 25,
+            "text": "memref.copy %subview, %subview_0 : memref<?xi32, strided<[1], offset: ?>> to memref<?xi32, strided<[1]>> loc(#loc1)"
+          },
+          {
+            "line": 28,
+            "text": "%10 = scf.for %arg11 = %c0 to %9 step %c1 iter_args(%arg12 = %0) -> (tensor<256xf32>) {"
+          },
+          {
+            "line": 29,
+            "text": "%extracted = tensor.extract %8[%arg11] {DiscreteMemAccess} : tensor<256xi32> loc(#loc2)"
+          },
+          {
+            "line": 31,
+            "text": "%reinterpret_cast_3 = memref.reinterpret_cast %arg2 to offset: [%11], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 32,
+            "text": "%12 = memref.load %reinterpret_cast_3[%c0] : memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          }
+        ]
+      }
+    ]
+  },
   "artifacts": [
     {
       "artifact": "mask-before/002-captured-input",

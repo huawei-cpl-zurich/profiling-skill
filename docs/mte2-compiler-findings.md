@@ -111,6 +111,58 @@ Extra buffers create an opportunity to pipeline movement and compute; independen
 timing and profile evidence must decide whether that opportunity benefits this
 small matmul or whether overhead/another resource dominates.
 
+## Controlled memory: compiled path versus runtime locality
+
+The completed controlled memory matrix adds an important separation. Its source
+retains a direct load or loads runtime indices before loading selected values.
+The compact data's `controlled_memory` section binds10 actual first-correctness
+adapter artifacts to their SHA256 and line excerpts; each was checked against
+the retained586-file curation manifest, archive SHA256
+`906f91a99215756f17ebf2d6b784255c0ccff897e950b83fbc7c971a59e154b6`.
+These artifacts are original successful workload outputs, not reconstructions.
+
+For all six fixed-count nonunit strides2/4/8/16/32/64, adapter line12 creates a
+256-element input view with that stride; line24 copies the strided view to a
+dense destination. Direct stride1 instead has a stride1 view/copy at lines10/22.
+No per-element scalar input-load loop is visible in these direct adapter inputs.
+That does not establish the final DMA sequence: `memref.copy` is an intermediate
+operation, not a measured transfer count or a guaranteed hardware pipe binding.
+
+Runtime-indexed contiguous, local32 permutation and global permutation all have
+**byte-identical5355-byte adapter IR**, SHA256
+`4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79`.
+Line25 copies a contiguous integer index tile. Lines28–35 then loop over up to256
+elements, extract an index and perform a one-element input `memref.load` at
+line32. This is distinct from the direct contiguous input copy, even when runtime
+index values describe exactly those same contiguous input addresses.
+
+Observed BasicInfo medians in the same indexed comparison are30.099µs direct,
+481.470µs indexed-contiguous,483.090µs local32 permutation and2378.992µs global
+permutation. Thus a compiler-path difference is consistent with much of the
+direct-versus-indexed penalty; additional index traffic/control also differs.
+But the global-versus-contiguous indexed slowdown is **not explained by an
+adapter-code change**: the code bytes are identical and runtime indices change.
+Address locality is a plausible factor, not an independently isolated cache,
+HBM or final instruction-level mechanism. Identical IR is a useful negative
+result: compiler dumps cannot explain every runtime performance difference.
+
+The fixed-count stride measurements also resist simplistic explanation.
+Stride2 has median882.742µs and stride64 median264.455µs for the same useful
+input count. Every nonunit stride reports a GM→UB amount equal to32× useful
+input bytes under the empirical KiB conversion, while row-median MTE2 activity
+stays approximately99.5–99.9%. Higher busy fraction therefore does not mean
+higher useful throughput, and equal reported transfer amount does not predict
+equal latency. Counter units/scopes remain as qualified by the memory report;
+this is not established physical HBM traffic.
+
+The retained adapter artifacts do **not** establish why stride2 is slower than
+stride64 or why the reported amount is32×. Fixed transaction granularity,
+overlapping small requests, cache behavior and channel mapping are hypotheses
+for future discriminating measurements, not findings. No later HIVM/LLVM for
+these exact memory matrix specializations was retained, and no recapture is
+claimed in this report. Do not convert the ratio into an asserted128-byte
+hardware transaction size solely by multiplying it by the4-byte element size.
+
 ## What to teach, and what remains unproven
 
 Use source→adapter→actual late consumer inputs when source reasoning conflicts

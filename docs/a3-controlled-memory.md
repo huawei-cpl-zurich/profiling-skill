@@ -3,6 +3,9 @@
 This experiment separates two controls that the historical stride sweep
 confounded. It adds new entrypoints; historical memory cases are unchanged.
 
+See the [measured findings](mte2-controlled-memory-findings.md) for the complete
+controlled A3 matrix, counter interpretation limits and all timing samples.
+
 At the default size 1,048,576, `count/<stride>/<size>` always reads that many
 unique FP32 elements from one 64×size allocation. `span/<stride>/<size>` uses
 one size-element allocation and reads `ceil(size/stride)` elements. Strides

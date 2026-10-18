@@ -57,6 +57,27 @@ activity alone proves neither source attribution nor capacity saturation.
 Keep A3 simulation separate from A5 hardware timelines. This escalation is not
 a mandatory compiler-dump gate for every optimization.
 
+For captures indexed by `scripts/mte2_compiler_evidence.py`, inspect the additive
+`stage_index` in `evidence.json` to locate retained consumer inputs. Each entry
+binds a role to an original `input_arg`, compiler argv, invocation ID, retained
+path and SHA256; it does not rename or rewrite the artifact. Recognized roles:
+
+| Role | What to inspect; what it cannot establish |
+| --- | --- |
+| `adapter` | Bound adapter MLIR consumed by bishengir: tensor/layout and early copy structure, not later buffers or flags. |
+| `hivm` | Bound MLIR consumed by HIVM: lowered movement, buffers and synchronization visible at that stage, not measured waits or overlap. |
+| `device_llvm` | Bound LLVM input with explicit AICore compile flags: device-side lowering before final compiler optimization, not final ISA or dynamic instruction counts. |
+| `host_llvm` | Bound LLVM shared-library compilation without AICore flags: host launch/setup, not device pipe work. |
+| `unknown` | No supported unambiguous consumer binding; inspect retained metadata without inventing a stage. |
+
+A dump filename or linked library elsewhere in argv is not sufficient stage
+evidence. The index covers retained compiler-consumer inputs; runtime assembly
+and legacy artifact `stage` labels remain separate. An index entry can describe
+the input to a failed compiler: check capture status and exit codes before
+claiming the stage completed. For already retained captures, use the helper's
+`inspect` action to add the index without recompilation. Open the relevant
+indexed file rather than treating its presence or a manifest listing as a read.
+
 The probe's `--contract` output uses `constructs[]`; every identifier is an
 independent lookup key for this inventory. Do not join several constructs into
 an unreviewed composite attribution.

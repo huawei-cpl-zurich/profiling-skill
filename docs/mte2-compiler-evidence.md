@@ -45,6 +45,15 @@ reference failures and exit-zero runs with no real compiler input return exit
 2, with diagnostics retained. `inspect --manifest ... --assembly-root ...
 --output summary.json` reindexes an existing capture without recompilation.
 
+The additive `stage_index` binds each retained real consumer input to its
+original `input_arg`, argv, invocation ID, path, bytes and SHA256. Its roles are
+`adapter`, `hivm`, `device_llvm`, `host_llvm`, or explicit `unknown`; see the
+[attribution guide](../references/triton-pipe-attribution.md) for interpretation.
+Roles require a bound input and recognized consumer metadata, not an archive
+filename. Existing artifact `stage` values and raw bytes remain unchanged.
+Inputs retained from failed compilation remain indexed with the failed capture
+status; input-less queries and missing input files do not create stage entries.
+
 Check source, specialization, target, options and (when available) final binary
 hashes against the ordinary timed run. Forced compilation/debug capture is not
 timing evidence. A `memref.copy` is not a particular pipe; early MLIR is not final

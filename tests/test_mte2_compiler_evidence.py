@@ -95,6 +95,93 @@ def test_suffixless_copied_llvm_input_uses_actual_manifest_binding(tmp_path):
     assert evidence.inspect(path)['later_artifact_status'] == 'not_observed'
 
 
+@pytest.mark.parametrize('tool,bound,flags,role', [
+    ('bishengir-compile', '/compile/kernel.ttadapter.mlir', ['--target=Ascend910_9382'], 'adapter'),
+    ('hivmc', '/compile/module.hivm.opt.mlir', ['--enable-static-bare-ptr=true'], 'hivm'),
+    ('bisheng', '/compile/kernel.ll', ['--cce-aicore-only', '-O2'], 'device_llvm'),
+    ('bisheng', '/compile/kernel.bc', ['--cce-aicore-arch=dav-c220-vec'], 'device_llvm'),
+    ('bisheng', '/compile/kernel.host.ll', ['-x', 'ir', '--shared'], 'host_llvm'),
+    ('bisheng', '/compile/kernel.host.ll', ['-O2'], 'unknown'),
+    ('unreviewed-compiler', '/compile/kernel.ttadapter.mlir', [], 'unknown'),
+    ('bisheng', '/compile/kernel.ll', ['--shared', '--cce-aicore-only'], 'unknown'),
+])
+def test_stage_index_uses_bound_consumer_roles_without_modifying_artifacts(
+        tmp_path, tool, bound, flags, role):
+    path = manifest(tmp_path)
+    data = json.loads(path.read_text())
+    invocation = data['invocations'][0]
+    original = Path(invocation['input_copy'])
+    copied = original.with_name('captured-input')
+    original.rename(copied)
+    before = copied.read_bytes()
+    invocation.update(tool=tool, input_arg=bound, input_copy=str(copied),
+                      argv=[tool, bound, *flags, '-o', 'kernel.o'])
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    entry, = result['stage_index']
+    assert result['status'] == 'captured'
+    assert entry['role'] == role
+    assert entry['input_arg'] == bound
+    assert entry['argv'] == invocation['argv']
+    assert entry['invocation_id'] == 'actual'
+    assert entry['provenance'] == 'capture_manifest_consumer_binding'
+    assert entry['path'] == str(copied)
+    assert entry['sha256'] == hashlib.sha256(before).hexdigest()
+    assert entry['bytes'] == len(before)
+    assert copied.read_bytes() == before
+    # The additive index must not rename legacy artifact stages or alter hashes.
+    assert result['artifacts'][0]['sha256'] == entry['sha256']
+    expected = 'llvm' if bound.endswith('.ll') else ('llvm_bitcode' if bound.endswith('.bc')
+                                                  else Path(bound).stem)
+    assert result['artifacts'][0]['stage'] == expected
+
+
+def test_stage_index_does_not_promote_filenames_or_linked_inputs(tmp_path):
+    path = manifest(tmp_path)
+    data = json.loads(path.read_text())
+    invocation = data['invocations'][0]
+    invocation.update(tool='bisheng', input_arg='/compile/early.ttadapter.mlir',
+                      argv=['bisheng', '/compile/early.ttadapter.mlir',
+                            '/linked/device.ll', '--cce-aicore-only'])
+    # A misleading copy filename must not override its actual compiler binding.
+    misleading = path.parent / 'kernel.host.ll'
+    Path(invocation['input_copy']).rename(misleading)
+    invocation['input_copy'] = str(misleading)
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['stage_index'][0]['role'] == 'unknown'
+    invocation['input_arg'] = '/not-in-argv/kernel.ll'
+    path.write_text(json.dumps(data))
+    assert evidence.inspect(path)['stage_index'][0]['role'] == 'unknown'
+
+
+def test_stage_index_retains_failed_compiler_binding_but_not_queries(tmp_path):
+    path = manifest(tmp_path, exit_code=7)
+    data = json.loads(path.read_text())
+    data['invocations'][0].update(tool='hivmc', input_arg='/compile/module.mlir',
+                                  argv=['hivmc', '/compile/module.mlir'])
+    data['invocations'].append(dict(id='query', tool='bisheng',
+                                    argv=['bisheng', '--version'], exit_code=0))
+    path.write_text(json.dumps(data))
+    output = tmp_path / 'evidence.json'
+    proc = subprocess.run([sys.executable, str(ROOT / 'scripts/mte2_compiler_evidence.py'),
+                           'inspect', '--manifest', str(path), '--output', str(output)],
+                          capture_output=True, text=True)
+    result = json.loads(output.read_text())
+    assert proc.returncode == 2
+    assert result['status'] == 'failed'
+    assert len(result['stage_index']) == 1
+    assert result['stage_index'][0]['role'] == 'hivm'
+    assert result['invocations'][0]['exit_code'] == 7
+    assert result['invocations'][1]['kind'] == 'tool_query'
+    Path(data['invocations'][0]['input_copy']).unlink()
+    path.write_text(json.dumps(data))
+    result = evidence.inspect(path)
+    assert result['status'] == 'failed'
+    assert result['stage_index'] == []
+    assert any('missing actual compiler input' in error for error in result['errors'])
+
+
 @pytest.mark.parametrize('query', ['--help', '-h', '--version', '-version',
                                   '-print-targets', '--print-targets'])
 def test_actual_compile_may_include_inputless_backend_queries(tmp_path, query):

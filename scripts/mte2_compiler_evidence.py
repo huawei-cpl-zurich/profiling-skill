@@ -40,10 +40,37 @@ def log_record(value):
     return record
 
 
+def stage_entry(invocation, artifact):
+    """Index a retained consumer input, without treating dump names as evidence."""
+    argv = invocation.get('argv', [])
+    bound = invocation.get('input_arg')
+    tool = Path(invocation.get('tool') or '').name
+    role, reason = 'unknown', 'input_arg is not bound to the recorded compiler argv'
+    if bound and bound in argv[1:]:
+        suffix = Path(bound).suffix
+        device = any(arg in ('--cce-aicore-only', '-cce-bitcode-is-aicore') or
+                     arg.startswith('--cce-aicore-arch=') for arg in argv[1:])
+        host = '--shared' in argv[1:]
+        if tool in ('bishengir-compile', 'bishengir-compile-a5') and bound.endswith('.ttadapter.mlir'):
+            role, reason = 'adapter', 'bound adapter MLIR input to bishengir compiler'
+        elif tool in ('hivmc', 'hivmc-a5') and suffix == '.mlir':
+            role, reason = 'hivm', 'bound MLIR input to HIVM compiler'
+        elif tool == 'bisheng' and suffix in ('.ll', '.bc') and device != host:
+            role = 'device_llvm' if device else 'host_llvm'
+            reason = ('bound LLVM input with explicit AICore flags' if device else
+                      'bound LLVM input to shared-library compilation without AICore flags')
+        else:
+            reason = 'bound input has no unambiguous supported consumer role'
+    return {'role': role, 'path': artifact['path'], 'sha256': artifact['sha256'],
+            'bytes': artifact['bytes'], 'invocation_id': invocation.get('id'),
+            'tool': invocation.get('tool'), 'input_arg': bound, 'argv': argv,
+            'provenance': 'capture_manifest_consumer_binding', 'reason': reason}
+
+
 def inspect(manifest_path, assembly_root=None):
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
-    errors, artifacts, invocations = [], [], []
+    errors, artifacts, invocations, stage_index = [], [], [], []
     real_compiles = 0
     query_flags = {'--help', '-h', '--version', '-version', '-print-targets', '--print-targets'}
     if manifest['reference_exit_code'] != 0:
@@ -77,6 +104,7 @@ def inspect(manifest_path, assembly_root=None):
                     artifact.pop('operations', None)
                 artifacts.append(artifact)
                 if key == 'input_copy' and not query:
+                    stage_index.append(stage_entry(invocation, artifact))
                     real_compiles += 1
             elif key == 'input_copy' and not query:
                 errors.append('missing actual compiler input: ' + str(invocation.get('id')))
@@ -106,7 +134,7 @@ def inspect(manifest_path, assembly_root=None):
             'reference_stdout': log_record(manifest.get('reference_stdout')),
             'reference_stderr': log_record(manifest.get('reference_stderr')),
             'real_tools': manifest.get('real_tools'), 'wrappers': manifest.get('wrappers'),
-            'invocations': invocations, 'artifacts': artifacts,
+            'invocations': invocations, 'artifacts': artifacts, 'stage_index': stage_index,
             'runtime_metadata': runtime_metadata,
             'later_artifact_status': 'observed_not_hardware_schedule' if later else 'not_observed',
             'limitation': 'IR operations are not executed instruction counts or pipe assignments; '

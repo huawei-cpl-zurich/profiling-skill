@@ -84,6 +84,13 @@ not make an original Triton operation single-pipe. Keep unsupported mappings
 unknown. If the explanation depends on actual emitted operations, the optional
 `mlir-triton-dump` workflow can resolve it; early IR alone may miss scheduling.
 
+Use compiler artifacts to verify execution structure, not rank latency by static
+operation counts. A dense lowered copy does not rule out a faster candidate;
+generated buffering or flags do not establish realized overlap. Keep cheap
+direct timing in the loop, and distinguish an observed correctness result from
+one inferred from source or capture success. See the A3 reasoning guide for
+the evidence boundaries and the attribution guide for the compiler stage index.
+
 ## A2/A3 Triton timing and pipe evidence
 
 Use the repository's `$gz-a3` profile and its native `py311-torch` runtime only

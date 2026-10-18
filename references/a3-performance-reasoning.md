@@ -43,6 +43,15 @@ prove that the algorithm, traffic or layout is already optimal.
   whole-task denominator. Tiny intervals can yield misleadingly large active
   bandwidth. Missing fields remain unavailable, not zero.
 
+Keep three quantities distinct: useful bytes from the algorithm divided by
+independent kernel latency; raw reported transfer amount/bandwidth with its
+exported units and row scope; and activity or active bandwidth within a pipe's
+active window. Higher reported transfer bandwidth can accompany more wasted
+traffic and lower useful throughput. Matching a counter's arithmetic formula
+does not independently validate its physical byte semantics. Do not relabel
+`KB` as `KiB` or call a raw amount exact HBM traffic without product/version
+evidence; leave unknown byte factors unknown.
+
 Use ordinary timing to decide whether a change helped and instrumented
 evidence to explain why. A change in counters without a reliable timing
 change is a mechanism observation, not an established optimization gain.
@@ -61,6 +70,13 @@ Lower MTE2 time alone cannot prove traffic reduction; additional indexing or
 vector work may outweigh it. Inspect emitted copies and masks if that
 distinction matters to the explanation.
 
+The converse matters too: retaining a dense copy or adding mask operations
+does not prove the candidate will be slower. Source-level predication can help
+without an established physical-traffic reduction. Inspect structure to reject
+unsupported causal stories, then measure the candidate; static operation counts
+are neither executed instruction counts nor a latency model. An observed gain
+with an unresolved cause is a valid result.
+
 **Scalar decisions:** extracting a scalar or broadcasting a decision may add
 scalar/vector conversions, conditional work and cross-pipe set/wait
 dependencies. Scalar-looking source is not automatically cheaper. Correlate
@@ -72,6 +88,12 @@ knobs independently when attributing their effects; a combined change cannot
 identify each knob's contribution. Autotuning finds candidates; selected
 candidate profiling explains mechanisms without needing expensive profiling
 for every option.
+
+Extra buffers and set/wait sites demonstrate a compiler transformation, not
+achieved overlap, fewer dynamic waits or a speedup. Likewise, fewer loop sites
+or iterations can alter transfer sizes, resource pressure and setup costs.
+Without matched timing, keep candidate ranking tentative even when the
+structural interpretation is well supported.
 
 **Overlap:** source load/compute order does not prove independence or realized
 overlap. Runtime aliasing, live ranges and dependencies matter. A source-level
@@ -101,3 +123,10 @@ Distinguish observed correlation from compiler-confirmed mechanism and from
 critical-path proof. Retain all declared samples and their dispersion; a noisy
 result may support a hypothesis but not a precise speedup. Do not blame a
 device merely because compilation, correctness or timings surprised you.
+
+State whether correctness was actually checked and where its result is retained.
+Successful compilation/capture and plausible source establish neither executed
+correctness nor a recorded numerical check. When candidate timings or checks
+were not provided, say so; do not fill those gaps from provenance or confidence
+in the implementation. Separate a prediction's direction from its explanation:
+a correct latency prediction does not validate the proposed mechanism.

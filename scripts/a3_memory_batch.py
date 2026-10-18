@@ -79,7 +79,7 @@ def execute(argv, folder, env, *, timeout=600):
     return result
 
 
-def capture(command, folder, env, metric, selector=None, *, timeout=600):
+def capture(command, folder, env, metric, selector=None, *, timeout=None):
     wrapper = folder.parent / (folder.name + '-application.sh')
     wrapper.write_text('#!/bin/sh\nset -eu\nexec ' + shlex.join(command) + '\n')
     wrapper.chmod(0o700)
@@ -87,7 +87,7 @@ def capture(command, folder, env, metric, selector=None, *, timeout=600):
             '--aic-metrics=' + metric, '--warm-up=0', '--launch-count=1', '--kill=off']
     if selector:
         argv.append('--kernel-name=' + selector)
-    result = execute(argv, folder, env, timeout=timeout)
+    result = execute(argv, folder, env, **({} if timeout is None else {'timeout': timeout}))
     validate_capture(result.returncode, result.stdout + result.stderr)
     rows = basic_rows(folder / 'report', selector)
     if len(rows) != 1:

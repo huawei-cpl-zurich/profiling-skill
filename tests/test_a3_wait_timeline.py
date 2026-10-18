@@ -142,3 +142,15 @@ def test_simulation_worker_failure_cannot_promote_clean_result(tmp_path, monkeyp
     result = study.simulation('/kernel', study.pairs()['mte2-vector'][0], tmp_path / 'sim', {}, 'soc')
     assert not result['clean_acquisition_gate_passed']
     assert result['instruction_evidence']['status'] == 'unavailable'
+
+
+def test_measurement_passes_explicit_watchdog_to_existing_interfaces(tmp_path, monkeypatch):
+    calls = []
+    def capture(*args, **kwargs):
+        calls.append(kwargs)
+        return {'metric': 'observed'}
+    monkeypatch.setattr(study.base, 'capture', capture)
+    monkeypatch.setattr(study, 'memory_capture', capture)
+    for metric in ('BasicInfo', 'PipeUtilization', 'Memory'):
+        assert study.measured_capture(['/kernel'], tmp_path, {}, metric, 'exact')['metric'] == 'observed'
+    assert calls == [{'timeout': 300}] * 3

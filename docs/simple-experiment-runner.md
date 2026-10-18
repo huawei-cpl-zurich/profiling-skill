@@ -1,7 +1,8 @@
 # Simple experiment runner
 
-`scripts/simple_experiment_runner.py` is the only supported experiment campaign
-entrypoint. It runs one cell with one readable folder, isolated Git clone,
+`scripts/simple_experiment_runner.py` is the supported multi-round kernel
+optimization campaign entrypoint. Independent profiling, diagnostic, and
+blinded-evaluation drivers remain supported. It runs one cell with one readable folder, isolated Git clone,
 branch, private agent home, and append-only attempt history. Git commits are
 the round history. A remote handle is only a pointer used to resume one retained
 job.

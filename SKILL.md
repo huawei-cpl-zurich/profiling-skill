@@ -37,12 +37,14 @@ validation.
 
 ## Run agent experiment campaigns
 
-Use `scripts/simple_experiment_runner.py` as the only supported experiment
-campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
+Use `scripts/simple_experiment_runner.py` as the supported multi-round kernel
+optimization campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
 isolated Git-backed cell. Read [Simple experiment runner](docs/simple-experiment-runner.md)
 for its configuration, agent protocol, retained evidence, and recovery rules.
 Run separate cells concurrently at the orchestration layer; do not add a
 second scheduler, admission controller, receipt graph, or migration layer.
+Independent profiling, diagnostic, and blinded-evaluation drivers remain
+supported; they are not alternate optimization campaign controllers.
 
 ## Acquire live control evidence
 

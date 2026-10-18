@@ -37,9 +37,10 @@ def checked_output(result):
     return valid[0]
 
 
-def memory_capture(command, folder, env, selector):
+def memory_capture(command, folder, env, selector, *, timeout=None):
     try:
-        evidence = base.capture(command, folder, env, 'Memory', selector)
+        evidence = base.capture(command, folder, env, 'Memory', selector,
+                                **({} if timeout is None else {'timeout': timeout}))
     except RuntimeError:
         transcript = '\n'.join(p.read_text() for p in folder.glob('*.log'))
         # Only a named metric rejection is a capability result. Runtime/compiler,

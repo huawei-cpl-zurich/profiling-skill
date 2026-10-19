@@ -34,9 +34,11 @@ ordering. Isolated transfer and compute medians provide qualitative sum/max
 references, not exact bounds: both independently include initialization, output
 stores, launch/prologue/epilogue costs. All variants use a bounded working set;
 repeated transfers read the same GM range, so cache warming is intentional and
-this is not a sustained HBM-bandwidth benchmark. Repetitions overwrite the transfer
-output but every transfer instruction is issued; vector work accumulates and is
-fully observable. Tiny groups may be overhead dominated. A null or negative
+this is not a sustained HBM-bandwidth benchmark. Each source iteration requests
+a transfer, but repetitions overwrite its output. Confirm instruction retention
+in generated code before claiming repeated transfers; source-level logical bytes
+are not measured physical traffic. Vector work accumulates and is fully
+observable. Tiny groups may be overhead dominated. A null or negative
 performance change is useful evidence, not a failed experiment.
 
 Pipe/Memory counters can support a bottleneck interpretation, but separate

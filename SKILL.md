@@ -1,6 +1,6 @@
 ---
 name: ascend-profiling
-description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascend 950/A5, or AscendC and Catlass kernels on A5, producing compact target-correct msprof evidence without mixing product-specific metrics.
+description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascend 950/A5, native Ascend C kernels on A3 or A5, or Catlass kernels on A5, producing compact target-correct msprof evidence without mixing product-specific metrics.
 ---
 
 # Ascend kernel profiling

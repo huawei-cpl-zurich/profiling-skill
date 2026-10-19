@@ -129,3 +129,22 @@ def test_cli_rejects_invalid_group_before_device_probe(tmp_path):
                              '--canary', '--group', '8192/32/16'], capture_output=True, text=True)
     assert result.returncode == 2
     assert 'unknown or excluded group' in result.stderr
+
+
+@pytest.mark.parametrize('noisy_mode', ['serialized', 'overlap', 'transfer', None])
+def test_pair_confidence_preserves_medians_and_noise(noisy_mode):
+    cells = {}
+    originals = {}
+    for case in controls.cases(True):
+        samples = [5.94, 27.24, 7.36, 5.76, 5.88, 5.2, 29.46] \
+            if case['mode'] == noisy_mode else [6.0] * 7
+        cells[case['id']] = dict(case=case, event_timing=controls.base.summarize(samples))
+        originals[case['id']] = list(samples)
+    comparison = controls.conclusions(cells)['1024/1/1']
+    noisy_pair = noisy_mode in ('serialized', 'overlap')
+    assert comparison['low_confidence'] is noisy_pair
+    assert (comparison['status'] == 'inconclusive_noisy_event_timing') is noisy_pair
+    assert comparison['event_low_confidence'] == {m: m == noisy_mode for m in controls.MODES}
+    assert comparison['paired_speedup'] == comparison['event_medians_us']['serialized'] / \
+        comparison['event_medians_us']['overlap']
+    assert {key: cell['event_timing']['samples_us'] for key, cell in cells.items()} == originals

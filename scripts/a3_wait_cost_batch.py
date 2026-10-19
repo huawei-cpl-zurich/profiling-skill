@@ -46,11 +46,19 @@ def conclusions(cells):
         if not all(m in group and 'event_timing' in group[m] for m in MODES):
             continue
         durations = {m: group[m]['event_timing']['median_us'] for m in MODES}
+        confidence = {m: group[m]['event_timing']['low_confidence'] for m in MODES}
+        noisy_pair = confidence['serialized'] or confidence['overlap']
         result[key] = dict(event_medians_us=durations,
                            paired_speedup=durations['serialized'] / durations['overlap'],
+                           event_low_confidence=confidence, low_confidence=noisy_pair,
+                           status='inconclusive_noisy_event_timing' if noisy_pair else 'paired_event_comparison',
+                           ratio_scope='descriptive ratio of stream-event medians; '
+                           'not an intrinsic kernel speedup claim',
                            isolated_stage_sum_us=durations['transfer'] + durations['compute'],
                            isolated_stage_max_us=max(durations['transfer'], durations['compute']),
-                           interpretation='isolated stages repeat launch/prologue/epilogue overhead; '
+                           interpretation='stream-event brackets may include host-submission gaps; '
+                           'a noisy pair is inconclusive, irrespective of its median ratio; '
+                           'isolated stages repeat launch/prologue/epilogue overhead; '
                            'sum/max are qualitative references, not exact predicted bounds; '
                            'paired timing does not locate stalls or prove simultaneous pipe overlap')
     return result
@@ -83,8 +91,10 @@ def run(selected, output, env, *, physical, resume=False):
     if hashlib.sha256(executable.read_bytes()).hexdigest() != built['binary_sha256']:
         raise RuntimeError('retained executable changed')
     summary = dict(cells={}, physical_device=physical, logical_device=0, build=built,
-                   capture_order=[], event_timing='uninstrumented ACL stream event elapsed time',
-                   BasicInfo='diagnostic profiler duration, not canonical uninstrumented latency')
+                   capture_order=[], event_timing='ACL stream-event elapsed time without msprof; '
+                   'may include host-submission gaps, not intrinsic kernel latency',
+                   BasicInfo='profiler-reported task duration; measurement scope differs from '
+                   'stream events, neither is automatically ground truth')
     save(output / 'summary.json', summary)
     for case in selected:
         folder = output / case['id'].replace('/', '-')

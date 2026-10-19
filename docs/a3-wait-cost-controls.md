@@ -23,10 +23,18 @@ work. Each native application normally launches exactly one kernel; its separate
 timing mode performs three warmups followed by seven stream-event measurements
 without msprof, with positive microsecond samples retained. Event timing uses ACL
 events, not whole-process wall time or device-intrusive timestamp instructions.
+The stream-event bracket can include host-submission gaps between event/kernel
+enqueue operations, especially for tiny kernels. It is not intrinsic kernel
+latency, even though the events themselves are recorded on the device.
 Every profiler application disables this timing loop. Five BasicInfo, three
 PipeUtilization and three Memory captures rotate case order between rounds.
-BasicInfo durations are diagnostic profiler durations, not the uninstrumented
-canonical latency. No noisy samples are discarded or retried to manufacture
+BasicInfo is the profiler-reported task duration. It and stream-event timing
+have different measurement scopes; neither is automatically ground truth.
+If either paired event series has the existing range/median low-confidence flag,
+the comparison is explicitly inconclusive. Retain all samples, medians and the
+descriptive ratio without treating it as a performance-gain claim. Larger work
+and repetition groups test whether submission overhead becomes amortized.
+No noisy samples are discarded or retried to manufacture
 low variance. Missing metrics are unavailable, never zero.
 
 Interpret serialized versus delayed-wait event latency as an intervention on

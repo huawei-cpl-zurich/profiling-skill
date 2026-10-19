@@ -82,16 +82,14 @@ require pipe evidence, hint at an optimization
 or request a prescribed interpretation. Agent commits code, command/results,
 evidence-backed reasoning, uncertainties and postmortem; never merges its branch.
 
-Exact common artifact paragraph (prompt freeze 02):
+Exact common artifact paragraph (as frozen for cohort 04):
 
-> Write EXPERIMENTS.md in your branch. For each experiment record your hypothesis,
-> expected result, actual result, commands run, failed attempts and remaining
-> uncertainty. Cite selected compact JSON/CSV evidence using repository-relative
-> paths, including the evidence needed to check your baseline and final
-> correctness/results. Before finishing, commit candidate.asc, EXPERIMENTS.md and
-> the selected compact evidence files together. Do not commit full profile
-> archives or build trees. A final chat summary does not replace these committed
-> artifacts. No particular metric citation or code rewrite is required.
+> Write EXPERIMENTS.md with your hypothesis, expected and actual results, the
+> commands run, failed attempts, evidence citations and remaining uncertainty.
+> Commit candidate.asc, EXPERIMENTS.md and the selected compact JSON/CSV evidence
+> needed to audit your conclusions on your assigned branch. Do not commit full
+> profiler archives or compiler build trees. A chat-only report or a code-only
+> commit does not complete this task.
 
 The first unscored interface canary acquired baseline BasicInfo/Pipe evidence
 and checked a comment-only candidate across all variants, but committed only
@@ -107,10 +105,10 @@ Counterbalance four waves (rep/task labels are controller-only):
 
 | Wave | Three cells |
 | --- | --- |
-| 1 | intercore rep1 old; intra rep1 new; phase rep1 old |
-| 2 | intercore rep1 new; intra rep1 old; phase rep1 new |
-| 3 | intercore rep2 new; intra rep2 old; phase rep2 new |
-| 4 | intercore rep2 old; intra rep2 new; phase rep2 old |
+| 1 | intercore rep1 new; intra rep1 old; phase rep1 new |
+| 2 | intercore rep1 old; intra rep1 new; phase rep1 old |
+| 3 | intercore rep2 old; intra rep2 new; phase rep2 old |
+| 4 | intercore rep2 new; intra rep2 old; phase rep2 new |
 
 Freeze before/after correctness, exact selectors, source/binary identities and
 compact raw reports. All before variants must compile, pass and support actual

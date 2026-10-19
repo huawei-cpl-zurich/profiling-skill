@@ -56,10 +56,32 @@ Compilation/runtime/correctness failures and agent budget exhaustion are scored.
 Three tasks × two independent repetitions × two skill arms = twelve fresh
 isolated sessions, max three concurrent. Same explicit model configuration
 throughout; no prior conversation or other installed skill is mounted. Use
-`build_prompt(1200)` from the existing launcher unchanged in both arms, with
-120-second final reserve. Do not require pipe evidence, hint at an optimization
+`build_prompt(1200)` from the existing launcher unchanged, then append the exact
+artifact paragraph below in both arms, with 120-second final reserve. Do not
+require pipe evidence, hint at an optimization
 or request a prescribed interpretation. Agent commits code, command/results,
 evidence-backed reasoning, uncertainties and postmortem; never merges its branch.
+
+Exact common artifact paragraph (prompt freeze 02):
+
+> Write EXPERIMENTS.md in your branch. For each experiment record your hypothesis,
+> expected result, actual result, commands run, failed attempts and remaining
+> uncertainty. Cite selected compact JSON/CSV evidence using repository-relative
+> paths, including the evidence needed to check your baseline and final
+> correctness/results. Before finishing, commit candidate.asc, EXPERIMENTS.md and
+> the selected compact evidence files together. Do not commit full profile
+> archives or build trees. A final chat summary does not replace these committed
+> artifacts. No particular metric citation or code rewrite is required.
+
+The first unscored interface canary acquired baseline BasicInfo/Pipe evidence
+and checked a comment-only candidate across all variants, but committed only
+candidate.asc: evidence remained untracked and reasoning existed only in final
+chat. Retain this artifact-protocol failure as a negative result. Freeze 02
+changes only the common prompt paragraph; reuse already qualified task/helper
+bytes and do not rerun hardware qualification merely for this prompt change.
+Before scored cells, run a new trivial contextless artifact canary: baseline
+check, comment-only candidate check, and verify its committed log and compact
+evidence. Keep this canary separate from optimization and paired usefulness.
 
 Counterbalance four waves (rep/task labels are controller-only):
 

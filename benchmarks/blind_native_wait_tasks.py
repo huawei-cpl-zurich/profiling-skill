@@ -53,7 +53,10 @@ def source(task):
     DataCopy(a,x[block*n],n);
     SetFlag<HardEvent::MTE2_V>(load); WaitFlag<HardEvent::MTE2_V>(load);
     if(imbalanced && block==0) for(int r=0;r<32;++r) {
-        Adds(a,a,1.0f,n); PipeBarrier<PIPE_V>();
+        Muls(t,a,-1.0f,n); PipeBarrier<PIPE_V>();
+        Adds(t,t,1.0f,n); PipeBarrier<PIPE_V>();
+        Mul(a,a,t,n); PipeBarrier<PIPE_V>();
+        Muls(a,a,4.0f,n); PipeBarrier<PIPE_V>();
     }
     SetFlag<HardEvent::V_MTE3>(store); WaitFlag<HardEvent::V_MTE3>(store);
     DataCopy(y[block*2*n],a,n);
@@ -124,7 +127,7 @@ def export(task, output):
         'The trusted host checks both complete outputs against seeded CPU references.\n'
         'Preserve one fused launch, input dependence, repetitions and useful work; do not\n'
         'replace computation with host work, constants or auxiliary kernels.\n'
-        'Work uses the seeded third region, four separate float32 recurrence operations\n'
+        'Work uses independent seeded vectors, four separate float32 recurrence operations\n'
         'per round and phase-specific payload per repetition; all affect checked outputs.\n'
         'Do not edit baseline, runner, host or contract. Use experiment-tool help.\n')
     return spec

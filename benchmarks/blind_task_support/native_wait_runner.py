@@ -14,27 +14,34 @@ def seeded_inputs(kind, variant, seed):
     vectors = payload+(2 if kind == 1 else 1)
     for i in range(vectors*n):
         seed = (1664525*seed+1013904223) & 0xffffffff
-        values.append((seed % 65535+1)/65536 if kind == 3 or i >= payload*n else (seed % 2049-1024)/64)
+        values.append((seed % 65535+1)/65536 if kind != 2 or i >= payload*n else (seed % 2049-1024)/64)
     return np.array(values, dtype=np.float32).reshape(vectors, n)
+
+
+def recurrence(w, rounds):
+    for _ in range(rounds):
+        negative = np.multiply(w, np.float32(-1))
+        complement = np.add(negative, np.float32(1))
+        product = np.multiply(w, complement)
+        w = np.multiply(product, np.float32(4))
+    return w
 
 
 def oracle(kind, variant, seed):
     values = seeded_inputs(kind, variant, seed)
     w = values[2:].copy() if kind == 1 else values[-1].copy()
     for rep in range(variant['repetitions'] if kind == 3 else 1):
-        for _ in range(variant['rounds']):
-            negative = np.multiply(w, np.float32(-1))
-            complement = np.add(negative, np.float32(1))
-            product = np.multiply(w, complement)
-            w = np.multiply(product, np.float32(4))
+        w = recurrence(w, variant['rounds'])
         if kind == 3:
             w = np.multiply(np.add(w, values[rep]), np.float32(.25))
     if kind == 1:
         result = []
+        published = values[:2].copy()
+        if variant['imbalanced']:
+            published[0] = recurrence(published[0], 32)
         for b in range(2):
-            result += np.add(values[b], np.float32(32 if variant['imbalanced'] and b == 0 else 0)).tolist()
-            peer = np.add(values[1-b], np.float32(32 if variant['imbalanced'] and b == 1 else 0))
-            result += np.add(w[b], peer).tolist()
+            result += published[b].tolist()
+            result += np.add(w[b], published[1-b]).tolist()
         return result
     return np.concatenate((np.add(np.add(values[0], values[1]), w) if kind == 2 else
                            values[variant['repetitions']-1], w)).tolist()

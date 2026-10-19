@@ -89,7 +89,7 @@ def test_old_constant_work_collapse_fails_seeded_oracle(tmp_path, task):
         if kind == 1:
             values = runner.seeded_inputs(kind, variant, 17)
             for block in range(2):
-                peer = np.add(values[1-block], np.float32(32 if variant['imbalanced'] and block == 1 else 0))
+                peer = runner.recurrence(values[0], 32) if variant['imbalanced'] and block == 1 else values[1-block]
                 collapsed[block*2*n+n:(block+1)*2*n] = np.add(peer, np.float32(variant['rounds']))
         else:
             collapsed[n:] = np.float32(variant['rounds']*variant['repetitions'])
@@ -124,3 +124,19 @@ def test_phase_every_payload_and_each_cores_work_seed_affect_outputs(tmp_path, m
     monkeypatch.setattr(runner, 'seeded_inputs', lambda *args: changed)
     reused = np.array(runner.oracle(1, variant, 19), dtype=np.float32)
     assert np.any(expected != reused)
+
+
+def test_imbalanced_producer_cannot_be_ignored_or_collapsed_to_add32(tmp_path):
+    folder = tmp_path/'intercore'
+    spec = export('intercore', folder)
+    runner = load_runner(folder)
+    variant = spec['variants']['imbalanced']
+    values = runner.seeded_inputs(1, variant, 23)
+    expected = np.array(runner.oracle(1, variant, 23), dtype=np.float32)
+    n = variant['n']
+    for wrong_producer in (values[0], np.add(values[0], np.float32(32))):
+        collapsed = expected.copy()
+        collapsed[:n] = wrong_producer
+        collapsed[3*n:] = np.add(runner.recurrence(values[3], variant['rounds']), wrong_producer)
+        with pytest.raises(AssertionError):
+            np.testing.assert_array_equal(collapsed, expected)

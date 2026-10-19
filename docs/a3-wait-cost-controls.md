@@ -36,6 +36,9 @@ descriptive ratio without treating it as a performance-gain claim. Larger work
 and repetition groups test whether submission overhead becomes amortized.
 No noisy samples are discarded or retried to manufacture
 low variance. Missing metrics are unavailable, never zero.
+An explicit Memory capability rejection is retained once and marks Memory
+unavailable for the rest of this invocation, including subsequent groups;
+remaining Memory replays are skipped. Compilation/runtime failures still abort.
 
 Interpret serialized versus delayed-wait event latency as an intervention on
 ordering. Isolated transfer and compute medians provide qualitative sum/max

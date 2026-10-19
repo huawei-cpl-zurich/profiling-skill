@@ -119,6 +119,8 @@ def run(selected, output, env, *, physical, resume=False):
         for round_id in range(count):
             order = selected[round_id % len(selected):] + selected[:round_id % len(selected)]
             for case in order:
+                if metric == 'Memory' and summary.get('memory_availability') == 'unsupported':
+                    continue  # One explicit capability rejection applies to the remaining sweep.
                 cell = summary['cells'][case['id']]
                 folder = output / case['id'].replace('/', '-') / f'{metric}-{round_id}'
                 argv = command(executable, case)
@@ -128,6 +130,12 @@ def run(selected, output, env, *, physical, resume=False):
                     return dict(evidence, physical_device=physical, captured_at_unix=time.time())
                 evidence = checkpoint(folder, dict(command=argv, metric=metric, selector=SELECTOR), collect)
                 cell['captures'].append(evidence)
+                if metric == 'Memory' and evidence.get('availability') == 'unsupported':
+                    summary['memory_availability'] = 'unsupported'
+                    summary['memory_capability_evidence'] = dict(case=case['id'], folder=str(folder),
+                                                                  physical_device=evidence['physical_device'])
+                    for observed in summary['cells'].values():
+                        observed['memory_availability'] = 'unsupported'
                 summary['capture_order'].append(dict(case=case['id'], metric=metric, round=round_id,
                                                       physical_device=evidence['physical_device']))
                 samples = [base.duration(c['basic_rows'][0]) for c in cell['captures']

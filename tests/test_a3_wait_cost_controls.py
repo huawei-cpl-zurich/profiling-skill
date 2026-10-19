@@ -35,7 +35,7 @@ def fake_runtime(monkeypatch):
         (folder / 'retained.log').write_text(metric)
         return dict(metric=metric, selector=selector,
                     basic_rows=[{'Kernel Name': selector, 'Duration(us)': '2.5'}],
-                    **({'availability': 'unsupported'} if metric == 'Memory' else {}))
+                    **({'availability': 'available'} if metric == 'Memory' else {}))
 
     monkeypatch.setattr(controls.a3_native_build, 'build', build)
     monkeypatch.setattr(controls.base, 'execute', execute)
@@ -67,7 +67,7 @@ def test_capture_counts_interleaving_resume_and_provenance(tmp_path, fake_runtim
         assert cell['profile_timing']['samples_us'] == [2.5] * 5
         assert cell['event_evidence']['physical_device'] == 7
         assert len(cell['captures']) == 11
-        assert cell['captures'][-1]['availability'] == 'unsupported'
+        assert cell['captures'][-1]['availability'] == 'available'
     assert result['capture_order'][0]['case'].endswith('/transfer')
     assert result['capture_order'][4]['case'].endswith('/compute')
     comparison = result['comparisons']['1024/1/1']
@@ -92,6 +92,39 @@ def test_failure_stops_before_profiling_and_keeps_logs(tmp_path, fake_runtime, m
         controls.run(controls.cases(True), tmp_path / 'run', {}, physical=0)
     assert not any(c[0] == 'capture' for c in fake_runtime)
     assert list((tmp_path / 'run').rglob('stdout.log'))
+
+
+def test_memory_rejection_stops_further_replays_across_groups(tmp_path, fake_runtime, monkeypatch):
+    capture = controls.memory_capture
+
+    def unsupported(*args):
+        return dict(capture(*args), availability='unsupported', diagnostic='Memory unsupported')
+
+    monkeypatch.setattr(controls, 'memory_capture', unsupported)
+    selected = controls.cases(True) + controls.cases()[4:8]
+    result = controls.run(selected, tmp_path / 'run', {}, physical=0)
+    assert sum(c[0] == 'capture' and c[2] == 'Memory' for c in fake_runtime) == 1
+    assert sum(c[0] == 'capture' and c[2] == 'BasicInfo' for c in fake_runtime) == 40
+    assert sum(c[0] == 'capture' and c[2] == 'PipeUtilization' for c in fake_runtime) == 24
+    assert result['memory_availability'] == 'unsupported'
+    assert all(c['memory_availability'] == 'unsupported' for c in result['cells'].values())
+    assert sum(e.get('availability') == 'unsupported' for c in result['cells'].values()
+               for e in c['captures']) == 1
+    assert all(len(c['profile_timing']['samples_us']) == 5 for c in result['cells'].values())
+    old_calls = list(fake_runtime)
+    controls.run(selected, tmp_path / 'run', {}, physical=0, resume=True)
+    assert fake_runtime == old_calls
+
+
+def test_memory_runtime_failure_is_not_capability_rejection(tmp_path, fake_runtime, monkeypatch):
+    def failed(*args):
+        raise RuntimeError('workload runtime failure')
+
+    monkeypatch.setattr(controls, 'memory_capture', failed)
+    with pytest.raises(RuntimeError, match='workload runtime failure'):
+        controls.run(controls.cases(True), tmp_path / 'run', {}, physical=0)
+    result = json.loads((tmp_path / 'run/summary.json').read_text())
+    assert 'memory_availability' not in result
 
 
 def test_bad_event_samples_are_not_zero_filled(tmp_path, fake_runtime, monkeypatch):

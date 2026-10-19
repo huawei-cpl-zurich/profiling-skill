@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Paired native wait controls; acquire simulator evidence before expansion."""
+"""Paired native wait controls; hardware evidence first, simulation optional."""
 import argparse
 from collections import Counter
 import hashlib
@@ -7,20 +7,26 @@ import json
 from pathlib import Path
 import shlex
 import sys
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'benchmarks'))
 import a3_memory_batch as base
-from a3_controlled_memory_batch import checked_output, memory_capture, probe, save
+from a3_controlled_memory_batch import checked_output, checkpoint, memory_capture, probe, save
 from a3_native_build import build
 from a3_profile_sync import cases, command
 from summarize_a3_simulator import parse_trace
 
 
-def pairs():
-    selected = [c for c in cases() if c['placement'] != 'late-set' and c['rounds'] == 32]
+def pairs(rounds=32):
+    if rounds not in (1, 32):
+        raise ValueError('native repetition controls support 1 or 32 rounds')
+    selected = [dict(c) for c in cases() if c['placement'] != 'late-set' and
+                (c['rounds'] == rounds if not c['family'].startswith('mode') else True)]
     result = {}
     for case in selected:
+        if case['rounds'] != rounds:
+            case.update(rounds=rounds, id=case['id'] + f'/rounds-{rounds}')
         name = case['family'] + (('/imbalanced' if case['imbalanced'] else '/balanced')
                                  if 'imbalanced' in case else '')
         result.setdefault(name, []).append(case)
@@ -82,36 +88,31 @@ def measured_capture(cmd, folder, env, metric, selector):
     return memory_capture(cmd, folder, env, selector, timeout=300)
 
 
-def run_pair(selected, executable, output, env, soc, *, canary=False,
+def run_pair(selected, executable, output, env, soc=None, *, canary=False, include_simulation=False,
              simulate=simulation, capture=measured_capture, execute=base.execute):
+    if include_simulation and not soc:
+        raise ValueError('requested simulation requires observed --soc-version')
     output.mkdir(parents=True, exist_ok=False)
     result = dict(status='running', cases={}, capture_order=[],
-                  simulator_not_hardware=True)
+                  simulator_not_hardware=True,
+                  timing_kind='hardware msprof op diagnostic duration, not uninstrumented timing')
     def persist():
         save(output / 'summary.json', result)
     persist()
     try:
-        # Native correctness and one native-application simulator acquisition
-        # qualify the pair before issuing the remaining profiling matrix.
-        for case in selected[:1] if canary else selected:
+        # Check BOTH variants before any performance capture, including canaries.
+        for case in selected:
             folder = output / case['placement']
             folder.mkdir()
             cmd = command(executable, case)
-            correctness = checked_output(execute(cmd, folder / 'correctness', env, timeout=300))
-            cell = dict(case=case, correctness=correctness, captures=[])
+            correctness = checkpoint(folder / 'correctness', dict(command=cmd, case=case),
+                lambda: checked_output(execute(cmd, folder / 'correctness', env, timeout=300)))
+            cell = dict(case=case, correctness=correctness, captures=[],
+                        simulation=dict(status='not_requested'))
             result['cases'][case['id']] = cell
-            cell['simulation'] = simulate(executable, case, folder / 'simulation', env, soc)
             persist()
-            if not cell['simulation']['clean_acquisition_gate_passed']:
-                result.update(status='acquisition_unavailable',
-                              reason='native simulator canary failed; pair expansion stopped')
-                persist()
-                return result
-        if canary:
-            result['status'] = 'canary_passed'
-            persist()
-            return result
-        for metric, rounds in [('BasicInfo', 5), ('PipeUtilization', 3), ('Memory', 3)]:
+        samples = [('BasicInfo', 1)] if canary else [('BasicInfo', 5), ('PipeUtilization', 3), ('Memory', 3)]
+        for metric, rounds in samples:
             unavailable = False
             for index in range(rounds):
                 order = selected[index % len(selected):] + selected[:index % len(selected)]
@@ -119,7 +120,14 @@ def run_pair(selected, executable, output, env, soc, *, canary=False,
                     if metric == 'Memory' and unavailable:
                         continue
                     folder = output / case['placement'] / f'{metric}-{index}'
-                    record = capture(command(executable, case), folder, env, metric, case['selector'])
+                    cmd = command(executable, case)
+                    request = dict(command=cmd, metric=metric, selector=case['selector'], case=case)
+                    def acquire():
+                        observed = capture(cmd, folder, env, metric, case['selector'])
+                        return dict(observed, command=cmd, artifact_root=str(folder),
+                                    physical_device_mask=env.get('ASCEND_RT_VISIBLE_DEVICES'),
+                                    captured_at_unix=time.time())
+                    record = checkpoint(folder, request, acquire)
                     unavailable = record.get('availability') == 'unsupported'
                     cell = result['cases'][case['id']]
                     cell['captures'].append(record)
@@ -131,26 +139,42 @@ def run_pair(selected, executable, output, env, soc, *, canary=False,
                     if unavailable:
                         result['memory_availability'] = 'unsupported for selected target/capture'
                     persist()
-        result['status'] = 'complete'
+        result['status'] = 'canary_passed' if canary else 'complete'
+        persist()  # Hardware results survive optional simulator timeout/failure.
+        if include_simulation:
+            for case in selected:
+                cell = result['cases'][case['id']]
+                try:
+                    cell['simulation'] = simulate(executable, case,
+                        output / case['placement'] / 'simulation', env, soc)
+                    cell['simulation']['availability'] = ('available' if
+                        cell['simulation'].get('clean_acquisition_gate_passed') else 'unavailable')
+                except Exception as exc:
+                    cell['simulation'] = dict(status='unavailable', clean_acquisition_gate_passed=False,
+                                             failure=dict(type=type(exc).__name__, message=str(exc)))
+                persist()
     except Exception as exc:
         result.update(status='failed', failure=dict(type=type(exc).__name__, message=str(exc)))
     persist()
     return result
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', action='store_true')
     parser.add_argument('--family', choices=tuple(pairs()), action='append')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--soc-version')
+    parser.add_argument('--simulation', action='store_true', help='optional diagnostic after hardware captures')
+    parser.add_argument('--rounds', type=int, choices=(1, 32), action='append')
     parser.add_argument('--canary', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    repetitions = list(dict.fromkeys(args.rounds or [32]))
     if args.manifest:
-        print(json.dumps(pairs()))
+        print(json.dumps({f'{name}/rounds-{r}': group for r in repetitions for name, group in pairs(r).items()}))
         return 0
-    if not args.output or not args.soc_version:
-        parser.error('--output and observed --soc-version required')
+    if not args.output or (args.simulation and not args.soc_version):
+        parser.error('--output required; requested simulation also requires observed --soc-version')
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     executable = build(output / 'build')
@@ -158,11 +182,14 @@ def main():
     summary = dict(physical_device=physical, logical_device=0,
                    executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(), pairs={})
     try:
-        for name in args.family or pairs():
-            summary['pairs'][name] = run_pair(pairs()[name], executable,
-                output / name.replace('/', '-'), env, args.soc_version, canary=args.canary)
-            save(output / 'summary.json', summary)
-            print(json.dumps(dict(family=name, status=summary['pairs'][name]['status'])), flush=True)
+        for rounds in repetitions:
+            for name in args.family or pairs(rounds):
+                key = f'{name}/rounds-{rounds}'
+                summary['pairs'][key] = run_pair(pairs(rounds)[name], executable,
+                    output / f'rounds-{rounds}' / name.replace('/', '-'), env, args.soc_version,
+                    canary=args.canary, include_simulation=args.simulation)
+                save(output / 'summary.json', summary)
+                print(json.dumps(dict(family=key, status=summary['pairs'][key]['status'])), flush=True)
     finally:
         lease.close()
     return int(any(p['status'] not in {'complete', 'canary_passed'} for p in summary['pairs'].values()))

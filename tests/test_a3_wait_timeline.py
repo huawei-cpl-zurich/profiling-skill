@@ -46,18 +46,22 @@ def test_interleaves_all_samples_and_keeps_noisy_values(tmp_path):
                for c in result['cases'].values())
 
 
-def test_failed_canary_never_expands_or_profiles(tmp_path):
+def test_failed_simulation_still_completes_hardware_matrix(tmp_path):
     calls = []
     def simulate(*args):
         calls.append('simulation')
         return {'clean_acquisition_gate_passed': False, 'status': 'profiler_failed'}
-    def capture(*args):
-        raise AssertionError('capture dispatched after bad canary')
+    def capture(cmd, folder, env, metric, selector):
+        calls.append(metric)
+        return dict(metric=metric, basic_rows=[{'Duration(us)': '2'}])
     result = study.run_pair(study.pairs()['mode0/balanced'], '/kernel', tmp_path / 'pair', {}, 'soc',
-                            simulate=simulate, capture=capture, execute=success)
-    assert result['status'] == 'acquisition_unavailable'
-    assert len(result['cases']) == 1
-    assert calls == ['simulation']
+                            include_simulation=True, simulate=simulate, capture=capture, execute=success)
+    assert result['status'] == 'complete'
+    assert len(result['cases']) == 2
+    assert calls.count('BasicInfo') == 10
+    assert calls.count('PipeUtilization') == calls.count('Memory') == 6
+    assert calls[-2:] == ['simulation', 'simulation']
+    assert all(c['simulation']['availability'] == 'unavailable' for c in result['cases'].values())
 
 
 def test_correctness_failure_stops_before_simulation(tmp_path):
@@ -71,12 +75,17 @@ def test_correctness_failure_stops_before_simulation(tmp_path):
     assert 'failed' in result['failure']['message']
 
 
-def test_canary_only_runs_one_case_without_measurements(tmp_path):
+def test_canary_checks_both_variants_and_hardware_discovery(tmp_path):
+    calls = []
+    def capture(cmd, folder, env, metric, selector):
+        calls.append((cmd[2], metric))
+        return dict(metric=metric, basic_rows=[{'Duration(us)': '2'}])
     result = study.run_pair(study.pairs()['mode2/imbalanced'], '/kernel', tmp_path / 'pair', {}, 'soc',
-                            canary=True, simulate=clean, execute=success)
+                            canary=True, capture=capture, execute=success)
     assert result['status'] == 'canary_passed'
-    assert len(result['cases']) == 1
-    assert result['capture_order'] == []
+    assert len(result['cases']) == 2
+    assert calls == [('0', 'BasicInfo'), ('1', 'BasicInfo')]
+    assert all(c['simulation']['status'] == 'not_requested' for c in result['cases'].values())
 
 
 def test_explicit_memory_rejection_stops_only_memory_group(tmp_path):
@@ -154,3 +163,67 @@ def test_measurement_passes_explicit_watchdog_to_existing_interfaces(tmp_path, m
     for metric in ('BasicInfo', 'PipeUtilization', 'Memory'):
         assert study.measured_capture(['/kernel'], tmp_path, {}, metric, 'exact')['metric'] == 'observed'
     assert calls == [{'timeout': 300}] * 3
+
+
+def test_simulator_exception_is_separate_and_hardware_checkpointed(tmp_path):
+    def simulate(*args):
+        raise subprocess.TimeoutExpired(['simulator'], 300)
+    def capture(cmd, folder, env, metric, selector):
+        return dict(metric=metric, basic_rows=[{'Duration(us)': '2'}])
+    output = tmp_path / 'pair'
+    result = study.run_pair(study.pairs()['mte2-vector'], '/kernel', output,
+                            {'ASCEND_RT_VISIBLE_DEVICES': 'leased-physical'}, 'observed', canary=True,
+                            include_simulation=True, simulate=simulate, capture=capture, execute=success)
+    assert result['status'] == 'canary_passed'
+    for cell in result['cases'].values():
+        assert cell['simulation']['failure']['type'] == 'TimeoutExpired'
+        capture_record = cell['captures'][0]
+        assert capture_record['physical_device_mask'] == 'leased-physical'
+        assert capture_record['command'][0] == '/kernel'
+        assert capture_record['captured_at_unix'] > 0
+        assert (Path(capture_record['artifact_root']) / 'completed.json').is_file()
+
+
+def test_second_variant_incorrect_never_profiles_either(tmp_path):
+    def execute(cmd, *args, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({'correctness': cmd[2] == '0'}), '')
+    def capture(*args):
+        raise AssertionError('profile dispatched despite incorrect paired variant')
+    result = study.run_pair(study.pairs()['mte2-vector'], '/kernel', tmp_path / 'pair', {},
+                            canary=True, execute=execute, capture=capture)
+    assert result['status'] == 'failed'
+    assert not result['capture_order']
+
+
+def test_cli_default_hardware_sweeps_without_soc(tmp_path, monkeypatch):
+    class Lease:
+        closed = False
+        def close(self):
+            self.closed = True
+    lease = Lease()
+    binary = tmp_path / 'native'
+    binary.write_bytes(b'compiled-native')
+    monkeypatch.setattr(study, 'build', lambda _: binary)
+    monkeypatch.setattr(study.base, 'wait_for_device', lambda _: ('leased', {}, lease))
+    original = study.run_pair
+    def capture(cmd, folder, env, metric, selector):
+        return dict(metric=metric, basic_rows=[{'Duration(us)': '3'}])
+    def run_pair(*args, **kwargs):
+        assert kwargs['include_simulation'] is False
+        return original(*args, **kwargs, capture=capture, execute=success)
+    monkeypatch.setattr(study, 'run_pair', run_pair)
+    output = tmp_path / 'hardware'
+    assert study.main(['--output', str(output), '--canary', '--family', 'mode2/imbalanced',
+                       '--rounds', '1', '--rounds', '32']) == 0
+    summary = json.loads((output / 'summary.json').read_text())
+    assert len(summary['pairs']) == 2
+    assert {c['case']['rounds'] for p in summary['pairs'].values() for c in p['cases'].values()} == {1, 32}
+    assert all(len(p['capture_order']) == 2 for p in summary['pairs'].values())
+    assert lease.closed
+
+
+def test_cli_requested_simulation_requires_soc_before_build(tmp_path):
+    with pytest.raises(SystemExit) as error:
+        study.main(['--output', str(tmp_path / 'forbidden'), '--simulation'])
+    assert error.value.code == 2
+    assert not (tmp_path / 'forbidden').exists()

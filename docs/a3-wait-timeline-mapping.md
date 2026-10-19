@@ -1,8 +1,10 @@
 # A3 wait-placement qualification
 
 The six paired groups in `scripts/a3_wait_timeline.py --manifest` reuse the
-existing native synchronization control: MTE2→Vector and Vector→MTE3 with
-32 useful vector rounds, plus balanced/imbalanced inter-core modes 0 and 2.
+existing native synchronization control: MTE2→Vector and Vector→MTE3,
+plus balanced/imbalanced inter-core modes 0 and 2. Default repetitions are
+32; select `--rounds 1 --rounds 32` for a two-point repetition sweep using
+the existing native API. Both placements use the same repetition count.
 Each pair compares `overlap` with `early-wait`; useful work, flags and outputs
 are unchanged within that pair. Do not compare different balance groups as
 equivalent-work candidates.
@@ -10,37 +12,53 @@ equivalent-work candidates.
 ## Native application canary
 
 Stage the repository through `$remote-access`, select its named runtime, and
-run from the registry-derived workspace. Supply the **observed supported**
-simulator SoC; there is intentionally no guessed default:
+run from the registry-derived workspace. The default is hardware-only and
+does not require a simulator model:
 
 ```bash
 python scripts/a3_wait_timeline.py --family mte2-vector --canary \
-  --soc-version "$OBSERVED_SIMULATOR_SOC" --output "$NEW_OUTPUT_DIRECTORY"
+  --rounds 1 --rounds 32 --output "$NEW_OUTPUT_DIRECTORY"
 ```
 
 The worker compiles the native executable before acquiring one idle physical
 device lease. Every application uses logical zero. It performs host numerical
-verification, then passes an executable shell wrapper to the existing explicit
-simulator worker. This exercises the native application route rather than the
-historical Python/Torch simulator teardown path. No hidden Triton arguments or
-binary-config ABI are copied or guessed. A failed canary is an acquisition gap,
-not a successful timeline just because partial trace files exist.
+verification of **both** variants before any capture, then requires one exact-
+kernel BasicInfo hardware acquisition per variant. Correctness alone does not
+pass the canary. A failing variant prevents profiling either member of that pair.
 
 Omit `--canary` for both variants and five interleaved BasicInfo, three separate
 PipeUtilization and three separate Memory replays per variant. Each ordinary
 subprocess and each acquisition stage has a 300-second limit. The outer
-simulator worker has a 620-second bound because it performs two sequential
+optional simulator worker has a 620-second bound because it performs two sequential
 bounded stages: native correctness and profiling. Timeout kills its process
 group before releasing the lease. Rotate pair order between rounds, retain all
 samples, and preserve low-confidence flags rather than selecting a convenient
-repeat. An explicit unsupported Memory metric stops only that metric group;
+repeat. Durations are **hardware `msprof op` diagnostic measurements**, not
+uninstrumented event timings or phase timelines. An explicit unsupported Memory metric stops only that metric group;
 compiler, correctness and runtime errors remain failures.
 
 Select several `--family` values, or omit them to run all six pairs. A failed
 pair is retained while independent pairs continue. Output directories must be
-new: there is no implicit retry, overwrite or duplicate scheduling. Transport
+new: there is no implicit retry, overwrite or duplicate scheduling. Every
+completed hardware phase retains its request, command, device mask, timestamp,
+raw artifact location and hash-checked `completed.json` checkpoint. Transport
 recovery and terminal infrastructure retries belong to the supervising
 `$remote-access` invocation, not this measurement worker.
+
+## Optional simulator evidence
+
+Only add `--simulation --soc-version "$OBSERVED_SIMULATOR_SOC"` after observing
+an installed compatible model. There is no guessed SoC. Optional simulation
+runs **after** hardware acquisition; its errors, timeouts and clean-acquisition
+status are retained separately and never invalidate or prevent completed
+hardware results. No trace is fabricated when simulation fails. Hardware-only
+results explicitly record simulation as `not_requested`.
+
+The optional worker uses the native executable route rather than the historical
+Python/Torch teardown path. No hidden Triton arguments or binary-config ABI are
+copied or guessed. A simulator failure is not a passed timeline acquisition
+even if partial traces exist; a successful hardware canary is not a simulator
+capability claim.
 
 ## What the evidence does and does not establish
 

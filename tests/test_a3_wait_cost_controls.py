@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -181,3 +182,89 @@ def test_pair_confidence_preserves_medians_and_noise(noisy_mode):
     assert comparison['paired_speedup'] == comparison['event_medians_us']['serialized'] / \
         comparison['event_medians_us']['overlap']
     assert {key: cell['event_timing']['samples_us'] for key, cell in cells.items()} == originals
+
+
+def test_actual_kernel_event_lifecycle_and_outputs_with_cpu_stubs(tmp_path):
+    compiler = shutil.which('g++')
+    if compiler is None:
+        pytest.skip('g++ unavailable for CPU-only kernel contract test')
+    (tmp_path / 'acl').mkdir()
+    (tmp_path / 'acl/acl.h').write_text('')
+    (tmp_path / 'kernel_operator.h').write_text(r'''
+#pragma once
+#include <cassert>
+#include <algorithm>
+#include <vector>
+#define __global__
+#define __aicore__
+#define __gm__
+using GM_ADDR = unsigned char*;
+namespace AscendC {
+using TEventID = int;
+enum class HardEvent { V_MTE2, MTE2_V, V_MTE3 };
+enum class TPosition { VECCALC };
+enum { PIPE_V, PIPE_ALL };
+inline bool live[3] = {};
+inline int pending[3] = {};
+template<class T> struct LocalTensor {
+    T* p;
+    LocalTensor operator[](int n) const { return {p+n}; }
+};
+template<class T> struct GlobalTensor {
+    T* p;
+    void SetGlobalBuffer(T* pointer, int) { p=pointer; }
+    GlobalTensor operator[](int n) const { return {p+n}; }
+};
+template<TPosition> struct TBuf {
+    std::vector<float> values;
+    template<class T> LocalTensor<T> Get() { return {values.data()}; }
+};
+struct TPipe {
+    template<class B> void InitBuffer(B& b, int bytes) { b.values.resize(bytes/4); }
+    template<HardEvent E> TEventID AllocEventID() {
+        int e=int(E); assert(!live[e]); live[e]=true; return e+3;
+    }
+    template<HardEvent E> void ReleaseEventID(TEventID id) {
+        int e=int(E); assert(id==e+3 && live[e] && pending[e]==0); live[e]=false;
+    }
+    ~TPipe() { for(int e=0;e<3;++e) assert(!live[e] && pending[e]==0); }
+};
+template<HardEvent E> void SetFlag(TEventID id) {
+    int e=int(E); assert(id==e+3 && live[e] && pending[e]==0); ++pending[e];
+}
+template<HardEvent E> void WaitFlag(TEventID id) {
+    int e=int(E); assert(id==e+3 && live[e] && pending[e]==1); --pending[e];
+}
+template<int P> void PipeBarrier() {}
+inline void Duplicate(LocalTensor<float> a, float value, int n) { std::fill_n(a.p,n,value); }
+inline void Adds(LocalTensor<float> a, LocalTensor<float> b, float value, int n) {
+    for(int i=0;i<n;++i) a.p[i]=b.p[i]+value;
+}
+template<class D,class S> void DataCopy(D a, S b, int n) { std::copy_n(b.p,n,a.p); }
+}
+''')
+    source = Path(controls.__file__).resolve().parents[1] / 'benchmarks/a3_wait_cost_control.asc'
+    program = tmp_path / 'contract.cpp'
+    program.write_text('#define A3_WAIT_COST_KERNEL_ONLY\n#include ' + json.dumps(str(source)) + r'''
+int main() {
+    int cases=0;
+    for(int n: {1024,8192}) for(int rounds: {1,32}) for(int reps: {1,16})
+    for(int mode=0;mode<4;++mode) {
+        std::vector<float> x(n), y(2*n,-999);
+        for(int i=0;i<n;++i) x[i]=float(i%17);
+        a3_wait_cost_probe((GM_ADDR)x.data(),(GM_ADDR)y.data(),mode,n,rounds,reps);
+        for(int i=0;i<n;++i) {
+            if(y[i]!=(mode==1?0:x[i]) || y[n+i]!=(mode==0?0:rounds*reps)) return 1;
+        }
+        ++cases;
+    }
+    std::printf("%d\n",cases);
+}
+''')
+    executable = tmp_path / 'contract'
+    built = subprocess.run([compiler, '-std=c++17', '-I', str(tmp_path), str(program), '-o',
+                            str(executable)], capture_output=True, text=True, timeout=60)
+    assert built.returncode == 0, built.stderr
+    ran = subprocess.run([str(executable)], capture_output=True, text=True, timeout=30)
+    assert ran.returncode == 0, ran.stderr
+    assert ran.stdout.strip() == '32'

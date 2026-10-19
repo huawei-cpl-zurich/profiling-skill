@@ -19,7 +19,10 @@ The paired kernels have identical input, outputs, memory, operations and one-blo
 launch geometry. Only the MTE2-to-vector wait position changes. Compute operates
 on an independent UB buffer. Both the copied input and accumulated compute
 result are returned and checked against a CPU formula, so compute is not dead
-work. Each native application normally launches exactly one kernel; its separate
+work. TPipe allocates a reserved event ID for each synchronization direction;
+all set/wait uses are matched and IDs released after their final waits. Do not
+substitute hardcoded IDs, which can collide with framework-owned events.
+Each native application normally launches exactly one kernel; its separate
 timing mode performs three warmups followed by seven stream-event measurements
 without msprof, with positive microsecond samples retained. Event timing uses ACL
 events, not whole-process wall time or device-intrusive timestamp instructions.

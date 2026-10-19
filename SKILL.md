@@ -35,6 +35,11 @@ attribution or races are in doubt. A3 simulated timelines are not A5 hardware
 timelines; do not transfer newly observed A3 mechanisms to A2 or A5 without
 validation.
 
+For A3 synchronization questions, start with native correctness, matched
+hardware timing and scoped wait/issue counters. Simulator availability is
+separate: its failure must not block that evidence. Read the reasoning guide's
+wait-counter scopes before treating a zero or an ID as a source-level diagnosis.
+
 ## Acquire live control evidence
 
 Use a supplied target-aware measurement interface when the benchmark provides

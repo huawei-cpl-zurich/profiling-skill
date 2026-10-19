@@ -37,8 +37,11 @@ try:
     physical, env, lease = wait_for_device(probe)
     summary.update(physical_device=physical, logical_device=0)
     command = [sys.executable, str(root / 'runner.py'), '--implementation', request['implementation']]
+    check_command = list(command)  # Measurement selection must not narrow supported-input checks.
+    if request.get('variant'):
+        command += ['--variant', request['variant']]
     stage = 'candidate'
-    checked = execute(command + ['--checks=4'], output / 'check', env, timeout=300)
+    checked = execute(check_command + ['--checks=4'], output / 'check', env, timeout=300)
     if checked.returncode:
         raise RuntimeError('correctness or compilation failed: ' + checked.stderr[-12000:])
     records = []
@@ -48,7 +51,16 @@ try:
     if not any(isinstance(r, dict) and r.get('correctness') is True for r in records):
         raise RuntimeError('trusted runner omitted correctness evidence')
     summary['correctness'] = records
-    if request['verb'] in ('check', 'timing', 'pipes', 'ir', 'sanitize'):
+    if request['verb'] == 'events':
+        stage = 'event-timing'
+        timed = execute(command + ['--event-timing'], output / 'event-timing', env, timeout=300)
+        events = [json.loads(line) for line in timed.stdout.splitlines() if line.startswith('{')]
+        if timed.returncode or len(events) != 1 or events[0].get('correctness') is not True or \
+                events[0].get('warmup') != 3 or len(events[0].get('samples_us', [])) != 7:
+            raise RuntimeError('native event timing did not return seven verified samples: ' + timed.stderr[-12000:])
+        summary['event_timing'] = summarize(events[0]['samples_us'])
+        summary['event_scope'] = 'stream-event bracket may include host-submission gaps; not intrinsic kernel latency'
+    if request['verb'] in ('check', 'timing', 'pipes', 'events', 'ir', 'sanitize'):
         stage = 'profiling'
         wrapper = root / 'application.sh'
         wrapper.write_text('#!/bin/sh\nexec ' + shlex.join(command) + '\n')
@@ -107,6 +119,7 @@ try:
     summary['state'] = 'completed'
 except BaseException as error:
     summary.update(state='failed', failure_stage=stage, error=str(error), traceback=traceback.format_exc())
+    summary['retained_diagnostics'] = [str(p.relative_to(root)) for p in (root / 'build').rglob('build.stderr')]
 finally:
     if lease: lease.close()
     (output / 'summary.json').write_text(json.dumps(summary, indent=2))
@@ -153,8 +166,13 @@ class Tools:
             raise RuntimeError('transport operation failed: ' + json.dumps(payload))
         return payload
 
-    def start(self, verb, implementation, sanitizer):
+    def start(self, verb, implementation, sanitizer, variant=None):
         spec = json.loads((self.bundle / 'task.json').read_text())
+        if variant is not None and variant not in spec.get('variants', {}):
+            raise ValueError('unknown task variant')
+        if verb == 'events' and not spec.get('native_wait_kind'):
+            return dict(state='unsupported', failure_stage='capability', operation=verb,
+                        implementation=implementation, error='events requires a native wait task')
         if spec['language'] != 'triton' and verb in ('ir', 'sanitize'):
             return dict(state='unsupported', failure_stage='capability', operation=verb,
                         implementation=implementation, error=verb + ' is supported for Triton tasks only')
@@ -168,12 +186,16 @@ class Tools:
             raise ValueError('implementation must be a regular non-symlink file')
         for name in ('runner.py', 'native_host.asc', 'task.json'):
             shutil.copyfile(self.bundle / name, folder / name)
+        if spec.get('native_wait_kind'):
+            shutil.copyfile(self.bundle / 'a3_native_build.py', folder / 'a3_native_build.py')
         shutil.copyfile(source, folder / source.name)
         helpers = Path(__file__).resolve().parent
         for name in ('profile_device.py', 'a3_memory_batch.py'):
             shutil.copyfile(helpers / name, folder / name)
         request = dict(verb=verb, implementation=implementation, sanitizer=sanitizer,
                        source_sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+        if variant is not None:
+            request['variant'] = variant
         save(folder / 'request.json', request)
         (folder / 'execute.py').write_text(REMOTE_PROGRAM)
         archive = folder / (ident + '.tar.gz')
@@ -301,25 +323,28 @@ def main(argv=None):
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--target', default='bz-a3-1')
     parser.add_argument('--runtime', default='py311-torch')
-    parser.add_argument('verb', choices=('help', 'check', 'timing', 'pipes', 'ir', 'sanitize', 'observe'))
+    parser.add_argument('verb', choices=('help', 'check', 'timing', 'pipes', 'events', 'ir', 'sanitize', 'observe'))
     parser.add_argument('call_id', nargs='?')
     parser.add_argument('--implementation', choices=('baseline', 'candidate'), default='candidate')
     parser.add_argument('--sanitizer', choices=('memcheck', 'racecheck', 'synccheck'), default='racecheck')
+    parser.add_argument('--variant', help='task.json variant name (supported native wait tasks only)')
     args = parser.parse_args(argv)
     if args.verb == 'help':
-        print('experiment-tool {check,timing,pipes,ir,sanitize} [--implementation baseline|candidate]\n'
+        print('experiment-tool {check,timing,pipes,events,ir,sanitize} [--implementation baseline|candidate] [--variant NAME]\n'
               'sanitize [--sanitizer memcheck|racecheck|synccheck] (Triton only)\n'
               'experiment-tool observe CALL_ID resumes an existing retained job.\n'
               'All supported execution operations (check, timing, pipes, ir, sanitize) include four correctness checks\n'
               'and complete bounded single-kernel verification; a separate check call is unnecessary before timing.\n'
               'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
               'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
+              'events returns seven ACL stream-event samples after three warmups (native wait tasks only);\n'
+              'event brackets can include host-submission gaps and are not intrinsic kernel latency.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
         return 0
     try:
         tools = Tools(args.bundle, args.workspace, args.target, args.runtime)
         if args.verb == 'observe' and not args.call_id: parser.error('observe requires CALL_ID')
-        result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(args.verb, args.implementation, args.sanitizer)
+        result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(args.verb, args.implementation, args.sanitizer, args.variant)
         print(json.dumps(result, indent=2))
         return 1 if result.get('state') == 'failed' else 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:

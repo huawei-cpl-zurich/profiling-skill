@@ -199,10 +199,12 @@ def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
     assert calls[1][1] == calls[2][1] == 'remote:t:transfer:download'
 
 
-@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('check', 0, True)])
+@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('check', 0, True), ('events', 0, False)])
 def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra):
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate'))
+    if verb == 'events':
+        tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate', variant='long'))
     tools.save(tmp_path / 'task.json', dict(selector='task_kernel', language='triton'))
     (tmp_path / 'profile_device.py').write_text('''
 class Lease:
@@ -216,6 +218,10 @@ from pathlib import Path
 from types import SimpleNamespace
 def execute(argv, folder, env, **kwargs):
     folder.mkdir(parents=True)
+    if '--checks=4' in argv:
+        assert '--variant' not in argv
+    if '--event-timing' in argv:
+        assert argv[argv.index('--variant')+1] == 'long'
     if argv[0] == 'msprof':
         report = folder / 'report'
         report.mkdir()
@@ -229,6 +235,8 @@ def execute(argv, folder, env, **kwargs):
     build = Path(__file__).parent / 'build'
     build.mkdir(exist_ok=True)
     (build / 'compile.stderr').write_text('compiler diagnostics')
+    if '--event-timing' in argv:
+        return SimpleNamespace(returncode=0,stdout='{"correctness":true,"warmup":3,"samples_us":[1,2,3,4,5,6,7]}',stderr='')
     return SimpleNamespace(returncode=0,stdout='{"correctness":true}',stderr='')
 def validate_capture(code,text): assert code == 0
 def capture(command,folder,env,metric,selector):
@@ -243,6 +251,11 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
         helper.write_text(helper.read_text().replace('renamed_kernel_compiled_123,2\\n', 'renamed_kernel_compiled_123,2\\nsecond_compute,3\\n'))
     result = subprocess.run(['python', str(tmp_path / 'execute.py')], capture_output=True, text=True)
     summary = json.loads((tmp_path / 'results/summary.json').read_text())
+    if verb == 'events':
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert summary['event_timing']['samples_us'] == [1, 2, 3, 4, 5, 6, 7]
+        assert summary['state'] == 'completed'
+        return
     if extra:
         assert result.returncode == 1
         assert summary['failure_stage'] == 'candidate-contract'

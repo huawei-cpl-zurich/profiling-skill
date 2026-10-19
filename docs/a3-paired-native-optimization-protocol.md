@@ -28,6 +28,20 @@ released; inter-core identifiers retain matched signal/wait semantics. Tasks:
 - Phase control: tiny and larger repeated-work variants, preserving input copy,
   runtime repetition loop and independent accumulated vector result.
 
+Freeze 04 replaces the original constant accumulated-work loop after calibration
+agents legitimately collapsed it to a constant and hoisted unused copies. Those
+old results are calibration only, not accepted optimization performance. Work
+now starts from independent seeded float32 inputs (different per inter-core
+participant) and executes four separately rounded logistic-recurrence operations
+per round. Phase inputs contain distinct payload vectors per repetition, each
+mixed into the recurrent state after that round's independent work; earlier
+copies cannot simply be dropped in favor of the final copy. Four UB vectors use
+128KiB at the largest case. The CPU oracle requires NumPy float32; the native
+host uses volatile intermediates to prevent contraction. Exact Ascend/CPU
+rounding parity needs fresh hardware qualification, not relaxed tolerances.
+Host task-kind configuration is captured before including candidate source to
+avoid a benign macro-name collision; this is not an adversarial C++ sandbox.
+
 Use the existing `BlindLauncher`, not a new scheduler or transport. Its opaque
 domain helper is the existing `blind_optimization_tools.py` with the exported
 bundle, configured A3 target and named runtime. Both arms have exactly the same

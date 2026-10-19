@@ -11,18 +11,26 @@ using namespace AscendC;
 SETUP = '''
     TPipe pipe;
     TBuf<TPosition::VECCALC> storage;
-    pipe.InitBuffer(storage, 3*n*sizeof(float));
-    auto a=storage.Get<float>(); auto b=a[n]; auto w=a[2*n];
+    pipe.InitBuffer(storage, 4*n*sizeof(float));
+    auto a=storage.Get<float>(); auto b=a[n]; auto w=a[2*n]; auto t=a[3*n];
     auto load=pipe.AllocEventID<HardEvent::MTE2_V>();
     auto store=pipe.AllocEventID<HardEvent::V_MTE3>();
     auto reuse=pipe.AllocEventID<HardEvent::V_MTE2>();
     GlobalTensor<float> x,y;
-    x.SetGlobalBuffer((__gm__ float*)input,2*n);
+    int block=TASK_KIND==1?GetBlockIdx():0;
+    int payloadVectors=TASK_KIND==3 && repetitions>2?repetitions:2;
+    x.SetGlobalBuffer((__gm__ float*)input,(payloadVectors+(TASK_KIND==1?2:1))*n);
     y.SetGlobalBuffer((__gm__ float*)output,4*n);
-    Duplicate(w,0.0f,n); PipeBarrier<PIPE_V>();
+    DataCopy(w,x[(payloadVectors+block)*n],n);
+    SetFlag<HardEvent::MTE2_V>(load); WaitFlag<HardEvent::MTE2_V>(load);
 '''
 WORK = '''
-    for(int r=0;r<rounds;++r) { Adds(w,w,1.0f,n); PipeBarrier<PIPE_V>(); }
+    for(int r=0;r<rounds;++r) {
+        Muls(t,w,-1.0f,n); PipeBarrier<PIPE_V>();
+        Adds(t,t,1.0f,n); PipeBarrier<PIPE_V>();
+        Mul(w,w,t,n); PipeBarrier<PIPE_V>();
+        Muls(w,w,4.0f,n); PipeBarrier<PIPE_V>();
+    }
 '''
 FINISH = '''
     pipe.ReleaseEventID<HardEvent::MTE2_V>(load);
@@ -42,7 +50,6 @@ def source(task):
         body = '''
     KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIV_1_0);
 ''' + SETUP + '''
-    int block=GetBlockIdx();
     DataCopy(a,x[block*n],n);
     SetFlag<HardEvent::MTE2_V>(load); WaitFlag<HardEvent::MTE2_V>(load);
     if(imbalanced && block==0) for(int r=0;r<32;++r) {
@@ -73,9 +80,11 @@ def source(task):
     SetFlag<HardEvent::V_MTE2>(reuse);
     for(int rep=0;rep<repetitions;++rep) {
         WaitFlag<HardEvent::V_MTE2>(reuse);
-        DataCopy(a,x,n);
+        DataCopy(a,x[rep*n],n);
         SetFlag<HardEvent::MTE2_V>(load); WaitFlag<HardEvent::MTE2_V>(load);
 ''' + WORK + '''
+        Add(w,w,a,n); PipeBarrier<PIPE_V>();
+        Muls(w,w,0.25f,n); PipeBarrier<PIPE_V>();
         SetFlag<HardEvent::V_MTE2>(reuse);
     }
     WaitFlag<HardEvent::V_MTE2>(reuse);
@@ -115,6 +124,8 @@ def export(task, output):
         'The trusted host checks both complete outputs against seeded CPU references.\n'
         'Preserve one fused launch, input dependence, repetitions and useful work; do not\n'
         'replace computation with host work, constants or auxiliary kernels.\n'
+        'Work uses the seeded third region, four separate float32 recurrence operations\n'
+        'per round and phase-specific payload per repetition; all affect checked outputs.\n'
         'Do not edit baseline, runner, host or contract. Use experiment-tool help.\n')
     return spec
 

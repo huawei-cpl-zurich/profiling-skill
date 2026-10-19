@@ -4,24 +4,40 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import numpy as np
 from a3_native_build import build
 
 
-def oracle(kind, variant, seed):
+def seeded_inputs(kind, variant, seed):
     n, values = variant['n'], []
-    for _ in range(2*n):
+    payload = max(2, variant['repetitions']) if kind == 3 else 2
+    vectors = payload+(2 if kind == 1 else 1)
+    for i in range(vectors*n):
         seed = (1664525*seed+1013904223) & 0xffffffff
-        values.append((seed % 2049-1024)/64)
-    rounds = variant['rounds']
+        values.append((seed % 65535+1)/65536 if kind == 3 or i >= payload*n else (seed % 2049-1024)/64)
+    return np.array(values, dtype=np.float32).reshape(vectors, n)
+
+
+def oracle(kind, variant, seed):
+    values = seeded_inputs(kind, variant, seed)
+    w = values[2:].copy() if kind == 1 else values[-1].copy()
+    for rep in range(variant['repetitions'] if kind == 3 else 1):
+        for _ in range(variant['rounds']):
+            negative = np.multiply(w, np.float32(-1))
+            complement = np.add(negative, np.float32(1))
+            product = np.multiply(w, complement)
+            w = np.multiply(product, np.float32(4))
+        if kind == 3:
+            w = np.multiply(np.add(w, values[rep]), np.float32(.25))
     if kind == 1:
         result = []
         for b in range(2):
-            result += [x+(32 if variant['imbalanced'] and b == 0 else 0) for x in values[b*n:(b+1)*n]]
-            result += [rounds+x+(32 if variant['imbalanced'] and b == 1 else 0)
-                       for x in values[(1-b)*n:(2-b)*n]]
+            result += np.add(values[b], np.float32(32 if variant['imbalanced'] and b == 0 else 0)).tolist()
+            peer = np.add(values[1-b], np.float32(32 if variant['imbalanced'] and b == 1 else 0))
+            result += np.add(w[b], peer).tolist()
         return result
-    return ([values[i]+values[n+i]+rounds for i in range(n)] + [rounds]*n) if kind == 2 else \
-        values[:n]+[rounds*variant['repetitions']]*n
+    return np.concatenate((np.add(np.add(values[0], values[1]), w) if kind == 2 else
+                           values[variant['repetitions']-1], w)).tolist()
 
 
 def main():

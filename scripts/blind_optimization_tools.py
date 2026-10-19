@@ -53,6 +53,9 @@ try:
     summary['correctness'] = records
     if request['verb'] == 'events':
         stage = 'event-timing'
+        spec = json.loads((root / 'task.json').read_text())
+        if not spec.get('native_wait_kind'):
+            raise RuntimeError('events requires the trusted native wait host')
         timed = execute(command + ['--event-timing'], output / 'event-timing', env, timeout=300)
         events = [json.loads(line) for line in timed.stdout.splitlines() if line.startswith('{')]
         if timed.returncode or len(events) != 1 or events[0].get('correctness') is not True or \
@@ -60,7 +63,10 @@ try:
             raise RuntimeError('native event timing did not return seven verified samples: ' + timed.stderr[-12000:])
         summary['event_timing'] = summarize(events[0]['samples_us'])
         summary['event_scope'] = 'stream-event bracket may include host-submission gaps; not intrinsic kernel latency'
-    if request['verb'] in ('check', 'timing', 'pipes', 'events', 'ir', 'sanitize'):
+        summary['kernel_contract'] = dict(evidence_kind='trusted_host_launch_structure',
+            entrypoint='task_kernel', launches_per_iteration=1, exported_selector_available=False,
+            limitation='host structure only; exported device stream is not inspected by events')
+    if request['verb'] in ('check', 'timing', 'pipes', 'ir', 'sanitize'):
         stage = 'profiling'
         wrapper = root / 'application.sh'
         wrapper.write_text('#!/bin/sh\nexec ' + shlex.join(command) + '\n')
@@ -338,6 +344,7 @@ def main(argv=None):
               'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
               'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
               'events returns seven ACL stream-event samples after three warmups (native wait tasks only);\n'
+              'events does not require msprof; its launch contract comes from the trusted host, not exported selector discovery.\n'
               'event brackets can include host-submission gaps and are not intrinsic kernel latency.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
         return 0

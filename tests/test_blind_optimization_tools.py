@@ -199,13 +199,14 @@ def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
     assert calls[1][1] == calls[2][1] == 'remote:t:transfer:download'
 
 
-@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('check', 0, True), ('events', 0, False)])
-def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra):
+def exercise_remote_program(tmp_path, verb, count, extra, event_error=None):
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate'))
     if verb == 'events':
         tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate', variant='long'))
     tools.save(tmp_path / 'task.json', dict(selector='task_kernel', language='triton'))
+    if verb == 'events':
+        tools.save(tmp_path / 'task.json', dict(language='ascendc', native_wait_kind=3))
     (tmp_path / 'profile_device.py').write_text('''
 class Lease:
     def close(self): pass
@@ -249,12 +250,33 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
     if extra:
         helper = tmp_path / 'a3_memory_batch.py'
         helper.write_text(helper.read_text().replace('renamed_kernel_compiled_123,2\\n', 'renamed_kernel_compiled_123,2\\nsecond_compute,3\\n'))
+    if verb == 'events':
+        helper = tmp_path / 'a3_memory_batch.py'
+        content = helper.read_text().replace("if argv[0] == 'msprof':", "if argv[0] == 'msprof':\n        raise AssertionError('msprof unavailable: events must not dispatch it')")
+        if event_error == 'bad-samples':
+            content = content.replace('[1,2,3,4,5,6,7]', '[0,2,3,4,5,6,7]')
+        if event_error == 'runtime':
+            content = content.replace("return SimpleNamespace(returncode=0,stdout='{\"correctness\":true,\"warmup\":3", "return SimpleNamespace(returncode=1,stdout='{\"correctness\":true,\"warmup\":3")
+        if event_error == 'correctness':
+            content = content.replace('"correctness":true,"warmup":3', '"correctness":false,"warmup":3')
+        content = content.replace("def summarize(samples): return {'samples_us':samples,'median_us':2}",
+                                  "def summarize(samples):\n    if any(x<=0 for x in samples): raise ValueError('nonpositive event sample')\n    return {'samples_us':samples,'median_us':2}")
+        helper.write_text(content)
     result = subprocess.run(['python', str(tmp_path / 'execute.py')], capture_output=True, text=True)
     summary = json.loads((tmp_path / 'results/summary.json').read_text())
     if verb == 'events':
+        if event_error:
+            assert result.returncode == 1
+            assert summary['failure_stage'] == 'event-timing'
+            assert summary['state'] == 'failed'
+            return
         assert result.returncode == 0, result.stdout + result.stderr
         assert summary['event_timing']['samples_us'] == [1, 2, 3, 4, 5, 6, 7]
         assert summary['state'] == 'completed'
+        assert summary['kernel_contract']['evidence_kind'] == 'trusted_host_launch_structure'
+        assert summary['kernel_contract']['exported_selector_available'] is False
+        assert 'selector' not in summary
+        assert not (tmp_path / 'results/discovery').exists()
         return
     if extra:
         assert result.returncode == 1
@@ -270,3 +292,13 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
         assert 'build/compile.stderr' in archive.getnames()
         assert 'compiler-evidence/candidate/lowered.ll' in archive.getnames()
         assert 'compiler-evidence/candidate/lowered.bc' in archive.getnames()
+
+
+@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('check', 0, True), ('events', 0, False)])
+def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra):
+    exercise_remote_program(tmp_path, verb, count, extra)
+
+
+@pytest.mark.parametrize('error', ['bad-samples', 'runtime', 'correctness'])
+def test_independent_events_preserve_measurement_failures(tmp_path, error):
+    exercise_remote_program(tmp_path, 'events', 0, False, event_error=error)

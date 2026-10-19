@@ -34,18 +34,24 @@ bundle, configured A3 target and named runtime. Both arms have exactly the same
 commands. `experiment-tool timing --implementation baseline|candidate` returns
 five exact-kernel BasicInfo samples; `pipes` returns three PipeUtilization
 captures. `--variant NAME` selects the documented task variant for measurement.
-Every execution first checks four seeded cases, cycling through supported
-variants unless one is explicitly selected. Final acceptance independently
+Every execution first checks four seeded cases, cycling through all supported
+variants even when one is selected for measurement. Final acceptance independently
 checks **all** variants regardless of what the agent chose to measure.
 `events --variant tiny|long` is supported by the native tasks and returns three
 warmups plus seven stream-event samples without msprof. It has a different
 measurement scope and may include host-submission gaps; it is not intrinsic
-kernel latency. Profiler commands disable this event loop. Preserve noisy
+kernel latency. It succeeds independently of msprof availability: its one-launch
+per-iteration contract is supported by the immutable kernel-only trusted host,
+not discovery of an actual exported selector or inspection of the device stream.
+Event/correctness failures still fail the operation. `check`, `timing` and
+`pipes` retain actual profiler selector discovery; profiler commands disable
+the event loop. Preserve noisy
 samples; no selective retries or required speedup. Missing optional Memory or
 native compiler-IR tools are capability gaps, not zero counters or agent faults.
 
 The domain helper copies candidate bytes before submission, compiles the source,
-returns compiler diagnostics, checks outputs and verifies one compute launch.
+returns compiler diagnostics and checks outputs. Profiler operations verify one
+exported compute launch; `events` labels its weaker trusted-host evidence explicitly.
 The same retained remote handle is observed after interruptions. No direct
 SSH/client bypass or duplicate dispatch. Use at most two replacements only
 after terminal infrastructure failure; infrastructure-invalid cells are unscored.

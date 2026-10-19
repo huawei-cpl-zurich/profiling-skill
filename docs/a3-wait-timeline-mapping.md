@@ -9,6 +9,15 @@ Each pair compares `overlap` with `early-wait`; useful work, flags and outputs
 are unchanged within that pair. Do not compare different balance groups as
 equivalent-work candidates.
 
+Native controls allocate intra-core event IDs through their owning `TPipe`,
+and release every allocated ID after its matching wait. The two independently
+pending MTE2→Vector signals use distinct allocated IDs, as do the intra-core
+output roles. Cross-core flag IDs 8/9 are unchanged: they are a separate
+namespace. This follows the [TPipe synchronization contract](https://asc.gitcode.com/api/SIMD-API/basic_api/sync_control/intra_core_sync/TQueSync.html).
+Earlier literal-ID captures remain historical observations of that exact binary;
+they do not validate the corrected allocator-backed source. A new native canary
+must verify the updated binary before accepting its hardware measurements.
+
 ## Native application canary
 
 Stage the repository through `$remote-access`, select its named runtime, and

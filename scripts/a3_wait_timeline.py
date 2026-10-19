@@ -170,6 +170,7 @@ def main(argv=None):
     parser.add_argument('--canary', action='store_true')
     args = parser.parse_args(argv)
     repetitions = list(dict.fromkeys(args.rounds or [32]))
+    families = list(dict.fromkeys(args.family or pairs()))
     if args.manifest:
         print(json.dumps({f'{name}/rounds-{r}': group for r in repetitions for name, group in pairs(r).items()}))
         return 0
@@ -183,7 +184,7 @@ def main(argv=None):
                    executable_sha256=hashlib.sha256(executable.read_bytes()).hexdigest(), pairs={})
     try:
         for rounds in repetitions:
-            for name in args.family or pairs(rounds):
+            for name in families:
                 key = f'{name}/rounds-{rounds}'
                 summary['pairs'][key] = run_pair(pairs(rounds)[name], executable,
                     output / f'rounds-{rounds}' / name.replace('/', '-'), env, args.soc_version,

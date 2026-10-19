@@ -195,7 +195,11 @@ def test_second_variant_incorrect_never_profiles_either(tmp_path):
     assert not result['capture_order']
 
 
-def test_cli_default_hardware_sweeps_without_soc(tmp_path, monkeypatch):
+@pytest.mark.parametrize('families', [
+    ['mode2/imbalanced'],
+    ['mode2/imbalanced', 'mte2-vector', 'mode2/imbalanced'],
+])
+def test_cli_default_hardware_sweeps_without_soc(tmp_path, monkeypatch, families):
     class Lease:
         closed = False
         def close(self):
@@ -206,17 +210,22 @@ def test_cli_default_hardware_sweeps_without_soc(tmp_path, monkeypatch):
     monkeypatch.setattr(study, 'build', lambda _: binary)
     monkeypatch.setattr(study.base, 'wait_for_device', lambda _: ('leased', {}, lease))
     original = study.run_pair
+    calls = []
     def capture(cmd, folder, env, metric, selector):
         return dict(metric=metric, basic_rows=[{'Duration(us)': '3'}])
     def run_pair(*args, **kwargs):
         assert kwargs['include_simulation'] is False
+        calls.append(Path(args[2]).name)
         return original(*args, **kwargs, capture=capture, execute=success)
     monkeypatch.setattr(study, 'run_pair', run_pair)
     output = tmp_path / 'hardware'
-    assert study.main(['--output', str(output), '--canary', '--family', 'mode2/imbalanced',
+    options = [value for family in families for value in ('--family', family)]
+    assert study.main(['--output', str(output), '--canary', *options,
                        '--rounds', '1', '--rounds', '32']) == 0
     summary = json.loads((output / 'summary.json').read_text())
-    assert len(summary['pairs']) == 2
+    unique = list(dict.fromkeys(families))
+    assert len(summary['pairs']) == 2 * len(unique)
+    assert calls == [family.replace('/', '-') for family in unique] * 2
     assert {c['case']['rounds'] for p in summary['pairs'].values() for c in p['cases'].values()} == {1, 32}
     assert all(len(p['capture_order']) == 2 for p in summary['pairs'].values())
     assert lease.closed

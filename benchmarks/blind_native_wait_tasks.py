@@ -82,6 +82,8 @@ def source(task):
     SetFlag<HardEvent::V_MTE3>(store); WaitFlag<HardEvent::V_MTE3>(store);
     DataCopy(y,a,n); DataCopy(y[n],w,n);
 '''
+    if not inter:
+        body = body.replace('output,4*n)', 'output,2*n)')
     return HEADER + signature + body + FINISH
 
 

@@ -196,6 +196,28 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(imports, ["torch_npu", "torchair"])
         self.assertEqual(compiler.backend, "ge")
 
+    def test_explicit_npu_inductor_loader_and_label(self):
+        imports = []
+        def load(name):
+            imports.append(name)
+            return SimpleNamespace(lookup_backend=lambda name: "inductor")
+        with patch.object(execution.importlib, "import_module", side_effect=load):
+            compiler = execution.GraphCompiler(torch_module=FakeTorch(), backend_name="npu-inductor")
+        self.assertEqual(imports, ["torch_npu", "torch_npu._inductor", "torch._dynamo.backends.registry"])
+        self.assertEqual(compiler.backend, "inductor")
+        self.assertEqual(compiler.backend_name, "npu-inductor")
+
+    def test_unknown_backend_is_not_silently_selected(self):
+        with self.assertRaises(ValueError):
+            execution.GraphCompiler(backend_name="eager")
+
+    def test_actual_backend_label_in_prepared_evidence(self):
+        compiler = execution.GraphCompiler(torch_module=FakeTorch(),
+            backend=lambda graph, args: graph.forward, backend_name="npu-inductor")
+        prepared = execution.prepare_model(lambda: lambda x: x, (1,), {},
+                                          lambda result: None, compiler=compiler)
+        self.assertEqual(prepared.evidence["backend"], "npu-inductor")
+
     def test_existing_compiler_evidence_cannot_cover_a_later_eager_model(self):
         compiler = self.prepare().compiler
         compiler.torch.compile = lambda model, **kwargs: model

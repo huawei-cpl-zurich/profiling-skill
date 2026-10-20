@@ -203,6 +203,20 @@ class ExecutionTests(unittest.TestCase):
             execution.prepare_model(lambda: lambda x: x, (1,), {}, lambda output: None,
                                     compiler=compiler)
 
+    def test_backend_unwrap_metadata_cannot_bypass_execution_counter(self):
+        def backend(graph, args):
+            def executable(*args):
+                return graph.forward(*args)
+            executable._torchdynamo_orig_callable = graph.forward
+            executable._boxed_call = True
+            return executable
+        compiler = execution.GECompiler(torch_module=FakeTorch(), backend=backend)
+        wrapped = compiler.backend_wrapper(SimpleNamespace(code="graph", forward=lambda x: x), (1,))
+        self.assertFalse(hasattr(wrapped, "_torchdynamo_orig_callable"))
+        self.assertTrue(wrapped._boxed_call)
+        self.assertEqual(wrapped(1), 1)
+        self.assertEqual(compiler.executions, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

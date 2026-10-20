@@ -106,7 +106,7 @@ class GraphCompiler:
                     continue
                 raise CapabilityError(f"broken Triton installation: {exc}") from exc
         entries = []
-        for name in ("triton.compiler.compiler", "triton.compiler", "triton.runtime.jit"):
+        for name in ("triton", "triton.compiler.compiler", "triton.compiler", "triton.runtime.jit"):
             module = sys.modules.get(name)
             original = getattr(module, "compile", None)
             if not callable(original):

@@ -12,7 +12,7 @@ import traceback
 
 HELPERS = Path(__file__).resolve().parents[1] / 'skills/ascend-model-benchmarking/scripts'
 sys.path.insert(0, str(HELPERS))
-from model_execution import CapabilityError, benchmark_pair, prepare_model
+from model_execution import CapabilityError, GraphCompiler, benchmark_pair, prepare_model
 from profile_accounting import account_profile
 
 
@@ -47,6 +47,7 @@ def run(options, *, compiler_factory=None, clock=None):
     try:
         hooks = {name: load(getattr(options, name)) for name in (
             'baseline', 'candidate', 'cases_provider', 'validator', 'acquisition')}
+        compiler_factory = compiler_factory or (lambda: GraphCompiler(backend_name=options.backend))
         report['sources'] = {name: identity(hook) for name, hook in hooks.items()}
         adapter = hooks['acquisition']()
         report['environment_before'] = adapter.provenance()
@@ -56,6 +57,10 @@ def run(options, *, compiler_factory=None, clock=None):
         for index, case in enumerate(cases):
             if not isinstance(case['id'], str) or not case['id']:
                 raise ValueError('case id must be a nonempty string')
+            expected = case.get('expected_kernel', options.expected_kernel)
+            if (not isinstance(expected, list) or not expected
+                    or any(not isinstance(name, str) or not name for name in expected)):
+                raise ValueError('provide nonempty exact expected_kernel names per case or CLI')
             case_dir = output / f'case-{index:04d}'
             case_dir.mkdir()
             row = {'id': case['id'], 'state': 'incomplete'}
@@ -68,7 +73,7 @@ def run(options, *, compiler_factory=None, clock=None):
                                                     **case.get('init_kwargs', {})),
                     case['args'], case.get('kwargs', {}),
                     lambda result, arm=arm: hooks['validator'](case, arm, result),
-                    compiler=compiler_factory() if compiler_factory else None,
+                    compiler=compiler_factory(),
                     synchronize=adapter.synchronize)
             # Separate profiling replay proves identity before unprofiled timing.
             profiles = {}
@@ -89,10 +94,13 @@ def run(options, *, compiler_factory=None, clock=None):
                     raise CapabilityError('profile must identify exactly 50 active iterations')
                 if any(not item['task_count'] for item in accounted['iterations']):
                     raise CapabilityError('profile contains an empty active iteration')
+                for iteration in accounted['iterations']:
+                    iteration['all_kernel_busy_us'] = (iteration['device_busy_us']
+                                                       + iteration['aicpu_busy_us'])
                 profiles[arm] = accounted
                 save(case_dir / f'{arm}-busy-time.json', accounted)
             # Exact task identities, not graph-text guesses or name-count grouping.
-            wanted = set(options.expected_kernel)
+            wanted = set(expected)
             candidate = profiles['candidate']
             for iteration in candidate['iterations']:
                 observed = {task['name'] for task in candidate['tasks']
@@ -108,11 +116,18 @@ def run(options, *, compiler_factory=None, clock=None):
             save(case_dir / 'latency.json', latency)
             busy = {arm: statistics.median(item['device_busy_us']
                     for item in profile['iterations']) for arm, profile in profiles.items()}
+            aicpu = {arm: statistics.median(item['aicpu_busy_us']
+                     for item in profile['iterations']) for arm, profile in profiles.items()}
+            total = {arm: statistics.median(item['all_kernel_busy_us']
+                     for item in profile['iterations']) for arm, profile in profiles.items()}
             if busy['candidate'] <= 0:
                 raise CapabilityError('candidate device busy-time must be positive')
             row.update(state='complete', latency=latency,
                        device_busy_median_us=busy,
-                       busy_time_speedup=busy['baseline'] / busy['candidate'])
+                       aicpu_busy_median_us=aicpu, all_kernel_busy_median_us=total,
+                       busy_time_metric='per_iteration_sum_of_device_and_aicpu_task_durations',
+                       device_busy_time_speedup=busy['baseline'] / busy['candidate'],
+                       busy_time_speedup=total['baseline'] / total['candidate'])
             row['latency_variability_flags'] = [arm for arm in ('baseline', 'candidate')
                 if latency.get(arm, {}).get('between_batch_relative_spread', 0) > .05]
             save(output / 'report.json', report)
@@ -140,10 +155,13 @@ def run(options, *, compiler_factory=None, clock=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('baseline', 'candidate', 'cases-provider', 'validator', 'acquisition'):
+    for name in ('baseline', 'candidate', 'cases-provider', 'validator'):
         parser.add_argument('--' + name, required=True)
-    parser.add_argument('--expected-kernel', action='append', required=True,
-                        help='exact submitted device task name; repeat for required components')
+    parser.add_argument('--acquisition', default='profile_capture:create_acquisition')
+    parser.add_argument('--backend', choices=('torchair-ge', 'npu-inductor'), default='torchair-ge',
+                        help='explicit graph backend for BOTH arms; never falls back automatically')
+    parser.add_argument('--expected-kernel', action='append', default=[],
+                        help='exact submitted task name; private per-case expected_kernel overrides')
     parser.add_argument('--output', required=True, help='new evidence directory')
     options = parser.parse_args(argv)
     try:

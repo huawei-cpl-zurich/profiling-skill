@@ -92,7 +92,7 @@ class ControllerTests(unittest.TestCase):
                             output=str(root / 'results'), expected_kernel=['submitted'])
         with patch.object(controller, 'load', side_effect=hooks.__getitem__), \
                 patch.object(controller, 'prepare_model', side_effect=Prepared):
-            return controller.run(options, clock=lambda: 1000)
+            return controller.run(options, compiler_factory=lambda: None, clock=lambda: 1000)
 
     def test_complete_report_retains_flags_and_both_metrics(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -155,6 +155,44 @@ class ControllerTests(unittest.TestCase):
             (root / 'results').mkdir()
             with self.assertRaises(FileExistsError):
                 self.run_fixture(root)
+
+    def test_aicpu_is_summed_per_iteration_before_median(self):
+        class Crossed(Adapter):
+            def profile(self, prepared, **kwargs):
+                capture = super().profile(prepared, **kwargs)
+                for index, task in enumerate(list(capture['tasks'])):
+                    device, cpu = (1, 100) if index < 17 else ((2, 2) if index < 33 else (100, 1))
+                    task['duration_us'] = device
+                    capture['tasks'].append(dict(task, task_id='cpu-' + str(index),
+                                                 kind='aicpu', duration_us=cpu))
+                return capture
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(controller, 'benchmark_pair', return_value={'latency_speedup': 1}):
+            report = self.run_fixture(Path(temporary), Crossed())
+            self.assertEqual(report['state'], 'complete')
+            row = report['cases'][0]
+            self.assertEqual(row['device_busy_median_us']['candidate'], 2)
+            self.assertEqual(row['aicpu_busy_median_us']['candidate'], 2)
+            self.assertEqual(row['all_kernel_busy_median_us']['candidate'], 101)
+            self.assertEqual(row['busy_time_speedup'], 1)
+            self.assertEqual(row['device_busy_time_speedup'], 1)
+
+    def test_private_case_can_select_its_actual_entrypoint(self):
+        varied = [dict(cases()[0], expected_kernel=['different-entrypoint'])]
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(controller, 'benchmark_pair', return_value={'latency_speedup': 1}), \
+                patch.dict(globals(), cases=lambda: varied):
+            report = self.run_fixture(Path(temporary), Adapter(name='different-entrypoint'))
+            self.assertEqual(report['state'], 'complete')
+
+    def test_backend_selection_and_default_acquisition_reach_runner(self):
+        args = ['--baseline', 'r:Model', '--candidate', 'c:Model',
+                '--cases-provider', 'p:cases', '--validator', 'p:validate', '--output', 'new']
+        for extra, expected in [([], 'torchair-ge'), (['--backend', 'npu-inductor'], 'npu-inductor')]:
+            with patch.object(controller, 'run', return_value={'state': 'complete'}) as run:
+                self.assertEqual(controller.main(args + extra), 0)
+                self.assertEqual(run.call_args.args[0].backend, expected)
+                self.assertEqual(run.call_args.args[0].acquisition, 'profile_capture:create_acquisition')
 
 
 if __name__ == '__main__':

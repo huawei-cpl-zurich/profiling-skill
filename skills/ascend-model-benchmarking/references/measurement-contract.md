@@ -13,7 +13,10 @@ fits in cache. Inputs must remain immutable across paired calls.
 
 Busy-time comes from a separate warmed replay of the same compiled callable and
 inputs: 20 warmups and 50 explicitly correlated active iterations. Sum durations
-of each iteration's device tasks; retain AiCPU separately. Overlapping device
+of each iteration's device and AiCPU tasks for all-kernel busy-time; retain
+device-only and AiCPU totals separately. Compute the median of each iteration's
+sum, not the sum of the two medians. The primary busy-time speedup uses all-kernel
+medians; a separate device-only speedup is labeled explicitly. Overlapping device
 tasks can make this sum exceed elapsed time. Union-of-device-activity is an
 additional diagnostic, not end-to-end latency. Keep AIC/AIV components distinct.
 

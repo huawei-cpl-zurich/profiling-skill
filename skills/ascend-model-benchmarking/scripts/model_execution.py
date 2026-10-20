@@ -92,7 +92,7 @@ class GraphCompiler:
         return self.compilations, self.triton_compilations
 
     @contextmanager
-    def monitor_compilation(self):
+    def monitor_compilation(self, *, on_compile=None):
         """Catch Triton compile entrypoints, including cached Python aliases.
 
         Install before compilation so modules lazily imported by Triton runtime are
@@ -113,7 +113,10 @@ class GraphCompiler:
                 continue
 
             def wrapper(*args, _original=original, **kwargs):
-                self.triton_compilations += 1
+                if on_compile is None:
+                    self.triton_compilations += 1
+                else:
+                    on_compile()
                 return _original(*args, **kwargs)
             entries.append((module, original))
             module.compile = wrapper
@@ -211,12 +214,14 @@ def summarize(batches):
 
 
 def benchmark_pair(baseline, candidate, *, synchronize, batches=3, samples=50,
-                   warmup=20, clock=time.perf_counter_ns):
+                   warmup=20, clock=time.perf_counter_ns, validate_inputs=None):
     """Measure full forward completion with profiler disabled and warm inputs.
 
     Invoke once per already-prepared specialization. Device/clock/load metadata,
     source identities and kernel identity verification belong in the acquisition
     adapter. A raised MeasurementError means no valid timing result is produced.
+    Optional validate_inputs(phase) runs after each arm's warmup and measured batch,
+    outside clock windows and before another arm can consume shared inputs.
     """
     if batches < 1 or samples < 1 or warmup < 20:
         raise ValueError("require positive batches/samples and at least 20 warmups")
@@ -224,6 +229,11 @@ def benchmark_pair(baseline, candidate, *, synchronize, batches=3, samples=50,
     results = {name: [] for name in models}
     orders = []
     empty = []
+    active_triton_compilations = 0
+
+    def record_active_compile():
+        nonlocal active_triton_compilations
+        active_triton_compilations += 1
 
     def timed(call):
         synchronize()
@@ -233,15 +243,18 @@ def benchmark_pair(baseline, candidate, *, synchronize, batches=3, samples=50,
         elapsed = (clock() - started) / 1e6
         return elapsed
 
-    # One monitor sees Triton compilation across both models; each GE backend has
-    # its own counter. Hooks remain active across warmup and every measured call.
-    with baseline.compiler.torch.inference_mode(), baseline.compiler.monitor_compilation():
-        for model in models.values():
-            for _ in range(warmup):
-                model()
-            synchronize()
+    with baseline.compiler.torch.inference_mode():
+        for name, model in models.items():
+            # Warmup compilation belongs to the model being warmed, not whichever
+            # implementation supplied the measurement-level monitor.
+            with model.compiler.monitor_compilation():
+                for _ in range(warmup):
+                    model()
+                synchronize()
             model.evidence["post_warmup_compile_count"] = model.compiler.compilations
             model.evidence["post_warmup_triton_compile_count"] = model.compiler.triton_compilations
+            if validate_inputs is not None:
+                validate_inputs(f"{name}:warmup")
         expected = {name: model.compiler.snapshot() for name, model in models.items()}
         for _ in range(samples):
             empty.append(timed(lambda: None))
@@ -252,20 +265,26 @@ def benchmark_pair(baseline, candidate, *, synchronize, batches=3, samples=50,
                 model = models[name]
                 executions = model.compiler.executions
                 values = []
-                for _ in range(samples):
-                    values.append(timed(model))
-                    if any(item.compiler.snapshot() != expected[key]
-                           for key, item in models.items()):
-                        raise MeasurementError("compilation detected during active measurement", {
-                            "completed_batches_ms": results, "invalid_arm": name,
-                            "invalid_batch_ms": values, "empty_sync_ms": empty,
-                            "expected_compile_counts": expected,
-                            "actual_compile_counts": {
-                                key: item.compiler.snapshot() for key, item in models.items()},
-                        })
+                with baseline.compiler.monitor_compilation(on_compile=record_active_compile):
+                    for _ in range(samples):
+                        values.append(timed(model))
+                        if active_triton_compilations or any(
+                                item.compiler.snapshot() != expected[key]
+                                for key, item in models.items()):
+                            raise MeasurementError("compilation detected during active measurement", {
+                                "completed_batches_ms": results, "invalid_arm": name,
+                                "invalid_batch_ms": values, "empty_sync_ms": empty,
+                                "expected_compile_counts": expected,
+                                "measurement_triton_compile_count": active_triton_compilations,
+                                "actual_compile_counts": {
+                                    key: item.compiler.snapshot() for key, item in models.items()},
+                            })
                 if model.compiler.executions - executions < samples:
                     raise MeasurementError("compiled graph was not executed for every sample")
                 results[name].append(values)
+                synchronize()
+                if validate_inputs is not None:
+                    validate_inputs(f"{name}:batch-{batch}")
     report = {name: summarize(values) for name, values in results.items()}
     report.update({
         "metric": "unprofiled synchronized Model forward wall latency",

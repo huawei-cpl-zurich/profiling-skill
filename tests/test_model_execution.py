@@ -249,6 +249,98 @@ class ExecutionTests(unittest.TestCase):
                 module.compile()
                 self.assertEqual(compiler.triton_compilations, 1)
 
+    def test_lazy_candidate_warmup_compilation_is_attributed_to_candidate(self):
+        baseline, candidate = self.prepare(), self.prepare()
+        original = candidate.compiled
+        module = SimpleNamespace(compile=lambda: "binary")
+        calls = 0
+        def lazy(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                module.compile()
+            return original(*args, **kwargs)
+        candidate.compiled = lazy
+        with patch.dict(execution.sys.modules, {"triton": module,
+                "triton.compiler.compiler": None, "triton.runtime.jit": None,
+                "triton.compiler": None}):
+            report = execution.benchmark_pair(baseline, candidate, synchronize=lambda: None, clock=Clock())
+        self.assertEqual(report["execution_evidence"]["baseline"]["post_warmup_triton_compile_count"], 0)
+        self.assertEqual(report["execution_evidence"]["candidate"]["post_warmup_triton_compile_count"], 1)
+        self.assertEqual(baseline.compiler.triton_compilations, 0)
+
+    def test_input_validation_runs_at_boundaries_outside_timed_windows(self):
+        phases = []
+        ticks = 0
+        def clock():
+            nonlocal ticks
+            ticks += 1
+            return ticks * 1000
+        def validate(phase):
+            self.assertEqual(ticks % 2, 0)
+            phases.append(phase)
+        execution.benchmark_pair(self.prepare(), self.prepare(), synchronize=lambda: None,
+                                 clock=clock, validate_inputs=validate)
+        self.assertEqual(phases, ["baseline:warmup", "candidate:warmup",
+            "baseline:batch-0", "candidate:batch-0", "candidate:batch-1",
+            "baseline:batch-1", "baseline:batch-2", "candidate:batch-2"])
+
+    def test_mutated_input_is_rejected_before_another_arm_executes(self):
+        baseline, candidate = self.prepare(), self.prepare()
+        state = {"mutated": False}
+        original = candidate.compiled
+        def mutate(*args, **kwargs):
+            state["mutated"] = True
+            return original(*args, **kwargs)
+        candidate.compiled = mutate
+        def validate(phase):
+            if state["mutated"]:
+                raise execution.MeasurementError("input mutated at " + phase)
+        with self.assertRaisesRegex(execution.MeasurementError, "candidate:warmup"):
+            execution.benchmark_pair(baseline, candidate, synchronize=lambda: None,
+                                     validate_inputs=validate)
+        self.assertEqual(baseline.compiler.executions, 21)
+
+    def test_active_triton_compile_uses_measurement_counter_not_baseline(self):
+        baseline, candidate = self.prepare(), self.prepare()
+        original = candidate.compiled
+        module = SimpleNamespace(compile=lambda: "binary")
+        calls = 0
+        def lazy(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 21:
+                module.compile()
+            return original(*args, **kwargs)
+        candidate.compiled = lazy
+        with patch.dict(execution.sys.modules, {"triton": module,
+                "triton.compiler.compiler": None, "triton.runtime.jit": None,
+                "triton.compiler": None}):
+            with self.assertRaises(execution.MeasurementError) as caught:
+                execution.benchmark_pair(baseline, candidate, synchronize=lambda: None)
+        self.assertEqual(caught.exception.details["measurement_triton_compile_count"], 1)
+        self.assertEqual(caught.exception.details["invalid_arm"], "candidate")
+        self.assertEqual(baseline.compiler.triton_compilations, 0)
+        self.assertEqual(candidate.compiler.triton_compilations, 0)
+
+    def test_batch_input_mutation_check_stops_before_next_arm(self):
+        baseline, candidate = self.prepare(), self.prepare()
+        state = {"mutated": False}
+        original = candidate.compiled
+        def mutate(*args, **kwargs):
+            if candidate.compiler.executions >= 21:
+                state["mutated"] = True
+            return original(*args, **kwargs)
+        candidate.compiled = mutate
+        def validate(phase):
+            if state["mutated"]:
+                raise execution.MeasurementError("input mutated at " + phase)
+        with self.assertRaisesRegex(execution.MeasurementError, "candidate:batch-0"):
+            execution.benchmark_pair(baseline, candidate, synchronize=lambda: None,
+                                     validate_inputs=validate)
+        self.assertEqual(baseline.compiler.executions, 71)
+        self.assertEqual(candidate.compiler.executions, 71)
+
 
 if __name__ == "__main__":
     unittest.main()

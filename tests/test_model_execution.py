@@ -239,6 +239,16 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(wrapped(1), 1)
         self.assertEqual(compiler.executions, 1)
 
+    def test_top_level_triton_compile_is_monitored(self):
+        compiler = self.prepare().compiler
+        module = SimpleNamespace(compile=lambda: "binary")
+        with patch.dict(execution.sys.modules, {"triton": module,
+                "triton.compiler.compiler": None, "triton.runtime.jit": None,
+                "triton.compiler": None}):
+            with compiler.monitor_compilation():
+                module.compile()
+                self.assertEqual(compiler.triton_compilations, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

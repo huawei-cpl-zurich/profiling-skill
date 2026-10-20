@@ -33,8 +33,8 @@ class MeasurementError(RuntimeError):
         self.details = details or {}
 
 
-class GECompiler:
-    """TorchAir GE only. Dependency injection is for CPU functional tests.
+class GraphCompiler:
+    """Explicit NPU graph backend. Injection is for CPU functional tests only.
 
     The counting backend wraps the real compiled graph callable, not Model.forward.
     Fullgraph makes graph breaks errors; neither compilation nor execution retries
@@ -42,17 +42,26 @@ class GECompiler:
     proof: the acquisition adapter must also verify executed kernel identities.
     """
 
-    def __init__(self, *, torch_module=None, backend=None):
+    def __init__(self, *, backend_name="torchair-ge", torch_module=None, backend=None):
+        if backend_name not in ("torchair-ge", "npu-inductor"):
+            raise ValueError("supported backends: torchair-ge, npu-inductor; no automatic fallback")
+        self.backend_name = backend_name
         try:
             self.torch = torch_module or importlib.import_module("torch")
             if backend is None:
                 # Torch-NPU registers bundled TorchAir on some supported images.
                 importlib.import_module("torch_npu")
-                self.backend = importlib.import_module("torchair").get_npu_backend()
+                if backend_name == "torchair-ge":
+                    self.backend = importlib.import_module("torchair").get_npu_backend()
+                else:
+                    importlib.import_module("torch_npu._inductor")
+                    registry = importlib.import_module("torch._dynamo.backends.registry")
+                    self.backend = registry.lookup_backend("inductor")
             else:
                 self.backend = backend
         except (ImportError, AttributeError) as exc:
-            raise CapabilityError(f"TorchAir GE backend unavailable: {exc}") from exc
+            label = "TorchAir GE" if backend_name == "torchair-ge" else "NPU Inductor"
+            raise CapabilityError(f"{label} backend unavailable: {exc}") from exc
         self.compilations = 0
         self.triton_compilations = 0
         self.executions = 0
@@ -68,7 +77,7 @@ class GECompiler:
             self.last_failure = "backend-compilation"
             raise
         if not callable(executable):
-            raise CapabilityError("GE backend did not return a callable graph")
+            raise CapabilityError("NPU backend did not return a callable graph")
 
         def execute(*args, **kwargs):
             self.executions += 1
@@ -115,6 +124,10 @@ class GECompiler:
                 module.compile = original
 
 
+# Compatibility for the initial GE-default adapter; new callers select GraphCompiler.
+GECompiler = GraphCompiler
+
+
 class PreparedModel:
     def __init__(self, compiled, args, kwargs, compiler, evidence):
         self.compiled = compiled
@@ -135,7 +148,7 @@ def prepare_model(factory, args, kwargs, validate, *, compiler=None,
     adapters own domain-specific cases/tolerances. Supply NPU synchronize to keep
     cold preparation diagnostics separate from later active measurements.
     """
-    compiler = compiler or GECompiler()
+    compiler = compiler or GraphCompiler()
     before = compiler.compilations, compiler.executions
     start = time.perf_counter_ns()
     stage = "model-construction"
@@ -151,7 +164,7 @@ def prepare_model(factory, args, kwargs, validate, *, compiler=None,
             output = compiled(*args, **kwargs)
             synchronize()
     except Exception as exc:
-        raise ModelExecutionError(f"required fullgraph GE execution failed: {exc}",
+        raise ModelExecutionError(f"required fullgraph {compiler.backend_name} execution failed: {exc}",
                                   compiler.last_failure or stage) from exc
     cold_ms = (time.perf_counter_ns() - start) / 1e6
     if compiler.compilations <= before[0] or compiler.executions <= before[1]:
@@ -160,7 +173,7 @@ def prepare_model(factory, args, kwargs, validate, *, compiler=None,
             f"executions={compiler.executions - before[1]}); eager is forbidden")
     validate(output)
     evidence = {
-        "backend": "torchair-ge", "fullgraph": True, "dynamic": False,
+        "backend": compiler.backend_name, "fullgraph": True, "dynamic": False,
         "autograd_mode": "inference", "model_mode": "eval-if-supported",
         "torch_version": compiler.torch.__version__, "graphs": list(compiler.graphs),
         "compile_count": compiler.compilations, "compiled_executions": compiler.executions,

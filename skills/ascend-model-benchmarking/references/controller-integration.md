@@ -7,14 +7,17 @@ module search path:
 python scripts/model_benchmark.py \
   --baseline reference:Model --candidate candidate:Model \
   --cases-provider private_cases:cases --validator private_cases:validate \
+  --acquisition profile_capture:create_acquisition \
   --expected-kernel submitted_kernel --output results/new-run
 ```
 
 The output directory must not already exist. Exit 0 means complete acquisitions,
 not necessarily comparable clocks or a correctness claim beyond the validator.
 Exit 2 retains `report.json`, diagnostics and any already-acquired evidence.
-The default trusted acquisition is `profile_capture:create_acquisition`; override
-`--acquisition module:factory` only for a validated platform adapter. TorchAir GE
+`--acquisition module:factory` is required: select a validated platform adapter
+explicitly. The dependent acquisition skill implementation provides
+`profile_capture:create_acquisition` when installed alongside this controller; an
+independent controller checkout never silently assumes that module exists. TorchAir GE
 is the default backend. Explicit `--backend npu-inductor` selects NPU Inductor for
 both implementations; unsupported graph/backend combinations fail without fallback.
 
@@ -25,6 +28,14 @@ submitted task names and overrides CLI names for legitimate entrypoint dispatch.
 Both implementations receive the same immutable device inputs.
 Factories produce inference Models; constructors handle device placement.
 `validate(case, arm, output)` raises on mismatch against an independent reference.
+The controller snapshots nested tensor inputs and initialization arguments before
+preparation. It checks structure, version counters and exact content after each
+Model preparation/profile, each arm's warmup and each measured batch, always
+outside timed windows. Raw-pointer writes are detected by content comparison even
+when tensor versions do not change. Mutating Models fail before a valid paired
+result is reported. Input snapshots consume extra device memory; inference-mode
+input tensors without version tracking are explicitly unsupported. Ordinary NaNs
+in unchanged inputs compare equal. Do not pass mutable inputs to this interface.
 
 Every case retains a source-independent specialization identity: input tensor
 shape/dtype/stride/device/gradient descriptors, scalar/container arguments and
@@ -33,7 +44,9 @@ Model initialization configuration. Tensor values are never serialized. Optional
 dataset/version and runtime configuration consumed by the provider; declare them
 when they cannot be reconstructed from provider source alone. Configuration accepts
 only finite JSON primitives, string-keyed dictionaries and lists/tuples, with
-tensors represented by descriptors; arbitrary objects/repr are rejected.
+tensors represented by descriptors; known `torch.dtype`, `torch.device` and
+`torch.Size` constructor options use explicit tagged descriptors. Arbitrary
+objects/repr are rejected.
 The descriptor and metadata are retained in controller-only
 `case-NNNN/private-specialization.json`; the main report contains its digest and
 relative location. Do not publish these private artifacts in blind-agent exports.

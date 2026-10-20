@@ -54,6 +54,30 @@ def test_components_multiple_launches_and_overlap_are_not_elapsed(accounting):
     assert len(result['tasks']) == 4
 
 
+@pytest.mark.parametrize('origin', [10**16, float(10**16)])
+def test_small_duration_at_large_absolute_origin_is_not_lost(accounting, origin):
+    result = account(accounting, tasks=[task('a', start=origin, duration=1)])
+    row = result['iterations'][0]
+    assert row['device_busy_us'] == 1
+    assert row['device_active_union_us'] == 1
+    assert row['device_overlap_us'] == 0
+    assert json.loads(json.dumps(result))['tasks'][0]['start_us'] == origin
+
+
+def test_large_integer_origin_preserves_adjacent_and_overlapping_intervals(accounting):
+    origin = 10**16
+    result = account(accounting, [iteration(expected=('a', 'b', 'c'))], [
+        task('a', start=origin, duration=2),
+        task('b', start=origin + 1, duration=2),
+        task('c', start=origin + 3, duration=1)])
+    row = result['iterations'][0]
+    assert row['device_busy_us'] == 5
+    assert row['device_active_union_us'] == 4
+    assert row['device_overlap_us'] == 1
+    assert result['tasks'][1]['start_us'] == origin + 1
+    assert isinstance(json.loads(json.dumps(result))['tasks'][1]['start_us'], int)
+
+
 def test_same_names_do_not_determine_iteration_or_launch_count(accounting):
     result = account(accounting, [iteration('first', ('x',), ('a',)),
                                  iteration('second', ('y',), ('b', 'c'))], [

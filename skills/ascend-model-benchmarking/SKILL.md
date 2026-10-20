@@ -6,8 +6,10 @@ description: Measure warmed compiled Ascend Model forwards with separate end-to-
 # Ascend Model benchmarking
 
 Use this for arbitrary Model APIs, not only a particular operator. A Model class
-does **not** imply graph compilation. Establish actual TorchAir GE full-graph
-capture and compiled execution for both implementations; reject unsupported
+does **not** imply graph compilation. Establish actual full-graph capture and
+compiled execution for both implementations using the same explicit backend;
+TorchAir GE is the default, with `--backend npu-inductor` available when selected
+and validated for the workload. Never switch backends automatically; reject unsupported
 graphs, eager fallback and missing submitted-kernel identity evidence.
 
 ## Obtain reproducible measurements
@@ -22,6 +24,7 @@ reimplement timings with ad hoc clocks or infer iteration boundaries from names.
   invalidates a batch, rather than becoming kernel execution time.
 - Collect unprofiled synchronized full-forward latency separately from a warmed
   profiler replay. Report both; summed kernel durations are not elapsed latency.
+  Busy-time includes device and AiCPU tasks per iteration; also report each separately.
 - Preserve all samples and rows. Median-threshold outliers are flags, not deletions.
   Report clock/load differences and dispersion rather than selecting a fast retry.
 - Compare paired implementations on the same physical device/runtime/clock policy.

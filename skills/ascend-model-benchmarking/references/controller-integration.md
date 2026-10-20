@@ -7,17 +7,22 @@ module search path:
 python scripts/model_benchmark.py \
   --baseline reference:Model --candidate candidate:Model \
   --cases-provider private_cases:cases --validator private_cases:validate \
-  --acquisition private_capture:create_adapter \
   --expected-kernel submitted_kernel --output results/new-run
 ```
 
 The output directory must not already exist. Exit 0 means complete acquisitions,
 not necessarily comparable clocks or a correctness claim beyond the validator.
 Exit 2 retains `report.json`, diagnostics and any already-acquired evidence.
+The default trusted acquisition is `profile_capture:create_acquisition`; override
+`--acquisition module:factory` only for a validated platform adapter. TorchAir GE
+is the default backend. Explicit `--backend npu-inductor` selects NPU Inductor for
+both implementations; unsupported graph/backend combinations fail without fallback.
 
 Hooks are trusted controller code. `cases()` returns dictionaries with unique
 string `id`, positional `args`, optional `kwargs`, optional Model `init_args` and
-`init_kwargs`. Both implementations receive the same immutable device inputs.
+`init_kwargs`. Optional per-case `expected_kernel` is a nonempty list of exact
+submitted task names and overrides CLI names for legitimate entrypoint dispatch.
+Both implementations receive the same immutable device inputs.
 Factories produce inference Models; constructors handle device placement.
 `validate(case, arm, output)` raises on mismatch against an independent reference.
 

@@ -132,3 +132,68 @@ def test_forbidden_extra_public_exports_rejected_before_launch(tmp_path):
     with pytest.raises(smoke.LaunchError, match="only API"):
         smoke.run(args)
     assert not args.output.exists()
+
+
+def campaign_args(tmp_path):
+    from argparse import Namespace
+    instance = launcher(tmp_path)
+    model = tmp_path / "model.json"
+    model.write_text(json.dumps(instance.model))
+    return Namespace(bundle=instance.bundle, output=tmp_path / "campaign",
+                     version="previous", model=model, coding=tmp_path / "coding",
+                     profiling=tmp_path / "profiling", replicates=3, timeout=5,
+                     parallel=3, preflight_only=False)
+
+
+@pytest.mark.parametrize("invalid", ["{bad", "{}", "[]", '{"name":"x","reasoning_effort":""}'])
+def test_invalid_model_leaves_output_unreserved(tmp_path, invalid):
+    args = campaign_args(tmp_path)
+    args.model.write_text(invalid)
+    with pytest.raises((ValueError, smoke.LaunchError)):
+        smoke.run(args)
+    assert not args.output.exists()
+
+
+@pytest.mark.parametrize("missing", ["coding", "profiling", "prompt", "public"])
+def test_missing_campaign_input_leaves_output_unreserved(tmp_path, monkeypatch, missing):
+    args = campaign_args(tmp_path)
+    if missing in ("coding", "profiling"):
+        (getattr(args, missing) / "SKILL.md").unlink()
+    elif missing == "prompt":
+        monkeypatch.setattr(smoke, "PROMPTS", tmp_path / "missing-prompts")
+    else:
+        (args.bundle / "candidate.py").unlink()
+    with pytest.raises(smoke.LaunchError):
+        smoke.run(args)
+    assert not args.output.exists()
+
+
+@pytest.mark.parametrize("failure", ["construction", "prepare", "preflight"])
+def test_cell_setup_failure_retains_receipt_and_completed_siblings(tmp_path, monkeypatch, failure):
+    args = campaign_args(tmp_path)
+
+    class FailingLauncher:
+        def __init__(self, output, *unused, **kwargs):
+            self.output = output
+            if output.name == "previous-1" and failure == "construction":
+                raise smoke.LaunchError("construction unavailable")
+
+        def launch(self, preflight_only):
+            self.output.mkdir()
+            if self.output.name == "previous-1":
+                if failure == "preflight":
+                    smoke.write_json(self.output / "isolation.json", {"returncode": 1})
+                raise smoke.LaunchError(failure + " unavailable")
+            result = {"exit_code": 0, "plan_present": True}
+            smoke.write_json(self.output / "receipt.json", result)
+            return result
+
+    monkeypatch.setattr(smoke, "PlanningLauncher", FailingLauncher)
+    assert smoke.run(args) == 1
+    results = json.loads((args.output / "results.json").read_text())
+    assert [row["exit_code"] for row in results] == [1, 0, 0]
+    failed = json.loads((args.output / "previous-1" / "receipt.json").read_text())
+    assert failed["error"] == failure + " unavailable"
+    for number in (2, 3):
+        receipt = args.output / f"previous-{number}" / "receipt.json"
+        assert json.loads(receipt.read_text())["exit_code"] == 0

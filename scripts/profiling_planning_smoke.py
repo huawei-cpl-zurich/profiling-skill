@@ -134,8 +134,24 @@ def run(args):
         raise LaunchError("planning bundle must export only API.md and candidate.py")
     if args.output.exists():
         raise LaunchError("output exists; inspect receipts instead of restarting")
-    args.output.mkdir(parents=True)
     model = json.loads(args.model.read_text())
+    if not isinstance(model, dict) or not all(
+            isinstance(model.get(key), str) and model[key].strip()
+            for key in ("name", "reasoning_effort")):
+        raise LaunchError("explicit model name and reasoning_effort are required")
+    for name in files:
+        source = args.bundle / name
+        if source.is_symlink() or not source.is_file():
+            raise LaunchError("public bundle file is unavailable: " + name)
+    for name, source in (("coding", args.coding), ("profiling", args.profiling)):
+        if not (source / "SKILL.md").is_file() or any(
+                p.is_symlink() for p in source.rglob("*")):
+            raise LaunchError(name + " snapshot must be available without symlinks")
+    for version in versions:
+        if not (PROMPTS / f"{version}.md").is_file():
+            raise LaunchError("prompt version is unavailable: " + version)
+    # Bad campaign-wide inputs must not reserve an unusable output directory.
+    args.output.mkdir(parents=True)
     # Source paths never enter the agent-visible bundle.
     write_json(args.output / "campaign.json", {
         "mode": "planning-only", "model": model, "versions": versions,
@@ -146,17 +162,22 @@ def run(args):
 
     def cell(item):
         version, number = item
-        launcher = PlanningLauncher(
-            args.output / f"{version}-{number}", args.bundle, PROMPTS / f"{version}.md",
-            model, [sys.executable, str(HERE / "planning_tool_client.py"), "serve"],
-            coding=args.coding, skill=args.profiling, timeout=args.timeout,
-            finish_reserve_seconds=0)
+        name = f"{version}-{number}"
+        output = args.output / name
         try:
-            return {"cell": f"{version}-{number}", **launcher.launch(args.preflight_only)}
+            launcher = PlanningLauncher(
+                output, args.bundle, PROMPTS / f"{version}.md",
+                model, [sys.executable, str(HERE / "planning_tool_client.py"), "serve"],
+                coding=args.coding, skill=args.profiling, timeout=args.timeout,
+                finish_reserve_seconds=0)
+            return {"cell": name, **launcher.launch(args.preflight_only)}
         except Exception as error:
             # Preserve failures from one cell without abandoning siblings.
-            return {"cell": f"{version}-{number}", "exit_code": 1,
-                    "error": str(error)}
+            result = {"cell": name, "exit_code": 1, "error": str(error),
+                      "mode": "planning-only", "plan_present": False}
+            output.mkdir(parents=True, exist_ok=True)
+            write_json(output / "receipt.json", result)
+            return result
 
     cells = [(v, n) for v in versions for n in range(1, args.replicates + 1)]
     with ThreadPoolExecutor(max_workers=args.parallel) as pool:

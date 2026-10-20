@@ -12,6 +12,13 @@ TorchAir GE is the default, with `--backend npu-inductor` available when selecte
 and validated for the workload. Never switch backends automatically; reject unsupported
 graphs, eager fallback and missing submitted-kernel identity evidence.
 
+This skill covers correctness/run status, warm latency, correlated busy-time,
+dispersion, comparison conditions and retained logs only. Report compilation and
+runtime errors as run failures; do not turn them into kernel-diagnostic advice.
+Pipe utilization, bottlenecks, timelines, MLIR and optimization recommendations
+belong to the separate `ascend-profiling` skill/workflow and are not benchmarking
+acceptance gates.
+
 ## Obtain reproducible measurements
 
 Read [the measurement contract](references/measurement-contract.md) before

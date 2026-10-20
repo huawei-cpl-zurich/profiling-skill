@@ -11,6 +11,12 @@ medians and relative spread. Report empty synchronization overhead, never silent
 subtract it. Warm means steady-state execution, not an assertion that all data
 fits in cache. Inputs must remain immutable across paired calls.
 
+`latency.execution_evidence[arm].compiled_executions` and `compile_count` are
+preparation snapshots, not totals for the active measurement calls. The controller
+checks active compiled execution and compilation separately. Cold preparation is
+retained as `latency.execution_evidence[arm].cold_prepare_ms`; it includes Model
+construction, compilation, first execution and synchronization, never warm latency.
+
 Busy-time comes from a separate warmed replay of the same compiled callable and
 inputs: 20 warmups and 50 explicitly correlated active iterations. Sum durations
 of each iteration's device and AiCPU tasks for all-kernel busy-time; retain

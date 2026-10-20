@@ -109,10 +109,11 @@ def test_vendor_administrative_tasks_are_excluded_with_raw_evidence(trace, kind)
     assert result['acquisition_evidence']['exclusions'][0]['task']['dur'] == 3.06
 
 
-def test_observed_mixed_kernel_is_one_task_not_invented_components(trace):
+@pytest.mark.parametrize('kind', ['MIX_AIC', 'AI_CORE', 'AI_VECTOR_CORE'])
+def test_observed_mixed_kernel_is_one_task_not_invented_components(trace, kind):
     for event in trace:
         if 'Task Type' in event.get('args', {}):
-            event['args']['Task Type'] = 'MIX_AIC'
+            event['args']['Task Type'] = kind
             event['name'] = 'qualified_matmul_add'
     result = normalize(trace)
     assert len(result['tasks']) == 2

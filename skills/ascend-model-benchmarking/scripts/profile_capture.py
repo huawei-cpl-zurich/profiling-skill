@@ -14,6 +14,9 @@ import os
 from pathlib import Path
 import platform
 
+TASK_KINDS = dict(KERNEL_AIVEC='device', KERNEL_AICORE='device', KERNEL_AICPU='aicpu',
+                 MIX_AIC='device', AI_CORE='device', AI_VECTOR_CORE='device')
+
 
 class CaptureError(ValueError):
     """The profiler export cannot establish unambiguous iteration accounting."""
@@ -75,7 +78,7 @@ def _normalize(events, names):
                 administrative.append(dict(reason='vendor administrative task, not a kernel',
                                            task=dict(event)))
                 continue
-            if kind not in ('KERNEL_AIVEC', 'KERNEL_AICORE', 'KERNEL_AICPU', 'MIX_AIC'):
+            if kind not in TASK_KINDS:
                 raise CaptureError(f'unvalidated device task type: {kind}')
             tasks.append((position, event))
             task_at[_coordinate(event)].append((position, event))
@@ -110,8 +113,6 @@ def _normalize(events, names):
         if len(owners) > 1:
             raise CaptureError('ambiguous host iteration scope')
         kind = task['args']['Task Type']
-        if kind not in ('KERNEL_AIVEC', 'KERNEL_AICORE', 'KERNEL_AICPU', 'MIX_AIC'):
-            raise CaptureError(f'unvalidated device task type: {kind}')
         identity = ':'.join(str(value) for value in [task['pid']] + [task['args'][k]
             for k in ('Physic Stream Id', 'Task Id', 'Batch Id', 'Subtask Id')])
         if identity in identities:
@@ -130,7 +131,7 @@ def _normalize(events, names):
         correlation = 'async_npu:' + key
         index[name]['correlation_ids'].append(correlation)
         normalized.append(dict(task_id=identity, correlation_id=correlation,
-            name=task['name'], kind='aicpu' if kind == 'KERNEL_AICPU' else 'device',
+            name=task['name'], kind=TASK_KINDS[kind],
             start_us=float(_decimal(task['ts']) - origin), duration_us=duration))
         links.append(dict(iteration=name, **link))
     if len(used) != len(tasks):

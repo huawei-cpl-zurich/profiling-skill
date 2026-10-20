@@ -7,7 +7,6 @@ Use a separate profiler replay for device busy-time, not these wall-clock sample
 
 from contextlib import contextmanager
 import importlib
-import functools
 import math
 import statistics
 import sys
@@ -71,10 +70,13 @@ class GECompiler:
         if not callable(executable):
             raise CapabilityError("GE backend did not return a callable graph")
 
-        @functools.wraps(executable)
         def execute(*args, **kwargs):
             self.executions += 1
             return executable(*args, **kwargs)
+        # Do not copy unwrap/disable metadata: Dynamo may otherwise bypass this
+        # execution counter. Preserve only the calling-convention marker.
+        if hasattr(executable, "_boxed_call"):
+            execute._boxed_call = executable._boxed_call
         return execute
 
     def snapshot(self):
@@ -153,7 +155,9 @@ def prepare_model(factory, args, kwargs, validate, *, compiler=None,
                                   compiler.last_failure or stage) from exc
     cold_ms = (time.perf_counter_ns() - start) / 1e6
     if compiler.compilations <= before[0] or compiler.executions <= before[1]:
-        raise CapabilityError("no compiled graph capture/execution evidence; eager is forbidden")
+        raise CapabilityError("no compiled graph capture/execution evidence "
+            f"(captures={compiler.compilations - before[0]}, "
+            f"executions={compiler.executions - before[1]}); eager is forbidden")
     validate(output)
     evidence = {
         "backend": "torchair-ge", "fullgraph": True, "dynamic": False,

@@ -5,6 +5,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
 from pathlib import Path
 import statistics
 import sys
@@ -38,6 +39,36 @@ def save(path, payload):
     path.write_text(json.dumps(payload, indent=2, allow_nan=False) + '\n')
 
 
+def describe(value):
+    """JSON primitives/configuration and Tensor descriptors, never Tensor contents."""
+    torch = sys.modules.get('torch')
+    tensor_type = getattr(torch, 'Tensor', ())
+    if tensor_type and isinstance(value, tensor_type):
+        return dict(kind='tensor', shape=list(value.shape), dtype=str(value.dtype),
+                    stride=list(value.stride()), device=str(value.device),
+                    requires_grad=bool(value.requires_grad))
+    if value is None or type(value) in (bool, int, str):
+        return value
+    if type(value) is float and math.isfinite(value):
+        return value
+    if type(value) in (list, tuple):
+        return [describe(item) for item in value]
+    if type(value) is dict and all(type(key) is str for key in value):
+        return {key: describe(item) for key, item in value.items()}
+    raise ValueError('case metadata/configuration must be finite JSON primitives or tensors; '
+                     'unsupported type ' + type(value).__name__)
+
+
+def case_identity(case, expected):
+    """Bind runtime specialization/init/provider metadata alongside provider source."""
+    payload = describe(dict(args=case['args'], kwargs=case.get('kwargs', {}),
+        init_args=case.get('init_args', ()), init_kwargs=case.get('init_kwargs', {}),
+        expected_kernel=expected, metadata=case.get('metadata')))
+    encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'), allow_nan=False)
+    return dict(descriptor=payload, sha256=hashlib.sha256(encoded.encode()).hexdigest(),
+                provider_metadata_supplied='metadata' in case)
+
+
 def run(options, *, compiler_factory=None, clock=None):
     """Adapter hooks are trusted private code, not candidate-supplied callbacks."""
     output = Path(options.output)
@@ -63,7 +94,12 @@ def run(options, *, compiler_factory=None, clock=None):
                 raise ValueError('provide nonempty exact expected_kernel names per case or CLI')
             case_dir = output / f'case-{index:04d}'
             case_dir.mkdir()
-            row = {'id': case['id'], 'state': 'incomplete'}
+            specialization = case_identity(case, expected)
+            private_path = case_dir / 'private-specialization.json'
+            save(private_path, specialization)
+            row = {'id': case['id'], 'state': 'incomplete',
+                   'specialization': dict(sha256=specialization['sha256'],
+                                         private_artifact=str(private_path.relative_to(output)))}
             report['cases'].append(row)
             models = {}
             for arm in ('baseline', 'candidate'):

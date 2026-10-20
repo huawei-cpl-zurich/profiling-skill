@@ -26,6 +26,21 @@ Both implementations receive the same immutable device inputs.
 Factories produce inference Models; constructors handle device placement.
 `validate(case, arm, output)` raises on mismatch against an independent reference.
 
+Every case retains a source-independent specialization identity: input tensor
+shape/dtype/stride/device/gradient descriptors, scalar/container arguments and
+Model initialization configuration. Tensor values are never serialized. Optional
+`metadata` contains explicit private reproduction settings such as generator seed,
+dataset/version and runtime configuration consumed by the provider; declare them
+when they cannot be reconstructed from provider source alone. Configuration accepts
+only finite JSON primitives, string-keyed dictionaries and lists/tuples, with
+tensors represented by descriptors; arbitrary objects/repr are rejected.
+The descriptor and metadata are retained in controller-only
+`case-NNNN/private-specialization.json`; the main report contains its digest and
+relative location. Do not publish these private artifacts in blind-agent exports.
+Agent-facing exporters must allowlist measurement artifacts rather than recursively
+copy every JSON file. Source identities and specialization identities complement
+each other; neither asserts the contents of an external unversioned dataset.
+
 `create_adapter()` returns:
 
 - `synchronize()`: synchronizes the selected NPU.

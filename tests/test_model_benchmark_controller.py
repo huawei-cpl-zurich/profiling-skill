@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -107,6 +108,10 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(report['state'], 'complete')
             self.assertEqual(report['geomean_busy_time_speedup'], 1)
             row = report['cases'][0]
+            private = json.loads((root / 'results' / row['specialization']['private_artifact']).read_text())
+            self.assertEqual(private['descriptor']['args'], [2])
+            self.assertEqual(row['specialization']['sha256'], private['sha256'])
+            self.assertNotIn('descriptor', row['specialization'])
             self.assertEqual([len(batch) for batch in row['latency']['candidate']['batches_ms']], [50] * 3)
             profile = json.loads((root / 'results/case-0000/candidate-busy-time.json').read_text())
             self.assertEqual(len(profile['tasks']), 50)
@@ -193,6 +198,44 @@ class ControllerTests(unittest.TestCase):
                 self.assertEqual(controller.main(args + extra), 0)
                 self.assertEqual(run.call_args.args[0].backend, expected)
                 self.assertEqual(run.call_args.args[0].acquisition, 'profile_capture:create_acquisition')
+
+    def test_specialization_binds_tensor_descriptors_and_private_runtime_config(self):
+        class Tensor:
+            shape = (8, 16)
+            dtype = 'torch.float16'
+            device = 'npu:0'
+            requires_grad = False
+
+            def stride(self):
+                return (16, 1)
+
+            def tolist(self):
+                raise AssertionError('tensor values must never be read')
+
+        case = dict(id='opaque', args=(Tensor(),), init_kwargs={'mode': 'first'},
+                    metadata={'seed': 123, 'generator_environment': {'layout': 'dense'}})
+        with patch.dict(sys.modules, torch=SimpleNamespace(Tensor=Tensor)):
+            first = controller.case_identity(case, ['submitted'])
+            tensor = first['descriptor']['args'][0]
+            self.assertEqual(tensor, dict(kind='tensor', shape=[8, 16], dtype='torch.float16',
+                stride=[16, 1], device='npu:0', requires_grad=False))
+            for updated in (dict(case, init_kwargs={'mode': 'second'}),
+                            dict(case, metadata={'seed': 124})):
+                self.assertNotEqual(first['sha256'], controller.case_identity(updated, ['submitted'])['sha256'])
+            case['args'][0].shape = (4, 32)
+            self.assertNotEqual(first['sha256'], controller.case_identity(case, ['submitted'])['sha256'])
+            self.assertEqual(first['sha256'], controller.case_identity(
+                dict(id='other-label', args=(Tensor(),), init_kwargs={'mode': 'first'},
+                     metadata={'generator_environment': {'layout': 'dense'}, 'seed': 123}),
+                ['submitted'])['sha256'])
+
+    def test_metadata_rejects_arbitrary_serialization_and_nonfinite_values(self):
+        class PrivateObject:
+            def __repr__(self):
+                raise AssertionError('must not serialize arbitrary objects')
+        for value in (PrivateObject(), float('nan'), {1: 'non-string-key'}):
+            with self.assertRaisesRegex(ValueError, 'JSON primitives'):
+                controller.case_identity(dict(args=(2,), metadata=value), ['submitted'])
 
 
 if __name__ == '__main__':

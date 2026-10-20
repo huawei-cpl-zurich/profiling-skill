@@ -39,7 +39,7 @@ class Prepared:
         self.compiler = SimpleNamespace(
             compilations=1, triton_compilations=0, executions=1,
             torch=SimpleNamespace(inference_mode=nullcontext),
-            monitor_compilation=nullcontext)
+            monitor_compilation=lambda **kwargs: nullcontext())
         self.compiler.snapshot = lambda: (self.compiler.compilations,
                                           self.compiler.triton_compilations)
         self.evidence = {'custom_kernel_identity_verified': False}
@@ -190,14 +190,22 @@ class ControllerTests(unittest.TestCase):
             report = self.run_fixture(Path(temporary), Adapter(name='different-entrypoint'))
             self.assertEqual(report['state'], 'complete')
 
-    def test_backend_selection_and_default_acquisition_reach_runner(self):
+    def test_backend_selection_and_explicit_acquisition_reach_runner(self):
         args = ['--baseline', 'r:Model', '--candidate', 'c:Model',
-                '--cases-provider', 'p:cases', '--validator', 'p:validate', '--output', 'new']
+                '--cases-provider', 'p:cases', '--validator', 'p:validate',
+                '--acquisition', 'trusted_capture:create', '--output', 'new']
         for extra, expected in [([], 'torchair-ge'), (['--backend', 'npu-inductor'], 'npu-inductor')]:
             with patch.object(controller, 'run', return_value={'state': 'complete'}) as run:
                 self.assertEqual(controller.main(args + extra), 0)
                 self.assertEqual(run.call_args.args[0].backend, expected)
-                self.assertEqual(run.call_args.args[0].acquisition, 'profile_capture:create_acquisition')
+                self.assertEqual(run.call_args.args[0].acquisition, 'trusted_capture:create')
+
+    def test_missing_acquisition_is_rejected_before_runner(self):
+        with patch.object(controller, 'run') as run, self.assertRaises(SystemExit) as error:
+            controller.main(['--baseline', 'r:Model', '--candidate', 'c:Model',
+                '--cases-provider', 'p:cases', '--validator', 'p:validate', '--output', 'new'])
+        self.assertEqual(error.exception.code, 2)
+        run.assert_not_called()
 
     def test_specialization_binds_tensor_descriptors_and_private_runtime_config(self):
         class Tensor:
@@ -236,6 +244,54 @@ class ControllerTests(unittest.TestCase):
         for value in (PrivateObject(), float('nan'), {1: 'non-string-key'}):
             with self.assertRaisesRegex(ValueError, 'JSON primitives'):
                 controller.case_identity(dict(args=(2,), metadata=value), ['submitted'])
+
+    def test_common_torch_constructor_configuration_has_typed_identity(self):
+        import torch
+        case = dict(args=(torch.ones(2),), init_kwargs=dict(
+            dtype=torch.float16, device=torch.device('cpu'), shape=torch.Size([2, 4])))
+        value = controller.case_identity(case, ['submitted'])
+        config = value['descriptor']['init_kwargs']
+        self.assertEqual(config['dtype'], dict(kind='torch.dtype', value='torch.float16'))
+        self.assertEqual(config['device'], dict(kind='torch.device', value='cpu'))
+        self.assertEqual(config['shape'], dict(kind='torch.Size', value=[2, 4]))
+        changed = dict(case, init_kwargs=dict(case['init_kwargs'], dtype=torch.float32))
+        self.assertNotEqual(value['sha256'], controller.case_identity(changed, ['submitted'])['sha256'])
+
+    def test_nested_raw_pointer_mutation_is_detected_without_version_change(self):
+        import torch
+        tensor = torch.ones(3)
+        guard = controller.InputGuard(({'nested': [tensor]},), lambda: None)
+        version = tensor._version
+        tensor.data.add_(1)
+        self.assertEqual(tensor._version, version)
+        with self.assertRaisesRegex(controller.MeasurementError, 'mutated an input') as error:
+            guard('candidate:batch-0')
+        self.assertEqual(error.exception.details['stage'], 'candidate:batch-0')
+
+    def test_inference_input_tracking_is_explicitly_unsupported(self):
+        import torch
+        with torch.inference_mode():
+            tensor = torch.ones(2)
+        with self.assertRaisesRegex(controller.CapabilityError, 'inference tensors'):
+            controller.InputGuard((tensor,), lambda: None)
+
+    def test_mutating_baseline_and_candidate_fail_before_timing(self):
+        import torch
+        for arm in ('baseline', 'candidate'):
+            tensor = torch.ones(3)
+            def mutator():
+                def forward(value):
+                    value.data.add_(1)
+                    return value
+                return forward
+            with tempfile.TemporaryDirectory() as temporary, \
+                    patch.dict(globals(), {arm: mutator, 'cases': lambda: [dict(id='nested', args=(tensor,))]}), \
+                    patch.object(controller, 'benchmark_pair') as timing:
+                report = self.run_fixture(Path(temporary), validator=lambda *args: None)
+                self.assertEqual(report['state'], 'failed')
+                self.assertEqual(report['error_type'], 'MeasurementError')
+                self.assertEqual(report['failure_details']['stage'], arm + ':prepare')
+                timing.assert_not_called()
 
 
 if __name__ == '__main__':

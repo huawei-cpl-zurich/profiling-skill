@@ -13,7 +13,7 @@ import traceback
 
 HELPERS = Path(__file__).resolve().parents[1] / 'skills/ascend-model-benchmarking/scripts'
 sys.path.insert(0, str(HELPERS))
-from model_execution import CapabilityError, GraphCompiler, benchmark_pair, prepare_model
+from model_execution import CapabilityError, GraphCompiler, MeasurementError, benchmark_pair, prepare_model
 from profile_accounting import account_profile
 
 
@@ -47,6 +47,11 @@ def describe(value):
         return dict(kind='tensor', shape=list(value.shape), dtype=str(value.dtype),
                     stride=list(value.stride()), device=str(value.device),
                     requires_grad=bool(value.requires_grad))
+    for name in ('dtype', 'device', 'Size'):
+        known_type = getattr(torch, name, ())
+        if known_type and isinstance(value, known_type):
+            return dict(kind='torch.' + name,
+                        value=[describe(item) for item in value] if name == 'Size' else str(value))
     if value is None or type(value) in (bool, int, str):
         return value
     if type(value) is float and math.isfinite(value):
@@ -67,6 +72,45 @@ def case_identity(case, expected):
     encoded = json.dumps(payload, sort_keys=True, separators=(',', ':'), allow_nan=False)
     return dict(descriptor=payload, sha256=hashlib.sha256(encoded.encode()).hexdigest(),
                 provider_metadata_supplied='metadata' in case)
+
+
+class InputGuard:
+    """Private exact snapshots catch both versioned and raw-pointer mutations."""
+    def __init__(self, values, synchronize):
+        self.values, self.synchronize = values, synchronize
+        self.structure = describe(values)
+        self.tensors = []
+        torch = sys.modules.get('torch')
+        tensor_type = getattr(torch, 'Tensor', ())
+        def visit(value):
+            if tensor_type and isinstance(value, tensor_type):
+                try:
+                    version = value._version
+                except RuntimeError as error:
+                    raise CapabilityError('input mutation tracking unavailable for inference tensors') from error
+                self.tensors.append((value, version, value.detach().clone()))
+            elif type(value) in (list, tuple):
+                for item in value:
+                    visit(item)
+            elif type(value) is dict:
+                for item in value.values():
+                    visit(item)
+        visit(values)
+        synchronize()
+
+    def __call__(self, stage):
+        self.synchronize()
+        if describe(self.values) != self.structure:
+            raise MeasurementError('Model mutated input structure or metadata', dict(stage=stage))
+        torch = sys.modules.get('torch')
+        for value, version, snapshot in self.tensors:
+            try:
+                if value._version != version:
+                    raise AssertionError('input version changed')
+                torch.testing.assert_close(value, snapshot, rtol=0, atol=0, equal_nan=True,
+                                           check_stride=False)
+            except AssertionError as error:
+                raise MeasurementError('Model mutated an input tensor', dict(stage=stage)) from error
 
 
 def run(options, *, compiler_factory=None, clock=None):
@@ -101,6 +145,8 @@ def run(options, *, compiler_factory=None, clock=None):
                    'specialization': dict(sha256=specialization['sha256'],
                                          private_artifact=str(private_path.relative_to(output)))}
             report['cases'].append(row)
+            guard = InputGuard((case['args'], case.get('kwargs', {}), case.get('init_args', ()),
+                                case.get('init_kwargs', {})), adapter.synchronize)
             models = {}
             for arm in ('baseline', 'candidate'):
                 factory = hooks[arm]
@@ -111,6 +157,7 @@ def run(options, *, compiler_factory=None, clock=None):
                     lambda result, arm=arm: hooks['validator'](case, arm, result),
                     compiler=compiler_factory(),
                     synchronize=adapter.synchronize)
+                guard(arm + ':prepare')
             # Separate profiling replay proves identity before unprofiled timing.
             profiles = {}
             for arm, prepared in models.items():
@@ -120,6 +167,7 @@ def run(options, *, compiler_factory=None, clock=None):
                     capture = adapter.profile(prepared, samples=50, warmup=20,
                                               output=case_dir / arm)
                 save(case_dir / f'{arm}-normalized-capture.json', capture)
+                guard(arm + ':profile')
                 if prepared.compiler.snapshot() != before:
                     raise CapabilityError('compilation detected during profiler replay')
                 if prepared.compiler.executions - executions < 70:
@@ -145,7 +193,7 @@ def run(options, *, compiler_factory=None, clock=None):
                 if not wanted.issubset(observed):
                     raise CapabilityError('submitted kernel identity absent from compiled replay')
             models['candidate'].evidence['custom_kernel_identity_verified'] = True
-            arguments = {'synchronize': adapter.synchronize}
+            arguments = {'synchronize': adapter.synchronize, 'validate_inputs': guard}
             if clock is not None:
                 arguments['clock'] = clock
             latency = benchmark_pair(models['baseline'], models['candidate'], **arguments)
@@ -191,9 +239,8 @@ def run(options, *, compiler_factory=None, clock=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('baseline', 'candidate', 'cases-provider', 'validator'):
+    for name in ('baseline', 'candidate', 'cases-provider', 'validator', 'acquisition'):
         parser.add_argument('--' + name, required=True)
-    parser.add_argument('--acquisition', default='profile_capture:create_acquisition')
     parser.add_argument('--backend', choices=('torchair-ge', 'npu-inductor'), default='torchair-ge',
                         help='explicit graph backend for BOTH arms; never falls back automatically')
     parser.add_argument('--expected-kernel', action='append', default=[],

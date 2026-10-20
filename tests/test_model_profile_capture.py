@@ -99,12 +99,54 @@ def test_aic_and_aicpu_are_separate(trace):
     assert summary['iterations'][0]['aicpu_busy_us'] == 18.979625
 
 
-def test_vendor_administrative_tasks_are_excluded_with_raw_evidence(trace):
-    trace.append(event('MODEL_EXECUTE', 3267914182, 47, '1792459730174333', 3.06,
-                       args={'Task Type': 'MODEL_EXECUTE'}))
+@pytest.mark.parametrize('kind', ['MODEL_EXECUTE', 'PROFILER_TRACE_EX',
+                                'PROFILING_ENABLE', 'PROFILING_DISABLE'])
+def test_vendor_administrative_tasks_are_excluded_with_raw_evidence(trace, kind):
+    trace.append(event(kind, 3267914182, 47, '1792459730174333', 3.06,
+                       args={'Task Type': kind}))
     result = normalize(trace)
     assert len(result['tasks']) == 2
     assert result['acquisition_evidence']['exclusions'][0]['task']['dur'] == 3.06
+
+
+def test_observed_mixed_kernel_is_one_task_not_invented_components(trace):
+    for event in trace:
+        if 'Task Type' in event.get('args', {}):
+            event['args']['Task Type'] = 'MIX_AIC'
+            event['name'] = 'qualified_matmul_add'
+    result = normalize(trace)
+    assert len(result['tasks']) == 2
+    assert {t['kind'] for t in result['tasks']} == {'device'}
+    assert {t['name'] for t in result['tasks']} == {'qualified_matmul_add'}
+
+
+def test_actual_level1_mixed_trace_three_iterations():
+    # Exact endpoint/range/duration records from native 5971ace9b099 capture;
+    # omit unrelated host allocation records, not any device kernel or flow.
+    rows = [
+        ('1792460482362661.470',737.5,'1792460482363192.720',14.64,
+         '1792460482363284.188',52.618875),
+        ('1792460482363463.850',389.59,'1792460482363724.980',11.14,
+         '1792460482363755.218',56.018875),
+        ('1792460482363903.230',366.95,'1792460482364145.940',10.8,
+         '1792460482364170.470',58.318875)]
+    events = []
+    for i,(start,duration,host,host_duration,device,device_duration) in enumerate(rows):
+        events += [event(f'model_iteration_{i}',3194843,3194843,start,duration,cat='cpu_op'),
+            event('qualified_matmul_add',3194843,3194843,host,host_duration,cat='cpu_op'),
+            event('qualified_matmul_add',3271519682,47,device,device_duration,
+                  args={'Task Type':'MIX_AIC','Physic Stream Id':47,'Task Id':34+i,
+                        'Batch Id':0,'Subtask Id':0}),
+            dict(ph='s',cat='async_npu',name='torch_to_npu',id=i,
+                 pid=3194843,tid=3194843,ts=host),
+            dict(ph='f',cat='async_npu',name='torch_to_npu',id=i,
+                 pid=3271519682,tid=47,ts=device)]
+    normalized = capture.normalize_trace(events,[f'model_iteration_{i}' for i in range(3)],
+                                         export_completed=True)
+    result = accounting.account_profile(normalized['iterations'], normalized['tasks'],
+                                        capture_complete=True)
+    assert [r['task_count'] for r in result['iterations']] == [1,1,1]
+    assert [r['device_busy_us'] for r in result['iterations']] == [52.618875,56.018875,58.318875]
 
 
 def test_unrelated_fully_correlated_work_retains_explicit_exclusion(trace):
@@ -161,8 +203,14 @@ def fake_acquisition(trace, tmp_path, *, recompile=False, export=True):
     torch = SimpleNamespace(__version__='test', inference_mode=nullcontext,
         npu=SimpleNamespace(synchronize=lambda: None, current_device=lambda: 0),
         autograd=SimpleNamespace(profiler=SimpleNamespace(record_function=lambda name: nullcontext())))
+    def profile(**kwargs):
+        state['profile_kwargs'] = kwargs
+        return Profile()
+
     npu = SimpleNamespace(__version__='test', profiler=SimpleNamespace(
-        ProfilerActivity=SimpleNamespace(CPU=0, NPU=1), profile=lambda **kwargs: Profile(),
+        ProfilerActivity=SimpleNamespace(CPU=0, NPU=1), profile=profile,
+        ProfilerLevel=SimpleNamespace(Level1='level-one'),
+        _ExperimentalConfig=lambda **kwargs: kwargs,
         schedule=lambda **kwargs: None,
         tensorboard_trace_handler=lambda path: None))
     return capture.Acquisition(torch_module=torch, npu_module=npu), prepared, state
@@ -172,6 +220,8 @@ def test_acquisition_warms_outside_capture_and_retains_raw_export(trace, tmp_pat
     adapter, prepared, state = fake_acquisition(trace, tmp_path)
     result = adapter.profile(prepared, samples=1, warmup=20, output=tmp_path / 'capture')
     assert state['calls'] == 21 and state['steps'] == 1
+    assert state['profile_kwargs']['experimental_config'] == {
+        'profiler_level': 'level-one', 'data_simplification': False}
     assert result['capture_complete']
     raw = json.load(gzip.open(tmp_path / 'capture/trace_view.json.gz', 'rt'))
     assert raw == trace

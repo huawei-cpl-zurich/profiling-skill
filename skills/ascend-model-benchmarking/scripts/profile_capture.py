@@ -70,11 +70,12 @@ def _normalize(events, names):
             host[_coordinate(event)].append(event)
         if event.get('ph') == 'X' and 'Task Type' in event.get('args', {}):
             kind = event['args']['Task Type']
-            if kind in ('PROFILER_TRACE_EX', 'MODEL_EXECUTE'):
+            if kind in ('PROFILER_TRACE_EX', 'MODEL_EXECUTE',
+                        'PROFILING_ENABLE', 'PROFILING_DISABLE'):
                 administrative.append(dict(reason='vendor administrative task, not a kernel',
                                            task=dict(event)))
                 continue
-            if kind not in ('KERNEL_AIVEC', 'KERNEL_AICORE', 'KERNEL_AICPU'):
+            if kind not in ('KERNEL_AIVEC', 'KERNEL_AICORE', 'KERNEL_AICPU', 'MIX_AIC'):
                 raise CaptureError(f'unvalidated device task type: {kind}')
             tasks.append((position, event))
             task_at[_coordinate(event)].append((position, event))
@@ -109,7 +110,7 @@ def _normalize(events, names):
         if len(owners) > 1:
             raise CaptureError('ambiguous host iteration scope')
         kind = task['args']['Task Type']
-        if kind not in ('KERNEL_AIVEC', 'KERNEL_AICORE', 'KERNEL_AICPU'):
+        if kind not in ('KERNEL_AIVEC', 'KERNEL_AICORE', 'KERNEL_AICPU', 'MIX_AIC'):
             raise CaptureError(f'unvalidated device task type: {kind}')
         identity = ':'.join(str(value) for value in [task['pid']] + [task['args'][k]
             for k in ('Physic Stream Id', 'Task Id', 'Batch Id', 'Subtask Id')])
@@ -168,7 +169,8 @@ class Acquisition:
         output = Path(output)
         output.mkdir(parents=True, exist_ok=False)
         manifest = dict(state='incomplete', samples=samples, warmup=warmup,
-                        provenance=self.provenance())
+                        provenance=self.provenance(), profiler_level='Level1',
+                        data_simplification=False)
         try:
             with self.torch.inference_mode(), prepared.compiler.monitor_compilation():
                 for _ in range(warmup):
@@ -179,6 +181,9 @@ class Acquisition:
                 activities = [self.npu.profiler.ProfilerActivity.CPU,
                               self.npu.profiler.ProfilerActivity.NPU]
                 with self.npu.profiler.profile(activities=activities, record_shapes=False,
+                        experimental_config=self.npu.profiler._ExperimentalConfig(
+                            profiler_level=self.npu.profiler.ProfilerLevel.Level1,
+                            data_simplification=False),
                         with_stack=False, schedule=self.npu.profiler.schedule(
                             wait=0, warmup=0, active=samples, repeat=1),
                         on_trace_ready=self.npu.profiler.tensorboard_trace_handler(

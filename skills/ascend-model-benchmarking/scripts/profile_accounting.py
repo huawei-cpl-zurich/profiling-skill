@@ -22,6 +22,7 @@ total is unfiltered. The CANNBot per-name median threshold is diagnostic ONLY.
 import argparse
 from collections import defaultdict
 from collections.abc import Mapping
+from fractions import Fraction
 import json
 import math
 from numbers import Real
@@ -55,17 +56,23 @@ def _number(record, key):
     if (isinstance(value, bool) or not isinstance(value, Real)
             or not math.isfinite(value) or value < 0):
         raise AccountingError(f'{key} must be finite and nonnegative')
-    return float(value)
+    # Keep integer timestamps exact, including those beyond float's 2**53 range.
+    # Other Real inputs normalize to the JSON-compatible float representation.
+    return value if isinstance(value, int) else float(value)
 
 
 def _union_duration(tasks):
     """Union on the normalized device clock, not end-to-end latency."""
-    total, end = 0.0, 0.0
-    for start, stop in sorted((t['start_us'], t['start_us'] + t['duration_us'])
-                              for t in tasks):
-        total += max(0.0, stop - max(end, start))
+    # Endpoint arithmetic must not erase a short duration at an epoch-sized
+    # origin. Rational decimal representations avoid both float cancellation
+    # and a fixed Decimal precision limit; public outputs remain JSON numbers.
+    intervals = [(Fraction(str(t['start_us'])), Fraction(str(t['duration_us'])))
+                 for t in tasks]
+    total, end = Fraction(0), Fraction(0)
+    for start, stop in sorted((start, start + duration) for start, duration in intervals):
+        total += max(Fraction(0), stop - max(end, start))
         end = max(end, stop)
-    return total
+    return float(total)
 
 
 def account_profile(iterations, tasks, *, capture_complete):

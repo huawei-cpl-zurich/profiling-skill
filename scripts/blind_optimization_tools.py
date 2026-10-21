@@ -19,7 +19,6 @@ import uuid
 
 REMOTE_PROGRAM = r'''
 import csv, hashlib, json, os, re, shlex, signal, subprocess, sys, tarfile, time, traceback
-from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profile_device import bounded_run, wait_for_device
@@ -34,10 +33,14 @@ started = time.monotonic()
 relative_budget = float(request.get('host_remaining_seconds', 1800))
 relative_budget = min(relative_budget,
                       float(os.environ.get('CPL_ROLE_REMAINING_SECONDS', relative_budget)))
+summary['budget_evidence'] = dict(original_host_utc_deadline=request.get('utc_deadline'),
+    host_remaining_seconds=request.get('host_remaining_seconds'),
+    dispatch_remaining_seconds=relative_budget,
+    policy='host-owned deadline; remote monotonic elapsed time only')
 def remaining():
+    # The host has already subtracted staging time. Remote UTC may differ by
+    # minutes, so comparing it with a host timestamp rejects healthy work.
     value = relative_budget - (time.monotonic() - started)
-    if request.get('utc_deadline'):
-        value = min(value, (datetime.fromisoformat(request['utc_deadline']) - datetime.now(timezone.utc)).total_seconds())
     if value <= 0:
         raise TimeoutError('original role deadline expired')
     return value
@@ -320,7 +323,10 @@ class Tools:
                 return dict(receipt, error=str(error), next='experiment-tool observe ' + ident)
             save(folder / 'receipt.json', receipt)
             if transfer['state'] in ('failed', 'cancelled'):
-                return dict(receipt, state='failed', failure_stage='infrastructure', error='upload ' + transfer['state'], transfer=transfer)
+                receipt.update(state='failed', failure_stage='infrastructure',
+                               error='upload ' + transfer['state'], transfer=transfer)
+                save(folder / 'receipt.json', receipt)
+                return receipt
             if transfer['state'] != 'completed':
                 return dict(receipt, state='transfer-pending', next='experiment-tool observe ' + ident)
             return self.dispatch(folder, receipt)

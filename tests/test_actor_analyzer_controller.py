@@ -6,7 +6,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from actor_analyzer_controller import Campaign, RoleLauncher, bridge, digest
+from actor_analyzer_controller import Campaign, RoleLauncher, bridge, digest, cleanup_phase
 
 
 def make_campaign(tmp_path, runner, **options):
@@ -168,3 +168,87 @@ def test_resume_refuses_changed_budgets_without_dispatch(tmp_path):
     with pytest.raises(Exception, match='configuration changed'):
         campaign.run()
     assert len(calls) == 1  # analyzer was skipped because no candidate was verified
+
+
+def test_cleanup_only_cancels_phase_owned_jobs_and_blocks_unknown_handles(tmp_path):
+    phase = tmp_path / 'phase'
+    phase.mkdir()
+    state = tmp_path / 'tool-state'
+    for name in ('old', 'new', 'unknown'):
+        folder = state / name
+        folder.mkdir(parents=True)
+        (folder / 'receipt.json').write_text(json.dumps({'call_id': name, 'state': 'running',
+            'dispatch_intent': True, **({'handle': name} if name != 'unknown' else {})}))
+    (phase / 'owned-tools.json').write_text(json.dumps({'directory': str(state), 'existing': ['old']}))
+    calls = []
+    def remote(operation, handle):
+        calls.append((operation, handle))
+        return {'state': 'cancelled' if operation == 'cancel' else 'running'}
+    result = cleanup_phase(phase, remote)
+    assert calls == [('observe', 'new'), ('cancel', 'new')]
+    assert result['state'] == 'observation-required'
+    assert json.loads((state / 'new/receipt.json').read_text())['state'] == 'cancelled'
+    assert json.loads((state / 'old/receipt.json').read_text())['state'] == 'running'
+
+
+def test_invalid_analysis_raw_report_is_committed_without_replacing_handoff(tmp_path):
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                    'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        else:
+            reports = phase / 'reports'
+            reports.mkdir()
+            if phase.name == 'round-1-analyzer':
+                report = {'candidate_commit': commit, 'profiling': {'status': 'unavailable', 'reason': 'test'},
+                          'evidence': [], 'observations': [], 'bottlenecks': [], 'ceilings': [], 'unknowns': []}
+                (reports / 'analysis.json').write_text(json.dumps(report))
+            else:
+                (reports / 'analysis.json').write_text('{incomplete')
+                (reports / 'failure.log').write_text('remote observer interrupted')
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=2)
+    result = campaign.run()
+    assert not result['phases']['round-2-analyzer']['analysis_valid']
+    assert json.loads((campaign.workspace / 'analysis.json').read_text())['candidate_commit'] == \
+        result['phases']['round-1-analyzer']['candidate_commit']
+    assert campaign.git('show', 'HEAD:experiments/round-2-analyzer/analysis/analysis.json') == '{incomplete'
+    assert 'interrupted' in campaign.git('show', 'HEAD:experiments/round-2-analyzer/analysis/failure.log')
+
+
+def test_watchdog_cleans_up_at_original_deadline_before_agent_returns(tmp_path, monkeypatch):
+    import threading
+    import time
+    import actor_analyzer_controller as controller
+    campaign = make_campaign(tmp_path, None, rounds=1)
+    campaign.prepare()
+    auth = tmp_path / 'auth'
+    auth.mkdir()
+    (auth / 'auth.json').write_text('{}')
+    campaign.auth_home = auth
+    phase = campaign.root / 'round-1-actor'
+    launcher = RoleLauncher(campaign, phase, 'actor', 1, None)
+    cancelled = threading.Event()
+    def fake_launch(self, preflight_only=False):
+        self.root.mkdir()
+        self.deadline_monotonic = time.monotonic() + .02
+        assert cancelled.wait(1), 'remote cleanup waited for agent return'
+        return {'exit_code': 124}
+    monkeypatch.setattr(controller.BlindLauncher, 'launch', fake_launch)
+    monkeypatch.setattr(controller, 'cleanup_phase', lambda p: cancelled.set() or {'state': 'terminal'})
+    assert launcher.launch()['exit_code'] == 124
+
+
+def test_uncertain_cleanup_prevents_analyzer_dispatch(tmp_path, monkeypatch):
+    import actor_analyzer_controller as controller
+    roles = []
+    def runner(campaign, phase, role, budget, commit):
+        roles.append(role)
+        campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        return {'exit_code': 0}
+    monkeypatch.setattr(controller, 'cleanup_phase', lambda p: {'state': 'observation-required'})
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    assert campaign.run()['state'] == 'observation-required'
+    assert campaign.run()['state'] == 'observation-required'
+    assert roles == ['actor']

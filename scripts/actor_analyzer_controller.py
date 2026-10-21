@@ -10,6 +10,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
+import time
 
 from blind_optimization_launcher import BlindLauncher, LaunchError, write_json
 from actor_analyzer_contract import build_prompt, validate_analysis
@@ -35,6 +37,53 @@ def correct(result):
     return result.get('state') == 'completed' and (records is True or
         isinstance(records, list) and bool(records) and all(
             isinstance(item, dict) and item.get('correctness') is True for item in records))
+
+
+def managed_observation(operation, handle):
+    client = (Path.home() / '.agents/skills/remote-access/scripts/cpl-remote').resolve(strict=True)
+    result = subprocess.run([str(client), '--json', operation, handle],
+                            capture_output=True, text=True, timeout=20)
+    return json.loads(result.stdout)
+
+
+def cleanup_phase(phase, remote=managed_observation):
+    """Stop only this phase's work; uncertainty never permits a new dispatch."""
+    ownership = phase / 'owned-tools.json'
+    if not ownership.exists():
+        return {'state': 'terminal', 'calls': []}
+    config = json.loads(ownership.read_text())
+    calls, uncertain = [], False
+    for path in sorted(Path(config['directory']).glob('*/receipt.json')):
+        if path.parent.name in config['existing']:
+            continue
+        try:
+            receipt = json.loads(path.read_text())
+            if receipt.get('state') in ('completed', 'failed', 'cancelled'):
+                continue
+            handle = receipt.get('handle') or receipt.get('upload', {}).get('handle')
+            if not handle:
+                if receipt.get('dispatch_intent'):
+                    uncertain = True
+                    calls.append({'call_id': path.parent.name, 'state': 'handle-unknown'})
+                    continue
+                # No workload dispatch was attempted; abort the prepared call.
+                result = {'state': 'failed', 'error': 'phase ended before dispatch'}
+            else:
+                result = remote('observe', handle)
+                if result.get('state') not in ('completed', 'failed', 'cancelled'):
+                    result = remote('cancel', handle)
+                calls.append({'handle': handle, 'result': result})
+            if result.get('state') in ('completed', 'failed', 'cancelled'):
+                receipt['state'] = result['state']
+                save(path, receipt)
+            else:
+                uncertain = True
+        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+            uncertain = True
+            calls.append({'call_id': path.parent.name, 'error': str(error)})
+    result = {'state': 'observation-required' if uncertain else 'terminal', 'calls': calls}
+    save(phase / 'cleanup.json', result)
+    return result
 
 
 def bridge(config_path, arguments):
@@ -103,6 +152,29 @@ class RoleLauncher(BlindLauncher):
         self.tool_command = [sys.executable, str(Path(__file__).resolve()), 'tool', str(config)]
         self.reports = self.root / 'reports'
         self.reports.mkdir()
+        directory = self.workspace.parent / 'tool-state'
+        save(self.root / 'owned-tools.json', {'directory': str(directory),
+                                              'existing': [p.name for p in directory.glob('*')]})
+
+    def launch(self, preflight_only=False):
+        done, cleanup_lock = threading.Event(), threading.Lock()
+        def watchdog():
+            while not done.wait(.1):
+                deadline = getattr(self, 'deadline_monotonic', None)
+                if deadline is not None and time.monotonic() >= deadline:
+                    with cleanup_lock:
+                        cleanup_phase(self.root)
+                    return
+        observer = threading.Thread(target=watchdog, daemon=True)
+        observer.start()
+        try:
+            return super().launch(preflight_only)
+        finally:
+            done.set()
+            observer.join()
+            with cleanup_lock:
+                if self.root.exists():
+                    cleanup_phase(self.root)
 
     def base_command(self):
         command = super().base_command()
@@ -201,7 +273,8 @@ class Campaign:
     def finish_phase(self, phase, role, entry, state):
         archive = self.workspace / 'experiments' / phase.name
         archive.mkdir(parents=True, exist_ok=True)
-        for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr', 'qualifications.jsonl'):
+        for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr',
+                     'qualifications.jsonl', 'cleanup.json'):
             if (phase / name).is_file():
                 shutil.copyfile(phase / name, archive / name)
         if role == 'actor':
@@ -217,12 +290,17 @@ class Campaign:
             report_path = phase / 'reports/analysis.json'
             if not report_path.exists():
                 report_path = phase / 'analysis.json'
+            trusted = phase / 'candidate-snapshot/evidence'
+            if trusted.exists():
+                shutil.copytree(trusted, phase / 'reports/evidence', dirs_exist_ok=True,
+                                ignore=shutil.ignore_patterns('*.tar.gz'))
+            if (phase / 'reports').exists():
+                shutil.copytree(phase / 'reports', archive / 'analysis', dirs_exist_ok=True,
+                                ignore=shutil.ignore_patterns('*.tar.gz'))
+            elif report_path.exists():
+                shutil.copyfile(report_path, archive / 'raw-analysis.json')
             try:
                 report = validate_analysis(json.loads(report_path.read_text()), entry['candidate_commit'])
-                trusted = phase / 'candidate-snapshot/evidence'
-                if trusted.exists():
-                    shutil.copytree(trusted, phase / 'reports/evidence', dirs_exist_ok=True,
-                                    ignore=shutil.ignore_patterns('*.tar.gz'))
                 verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
                                                            entry['candidate_commit'] + ':candidate.py'])
                 expected_source = hashlib.sha256(verified_source).hexdigest()
@@ -240,8 +318,6 @@ class Campaign:
                                 or not any(item.get('pipe_rows') for item in summary.get('captures', [])):
                             raise ValueError('profile citation lacks acquired candidate pipe evidence')
                 shutil.copyfile(report_path, self.workspace / 'analysis.json')
-                if (phase / 'reports').exists():
-                    shutil.copytree(phase / 'reports', archive / 'analysis', dirs_exist_ok=True)
                 entry['analysis_valid'] = True
             except (ValueError, OSError) as error:
                 entry.update(analysis_valid=False, analysis_error=str(error))
@@ -264,6 +340,11 @@ class Campaign:
                     entry = state['phases'].get(name)
                     if entry:
                         if entry['state'] != 'dispatch-intent':
+                            if entry.get('cleanup', {}).get('state') == 'observation-required':
+                                entry['cleanup'] = cleanup_phase(phase)
+                                save(self.root / 'state.json', state)
+                                if entry['cleanup']['state'] != 'terminal':
+                                    return {**state, 'state': 'observation-required', 'pending_phase': name}
                             continue
                         if not (phase / 'receipt.json').exists():
                             return {**state, 'state': 'observation-required', 'pending_phase': name}
@@ -283,9 +364,12 @@ class Campaign:
                         budget = self.actor_budget if role == 'actor' else self.analyzer_budget
                         result = self.runner(self, phase, role, budget, commit)
                         save(phase / 'receipt.json', result)
+                    entry['cleanup'] = cleanup_phase(phase)
                     self.finish_phase(phase, role, entry, state)
                     entry.update(state='terminal', result=result)
                     save(self.root / 'state.json', state)
+                    if entry['cleanup']['state'] != 'terminal':
+                        return {**state, 'state': 'observation-required', 'pending_phase': name}
             state['state'] = 'completed'
             save(self.root / 'state.json', state)
             return state

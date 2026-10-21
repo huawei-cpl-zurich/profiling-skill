@@ -53,6 +53,13 @@ agent dispatch. An interrupted phase without a terminal receipt returns
 starting a second session or renewing its deadline. Pending native tool jobs
 block new remote work; `observe CALL_ID` routes to the original tool workspace
 and retains its original deadline and handle, even across role transitions.
+The controller's host-side watchdog uses the original role deadline to cancel
+phase-owned outstanding jobs through the installed managed client, including
+jobs still queued remotely. It also performs cleanup when a role exits early.
+Unknown handles or unconfirmed cancellation stop progression before another
+role starts; resume observes/cleans up that same work, without renewing budgets.
+Malformed/incomplete analyzer reports and compact diagnostics are still archived
+and committed, but cannot replace the last valid actor handoff.
 
 Promotion to a default requires the three paired natural-task gate (gather,
 masked compute, matmul): real profile acquisition, defensible interpretation,

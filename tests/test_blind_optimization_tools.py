@@ -223,10 +223,10 @@ def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
     assert calls[1][1] == calls[2][1] == 'remote:t:transfer:download'
 
 
-@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('timing', 5, True)])
-def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra):
+@pytest.mark.parametrize('verb,count,extra,settings', [('timing', 5, False, {}), ('pipes', 3, False, {}), ('ir', 0, False, {}), ('check', 0, False, {}), ('timing', 5, True, {}), ('timing', 3, False, {'timing_captures': 3}), ('pipes', 1, False, {'pipe_captures': 1})])
+def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra, settings):
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
-    tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate', source_sha256='a' * 64))
+    tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate', source_sha256='a' * 64, **settings))
     tools.save(tmp_path / 'task.json', dict(selector='task_kernel', language='triton'))
     (tmp_path / 'profile_device.py').write_text('''
 class Lease:
@@ -279,6 +279,8 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
     else:
         assert not (tmp_path / 'results/discovery').exists()
     assert len(summary.get('captures', [])) == count
+    if count:
+        assert summary['capture_count'] == count
     assert summary['physical_device'] == 7
     assert summary['launch_contract'] == dict(runner_checked=True,
         profile_stream_verified=verb in ('timing', 'pipes'))
@@ -309,7 +311,8 @@ def test_pending_request_is_observed_even_after_candidate_changes(tmp_path):
     assert obj.start('check', 'candidate', 'racecheck') == dict(observed='abc123')
 
 
-def test_request_deadline_survives_staging_and_dispatch(tmp_path):
+@pytest.mark.parametrize('settings,counts', [({}, (5, 3)), ({'timing_captures': 3, 'pipe_captures': 1}, (3, 1))])
+def test_request_deadline_survives_staging_and_dispatch(tmp_path, settings, counts):
     obj = instance(tmp_path)
     deadline = (datetime.now(timezone.utc) + timedelta(seconds=600)).isoformat()
     tools.save(obj.workspace / 'execution.json', dict(utc_deadline=deadline))
@@ -317,12 +320,21 @@ def test_request_deadline_survives_staging_and_dispatch(tmp_path):
         return dict(state='running', handle='remote:t:job:same') if args[0] == 'run' else dict(state='completed')
     obj.remote = remote
     obj.observe = lambda ident: json.loads((obj.state / ident / 'receipt.json').read_text())
-    receipt = obj.start('check', 'candidate', 'racecheck')
+    receipt = obj.start('check', 'candidate', 'racecheck', **settings)
     request = json.loads((obj.state / receipt['call_id'] / 'request.json').read_text())
     assert request['utc_deadline'] == deadline
     assert 0 < request['host_remaining_seconds'] <= 600
     assert receipt['request']['utc_deadline'] == deadline
     assert receipt['dispatch_remaining_seconds'] <= request['host_remaining_seconds']
+    assert (request['timing_captures'], request['pipe_captures']) == counts
+
+
+@pytest.mark.parametrize('option', ['--timing-captures', '--pipe-captures'])
+def test_invalid_capture_count_rejected_before_transport(tmp_path, monkeypatch, option):
+    monkeypatch.setattr(tools, 'Tools', lambda *a, **kw: pytest.fail('must reject before constructing transport'))
+    with pytest.raises(SystemExit) as error:
+        tools.main(['--bundle', str(tmp_path), '--workspace', str(tmp_path), 'pipes', option, '0'])
+    assert error.value.code == 2
 
 
 def test_upload_time_is_not_a_new_remote_budget(tmp_path):

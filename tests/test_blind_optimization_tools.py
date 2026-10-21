@@ -280,6 +280,8 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
         assert not (tmp_path / 'results/discovery').exists()
     assert len(summary.get('captures', [])) == count
     assert summary['physical_device'] == 7
+    assert summary['launch_contract'] == dict(runner_checked=True,
+        profile_stream_verified=verb in ('timing', 'pipes'))
     assert (tmp_path / 'evidence.tar.gz').is_file()
     with tarfile.open(tmp_path / 'evidence.tar.gz') as archive:
         assert 'build/compile.stderr' in archive.getnames()

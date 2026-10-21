@@ -28,7 +28,8 @@ request = json.loads((root / 'request.json').read_text())
 output = root / 'results'
 output.mkdir()
 summary = {'operation': request['verb'], 'implementation': request['implementation'],
-           'source_sha256': request.get('source_sha256')}
+           'source_sha256': request.get('source_sha256'),
+           'launch_contract': dict(runner_checked=False, profile_stream_verified=False)}
 started = time.monotonic()
 relative_budget = float(request.get('host_remaining_seconds', 1800))
 relative_budget = min(relative_budget,
@@ -78,6 +79,7 @@ try:
     if not any(isinstance(r, dict) and r.get('correctness') is True for r in records):
         raise RuntimeError('trusted runner omitted correctness evidence')
     summary['correctness'] = records
+    summary['launch_contract']['runner_checked'] = True
     if request['verb'] in ('timing', 'pipes', 'sanitize'):
         stage = 'profiling'
         wrapper = root / 'application.sh'
@@ -100,6 +102,7 @@ try:
             raise RuntimeError('single-kernel contract requires exactly one compute launch in the complete bounded stream; observed ' + str(len(rows)) + ' rows: ' + repr(sorted(names)))
         selector = names.pop()
         summary['selector'] = selector
+        summary['launch_contract']['profile_stream_verified'] = True
         stage = 'profiling'
         if request['verb'] in ('timing', 'pipes'):
             metric, count = ('BasicInfo', 5) if request['verb'] == 'timing' else ('PipeUtilization', 3)
@@ -386,8 +389,10 @@ def main(argv=None):
         print('experiment-tool {check,timing,pipes,ir,sanitize} [--implementation baseline|candidate]\n'
               'sanitize [--sanitizer memcheck|racecheck|synccheck] (Triton only)\n'
               'experiment-tool observe CALL_ID resumes an existing retained job.\n'
-              'All supported execution operations (check, timing, pipes, ir, sanitize) include four correctness checks\n'
-              'and complete bounded single-kernel verification; a separate check call is unnecessary before timing.\n'
+              'All execution operations include four correctness checks and the trusted runner launch contract.\n'
+              'timing/pipes/sanitize additionally verify exactly one exported compute launch in a bounded profiler stream;\n'
+              'check/ir do not verify that stream. launch_contract reports each guarantee separately.\n'
+              'A separate check call is unnecessary before timing.\n'
               'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
               'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
               'check and ir do not require a profiler. Optional execution.json utc_deadline bounds original role work,\n'

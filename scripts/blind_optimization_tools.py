@@ -31,8 +31,9 @@ output.mkdir()
 summary = {'operation': request['verb'], 'implementation': request['implementation'],
            'source_sha256': request.get('source_sha256')}
 started = time.monotonic()
-relative_budget = min(float(request.get('host_remaining_seconds', 1800)),
-                      float(os.environ.get('CPL_ROLE_REMAINING_SECONDS', 1800)))
+relative_budget = float(request.get('host_remaining_seconds', 1800))
+relative_budget = min(relative_budget,
+                      float(os.environ.get('CPL_ROLE_REMAINING_SECONDS', relative_budget)))
 def remaining():
     value = relative_budget - (time.monotonic() - started)
     if request.get('utc_deadline'):
@@ -383,6 +384,8 @@ def main(argv=None):
               'and complete bounded single-kernel verification; a separate check call is unnecessary before timing.\n'
               'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
               'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
+              'check and ir do not require a profiler. Optional execution.json utc_deadline bounds original role work,\n'
+              'including staging and device waits; observation resumes the same call without resetting its budget.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
         return 0
     try:

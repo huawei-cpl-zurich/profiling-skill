@@ -24,6 +24,10 @@ profiling but need not. The analyzer explicitly acquires diagnostic profiling,
 interprets bottlenecks and justified rooflines, and leaves optimization choices
 to the actor. Compilation and numerical failures do not end the actor's round;
 debugging continues until the time deadline, without an attempt-count cap.
+Task-specific API and launch restrictions take precedence over the general
+permission to use multiple Triton kernels. Report only available timing
+boundaries: a busy-time-only tool does not supply full-forward latency, which
+must remain explicitly unavailable rather than inferred.
 
 Only correctness-qualified candidates are analyzed. If a round fails, reuse the
 last verified candidate and name its actual commit, not the failed revision. If

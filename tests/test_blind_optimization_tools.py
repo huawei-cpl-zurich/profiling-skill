@@ -179,6 +179,28 @@ def test_upload_resume_observes_same_transfer_then_dispatches_once(tmp_path, sta
     else:
         assert result['state'] == 'failed'
         assert result['failure_stage'] == 'infrastructure'
+        saved = json.loads((folder / 'receipt.json').read_text())
+        assert saved['state'] == 'failed'
+
+
+def test_failed_upload_does_not_block_fresh_candidate_retry(tmp_path):
+    obj = instance(tmp_path)
+    folder = obj.state / 'abc123'
+    folder.mkdir()
+    tools.save(folder / 'receipt.json', dict(call_id='abc123', state='prepared',
+        upload=dict(state='failed', handle='remote:t:transfer:upload')))
+    result = obj.observe('abc123')
+    assert result['state'] == 'failed'
+    (obj.workspace / 'candidate.py').write_text('REPAIRED')
+    calls = []
+    def remote(*args):
+        calls.append(args[0])
+        return dict(state='running', handle='remote:t:job:new') if args[0] == 'run' else dict(state='completed')
+    obj.remote = remote
+    obj.observe = lambda ident: dict(call_id=ident)
+    result = obj.start('check', 'candidate', 'racecheck')
+    assert result['call_id'] != 'abc123'
+    assert calls[-1] == 'run'
 
 
 def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
@@ -332,7 +354,8 @@ def test_pre_dispatch_failure_is_terminal_and_preserves_source_identity(tmp_path
 def test_worker_bounds_inventory_probe_and_retains_failure_identity(tmp_path, budget, delay, stage):
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb='check', implementation='candidate',
-        source_sha256='b' * 64, host_remaining_seconds=budget))
+        source_sha256='b' * 64, host_remaining_seconds=budget,
+        utc_deadline='2000-01-01T00:00:00+00:00'))
     (tmp_path / 'profile_device.py').write_text('''
 import json,time
 from pathlib import Path

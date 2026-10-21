@@ -52,6 +52,15 @@ def correct(result):
             isinstance(item, dict) and item.get('correctness') is True for item in records))
 
 
+def retain_result(phase, result):
+    """Journal trusted tool identity now; qualify final candidate bytes later."""
+    source = result.get('source_sha256')
+    if correct(result) and isinstance(source, str) and len(source) == 64 \
+            and all(character in '0123456789abcdef' for character in source):
+        with (phase / 'qualifications.jsonl').open('a') as stream:
+            stream.write(json.dumps(result) + '\n')
+
+
 def managed_observation(operation, handle):
     client = (Path.home() / '.agents/skills/remote-access/scripts/cpl-remote').resolve(strict=True)
     result = subprocess.run([str(client), '--json', operation, handle],
@@ -122,16 +131,13 @@ def bridge(config_path, arguments):
                 parent = receipt.parent.parent.parent
                 workspace = parent / ('workspace' if parent == Path(config['campaign']) else 'candidate-snapshot')
                 break
-    before = candidate_hash(workspace)
     result = subprocess.run([*config['command'], '--workspace', str(workspace), *arguments],
                             capture_output=True, text=True)
     print(result.stdout, end='')
     print(result.stderr, end='', file=sys.stderr)
     try:
         payload = json.loads(result.stdout)
-        if before and correct(payload) and payload.get('source_sha256') == before == candidate_hash(workspace):
-            with (phase / 'qualifications.jsonl').open('a') as stream:
-                stream.write(json.dumps(payload) + '\n')
+        retain_result(phase, payload)
     except ValueError:
         pass
     return result.returncode
@@ -331,10 +337,7 @@ class Campaign:
 
     def qualify(self, phase, result):
         """Trusted tool integration helper, never exposed inside the sandbox."""
-        if candidate_hash(self.workspace) and self.qualified(result) \
-                and result.get('source_sha256') == candidate_hash(self.workspace):
-            with (phase / 'qualifications.jsonl').open('a') as stream:
-                stream.write(json.dumps(result) + '\n')
+        retain_result(phase, result)
 
     def launch_role(self, campaign, phase, role, budget, commit):
         return RoleLauncher(self, phase, role, budget, commit).launch()

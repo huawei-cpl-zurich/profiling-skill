@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import json
 import subprocess
 import sys
@@ -90,7 +91,7 @@ def test_actor_only_has_no_analyzer_cost(tmp_path):
     assert result['configured_analyzer_seconds'] == 0
 
 
-def test_bridge_rejects_stale_source_and_routes_pending_observation(tmp_path, capsys):
+def test_bridge_rejects_malformed_source_identity_and_routes_pending_observation(tmp_path, capsys):
     campaign = make_campaign(tmp_path, None, rounds=1)
     campaign.prepare()
     phase = campaign.root / 'round-1-actor'
@@ -436,3 +437,94 @@ def test_valid_profile_uses_controller_owned_evidence_despite_report_path_confli
     assert result['phases']['round-1-analyzer']['analysis_valid']
     assert 'vector_ratio' in campaign.git('show',
         'HEAD:experiments/round-1-analyzer/trusted-evidence/call/results/summary.json')
+
+
+def pending_tool(tmp_path):
+    helper = tmp_path / 'trusted-pending-tool.py'
+    helper.write_text('''import hashlib,json,sys
+from pathlib import Path
+workspace = Path(sys.argv[sys.argv.index('--workspace') + 1])
+operation = sys.argv[sys.argv.index('--workspace') + 2]
+receipt = workspace.parent / 'tool-state/baseline/receipt.json'
+if operation == 'timing':
+    receipt.parent.mkdir(parents=True)
+    payload = {'call_id':'baseline','state':'running','handle':'retained-original',
+               'source_sha256':hashlib.sha256((workspace/'candidate.py').read_bytes()).hexdigest()}
+else:
+    payload = json.loads(receipt.read_text())
+    payload.update(state='completed',correctness=True,
+        launch_contract={'runner_checked':True,'profile_stream_verified':sys.argv[1]=='True'})
+receipt.write_text(json.dumps(payload))
+print(json.dumps(payload))
+''')
+    return helper
+
+
+@pytest.mark.parametrize('restore,stream_verified,expected', [(True, True, True),
+    (False, True, False), (True, False, False)])
+def test_pending_baseline_result_qualifies_restored_final_bytes_only(tmp_path, restore, stream_verified, expected):
+    helper = pending_tool(tmp_path)
+    seen = []
+    def runner(campaign, phase, role, budget, commit):
+        seen.append(role)
+        if role == 'actor':
+            source = campaign.workspace / 'candidate.py'
+            baseline = source.read_bytes()
+            config = phase / 'tool-config.json'
+            config.write_text(json.dumps({'campaign': str(campaign.root), 'workspace': str(campaign.workspace),
+                'command': [sys.executable, str(helper), str(stream_verified)]}))
+            assert bridge(config, ['timing']) == 0
+            source.write_text('value = 2\n')
+            assert bridge(config, ['observe', 'baseline']) == 0
+            # Public evidence is deliberately forged; qualification must use only
+            # the private bridge result journal, never this writable directory.
+            public = campaign.workspace / 'evidence/forged.json'
+            public.parent.mkdir()
+            public.write_text(json.dumps({'state':'completed','correctness':True,
+                'source_sha256':digest(source),'launch_contract':{'profile_stream_verified':True}}))
+            if restore:
+                source.write_bytes(baseline)
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    manifest = campaign.bundle / 'task.json'
+    spec = json.loads(manifest.read_text())
+    spec['single_kernel'] = True
+    manifest.write_text(json.dumps(spec))
+    campaign = Campaign(campaign.root, campaign.bundle, campaign.model, campaign.tool_command,
+                        campaign.instruction, rounds=1, runner=runner)
+    result = campaign.run()
+    assert ('analyzer' in seen) == expected
+    assert bool(result['verified']) == expected
+    retained = [json.loads(line) for line in
+                (campaign.root / 'round-1-actor/qualifications.jsonl').read_text().splitlines()]
+    assert len(retained) == 1
+    assert retained[0]['source_sha256'] == hashlib.sha256(b'value = 0\n').hexdigest()
+    assert retained[0]['handle'] == 'retained-original'
+
+
+@pytest.mark.parametrize('restore', [False, True])
+def test_prior_phase_observation_keeps_original_source_identity(tmp_path, restore):
+    helper = pending_tool(tmp_path)
+    analyzed = []
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            config = phase / 'tool-config.json'
+            config.write_text(json.dumps({'campaign': str(campaign.root), 'workspace': str(campaign.workspace),
+                'command': [sys.executable, str(helper), 'True']}))
+            source = campaign.workspace / 'candidate.py'
+            if phase.name == 'round-1-actor':
+                assert bridge(config, ['timing']) == 0
+                source.write_text('value = 2\n')
+            assert bridge(config, ['observe', 'baseline']) == 0
+            if phase.name == 'round-2-actor' and restore:
+                source.write_text('value = 0\n')
+        else:
+            analyzed.append(commit)
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=2)
+    result = campaign.run()
+    assert len(analyzed) == int(restore)
+    assert bool(result['verified']) == restore
+    record = json.loads((campaign.root / 'round-2-actor/qualifications.jsonl').read_text())
+    assert record['source_sha256'] == hashlib.sha256(b'value = 0\n').hexdigest()
+    assert record['call_id'] == 'baseline' and record['handle'] == 'retained-original'

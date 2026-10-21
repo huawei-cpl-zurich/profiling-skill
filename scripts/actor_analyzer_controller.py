@@ -26,11 +26,17 @@ def candidate_hash(workspace):
     return digest(path) if path.is_file() and not path.is_symlink() else None
 
 
-def skill_manifest(directory):
-    if not (directory / 'SKILL.md').is_file() or any(p.is_symlink() for p in directory.rglob('*')):
-        raise ValueError('skill needs SKILL.md and no symlinks')
+def directory_manifest(directory):
+    if any(p.is_symlink() for p in directory.rglob('*')):
+        raise ValueError('pinned inputs must not contain symlinks')
     return {str(p.relative_to(directory)): digest(p)
             for p in sorted(directory.rglob('*')) if p.is_file()}
+
+
+def skill_manifest(directory):
+    if not (directory / 'SKILL.md').is_file():
+        raise ValueError('skill needs SKILL.md and no symlinks')
+    return directory_manifest(directory)
 
 
 def save(path, value):
@@ -134,11 +140,16 @@ def bridge(config_path, arguments):
 class RoleLauncher(BlindLauncher):
     def __init__(self, campaign, phase, role, budget, commit):
         self.campaign, self.role, self.commit = campaign, role, commit
-        if campaign.skill and skill_manifest(campaign.skill) != campaign.config['profiling_manifest']:
-            raise LaunchError('frozen profiling snapshot changed; preserve original evidence')
+        campaign.verify_inputs()
         prompt = phase.parent / (phase.name + '.prompt.md')
-        prompt.write_text(build_prompt(role, budget, int(phase.name.split('-')[1]),
-                                      campaign.instruction, candidate_commit=commit))
+        text = build_prompt(role, budget, int(phase.name.split('-')[1]),
+                            campaign.instruction, candidate_commit=commit)
+        if role == 'actor' and campaign.single_kernel:
+            text += ('\nFor this single-kernel task, check/ir are cheap correctness/compiler probes only. '
+                     'Finish with timing (or pipes if useful) returning '
+                     'launch_contract.profile_stream_verified=true to qualify the final candidate. '
+                     'Timing verification does not require diagnostic profiling analysis.\n')
+        prompt.write_text(text)
         super().__init__(phase, campaign.bundle, prompt, campaign.model,
                          ['unused'], skill=campaign.skill, timeout=budget,
                          auth_home=campaign.auth_home)
@@ -167,6 +178,8 @@ class RoleLauncher(BlindLauncher):
             for name in self.campaign.coding_skills:
                 shutil.copytree(self.campaign.root / 'coding-skills' / name,
                                 self.frozen / 'coding-skills' / name)
+                if skill_manifest(self.frozen / 'coding-skills' / name) != self.campaign.config['coding_skills'][name]:
+                    raise LaunchError('coding snapshot changed during role preparation')
         directory = self.workspace.parent / 'tool-state'
         save(self.root / 'owned-tools.json', {'directory': str(directory),
                                               'existing': [p.name for p in directory.glob('*')]})
@@ -239,7 +252,9 @@ class Campaign:
                     or any(p.is_symlink() for p in directory.rglob('*')):
                 raise ValueError('coding skill needs unique name, SKILL.md, and no symlinks')
             self.coding_skills[directory.name] = directory
-        self.public_files = json.loads((self.bundle / 'task.json').read_text())['public_files']
+        task = json.loads((self.bundle / 'task.json').read_text())
+        self.single_kernel = task.get('single_kernel') is True
+        self.public_files = task['public_files']
         if not isinstance(self.public_files, list) or 'candidate.py' not in self.public_files:
             raise ValueError('public_files must include candidate.py')
         for name in self.public_files:
@@ -249,13 +264,27 @@ class Campaign:
                 raise ValueError('invalid public bundle path')
         # candidate is the only mutable supplied source; newly created logs remain writable.
         self.public_files = [name for name in self.public_files if name != 'candidate.py']
-        self.config = dict(bundle=str(self.bundle), model=model, tool_command=tool_command,
+        self.config = dict(bundle=str(self.bundle), bundle_manifest=directory_manifest(self.bundle),
+                           model=model, tool_command=tool_command,
                            instruction=instruction, rounds=rounds, actor_budget=actor_budget,
                            analyzer_budget=analyzer_budget, actor_only=actor_only,
                            skill=str(self.profiling_source) if skill else None,
                            profiling_manifest=skill_manifest(self.profiling_source) if skill else None,
                            coding_skills={name: skill_manifest(directory)
                                for name, directory in self.coding_skills.items()})
+
+    def verify_inputs(self):
+        if directory_manifest(self.bundle) != self.config['bundle_manifest']:
+            raise LaunchError('task bundle changed; preserve original campaign inputs')
+        if self.skill and skill_manifest(self.skill) != self.config['profiling_manifest']:
+            raise LaunchError('frozen profiling snapshot changed; preserve original evidence')
+        for name, expected in self.config['coding_skills'].items():
+            if skill_manifest(self.root / 'coding-skills' / name) != expected:
+                raise LaunchError('coding snapshot changed; preserve original evidence')
+
+    def qualified(self, result):
+        return correct(result) and (not self.single_kernel or
+            result.get('launch_contract', {}).get('profile_stream_verified') is True)
 
     def git(self, *arguments):
         return subprocess.check_output(['git', '-C', str(self.workspace), *arguments], text=True)
@@ -265,8 +294,7 @@ class Campaign:
             state = json.loads((self.root / 'state.json').read_text())
             if state['configuration'] != self.config:
                 raise LaunchError('resume configuration changed; preserve the original campaign')
-            if self.skill and skill_manifest(self.skill) != self.config['profiling_manifest']:
-                raise LaunchError('frozen profiling snapshot changed; preserve original evidence')
+            self.verify_inputs()
             return state
         if self.root.exists():
             raise LaunchError('unrecognized existing campaign output')
@@ -277,6 +305,7 @@ class Campaign:
                 raise LaunchError('profiling source changed during snapshot creation')
         for name, directory in self.coding_skills.items():
             shutil.copytree(directory, self.root / 'coding-skills' / name)
+        self.verify_inputs()
         for name in ['candidate.py', *self.public_files]:
             source = self.bundle / name
             if Path(name).is_absolute() or '..' in Path(name).parts or source.is_symlink():
@@ -302,7 +331,7 @@ class Campaign:
 
     def qualify(self, phase, result):
         """Trusted tool integration helper, never exposed inside the sandbox."""
-        if candidate_hash(self.workspace) and correct(result) \
+        if candidate_hash(self.workspace) and self.qualified(result) \
                 and result.get('source_sha256') == candidate_hash(self.workspace):
             with (phase / 'qualifications.jsonl').open('a') as stream:
                 stream.write(json.dumps(result) + '\n')
@@ -321,7 +350,7 @@ class Campaign:
             commit = self.commit(phase.name + ': candidate and execution evidence')
             if (phase / 'qualifications.jsonl').exists():
                 records = [json.loads(line) for line in (phase / 'qualifications.jsonl').read_text().splitlines()]
-                if any(correct(item) and item.get('source_sha256') is not None
+                if any(self.qualified(item) and item.get('source_sha256') is not None
                        and item.get('source_sha256') == candidate_hash(self.workspace)
                        for item in records):
                     state['verified'] = commit
@@ -332,11 +361,12 @@ class Campaign:
                 report_path = phase / 'analysis.json'
             trusted = phase / 'candidate-snapshot/evidence'
             if trusted.exists():
-                shutil.copytree(trusted, phase / 'reports/evidence', dirs_exist_ok=True,
+                shutil.copytree(trusted, phase / 'trusted-evidence', dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns('*.tar.gz'))
+                shutil.copytree(phase / 'trusted-evidence', archive / 'trusted-evidence', dirs_exist_ok=True)
             if (phase / 'reports').exists():
                 shutil.copytree(phase / 'reports', archive / 'analysis', dirs_exist_ok=True,
-                                ignore=shutil.ignore_patterns('*.tar.gz'))
+                                symlinks=True, ignore=shutil.ignore_patterns('*.tar.gz'))
             elif report_path.exists():
                 shutil.copyfile(report_path, archive / 'raw-analysis.json')
             try:
@@ -346,7 +376,7 @@ class Campaign:
                 expected_source = hashlib.sha256(verified_source).hexdigest()
                 entry['evidence_sha256'] = {}
                 for evidence in report['evidence']:
-                    path = phase / 'reports' / evidence['path']
+                    path = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
                     original = phase / 'candidate-snapshot' / evidence['path']
                     if not path.is_file() or path.is_symlink() or not original.is_file() \
                             or digest(path) != digest(original):
@@ -375,6 +405,7 @@ class Campaign:
                 return state
             for index in range(1, self.rounds + 1):
                 for role in (('actor',) if self.actor_only else ('actor', 'analyzer')):
+                    self.verify_inputs()
                     name = f'round-{index}-{role}'
                     phase = self.root / name
                     entry = state['phases'].get(name)

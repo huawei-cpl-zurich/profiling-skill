@@ -328,3 +328,111 @@ def test_profiling_snapshot_frozen_across_roles_and_resume_source_change_rejecte
                            campaign.instruction, rounds=2, skill=skill, runner=runner)
     with pytest.raises(Exception, match='resume configuration changed'):
         replacement.run()
+
+
+@pytest.mark.parametrize('stream_verified', [False, True])
+def test_single_launch_tasks_require_profile_stream_for_qualification(tmp_path, stream_verified):
+    roles = []
+    def runner(campaign, phase, role, budget, commit):
+        roles.append(role)
+        if role == 'actor':
+            campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                'source_sha256': digest(campaign.workspace / 'candidate.py'),
+                'launch_contract': {'runner_checked': True, 'profile_stream_verified': stream_verified}})
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    manifest = campaign.bundle / 'task.json'
+    spec = json.loads(manifest.read_text())
+    spec['single_kernel'] = True
+    manifest.write_text(json.dumps(spec))
+    # Construct against the final task specification, as an ordinary CLI does.
+    campaign = Campaign(campaign.root, campaign.bundle, campaign.model, campaign.tool_command,
+                        campaign.instruction, rounds=1, runner=runner)
+    result = campaign.run()
+    assert ('analyzer' in roles) == stream_verified
+    assert bool(result['verified']) == stream_verified
+
+
+@pytest.mark.parametrize('symlink', [False, True])
+def test_analyzer_evidence_file_conflict_is_archived_without_stalling(tmp_path, symlink):
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                    'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        else:
+            (phase / 'candidate-snapshot/evidence/call').mkdir(parents=True)
+            (phase / 'candidate-snapshot/evidence/call/summary.json').write_text('{}')
+            (phase / 'reports').mkdir()
+            if symlink:
+                (phase / 'reports/evidence').symlink_to('mistaken/missing')
+            else:
+                (phase / 'reports/evidence').write_text('mistaken file instead of a directory')
+            (phase / 'reports/analysis.json').write_text('{incomplete')
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    assert campaign.run()['state'] == 'completed'
+    assert campaign.run()['state'] == 'completed'
+    assert 'mistaken' in campaign.git('show', 'HEAD:experiments/round-1-analyzer/analysis/evidence')
+
+
+@pytest.mark.parametrize('changed', ['bundle', 'coding'])
+def test_mutated_retained_inputs_block_next_role(tmp_path, changed):
+    skill = tmp_path / 'coding'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('original')
+    roles = []
+    def runner(campaign, phase, role, budget, commit):
+        roles.append(role)
+        campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        target = campaign.bundle / 'private.py' if changed == 'bundle' else \
+            campaign.root / 'coding-skills/coding/SKILL.md'
+        target.write_text('changed')
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1, coding_skills=[skill])
+    with pytest.raises(Exception, match='(bundle|coding).*changed'):
+        campaign.run()
+    assert roles == ['actor']
+
+
+def test_changed_coding_copy_is_rejected_immediately(tmp_path, monkeypatch):
+    import actor_analyzer_controller as controller
+    skill = tmp_path / 'coding'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('original')
+    campaign = make_campaign(tmp_path, None, coding_skills=[skill])
+    original = controller.shutil.copytree
+    def changed_copy(source, destination, *args, **kwargs):
+        result = original(source, destination, *args, **kwargs)
+        if Path(destination).parent.name == 'coding-skills':
+            (Path(destination) / 'SKILL.md').write_text('changed during copy')
+        return result
+    monkeypatch.setattr(controller.shutil, 'copytree', changed_copy)
+    with pytest.raises(Exception, match='coding snapshot changed'):
+        campaign.prepare()
+
+
+def test_valid_profile_uses_controller_owned_evidence_despite_report_path_conflict(tmp_path):
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                    'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        else:
+            relative = 'evidence/call/results/summary.json'
+            summary = phase / 'candidate-snapshot' / relative
+            summary.parent.mkdir(parents=True)
+            summary.write_text(json.dumps({'state': 'completed', 'correctness': True,
+                'source_sha256': digest(campaign.workspace / 'candidate.py'),
+                'captures': [{'pipe_rows': [{'vector_ratio': '40'}]}]}))
+            (phase / 'reports').mkdir()
+            (phase / 'reports/evidence').write_text('unrelated mistaken file')
+            report = {'candidate_commit': commit, 'profiling': {'status': 'acquired'},
+                      'evidence': [{'path': relative, 'kind': 'profile', 'kernels': ['task_kernel'], 'cases': ['1']}],
+                      'observations': [], 'bottlenecks': [], 'ceilings': [], 'unknowns': []}
+            (phase / 'reports/analysis.json').write_text(json.dumps(report))
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    result = campaign.run()
+    assert result['phases']['round-1-analyzer']['analysis_valid']
+    assert 'vector_ratio' in campaign.git('show',
+        'HEAD:experiments/round-1-analyzer/trusted-evidence/call/results/summary.json')

@@ -42,6 +42,9 @@ content manifest; every role receives that frozen copy, never a fresh copy of
 the original directory. Original-source edits cannot alter an ongoing campaign.
 Resume with changed source contents fails explicitly rather than changing the
 treatment, and a modified retained profiling snapshot is rejected.
+The full trusted bundle (including private runner/fixture files) is content-pinned
+and checked before every phase and on resume. Retained coding snapshots are
+likewise verified after copying and before use; input drift stops the campaign.
 
 The actor writes `/workspace/candidate.py` and experiment logs. The analyzer sees
 a read-only clone at the last correctness-qualified commit, including read-only
@@ -52,6 +55,14 @@ hash-checks those trusted files into the retained report. A claimed acquired
 profile must include actual pipe rows for the frozen candidate source, not merely
 an agent-created CSV or a report claiming that collection worked. Unsupported
 profiling must be reported as unavailable, with the failure and uncertainties.
+Trusted artifacts are archived separately under each experiment's
+`trusted-evidence`, so a malformed `/analysis/evidence` file or symlink cannot
+overwrite them or prevent raw analyzer output from being retained.
+
+For single-kernel tasks, correctness-only `check`/`ir` results do not qualify the
+final launch contract. Finish with `timing` or `pipes` returning
+`launch_contract.profile_stream_verified: true`; ordinary timing verification
+does not require the actor to perform diagnostic profiling analysis.
 
 An invalid latest candidate does not replace the verified revision. If none has
 passed, analysis is explicitly skipped. Failed or timed-out actors still have

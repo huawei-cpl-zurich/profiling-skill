@@ -37,6 +37,11 @@ verification skill directories (each needs `SKILL.md` and no symlinks). Actors
 alone see read-only copies under `/workspace/.agents/skills/<directory-name>`;
 the analyzer never receives them. No global skill roots are mounted. Use the
 same explicit coding snapshots in actor-only and paired cells.
+Profiling guidance is likewise copied once into the campaign, with a persisted
+content manifest; every role receives that frozen copy, never a fresh copy of
+the original directory. Original-source edits cannot alter an ongoing campaign.
+Resume with changed source contents fails explicitly rather than changing the
+treatment, and a modified retained profiling snapshot is rejected.
 
 The actor writes `/workspace/candidate.py` and experiment logs. The analyzer sees
 a read-only clone at the last correctness-qualified commit, including read-only

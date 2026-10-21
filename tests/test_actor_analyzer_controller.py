@@ -179,7 +179,8 @@ def test_cleanup_only_cancels_phase_owned_jobs_and_blocks_unknown_handles(tmp_pa
         folder = state / name
         folder.mkdir(parents=True)
         (folder / 'receipt.json').write_text(json.dumps({'call_id': name, 'state': 'running',
-            'dispatch_intent': True, **({'handle': name} if name != 'unknown' else {})}))
+            'dispatch_intent': True, **({'handle': name} if name != 'unknown' else
+            {'upload': {'state': 'completed', 'handle': 'completed-transfer'}})}))
     (phase / 'owned-tools.json').write_text(json.dumps({'directory': str(state), 'existing': ['old']}))
     calls = []
     def remote(operation, handle):
@@ -264,9 +265,14 @@ def test_explicit_coding_skill_snapshot_actor_only_readonly(tmp_path, role, acto
     skill = tmp_path / 'triton-guarded-kernel'
     skill.mkdir()
     (skill / 'SKILL.md').write_text('Pinned coding guidance')
-    campaign = make_campaign(tmp_path, None, rounds=1, coding_skills=[skill], actor_only=actor_only)
+    profiling = tmp_path / 'profiling-source'
+    profiling.mkdir()
+    (profiling / 'SKILL.md').write_text('Pinned profiling guidance')
+    campaign = make_campaign(tmp_path, None, rounds=1, coding_skills=[skill], actor_only=actor_only,
+                             skill=profiling)
     campaign.prepare()
     (skill / 'SKILL.md').write_text('Changed after preparation')
+    (profiling / 'SKILL.md').write_text('Profiling changed after preparation')
     auth = tmp_path / 'auth'
     auth.mkdir()
     (auth / 'auth.json').write_text('{}')
@@ -276,6 +282,7 @@ def test_explicit_coding_skill_snapshot_actor_only_readonly(tmp_path, role, acto
     launcher.prepare()
     code = f'''from pathlib import Path
 p = Path('/workspace/.agents/skills/triton-guarded-kernel/SKILL.md')
+assert Path('/workspace/.agents/skills/ascend-profiling/SKILL.md').read_text() == 'Pinned profiling guidance'
 assert p.exists() == {role == 'actor'}
 assert not Path({str(skill)!r}).exists()
 if p.exists():
@@ -299,3 +306,25 @@ def test_coding_skill_symlink_rejected_before_campaign_creation(tmp_path):
     with pytest.raises(ValueError, match='no symlinks'):
         make_campaign(tmp_path, None, coding_skills=[skill])
     assert not (tmp_path / 'run').exists()
+
+
+def test_profiling_snapshot_frozen_across_roles_and_resume_source_change_rejected(tmp_path):
+    skill = tmp_path / 'profiling-source'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('original profiling guidance')
+    seen = []
+    def runner(campaign, phase, role, budget, commit):
+        seen.append((campaign.skill / 'SKILL.md').read_text())
+        (skill / 'SKILL.md').write_text('replaced source guidance')
+        if role == 'actor':
+            campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                    'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=2, skill=skill)
+    result = campaign.run()
+    assert seen == ['original profiling guidance'] * 4
+    assert campaign.run() == result
+    replacement = Campaign(campaign.root, campaign.bundle, campaign.model, campaign.tool_command,
+                           campaign.instruction, rounds=2, skill=skill, runner=runner)
+    with pytest.raises(Exception, match='resume configuration changed'):
+        replacement.run()

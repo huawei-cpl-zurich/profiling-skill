@@ -26,6 +26,13 @@ def candidate_hash(workspace):
     return digest(path) if path.is_file() and not path.is_symlink() else None
 
 
+def skill_manifest(directory):
+    if not (directory / 'SKILL.md').is_file() or any(p.is_symlink() for p in directory.rglob('*')):
+        raise ValueError('skill needs SKILL.md and no symlinks')
+    return {str(p.relative_to(directory)): digest(p)
+            for p in sorted(directory.rglob('*')) if p.is_file()}
+
+
 def save(path, value):
     temporary = path.with_suffix('.tmp')
     write_json(temporary, value)
@@ -60,12 +67,12 @@ def cleanup_phase(phase, remote=managed_observation):
             receipt = json.loads(path.read_text())
             if receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
+            if receipt.get('dispatch_intent') and not receipt.get('handle'):
+                uncertain = True
+                calls.append({'call_id': path.parent.name, 'state': 'handle-unknown'})
+                continue
             handle = receipt.get('handle') or receipt.get('upload', {}).get('handle')
             if not handle:
-                if receipt.get('dispatch_intent'):
-                    uncertain = True
-                    calls.append({'call_id': path.parent.name, 'state': 'handle-unknown'})
-                    continue
                 # No workload dispatch was attempted; abort the prepared call.
                 result = {'state': 'failed', 'error': 'phase ended before dispatch'}
             else:
@@ -127,6 +134,8 @@ def bridge(config_path, arguments):
 class RoleLauncher(BlindLauncher):
     def __init__(self, campaign, phase, role, budget, commit):
         self.campaign, self.role, self.commit = campaign, role, commit
+        if campaign.skill and skill_manifest(campaign.skill) != campaign.config['profiling_manifest']:
+            raise LaunchError('frozen profiling snapshot changed; preserve original evidence')
         prompt = phase.parent / (phase.name + '.prompt.md')
         prompt.write_text(build_prompt(role, budget, int(phase.name.split('-')[1]),
                                       campaign.instruction, candidate_commit=commit))
@@ -146,6 +155,8 @@ class RoleLauncher(BlindLauncher):
                             str(self.workspace)], check=True, capture_output=True)
             subprocess.run(['git', '-C', str(self.workspace), 'checkout', '--detach', self.commit],
                            check=True, capture_output=True)
+            if self.skill_source:
+                (self.workspace / '.agents/skills/ascend-profiling').mkdir(parents=True)
         config = self.root / 'tool-config.json'
         save(config, {'workspace': str(self.workspace), 'command': self.campaign.tool_command,
                       'campaign': str(self.campaign.root)})
@@ -215,7 +226,9 @@ class Campaign:
         self.root, self.bundle = Path(output).resolve(), Path(bundle).resolve()
         self.workspace = self.root / 'workspace'
         self.model, self.tool_command, self.instruction = model, tool_command, instruction
-        self.skill, self.auth_home = skill, auth_home
+        self.profiling_source = Path(skill).resolve() if skill else None
+        self.skill = self.root / 'profiling-skill' if skill else None
+        self.auth_home = auth_home
         self.rounds, self.actor_budget, self.analyzer_budget = rounds, actor_budget, analyzer_budget
         self.actor_only, self.runner = actor_only, runner or self.launch_role
         self.coding_skills = {}
@@ -239,9 +252,9 @@ class Campaign:
         self.config = dict(bundle=str(self.bundle), model=model, tool_command=tool_command,
                            instruction=instruction, rounds=rounds, actor_budget=actor_budget,
                            analyzer_budget=analyzer_budget, actor_only=actor_only,
-                           skill=str(skill) if skill else None,
-                           coding_skills={name: {str(p.relative_to(directory)): digest(p)
-                               for p in sorted(directory.rglob('*')) if p.is_file()}
+                           skill=str(self.profiling_source) if skill else None,
+                           profiling_manifest=skill_manifest(self.profiling_source) if skill else None,
+                           coding_skills={name: skill_manifest(directory)
                                for name, directory in self.coding_skills.items()})
 
     def git(self, *arguments):
@@ -252,10 +265,16 @@ class Campaign:
             state = json.loads((self.root / 'state.json').read_text())
             if state['configuration'] != self.config:
                 raise LaunchError('resume configuration changed; preserve the original campaign')
+            if self.skill and skill_manifest(self.skill) != self.config['profiling_manifest']:
+                raise LaunchError('frozen profiling snapshot changed; preserve original evidence')
             return state
         if self.root.exists():
             raise LaunchError('unrecognized existing campaign output')
         self.workspace.mkdir(parents=True)
+        if self.skill:
+            shutil.copytree(self.profiling_source, self.skill)
+            if skill_manifest(self.skill) != self.config['profiling_manifest']:
+                raise LaunchError('profiling source changed during snapshot creation')
         for name, directory in self.coding_skills.items():
             shutil.copytree(directory, self.root / 'coding-skills' / name)
         for name in ['candidate.py', *self.public_files]:

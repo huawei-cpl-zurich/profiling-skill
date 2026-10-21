@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import subprocess
 import tarfile
+import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -199,15 +201,15 @@ def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
     assert calls[1][1] == calls[2][1] == 'remote:t:transfer:download'
 
 
-@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('check', 0, True)])
+@pytest.mark.parametrize('verb,count,extra', [('timing', 5, False), ('pipes', 3, False), ('ir', 0, False), ('check', 0, False), ('timing', 5, True)])
 def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra):
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
-    tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate'))
+    tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate', source_sha256='a' * 64))
     tools.save(tmp_path / 'task.json', dict(selector='task_kernel', language='triton'))
     (tmp_path / 'profile_device.py').write_text('''
 class Lease:
     def close(self): pass
-def wait_for_device(probe): return 7, {}, Lease()
+def wait_for_device(probe, **kwargs): return 7, {}, Lease()
 def bounded_run(*args, **kwargs): raise AssertionError('unused probe')
 ''')
     (tmp_path / 'a3_memory_batch.py').write_text('''
@@ -238,18 +240,22 @@ def capture(command,folder,env,metric,selector):
 def duration(row): return float(row['Duration(us)'])
 def summarize(samples): return {'samples_us':samples,'median_us':2}
 ''')
-    if extra:
+    if extra and verb in ('timing', 'pipes'):
         helper = tmp_path / 'a3_memory_batch.py'
         helper.write_text(helper.read_text().replace('renamed_kernel_compiled_123,2\\n', 'renamed_kernel_compiled_123,2\\nsecond_compute,3\\n'))
     result = subprocess.run(['python', str(tmp_path / 'execute.py')], capture_output=True, text=True)
     summary = json.loads((tmp_path / 'results/summary.json').read_text())
+    assert summary['source_sha256'] == 'a' * 64
     if extra:
         assert result.returncode == 1
         assert summary['failure_stage'] == 'candidate-contract'
         assert 'exactly one compute launch' in summary['error']
         return
     assert result.returncode == 0, result.stderr + result.stdout
-    assert summary['selector'] == 'renamed_kernel_compiled_123'
+    if verb in ('timing', 'pipes'):
+        assert summary['selector'] == 'renamed_kernel_compiled_123'
+    else:
+        assert not (tmp_path / 'results/discovery').exists()
     assert len(summary.get('captures', [])) == count
     assert summary['physical_device'] == 7
     assert (tmp_path / 'evidence.tar.gz').is_file()
@@ -257,3 +263,99 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
         assert 'build/compile.stderr' in archive.getnames()
         assert 'compiler-evidence/candidate/lowered.ll' in archive.getnames()
         assert 'compiler-evidence/candidate/lowered.bc' in archive.getnames()
+
+
+def test_expired_role_never_uploads_or_dispatches(tmp_path):
+    obj = instance(tmp_path)
+    tools.save(obj.workspace / 'execution.json', dict(utc_deadline=(datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()))
+    obj.remote = lambda *args: pytest.fail('expired role must not call transport')
+    result = obj.start('check', 'candidate', 'racecheck')
+    assert result['failure_stage'] == 'budget'
+    assert result['source_sha256'] == tools.hashlib.sha256(b'EDITABLE').hexdigest()
+
+
+def test_pending_request_is_observed_even_after_candidate_changes(tmp_path):
+    obj = instance(tmp_path)
+    pending = obj.state / 'abc123'
+    pending.mkdir()
+    tools.save(pending / 'receipt.json', dict(call_id='abc123', state='running', handle='remote:t:job:same'))
+    (obj.workspace / 'candidate.py').write_text('NEW CANDIDATE')
+    obj.observe = lambda ident: dict(observed=ident)
+    obj.remote = lambda *args: pytest.fail('must observe pending request')
+    assert obj.start('check', 'candidate', 'racecheck') == dict(observed='abc123')
+
+
+def test_request_deadline_survives_staging_and_dispatch(tmp_path):
+    obj = instance(tmp_path)
+    deadline = (datetime.now(timezone.utc) + timedelta(seconds=600)).isoformat()
+    tools.save(obj.workspace / 'execution.json', dict(utc_deadline=deadline))
+    def remote(*args):
+        return dict(state='running', handle='remote:t:job:same') if args[0] == 'run' else dict(state='completed')
+    obj.remote = remote
+    obj.observe = lambda ident: json.loads((obj.state / ident / 'receipt.json').read_text())
+    receipt = obj.start('check', 'candidate', 'racecheck')
+    request = json.loads((obj.state / receipt['call_id'] / 'request.json').read_text())
+    assert request['utc_deadline'] == deadline
+    assert 0 < request['host_remaining_seconds'] <= 600
+    assert receipt['request']['utc_deadline'] == deadline
+    assert receipt['dispatch_remaining_seconds'] <= request['host_remaining_seconds']
+
+
+def test_upload_time_is_not_a_new_remote_budget(tmp_path):
+    obj = instance(tmp_path)
+    tools.save(obj.workspace / 'execution.json', dict(utc_deadline=(datetime.now(timezone.utc) + timedelta(seconds=.02)).isoformat()))
+    calls = []
+    def remote(*args):
+        calls.append(args[0])
+        if args[0] == 'upload': time.sleep(.04)
+        return dict(state='completed')
+    obj.remote = remote
+    result = obj.start('check', 'candidate', 'racecheck')
+    assert result['failure_stage'] == 'budget'
+    assert result['source_sha256'] == tools.hashlib.sha256(b'EDITABLE').hexdigest()
+    assert 'run' not in calls
+
+
+def test_pre_dispatch_failure_is_terminal_and_preserves_source_identity(tmp_path):
+    obj = instance(tmp_path)
+    def remote(*args): raise RuntimeError('preflight unreachable')
+    obj.remote = remote
+    result = obj.start('check', 'candidate', 'racecheck')
+    assert result['failure_stage'] == 'infrastructure'
+    assert result['source_sha256'] == tools.hashlib.sha256(b'EDITABLE').hexdigest()
+    saved = json.loads((obj.state / result['call_id'] / 'receipt.json').read_text())
+    assert saved['state'] == 'failed'
+    assert 'dispatch_intent' not in saved
+
+
+@pytest.mark.parametrize('budget,delay,stage', [(300, 0, 'environment'), (.03, .1, 'budget')])
+def test_worker_bounds_inventory_probe_and_retains_failure_identity(tmp_path, budget, delay, stage):
+    (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
+    tools.save(tmp_path / 'request.json', dict(verb='check', implementation='candidate',
+        source_sha256='b' * 64, host_remaining_seconds=budget))
+    (tmp_path / 'profile_device.py').write_text('''
+import json,time
+from pathlib import Path
+from types import SimpleNamespace
+def bounded_run(argv, **kwargs):
+    with Path('timeouts.jsonl').open('a') as stream:
+        stream.write(json.dumps({'argv':argv,'timeout':kwargs['timeout']})+'\\n')
+    return SimpleNamespace(returncode=0,stdout='',stderr='')
+def wait_for_device(probe,query):
+    query('-m'); probe({})
+    time.sleep(DELAY)
+    raise RuntimeError('inventory unavailable')
+'''.replace('DELAY', repr(delay)))
+    (tmp_path / 'a3_memory_batch.py').write_text('''
+def execute(*a,**kw): raise AssertionError('no runtime')
+capture=duration=summarize=validate_capture=execute
+''')
+    result = subprocess.run(['python', 'execute.py'], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 1
+    summary = json.loads((tmp_path / 'results/summary.json').read_text())
+    assert summary['source_sha256'] == 'b' * 64
+    assert summary['failure_stage'] == stage
+    inv, probe = map(json.loads, (tmp_path / 'timeouts.jsonl').read_text().splitlines())
+    assert 0 < inv['timeout'] <= min(120, budget)
+    assert 0 < probe['timeout'] <= min(180, budget)
+    assert (tmp_path / 'evidence.tar.gz').is_file()

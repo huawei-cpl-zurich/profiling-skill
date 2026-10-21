@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -17,7 +18,8 @@ import uuid
 
 
 REMOTE_PROGRAM = r'''
-import csv, hashlib, json, os, re, shlex, subprocess, sys, tarfile, traceback
+import csv, hashlib, json, os, re, shlex, signal, subprocess, sys, tarfile, time, traceback
+from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profile_device import bounded_run, wait_for_device
@@ -26,15 +28,39 @@ root = Path(__file__).resolve().parent
 request = json.loads((root / 'request.json').read_text())
 output = root / 'results'
 output.mkdir()
-summary = {'operation': request['verb'], 'implementation': request['implementation']}
+summary = {'operation': request['verb'], 'implementation': request['implementation'],
+           'source_sha256': request.get('source_sha256')}
+started = time.monotonic()
+relative_budget = min(float(request.get('host_remaining_seconds', 1800)),
+                      float(os.environ.get('CPL_ROLE_REMAINING_SECONDS', 1800)))
+def remaining():
+    value = relative_budget - (time.monotonic() - started)
+    if request.get('utc_deadline'):
+        value = min(value, (datetime.fromisoformat(request['utc_deadline']) - datetime.now(timezone.utc)).total_seconds())
+    if value <= 0:
+        raise TimeoutError('original role deadline expired')
+    return value
+def expire(*unused):
+    raise TimeoutError('original role deadline expired')
+original_execute = execute
+def execute(argv, folder, env, *, timeout=600):
+    return original_execute(argv, folder, env, timeout=min(timeout, remaining()))
 lease = None
 stage = 'environment'
 try:
+    signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, remaining())
+    def query(*arguments):
+        result = bounded_run(['npu-smi', 'info', *arguments], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=min(120, remaining()))
+        if result.returncode:
+            raise RuntimeError('npu-smi query failed: ' + result.stderr[-2000:])
+        return result.stdout
     def probe(env):
         p = bounded_run([sys.executable, '-c', 'import torch,torch_npu; torch.empty(1,device="npu"); torch.npu.synchronize()'],
-                        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
+                        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=min(180, remaining()))
         return p.returncode == 0, p.stderr[-1000:]
-    physical, env, lease = wait_for_device(probe)
+    physical, env, lease = wait_for_device(probe, query=query)
     summary.update(physical_device=physical, logical_device=0)
     command = [sys.executable, str(root / 'runner.py'), '--implementation', request['implementation']]
     stage = 'candidate'
@@ -48,7 +74,7 @@ try:
     if not any(isinstance(r, dict) and r.get('correctness') is True for r in records):
         raise RuntimeError('trusted runner omitted correctness evidence')
     summary['correctness'] = records
-    if request['verb'] in ('check', 'timing', 'pipes', 'ir', 'sanitize'):
+    if request['verb'] in ('timing', 'pipes', 'sanitize'):
         stage = 'profiling'
         wrapper = root / 'application.sh'
         wrapper.write_text('#!/bin/sh\nexec ' + shlex.join(command) + '\n')
@@ -106,8 +132,10 @@ try:
             raise RuntimeError('no compiler artifacts returned by this implementation')
     summary['state'] = 'completed'
 except BaseException as error:
-    summary.update(state='failed', failure_stage=stage, error=str(error), traceback=traceback.format_exc())
+    summary.update(state='failed', failure_stage='budget' if isinstance(error, TimeoutError) else stage,
+                   error=str(error), traceback=traceback.format_exc())
 finally:
+    signal.setitimer(signal.ITIMER_REAL, 0)
     if lease: lease.close()
     (output / 'summary.json').write_text(json.dumps(summary, indent=2))
     # Compact reports and inventoried compiler outputs, never raw profiler payloads.
@@ -141,7 +169,13 @@ class Tools:
 
     def remote(self, *arguments):
         command = [str(self.client), '--json', *map(str, arguments)]
-        result = subprocess.run(command, text=True, capture_output=True, timeout=240)
+        timeout = 240
+        deadline = getattr(self, '_staging_deadline', None)
+        if deadline and arguments[0] in ('targets', 'capabilities', 'preflight', 'upload', 'run'):
+            timeout = min(timeout, (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds())
+            if timeout <= 0:
+                raise TimeoutError('original role deadline expired during staging')
+        result = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
         with (self.state / 'transport.jsonl').open('a') as stream:
             stream.write(json.dumps(dict(command=command, code=result.returncode,
                                          stdout=result.stdout, stderr=result.stderr)) + '\n')
@@ -154,6 +188,11 @@ class Tools:
         return payload
 
     def start(self, verb, implementation, sanitizer):
+        # A candidate edit never licenses duplicate work while a prior call lives.
+        for path in sorted(self.state.glob('*/receipt.json')):
+            previous = json.loads(path.read_text())
+            if previous.get('state') not in ('completed', 'failed', 'cancelled'):
+                return self.observe(previous.get('call_id', path.parent.name))
         spec = json.loads((self.bundle / 'task.json').read_text())
         if spec['language'] != 'triton' and verb in ('ir', 'sanitize'):
             return dict(state='unsupported', failure_stage='capability', operation=verb,
@@ -173,7 +212,16 @@ class Tools:
         for name in ('profile_device.py', 'a3_memory_batch.py'):
             shutil.copyfile(helpers / name, folder / name)
         request = dict(verb=verb, implementation=implementation, sanitizer=sanitizer,
-                       source_sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+                       source_sha256=hashlib.sha256((folder / source.name).read_bytes()).hexdigest())
+        context = self.workspace / 'execution.json'
+        if context.exists():
+            deadline = json.loads(context.read_text())['utc_deadline']
+            budget = (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()
+            if budget <= 0:
+                return dict(state='failed', failure_stage='budget', error='original role deadline expired',
+                            source_sha256=request['source_sha256'])
+            request.update(utc_deadline=deadline, host_remaining_seconds=budget)
+            self._staging_deadline = deadline
         save(folder / 'request.json', request)
         (folder / 'execute.py').write_text(REMOTE_PROGRAM)
         archive = folder / (ident + '.tar.gz')
@@ -183,15 +231,22 @@ class Tools:
         remote_archive = self.cwd.rstrip('/') + '/' + archive.name
         remote_folder = self.cwd.rstrip('/') + '/blind-tools-' + ident
         receipt = dict(call_id=ident, target=self.target, runtime=self.runtime, cwd=self.cwd,
-                       remote_archive=remote_archive, remote_folder=remote_folder, request=request, state='prepared')
+                       remote_archive=remote_archive, remote_folder=remote_folder, request=request,
+                       source_sha256=request['source_sha256'], state='prepared')
         save(folder / 'receipt.json', receipt)
-        for command in (('targets',), ('capabilities', self.target), ('preflight', self.target)):
-            self.remote(*command)
         script = folder / 'run.sh'
         script.write_text('#!/bin/bash\nset -eu\nmkdir -p ' + shlex.quote(remote_folder) + '\n' +
                           'tar -xzf ' + shlex.quote(remote_archive) + ' -C ' + shlex.quote(remote_folder) + '\n' +
                           'cd ' + shlex.quote(remote_folder) + '\nexec python execute.py\n')
-        receipt['upload'] = self.remote('upload', self.target, archive, remote_archive)
+        try:
+            for command in (('targets',), ('capabilities', self.target), ('preflight', self.target)):
+                self.remote(*command)
+            receipt['upload'] = self.remote('upload', self.target, archive, remote_archive)
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            receipt.update(state='failed', failure_stage='budget' if isinstance(error, TimeoutError) else 'infrastructure',
+                           error=str(error))
+            save(folder / 'receipt.json', receipt)
+            return receipt
         save(folder / 'receipt.json', receipt)
         if receipt['upload'].get('state') != 'completed':
             return self.observe(ident)
@@ -200,6 +255,20 @@ class Tools:
     def dispatch(self, folder, receipt):
         if receipt.get('dispatch_intent'):
             return self.unconfirmed(receipt)
+        request = receipt.get('request', {})
+        if request.get('utc_deadline'):
+            self._staging_deadline = request['utc_deadline']
+            budget = (datetime.fromisoformat(request['utc_deadline']) - datetime.now(timezone.utc)).total_seconds()
+            if budget <= 0:
+                receipt.update(state='failed', failure_stage='budget', error='original role deadline expired',
+                               source_sha256=request.get('source_sha256'))
+                save(folder / 'receipt.json', receipt)
+                return receipt
+            receipt['dispatch_remaining_seconds'] = min(budget, request['host_remaining_seconds'])
+            script = folder / 'run.sh'
+            text = script.read_text()
+            script.write_text(text.replace('set -eu\n', 'set -eu\nexport CPL_ROLE_REMAINING_SECONDS=' +
+                shlex.quote(str(receipt['dispatch_remaining_seconds'])) + '\n', 1))
         # Commit the per-call intent before crossing the external dispatch boundary.
         # A lost response must never turn an observation into a second run.
         receipt['dispatch_intent'] = True

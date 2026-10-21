@@ -105,7 +105,9 @@ try:
         summary['launch_contract']['profile_stream_verified'] = True
         stage = 'profiling'
         if request['verb'] in ('timing', 'pipes'):
-            metric, count = ('BasicInfo', 5) if request['verb'] == 'timing' else ('PipeUtilization', 3)
+            metric, count = (('BasicInfo', request.get('timing_captures', 5)) if request['verb'] == 'timing'
+                             else ('PipeUtilization', request.get('pipe_captures', 3)))
+            summary['capture_count'] = count
             captures = [capture(command, output / ('capture-' + str(i)), env, metric, selector) for i in range(count)]
             summary['captures'] = captures
             if request['verb'] == 'timing':
@@ -162,6 +164,13 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+def positive_count(value):
+    count = int(value)
+    if count < 1:
+        raise ValueError('capture counts must be positive integers')
+    return count
+
+
 class Tools:
     def __init__(self, bundle, workspace, target='bz-a3-1', runtime='py311-torch'):
         self.bundle, self.workspace = Path(bundle).resolve(), Path(workspace).resolve()
@@ -194,7 +203,8 @@ class Tools:
             raise RuntimeError('transport operation failed: ' + json.dumps(payload))
         return payload
 
-    def start(self, verb, implementation, sanitizer):
+    def start(self, verb, implementation, sanitizer, *, timing_captures=5, pipe_captures=3):
+        timing_captures, pipe_captures = positive_count(timing_captures), positive_count(pipe_captures)
         # A candidate edit never licenses duplicate work while a prior call lives.
         for path in sorted(self.state.glob('*/receipt.json')):
             previous = json.loads(path.read_text())
@@ -219,6 +229,7 @@ class Tools:
         for name in ('profile_device.py', 'a3_memory_batch.py'):
             shutil.copyfile(helpers / name, folder / name)
         request = dict(verb=verb, implementation=implementation, sanitizer=sanitizer,
+                       timing_captures=timing_captures, pipe_captures=pipe_captures,
                        source_sha256=hashlib.sha256((folder / source.name).read_bytes()).hexdigest())
         context = self.workspace / 'execution.json'
         if context.exists():
@@ -384,6 +395,8 @@ def main(argv=None):
     parser.add_argument('call_id', nargs='?')
     parser.add_argument('--implementation', choices=('baseline', 'candidate'), default='candidate')
     parser.add_argument('--sanitizer', choices=('memcheck', 'racecheck', 'synccheck'), default='racecheck')
+    parser.add_argument('--timing-captures', type=positive_count, default=5)
+    parser.add_argument('--pipe-captures', type=positive_count, default=3)
     args = parser.parse_args(argv)
     if args.verb == 'help':
         print('experiment-tool {check,timing,pipes,ir,sanitize} [--implementation baseline|candidate]\n'
@@ -393,8 +406,9 @@ def main(argv=None):
               'timing/pipes/sanitize additionally verify exactly one exported compute launch in a bounded profiler stream;\n'
               'check/ir do not verify that stream. launch_contract reports each guarantee separately.\n'
               'A separate check call is unnecessary before timing.\n'
-              'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
-              'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
+              'Results and diagnostics appear under evidence/CALL_ID. --timing-captures N defaults to five BasicInfo samples;\n'
+              '--pipe-captures N defaults to three PipeUtilization captures; both must be positive integers.\n'
+              'ir returns Triton compiler artifacts; native ir is unsupported.\n'
               'check and ir do not require a profiler. Optional execution.json utc_deadline bounds original role work,\n'
               'including staging and device waits; observation resumes the same call without resetting its budget.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
@@ -402,7 +416,9 @@ def main(argv=None):
     try:
         tools = Tools(args.bundle, args.workspace, args.target, args.runtime)
         if args.verb == 'observe' and not args.call_id: parser.error('observe requires CALL_ID')
-        result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(args.verb, args.implementation, args.sanitizer)
+        result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(
+            args.verb, args.implementation, args.sanitizer,
+            timing_captures=args.timing_captures, pipe_captures=args.pipe_captures)
         print(json.dumps(result, indent=2))
         return 1 if result.get('state') == 'failed' else 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:

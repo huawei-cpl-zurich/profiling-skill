@@ -13,7 +13,8 @@ orchestration checkout:
 python scripts/actor_analyzer_controller.py \
   --output /tmp/actor-analyzer-example --bundle /tmp/exported-public-task \
   --model-json /tmp/model.json --tool-command-json /tmp/tools.json \
-  --instruction /tmp/task.md --skill /tmp/pinned-profiling-skill
+  --instruction /tmp/task.md --skill /tmp/pinned-profiling-skill \
+  --coding-skill /tmp/pinned-coding/triton-guarded-kernel
 ```
 
 `model.json` declares `name` and `reasoning_effort`. `tools.json` is a JSON array
@@ -31,6 +32,11 @@ Use `--actor-only` for the paired control; `--rounds`, `--actor-budget`, and
 cannot change on resume. Each phase gets a separate session, deadline, transcript,
 command journal, and receipt. Candidates and compact evidence are retained on one
 local `experiment/actor-analyzer` Git branch; nothing is merged or pushed.
+Repeatable `--coding-skill DIRECTORY` freezes explicitly selected coding or
+verification skill directories (each needs `SKILL.md` and no symlinks). Actors
+alone see read-only copies under `/workspace/.agents/skills/<directory-name>`;
+the analyzer never receives them. No global skill roots are mounted. Use the
+same explicit coding snapshots in actor-only and paired cells.
 
 The actor writes `/workspace/candidate.py` and experiment logs. The analyzer sees
 a read-only clone at the last correctness-qualified commit, including read-only
@@ -84,7 +90,8 @@ git archive HEAD | tar -x -C "$gate_dir/source"
 ```
 
 Before the following preparation, set `PROFILE_SKILL` to the chosen complete
-profiling-skill snapshot and `MODEL_JSON` to the approved explicit model JSON.
+profiling-skill snapshot, `CODING_SKILL` to the managed source resolved from the
+installed `triton-guarded-kernel` skill, and `MODEL_JSON` to the approved model JSON.
 Set `A3_TARGET` and `A3_RUNTIME` from the ignored remote-access registry; these
 machine-specific choices are not source defaults. Copying freezes the skill and
 model for all six cells. Retain the printed gate directory in the central task
@@ -93,6 +100,8 @@ record so resume uses the same output directories, not a fresh campaign.
 ```sh
 cp "$MODEL_JSON" "$gate_dir/model.json"
 cp -aL "$PROFILE_SKILL" "$gate_dir/skill"
+mkdir "$gate_dir/coding"
+cp -aL "$CODING_SKILL" "$gate_dir/coding/triton-guarded-kernel"
 for task in task01 task03 task05; do
   python "$gate_dir/source/benchmarks/natural_before_tasks.py" export \
     --task "$task" --output "$gate_dir/$task"
@@ -128,6 +137,7 @@ for task in task01 task03 task05; do
       --model-json "$gate_dir/model.json" \
       --tool-command-json "$gate_dir/$task-tools.json" \
       --instruction "$gate_dir/$task/TASK.md" --skill "$gate_dir/skill" \
+      --coding-skill "$gate_dir/coding/triton-guarded-kernel" \
       --rounds 4 --actor-budget 1200 --analyzer-budget 600 "${control[@]}" \
       > "$gate_dir/$task-$arm.log" 2>&1 &
   done

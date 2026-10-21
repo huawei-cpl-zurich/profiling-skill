@@ -28,6 +28,7 @@ def test_four_rounds_preserve_history_handoff_and_frozen_candidate(tmp_path):
             n = len([x for x in seen if x[0] == 'actor'])
             if n > 1:
                 assert (campaign.workspace / 'analysis.json').is_file()
+                assert commit == seen[-2][2]
             (campaign.workspace / 'candidate.py').write_text(f'value = {n}\n')
             campaign.qualify(phase, {'state': 'completed', 'correctness': True,
                                     'source_sha256': digest(campaign.workspace / 'candidate.py')})
@@ -252,3 +253,49 @@ def test_uncertain_cleanup_prevents_analyzer_dispatch(tmp_path, monkeypatch):
     assert campaign.run()['state'] == 'observation-required'
     assert campaign.run()['state'] == 'observation-required'
     assert roles == ['actor']
+
+
+@pytest.mark.parametrize('role,actor_only', [('actor', False), ('actor', True), ('analyzer', False)])
+def test_explicit_coding_skill_snapshot_actor_only_readonly(tmp_path, role, actor_only):
+    import shutil
+    from blind_optimization_launcher import execute
+    if not shutil.which('bwrap') or not shutil.which('codex'):
+        pytest.skip('Bubblewrap and Codex required')
+    skill = tmp_path / 'triton-guarded-kernel'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('Pinned coding guidance')
+    campaign = make_campaign(tmp_path, None, rounds=1, coding_skills=[skill], actor_only=actor_only)
+    campaign.prepare()
+    (skill / 'SKILL.md').write_text('Changed after preparation')
+    auth = tmp_path / 'auth'
+    auth.mkdir()
+    (auth / 'auth.json').write_text('{}')
+    campaign.auth_home = auth
+    phase = campaign.root / ('round-1-' + role)
+    launcher = RoleLauncher(campaign, phase, role, 600, campaign.git('rev-parse', 'HEAD').strip())
+    launcher.prepare()
+    code = f'''from pathlib import Path
+p = Path('/workspace/.agents/skills/triton-guarded-kernel/SKILL.md')
+assert p.exists() == {role == 'actor'}
+assert not Path({str(skill)!r}).exists()
+if p.exists():
+    assert p.read_text() == 'Pinned coding guidance'
+    try: p.write_text('tampered')
+    except OSError: pass
+    else: raise AssertionError('coding skill writable')
+'''
+    try:
+        result = execute([*launcher.base_command(), 'python3', '-c', code], phase, 30)
+        assert result['returncode'] == 0, result
+    finally:
+        launcher.socket_temporary.cleanup()
+
+
+def test_coding_skill_symlink_rejected_before_campaign_creation(tmp_path):
+    skill = tmp_path / 'coding'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('guidance')
+    (skill / 'alias.md').symlink_to(skill / 'SKILL.md')
+    with pytest.raises(ValueError, match='no symlinks'):
+        make_campaign(tmp_path, None, coding_skills=[skill])
+    assert not (tmp_path / 'run').exists()

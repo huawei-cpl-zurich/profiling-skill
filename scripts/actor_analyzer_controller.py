@@ -152,6 +152,10 @@ class RoleLauncher(BlindLauncher):
         self.tool_command = [sys.executable, str(Path(__file__).resolve()), 'tool', str(config)]
         self.reports = self.root / 'reports'
         self.reports.mkdir()
+        if self.role == 'actor':
+            for name in self.campaign.coding_skills:
+                shutil.copytree(self.campaign.root / 'coding-skills' / name,
+                                self.frozen / 'coding-skills' / name)
         directory = self.workspace.parent / 'tool-state'
         save(self.root / 'owned-tools.json', {'directory': str(directory),
                                               'existing': [p.name for p in directory.glob('*')]})
@@ -195,13 +199,17 @@ class RoleLauncher(BlindLauncher):
             retained.append(command[index])
             index += 1
         # Both roles can record work without mutating immutable public API files.
+        if self.role == 'actor':
+            for name in self.campaign.coding_skills:
+                retained += ['--ro-bind', str(self.frozen / 'coding-skills' / name),
+                             '/workspace/.agents/skills/' + name]
         return retained + ['--bind', str(self.reports), '/analysis']
 
 
 class Campaign:
     def __init__(self, output, bundle, model, tool_command, instruction, *, skill=None,
                  rounds=4, actor_budget=1200, analyzer_budget=600, actor_only=False,
-                 auth_home=None, runner=None):
+                 auth_home=None, runner=None, coding_skills=()):
         if min(rounds, actor_budget, analyzer_budget) <= 0:
             raise ValueError('rounds and budgets must be positive')
         self.root, self.bundle = Path(output).resolve(), Path(bundle).resolve()
@@ -210,6 +218,14 @@ class Campaign:
         self.skill, self.auth_home = skill, auth_home
         self.rounds, self.actor_budget, self.analyzer_budget = rounds, actor_budget, analyzer_budget
         self.actor_only, self.runner = actor_only, runner or self.launch_role
+        self.coding_skills = {}
+        for directory in coding_skills:
+            directory = Path(directory).resolve()
+            if directory.name in self.coding_skills or directory.name == 'ascend-profiling' \
+                    or not (directory / 'SKILL.md').is_file() \
+                    or any(p.is_symlink() for p in directory.rglob('*')):
+                raise ValueError('coding skill needs unique name, SKILL.md, and no symlinks')
+            self.coding_skills[directory.name] = directory
         self.public_files = json.loads((self.bundle / 'task.json').read_text())['public_files']
         if not isinstance(self.public_files, list) or 'candidate.py' not in self.public_files:
             raise ValueError('public_files must include candidate.py')
@@ -223,7 +239,10 @@ class Campaign:
         self.config = dict(bundle=str(self.bundle), model=model, tool_command=tool_command,
                            instruction=instruction, rounds=rounds, actor_budget=actor_budget,
                            analyzer_budget=analyzer_budget, actor_only=actor_only,
-                           skill=str(skill) if skill else None)
+                           skill=str(skill) if skill else None,
+                           coding_skills={name: {str(p.relative_to(directory)): digest(p)
+                               for p in sorted(directory.rglob('*')) if p.is_file()}
+                               for name, directory in self.coding_skills.items()})
 
     def git(self, *arguments):
         return subprocess.check_output(['git', '-C', str(self.workspace), *arguments], text=True)
@@ -237,6 +256,8 @@ class Campaign:
         if self.root.exists():
             raise LaunchError('unrecognized existing campaign output')
         self.workspace.mkdir(parents=True)
+        for name, directory in self.coding_skills.items():
+            shutil.copytree(directory, self.root / 'coding-skills' / name)
         for name in ['candidate.py', *self.public_files]:
             source = self.bundle / name
             if Path(name).is_absolute() or '..' in Path(name).parts or source.is_symlink():
@@ -350,7 +371,7 @@ class Campaign:
                             return {**state, 'state': 'observation-required', 'pending_phase': name}
                         result = json.loads((phase / 'receipt.json').read_text())
                     else:
-                        commit = state['verified'] if role == 'analyzer' else None
+                        commit = state['verified']
                         if role == 'analyzer' and not commit:
                             state['phases'][name] = {'state': 'skipped-no-verified-candidate'}
                             save(self.root / 'state.json', state)
@@ -386,6 +407,7 @@ def main():
     for name in ('output', 'bundle', 'model-json', 'tool-command-json', 'instruction'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--skill', type=Path)
+    parser.add_argument('--coding-skill', type=Path, action='append', default=[])
     parser.add_argument('--rounds', type=int, default=4)
     parser.add_argument('--actor-budget', type=int, default=1200)
     parser.add_argument('--analyzer-budget', type=int, default=600)
@@ -394,7 +416,8 @@ def main():
     result = Campaign(args.output, args.bundle, json.loads(args.model_json.read_text()),
                       json.loads(args.tool_command_json.read_text()), args.instruction.read_text(),
                       skill=args.skill, rounds=args.rounds, actor_budget=args.actor_budget,
-                      analyzer_budget=args.analyzer_budget, actor_only=args.actor_only).run()
+                      analyzer_budget=args.analyzer_budget, actor_only=args.actor_only,
+                      coding_skills=args.coding_skill).run()
     print(json.dumps(result, indent=2))
     return 0 if result['state'] == 'completed' else 75
 

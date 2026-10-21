@@ -25,8 +25,10 @@ missing timeline is not evidence of kernel behavior.
 Use workload operations/bytes and product-, dtype- and resource-appropriate
 compute/bandwidth ceilings with explicit source and units. Separate theoretical
 from empirical ceilings, useful from actual transferred bytes, and warm-cache
-kernel busy-time from full-forward latency. Avoid combining incomparable cases
-or summing unrelated timings. If a roofline is not defensible for irregular
+kernel busy-time from full-forward latency. Use only the timing boundaries the
+tools actually provide; if full-forward latency is absent, label it unavailable,
+not zero or an inferred value. Avoid combining incomparable cases or summing
+unrelated timings. If a roofline is not defensible for irregular
 memory, reductions, special functions or dependencies, report bounds or
 not_established plus the missing information. Never invent a roofline ratio.
 

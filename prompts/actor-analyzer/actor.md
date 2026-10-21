@@ -8,8 +8,10 @@ $task_instruction
 
 Previous verified candidate: $candidate_commit.
 
-Produce a substantive custom Triton implementation preserving the public API
-and semantics. Multiple Triton kernels are permitted. Do not return PyTorch/ACL
+Produce a substantive custom Triton implementation preserving the public API,
+semantics and task-specific restrictions. Multiple Triton kernels are permitted
+unless the supplied task explicitly requires a single launch; honor that
+restriction when present. Do not return PyTorch/ACL
 compute, reference fallbacks, token Triton wrappers, or hardcoded outputs. Torch
 allocation and metadata plumbing are allowed. Do not seek private fixtures,
 oracles, optimized comparators, or evaluation implementation.
@@ -18,9 +20,12 @@ Read the public API, current candidate and prior experiment history, and the
 latest analysis handoff if provided. Treat analysis as evidence and hypotheses,
 not orders: choose your own optimizations and explain agreement or disagreement.
 Use the installed coding/verification skills. Profiling is available if useful;
-it is optional. Benchmark through the supplied tools, reporting warm-cache
-kernel busy-time separately from full-forward latency. Do not include compilation
-time or compare incompatible cases, timing boundaries, or execution modes.
+it is optional. Benchmark through the supplied tools and identify each reported
+timing boundary. Keep warm-cache kernel busy-time separate from full-forward
+latency when both are available. If the tools provide only busy-time, explicitly
+report full-forward latency as unavailable rather than inventing or estimating
+it. Do not include compilation time or compare incompatible cases, timing
+boundaries, or execution modes.
 
 Compilation, runtime and numerical errors are debugging feedback, not reasons
 to terminate. Read retained compiler stderr and correctness diagnostics; repair

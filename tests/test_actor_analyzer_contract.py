@@ -1,5 +1,6 @@
 """Functional contracts for the actor/analyzer evidence boundary."""
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -114,6 +115,25 @@ def test_roofline_uses_units_and_does_not_hide_inconsistent_assumptions():
 def test_roofline_rejects_invalid_physical_inputs(inputs):
     with pytest.raises(ValueError):
         contract.roofline(*inputs)
+
+
+@pytest.mark.parametrize("field", ["lower_bound_us", "measured_us"])
+def test_analysis_rejects_huge_json_integers_as_value_error(field):
+    value = report()
+    value["ceilings"][0][field] = json.loads("1" + "0" * 400)
+    with pytest.raises(ValueError):
+        contract.validate_analysis(value, "a" * 40)
+
+
+@pytest.mark.parametrize("inputs, measured", [
+    ((10 ** 400, 1, 1, 1), None),
+    ((1e308, 1, 1e-308, 1), None),
+    ((1, 1e308, 1, 1e-308), None),
+    ((1e300, 1, 1, 1), 1e-300),
+])
+def test_roofline_rejects_numeric_overflow_in_inputs_or_results(inputs, measured):
+    with pytest.raises(ValueError):
+        contract.roofline(*inputs, measured_us=measured)
 
 
 def test_prompt_renderer_formats_round_budget_task_and_frozen_revision():

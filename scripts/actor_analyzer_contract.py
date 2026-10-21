@@ -32,8 +32,12 @@ def _texts(value, label, *, nonempty=False):
 
 
 def _number(value, label, *, positive=False):
+    try:
+        finite = isinstance(value, (float, int)) and math.isfinite(value)
+    except OverflowError:
+        finite = False
     if (isinstance(value, bool) or not isinstance(value, (float, int))
-            or not math.isfinite(value) or value < 0 or (positive and value == 0)):
+            or not finite or value < 0 or (positive and value == 0)):
         raise ValueError(f"{label} must be finite and {'positive' if positive else 'nonnegative'}")
     return value
 
@@ -85,11 +89,14 @@ def roofline(compute_ops, traffic_bytes, peak_ops_per_second,
     _number(bandwidth_bytes_per_second, "bandwidth_bytes_per_second", positive=True)
     compute = compute_ops / peak_ops_per_second * 1e6
     memory = traffic_bytes / bandwidth_bytes_per_second * 1e6
+    _number(compute, "compute_limit_us")
+    _number(memory, "memory_limit_us")
     result = {"compute_limit_us": compute, "memory_limit_us": memory,
               "lower_bound_us": max(compute, memory)}
     if measured_us is not None:
         _number(measured_us, "measured_us", positive=True)
         result["ideal_fraction"] = result["lower_bound_us"] / measured_us
+        _number(result["ideal_fraction"], "ideal_fraction")
     return result
 
 

@@ -32,7 +32,8 @@ def qualification_key(root, adapter, runtime, source_sha256):
             if item.is_file() and '__pycache__' not in item.parts:
                 digest.update(str(item.relative_to(bundle)).encode())
                 digest.update(item.read_bytes())
-    context = (str(bundle.resolve()), digest.hexdigest(), id(adapter), id(adapter.check),
+    context = (str(bundle.resolve()), digest.hexdigest(), id(adapter),
+               tuple(id(getattr(adapter, name, None)) for name in ('check', 'benchmark', 'pipes', 'screen')),
                runtime['physical'], runtime['torch_module_id'], id(sys.modules.get('torch')),
                runtime['runtime_initializations'], tuple(sorted(runtime['env'].items())))
     return hashlib.sha256(repr((source_sha256, context)).encode()).hexdigest()

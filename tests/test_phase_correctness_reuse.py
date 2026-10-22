@@ -47,7 +47,7 @@ def test_measurements_reuse_only_passed_source_and_publish_original_provenance(t
     assert published['correctness'] is True and published['diagnostics']==[]
 
 
-@pytest.mark.parametrize('changed', ['source','device','runtime','bundle','adapter','context'])
+@pytest.mark.parametrize('changed', ['source','device','runtime','bundle','adapter','measurement-adapter','context'])
 def test_changed_identity_forces_full_measurement_check(tmp_path,changed):
     run,runtime,adapter,checks,measurements=fixture(tmp_path)
     run('first','check')
@@ -59,6 +59,9 @@ def test_changed_identity_forces_full_measurement_check(tmp_path,changed):
     if changed=='adapter':
         original=adapter.check
         adapter.check=lambda *args:original(*args)
+    if changed=='measurement-adapter':
+        original=adapter.benchmark
+        adapter.benchmark=lambda *args:original(*args)
     if changed=='context':runtime['env']['MODE']='changed'
     result=run('measure','benchmark',source)
     assert result['state']=='completed' and checks==['first','measure']
@@ -84,14 +87,18 @@ def test_failed_check_is_never_reused(tmp_path,monkeypatch):
 
 def test_measurement_fresh_profile_validation_still_runs_and_failure_invalidates(tmp_path):
     run,runtime,adapter,checks,measurements=fixture(tmp_path)
+    invalid=[False]
+    def prepare_and_measure(*args):
+        if invalid[0]:
+            raise AssertionError('fresh profile-case validation failed')
+        return adapter.pipes(*args)
+    adapter.benchmark=prepare_and_measure
     run('first','check')
-    def invalid(*args):
-        raise AssertionError('fresh profile-case validation failed')
-    adapter.benchmark=invalid
+    invalid[0]=True
     result=run('timing','benchmark')
     assert result['state']=='failed' and result['failure_stage']=='measurement'
     assert result['correctness_provenance']['kind']=='phase-local-reuse'
     assert checks==['first']
-    adapter.benchmark=adapter.pipes
+    invalid[0]=False
     assert run('retry','benchmark')['state']=='completed'
     assert checks==['first','retry']

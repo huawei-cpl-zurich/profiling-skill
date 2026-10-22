@@ -226,6 +226,34 @@ class RoleLauncher(BlindLauncher):
         self.finish_reserve_seconds = min(120, budget // 5)
 
     def prepare(self):
+        if getattr(self, 'resume_before_agent', False):
+            self.workspace = self.root / 'candidate-snapshot'
+            self.frozen, self.state = self.root / 'frozen', self.root / 'codex-state'
+            self.wrapper, self.journal = self.root / 'experiment-tool', self.root / 'commands.jsonl'
+            self.reports = self.root / 'reports'
+            expected = subprocess.check_output(['git', '-C', str(self.campaign.workspace),
+                                                 'show', self.commit + ':candidate.py'])
+            if candidate_hash(self.workspace) != hashlib.sha256(expected).hexdigest():
+                raise LaunchError('retained analyzer snapshot differs from frozen candidate')
+            for path in (self.frozen / 'prompt.md', self.wrapper, self.state / 'auth.json', self.reports):
+                if not path.exists():
+                    raise LaunchError('incomplete retained analyzer preparation')
+            if digest(self.frozen / 'prompt.md') != digest(self.prompt_source):
+                raise LaunchError('retained analyzer prompt changed')
+            if self.skill_source and skill_manifest(self.frozen / 'skill') != skill_manifest(self.skill_source):
+                raise LaunchError('retained analyzer skill changed')
+            for name, expected in self.campaign.config.get('profiling_skills', {}).items():
+                if name != 'ascend-profiling' and skill_manifest(self.frozen / 'profiling-skills' / name) != expected:
+                    raise LaunchError('retained analyzer profiling inputs changed')
+            config = json.loads((self.root / 'tool-config.json').read_text())
+            if config != dict(workspace=str(self.workspace), command=self.campaign.tool_command,
+                              campaign=str(self.campaign.root)):
+                raise LaunchError('retained analyzer tool configuration changed')
+            self.socket_temporary = tempfile.TemporaryDirectory(prefix='blind-tool-')
+            self.socket_dir = Path(self.socket_temporary.name)
+            self.tool_command = [sys.executable, str(Path(__file__).resolve()), 'tool',
+                                 str(self.root / 'tool-config.json')]
+            return
         super().prepare()
         # Bootstrap is the launcher's own newly-created directory, never a user
         # worktree. Both roles instead see one persistent experiment history.
@@ -468,7 +496,9 @@ class Campaign:
         retain_result(phase, result)
 
     def launch_role(self, campaign, phase, role, budget, commit):
-        return RoleLauncher(self, phase, role, budget, commit).launch()
+        launcher = RoleLauncher(self, phase, role, budget, commit)
+        launcher.resume_before_agent = phase.exists()
+        return launcher.launch()
 
     def finish_phase(self, phase, role, entry, state):
         if role == 'analyzer' and self.analysis_contract == 2:
@@ -490,7 +520,8 @@ class Campaign:
         archive = self.workspace / 'experiments' / phase.name
         archive.mkdir(parents=True, exist_ok=True)
         for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr',
-                     'qualifications.jsonl', 'cleanup.json', 'required-profile.json'):
+                     'qualifications.jsonl', 'cleanup.json', 'required-profile.json',
+                     'role-execution.json', 'model-dispatch.json'):
             if (phase / name).is_file():
                 shutil.copyfile(phase / name, archive / name)
         if role == 'actor':
@@ -635,8 +666,15 @@ class Campaign:
                                     return {**state, 'state': 'observation-required', 'pending_phase': name}
                             continue
                         if not (phase / 'receipt.json').exists():
-                            return {**state, 'state': 'observation-required', 'pending_phase': name}
-                        result = json.loads((phase / 'receipt.json').read_text())
+                            recoverable = (role == 'analyzer' and self.analysis_contract == 2
+                                and (phase / 'role-execution.json').is_file()
+                                and not (phase / 'model-dispatch.json').exists())
+                            if not recoverable:
+                                return {**state, 'state': 'observation-required', 'pending_phase': name}
+                            result = self.runner(self, phase, role, self.analyzer_budget, entry['candidate_commit'])
+                            save(phase / 'receipt.json', result)
+                        else:
+                            result = json.loads((phase / 'receipt.json').read_text())
                     else:
                         commit = state['verified']
                         if role == 'actor' and commit:

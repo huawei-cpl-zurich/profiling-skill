@@ -306,3 +306,12 @@ observer resumes the original call; dispatch intent without a recoverable call
 requires observation and never permits another dispatch. Unchanged kernels use
 retained evidence, while actors, legacy campaigns and preflight checks skip this
 acquisition. Failed acquisitions remain honest unavailable reports.
+
+If the controller stops during required acquisition, `Campaign.run` can reattach
+that analyzer before model dispatch. It verifies the retained frozen inputs,
+restores the private original execution context, and observes the original call
+without granting a new budget. An expired deadline produces a terminal timeout
+and owned-work cleanup without starting a model. The controller atomically saves
+model-dispatch intent before launching it; an existing intent or missing trusted
+original clock remains observation-required and never authorizes a second model.
+Both clock and dispatch audit files are retained with experiment diagnostics.

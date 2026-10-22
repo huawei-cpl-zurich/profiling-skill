@@ -477,3 +477,22 @@ def test_preflight_skips_before_agent_acquisition(tmp_path):
     instance = make_launcher(tmp_path)
     instance.before_agent = lambda: pytest.fail('preflight acquired profile')
     assert instance.launch(preflight_only=True)['exit_code'] == 0
+
+
+def test_after_agent_runs_with_original_clock_and_tool_server_still_live(tmp_path):
+    instance = make_launcher(tmp_path)
+    fake_model(instance, "print('finished')\n")
+    seen = []
+    def after(result):
+        assert result['returncode'] == 0 and not result['timed_out']
+        assert instance.deadline_monotonic - time.monotonic() < instance.timeout
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.connect(str(instance.socket_dir / 'tool.sock'))
+            connection.sendall(json.dumps(dict(arguments=['help'])).encode() + b'\n')
+            reply = json.loads(connection.makefile('rb').readline())
+            assert reply['returncode'] == 0
+        seen.append(instance.deadline_monotonic)
+        return result
+    instance.after_agent = after
+    instance.launch()
+    assert len(seen) == 1

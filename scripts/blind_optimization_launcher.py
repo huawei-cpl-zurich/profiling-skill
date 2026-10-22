@@ -263,6 +263,10 @@ class BlindLauncher(ProductionLauncher):
     def before_agent(self) -> None:
         """Optional trusted work charged to the existing execution deadline."""
 
+    def after_agent(self, result: dict) -> dict:
+        """Optional report handling inside the original role clock/server lifetime."""
+        return result
+
     def launch(self, preflight_only: bool = False) -> dict:
         self.prepare()
         self.preflight()
@@ -305,6 +309,8 @@ class BlindLauncher(ProductionLauncher):
                         "utc_deadline": original["utc_deadline"]})
                 result = execute(command, self.root, remaining,
                                  (self.root / "agent.jsonl", self.root / "agent.stderr"))
+            if not preflight_only:
+                result = self.after_agent(result)
         finally:
             server.shutdown()
             server.server_close()

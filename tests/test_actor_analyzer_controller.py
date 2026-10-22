@@ -528,3 +528,47 @@ def test_prior_phase_observation_keeps_original_source_identity(tmp_path, restor
     record = json.loads((campaign.root / 'round-2-actor/qualifications.jsonl').read_text())
     assert record['source_sha256'] == hashlib.sha256(b'value = 0\n').hexdigest()
     assert record['call_id'] == 'baseline' and record['handle'] == 'retained-original'
+
+
+@pytest.mark.parametrize('aliases', [False, True])
+def test_unavailable_pipe_analysis_handoff_uses_original_timing_compiler_paths(tmp_path, aliases):
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            campaign.qualify(phase, {'state': 'completed', 'correctness': True,
+                                    'source_sha256': digest(campaign.workspace / 'candidate.py')})
+        else:
+            native = {
+                'timing': 'evidence/retained-timing/results/summary.json',
+                'compiler': 'evidence/retained-ir/compiler-evidence/candidate/ttir.txt'}
+            retained = {'timing': json.dumps({'state': 'completed', 'selector': 'task_kernel',
+                'timing': {'median_us': 3245.815}, 'source_sha256': digest(campaign.workspace / 'candidate.py')}),
+                'compiler': 'tt.func @task_kernel() { return }'}
+            (phase / 'reports').mkdir()
+            evidence = []
+            for kind, relative in native.items():
+                original = phase / 'candidate-snapshot' / relative
+                original.parent.mkdir(parents=True, exist_ok=True)
+                original.write_text(retained[kind])
+                if aliases:
+                    relative = 'evidence/' + kind + '.json'
+                    alias = phase / 'reports' / relative
+                    alias.parent.mkdir(parents=True, exist_ok=True)
+                    alias.write_text(retained[kind])
+                evidence.append({'path': relative, 'kind': kind, 'kernels': ['task_kernel'], 'cases': ['task01']})
+            report = {'candidate_commit': commit, 'profiling': {'status': 'unavailable',
+                      'reason': 'Retained pipe handle remained observation-unavailable'},
+                      'evidence': evidence, 'observations': [{'finding': 'Timing retained; pipe bottleneck unknown',
+                      'evidence': [evidence[0]['path']], 'confidence': 'high'}],
+                      'bottlenecks': [], 'ceilings': [], 'unknowns': ['Pipe metrics unavailable']}
+            (phase / 'reports/analysis.json').write_text(json.dumps(report))
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    result = campaign.run()
+    assert result['phases']['round-1-analyzer']['analysis_valid'] == (not aliases)
+    assert (campaign.workspace / 'analysis.json').exists() == (not aliases)
+    if not aliases:
+        handoff = json.loads((campaign.workspace / 'analysis.json').read_text())
+        assert handoff['profiling']['status'] == 'unavailable'
+        assert handoff['evidence'][0]['path'] == 'evidence/retained-timing/results/summary.json'
+        assert 'tt.func @task_kernel' in campaign.git('show',
+            'HEAD:experiments/round-1-analyzer/trusted-evidence/retained-ir/compiler-evidence/candidate/ttir.txt')

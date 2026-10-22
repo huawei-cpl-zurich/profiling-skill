@@ -398,6 +398,7 @@ def main(argv=None):
     parser.add_argument('--timing-captures', type=positive_count, default=5)
     parser.add_argument('--pipe-captures', type=positive_count, default=3)
     args = parser.parse_args(argv)
+    capture_configuration = dict(timing_captures=args.timing_captures, pipe_captures=args.pipe_captures)
     if args.verb == 'help':
         print('experiment-tool {check,timing,pipes,ir,sanitize} [--implementation baseline|candidate]\n'
               'sanitize [--sanitizer memcheck|racecheck|synccheck] (Triton only)\n'
@@ -406,19 +407,22 @@ def main(argv=None):
               'timing/pipes/sanitize additionally verify exactly one exported compute launch in a bounded profiler stream;\n'
               'check/ir do not verify that stream. launch_contract reports each guarantee separately.\n'
               'A separate check call is unnecessary before timing.\n'
-              'Results and diagnostics appear under evidence/CALL_ID. --timing-captures N defaults to five BasicInfo samples;\n'
-              '--pipe-captures N defaults to three PipeUtilization captures; both must be positive integers.\n'
+              'Results and diagnostics appear under evidence/CALL_ID.\n'
+              f'Effective --timing-captures: {args.timing_captures} BasicInfo samples; '
+              f'--pipe-captures: {args.pipe_captures} PipeUtilization captures.\n'
+              'Overrides must be positive integers; retain configured counts unless a justified change fits the deadline.\n'
               'ir returns Triton compiler artifacts; native ir is unsupported.\n'
               'check and ir do not require a profiler. Optional execution.json utc_deadline bounds original role work,\n'
               'including staging and device waits; observation resumes the same call without resetting its budget.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
+        print(json.dumps(dict(capture_configuration=capture_configuration)))
         return 0
     try:
         tools = Tools(args.bundle, args.workspace, args.target, args.runtime)
         if args.verb == 'observe' and not args.call_id: parser.error('observe requires CALL_ID')
         result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(
             args.verb, args.implementation, args.sanitizer,
-            timing_captures=args.timing_captures, pipe_captures=args.pipe_captures)
+            **capture_configuration)
         print(json.dumps(result, indent=2))
         return 1 if result.get('state') == 'failed' else 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:

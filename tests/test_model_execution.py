@@ -115,6 +115,13 @@ class ExecutionTests(unittest.TestCase):
                 compiler=execution.GECompiler(torch_module=FakeTorch(), backend=broken))
         self.assertEqual(caught.exception.stage, "backend-compilation")
 
+    def test_phase_timeout_is_not_wrapped_as_model_execution_failure(self):
+        def expired(graph, args):
+            raise TimeoutError('original deadline')
+        with self.assertRaisesRegex(TimeoutError, 'original deadline'):
+            execution.prepare_model(lambda: lambda x: x, (1,), {}, lambda value: None,
+                compiler=execution.GECompiler(torch_module=FakeTorch(), backend=expired))
+
     def test_factory_eval_and_inference_are_used_in_all_phases(self):
         phases = []
         active = False

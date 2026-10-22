@@ -204,6 +204,9 @@ def probe_candidate(factory, case_provider, validator, *, candidate_file,
             stage = "candidate-preparation"
             prepared = prepare_model(lambda: model, args, kwargs, validate,
                                      compiler=selected, synchronize=synchronize)
+            stage = "candidate-input-mutation"
+            for original, snapshot in snapshots:
+                torch.testing.assert_close(original, snapshot, rtol=0, atol=0, equal_nan=True)
             captured["evidence"] = prepared.evidence
             evidence.append(prepared.evidence)
             stage = "private-case-provider"
@@ -214,7 +217,14 @@ def probe_candidate(factory, case_provider, validator, *, candidate_file,
                 "backend": backend, "fullgraph": True, "eager_preflight": True,
                 "compile_count": sum(item["compile_count"] for item in evidence),
                 "compiled_executions": sum(item["compiled_executions"] for item in evidence)}
+    except TimeoutError:
+        # The worker owns the absolute phase deadline and its budget attribution.
+        raise
     except Exception as error:
+        # Dynamo/backend adapters may wrap the asynchronous deadline exception.
+        for cause in _chain(error):
+            if isinstance(cause, TimeoutError):
+                raise cause
         retained = traceback.format_exc()
         (private / "traceback.txt").write_text(retained)
         digest = hashlib.sha256(retained.encode()).hexdigest()
@@ -238,6 +248,8 @@ def probe_candidate(factory, case_provider, validator, *, candidate_file,
                             summary["actual_dtype"] != summary["expected_dtype"] or
                             not summary["actual_finite"] or summary.get("max_abs", 0) != 0):
                         result["category"] = "candidate-correctness-error"
+            except TimeoutError:
+                raise
             except Exception:
                 (private / "reference-diagnostic-error.txt").write_text(traceback.format_exc())
         (private / "public-result.json").write_text(json.dumps(result, indent=2, allow_nan=False))

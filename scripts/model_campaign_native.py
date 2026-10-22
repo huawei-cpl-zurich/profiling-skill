@@ -55,6 +55,8 @@ def check(root, env, remaining):
     from private_campaign_cases import make_case, validate
     try:
         import candidate
+    except TimeoutError:
+        raise
     except Exception as error:
         owned = Path(root / 'candidate.py').resolve()
         line = getattr(error, 'lineno', None) if getattr(error, 'filename', None) == str(owned) else None

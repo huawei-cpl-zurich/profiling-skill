@@ -30,7 +30,10 @@ status, numerical assumptions, sources, units and missing information. Discuss
 estimated distance to the appropriate roofline, or why it cannot be established.
 
 Add comparison: {status: copy context.status, rounds: [...], selection_reason,
-interpretation}. Include context.previous_distinct whenever present, even if its
+interpretation}. For the first round with empty history, use exactly
+{"status": "first", "rounds": [], "interpretation": "No previous kernel exists"};
+the controller owns the empty historical selection. Never select the current
+round. Include context.previous_distinct whenever present, even if its
 analysis failed (explain unavailable metrics). Optionally select one additional
 older distinct kernel with a specific reason. Read each selected round's
 candidate.py, analysis.json if valid, record.json and retained evidence. Compare

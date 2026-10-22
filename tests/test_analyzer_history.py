@@ -304,3 +304,34 @@ def test_optional_older_selection_cannot_repeat_previous_source(tmp_path):
     with pytest.raises(ValueError, match='distinct source'): history.validate_round(value, ctx)
     value['comparison']['rounds'] = [3, 2]
     history.validate_round(value, ctx)
+
+
+@pytest.mark.parametrize('profiling', ['unavailable', 'acquired'])
+def test_first_round_controller_owns_empty_selection_preserving_raw_diagnostic(tmp_path, profiling):
+    ctx = history.context(tmp_path, b'kernel', 'a'*40, 1)
+    value = report(ctx)
+    value['comparison'].update(rounds=[1], selection_reason='No historical kernel exists')
+    if profiling == 'acquired':
+        path = 'evidence/current/results/summary.json'
+        value.update(profiling=dict(status='acquired'),
+            evidence=[dict(path=path, kind='profile', cases=['case'], kernels=['kernel'])],
+            bottlenecks=[dict(finding='Possible memory limit', evidence=[path], confidence='low')],
+            utilization=[dict(status='measured', description='MAC', cases=['case'], kernels=['kernel'], evidence=[path])])
+    normalized = history.finalize(value, ctx, tmp_path, [])
+    assert normalized['comparison']['rounds'] == []
+    assert normalized['comparison']['results'] == []
+    assert normalized['controller_diagnostics']['first_round_selection']['reported_rounds'] == [1]
+    assert value['comparison']['rounds'] == [1]
+    value['comparison']['status'] = 'new'
+    with pytest.raises(ValueError, match='status'): history.finalize(value, ctx, tmp_path, [])
+
+
+def test_historical_unknown_selection_remains_invalid_after_first_round_normalization(tmp_path):
+    folder = tmp_path / 'round-1'
+    folder.mkdir()
+    (folder / 'candidate.py').write_text('old')
+    (folder / 'record.json').write_text(json.dumps(dict(round=1, source_sha256='old')))
+    ctx = history.context(tmp_path, b'new', 'a'*40, 2)
+    value = report(ctx)
+    value['comparison']['rounds'] = [1, 2]
+    with pytest.raises(ValueError, match='unknown'): history.finalize(value, ctx, tmp_path, [])

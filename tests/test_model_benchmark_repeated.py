@@ -32,6 +32,8 @@ class RepeatedBenchmarkTests(unittest.TestCase):
         self.assertEqual(row['metrics']['baseline_latency_ms']['sample_stddev'], 0)
         self.assertEqual(row['metrics']['candidate_all_kernel_busy_us']['unit'], 'us')
         self.assertEqual(result['state'], 'complete')
+        self.assertTrue(result['within_repetition_comparable'])
+        self.assertFalse(result['comparability']['comparable'])
 
     def test_failure_and_partial_cases_not_silently_replaced(self):
         failed = report(9)

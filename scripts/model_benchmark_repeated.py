@@ -80,11 +80,13 @@ def aggregate(reports, requested=10):
         result['cases'].append(dict(id=name, metrics=summary))
     if result['completed_repetitions'] == requested:
         result['state'] = 'complete'
-    result['comparability']['comparable'] = comparable and result['state'] == 'complete'
+    result['within_repetition_comparable'] = comparable and result['state'] == 'complete'
     # Per-run telemetry does not establish matching conditions ACROSS runs. Keep
     # this qualification even when every individual paired acquisition is sound.
     result['cross_repetition_comparability'] = dict(comparable=False,
         reasons=['verify physical device, clock/load policy and runtime across retained runs'])
+    result['comparability']['reasons'].append(
+        'cross-repetition conditions require independent verification')
     return result
 
 

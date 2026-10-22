@@ -123,6 +123,13 @@ def cleanup_phase(phase, remote=managed_observation):
             continue
         try:
             receipt = json.loads(path.read_text())
+            if path == phase_worker and receipt.get('remote_folder') and receipt.get('handle'):
+                from model_campaign_warm import shutdown_owned_phase
+                stopped = shutdown_owned_phase(path)
+                calls.append({'worker_shutdown': stopped})
+                if stopped['state'] != 'terminal':
+                    uncertain = True
+                    continue
             if path != phase_worker and receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
             if receipt.get('dispatch_intent') and not receipt.get('handle'):
@@ -143,7 +150,7 @@ def cleanup_phase(phase, remote=managed_observation):
                 save(path, receipt)
             else:
                 uncertain = True
-        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
             uncertain = True
             calls.append({'call_id': path.parent.name, 'error': str(error)})
     result = {'state': 'observation-required' if uncertain else 'terminal', 'calls': calls}
@@ -153,6 +160,8 @@ def cleanup_phase(phase, remote=managed_observation):
 
 def bridge(config_path, arguments):
     """Keep managed Tools receipts and source identity outside the agent mount."""
+    if arguments[:1] == ['stop']:
+        raise ValueError('phase shutdown is a trusted controller operation')
     config = json.loads(config_path.read_text())
     workspace, phase = Path(config['workspace']), config_path.parent
     pending_calls = []

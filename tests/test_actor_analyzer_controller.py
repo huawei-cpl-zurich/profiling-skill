@@ -840,3 +840,8 @@ def test_actor_carry_forward_qualification_tracks_source_not_phase_commit(tmp_pa
         assert actor['candidate_commit'] != analyzer['candidate_commit']
         from campaign_batch import failure
         assert failure(result) == 'unverified candidate'
+
+
+def test_public_bridge_cannot_request_trusted_phase_shutdown(tmp_path):
+    with pytest.raises(ValueError, match='trusted controller'):
+        bridge(tmp_path / 'absent-config.json', ['stop'])

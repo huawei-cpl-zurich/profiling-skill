@@ -271,3 +271,11 @@ filtered before per-device queries, leases, or probes; missing configured IDs
 fail closed. Allowed busy devices wait for isolation. The application still
 uses logical device zero. A retained live phase keeps its original allowance;
 observe/cancel that handle before starting a phase with a different allowance.
+
+Trusted cleanup must invoke the tool CLI `stop` and require `worker_closed:true`
+before releasing a phase. The controller does this automatically. A terminal
+outer transport handle alone does not prove its Python worker has exited.
+Shutdown retains its own control handle, verifies private PID/start-time/cwd
+identity, requests cooperative exit, and escalates only verified owned processes
+when necessary. Repeat `stop` to observe a pending control; do not redispatch it.
+This operation is unavailable through the public actor/analyzer tool bridge.

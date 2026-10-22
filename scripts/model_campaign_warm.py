@@ -72,7 +72,7 @@ def start(service, operation):
             return service.publish(receipt)
         remote = tools.cwd.rstrip('/') + '/model-phase-' + ident
         phase = dict(remote_folder=remote, first_call=ident, deadline=context['utc_deadline'],
-                     activation_required=True, devices=devices)
+                     activation_required=True, devices=devices, runtime=tools.runtime)
         staging = folder / 'phase'
         shutil.copytree(service.bundle, staging)
         (staging / 'inbox').mkdir()
@@ -265,3 +265,55 @@ def observe(tools, ident):
             receipt['state'] = 'observation-unavailable'
         save(folder / 'receipt.json', receipt)
         return dict(receipt, next='experiment-tool observe ' + ident) if receipt['state'] not in TERMINAL else receipt
+
+
+def _shutdown_phase(tools):
+    """Stop the actual owned worker even if its outer job reports terminal."""
+    phasefile = tools.state / 'phase.json'
+    if not phasefile.exists():
+        return dict(state='terminal', worker_closed=True)
+    phase = json.loads(phasefile.read_text())
+    control = phase.get('shutdown', {})
+    if not control.get('handle'):
+        if control.get('dispatch_intent'):
+            return dict(state='observation-required', worker_closed=False, reason='shutdown dispatch handle unknown')
+        source = Path(__file__).with_name('model_phase_shutdown.py').read_text()
+        script = tools.state / 'shutdown-phase.sh'
+        script.write_text("#!/bin/bash\nset -eu\npython - " + shlex.quote(phase['remote_folder'])
+                          + " <<'PY'\n" + source + "\nPY\n")
+        phase['shutdown'] = dict(dispatch_intent=True)
+        save(phasefile, phase)
+        control = tools.remote('run', tools.target, '--runtime', tools.runtime,
+                               '--cwd', phase['remote_folder'], '--file', script)
+        phase['shutdown'].update(control)
+        save(phasefile, phase)
+    else:
+        control = tools.remote('observe', control['handle'], '--wait', '--timeout', '15')
+        phase['shutdown'].update(control)
+        save(phasefile, phase)
+    if control.get('handle') and control.get('state') not in TERMINAL:
+        control = tools.remote('observe', control['handle'], '--wait', '--timeout', '15')
+        phase['shutdown'].update(control)
+        save(phasefile, phase)
+    closed = control.get('state') == 'completed' and control.get('exit') == 0
+    return dict(state='terminal' if closed else 'observation-required', worker_closed=closed,
+                control_handle=phase['shutdown'].get('handle'))
+
+
+def shutdown_phase(tools):
+    try:
+        return _shutdown_phase(tools)
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+        return dict(state='observation-required', worker_closed=False, diagnostic=type(error).__name__)
+
+
+def shutdown_owned_phase(phasefile):
+    """Controller boundary: recover registered transport from an owned receipt."""
+    from blind_optimization_tools import Tools
+    phasefile = Path(phasefile)
+    phase = json.loads(phasefile.read_text())
+    target = phase['handle'].split(':')[1]
+    tools = Tools(phasefile.parent, phasefile.parent / 'shutdown-private', target,
+                  phase.get('runtime', 'py311-torch'))
+    tools.state = phasefile.parent
+    return shutdown_phase(tools)

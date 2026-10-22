@@ -10,11 +10,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
 from blind_optimization_launcher import BlindLauncher, LaunchError, write_json
 from actor_analyzer_contract import build_prompt, validate_analysis
+import analyzer_history
 
 
 def digest(path):
@@ -196,6 +198,15 @@ class RoleLauncher(BlindLauncher):
                      'Finish with timing (or pipes if useful) returning '
                      'launch_contract.profile_stream_verified=true to qualify the final candidate. '
                      'Timing verification does not require diagnostic profiling analysis.\n')
+        if campaign.analysis_contract == 2:
+            text += ('\nAnalysis contract 2: read /history/context.json and retained round records. '
+                     'The controller supplies exact source_diff, identities and comparison requirements.\n')
+            if role == 'analyzer':
+                text += (Path(__file__).resolve().parents[1] / 'prompts/actor-analyzer/history.md').read_text()
+            else:
+                text += ('Read /history/context.json latest_analysis status before using prior reports. '
+                         'Read the latest valid report and its selected comparison reports and candidate.py files; '
+                         'record which findings you considered, including agreement/disagreement.\n')
         prompt.write_text(text)
         super().__init__(phase, campaign.bundle, prompt, campaign.model,
                          ['unused'], skill=campaign.skill or (
@@ -216,6 +227,12 @@ class RoleLauncher(BlindLauncher):
                             str(self.workspace)], check=True, capture_output=True)
             subprocess.run(['git', '-C', str(self.workspace), 'checkout', '--detach', self.commit],
                            check=True, capture_output=True)
+            if self.campaign.analysis_contract == 2:
+                ctx = json.loads((self.campaign.history / 'context.json').read_text())
+                if ctx['repeated_round'] is not None:
+                    evidence = self.campaign.history / f"round-{ctx['repeated_round']}/evidence"
+                    if evidence.exists():
+                        shutil.copytree(evidence, self.workspace / 'evidence', dirs_exist_ok=True)
             if self.skill_source:
                 (self.workspace / '.agents/skills/ascend-profiling').mkdir(parents=True)
         config = self.root / 'tool-config.json'
@@ -291,17 +308,21 @@ class RoleLauncher(BlindLauncher):
             for name in self.campaign.coding_skills:
                 retained += ['--ro-bind', str(self.frozen / 'coding-skills' / name),
                              '/workspace/.agents/skills/' + name]
+        if self.campaign.analysis_contract == 2:
+            retained += ['--ro-bind', str(self.campaign.history), '/history']
         return retained + ['--bind', str(self.reports), '/analysis']
 
 
 class Campaign:
     def __init__(self, output, bundle, model, tool_command, instruction, *, skill=None,
                  rounds=4, actor_budget=1200, analyzer_budget=600, actor_only=False,
-                 auth_home=None, runner=None, coding_skills=(), profiling_skills=()):
+                 auth_home=None, runner=None, coding_skills=(), profiling_skills=(), analysis_contract=2):
         if min(rounds, actor_budget, analyzer_budget) <= 0:
             raise ValueError('rounds and budgets must be positive')
         self.root, self.bundle = Path(output).resolve(), Path(bundle).resolve()
         self.workspace = self.root / 'workspace'
+        self.history = self.root / 'history'
+        self.analysis_contract = analysis_contract
         self.model, self.tool_command, self.instruction = model, tool_command, instruction
         self.profiling_source = Path(skill).resolve() if skill else None
         self.skill = self.root / 'profiling-skill' if skill else None
@@ -349,6 +370,14 @@ class Campaign:
             self.config['profiling_skills'] = {name: skill_manifest(directory)
                 for name, directory in self.profiling_skills.items()}
 
+        existing = self.root / 'state.json'
+        if existing.exists():
+            self.analysis_contract = json.loads(existing.read_text())['configuration'].get('analysis_contract', 1)
+        if self.analysis_contract == 2:
+            self.config['analysis_contract'] = 2
+        elif self.analysis_contract != 1:
+            raise ValueError('unsupported analysis contract')
+
     def verify_inputs(self):
         if directory_manifest(self.bundle) != self.config['bundle_manifest']:
             raise LaunchError('task bundle changed; preserve original campaign inputs')
@@ -378,6 +407,8 @@ class Campaign:
         if self.root.exists():
             raise LaunchError('unrecognized existing campaign output')
         self.workspace.mkdir(parents=True)
+        if self.analysis_contract == 2:
+            self.history.mkdir()
         if self.skill:
             shutil.copytree(self.profiling_source, self.skill)
             if skill_manifest(self.skill) != self.config['profiling_manifest']:
@@ -418,6 +449,22 @@ class Campaign:
         return RoleLauncher(self, phase, role, budget, commit).launch()
 
     def finish_phase(self, phase, role, entry, state):
+        if role == 'analyzer' and self.analysis_contract == 2:
+            retained = self.history / ('round-' + phase.name.split('-')[1])
+            if (retained / 'record.json').exists():
+                record = json.loads((retained / 'record.json').read_text())
+                if record['candidate_commit'] != entry['candidate_commit']:
+                    raise LaunchError('immutable history disagrees with pending phase')
+                if digest(retained / 'candidate.py') != record['source_sha256']:
+                    raise LaunchError('retained candidate identity changed')
+                entry.update({key: record[key] for key in
+                              ('analysis_valid', 'analysis_error', 'evidence_sha256')})
+                handoff = json.loads((retained / 'analysis.json').read_text()) if record['analysis_valid'] else dict(
+                    contract_version=2, candidate_commit=entry['candidate_commit'], status='invalid',
+                    reason=record['analysis_error'])
+                save(self.workspace / 'analysis.json', handoff)
+                self.commit(phase.name + ': recovered retained performance analysis')
+                return
         archive = self.workspace / 'experiments' / phase.name
         archive.mkdir(parents=True, exist_ok=True)
         for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr',
@@ -447,6 +494,7 @@ class Campaign:
                                 symlinks=True, ignore=shutil.ignore_patterns('*.tar.gz'))
             elif report_path.exists():
                 shutil.copyfile(report_path, archive / 'raw-analysis.json')
+            acquisitions = {}
             try:
                 report = validate_analysis(json.loads(report_path.read_text()), entry['candidate_commit'])
                 verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
@@ -467,11 +515,54 @@ class Campaign:
                             or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
                         raise ValueError('citation lacks its authoritative call summary')
                     entry['evidence_sha256'][str(relative_summary)] = digest(summary_path)
-                    validate_citation(evidence, json.loads(summary_path.read_text()), expected_source, path)
-                shutil.copyfile(report_path, self.workspace / 'analysis.json')
+                    summary = json.loads(summary_path.read_text())
+                    validate_citation(evidence, summary, expected_source, path)
+                    receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
+                    receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+                    acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
+                        hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
+                if self.analysis_contract == 2:
+                    ctx = json.loads((self.history / 'context.json').read_text())
+                    attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
+                    attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
+                                    and item.get('request', {}).get('source_sha256') == expected_source
+                                    for item in attempts)
+                    if ctx['status'] != 'unchanged' and not attempted:
+                        raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
+                    if ctx['status'] == 'unchanged' and not attempted:
+                        repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
+                        acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
+                    report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+                save(self.workspace / 'analysis.json', report)
                 entry['analysis_valid'] = True
             except (ValueError, OSError) as error:
                 entry.update(analysis_valid=False, analysis_error=str(error))
+            if self.analysis_contract == 2:
+                index = int(phase.name.split('-')[1])
+                folder = self.history / f'round-{index}'
+                staging = Path(tempfile.mkdtemp(prefix='.round-', dir=self.history))
+                final_folder, folder = folder, staging
+                source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
+                                                  entry['candidate_commit'] + ':candidate.py'])
+                (folder / 'candidate.py').write_bytes(source)
+                record = dict(round=index, candidate_commit=entry['candidate_commit'],
+                              source_sha256=hashlib.sha256(source).hexdigest(),
+                              analysis_valid=entry['analysis_valid'],
+                              analysis_error=entry.get('analysis_error'),
+                              evidence_sha256=entry.get('evidence_sha256', {}),
+                              acquisitions=list(acquisitions.values()) if entry['analysis_valid'] else [],
+                              bottlenecks=report['bottlenecks'] if entry['analysis_valid'] else [])
+                if entry['analysis_valid']:
+                    save(folder / 'analysis.json', report)
+                if (phase / 'trusted-evidence').exists():
+                    shutil.copytree(phase / 'trusted-evidence', folder / 'evidence')
+                save(folder / 'record.json', record)
+                os.rename(folder, final_folder)  # Publish once; never overwrite a retained round.
+                # Compatibility handoff must never silently retain a stale latest report.
+                if not entry['analysis_valid']:
+                    save(self.workspace / 'analysis.json', dict(contract_version=2,
+                        candidate_commit=entry['candidate_commit'], status='invalid',
+                        reason=entry['analysis_error']))
             self.commit(phase.name + ': performance analysis and diagnostics')
 
     def run(self):
@@ -518,6 +609,13 @@ class Campaign:
                             state['phases'][name] = {'state': 'skipped-no-verified-candidate'}
                             save(self.root / 'state.json', state)
                             continue
+                        if self.analysis_contract == 2:
+                            source = subprocess.check_output(['git', '-C', str(self.workspace),
+                                'show', (commit or self.git('rev-parse', 'HEAD').strip()) + ':candidate.py'])
+                            ctx = analyzer_history.context(self.history, source, commit, index)
+                            prior = ctx['history']
+                            ctx['latest_analysis'] = prior[-1] if prior else None
+                            save(self.history / 'context.json', ctx)
                         entry = {'state': 'dispatch-intent', 'candidate_commit': commit}
                         state['phases'][name] = entry
                         save(self.root / 'state.json', state)

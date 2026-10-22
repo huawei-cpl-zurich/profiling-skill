@@ -184,6 +184,7 @@ def phase(root, adapter):
                     sys.modules.pop('candidate', None)
             time.sleep(.1)
     finally:
-        if runtime.get('lease'):
-            runtime['lease'].close()
-        signal.signal(signal.SIGTERM, previous)
+        if os.getpid() == phase_pid:
+            if runtime.get('lease'):
+                runtime['lease'].close()
+            signal.signal(signal.SIGTERM, previous)

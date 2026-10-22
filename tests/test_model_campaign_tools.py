@@ -620,7 +620,10 @@ request=dict(operation='check',host_remaining_seconds=10,source_sha256=hashlib.s
 with tarfile.open(root/'inbox/call.tar.gz','w:gz') as archive:
  for name,data in [('candidate.py',candidate),('request.json',json.dumps(request).encode())]:
   info=tarfile.TarInfo(name);info.size=len(data);archive.addfile(info,io.BytesIO(data))
-sys.modules['model_device']=types.SimpleNamespace(acquire=lambda probe,remaining:(0,{},None))
+class Lease:
+ def close(self):
+  with (root/'lease-closed').open('a') as output: output.write(str(os.getpid())+'\n')
+sys.modules['model_device']=types.SimpleNamespace(acquire=lambda probe,remaining:(0,{},Lease()))
 def check(call,env,remaining):
  child=os.fork()
  if child==0:
@@ -629,12 +632,14 @@ def check(call,env,remaining):
  os.waitpid(child,0)
  assert not (call/'results/summary.json').exists(), 'child published parent report'
  assert not (call/'evidence.tar.gz').exists(), 'child published parent evidence'
+ assert not (root/'lease-closed').exists(), 'child closed parent lease'
  (root/'stop').touch()
  return dict(passed=True,variants=[0,1])
 os.environ['CAMPAIGN_REMAINING_SECONDS']='10'
 worker.phase(root,types.SimpleNamespace(check=check))
 report=json.loads((root/'calls/call/results/summary.json').read_text())
 assert report['state']=='completed' and report['worker_pid']==os.getpid()
+assert (root/'lease-closed').read_text().splitlines()==[str(os.getpid())]
 '''
     result = subprocess.run([sys.executable, '-c', script,
         str(Path(__file__).resolve().parents[1] / 'scripts'), str(tmp_path / 'phase'), child_exit],

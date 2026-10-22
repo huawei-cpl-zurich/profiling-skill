@@ -496,3 +496,24 @@ def test_prepare_comparison_releases_no_private_material(tmp_path, monkeypatch):
     assert (private / 'reference/secret').read_text() == 'PRIVATE ORACLE'
     assert json.loads((private / 'private-task.json').read_text())['check_indices'] == [0, 6]
     assert json.loads((public / 'task.json').read_text())['task'] == 'gdn'
+
+
+def test_prepare_wraps_bsa_function_without_changing_public_call(tmp_path, monkeypatch):
+    def prepare(private, root):
+        private.mkdir()
+        return dict(api='forward(value)', starter='import torch\ndef forward(value): return value\n')
+    monkeypatch.setitem(sys.modules, 'comparison_bsa', SimpleNamespace(prepare=prepare,
+        specifications=lambda root: [None] * 50))
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(nn=SimpleNamespace(Module=object)))
+    original = tools.shutil.copyfile
+    def copy(source, dest):
+        if Path(source).name in ('comparison_bsa.py', 'comparison_bsa_starter.py'):
+            Path(dest).write_text('# private adapter\n')
+        else:
+            original(source, dest)
+    monkeypatch.setattr(tools.shutil, 'copyfile', copy)
+    bundle = tools.prepare(tmp_path / 'bundle', 'bsa', tmp_path / 'references')
+    namespace = {}
+    exec((Path(bundle['public']) / 'candidate.py').read_text(), namespace)
+    marker = object()
+    assert namespace['Model']().forward(marker) is marker

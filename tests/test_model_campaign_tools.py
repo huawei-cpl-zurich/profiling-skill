@@ -31,7 +31,8 @@ def test_export_preserves_trusted_identity_and_pipe_rows_not_private_text(tmp_pa
         error='SECRET ORACLE', traceback='PRIVATE INPUT', result=dict(
             busy_time=dict(samples_us=[11, 12, 13], active_union_samples_us=[9, 10, 11]), captures=[
             dict(selector='candidate_kernel', pipe_rows=[{'Name': 'candidate_kernel',
-                'vec_ratio': '14.3', 'sub_block_id': 'vector0', 'private': 'SECRET ORACLE'},
+                'vec_ratio': '14.3', 'sub_block_id': 'vector0', 'private': 'SECRET ORACLE',
+                'unsupported_ratio': 'NaN', 'unsupported_time': 'inf'},
                 {'sub_block_id': 'SECRET ORACLE'}])]))
     (private / 'results/summary.json').write_text(json.dumps(value))
     tools.export(private, tmp_path / 'public')
@@ -70,8 +71,9 @@ def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, 
     assert called == ['benchmark', 'abc123']
 
 
-@pytest.mark.parametrize('incomplete', [False, True])
-def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monkeypatch, incomplete):
+@pytest.mark.parametrize('problem', ['valid', 'incomplete', 'duplicates', 'blank', 'na',
+                                    'nan', 'infinite', 'partial', 'multi-launch'])
+def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monkeypatch, problem):
     from contextlib import nullcontext
     from types import ModuleType
     calls, steps, synchronized = [], [], []
@@ -92,8 +94,17 @@ def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monke
         def export():
             output = Path(folder)
             output.mkdir(parents=True)
-            (output / 'kernel_details.csv').write_text('Name,Task Id,aiv_mte2_ratio\n' + ''.join(
-                f'{name},{task},44\n' for name in names for task in range(4 if incomplete else 5)))
+            count = 4 if problem == 'incomplete' else 10 if problem == 'multi-launch' else 5
+            rows = []
+            for name in names:
+                for task in range(count):
+                    identity = 0 if problem == 'duplicates' else task
+                    ratio = {'blank': '', 'na': 'N/A', 'nan': 'NaN', 'infinite': 'inf'}.get(problem, '44')
+                    if problem == 'partial' and task:
+                        ratio = 'N/A'
+                    rows.append(f'{name},0,47,{identity},{ratio},N/A\n')
+            (output / 'kernel_details.csv').write_text(
+                'Name,Device_id,Stream ID,Task ID,aiv_mte2_ratio,aic_mac_ratio\n' + ''.join(rows))
         return export
     def profile(**kwargs):
         assert kwargs['activities'] == ['cpu', 'npu']
@@ -119,7 +130,7 @@ def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monke
     config = ModuleType('torch_npu.profiler.experimental_config')
     config.AiCMetrics = SimpleNamespace(PipeUtilization='pipes')
     monkeypatch.setitem(sys.modules, 'torch_npu.profiler.experimental_config', config)
-    if incomplete:
+    if problem not in ('valid', 'multi-launch'):
         with pytest.raises(RuntimeError, match='export incomplete'):
             native.pipes(tmp_path, {}, lambda: 100)
         return
@@ -130,7 +141,8 @@ def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monke
     assert result['collector'] == 'Torch-NPU application PMU'
     assert result['granularity'] == 'per-task'
     assert result['discovered_names'] == list(names)
-    assert [len(capture['pipe_rows']) for capture in result['captures']] == [5, 5]
+    count = 10 if problem == 'multi-launch' else 5
+    assert [len(capture['pipe_rows']) for capture in result['captures']] == [count, count]
     assert all(row['Name'] == capture['selector'] for capture in result['captures']
                for row in capture['pipe_rows'])
     private = tmp_path / 'private'
@@ -142,6 +154,7 @@ def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monke
     assert public['collector'] == result['collector']
     assert public['granularity'] == result['granularity']
     assert public['captures'][0]['pipe_rows'][0]['aiv_mte2_ratio'] == 44
+    assert public['captures'][0]['pipe_rows'][0]['aic_mac_ratio'] == 'N/A'
 
 
 @pytest.mark.parametrize('finder_name', ['DependenciesFinder', 'DependencyFinder'])

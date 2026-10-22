@@ -221,3 +221,87 @@ def test_failed_bootstrap_upload_is_retryable_without_a_worker(tmp_path, failure
     pending = service.start('check')
     assert pending['state'] == 'running' and len(runs) == 1
     assert len(uploads) == 2
+
+
+@pytest.mark.parametrize('operation', ['targets', 'capabilities', 'preflight'])
+@pytest.mark.parametrize('failure', [RuntimeError('private transport detail'),
+                                    TimeoutError('original role deadline expired'), 'failed'])
+def test_discovery_failure_is_structured_and_retryable(tmp_path, operation, failure):
+    from model_campaign_service import CampaignService, CampaignTools
+    from model_campaign_tools import export
+    public, bundle = tmp_path / 'public', tmp_path / 'bundle'
+    public.mkdir()
+    bundle.mkdir()
+    (public / 'candidate.py').write_text('candidate source')
+    (public / 'execution.json').write_text(json.dumps(dict(utc_deadline=
+        (datetime.now(timezone.utc) + timedelta(seconds=600)).isoformat())))
+    tools = CampaignTools.__new__(CampaignTools)
+    tools.state, tools.workspace = tmp_path / 'state', tmp_path / 'private'
+    tools.state.mkdir()
+    tools.cwd, tools.target, tools.runtime = str(tmp_path / 'remote'), 'test', 'runtime'
+    fail, runs = [True], []
+    def remote(*args):
+        if args[0] == operation and fail[0]:
+            fail[0] = False
+            if isinstance(failure, Exception):
+                raise failure
+            return dict(state='failed')
+        if args[0] in ('targets', 'capabilities', 'preflight', 'upload'):
+            return dict(state='completed')
+        if args[0] == 'run':
+            runs.append(args)
+            return dict(state='running', handle='remote:test:job:worker')
+        if args[0] == 'logs':
+            return dict(state='running', content='')
+        raise AssertionError(args)
+    tools.remote = remote
+    service = CampaignService(tools, bundle, public, export)
+    failed = service.start('check')
+    assert failed['state'] == 'failed'
+    assert failed['failure_stage'] == ('budget' if isinstance(failure, TimeoutError) else 'infrastructure')
+    assert 'private transport detail' not in json.dumps(failed)
+    assert not (tools.state / 'phase.json').exists() and not runs
+    receipts = list(tools.state.glob('*/receipt.json'))
+    assert len(receipts) == 1 and json.loads(receipts[0].read_text())['state'] == 'failed'
+    assert service.start('check')['state'] == 'running'
+    assert len(runs) == 1
+
+
+def test_completed_download_reuses_same_handle_while_fetch_recovers(tmp_path):
+    from model_campaign_service import CampaignTools
+    from model_campaign_warm import observe
+    tools = CampaignTools.__new__(CampaignTools)
+    tools.state, tools.workspace, tools.target = tmp_path / 'state', tmp_path / 'private', 'test'
+    folder = tools.state / 'abc123'
+    folder.mkdir(parents=True)
+    (folder / 'receipt.json').write_text(json.dumps(dict(call_id='abc123',
+        state='running', handle='remote:test:job:worker', remote_folder='/remote/call')))
+    (tools.state / 'phase.json').write_text('{}')
+    fixture = tmp_path / 'fixture'
+    (fixture / 'results').mkdir(parents=True)
+    (fixture / 'results/summary.json').write_text(json.dumps(dict(state='completed')))
+    archive = tmp_path / 'evidence.tar.gz'
+    with tarfile.open(archive, 'w:gz') as stream:
+        stream.add(fixture / 'results/summary.json', arcname='results/summary.json')
+    downloads, fetches = [], []
+    def remote(*args):
+        if args[0] == 'observe':
+            return dict(state='running')
+        if args[0] == 'download':
+            downloads.append(args)
+            return dict(state='completed', handle='remote:test:transfer:once')
+        if args[0] == 'fetch':
+            fetches.append(args)
+            if len(fetches) == 1:
+                return dict(state='running')
+            if len(fetches) == 2:
+                raise OSError('observer interruption')
+            shutil.copyfile(archive, args[2])
+            return dict(state='completed')
+        raise AssertionError(args)
+    tools.remote = remote
+    assert observe(tools, 'abc123')['state'] == 'running'
+    assert observe(tools, 'abc123')['state'] == 'running'
+    assert observe(tools, 'abc123')['state'] == 'completed'
+    assert len(downloads) == 1
+    assert {args[1] for args in fetches} == {'remote:test:transfer:once'}

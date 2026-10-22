@@ -1,6 +1,7 @@
 """Private native matmul Model adapter. Never mount this into optimizer folders."""
 import csv
 import json
+import math
 from pathlib import Path
 import statistics
 import time
@@ -122,6 +123,31 @@ def _rows(folder, pattern):
     return rows
 
 
+def validate_pmu_captures(captures, samples=5):
+    """Require distinct attributable tasks with available finite pipe evidence."""
+    if not captures:
+        raise RuntimeError('application PMU export incomplete')
+    for capture in captures:
+        identities = set()
+        for row in capture['pipe_rows']:
+            identity = tuple(str(row.get(key, '')).strip()
+                             for key in ('Device_id', 'Stream ID', 'Task ID'))
+            if any(value in ('', 'N/A', 'NA', '-') for value in identity):
+                continue
+            for key, value in row.items():
+                if not key.endswith('_ratio'):
+                    continue
+                try:
+                    usable = math.isfinite(float(value))
+                except (TypeError, ValueError):
+                    usable = False
+                if usable:
+                    identities.add(identity)
+                    break
+        if len(identities) < samples:
+            raise RuntimeError('application PMU export incomplete')
+
+
 def pipes(root, env, remaining):
     """Application-level per-task PMU; deliberately not op-replay block PMU."""
     import torch
@@ -157,9 +183,7 @@ def pipes(root, env, remaining):
     rows = _rows(output / 'pmu', '*kernel_details.csv')
     captures = [dict(selector=name, basic_rows=[],
         pipe_rows=[row for row in rows if row.get('Name') == name]) for name in names]
-    if any(len(item['pipe_rows']) < 5 or not any(
-            key.endswith('_ratio') for row in item['pipe_rows'] for key in row) for item in captures):
-        raise RuntimeError('application PMU export incomplete')
+    validate_pmu_captures(captures)
     result = dict(state='complete', cases=['matmul-7-variant-0'],
         collector='Torch-NPU application PMU', granularity='per-task',
         discovered_names=names, captures=captures, warmup=20, samples=5)

@@ -2,6 +2,7 @@
 """Private Model-task tool boundary for isolated optimization roles."""
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 import shutil
@@ -34,7 +35,9 @@ def export(private, public):
                 numeric = {}
                 for key, item in row.items():
                     try:
-                        numeric[key] = float(item)
+                        number = float(item)
+                        if math.isfinite(number):
+                            numeric[key] = number
                     except (TypeError, ValueError):
                         if item == selector or item in ('N/A', 'NA', '-', ''):
                             numeric[key] = item

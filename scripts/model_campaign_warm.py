@@ -55,10 +55,17 @@ def start(service, operation):
             statefile.replace(tools.state / phase['first_call'] / 'phase.json')
             phase = None
     if phase is None:
-        for args in (('targets',), ('capabilities', tools.target), ('preflight', tools.target)):
-            result = tools.remote(*args)
-            if args[0] == 'preflight' and result.get('state') != 'completed':
-                raise RuntimeError('preflight unavailable')
+        try:
+            for args in (('targets',), ('capabilities', tools.target), ('preflight', tools.target)):
+                result = tools.remote(*args)
+                if result.get('state') != 'completed':
+                    raise RuntimeError('discovery unavailable')
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            receipt = dict(call_id=ident, target=tools.target, runtime=tools.runtime, cwd=tools.cwd,
+                state='failed', request=request, warm=True, dispatch_attempted=False,
+                failure_stage='budget' if isinstance(error, TimeoutError) else 'infrastructure')
+            save(folder / 'receipt.json', receipt)
+            return service.publish(receipt)
         remote = tools.cwd.rstrip('/') + '/model-phase-' + ident
         phase = dict(remote_folder=remote, first_call=ident, deadline=context['utc_deadline'],
                      activation_required=True)
@@ -215,6 +222,8 @@ def observe(tools, ident):
         if download is None:
             download = tools.remote('download', tools.target,
                 receipt['remote_folder'] + '/evidence.tar.gz', evidence / 'evidence.tar.gz')
+            receipt['download'] = download
+            save(folder / 'receipt.json', receipt)
         if download.get('state') not in TERMINAL:
             receipt['download'] = download
             save(folder / 'receipt.json', receipt)

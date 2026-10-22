@@ -26,6 +26,24 @@ def test_inventory_discovers_second_chip_above_seven():
     assert device.inspect_devices(table(), device.discover_devices(MAPPING)) == [(7, 1, 15)]
 
 
+def test_three_column_native_inventory_ignores_management_chips():
+    mapping = ('NPU ID    Chip ID    Chip Logic ID    Chip Name\n'
+               '0         0          0                Ascend 910B4-1\n'
+               '0         1          -                Mcu\n'
+               '7         0          7                Ascend 910B4-1\n')
+    assert device.discover_devices(mapping) == [(0, 0, 0), (7, 0, 7)]
+
+
+@pytest.mark.parametrize('mapping', [
+    '0 0 0 Ascend 910B4-1',  # Do not guess a shortened schema without its header.
+    'NPU ID Chip ID Chip Logic ID Chip Name\n0 0 0 Ascend\n1 0 0 Ascend',
+    'NPU ID Chip ID Chip Logic ID Other Name\n0 0 0 Ascend',
+])
+def test_unknown_or_duplicate_short_inventory_fails_closed(mapping):
+    with pytest.raises(RuntimeError, match='no unique device inventory'):
+        device.discover_devices(mapping)
+
+
 def test_real_two_chip_card_status_health_and_power_columns():
     inventory = device.discover_devices("3 0 6 6 Ascend910\n3 1 7 7 Ascend910")
     status = ("| 3 Ascend910 | OK | 163.7 47 0 / 0 |\n"

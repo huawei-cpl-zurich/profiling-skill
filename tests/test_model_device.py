@@ -20,6 +20,30 @@ def test_device_health_occupancy_and_missing_fields_fail_closed():
     assert not eligible(HEALTH, USAGES.replace('HBM Capacity(MB) : 65536', ''), EMPTY)
 
 
+def test_native_engine_usage_without_optional_aggregate_utilization():
+    native = USAGES.replace('NPU Utilization(%) : 0\n', '')
+    assert eligible(HEALTH, native, EMPTY)
+    for missing in ('Aicore Usage Rate(%) : 0\n', 'Aivector Usage Rate(%) : 0\n'):
+        assert not eligible(HEALTH, native.replace(missing, ''), EMPTY)
+    for value in ('1', 'unknown'):
+        assert not eligible(HEALTH, native + f'NPU Utilization(%) : {value}\n', EMPTY)
+
+
+def test_native_three_column_selector_preserves_runtime_mapping(tmp_path):
+    def query(*args):
+        if args == ('-m',):
+            return 'NPU ID Chip ID Chip Logic ID Chip Name\n7 0 7 Ascend 910B4-1\n7 1 - Mcu\n'
+        return {'health': HEALTH,
+                'usages': USAGES.replace('NPU Utilization(%) : 0\n', ''),
+                'proc-mem': EMPTY}[args[1]]
+    physical, env, lease = acquire(lambda env: env['ASCEND_RT_VISIBLE_DEVICES'] == '7',
+                                   lambda: 100, query=query, lease_root=tmp_path)
+    try:
+        assert physical == 7 and env['ASCEND_DEVICE_ID'] == '0'
+    finally:
+        lease.close()
+
+
 def test_targeted_selector_excludes_bad_chip_and_rechecks_under_lease(tmp_path):
     calls = []
     def query(*args):

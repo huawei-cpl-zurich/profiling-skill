@@ -1,7 +1,10 @@
 """Functional host dispatch checks for the neutral BSA Triton starter."""
 
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 import torch
@@ -17,8 +20,26 @@ def load_starter():
     return module
 
 
+@pytest.fixture
+def isolated_interpreter(request):
+    """Activate interpreter mode before Triton's process-wide first import."""
+    if os.environ.get("CPL_BSA_INTERPRETER_SUBPROCESS") == "1":
+        return True
+    environment = dict(os.environ, TRITON_INTERPRET="1",
+                       CPL_BSA_INTERPRETER_SUBPROCESS="1")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", request.node.nodeid],
+        cwd=STARTER.parents[2], env=environment, text=True,
+        capture_output=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return False
+
+
 @pytest.mark.parametrize("exact,causal", [(False, False), (False, True), (True, True)])
-def test_interpreted_kernel_matches_reference(monkeypatch, exact, causal):
+def test_interpreted_kernel_matches_reference(monkeypatch, exact, causal, isolated_interpreter):
+    if not isolated_interpreter:
+        return
     monkeypatch.setenv("TRITON_INTERPRET", "1")
     starter = load_starter()
     baseline_spec = importlib.util.spec_from_file_location(
@@ -42,7 +63,9 @@ def test_interpreted_kernel_matches_reference(monkeypatch, exact, causal):
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
-def test_interpreted_multiblock_strided_layout(monkeypatch, dtype):
+def test_interpreted_multiblock_strided_layout(monkeypatch, dtype, isolated_interpreter):
+    if not isolated_interpreter:
+        return
     monkeypatch.setenv("TRITON_INTERPRET", "1")
     starter = load_starter()
     baseline_spec = importlib.util.spec_from_file_location(

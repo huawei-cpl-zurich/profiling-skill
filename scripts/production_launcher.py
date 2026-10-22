@@ -23,10 +23,9 @@ class LaunchError(RuntimeError):
 class ProductionLauncher:
     """Provide the shared, controller-free Codex isolation primitives.
 
-    This class is intentionally not a campaign runner. The only production
-    experiment lifecycle is the simple runner's JSON phase contract. The
-    behavioral profiling gate subclasses this helper for its independent
-    blinded-evaluation workflow.
+    This class is intentionally not a campaign runner. Multi-round kernel
+    optimization uses the simple runner's JSON phase contract. Independent
+    profiling and blinded-evaluation launchers reuse these isolation helpers.
     """
 
     def __init__(

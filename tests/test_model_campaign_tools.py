@@ -83,8 +83,10 @@ def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, 
             self.workspace = workspace
     class FakeService:
         def __init__(self, client, bundle, public, exporter):
+            self.client = client
             assert client.state == public.parent / 'tool-state'
         def start(self, operation):
+            assert self.client.devices == [2, 5]
             called.append(operation)
             return dict(state='completed', correctness=True)
         def observe(self, call_id):
@@ -92,7 +94,7 @@ def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, 
             return dict(state='running', call_id=call_id)
     monkeypatch.setattr(tools, 'CampaignTools', FakeTools)
     monkeypatch.setattr(tools, 'CampaignService', FakeService)
-    prefix = ['--bundle', str(tmp_path / 'bundle'), '--workspace', str(workspace)]
+    prefix = ['--bundle', str(tmp_path / 'bundle'), '--workspace', str(workspace), '--devices', '2,5']
     assert tools.main(prefix + ['timing']) == 0
     assert json.loads(capsys.readouterr().out)['correctness'] is True
     assert tools.main(prefix + ['observe', 'abc123']) == 0
@@ -620,7 +622,10 @@ request=dict(operation='check',host_remaining_seconds=10,source_sha256=hashlib.s
 with tarfile.open(root/'inbox/call.tar.gz','w:gz') as archive:
  for name,data in [('candidate.py',candidate),('request.json',json.dumps(request).encode())]:
   info=tarfile.TarInfo(name);info.size=len(data);archive.addfile(info,io.BytesIO(data))
-sys.modules['model_device']=types.SimpleNamespace(acquire=lambda probe,remaining:(0,{},None))
+class Lease:
+ def close(self):
+  with (root/'lease-closed').open('a') as output: output.write(str(os.getpid())+'\n')
+sys.modules['model_device']=types.SimpleNamespace(acquire=lambda probe,remaining:(0,{},Lease()))
 def check(call,env,remaining):
  child=os.fork()
  if child==0:
@@ -629,12 +634,14 @@ def check(call,env,remaining):
  os.waitpid(child,0)
  assert not (call/'results/summary.json').exists(), 'child published parent report'
  assert not (call/'evidence.tar.gz').exists(), 'child published parent evidence'
+ assert not (root/'lease-closed').exists(), 'child closed parent lease'
  (root/'stop').touch()
  return dict(passed=True,variants=[0,1])
 os.environ['CAMPAIGN_REMAINING_SECONDS']='10'
 worker.phase(root,types.SimpleNamespace(check=check))
 report=json.loads((root/'calls/call/results/summary.json').read_text())
 assert report['state']=='completed' and report['worker_pid']==os.getpid()
+assert (root/'lease-closed').read_text().splitlines()==[str(os.getpid())]
 '''
     result = subprocess.run([sys.executable, '-c', script,
         str(Path(__file__).resolve().parents[1] / 'scripts'), str(tmp_path / 'phase'), child_exit],
@@ -642,3 +649,32 @@ assert report['state']=='completed' and report['worker_pid']==os.getpid()
     assert result.returncode == 0, result.stdout + result.stderr
     summary = json.loads((tmp_path / 'phase/calls/call/results/summary.json').read_text())
     assert summary['check'] == dict(passed=True, variants=[0, 1])
+
+
+def test_warm_launch_propagates_physical_allowance_to_actual_payload(tmp_path):
+    import subprocess, tarfile
+    from datetime import datetime, timedelta, timezone
+    import model_campaign_warm as warm
+    state = tmp_path / 'state'
+    folder = state / 'call'
+    folder.mkdir(parents=True)
+    remote = tmp_path / 'phase'
+    payload = tmp_path / 'execute-phase.py'
+    payload.write_text('import os,json\nprint(json.dumps(json.loads(os.environ["CAMPAIGN_ALLOWED_DEVICES"])))\n')
+    with tarfile.open(str(remote) + '.tar.gz', 'w:gz') as archive:
+        archive.add(payload, arcname='execute-phase.py')
+    (state / 'phase.json').write_text(json.dumps(dict(remote_folder=str(remote), devices=[2, 5])))
+    receipt = dict(call_id='call', request=dict(utc_deadline=(datetime.now(timezone.utc)
+        + timedelta(seconds=60)).isoformat()), upload=dict(state='completed'))
+    captured = []
+    def run(verb, *args):
+        assert verb == 'run'
+        script = Path(args[args.index('--file') + 1])
+        result = subprocess.run(['bash', str(script)], capture_output=True, text=True, check=True)
+        captured.append(json.loads(result.stdout))
+        return dict(state='running', handle='remote:fake:job:owned')
+    client = SimpleNamespace(state=state, target='fake', runtime='fake', cwd=str(tmp_path),
+        transfer=lambda receipt, kind: receipt[kind], remote=run)
+    result = warm.launch(client, receipt, folder)
+    assert captured == [[2, 5]]
+    assert result['handle'] == 'remote:fake:job:owned'

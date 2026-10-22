@@ -155,6 +155,8 @@ def main(argv=None):
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--target', default='bz-a3-1')
     parser.add_argument('--runtime', default='py311-torch')
+    parser.add_argument('--devices', type=lambda value: [int(item) for item in value.split(',')],
+                        help='comma-separated allowed physical IDs (for example 2,5)')
     parser.add_argument('verb', choices=('help', 'check', 'timing', 'pipes', 'observe'))
     parser.add_argument('call_id', nargs='?')
     options = parser.parse_args(argv)
@@ -174,6 +176,9 @@ def main(argv=None):
     private_workspace = options.workspace.parent / 'private-model-workspace'
     private_workspace.mkdir(exist_ok=True)
     tools = CampaignTools(options.bundle, private_workspace, options.target, options.runtime)
+    if options.devices is not None:
+        from model_device import device_allowlist
+        tools.devices = device_allowlist(options.devices)
     # Match controller cleanup ownership and pending-call discovery exactly.
     tools.state = options.workspace.parent / 'tool-state'
     tools.state.mkdir(exist_ok=True)

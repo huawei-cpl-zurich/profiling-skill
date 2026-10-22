@@ -41,11 +41,14 @@ def start(service, operation):
             stream.add(folder / name, arcname=name)
     statefile = tools.state / 'phase.json'
     phase = json.loads(statefile.read_text()) if statefile.exists() else None
+    devices = getattr(tools, 'devices', None)
     if phase and not phase.get('handle'):
         return dict(state='dispatch-unconfirmed', call_id=phase['first_call'],
                     recovery='Recover the original phase handle; never redispatch.')
     if phase:
         observed = tools.remote('observe', phase['handle'])
+        if phase.get('devices') != devices and observed['state'] not in TERMINAL:
+            raise ValueError('device allowance differs from retained phase; observe/cancel its handle first')
         if phase['deadline'] != context['utc_deadline'] and observed['state'] not in TERMINAL:
             return dict(state='phase-cleanup-required', handle=phase['handle'],
                         diagnostic=dict(kind='previous-phase-not-terminal'))
@@ -69,7 +72,7 @@ def start(service, operation):
             return service.publish(receipt)
         remote = tools.cwd.rstrip('/') + '/model-phase-' + ident
         phase = dict(remote_folder=remote, first_call=ident, deadline=context['utc_deadline'],
-                     activation_required=True)
+                     activation_required=True, devices=devices)
         staging = folder / 'phase'
         shutil.copytree(service.bundle, staging)
         (staging / 'inbox').mkdir()
@@ -149,6 +152,8 @@ def launch(tools, receipt, folder):
         return receipt
     tools._staging_deadline = deadline
     script = '#!/bin/bash\nset -eu\nexport CAMPAIGN_REMAINING_SECONDS=' + shlex.quote(str(remaining))
+    if phase.get('devices') is not None:
+        script += '\nexport CAMPAIGN_ALLOWED_DEVICES=' + shlex.quote(json.dumps(phase['devices']))
     script += '\nmkdir -p ' + shlex.quote(phase['remote_folder'])
     script += '\ntar -xzf ' + shlex.quote(phase['remote_folder'] + '.tar.gz')
     script += ' -C ' + shlex.quote(phase['remote_folder'])

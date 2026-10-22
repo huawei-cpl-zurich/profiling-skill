@@ -264,3 +264,10 @@ matmul continuations. Terminal matmul candidate/analyzer failures permanently
 freeze admission. Record batch-owned remote handles in `handles`; invoke
 `cancel_owned` with the installed cpl-remote cancellation boundary and observe
 nonterminal cancellation receipts. Lost observation never permits redispatch.
+
+Use the trusted tool CLI `--devices 2,5` to constrain physical device admission.
+The comma-separated list must contain distinct nonnegative IDs. Inventory is
+filtered before per-device queries, leases, or probes; missing configured IDs
+fail closed. Allowed busy devices wait for isolation. The application still
+uses logical device zero. A retained live phase keeps its original allowance;
+observe/cancel that handle before starting a phase with a different allowance.

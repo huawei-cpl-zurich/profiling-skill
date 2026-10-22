@@ -1,6 +1,7 @@
 """Trusted retained worker; task adapters and all evidence stay outside sandboxes."""
 from datetime import datetime, timezone
 import json
+import hashlib
 import importlib
 import os
 from pathlib import Path
@@ -12,6 +13,30 @@ import time
 import traceback
 
 from profile_device import bounded_run, wait_for_device
+
+
+def qualification_key(root, adapter, runtime, source_sha256):
+    """Identity of a proof reusable only inside this retained private runtime."""
+    if runtime is None or not (root / 'candidate.py').is_file():
+        return None
+    if hashlib.sha256((root / 'candidate.py').read_bytes()).hexdigest() != source_sha256:
+        return None
+    from model_campaign_task import trusted_bundle_root
+    bundle = trusted_bundle_root(root)
+    digest = hashlib.sha256()
+    for name in ('scripts', 'reference', 'benchmarks', 'skills', 'private-task.json', 'task.json', 'API.md',
+                 'candidate.py', 'execute.py', 'execute-phase.py'):
+        path = bundle / name
+        files = sorted(path.rglob('*')) if path.is_dir() else [path]
+        for item in files:
+            if item.is_file() and '__pycache__' not in item.parts:
+                digest.update(str(item.relative_to(bundle)).encode())
+                digest.update(item.read_bytes())
+    context = (str(bundle.resolve()), digest.hexdigest(), id(adapter),
+               tuple(id(getattr(adapter, name, None)) for name in ('check', 'benchmark', 'pipes', 'screen')),
+               runtime['physical'], runtime['torch_module_id'], id(sys.modules.get('torch')),
+               runtime['runtime_initializations'], tuple(sorted(runtime['env'].items())))
+    return hashlib.sha256(repr((source_sha256, context)).encode()).hexdigest()
 
 
 def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=None):
@@ -34,7 +59,7 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
         raise TimeoutError('original round deadline expired')
     summary = dict(state='failed', failure_stage='infrastructure', operation=request['operation'],
                    source_sha256=request['source_sha256'], worker_pid=os.getpid())
-    lease = None
+    lease, proof_key, proof_cache = None, None, {}
     try:
         if runtime is None and request.get('activation_required'):
             from phase_deadline import wait_for_activation
@@ -79,7 +104,18 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
         summary.update(physical_device=physical, logical_device=0, failure_stage='candidate')
         summary['progress'] = 'correctness-check'
         print('MODEL_STAGE=correctness-check', flush=True)
-        checked = adapter.check(root, env, remaining)
+        proof_key = qualification_key(root, adapter, runtime, request['source_sha256'])
+        proof_cache = runtime.setdefault('correctness_cache', {}) if runtime is not None else {}
+        reused = proof_cache.get(proof_key) if request['operation'] in ('benchmark', 'pipes') else None
+        if reused:
+            checked = dict(passed=True, variants=[0, 1], diagnostics=[])
+            summary['correctness_provenance'] = dict(reused, kind='phase-local-reuse')
+        else:
+            if proof_key:
+                proof_cache.pop(proof_key, None)
+            checked = adapter.check(root, env, remaining)
+            summary['correctness_provenance'] = dict(kind='fresh', original_call=root.name,
+                source_sha256=request['source_sha256'])
         summary['check'] = checked
         if checked.get('passed') is not True or set(checked.get('variants', [])) != {0, 1}:
             if runtime:
@@ -99,11 +135,15 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
             print('MODEL_STAGE=' + request['operation'], flush=True)
             summary['result'] = getattr(adapter, request['operation'])(root, env, remaining)
             if summary['result'].get('state') not in ('complete', 'completed'):
+                proof_cache.pop(proof_key, None)
                 return summary
+        if proof_key and not reused:
+            proof_cache[proof_key] = dict(original_call=root.name, source_sha256=request['source_sha256'])
         summary.update(state='completed')
         summary.pop('failure_stage')
         return summary
     except Exception as error:
+        proof_cache.pop(proof_key, None)
         summary.update(error=str(error), traceback=traceback.format_exc())
         summary['diagnostic'] = dict(kind='worker-failure', error_type=type(error).__name__,
                                     stage=summary.get('progress', 'device-acquisition'))

@@ -279,3 +279,12 @@ Shutdown retains its own control handle, verifies private PID/start-time/cwd
 identity, requests cooperative exit, and escalates only verified owned processes
 when necessary. Repeat `stop` to observe a pending control; do not redispatch it.
 This operation is unavailable through the public actor/analyzer tool bridge.
+
+Within one retained phase, timing and pipe measurements may reuse a passed
+source qualification. Explicit checks always run the full configured case and
+variant subset. Reuse requires identical source, trusted bundle fingerprint,
+adapter, physical device and runtime context. Measurement still executes fresh
+profile-case preparation and validation. Exported `correctness_provenance`
+identifies the original call and source hash; reused reports contain no fresh
+backend-check diagnostics. Failed checks or measurements invalidate that proof.
+Final benchmark case coverage, samples, and role deadlines remain unchanged.

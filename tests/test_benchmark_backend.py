@@ -73,6 +73,7 @@ if "fusion_contract" in job:
 if job["action"] == "profile":
     identity["round"] = job["round"]
     identity["kernel_name"] = job["profiling"]["kernel_name"]
+    identity["replay_mode"] = job["profiling"].get("replay_mode", "kernel")
 if mode == "wrong_identity": identity["cases"] = list(reversed(identity["cases"]))
 if mode == "wrong_check": identity["scope"] = "development"
 if mode == "wrong_round": identity["round"] = 2
@@ -174,7 +175,7 @@ def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: 
         "launch_count": 1,
         "replay_mode": "kernel",
         "kernel_name": result["selector"],
-        "driver_arguments": ["--kernel-name", result["selector"]],
+        "driver_arguments": ["--kernel-name", result["selector"], "--replay-mode", "kernel"],
     }
 
 
@@ -193,6 +194,15 @@ def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):
     assert first["job"]["calibration_attempt_id"] == "wave-2-first"
     assert second["job"]["calibration_attempt_id"] == "wave-2-retry"
     assert first["job"] != second["job"]
+
+
+@pytest.mark.parametrize("product,mode", [("a3", "application"), ("a5", "kernel")])
+def test_bsa_replay_choice_is_product_specific(tmp_path: Path, product: str, mode: str):
+    run = run_backend(tmp_path, request("bsa"), "bsa", product=product)
+    result = json.loads(run.stdout)
+    assert run.returncode == 0, result
+    assert result["job"]["profiling"]["replay_mode"] == mode
+    assert result["replay_mode"] == mode
 
 
 def test_profile_attempt_identity_changes_managed_job(tmp_path: Path):
@@ -368,10 +378,20 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
         "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
         "tool": "msprof op", "captures": 15, "aic_metrics": "BasicInfo", "warm_up": 3,
         "launch_count": 1, "replay_mode": "kernel", "kernel_name": "candidate_kernel",
-        "driver_arguments": ["--kernel-name", "candidate_kernel"],
+        "driver_arguments": ["--kernel-name", "candidate_kernel", "--replay-mode", "kernel"],
     }
     assert result["handle"] == "gz-a3:job-1"
     assert "client diagnostic" in result["diagnostics"]
+
+
+def test_bsa_profile_job_uses_application_replay(tmp_path: Path):
+    run = run_backend(tmp_path, request(benchmark="bsa", device=1,
+                                       cases=[47, 46, 49, 44, 43]),
+                      benchmark="bsa", mode="echo")
+    assert run.returncode == 0
+    profiling = json.loads(run.stdout)["job"]["profiling"]
+    assert profiling["replay_mode"] == "application"
+    assert profiling["driver_arguments"][-2:] == ["--replay-mode", "application"]
 
 
 @pytest.mark.parametrize("status", ["compile_error", "runtime_error", "correctness_error"])

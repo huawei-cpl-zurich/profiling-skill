@@ -27,13 +27,29 @@ def isolated_interpreter(request):
         return True
     environment = dict(os.environ, TRITON_INTERPRET="1",
                        CPL_BSA_INTERPRETER_SUBPROCESS="1")
+    selector = str(Path(__file__).resolve()) + "::" + request.node.nodeid.split("::", 1)[1]
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", request.node.nodeid],
+        [sys.executable, "-m", "pytest", "-q", selector],
         cwd=STARTER.parents[2], env=environment, text=True,
         capture_output=True, timeout=120,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return False
+
+
+@pytest.mark.parametrize("outside_checkout", [False, True])
+def test_interpreter_isolation_preserves_absolute_selector(tmp_path, outside_checkout):
+    """Exercise parent collection with a rootdir different from the child cwd."""
+    tests = Path(__file__).resolve().parent
+    cwd = tmp_path if outside_checkout else tests
+    selector = str(Path(__file__).resolve()) + "::test_interpreted_kernel_matches_reference[False-False]"
+    environment = os.environ.copy()
+    environment.pop("CPL_BSA_INTERPRETER_SUBPROCESS", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "--rootdir", str(cwd), selector],
+        cwd=cwd, env=environment, text=True, capture_output=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("exact,causal", [(False, False), (False, True), (True, True)])

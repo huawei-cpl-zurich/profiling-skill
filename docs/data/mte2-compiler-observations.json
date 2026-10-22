@@ -1,0 +1,521 @@
+{
+  "schema_version": 1,
+  "source_sha256": "619fb00eb600cb50aa8d3e7988274cb49c1c93ca54f734c0981ede49e4d14843",
+  "target": "Ascend910_9382",
+  "triton_module_version": "3.2.0",
+  "hivmc_query_stdout": "hivmc 0.3.0 (923475c46003 2026-07-29)\nRelease build\n",
+  "all_reference_exit_codes": 0,
+  "artifact_name_policy": "Names are stable local archive labels, not compiler stage filenames. Input stages are bound by the actual manifest input_arg.",
+  "limitation": "LLVM is the input to final bisheng -O2, not final ISA. Static operations are not dynamic counts, measured waits, physical bandwidth or performance.",
+  "controlled_memory": {
+    "archive_sha256": "906f91a99215756f17ebf2d6b784255c0ccff897e950b83fbc7c971a59e154b6",
+    "artifacts": [
+      {
+        "case": "count-16-1048576",
+        "stage": "adapter",
+        "bytes": 4427,
+        "sha256": "f61dcdb045e3bf40b1bc1e28bad8991c1e258f78134b8e7e42034332e08bd5f0",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [16] : memref<?xf32> to memref<256xf32, strided<[16], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[16], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-2-1048576",
+        "stage": "adapter",
+        "bytes": 4402,
+        "sha256": "9df0b4480d3b869829487e35877a6baf364872021f06232031582502f55549ff",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [2] : memref<?xf32> to memref<256xf32, strided<[2], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[2], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-32-1048576",
+        "stage": "adapter",
+        "bytes": 4427,
+        "sha256": "3a0ee569270dc5d996f4159037d1b49e4b6be321d6fb6af16900d93d51c2d2e1",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [32] : memref<?xf32> to memref<256xf32, strided<[32], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[32], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-4-1048576",
+        "stage": "adapter",
+        "bytes": 4402,
+        "sha256": "245307b74d962ea3ccb9fd332e5454fec717c04db3e85de939d2d982c22bf9d9",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [4] : memref<?xf32> to memref<256xf32, strided<[4], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[4], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-64-1048576",
+        "stage": "adapter",
+        "bytes": 4427,
+        "sha256": "88e07ca838a63a89980870ee78a27c22b1103e9804e218847c75a2ab966b65e6",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [64] : memref<?xf32> to memref<256xf32, strided<[64], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[64], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-8-1048576",
+        "stage": "adapter",
+        "bytes": 4402,
+        "sha256": "6b0cca618b6f3d92febd1d1224313861171f8c08b409284f1310d05489380364",
+        "excerpts": [
+          {
+            "line": 12,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%2], sizes: [256], strides: [8] : memref<?xf32> to memref<256xf32, strided<[8], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 24,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[8], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "count-1-1048576",
+        "stage": "adapter",
+        "bytes": 4309,
+        "sha256": "638fd63014747e45281cd97b996e0a5864300aad2a015cf9013bcd91ab732109",
+        "excerpts": [
+          {
+            "line": 10,
+            "text": "%reinterpret_cast = memref.reinterpret_cast %arg2 to offset: [%1], sizes: [256], strides: [1] : memref<?xf32> to memref<256xf32, strided<[1], offset: ?>> loc(#loc3)"
+          },
+          {
+            "line": 22,
+            "text": "memref.copy %subview, %subview_0 : memref<?xf32, strided<[1], offset: ?>> to memref<?xf32, strided<[1]>> loc(#loc1)"
+          }
+        ]
+      },
+      {
+        "case": "indexed-contiguous-1048576",
+        "stage": "adapter",
+        "bytes": 5355,
+        "sha256": "4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79",
+        "excerpts": [
+          {
+            "line": 25,
+            "text": "memref.copy %subview, %subview_0 : memref<?xi32, strided<[1], offset: ?>> to memref<?xi32, strided<[1]>> loc(#loc1)"
+          },
+          {
+            "line": 28,
+            "text": "%10 = scf.for %arg11 = %c0 to %9 step %c1 iter_args(%arg12 = %0) -> (tensor<256xf32>) {"
+          },
+          {
+            "line": 29,
+            "text": "%extracted = tensor.extract %8[%arg11] {DiscreteMemAccess} : tensor<256xi32> loc(#loc2)"
+          },
+          {
+            "line": 31,
+            "text": "%reinterpret_cast_3 = memref.reinterpret_cast %arg2 to offset: [%11], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 32,
+            "text": "%12 = memref.load %reinterpret_cast_3[%c0] : memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          }
+        ]
+      },
+      {
+        "case": "indexed-global-1048576",
+        "stage": "adapter",
+        "bytes": 5355,
+        "sha256": "4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79",
+        "excerpts": [
+          {
+            "line": 25,
+            "text": "memref.copy %subview, %subview_0 : memref<?xi32, strided<[1], offset: ?>> to memref<?xi32, strided<[1]>> loc(#loc1)"
+          },
+          {
+            "line": 28,
+            "text": "%10 = scf.for %arg11 = %c0 to %9 step %c1 iter_args(%arg12 = %0) -> (tensor<256xf32>) {"
+          },
+          {
+            "line": 29,
+            "text": "%extracted = tensor.extract %8[%arg11] {DiscreteMemAccess} : tensor<256xi32> loc(#loc2)"
+          },
+          {
+            "line": 31,
+            "text": "%reinterpret_cast_3 = memref.reinterpret_cast %arg2 to offset: [%11], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 32,
+            "text": "%12 = memref.load %reinterpret_cast_3[%c0] : memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          }
+        ]
+      },
+      {
+        "case": "indexed-local32-1048576",
+        "stage": "adapter",
+        "bytes": 5355,
+        "sha256": "4d12d93035f7b95bfa3407532b7f94af71b0a1620a025c93188f0f0153dd8b79",
+        "excerpts": [
+          {
+            "line": 25,
+            "text": "memref.copy %subview, %subview_0 : memref<?xi32, strided<[1], offset: ?>> to memref<?xi32, strided<[1]>> loc(#loc1)"
+          },
+          {
+            "line": 28,
+            "text": "%10 = scf.for %arg11 = %c0 to %9 step %c1 iter_args(%arg12 = %0) -> (tensor<256xf32>) {"
+          },
+          {
+            "line": 29,
+            "text": "%extracted = tensor.extract %8[%arg11] {DiscreteMemAccess} : tensor<256xi32> loc(#loc2)"
+          },
+          {
+            "line": 31,
+            "text": "%reinterpret_cast_3 = memref.reinterpret_cast %arg2 to offset: [%11], sizes: [1], strides: [1] : memref<?xf32> to memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          },
+          {
+            "line": 32,
+            "text": "%12 = memref.load %reinterpret_cast_3[%c0] : memref<1xf32, strided<[1], offset: ?>> loc(#loc2)"
+          }
+        ]
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "artifact": "mask-before/002-captured-input",
+      "stage": "late_hivm",
+      "bytes": 18113,
+      "sha256": "4b51c431b556d06da68d50066ac2f8d1d04d0bc686ffb739865dc1b345f4f5d9",
+      "excerpts": [
+        {
+          "line": 101,
+          "text": "scf.for %arg9 = %c0 to %c1024 step %c1 {"
+        },
+        {
+          "line": 102,
+          "text": "%46 = memref.load %34[%arg9] : memref<1024xi32, #hivm.address_space<ub>>"
+        },
+        {
+          "line": 103,
+          "text": "%47 = arith.remsi %46, %c4_i32 : i32"
+        },
+        {
+          "line": 104,
+          "text": "memref.store %47, %36[%arg9] : memref<1024xi32, #hivm.address_space<ub>>"
+        },
+        {
+          "line": 122,
+          "text": "%reinterpret_cast = memref.reinterpret_cast %arg3 to offset: [%40], sizes: [1024], strides: [1] : memref<?xf32, #hivm.address_space<gm>> to memref<1024xf32, strided<[1], offset: ?>, #hivm.address_space<gm>>"
+        },
+        {
+          "line": 137,
+          "text": "func.call @load_gm_to_ubuf_1d_float(%cast_15, %cast_16, %c2_i32, %cst, %c0) : (memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<gm>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>, i32, f32, index) -> ()"
+        },
+        {
+          "line": 147,
+          "text": "func.call @vsel_vs_1d_float(%cast_17, %cast_18, %cst, %cast_19, %cast_20) : (memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>, f32, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>) -> ()"
+        }
+      ]
+    },
+    {
+      "artifact": "mask-after/005-captured-input",
+      "stage": "late_hivm",
+      "bytes": 22273,
+      "sha256": "7b4e56d2165b59abeb90607231e062769b5d56665c5982c911c3d7081bb44156",
+      "excerpts": [
+        {
+          "line": 105,
+          "text": "scf.for %arg9 = %c0 to %c1024 step %c1 {"
+        },
+        {
+          "line": 106,
+          "text": "%52 = memref.load %34[%arg9] : memref<1024xi32, #hivm.address_space<ub>>"
+        },
+        {
+          "line": 107,
+          "text": "%53 = arith.remsi %52, %c4_i32 : i32"
+        },
+        {
+          "line": 108,
+          "text": "memref.store %53, %36[%arg9] : memref<1024xi32, #hivm.address_space<ub>>"
+        },
+        {
+          "line": 126,
+          "text": "%reinterpret_cast = memref.reinterpret_cast %arg3 to offset: [%40], sizes: [1024], strides: [1] : memref<?xf32, #hivm.address_space<gm>> to memref<1024xf32, strided<[1], offset: ?>, #hivm.address_space<gm>>"
+        },
+        {
+          "line": 145,
+          "text": "func.call @vnot_1d_bool(%cast_20, %cast_21, %cast_22) : (memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>) -> ()"
+        },
+        {
+          "line": 153,
+          "text": "func.call @load_gm_to_ubuf_1d_float(%cast_24, %cast_25, %c0_i32, %cst, %c0) : (memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<gm>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>, i32, f32, index) -> ()"
+        },
+        {
+          "line": 162,
+          "text": "func.call @vand_1d_bool(%cast_26, %cast_27, %cast_28, %cast_29) : (memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>) -> ()"
+        },
+        {
+          "line": 171,
+          "text": "func.call @vsel_vs_1d_float(%cast_30, %cast_31, %cst, %cast_32, %cast_33) : (memref<?xi1, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>, f32, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>, memref<?xf32, strided<[?], offset: ?>, #hivm.address_space<ub>>) -> ()"
+        }
+      ]
+    },
+    {
+      "artifact": "mask-before/004-captured-input",
+      "stage": "llvm_consumer_input",
+      "bytes": 30561,
+      "sha256": "afd74ecad87e1b3b9d77a6b549a131fe85c709c954ed9b2ec97553d0f1b0138d",
+      "excerpts": [
+        {
+          "line": 345,
+          "text": "%79 = load i32, ptr addrspace(6) %78, align 4"
+        },
+        {
+          "line": 346,
+          "text": "%80 = srem i32 %79, 4"
+        },
+        {
+          "line": 348,
+          "text": "store i32 %80, ptr addrspace(6) %81, align 4"
+        },
+        {
+          "line": 376,
+          "text": "call void @load_gm_to_ubuf_1d_float(ptr addrspace(1) %3, ptr addrspace(1) %3, i64 %84, i64 %91, i64 1, ptr addrspace(6) %50, ptr addrspace(6) %51, i64 0, i64 %91, i64 1, i32 2, float 0.000000e+00, i64 0)"
+        },
+        {
+          "line": 381,
+          "text": "call void @vsel_vs_1d_float(ptr addrspace(6) inttoptr (i64 16384 to ptr addrspace(6)), ptr addrspace(6) inttoptr (i64 16384 to ptr addrspace(6)), i64 0, i64 1024, i64 1, ptr addrspace(6) %50, ptr addrspace(6) %51, i64 0, i64 1024, i64 1, float 0.000000e+00, ptr addrspace(6) %33, ptr addrspace(6) %34, i64 0, i64 1024, i64 1, ptr addrspace(6) inttoptr (i64 28736 to ptr addrspace(6)), ptr addrspace(6) inttoptr (i64 28736 to ptr addrspace(6)), i64 0, i64 16, i64 1)"
+        }
+      ]
+    },
+    {
+      "artifact": "mask-after/002-captured-input",
+      "stage": "llvm_consumer_input",
+      "bytes": 39705,
+      "sha256": "0e75562104134253fd4302ce598627ca66d6704a71769e4896d3b4e5487f9f3f",
+      "excerpts": [
+        {
+          "line": 452,
+          "text": "call void @load_gm_to_ubuf_1d_float(ptr addrspace(1) %3, ptr addrspace(1) %3, i64 %84, i64 %91, i64 1, ptr addrspace(6) %50, ptr addrspace(6) %51, i64 0, i64 %91, i64 1, i32 0, float 0.000000e+00, i64 0)"
+        },
+        {
+          "line": 459,
+          "text": "call void @vsel_vs_1d_float(ptr addrspace(6) inttoptr (i64 24640 to ptr addrspace(6)), ptr addrspace(6) inttoptr (i64 24640 to ptr addrspace(6)), i64 0, i64 1024, i64 1, ptr addrspace(6) %50, ptr addrspace(6) %51, i64 0, i64 1024, i64 1, float 0.000000e+00, ptr addrspace(6) %33, ptr addrspace(6) %34, i64 0, i64 1024, i64 1, ptr addrspace(6) inttoptr (i64 36928 to ptr addrspace(6)), ptr addrspace(6) inttoptr (i64 36928 to ptr addrspace(6)), i64 0, i64 16, i64 1)"
+        }
+      ]
+    },
+    {
+      "artifact": "buffering-before/002-captured-input",
+      "stage": "adapter",
+      "bytes": 9375,
+      "sha256": "c7ec840e3042a5335795a958bb24c7ccc76c632d47839b0421dd9766a615ae07",
+      "excerpts": [
+        {
+          "line": 20,
+          "text": "%4 = scf.for %arg11 = %c0_i32 to %c16_i32 step %c1_i32 iter_args(%arg12 = %1) -> (tensor<32x64xf32>)  : i32 {"
+        }
+      ]
+    },
+    {
+      "artifact": "buffering-after/002-captured-input",
+      "stage": "adapter",
+      "bytes": 9375,
+      "sha256": "c7ec840e3042a5335795a958bb24c7ccc76c632d47839b0421dd9766a615ae07",
+      "excerpts": [
+        {
+          "line": 20,
+          "text": "%4 = scf.for %arg11 = %c0_i32 to %c16_i32 step %c1_i32 iter_args(%arg12 = %1) -> (tensor<32x64xf32>)  : i32 {"
+        }
+      ]
+    },
+    {
+      "artifact": "buffering-before/005-captured-input",
+      "stage": "late_hivm",
+      "bytes": 14724,
+      "sha256": "024e313f05bd9b7f1604e69dd6eae0bc610a85b6b0a1a22663831412ddd9ccc3",
+      "excerpts": [
+        {
+          "line": 43,
+          "text": "hivm.hir.set_flag[<PIPE_MTE1>, <PIPE_MTE2>, <EVENT_ID1>]"
+        },
+        {
+          "line": 68,
+          "text": "scf.for %arg10 = %c0_i32 to %c16_i32 step %c1_i32  : i32 {"
+        },
+        {
+          "line": 78,
+          "text": "%35 = hivm.hir.pointer_cast(%c0_i64) : memref<2x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 100,
+          "text": "func.call @nd2nz_half(%cast_5, %cast_6) : (memref<?x?xf16, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>) -> ()"
+        },
+        {
+          "line": 104,
+          "text": "%45 = hivm.hir.pointer_cast(%c2048_i64) : memref<4x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 120,
+          "text": "func.call @nd2nz_half(%cast_10, %cast_11) : (memref<?x?xf16, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>) -> ()"
+        },
+        {
+          "line": 126,
+          "text": "func.call @mma_tile_half_to_float(%cast_12, %cast_13, %48, %15, %39, %21, %cast_14, %c0_i64, %c1_i64, %c1_i64, %c2_i64, %31, %c-1_i64, %c-1_i64, %c0_i8) : (memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>, memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>, i1, index, index, index, memref<?x?x?x?xf32, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cc>>, i64, i64, i64, i64, i64, i64, i64, i8) -> ()"
+        }
+      ]
+    },
+    {
+      "artifact": "buffering-after/003-captured-input",
+      "stage": "late_hivm",
+      "bytes": 16202,
+      "sha256": "0e46c308ff65c41172e47a5f0681f0d09119f13a72e5165bf30245009e0af157",
+      "excerpts": [
+        {
+          "line": 7,
+          "text": "#map6 = affine_map<()[s0] -> (s0 mod 2)>"
+        },
+        {
+          "line": 43,
+          "text": "%0 = hivm.hir.pointer_cast(%c2048_i64) : memref<4x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 44,
+          "text": "%1 = hivm.hir.pointer_cast(%c8192_i64) : memref<4x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 45,
+          "text": "%2 = hivm.hir.pointer_cast(%c0_i64) : memref<2x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 46,
+          "text": "%3 = hivm.hir.pointer_cast(%c6144_i64) : memref<2x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 81,
+          "text": "%32 = affine.apply #map6()[%31]"
+        },
+        {
+          "line": 84,
+          "text": "%35 = arith.select %34, %1, %0 : memref<4x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 89,
+          "text": "%40 = arith.select %39, %3, %2 : memref<2x2x16x16xf16, #hivm.address_space<cbuf>>"
+        },
+        {
+          "line": 98,
+          "text": "%49 = arith.select %48, %c3_i64, %c4_i64 : i64"
+        },
+        {
+          "line": 100,
+          "text": "%51 = arith.select %50, %c1_i64, %c2_i64 : i64"
+        },
+        {
+          "line": 126,
+          "text": "func.call @nd2nz_half(%cast_5, %cast_6) : (memref<?x?xf16, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>) -> ()"
+        },
+        {
+          "line": 145,
+          "text": "func.call @nd2nz_half(%cast_10, %cast_11) : (memref<?x?xf16, strided<[?, ?], offset: ?>, #hivm.address_space<gm>>, memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>) -> ()"
+        },
+        {
+          "line": 151,
+          "text": "func.call @mma_tile_half_to_float(%cast_12, %cast_13, %66, %19, %58, %25, %cast_14, %c0_i64, %c1_i64, %51, %49, %45, %c-1_i64, %c-1_i64, %c0_i8) : (memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>, memref<?x?x?x?xf16, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cbuf>>, i1, index, index, index, memref<?x?x?x?xf32, strided<[?, ?, ?, ?], offset: ?>, #hivm.address_space<cc>>, i64, i64, i64, i64, i64, i64, i64, i8) -> ()"
+        }
+      ]
+    },
+    {
+      "artifact": "buffering-before/004-captured-input",
+      "stage": "llvm_consumer_input",
+      "bytes": 20111,
+      "sha256": "419433dc295acd2949e60a04926bb1c3d673d8f7ba4186c0a627d8238095d943",
+      "excerpts": [
+        {
+          "line": 246,
+          "text": "call void @nd2nz_half(ptr addrspace(1) %3, ptr addrspace(1) %3, i64 %73, i64 %38, i64 %84, i64 512, i64 1, ptr addrspace(2) null, ptr addrspace(2) null, i64 0, i64 %100, i64 %93, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1)"
+        },
+        {
+          "line": 269,
+          "text": "call void @nd2nz_half(ptr addrspace(1) %4, ptr addrspace(1) %4, i64 %104, i64 %84, i64 %51, i64 128, i64 1, ptr addrspace(2) inttoptr (i64 2048 to ptr addrspace(2)), ptr addrspace(2) inttoptr (i64 2048 to ptr addrspace(2)), i64 0, i64 %112, i64 %100, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1)"
+        },
+        {
+          "line": 272,
+          "text": "call void @mma_tile_half_to_float(ptr addrspace(2) null, ptr addrspace(2) null, i64 0, i64 2, i64 2, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1, ptr addrspace(2) inttoptr (i64 2048 to ptr addrspace(2)), ptr addrspace(2) inttoptr (i64 2048 to ptr addrspace(2)), i64 0, i64 4, i64 2, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1, i1 %115, i64 %38, i64 %84, i64 %51, ptr addrspace(5) null, ptr addrspace(5) null, i64 0, i64 4, i64 2, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1, i64 0, i64 1, i64 1, i64 2, i64 %69, i64 -1, i64 -1, i8 0)"
+        }
+      ]
+    },
+    {
+      "artifact": "buffering-after/005-captured-input",
+      "stage": "llvm_consumer_input",
+      "bytes": 21371,
+      "sha256": "90dfe51c250664cbf3d2e275018336de1dbce1bc4fea16ef523b1bcf7718ce2b",
+      "excerpts": [
+        {
+          "line": 136,
+          "text": "call void @llvm.hivm.SET.FLAG.IMM(i64 3, i64 4, i64 1)"
+        },
+        {
+          "line": 137,
+          "text": "call void @llvm.hivm.SET.FLAG.IMM(i64 3, i64 4, i64 2)"
+        },
+        {
+          "line": 138,
+          "text": "call void @llvm.hivm.SET.FLAG.IMM(i64 3, i64 4, i64 3)"
+        },
+        {
+          "line": 139,
+          "text": "call void @llvm.hivm.SET.FLAG.IMM(i64 3, i64 4, i64 4)"
+        },
+        {
+          "line": 194,
+          "text": "%58 = srem i64 %57, 2"
+        },
+        {
+          "line": 202,
+          "text": "%66 = srem i64 %65, 2"
+        },
+        {
+          "line": 272,
+          "text": "call void @llvm.hivm.WAIT.FLAG.REG(i64 3, i64 4, i64 %94)"
+        },
+        {
+          "line": 295,
+          "text": "call void @llvm.hivm.WAIT.FLAG.REG(i64 3, i64 4, i64 %92)"
+        },
+        {
+          "line": 299,
+          "text": "call void @mma_tile_half_to_float(ptr addrspace(2) %71, ptr addrspace(2) %72, i64 0, i64 2, i64 2, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1, ptr addrspace(2) %63, ptr addrspace(2) %64, i64 0, i64 4, i64 2, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1, i1 %140, i64 %38, i64 %109, i64 %51, ptr addrspace(5) null, ptr addrspace(5) null, i64 0, i64 4, i64 2, i64 16, i64 16, i64 512, i64 256, i64 16, i64 1, i64 0, i64 1, i64 %94, i64 %92, i64 %85, i64 -1, i64 -1, i8 0)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "profiling-skill/audited-repair-canaries/v1",
+  "benchmark": "matmul",
+  "request_budget": 48,
+  "max_candidate_repairs_per_round": 2,
+  "placement": "dynamic-bz-a3-admission",
+  "canaries": [
+    {
+      "id": "matmul-cannbot-all-repair",
+      "treatment": "cannbot-all",
+      "required_evidence": ["candidate-repair", "offline-verifier", "msprof-op-timing"]
+    },
+    {
+      "id": "matmul-cannbot-new-profiler-resume",
+      "treatment": "cannbot-new-profiler",
+      "required_evidence": ["checkpoint-resume", "same-session", "offline-verifier", "msprof-op-timing"]
+    },
+    {
+      "id": "matmul-guarded-new-profiler-repair",
+      "treatment": "guarded-new-profiler",
+      "required_evidence": ["candidate-repair", "offline-verifier", "msprof-op-timing"]
+    },
+    {
+      "id": "matmul-guarded-old-profiler-repair",
+      "treatment": "guarded-old-profiler",
+      "required_evidence": ["candidate-repair", "offline-verifier", "msprof-op-timing"]
+    }
+  ],
+  "gate": {
+    "all_canaries_terminal_ok": true,
+    "all_branches_offline_valid": true,
+    "all_final_timings_positive": true,
+    "minimum_repaired_canaries": 3,
+    "resume_canary_required": true
+  }
+}

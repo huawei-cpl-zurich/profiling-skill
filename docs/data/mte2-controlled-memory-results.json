@@ -1,0 +1,2980 @@
+{
+  "schema": 1,
+  "date": "2026-10-17",
+  "source_commit": "ebd28161cb24dbcedb49fb30a27958d3f7de398e",
+  "source_sha256": {
+    "scripts/a3_controlled_memory_batch.py": "8c176a3a07ea28e5b9d0854da90fda46cb98e07b6571473b5e29b5bb74d8256c",
+    "benchmarks/a3_controlled_memory.py": "2d706f1c6edd3a832f96ee1b4c56c840f54998bf3b184660c1a8bbb04322dfb1",
+    "benchmarks/a3_profile_memory.py": "e773b7f4c62965dde588a35f3558ba47e2369ce20e1476fcaa8bfb6de8c2de32",
+    "scripts/a3_memory_batch.py": "9c636d1dc3bac622bfc18218e30cda5b8a7d35eb3c48d8ddc8f5c04322ce5bbe",
+    "scripts/profile_device.py": "5419d1319e3f21d8465e1707e40dd942f8293b34ce99d8b15bc7e798b0ed0089",
+    "benchmarks/compile_evidence.py": "ca80662555730617137ba2c169ed945c5220d2762fe912f637e1b433c7c4903c"
+  },
+  "tool_identity": {
+    "observed_case_environments": [
+      {
+        "torch": "2.10.0+cpu",
+        "triton_module": "3.2.0",
+        "triton_distributions": {
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        },
+        "compiler_identity": {
+          "target": "GPUTarget(backend='npu', arch='Ascend910_9382', warp_size=0)",
+          "target_origin": "compiled.metadata.target"
+        },
+        "device_name": "Ascend910_9382"
+      }
+    ],
+    "profiler": "msprof op",
+    "profiler_build": "not established; --version unsupported",
+    "CANN_build": "not established"
+  },
+  "measurement": {
+    "warm_up": 0,
+    "launch_count": 1,
+    "kill": "off",
+    "kernel_selector": "a3_memory_probe",
+    "timing_samples_per_case": 5,
+    "pipe_captures_per_case": 3,
+    "memory_captures_per_case": 3,
+    "aggregation": "median",
+    "order": "round-major, cases rotated each round",
+    "useful_bandwidth": "input useful bytes / whole-kernel BasicInfo median microseconds /1000; decimal GB/s",
+    "raw_amount_conversion": "KiB-compatible arithmetic check only; no independently validated physical HBM multiplier"
+  },
+  "completion": {
+    "jobs": 13,
+    "case_instances": 28,
+    "unique_cases": 17,
+    "basic_samples": 140,
+    "pipe_captures": 84,
+    "memory_captures": 84,
+    "all_terminal_exit_zero": true
+  },
+  "counter_checks": {
+    "memory_count": 16128,
+    "memory_max_relative_error": 1.3837154484888196e-05,
+    "active_count": 8064,
+    "active_max_relative_error": 4.0012215747342594e-06
+  },
+  "raw_archive": {
+    "name": "mte2-full-memory-analysis-20261017.tar.gz",
+    "bytes": 1231306,
+    "sha256": "906f91a99215756f17ebf2d6b784255c0ccff897e950b83fbc7c971a59e154b6",
+    "manifest_bound_files": 586,
+    "retention": "central ignored experiment evidence, not committed raw profile trees"
+  },
+  "comparisons": [
+    {
+      "case": "count/2/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          25.319494,
+          25.819483,
+          27.279455,
+          27.499451,
+          28.739426
+        ],
+        "median_us": 27.279455,
+        "range_over_median": 0.12536658082062135,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          882.742371,
+          879.78241,
+          891.4422,
+          879.28241,
+          890.18219
+        ],
+        "median_us": 882.742371,
+        "range_over_median": 0.013775015677818789,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 8388604,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 153.75321831026318,
+      "candidate_useful_input_GB_per_s": 4.751447463939623,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.0309030764764321,
+        "paired_latency_ratios": [
+          0.028682767284997582,
+          0.02934757811309276,
+          0.030601484874734446,
+          0.031274879023225316,
+          0.032284880918590386
+        ],
+        "paired_ratio_geomean": 0.030410679824898458,
+        "paired_ratio_range": [
+          0.028682767284997582,
+          0.032284880918590386
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 3,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.888207
+        },
+        {
+          "row_count": 48,
+          "physical_device": 3,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8864645
+        },
+        {
+          "row_count": 48,
+          "physical_device": 3,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.879919
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 3,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9983595000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 3,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.998572
+        },
+        {
+          "row_count": 48,
+          "physical_device": 3,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.998661
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 3,
+          "row_median_mte2_ratio": 0.8761675,
+          "row_median_scalar_ratio": 0.1893375,
+          "row_median_mte2_active_bw_export": 4.983935000000001
+        },
+        {
+          "physical_device": 3,
+          "row_median_mte2_ratio": 0.8807834999999999,
+          "row_median_scalar_ratio": 0.194531,
+          "row_median_mte2_active_bw_export": 5.0202025
+        },
+        {
+          "physical_device": 3,
+          "row_median_mte2_ratio": 0.889366,
+          "row_median_scalar_ratio": 0.1956415,
+          "row_median_mte2_active_bw_export": 4.9838105
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 3,
+          "row_median_mte2_ratio": 0.9983715,
+          "row_median_scalar_ratio": 0.005509999999999999,
+          "row_median_mte2_active_bw_export": 3.0868349999999998
+        },
+        {
+          "physical_device": 3,
+          "row_median_mte2_ratio": 0.9982875,
+          "row_median_scalar_ratio": 0.005638000000000001,
+          "row_median_mte2_active_bw_export": 3.092366
+        },
+        {
+          "physical_device": 3,
+          "row_median_mte2_ratio": 0.998462,
+          "row_median_scalar_ratio": 0.0056105,
+          "row_median_mte2_active_bw_export": 3.1322005
+        }
+      ]
+    },
+    {
+      "case": "count/4/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          26.379473,
+          28.319433,
+          29.339413,
+          28.139437,
+          31.779364
+        ],
+        "median_us": 28.319433,
+        "range_over_median": 0.19067793483012177,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          798.044067,
+          789.004211,
+          805.383911,
+          806.503845,
+          800.863953
+        ],
+        "median_us": 800.863953,
+        "range_over_median": 0.02185094476339841,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 16777204,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 148.10692007851995,
+      "candidate_useful_input_GB_per_s": 5.237224105652811,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.035361103335862086,
+        "paired_latency_ratios": [
+          0.03305515834378103,
+          0.03589262592668216,
+          0.036429102443294274,
+          0.034890642089871256,
+          0.039681351471689975
+        ],
+        "paired_ratio_geomean": 0.03592507409167022,
+        "paired_ratio_range": [
+          0.03305515834378103,
+          0.039681351471689975
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 4,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8897470000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 4,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8820855000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 4,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8813
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 4,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.998356
+        },
+        {
+          "row_count": 48,
+          "physical_device": 4,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.998375
+        },
+        {
+          "row_count": 48,
+          "physical_device": 4,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.998176
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 4,
+          "row_median_mte2_ratio": 0.891114,
+          "row_median_scalar_ratio": 0.19038349999999998,
+          "row_median_mte2_active_bw_export": 4.9920945
+        },
+        {
+          "physical_device": 4,
+          "row_median_mte2_ratio": 0.8746510000000001,
+          "row_median_scalar_ratio": 0.19155699999999998,
+          "row_median_mte2_active_bw_export": 4.9917175
+        },
+        {
+          "physical_device": 4,
+          "row_median_mte2_ratio": 0.8795605,
+          "row_median_scalar_ratio": 0.185311,
+          "row_median_mte2_active_bw_export": 4.984446
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 4,
+          "row_median_mte2_ratio": 0.998588,
+          "row_median_scalar_ratio": 0.005915,
+          "row_median_mte2_active_bw_export": 3.404739
+        },
+        {
+          "physical_device": 4,
+          "row_median_mte2_ratio": 0.998424,
+          "row_median_scalar_ratio": 0.006203,
+          "row_median_mte2_active_bw_export": 3.3980164999999998
+        },
+        {
+          "physical_device": 4,
+          "row_median_mte2_ratio": 0.99837,
+          "row_median_scalar_ratio": 0.0062025,
+          "row_median_mte2_active_bw_export": 3.4360530000000002
+        }
+      ]
+    },
+    {
+      "case": "count/8/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.439451,
+          26.079479,
+          27.579449,
+          29.459412,
+          30.539389
+        ],
+        "median_us": 27.579449,
+        "range_over_median": 0.16171135253644844,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          514.149719,
+          510.149811,
+          516.329651,
+          517.649658,
+          518.809631
+        ],
+        "median_us": 516.329651,
+        "range_over_median": 0.016771882039367844,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 33554404,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 152.08077579795014,
+      "candidate_useful_input_GB_per_s": 8.123306480417488,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.05341442031575289,
+        "paired_latency_ratios": [
+          0.05336860059627884,
+          0.05112121662630587,
+          0.05341442031575289,
+          0.05690994197469362,
+          0.05886434479085451
+        ],
+        "paired_ratio_geomean": 0.05466598710176953,
+        "paired_ratio_range": [
+          0.05112121662630587,
+          0.05886434479085451
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 5,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8925375
+        },
+        {
+          "row_count": 48,
+          "physical_device": 5,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.882888
+        },
+        {
+          "row_count": 48,
+          "physical_device": 5,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.885106
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 5,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9976175
+        },
+        {
+          "row_count": 48,
+          "physical_device": 5,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9973799999999999
+        },
+        {
+          "row_count": 48,
+          "physical_device": 5,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.997593
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 5,
+          "row_median_mte2_ratio": 0.8885415,
+          "row_median_scalar_ratio": 0.191911,
+          "row_median_mte2_active_bw_export": 5.0112375
+        },
+        {
+          "physical_device": 5,
+          "row_median_mte2_ratio": 0.886695,
+          "row_median_scalar_ratio": 0.1879035,
+          "row_median_mte2_active_bw_export": 5.0169375
+        },
+        {
+          "physical_device": 5,
+          "row_median_mte2_ratio": 0.8967955000000001,
+          "row_median_scalar_ratio": 0.181286,
+          "row_median_mte2_active_bw_export": 4.995332
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 5,
+          "row_median_mte2_ratio": 0.9976134999999999,
+          "row_median_scalar_ratio": 0.0095025,
+          "row_median_mte2_active_bw_export": 5.264332
+        },
+        {
+          "physical_device": 5,
+          "row_median_mte2_ratio": 0.997672,
+          "row_median_scalar_ratio": 0.009429,
+          "row_median_mte2_active_bw_export": 5.2172160000000005
+        },
+        {
+          "physical_device": 5,
+          "row_median_mte2_ratio": 0.997787,
+          "row_median_scalar_ratio": 0.009382999999999999,
+          "row_median_mte2_active_bw_export": 5.269671000000001
+        }
+      ]
+    },
+    {
+      "case": "count/16/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.499451,
+          27.399452,
+          29.839403,
+          27.419451,
+          30.659388
+        ],
+        "median_us": 27.499451,
+        "range_over_median": 0.11854549387185946,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          359.112823,
+          357.852844,
+          358.992828,
+          359.652802,
+          360.652802
+        ],
+        "median_us": 359.112823,
+        "range_over_median": 0.00779687557968378,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 67108804,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 152.52319037205504,
+      "candidate_useful_input_GB_per_s": 11.679627491330212,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.07657607648279383,
+        "paired_latency_ratios": [
+          0.07657607648279383,
+          0.07656625470328804,
+          0.08311977474937188,
+          0.07623866920408422,
+          0.08501081325301889
+        ],
+        "paired_ratio_geomean": 0.07941396314003571,
+        "paired_ratio_range": [
+          0.07623866920408422,
+          0.08501081325301889
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 6,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8951830000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 6,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8953530000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 6,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.881658
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 6,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9967455000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 6,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.996684
+        },
+        {
+          "row_count": 48,
+          "physical_device": 6,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.996605
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 6,
+          "row_median_mte2_ratio": 0.8949039999999999,
+          "row_median_scalar_ratio": 0.189705,
+          "row_median_mte2_active_bw_export": 4.999988999999999
+        },
+        {
+          "physical_device": 6,
+          "row_median_mte2_ratio": 0.89005,
+          "row_median_scalar_ratio": 0.18204,
+          "row_median_mte2_active_bw_export": 4.993035
+        },
+        {
+          "physical_device": 6,
+          "row_median_mte2_ratio": 0.887283,
+          "row_median_scalar_ratio": 0.1897995,
+          "row_median_mte2_active_bw_export": 4.9986315
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 6,
+          "row_median_mte2_ratio": 0.9966465,
+          "row_median_scalar_ratio": 0.013914,
+          "row_median_mte2_active_bw_export": 7.6417005
+        },
+        {
+          "physical_device": 6,
+          "row_median_mte2_ratio": 0.996912,
+          "row_median_scalar_ratio": 0.013441,
+          "row_median_mte2_active_bw_export": 7.5200145
+        },
+        {
+          "physical_device": 6,
+          "row_median_mte2_ratio": 0.9966165,
+          "row_median_scalar_ratio": 0.013895999999999999,
+          "row_median_mte2_active_bw_export": 7.6150485
+        }
+      ]
+    },
+    {
+      "case": "count/32/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.719446,
+          26.079479,
+          27.939442,
+          29.739405,
+          28.699427
+        ],
+        "median_us": 27.939442,
+        "range_over_median": 0.13099495687852328,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          267.374664,
+          271.474579,
+          268.934631,
+          270.69458,
+          270.93457
+        ],
+        "median_us": 270.69458,
+        "range_over_median": 0.015145907243506724,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 134217604,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 150.12125152678425,
+      "candidate_useful_input_GB_per_s": 15.494599116096081,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.10321389515815205,
+        "paired_latency_ratios": [
+          0.10367267259099763,
+          0.09606600771264111,
+          0.10388934253692303,
+          0.10986331902175508,
+          0.10592751969599154
+        ],
+        "paired_ratio_geomean": 0.10378469436302057,
+        "paired_ratio_range": [
+          0.09606600771264111,
+          0.10986331902175508
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 7,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8932059999999999
+        },
+        {
+          "row_count": 48,
+          "physical_device": 7,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.887657
+        },
+        {
+          "row_count": 48,
+          "physical_device": 7,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8857865
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 7,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9956975
+        },
+        {
+          "row_count": 48,
+          "physical_device": 7,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9953995
+        },
+        {
+          "row_count": 48,
+          "physical_device": 7,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.995282
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 7,
+          "row_median_mte2_ratio": 0.886539,
+          "row_median_scalar_ratio": 0.19027,
+          "row_median_mte2_active_bw_export": 5.0460705
+        },
+        {
+          "physical_device": 7,
+          "row_median_mte2_ratio": 0.8854365,
+          "row_median_scalar_ratio": 0.19492500000000001,
+          "row_median_mte2_active_bw_export": 5.005405
+        },
+        {
+          "physical_device": 7,
+          "row_median_mte2_ratio": 0.878904,
+          "row_median_scalar_ratio": 0.1919535,
+          "row_median_mte2_active_bw_export": 5.0182305
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 7,
+          "row_median_mte2_ratio": 0.9960915,
+          "row_median_scalar_ratio": 0.01803,
+          "row_median_mte2_active_bw_export": 10.189791
+        },
+        {
+          "physical_device": 7,
+          "row_median_mte2_ratio": 0.99552,
+          "row_median_scalar_ratio": 0.018963,
+          "row_median_mte2_active_bw_export": 10.519663000000001
+        },
+        {
+          "physical_device": 7,
+          "row_median_mte2_ratio": 0.995438,
+          "row_median_scalar_ratio": 0.018973,
+          "row_median_mte2_active_bw_export": 10.459138
+        }
+      ]
+    },
+    {
+      "case": "count/64/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.639446,
+          29.399412,
+          30.379393,
+          26.259476,
+          26.279474
+        ],
+        "median_us": 27.639446,
+        "range_over_median": 0.14905931906160497,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          268.394623,
+          264.454712,
+          264.194702,
+          260.434784,
+          265.034698
+        ],
+        "median_us": 264.454712,
+        "range_over_median": 0.0300990628595797,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 268435204,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 151.75065375767662,
+      "candidate_useful_input_GB_per_s": 15.860197643216887,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.10451485545850286,
+        "paired_latency_ratios": [
+          0.10298062491363695,
+          0.1111699306760698,
+          0.11498865333037601,
+          0.1008293730840501,
+          0.09915484349147372
+        ],
+        "paired_ratio_geomean": 0.10564763249030641,
+        "paired_ratio_range": [
+          0.09915484349147372,
+          0.11498865333037601
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 8,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8801275
+        },
+        {
+          "row_count": 48,
+          "physical_device": 8,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.882824
+        },
+        {
+          "row_count": 48,
+          "physical_device": 8,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.890299
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 8,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.995487
+        },
+        {
+          "row_count": 48,
+          "physical_device": 8,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9951565
+        },
+        {
+          "row_count": 48,
+          "physical_device": 8,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 131072.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 131078.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9952695
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 8,
+          "row_median_mte2_ratio": 0.903529,
+          "row_median_scalar_ratio": 0.18177349999999998,
+          "row_median_mte2_active_bw_export": 5.016750500000001
+        },
+        {
+          "physical_device": 8,
+          "row_median_mte2_ratio": 0.8798565,
+          "row_median_scalar_ratio": 0.1924035,
+          "row_median_mte2_active_bw_export": 4.9951620000000005
+        },
+        {
+          "physical_device": 8,
+          "row_median_mte2_ratio": 0.8924595,
+          "row_median_scalar_ratio": 0.18491950000000001,
+          "row_median_mte2_active_bw_export": 5.0050485
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 8,
+          "row_median_mte2_ratio": 0.9958805,
+          "row_median_scalar_ratio": 0.019299999999999998,
+          "row_median_mte2_active_bw_export": 11.1761865
+        },
+        {
+          "physical_device": 8,
+          "row_median_mte2_ratio": 0.9958009999999999,
+          "row_median_scalar_ratio": 0.019645500000000003,
+          "row_median_mte2_active_bw_export": 11.2063035
+        },
+        {
+          "physical_device": 8,
+          "row_median_mte2_ratio": 0.9956815,
+          "row_median_scalar_ratio": 0.019794,
+          "row_median_mte2_active_bw_export": 11.188872499999999
+        }
+      ]
+    },
+    {
+      "case": "span/2/1048576",
+      "baseline_case": "span/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          25.53949,
+          25.159496,
+          28.559429,
+          24.9795,
+          29.519409
+        ],
+        "median_us": 25.53949,
+        "range_over_median": 0.17776036248178792,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          465.250702,
+          451.270966,
+          458.550842,
+          462.530762,
+          461.910767
+        ],
+        "median_us": 461.910767,
+        "range_over_median": 0.030265014368024035,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 2097152,
+        "index_bytes": 0,
+        "output_bytes": 2097152,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194300,
+        "distinct_input_bytes": 2097152,
+        "grid": [
+          2048
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 164.22818153377378,
+      "candidate_useful_input_GB_per_s": 4.540166953934633,
+      "comparison": {
+        "baseline": "span/1/1048576",
+        "median_latency_ratio": 0.05529096055905534,
+        "paired_latency_ratios": [
+          0.05489403861232648,
+          0.05575252541285805,
+          0.06228192467259716,
+          0.05400613765014834,
+          0.06390716802667645
+        ],
+        "paired_ratio_geomean": 0.058026835763962545,
+        "paired_ratio_range": [
+          0.05400613765014834,
+          0.06390716802667645
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 9,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9031775
+        },
+        {
+          "row_count": 48,
+          "physical_device": 9,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9034420000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 9,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.893563
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 9,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 65536.0,
+            "UB_to_GM_datas(KB)": 2048.0,
+            "read_main_memory_datas(KB)": 65542.0,
+            "write_main_memory_datas(KB)": 2048.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9970954999999999
+        },
+        {
+          "row_count": 48,
+          "physical_device": 9,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 65536.0,
+            "UB_to_GM_datas(KB)": 2048.0,
+            "read_main_memory_datas(KB)": 65542.0,
+            "write_main_memory_datas(KB)": 2048.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9970755
+        },
+        {
+          "row_count": 48,
+          "physical_device": 9,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 65536.0,
+            "UB_to_GM_datas(KB)": 2048.0,
+            "read_main_memory_datas(KB)": 65542.0,
+            "write_main_memory_datas(KB)": 2048.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.996641
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 9,
+          "row_median_mte2_ratio": 0.895544,
+          "row_median_scalar_ratio": 0.189917,
+          "row_median_mte2_active_bw_export": 5.0308554999999995
+        },
+        {
+          "physical_device": 9,
+          "row_median_mte2_ratio": 0.8937785,
+          "row_median_scalar_ratio": 0.1919385,
+          "row_median_mte2_active_bw_export": 5.0351045
+        },
+        {
+          "physical_device": 9,
+          "row_median_mte2_ratio": 0.889526,
+          "row_median_scalar_ratio": 0.1947355,
+          "row_median_mte2_active_bw_export": 5.0299215
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 9,
+          "row_median_mte2_ratio": 0.9967410000000001,
+          "row_median_scalar_ratio": 0.006602,
+          "row_median_mte2_active_bw_export": 3.0722555
+        },
+        {
+          "physical_device": 9,
+          "row_median_mte2_ratio": 0.9974735,
+          "row_median_scalar_ratio": 0.0060655,
+          "row_median_mte2_active_bw_export": 3.1035095000000004
+        },
+        {
+          "physical_device": 9,
+          "row_median_mte2_ratio": 0.9961085000000001,
+          "row_median_scalar_ratio": 0.007227,
+          "row_median_mte2_active_bw_export": 3.094884
+        }
+      ]
+    },
+    {
+      "case": "span/4/1048576",
+      "baseline_case": "span/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          26.479471,
+          24.699507,
+          29.459412,
+          27.899443,
+          28.659428
+        ],
+        "median_us": 27.899443,
+        "range_over_median": 0.1706093200498662,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          217.155655,
+          206.815857,
+          215.275696,
+          207.815842,
+          208.195831
+        ],
+        "median_us": 208.195831,
+        "range_over_median": 0.04966380907022102,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 1048576,
+        "index_bytes": 0,
+        "output_bytes": 1048576,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194292,
+        "distinct_input_bytes": 1048576,
+        "grid": [
+          1024
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 150.33647804366558,
+      "candidate_useful_input_GB_per_s": 5.036488939108488,
+      "comparison": {
+        "baseline": "span/1/1048576",
+        "median_latency_ratio": 0.13400577171019337,
+        "paired_latency_ratios": [
+          0.12193774553096488,
+          0.11942753016273797,
+          0.13684504357612204,
+          0.1342507998018746,
+          0.13765610897367103
+        ],
+        "paired_ratio_geomean": 0.12978867868317812,
+        "paired_ratio_range": [
+          0.11942753016273797,
+          0.13765610897367103
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 10,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8938125
+        },
+        {
+          "row_count": 48,
+          "physical_device": 10,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8917925
+        },
+        {
+          "row_count": 48,
+          "physical_device": 10,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.893945
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 10,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 32768.0,
+            "UB_to_GM_datas(KB)": 1024.0,
+            "read_main_memory_datas(KB)": 32774.0,
+            "write_main_memory_datas(KB)": 1024.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9932300000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 10,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 32768.0,
+            "UB_to_GM_datas(KB)": 1024.0,
+            "read_main_memory_datas(KB)": 32774.0,
+            "write_main_memory_datas(KB)": 1024.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9934835
+        },
+        {
+          "row_count": 48,
+          "physical_device": 10,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 32768.0,
+            "UB_to_GM_datas(KB)": 1024.0,
+            "read_main_memory_datas(KB)": 32774.0,
+            "write_main_memory_datas(KB)": 1024.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9933415
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 10,
+          "row_median_mte2_ratio": 0.9029929999999999,
+          "row_median_scalar_ratio": 0.18473499999999998,
+          "row_median_mte2_active_bw_export": 5.061562
+        },
+        {
+          "physical_device": 10,
+          "row_median_mte2_ratio": 0.9050075,
+          "row_median_scalar_ratio": 0.186266,
+          "row_median_mte2_active_bw_export": 5.036034
+        },
+        {
+          "physical_device": 10,
+          "row_median_mte2_ratio": 0.8903025,
+          "row_median_scalar_ratio": 0.189603,
+          "row_median_mte2_active_bw_export": 5.0483405
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 10,
+          "row_median_mte2_ratio": 0.9936095,
+          "row_median_scalar_ratio": 0.009555000000000001,
+          "row_median_mte2_active_bw_export": 3.4747285000000003
+        },
+        {
+          "physical_device": 10,
+          "row_median_mte2_ratio": 0.9941610000000001,
+          "row_median_scalar_ratio": 0.008618500000000001,
+          "row_median_mte2_active_bw_export": 3.424333
+        },
+        {
+          "physical_device": 10,
+          "row_median_mte2_ratio": 0.9929435,
+          "row_median_scalar_ratio": 0.0094865,
+          "row_median_mte2_active_bw_export": 3.466569
+        }
+      ]
+    },
+    {
+      "case": "span/8/1048576",
+      "baseline_case": "span/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.159456,
+          26.679466,
+          29.119417,
+          30.079399,
+          30.97938
+        ],
+        "median_us": 29.119417,
+        "range_over_median": 0.1476648382074407,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          76.378471,
+          74.038521,
+          73.158539,
+          81.258377,
+          77.758446
+        ],
+        "median_us": 76.378471,
+        "range_over_median": 0.10604870579302367,
+        "low_confidence": true
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 524288,
+        "index_bytes": 0,
+        "output_bytes": 524288,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194276,
+        "distinct_input_bytes": 524288,
+        "grid": [
+          512
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 144.03804856395305,
+      "candidate_useful_input_GB_per_s": 6.864342702016121,
+      "comparison": {
+        "baseline": "span/1/1048576",
+        "median_latency_ratio": 0.38125163568671067,
+        "paired_latency_ratios": [
+          0.3555904647528228,
+          0.3603457448859628,
+          0.398031691146812,
+          0.37016982261410414,
+          0.3984053385017493
+        ],
+        "paired_ratio_geomean": 0.3760647812644329,
+        "paired_ratio_range": [
+          0.3555904647528228,
+          0.3984053385017493
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 11,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.897107
+        },
+        {
+          "row_count": 48,
+          "physical_device": 11,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9038465
+        },
+        {
+          "row_count": 48,
+          "physical_device": 11,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8997745
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 11,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 16384.0,
+            "UB_to_GM_datas(KB)": 512.0,
+            "read_main_memory_datas(KB)": 16390.0,
+            "write_main_memory_datas(KB)": 512.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.981723
+        },
+        {
+          "row_count": 48,
+          "physical_device": 11,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 16384.0,
+            "UB_to_GM_datas(KB)": 512.0,
+            "read_main_memory_datas(KB)": 16390.0,
+            "write_main_memory_datas(KB)": 512.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.979325
+        },
+        {
+          "row_count": 48,
+          "physical_device": 11,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 16384.0,
+            "UB_to_GM_datas(KB)": 512.0,
+            "read_main_memory_datas(KB)": 16390.0,
+            "write_main_memory_datas(KB)": 512.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9838915
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 11,
+          "row_median_mte2_ratio": 0.8987624999999999,
+          "row_median_scalar_ratio": 0.186443,
+          "row_median_mte2_active_bw_export": 5.0411405
+        },
+        {
+          "physical_device": 11,
+          "row_median_mte2_ratio": 0.8894205,
+          "row_median_scalar_ratio": 0.198316,
+          "row_median_mte2_active_bw_export": 5.0634415
+        },
+        {
+          "physical_device": 11,
+          "row_median_mte2_ratio": 0.898675,
+          "row_median_scalar_ratio": 0.184304,
+          "row_median_mte2_active_bw_export": 5.005306
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 11,
+          "row_median_mte2_ratio": 0.9822295000000001,
+          "row_median_scalar_ratio": 0.019307,
+          "row_median_mte2_active_bw_export": 5.2993755
+        },
+        {
+          "physical_device": 11,
+          "row_median_mte2_ratio": 0.9802109999999999,
+          "row_median_scalar_ratio": 0.022054999999999998,
+          "row_median_mte2_active_bw_export": 5.3015655
+        },
+        {
+          "physical_device": 11,
+          "row_median_mte2_ratio": 0.981634,
+          "row_median_scalar_ratio": 0.0204565,
+          "row_median_mte2_active_bw_export": 5.329737
+        }
+      ]
+    },
+    {
+      "case": "span/16/1048576",
+      "baseline_case": "span/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.53945,
+          25.219496,
+          29.819403,
+          29.279415,
+          31.759365
+        ],
+        "median_us": 29.279415,
+        "range_over_median": 0.22336064432981326,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          30.97938,
+          31.639368,
+          33.339333,
+          34.179317,
+          35.419292
+        ],
+        "median_us": 33.339333,
+        "range_over_median": 0.133173390121512,
+        "low_confidence": true
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 262144,
+        "index_bytes": 0,
+        "output_bytes": 262144,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194244,
+        "distinct_input_bytes": 262144,
+        "grid": [
+          256
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 143.25094951521402,
+      "candidate_useful_input_GB_per_s": 7.862904755773007,
+      "comparison": {
+        "baseline": "span/1/1048576",
+        "median_latency_ratio": 0.8782243783941328,
+        "paired_latency_ratios": [
+          0.8889606570564033,
+          0.7970922807307655,
+          0.8944211031456447,
+          0.8566413132246031,
+          0.8966685443627727
+        ],
+        "paired_ratio_geomean": 0.8659101418943217,
+        "paired_ratio_range": [
+          0.7970922807307655,
+          0.8966685443627727
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 12,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.902199
+        },
+        {
+          "row_count": 48,
+          "physical_device": 12,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.893995
+        },
+        {
+          "row_count": 48,
+          "physical_device": 12,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.896207
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 12,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 8192.0,
+            "UB_to_GM_datas(KB)": 256.0,
+            "read_main_memory_datas(KB)": 8198.0,
+            "write_main_memory_datas(KB)": 256.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.952339
+        },
+        {
+          "row_count": 48,
+          "physical_device": 12,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 8192.0,
+            "UB_to_GM_datas(KB)": 256.0,
+            "read_main_memory_datas(KB)": 8198.0,
+            "write_main_memory_datas(KB)": 256.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9531505
+        },
+        {
+          "row_count": 48,
+          "physical_device": 12,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 8192.0,
+            "UB_to_GM_datas(KB)": 256.0,
+            "read_main_memory_datas(KB)": 8198.0,
+            "write_main_memory_datas(KB)": 256.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.9478075
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 12,
+          "row_median_mte2_ratio": 0.9046875000000001,
+          "row_median_scalar_ratio": 0.1879255,
+          "row_median_mte2_active_bw_export": 5.0393345
+        },
+        {
+          "physical_device": 12,
+          "row_median_mte2_ratio": 0.8882730000000001,
+          "row_median_scalar_ratio": 0.198229,
+          "row_median_mte2_active_bw_export": 5.012304
+        },
+        {
+          "physical_device": 12,
+          "row_median_mte2_ratio": 0.9013424999999999,
+          "row_median_scalar_ratio": 0.19137700000000002,
+          "row_median_mte2_active_bw_export": 5.063758
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 12,
+          "row_median_mte2_ratio": 0.949771,
+          "row_median_scalar_ratio": 0.043981,
+          "row_median_mte2_active_bw_export": 7.6027495
+        },
+        {
+          "physical_device": 12,
+          "row_median_mte2_ratio": 0.952199,
+          "row_median_scalar_ratio": 0.04122,
+          "row_median_mte2_active_bw_export": 7.8151125
+        },
+        {
+          "physical_device": 12,
+          "row_median_mte2_ratio": 0.947953,
+          "row_median_scalar_ratio": 0.0451285,
+          "row_median_mte2_active_bw_export": 7.741921
+        }
+      ]
+    },
+    {
+      "case": "span/32/1048576",
+      "baseline_case": "span/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.939442,
+          24.539509,
+          28.219435,
+          29.119417,
+          30.119398
+        ],
+        "median_us": 28.219435,
+        "range_over_median": 0.19773213035625983,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          16.359673,
+          18.419632,
+          17.699646,
+          16.539669,
+          21.359573
+        ],
+        "median_us": 17.699646,
+        "range_over_median": 0.2824858757062147,
+        "low_confidence": true
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 131072,
+        "index_bytes": 0,
+        "output_bytes": 131072,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194180,
+        "distinct_input_bytes": 131072,
+        "grid": [
+          128
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 148.63174971433693,
+      "candidate_useful_input_GB_per_s": 7.405345847029935,
+      "comparison": {
+        "baseline": "span/1/1048576",
+        "median_latency_ratio": 1.5943502485868926,
+        "paired_latency_ratios": [
+          1.7078239889024676,
+          1.3322475172142418,
+          1.5943502485868926,
+          1.7605803961373108,
+          1.4101123650739646
+        ],
+        "paired_ratio_geomean": 1.552044857299275,
+        "paired_ratio_range": [
+          1.3322475172142418,
+          1.7605803961373108
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 13,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8934275
+        },
+        {
+          "row_count": 48,
+          "physical_device": 13,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8993065
+        },
+        {
+          "row_count": 48,
+          "physical_device": 13,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.894447
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 13,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 128.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 128.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8636675
+        },
+        {
+          "row_count": 48,
+          "physical_device": 13,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 128.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 128.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8694824999999999
+        },
+        {
+          "row_count": 48,
+          "physical_device": 13,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 128.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 128.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8694299999999999
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 13,
+          "row_median_mte2_ratio": 0.8993405,
+          "row_median_scalar_ratio": 0.191688,
+          "row_median_mte2_active_bw_export": 5.0465345
+        },
+        {
+          "physical_device": 13,
+          "row_median_mte2_ratio": 0.8976385,
+          "row_median_scalar_ratio": 0.187032,
+          "row_median_mte2_active_bw_export": 5.0418
+        },
+        {
+          "physical_device": 13,
+          "row_median_mte2_ratio": 0.8982490000000001,
+          "row_median_scalar_ratio": 0.193706,
+          "row_median_mte2_active_bw_export": 5.031194
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 13,
+          "row_median_mte2_ratio": 0.885756,
+          "row_median_scalar_ratio": 0.09290899999999999,
+          "row_median_mte2_active_bw_export": 9.956761
+        },
+        {
+          "physical_device": 13,
+          "row_median_mte2_ratio": 0.8340515,
+          "row_median_scalar_ratio": 0.13226949999999998,
+          "row_median_mte2_active_bw_export": 10.9062245
+        },
+        {
+          "physical_device": 13,
+          "row_median_mte2_ratio": 0.878294,
+          "row_median_scalar_ratio": 0.09987599999999999,
+          "row_median_mte2_active_bw_export": 10.628168
+        }
+      ]
+    },
+    {
+      "case": "span/64/1048576",
+      "baseline_case": "span/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          27.639446,
+          24.939501,
+          27.95944,
+          30.659388,
+          29.019419
+        ],
+        "median_us": 27.95944,
+        "range_over_median": 0.20457802445256412,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          12.879743,
+          17.079659,
+          13.03974,
+          14.599708,
+          13.359733
+        ],
+        "median_us": 13.359733,
+        "range_over_median": 0.3143712527787793,
+        "low_confidence": true
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 65536,
+        "index_bytes": 0,
+        "output_bytes": 65536,
+        "allocation_bytes": 4194304,
+        "accessed_span_bytes": 4194052,
+        "distinct_input_bytes": 65536,
+        "grid": [
+          64
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 150.0138772450378,
+      "candidate_useful_input_GB_per_s": 4.905487257866605,
+      "comparison": {
+        "baseline": "span/1/1048576",
+        "median_latency_ratio": 2.0928142800458662,
+        "paired_latency_ratios": [
+          2.145962539780491,
+          1.460187290624479,
+          2.144171586243284,
+          2.1000000821934246,
+          2.172155611193727
+        ],
+        "paired_ratio_geomean": 1.9828054168651952,
+        "paired_ratio_range": [
+          1.460187290624479,
+          2.172155611193727
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 14,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8995070000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 14,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.898889
+        },
+        {
+          "row_count": 48,
+          "physical_device": 14,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8959035
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 14,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 2048.0,
+            "UB_to_GM_datas(KB)": 64.0,
+            "read_main_memory_datas(KB)": 2054.0,
+            "write_main_memory_datas(KB)": 64.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.719787
+        },
+        {
+          "row_count": 48,
+          "physical_device": 14,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 2048.0,
+            "UB_to_GM_datas(KB)": 64.0,
+            "read_main_memory_datas(KB)": 2054.0,
+            "write_main_memory_datas(KB)": 64.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.7349425
+        },
+        {
+          "row_count": 48,
+          "physical_device": 14,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 2048.0,
+            "UB_to_GM_datas(KB)": 64.0,
+            "read_main_memory_datas(KB)": 2054.0,
+            "write_main_memory_datas(KB)": 64.0
+          },
+          "input_reported_amplification_if_KiB": 32.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.7423335
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 14,
+          "row_median_mte2_ratio": 0.8985155,
+          "row_median_scalar_ratio": 0.18368050000000002,
+          "row_median_mte2_active_bw_export": 5.062352
+        },
+        {
+          "physical_device": 14,
+          "row_median_mte2_ratio": 0.8824655,
+          "row_median_scalar_ratio": 0.1942245,
+          "row_median_mte2_active_bw_export": 5.0281105
+        },
+        {
+          "physical_device": 14,
+          "row_median_mte2_ratio": 0.8948929999999999,
+          "row_median_scalar_ratio": 0.19375799999999999,
+          "row_median_mte2_active_bw_export": 5.0532965
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 14,
+          "row_median_mte2_ratio": 0.7546984999999999,
+          "row_median_scalar_ratio": 0.1778245,
+          "row_median_mte2_active_bw_export": 12.380780999999999
+        },
+        {
+          "physical_device": 14,
+          "row_median_mte2_ratio": 0.7455595,
+          "row_median_scalar_ratio": 0.174017,
+          "row_median_mte2_active_bw_export": 11.4345635
+        },
+        {
+          "physical_device": 14,
+          "row_median_mte2_ratio": 0.7330274999999999,
+          "row_median_scalar_ratio": 0.2028455,
+          "row_median_mte2_active_bw_export": 11.2360805
+        }
+      ]
+    },
+    {
+      "case": "indexed/contiguous/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          26.639467,
+          30.139397,
+          30.919382,
+          30.099398,
+          29.819403
+        ],
+        "median_us": 30.099398,
+        "range_over_median": 0.1421927109638538,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          480.810394,
+          485.3703,
+          481.470367,
+          485.990295,
+          480.870392
+        ],
+        "median_us": 481.470367,
+        "range_over_median": 0.010758504271562011,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 4194304,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 139.34843480922774,
+      "candidate_useful_input_GB_per_s": 8.71144786362314,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.0625155774124724,
+        "paired_latency_ratios": [
+          0.055405347580734704,
+          0.06209567622905646,
+          0.06421866041861721,
+          0.06193415446701461,
+          0.06201131010785959
+        ],
+        "paired_ratio_geomean": 0.061056946521029165,
+        "paired_ratio_range": [
+          0.055405347580734704,
+          0.06421866041861721
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.887487
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8945975
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8869165
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 12294.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.046191499999999996
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 12294.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.0461115
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 12294.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.046204
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.888713,
+          "row_median_scalar_ratio": 0.19373600000000002,
+          "row_median_mte2_active_bw_export": 4.9780525
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.8891415,
+          "row_median_scalar_ratio": 0.190502,
+          "row_median_mte2_active_bw_export": 5.0184165
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.892787,
+          "row_median_scalar_ratio": 0.1825005,
+          "row_median_mte2_active_bw_export": 4.983258
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.045953,
+          "row_median_scalar_ratio": 0.9556805,
+          "row_median_mte2_active_bw_export": 3.7849885
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.0462395,
+          "row_median_scalar_ratio": 0.9553905,
+          "row_median_mte2_active_bw_export": 3.76679
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.0462855,
+          "row_median_scalar_ratio": 0.955363,
+          "row_median_mte2_active_bw_export": 3.767906
+        }
+      ]
+    },
+    {
+      "case": "indexed/local32/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          26.639467,
+          30.139397,
+          30.919382,
+          30.099398,
+          29.819403
+        ],
+        "median_us": 30.099398,
+        "range_over_median": 0.1421927109638538,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          483.330322,
+          482.310364,
+          483.490326,
+          483.090332,
+          482.670349
+        ],
+        "median_us": 483.090332,
+        "range_over_median": 0.00244252869875274,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 4194304,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 139.34843480922774,
+      "candidate_useful_input_GB_per_s": 8.682235437491638,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.062305941572848536,
+        "paired_latency_ratios": [
+          0.05511648201537829,
+          0.06248963167625401,
+          0.0639503633005472,
+          0.062305941572848536,
+          0.061780059748397766
+        ],
+        "paired_ratio_geomean": 0.061046680225472674,
+        "paired_ratio_range": [
+          0.05511648201537829,
+          0.0639503633005472
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.887487
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8945975
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8869165
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 12294.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.0461795
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 12294.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.0459605
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 12294.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.0459565
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.888713,
+          "row_median_scalar_ratio": 0.19373600000000002,
+          "row_median_mte2_active_bw_export": 4.9780525
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.8891415,
+          "row_median_scalar_ratio": 0.190502,
+          "row_median_mte2_active_bw_export": 5.0184165
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.892787,
+          "row_median_scalar_ratio": 0.1825005,
+          "row_median_mte2_active_bw_export": 4.983258
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.04607,
+          "row_median_scalar_ratio": 0.9555655000000001,
+          "row_median_mte2_active_bw_export": 3.777515
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.04600750000000001,
+          "row_median_scalar_ratio": 0.9556295,
+          "row_median_mte2_active_bw_export": 3.7827005
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.045867000000000005,
+          "row_median_scalar_ratio": 0.9557565,
+          "row_median_mte2_active_bw_export": 3.778542
+        }
+      ]
+    },
+    {
+      "case": "indexed/global/1048576",
+      "baseline_case": "count/1/1048576",
+      "baseline_timing": {
+        "samples_us": [
+          26.639467,
+          30.139397,
+          30.919382,
+          30.099398,
+          29.819403
+        ],
+        "median_us": 30.099398,
+        "range_over_median": 0.1421927109638538,
+        "low_confidence": true
+      },
+      "candidate_timing": {
+        "samples_us": [
+          2378.992432,
+          2379.252441,
+          2377.452393,
+          2377.272461,
+          2379.112305
+        ],
+        "median_us": 2378.992432,
+        "range_over_median": 0.0008322767123456191,
+        "low_confidence": false
+      },
+      "baseline_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 0,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "candidate_footprint": {
+        "useful_input_bytes": 4194304,
+        "index_bytes": 4194304,
+        "output_bytes": 4194304,
+        "allocation_bytes": 268435456,
+        "accessed_span_bytes": 4194304,
+        "distinct_input_bytes": 4194304,
+        "grid": [
+          4096
+        ],
+        "block": 256,
+        "physical_traffic": "unmeasured"
+      },
+      "baseline_useful_input_GB_per_s": 139.34843480922774,
+      "candidate_useful_input_GB_per_s": 1.763058992362528,
+      "comparison": {
+        "baseline": "count/1/1048576",
+        "median_latency_ratio": 0.012652162148618386,
+        "paired_latency_ratios": [
+          0.011197793923877434,
+          0.012667591080554869,
+          0.013005258103605694,
+          0.012661316064435746,
+          0.012533835808141894
+        ],
+        "paired_ratio_geomean": 0.01239657369934234,
+        "paired_ratio_range": [
+          0.011197793923877434,
+          0.013005258103605694
+        ]
+      },
+      "baseline_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.887487
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8945975
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 4102.0,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.8869165
+        }
+      ],
+      "candidate_memory": [
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 134702.125,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.009555999999999999
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 134702.125,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.009576000000000001
+        },
+        {
+          "row_count": 48,
+          "physical_device": 15,
+          "amount_sums_KB": {
+            "GM_to_UB_datas(KB)": 4096.0,
+            "UB_to_GM_datas(KB)": 4096.0,
+            "read_main_memory_datas(KB)": 134702.125,
+            "write_main_memory_datas(KB)": 4096.0
+          },
+          "input_reported_amplification_if_KiB": 1.0,
+          "output_reported_to_logical_ratio_if_KiB": 1.0,
+          "row_median_mte2_ratio": 0.009613
+        }
+      ],
+      "baseline_pipes": [
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.888713,
+          "row_median_scalar_ratio": 0.19373600000000002,
+          "row_median_mte2_active_bw_export": 4.9780525
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.8891415,
+          "row_median_scalar_ratio": 0.190502,
+          "row_median_mte2_active_bw_export": 5.0184165
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.892787,
+          "row_median_scalar_ratio": 0.1825005,
+          "row_median_mte2_active_bw_export": 4.983258
+        }
+      ],
+      "candidate_pipes": [
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.009581,
+          "row_median_scalar_ratio": 0.990754,
+          "row_median_mte2_active_bw_export": 3.7811795000000004
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.0095695,
+          "row_median_scalar_ratio": 0.9907710000000001,
+          "row_median_mte2_active_bw_export": 3.773014
+        },
+        {
+          "physical_device": 15,
+          "row_median_mte2_ratio": 0.009555000000000001,
+          "row_median_scalar_ratio": 0.9907900000000001,
+          "row_median_mte2_active_bw_export": 3.774228
+        }
+      ]
+    }
+  ]
+}

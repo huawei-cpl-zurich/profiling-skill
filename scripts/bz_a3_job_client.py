@@ -9,20 +9,23 @@ import hashlib
 import json
 import math
 import os
+import pwd
 import re
 import shlex
 import statistics
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
 
-PROFILES = {"bz-a3-1", "bz-a3-2"}
-RESULTS = {"ok", "compile_error", "runtime_error", "correctness_error",
+TARGETS = {"bz-a3-1", "bz-a3-2"}
+GLOBAL_CPL_REMOTE = Path(".agents/skills/remote-access/scripts/cpl-remote")
+RESULTS = {"ok", "submission_error", "compile_error", "runtime_error", "correctness_error",
            "infrastructure_error"}
 
 
@@ -48,7 +51,8 @@ def _invoke(argv: list[str], timeout: int) -> CommandResult:
                                 check=False)
     except subprocess.TimeoutExpired as exc:
         output = _text(exc.stdout) + _text(exc.stderr)
-        match = re.search(r"\b(bz-a3-[12]:[A-Za-z0-9_.-]+)\b", output)
+        match = re.search(
+            r"\b(remote:[A-Za-z0-9_.-]+:job:[A-Za-z0-9_.-]+)\b", output)
         handle = match.group(1) if match else None
         raise JobError("observer_error" if handle else "transport_error",
                        f"transport timed out after {timeout}s", handle,
@@ -69,60 +73,166 @@ def _bounded(value: str, limit: int = 64 * 1024) -> str:
     return value if len(value) <= limit else value[:limit] + "\n...[diagnostic truncated]"
 
 
-def _handle(output: str, profile: str) -> str | None:
-    match = re.search(rf"\b({re.escape(profile)}:[A-Za-z0-9_.-]+)\b", output)
-    return match.group(1) if match else None
+def _user_home() -> Path:
+    """Return the authenticated account home without trusting caller environment."""
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
 
 
-def _nonterminal(output: str) -> bool:
-    return any(marker in output for marker in (
-        "CATLASS_VALIDATION_STATE=observation-unavailable",
-        "CATLASS_VALIDATION_STATE=running",
-        "BZ_A3_JOB_STATE=observation-unavailable",
-    ))
+def _cpl_json_receipt(result: CommandResult, handle: str | None) -> dict:
+    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    diagnostics = _bounded(result.stdout + result.stderr)
+    if not lines:
+        raise JobError("transport_error",
+                       "cpl-remote JSON receipt is missing: " + diagnostics, handle)
+    try:
+        payload = json.loads(lines[-1])
+    except json.JSONDecodeError as exc:
+        raise JobError("transport_error",
+                       "cpl-remote trailing JSON receipt is missing: " + diagnostics,
+                       handle) from exc
+    if not isinstance(payload, dict):
+        raise JobError("transport_error",
+                       "cpl-remote trailing JSON receipt is not an object: " + diagnostics,
+                       handle)
+    for line in lines[:-1]:
+        try:
+            earlier = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(earlier, dict):
+            raise JobError("transport_error",
+                           "cpl-remote JSON receipt is ambiguous: " + diagnostics,
+                           handle)
+    return payload
 
 
-class AdapterTransport:
-    """Approved cpl-remote and neutral cat_dev adapter boundary."""
+class GlobalCplRemoteTransport:
+    """Hash-pinned access to the installed global remote-access client."""
 
-    def __init__(self, remote: list[str], adapter: list[str],
-                 invoke: Callable = _invoke):
-        self.remote, self.adapter, self.invoke = remote, adapter, invoke
+    def __init__(self, expected_sha256: str, remote_root: str,
+                 invoke: Callable = _invoke, *, targets: set[str] | None = None,
+                 executable: Path | None = None):
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise JobError("request_error",
+                           "cpl-remote digest must be 64 lowercase hexadecimal characters")
+        self.executable = executable or (_user_home() / GLOBAL_CPL_REMOTE)
+        try:
+            actual = _sha(self.executable)
+        except OSError as exc:
+            raise JobError("transport_error",
+                           f"global cpl-remote is unavailable: {exc}") from exc
+        if actual != expected_sha256:
+            raise JobError("digest_mismatch", "global cpl-remote digest mismatch")
+        if not os.access(self.executable, os.X_OK):
+            raise JobError("transport_error", "global cpl-remote is not executable")
+        self.expected_sha256 = expected_sha256
+        self.remote_root = validate_remote_root(remote_root)
+        self.invoke = invoke
+        self.targets = set(TARGETS if targets is None else targets)
 
-    def upload(self, profile: str, source: Path, destination: str, timeout: int) -> None:
-        result = self.invoke(
-            self.remote + ["upload", profile, str(source), destination], timeout)
-        if result.returncode:
-            raise JobError("staging_error", _bounded(result.stdout + result.stderr))
+    def _call(self, arguments: list[str], timeout: int,
+              *, handle: str | None = None) -> dict:
+        if _sha(self.executable) != self.expected_sha256:
+            raise JobError("digest_mismatch", "global cpl-remote changed after validation",
+                           handle)
+        try:
+            result = self.invoke([str(self.executable), "--json", *arguments], timeout)
+        except JobError as exc:
+            if exc.handle is not None:
+                target = (arguments[1] if arguments[:1] == ["run"]
+                          and len(arguments) > 1 else None)
+                if handle is not None:
+                    target = handle.split(":", 3)[1]
+                if target not in self.targets:
+                    raise JobError(
+                        "transport_error", "cpl-remote timeout returned a handle for "
+                        "an unsupported target", dispatch_uncertain=True,
+                    ) from exc
+                self._validate_handle(target, exc.handle)
+            if handle is None:
+                raise
+            raise JobError("observer_error", str(exc), handle) from exc
+        return _cpl_json_receipt(result, handle)
 
-    def execute(self, profile: str, device: int, operation: str, script: str,
-                timeout: int) -> tuple[CommandResult, str | None]:
-        deadline = time.monotonic() + timeout
-        argv = self.adapter + [
-            "--profile", profile, "--operation", operation, "run", "--native",
-            "--runtime", "py311-torch", "--device", str(device), "--timeout",
-            str(timeout), "--", "bash", "-c", script,
-        ]
-        result = self.invoke(argv, timeout)
-        handle = _handle(result.stdout + result.stderr, profile)
-        if handle and _nonterminal(result.stdout + result.stderr):
-            remaining = math.ceil(deadline - time.monotonic())
-            if remaining < 1:
-                raise JobError("observer_error", "BZ job deadline exhausted", handle)
-            try:
-                result = self.observe(profile, handle, remaining)
-            except JobError as exc:
-                raise JobError("observer_error", str(exc), exc.handle or handle) from exc
-        return result, handle
+    @staticmethod
+    def _validate_handle(target: str, handle: object) -> str:
+        prefix = f"remote:{target}:job:"
+        if (not isinstance(handle, str) or not handle.startswith(prefix)
+                or not re.fullmatch(r"remote:[A-Za-z0-9_.-]+:job:[A-Za-z0-9_.-]+", handle)):
+            raise JobError("transport_error", "cpl-remote returned an invalid job handle")
+        return handle
 
-    def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
-        result = self.invoke(
-            self.adapter + ["--profile", profile, "observe", "--handle", handle],
-            timeout,
+    def upload(self, target: str, source: Path, destination: str, timeout: int) -> None:
+        payload = self._call(
+            ["upload", "--timeout", str(timeout), target, str(source), destination], timeout)
+        if (payload.get("target") != target or payload.get("state") != "completed"):
+            raise JobError("staging_error", "cpl-remote upload did not complete")
+
+    def dispatch(self, target: str, device: int, runtime: str, operation: str,
+                 script: str, timeout: int) -> str:
+        del operation
+        wrapped = ("#!/usr/bin/env bash\nset -euo pipefail\n"
+                   f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
+                   "export ASCEND_DEVICE_ID=0\n" + script)
+        path = None
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as stream:
+                stream.write(wrapped)
+                stream.flush()
+                path = Path(stream.name)
+            payload = self._call([
+                "run", target, "--runtime", runtime, "--file", str(path),
+                "--cwd", self.remote_root, "--timeout", str(timeout),
+            ], timeout)
+        finally:
+            if path is not None:
+                path.unlink(missing_ok=True)
+        handle = self._validate_handle(target, payload.get("handle"))
+        state = payload.get("state")
+        if state not in {"running", "reconnecting", "observation-unavailable",
+                         "completed", "failed", "cancelled"}:
+            raise JobError("transport_error", "cpl-remote returned an invalid run state",
+                           handle)
+        return handle
+
+    def observe(self, target: str, handle: str, timeout: int) -> CommandResult:
+        self._validate_handle(target, handle)
+        payload = self._call(
+            ["observe", handle, "--wait", "--timeout", str(timeout)], timeout,
+            handle=handle,
         )
-        if _nonterminal(result.stdout + result.stderr):
+        if payload.get("handle") != handle or payload.get("target") != target:
+            raise JobError("transport_error", "cpl-remote observation identity mismatch",
+                           handle)
+        if payload.get("state") in {"running", "reconnecting", "observation-unavailable"}:
             raise JobError("observer_error", "retained job is not terminal", handle)
-        return result
+        if payload.get("state") not in {"completed", "failed", "cancelled"}:
+            raise JobError("observer_error", "retained job returned an invalid state", handle)
+        return self._collect(target, handle, timeout)
+
+    def _collect(self, target: str, handle: str, timeout: int) -> CommandResult:
+        terminal = self._call(["result", handle], timeout, handle=handle)
+        if terminal.get("handle") != handle or terminal.get("target") != target:
+            raise JobError("transport_error", "cpl-remote result identity mismatch", handle)
+        state = terminal.get("state")
+        if state not in {"completed", "failed", "cancelled"}:
+            raise JobError("observer_error", "retained result is not terminal", handle)
+        streams = {}
+        for name, tail in (("stdout", 1), ("stderr", 200)):
+            payload = self._call(
+                ["logs", handle, "--stream", name, "--tail", str(tail)], timeout,
+                handle=handle,
+            )
+            if (payload.get("handle") != handle or payload.get("target") != target
+                    or payload.get("state") != "completed"
+                    or not isinstance(payload.get("content"), str)):
+                raise JobError("transport_error", "cpl-remote logs identity mismatch",
+                               handle)
+            streams[name] = payload["content"]
+        exit_code = terminal.get("exit")
+        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+            exit_code = 0 if state == "completed" else 125
+        return CommandResult(exit_code, streams["stdout"], streams["stderr"])
 
 
 def _json_sha(value: object) -> str:
@@ -154,7 +264,7 @@ def _write_json(path: Path, value: dict) -> None:
         os.close(directory)
 
 
-def validate_placements(value: object) -> dict[int, dict]:
+def validate_placements(value: object, targets: set[str] = TARGETS) -> dict[int, dict]:
     if not isinstance(value, dict) or not value:
         raise JobError("request_error", "placements must be a non-empty JSON object")
     result = {}
@@ -165,8 +275,8 @@ def validate_placements(value: object) -> dict[int, dict]:
             raise JobError("request_error", "placement keys must be logical device IDs") from exc
         if (str(logical_id) != str(logical) or logical_id < 0
                 or not isinstance(placement, dict)
-                or set(placement) != {"profile", "device"}
-                or placement.get("profile") not in PROFILES
+                or set(placement) != {"target", "device"}
+                or placement.get("target") not in targets
                 or isinstance(placement.get("device"), bool)
                 or not isinstance(placement.get("device"), int)
                 or placement["device"] < 0):
@@ -210,6 +320,10 @@ def _parse_result(stdout: str, expected: dict) -> dict:
         raise JobError("transport_error", "remote result is invalid JSON") from exc
     if not isinstance(result, dict) or result.get("status") not in RESULTS:
         raise JobError("transport_error", "remote result has an invalid status")
+    # Historical kernel-replay receipts omitted the mode. Application replay
+    # must always bind its mode explicitly, including on resumed jobs.
+    if expected.get("replay_mode") == "kernel":
+        result.setdefault("replay_mode", "kernel")
     mismatch = [key for key, value in expected.items() if result.get(key) != value]
     if mismatch:
         raise JobError("transport_error",
@@ -223,16 +337,35 @@ def _positive_number(value: object) -> bool:
             and math.isfinite(value) and value > 0)
 
 
+def _valid_selector_mapping(declared: object, resolved: object) -> bool:
+    return (isinstance(declared, str) and bool(declared)
+            and isinstance(resolved, str) and bool(resolved)
+            and (resolved == declared
+                 or any(declared == resolved + suffix
+                        for suffix in ("_mix_aic", "_mix_aiv"))))
+
+
 def _validate_profile_evidence(result: dict, job: dict) -> None:
     evidence = result.get("profile")
     rows = result.get("profile_cases")
-    kernel = job["profiling"]["kernel_name"]
     replay_mode = job["profiling"].get("replay_mode", "kernel")
+    declared = job["profiling"]["kernel_name"]
     repeats = job["repeats"]
+    target_family = "Ascend-A5" if job.get("product") == "a5" else "Ascend-A2-A3"
+    explicit_names = (isinstance(evidence, dict)
+                      and ("declared_kernel_name" in evidence
+                           or "resolved_kernel_name" in evidence))
+    evidence_declared = evidence.get("declared_kernel_name") if explicit_names else declared
+    resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
     if (not isinstance(evidence, dict) or evidence.get("status") != "success"
             or evidence.get("profiler") != "msprof-op"
-            or evidence.get("kernel_name") != kernel
-            or evidence.get("replay_mode") != replay_mode
+            or evidence.get("replay_mode", "kernel") != replay_mode
+            or evidence.get("target_family", "Ascend-A2-A3") != target_family
+            or evidence.get("kernel_name") != declared
+            or evidence_declared != declared
+            or not _valid_selector_mapping(declared, resolved)
+            or result.get("declared_kernel_name", declared) != declared
+            or result.get("resolved_kernel_name", resolved) != resolved
             or evidence.get("repeats") != repeats
             or not isinstance(rows, list) or evidence.get("cases") != rows
             or len(rows) != len(job["cases"])
@@ -256,8 +389,11 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     if (not isinstance(captures, list) or len(captures) != len(expected)
             or any(not isinstance(capture, dict)
                    or (capture.get("case"), capture.get("iteration")) != identity[:2]
-                   or capture.get("kernel_name") != kernel
-                   or capture.get("replay_mode") != replay_mode
+                   or capture.get("replay_mode", "kernel") != replay_mode
+                   or capture.get("kernel_name") != resolved
+                   or (explicit_names and
+                       (capture.get("declared_kernel_name") != declared
+                        or capture.get("resolved_kernel_name") != resolved))
                    or not _positive_number(capture.get("duration_us"))
                    or not math.isclose(capture["duration_us"], identity[2],
                                        rel_tol=1e-12, abs_tol=1e-12)
@@ -275,18 +411,29 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
 
 
 class BzA3JobClient:
-    def __init__(self, transport: AdapterTransport, state_dir: Path,
+    PRODUCT = "a3"
+    RUNTIME = "py311-torch"
+    TARGETS = TARGETS
+
+    def __init__(self, transport: GlobalCplRemoteTransport, state_dir: Path,
                  placements: object, *, runner: Path, profiler: Path,
-                 batch_profiler: Path, remote_root: str):
+                 batch_profiler: Path, remote_root: str,
+                 interrupt_after_dispatch: Path | None = None):
         self.transport = transport
         self.state_dir = state_dir
-        self.placements = validate_placements(placements)
+        self.placements = validate_placements(placements, self.TARGETS)
         self.placements_sha256 = _json_sha(self.placements)
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler
         self.remote_root = validate_remote_root(remote_root)
+        self.interrupt_after_dispatch = (
+            Path(interrupt_after_dispatch).resolve()
+            if interrupt_after_dispatch is not None else None
+        )
 
-    def run(self, job: object, timeout: int = 3600) -> dict:
+    def run(self, job: object, timeout: int = 3600,
+            *, operation_mode: str = "submit",
+            controller_request_sha256: str | None = None) -> dict:
         identity: dict = {}
         placement = None
         handle = None
@@ -296,12 +443,21 @@ class BzA3JobClient:
         try:
             if not isinstance(job, dict):
                 raise JobError("request_error", "job must be a JSON object")
+            if operation_mode not in {"submit", "observe"}:
+                raise JobError("request_error", "controller operation mode is invalid")
+            if (self.interrupt_after_dispatch is not None
+                    and (not isinstance(controller_request_sha256, str)
+                         or not re.fullmatch(r"[0-9a-f]{64}",
+                                             controller_request_sha256))):
+                raise JobError("request_error",
+                               "canary controller request digest is invalid")
             if (isinstance(timeout, bool) or not isinstance(timeout, int)
                     or timeout <= 25):
                 raise JobError("request_error",
                                "effective timeout must be an integer greater than 25 seconds")
             self._validate_job(job)
             identity = _identity(job)
+            provenance = self._execution_provenance(job["runtime"])
             logical = job["device"]
             placement = self.placements.get(logical)
             if placement is None:
@@ -309,12 +465,32 @@ class BzA3JobClient:
                                f"no frozen placement for logical device {logical}")
             stage_files, remote_job = self._files_and_job(job)
             file_hashes = {name: _sha(path) for name, path in stage_files}
-            request_sha = _json_sha({"job": remote_job, "files": file_hashes,
-                                     "campaign_device": logical,
-                                     "placement": placement,
-                                     "placements_sha256": self.placements_sha256,
-                                     "remote_root": self.remote_root,
-                                     "timeout_seconds": timeout})
+            request_identity = {"job": remote_job, "files": file_hashes,
+                                "campaign_device": logical,
+                                "placement": placement,
+                                "placements_sha256": self.placements_sha256,
+                                "remote_root": self.remote_root,
+                                "timeout_seconds": timeout}
+            candidates = []
+            for candidate_provenance in (
+                    provenance, *self._legacy_execution_provenances(job["runtime"])):
+                candidate_sha = _json_sha({
+                    **request_identity,
+                    "execution_provenance": candidate_provenance,
+                })
+                candidate_state = self.state_dir / candidate_sha
+                if ((candidate_state / "dispatch.json").is_file()
+                        or (candidate_state / "completed.json").is_file()):
+                    candidates.append((candidate_sha, candidate_provenance))
+            if len(candidates) > 1:
+                raise JobError(
+                    "request_error", "conflicting current and legacy request receipts")
+            if candidates:
+                request_sha, provenance = candidates[0]
+            else:
+                request_sha = _json_sha({
+                    **request_identity, "execution_provenance": provenance,
+                })
             state = self.state_dir / request_sha
             archive = state / "payload.tar"
             dispatch, completed = state / "dispatch.json", state / "completed.json"
@@ -325,6 +501,8 @@ class BzA3JobClient:
                 record = json.loads(completed.read_text())
                 if record.get("request_sha256") != request_sha:
                     raise JobError("request_error", "completed receipt request mismatch")
+                if record.get("execution_provenance") != provenance:
+                    raise JobError("request_error", "completed receipt provenance mismatch")
                 result = record.get("result")
                 if not isinstance(result, dict):
                     raise JobError("request_error", "completed receipt is invalid")
@@ -333,45 +511,60 @@ class BzA3JobClient:
                 record = json.loads(dispatch.read_text())
                 if record.get("request_sha256") != request_sha:
                     raise JobError("request_error", "dispatch receipt request mismatch")
+                if record.get("execution_provenance") != provenance:
+                    raise JobError("request_error", "dispatch receipt provenance mismatch")
                 handle = record.get("handle")
-                if not isinstance(handle, str) or not handle.startswith(placement["profile"] + ":"):
+                expected = f'remote:{placement["target"]}:job:'
+                if not isinstance(handle, str) or not handle.startswith(expected):
                     raise JobError("request_error", "dispatch receipt handle mismatch")
+                self._interrupt_observer(
+                    request_sha, controller_request_sha256, placement, handle,
+                    identity, operation_mode, job,
+                )
                 response = self.transport.observe(
-                    placement["profile"], handle, self._remaining(deadline, handle))
+                    placement["target"], handle, self._remaining(deadline, handle))
             else:
                 self._archive(archive, stage_files, remote_job)
                 # cpl-remote's rsync transport does not create destination
                 # parents. The configured root is therefore a pre-provisioned
                 # writable staging directory, while the content-addressed
                 # filename keeps concurrent requests collision-free.
-                remote_archive = f"{self.remote_root}/payload-{request_sha}.tar"
-                self.transport.upload(placement["profile"], archive, remote_archive,
-                                      self._remaining(deadline))
                 run_root = f"{self.remote_root}/runs/{request_sha}"
-                script = self._remote_script(
-                    remote_archive, _sha(archive), run_root,
+                script = self._prepare_remote_script(
+                    placement["target"], archive, request_sha, run_root,
                     self._workload_timeout(self._remaining(deadline)), job,
+                    self._remaining(deadline),
                 )
                 try:
-                    response, handle = self.transport.execute(
-                        placement["profile"], placement["device"],
+                    handle = self.transport.dispatch(
+                        placement["target"], placement["device"], job["runtime"],
                         f"profiling-job-{request_sha[:16]}", script,
                         self._remaining(deadline),
                     )
+                    _write_json(dispatch, {"protocol_version": 1,
+                                "request_sha256": request_sha,
+                                "execution_provenance": provenance,
+                                "handle": handle})
+                    self._interrupt_observer(
+                        request_sha, controller_request_sha256, placement, handle,
+                        identity, operation_mode, job,
+                    )
+                    response = self.transport.observe(
+                        placement["target"], handle,
+                        self._remaining(deadline, handle))
                 except JobError as exc:
                     if exc.handle:
                         _write_json(dispatch, {"protocol_version": 1,
                                     "request_sha256": request_sha,
+                                    "execution_provenance": provenance,
                                     "handle": exc.handle})
                     raise
-                if handle:
-                    _write_json(dispatch, {"protocol_version": 1,
-                                "request_sha256": request_sha, "handle": handle})
             result = self._complete(response, handle, identity, placement,
                                     request_sha, job, self.remote_root,
-                                    self.placements_sha256)
+                                    self.placements_sha256, provenance)
             _write_json(completed, {"protocol_version": 1,
-                        "request_sha256": request_sha, "result": result})
+                        "request_sha256": request_sha,
+                        "execution_provenance": provenance, "result": result})
             dispatch.unlink(missing_ok=True)
             return result
         except JobError as exc:
@@ -390,6 +583,53 @@ class BzA3JobClient:
             if request_lock is not None:
                 fcntl.flock(request_lock, fcntl.LOCK_UN)
                 request_lock.close()
+
+    def _interrupt_observer(self, request_sha: str,
+                            controller_request_sha256: str | None,
+                            placement: dict, handle: str, identity: dict,
+                            operation_mode: str, job: dict) -> None:
+        marker = self.interrupt_after_dispatch
+        if marker is None or "calibration_phase" in job:
+            return
+        candidate = Path(job["candidate"])
+        manifest = candidate.with_name("candidate.manifest.json")
+        if not manifest.is_file():
+            raise JobError("request_error", "canary candidate manifest is unavailable",
+                           handle)
+        document = {
+            "schema": "profiling-skill/canary-observer-interrupt/v1",
+            "job_request_sha256": request_sha,
+            "controller_request_sha256": controller_request_sha256,
+            "handle": handle,
+            "target": placement["target"], "device": placement["device"],
+            "job_identity": identity,
+            "candidate_sha256": _sha(candidate),
+            "manifest_sha256": _sha(manifest),
+        }
+        if marker.is_file():
+            try:
+                retained = json.loads(marker.read_text())
+            except (OSError, json.JSONDecodeError) as exc:
+                raise JobError("request_error", "canary observer marker is invalid",
+                               handle) from exc
+            if retained != document:
+                return
+        else:
+            _write_json(marker, document)
+        if operation_mode != "observe":
+            raise JobError(
+                "observer_error", "deterministic canary observer interruption", handle,
+            )
+
+    def _execution_provenance(self, runtime: str) -> dict[str, str]:
+        digest = getattr(self.transport, "expected_sha256", None)
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise JobError("request_error", "transport cpl-remote digest is invalid")
+        return {"cpl_remote_sha256": digest, "runtime": runtime}
+
+    def _legacy_execution_provenances(self, runtime: str) -> tuple[dict[str, str], ...]:
+        del runtime
+        return ()
 
     @staticmethod
     def _acquire_request_lock(path: Path, deadline: float):
@@ -424,11 +664,16 @@ class BzA3JobClient:
             raise JobError("transport_error", "insufficient workload response grace")
         return remaining - 25
 
-    @staticmethod
-    def _validate_job(job: dict) -> None:
+    @classmethod
+    def _validate_job(cls, job: dict) -> None:
         if job.get("protocol_version") != 1 or job.get("action") not in {
                 "check", "measure", "profile"}:
             raise JobError("request_error", "unsupported job protocol or action")
+        if job.get("runtime") != cls.RUNTIME:
+            raise JobError("request_error", f"runtime must be {cls.RUNTIME}")
+        product = job.get("product", cls.PRODUCT)
+        if product != cls.PRODUCT:
+            raise JobError("request_error", f"product must be {cls.PRODUCT}")
         device = job.get("device")
         if isinstance(device, bool) or not isinstance(device, int) or device < 0:
             raise JobError("request_error", "device must be a non-negative logical ID")
@@ -537,10 +782,20 @@ test -f response.json || exit "$rc"
 {merge}
 exit 0'''
 
+    def _prepare_remote_script(self, target: str, archive: Path, request_sha: str,
+                               run_root: str, workload_timeout: int, job: dict,
+                               transport_timeout: int) -> str:
+        remote_archive = f"{self.remote_root}/payload-{request_sha}.tar"
+        self.transport.upload(target, archive, remote_archive, transport_timeout)
+        return self._remote_script(
+            remote_archive, _sha(archive), run_root, workload_timeout, job,
+        )
+
     @staticmethod
     def _complete(response: CommandResult, handle: str | None, identity: dict,
                   placement: dict, request_sha: str, job: dict,
-                  remote_root: str, placements_sha256: str) -> dict:
+                  remote_root: str, placements_sha256: str,
+                  execution_provenance: dict[str, str]) -> dict:
         output = response.stdout + response.stderr
         if response.returncode in (124, 137):
             return {"status": "runtime_error", "failure_type": "runtime_error",
@@ -563,6 +818,7 @@ exit 0'''
         result.update(handle=handle, placement=placement,
                       artifacts={"request_digest": request_sha,
                                  "placements_sha256": placements_sha256,
+                                 "execution_provenance": execution_provenance,
                                  "remote_run_root": f"{remote_root}/runs/{request_sha}"})
         if job["action"] == "profile":
             result["artifacts"]["remote_profile_evidence"] = (
@@ -578,39 +834,36 @@ exit 0'''
         return result
 
 
-def _command(value: str, name: str) -> list[str]:
-    parsed = json.loads(value)
-    if (not isinstance(parsed, list) or not parsed
-            or not all(isinstance(item, str) and item for item in parsed)):
-        raise ValueError(f"{name} must be a non-empty JSON string array")
-    return parsed
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--placements-json", type=Path, required=True)
-    parser.add_argument("--remote-json", default='["cpl-remote"]')
-    parser.add_argument("--adapter-json", required=True)
+    parser.add_argument("--cpl-remote-sha256", required=True)
     parser.add_argument(
         "--remote-root", required=True,
         help="existing writable remote staging root; run artifacts use its runs/ child",
     )
     parser.add_argument("--timeout", type=int, default=3600)
+    parser.add_argument("--canary-interrupt-after-dispatch-once", type=Path)
     args = parser.parse_args()
     try:
-        remote = _command(args.remote_json, "--remote-json")
-        adapter = _command(args.adapter_json, "--adapter-json")
         placements = json.loads(args.placements_json.read_text())
         here = Path(__file__).resolve().parent
         client = BzA3JobClient(
-            AdapterTransport(remote, adapter), args.state_dir, placements,
+            GlobalCplRemoteTransport(args.cpl_remote_sha256, args.remote_root),
+            args.state_dir, placements,
             runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
             batch_profiler=here / "batch_profile_a3.py",
             remote_root=args.remote_root,
+            interrupt_after_dispatch=args.canary_interrupt_after_dispatch_once,
         )
         job = json.load(sys.stdin)
-        result = client.run(job, args.timeout)
+        result = client.run(
+            job, args.timeout,
+            operation_mode=os.environ.get("PROFILING_SKILL_CONTROLLER_MODE", "submit"),
+            controller_request_sha256=os.environ.get(
+                "PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"),
+        )
     except (OSError, ValueError, json.JSONDecodeError, JobError) as exc:
         failure = exc.failure_type if isinstance(exc, JobError) else "request_error"
         result = {"status": "infrastructure_error", "failure_type": failure,

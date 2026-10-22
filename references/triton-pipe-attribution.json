@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "inventory_id": "triton-ascend-3.2.0-pipe-attribution-v1",
+  "compiler_revisions": {
+    "triton_ascend": "23ac2717c0a38ba962cbd4a0425fc069e7ae104d",
+    "ascendnpuir": "af5499b3b9f3dbab50b2834bcfff5da5c2a1d920"
+  },
+  "runtime_scope": {
+    "live_validated_products": ["a3"],
+    "unvalidated_products": ["a2", "a5"]
+  },
+  "lowering_path": [
+    {
+      "stage": "ttir-adapter",
+      "status": "direct",
+      "summary": "Triton-Ascend constructs and runs the TTIR adapter before AscendNPU-IR compilation.",
+      "citation": "ref://profiling-skill/triton/profiling/repos/triton-ascend-pipe-lowering-v3-2-0-profiling#triton-ascend/ascend/backend/compiler.py:L93-L142"
+    },
+    {
+      "stage": "hfusion-pipeline",
+      "status": "direct",
+      "summary": "HFusion pipeline construction is source-visible, but does not by itself assign an original Triton operation to one pipe.",
+      "citation": "ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HFusion/Pipelines/HFusionPipelines.cpp:L216-L248"
+    },
+    {
+      "stage": "hivm-pass-pipeline",
+      "status": "direct",
+      "summary": "The bishengir compiler pass sequence is source-visible.",
+      "citation": "ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Tools/bishengir-compile/PassPipeline.cpp:L45-L72"
+    },
+    {
+      "stage": "hivm-scheduling",
+      "status": "direct",
+      "summary": "HIVM exposes single-pipe, macro input/output-pipe, and unassigned operations; this interface does not make every source Triton operation single-pipe.",
+      "citation": "ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/include/bishengir/Dialect/HIVM/Interfaces/OpPipeInterface.td:L27-L94"
+    }
+  ],
+  "mappings": [
+    {
+      "construct": "ub_to_ub_copy",
+      "status": "direct",
+      "compiler_pipe": "PIPE_V",
+      "profiler_pipe": "Vector",
+      "profiler_pipe_status": "inferred",
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "reason": "CopyOp with UB source and UB destination returns PIPE_V. The profiler display-name correspondence is an enum-name inference."
+    },
+    {
+      "construct": "l0c_to_gm_copy",
+      "status": "direct",
+      "compiler_pipe": "PIPE_FIX",
+      "profiler_pipe": "FIX",
+      "profiler_pipe_status": "inferred",
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "reason": "CopyOp with L0C source and GM destination returns PIPE_FIX. The profiler display-name correspondence is an enum-name inference."
+    },
+    {
+      "construct": "gm_to_l1_copy",
+      "status": "direct",
+      "compiler_pipe": "PIPE_MTE2",
+      "profiler_pipe": "MTE2",
+      "profiler_pipe_status": "inferred",
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "reason": "CopyOp with GM source and L1 destination returns PIPE_MTE2. The profiler display-name correspondence is an enum-name inference."
+    },
+    {
+      "construct": "vbrc_to_l1",
+      "status": "direct",
+      "compiler_pipe": "PIPE_MTE2",
+      "profiler_pipe": "MTE2",
+      "profiler_pipe_status": "inferred",
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "reason": "VBrc with an L1 destination returns PIPE_MTE2. The profiler display-name correspondence is an enum-name inference."
+    },
+    {
+      "construct": "vbrc_to_ub",
+      "status": "direct",
+      "compiler_pipe": "PIPE_V",
+      "profiler_pipe": "Vector",
+      "profiler_pipe_status": "inferred",
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "reason": "VBrc with a UB destination returns PIPE_V. The profiler display-name correspondence is an enum-name inference."
+    },
+    {
+      "construct": "triton_load",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/triton/profiling/repos/triton-ascend-pipe-lowering-v3-2-0-profiling#triton-ascend/ascend/backend/compiler.py:L93-L142"],
+      "why_unknown": "A general Triton load may lower through layout- and address-space-dependent operations; the reviewed source does not establish one pipe.",
+      "next_evidence": "Capture a single-purpose load microbenchmark through TTIR/adapter/HIVM and correlate the emitted operation with compact profiler evidence."
+    },
+    {
+      "construct": "triton_store",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/triton/profiling/repos/triton-ascend-pipe-lowering-v3-2-0-profiling#triton-ascend/ascend/backend/compiler.py:L93-L142"],
+      "why_unknown": "A general Triton store is destination- and lowering-dependent; it is not proven equivalent to a specific HIVM CopyOp case.",
+      "next_evidence": "Capture a single-purpose store microbenchmark through TTIR/adapter/HIVM and correlate it with compact profiler evidence."
+    },
+    {
+      "construct": "triton_dot",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/include/bishengir/Dialect/HIVM/Interfaces/OpPipeInterface.td:L27-L94"],
+      "why_unknown": "The reviewed scheduling interface allows macro and unassigned operations and does not prove an original tl.dot has exactly one pipe.",
+      "next_evidence": "Capture a dot-only microbenchmark and inspect both the emitted HIVM operations and profiler pipe evidence."
+    },
+    {
+      "construct": "triton_elementwise",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/include/bishengir/Dialect/HIVM/Interfaces/OpPipeInterface.td:L27-L94"],
+      "why_unknown": "Elementwise is a source-level family, not one reviewed lowered operation.",
+      "next_evidence": "Use separate arithmetic microbenchmarks and correlate their HIVM instructions with profiler evidence."
+    },
+    {
+      "construct": "triton_reduction",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/include/bishengir/Dialect/HIVM/Interfaces/OpPipeInterface.td:L27-L94"],
+      "why_unknown": "Reduction lowering and synchronization are not assigned to a single pipe by the reviewed evidence.",
+      "next_evidence": "Capture a reduction-only microbenchmark and inspect the complete emitted sequence before correlating profiler evidence."
+    },
+    {
+      "construct": "layout_execution",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/triton/profiling/repos/triton-ascend-pipe-lowering-v3-2-0-profiling#triton-ascend/ascend/backend/compiler.py:L93-L142"],
+      "why_unknown": "The compiler pass sequence is known, but a layout conversion may be folded or expanded and has no proven single execution pipe.",
+      "next_evidence": "Compare otherwise identical microbenchmarks with and without the layout conversion and inspect emitted HIVM."
+    },
+    {
+      "construct": "synchronization",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/include/bishengir/Dialect/HIVM/Interfaces/OpPipeInterface.td:L27-L94"],
+      "why_unknown": "No reviewed source establishes synchronization as a profiler-visible single-pipe operation.",
+      "next_evidence": "Inspect a synchronization-containing HIVM sequence and correlate timeline gaps rather than assuming a pipe."
+    },
+    {
+      "construct": "scalar_control",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "why_unknown": "The reviewed cases do not directly map Triton control expressions to PIPE_S or the profiler Scalar track.",
+      "next_evidence": "Capture a control-heavy microbenchmark and inspect explicit emitted operations before using profiler evidence."
+    },
+    {
+      "construct": "mte1_operation",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "why_unknown": "No reviewed construct-to-PIPE_MTE1 case is established.",
+      "next_evidence": "Identify an emitted PIPE_MTE1 operation from a focused microbenchmark before attributing source code."
+    },
+    {
+      "construct": "mte3_operation",
+      "status": "unknown",
+      "compiler_pipe": null,
+      "profiler_pipe": null,
+      "products": ["a3"],
+      "citations": ["ref://profiling-skill/ascendnpuir/perf-analysis/repos/ascendnpuir-hivm-pipe-scheduling-af5499b-perf-analysis#ascendnpu-ir/bishengir/lib/Dialect/HIVM/IR/OpPipeInterface/GetPipe.cpp:L28-L70"],
+      "why_unknown": "No reviewed construct-to-PIPE_MTE3 case is established.",
+      "next_evidence": "Identify an emitted PIPE_MTE3 operation from a focused microbenchmark before attributing source code."
+    }
+  ]
+}

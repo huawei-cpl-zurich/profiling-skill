@@ -26,18 +26,50 @@ def load_backend():
     return module
 
 
+def test_file_based_backend_load_does_not_depend_on_repository_sys_path(tmp_path: Path):
+    probe = tmp_path / "probe.py"
+    probe.write_text(
+        "import importlib.util, sys\n"
+        f"path={str(BACKEND)!r}\n"
+        "sys.path=[item for item in sys.path if 'profiling-skill' not in item]\n"
+        "spec=importlib.util.spec_from_file_location('detached_backend', path)\n"
+        "module=importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(module)\n"
+        "assert module.FUSED_MANIFEST_SCHEMA.endswith('/v2')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, str(probe)], cwd=tmp_path, text=True, capture_output=True
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def fake_client(tmp_path: Path) -> Path:
     path = tmp_path / "client.py"
     path.write_text("""#!/usr/bin/env python3
 import json, os, sys
 job = json.load(sys.stdin)
 mode = os.environ.get("FAKE_MODE", "ok")
+if os.environ.get("FAKE_LOG"):
+    with open(os.environ["FAKE_LOG"], "a") as stream:
+        stream.write(json.dumps(job, sort_keys=True) + "\\n")
 print("client diagnostic", file=sys.stderr)
 identity = {k: job[k] for k in ("benchmark", "action", "device")}
 if job["action"] == "check": identity.update(cases=job["cases"], scope=job["scope"])
 elif job["action"] == "profile": identity.update(cases=job["cases"], repeats=job["repeats"])
 else: identity["case"] = job["case"]
 if job["action"] == "measure": identity["phase"] = job["phase"]
+if "fusion_contract" in job:
+    entrypoint = job["fusion_contract"]["entrypoint"]
+    selector = job["fusion_contract"]["kernel_name"]
+    identity["fusion_evidence"] = [{
+        "schema": "profiling-skill/fusion-evidence/v1", "case": case,
+        "output_launch_id": "launch-0", "operators": [{
+            "name": selector, "origin": "triton", "entrypoint": entrypoint,
+            "launch_id": "launch-0", "component": "aiv"}]
+    } for case in job["cases"]]
+    if mode == "fusion_fallback":
+        identity["fusion_evidence"][0]["operators"].append(
+            {"name": "aclnnMatmul", "origin": "acl", "launch_id": "acl-0"})
 if job["action"] == "profile":
     identity["round"] = job["round"]
     identity["kernel_name"] = job["profiling"]["kernel_name"]
@@ -45,13 +77,13 @@ if job["action"] == "profile":
 if mode == "wrong_identity": identity["cases"] = list(reversed(identity["cases"]))
 if mode == "wrong_check": identity["scope"] = "development"
 if mode == "wrong_round": identity["round"] = 2
-if mode == "echo":
+if mode in {"echo", "fusion_fallback"}:
     print(json.dumps({"status": "ok", "diagnostics": "", "job": job,
                       "latency_us": 12.5, "passed": True,
                       "profile_cases": [{"case": case, "samples_us": [12.5] * job.get("repeats", 1),
                                          "median_us": 12.5} for case in job.get("cases", [])],
                       "handle": "gz-a3:job-1", **identity}))
-elif mode in {"compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
+elif mode in {"submission_error", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}:
     print(json.dumps({"status": mode, "diagnostics": mode + " details",
                       "handle": "gz-a3:job-2", **identity}))
 elif mode in {"wrong_identity", "wrong_check", "wrong_round"}:
@@ -80,20 +112,45 @@ def request(benchmark="gdn", action="profile", **extra):
     return default
 
 
-def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo"):
+def run_backend(tmp_path: Path, payload: dict, benchmark="gdn", mode="echo",
+                fully_fused=False, log: Path | None = None, allow_legacy=True,
+                product="a3"):
     candidate = tmp_path / "candidate.py"
     candidate.write_text("# candidate\n")
-    candidate.with_suffix(".manifest.json").write_text(json.dumps({
-        "schema": "profiling-skill/candidate-kernel/v1", "kernel_name": "candidate_kernel"
-    }))
+    manifest = {"schema": "profiling-skill/candidate-kernel/v1",
+                "kernel_name": "candidate_kernel"}
+    if fully_fused:
+        manifest = {
+            "schema": "profiling-skill/candidate-kernel/v2",
+            "kernel_name": "candidate_kernel_mix_aiv",
+            "entrypoint": "candidate_kernel",
+            "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                       "complete_operator": True},
+        }
+    candidate.with_suffix(".manifest.json").write_text(json.dumps(manifest))
     client = fake_client(tmp_path)
+    argv = [sys.executable, str(BACKEND), "--benchmark", benchmark,
+            "--product", product,
+            "--candidate", str(candidate), "--job-client-json",
+            json.dumps([str(client), "--profile", "gz-a3"])]
+    if allow_legacy and not fully_fused:
+        argv.append("--allow-legacy-v1")
     return subprocess.run(
-        [sys.executable, str(BACKEND), "--benchmark", benchmark, "--candidate", str(candidate),
-         "--job-client-json", json.dumps([str(client), "--profile", "gz-a3"])], input=json.dumps(payload), text=True,
-        capture_output=True, env={**__import__("os").environ, "FAKE_MODE": mode}, check=False)
+        argv, input=json.dumps(payload), text=True,
+        capture_output=True,
+        env={**__import__("os").environ, "FAKE_MODE": mode,
+             **({"FAKE_LOG": str(log)} if log else {})}, check=False)
 
 
-def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
+def test_new_profile_rejects_v1_without_explicit_historical_replay(tmp_path: Path):
+    result = json.loads(run_backend(
+        tmp_path, request("matmul"), "matmul", allow_legacy=False,
+    ).stdout)
+    assert result["status"] == "submission_error"
+    assert "legacy v1 replay must be explicitly enabled" in result["diagnostics"]
+
+
+def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: Path):
     payload = {"protocol_version": 1, "action": "calibrate", "benchmark": "gdn",
                "device": 3, "phase": "before", "wave": 2,
                "attempt_id": "wave-2-first"}
@@ -103,10 +160,23 @@ def test_calibration_uses_frozen_matmul_case_and_exact_selector(tmp_path: Path):
     assert result["device"] == 3
     assert result["selector"] == "streaming_matmul_add_kernel_mix_aic"
     assert result["job"]["cases"] == [7]
+    assert result["job"]["repeats"] == 3
+    assert result["samples_us"] == [12.5, 12.5, 12.5]
+    assert result["median_us"] == 12.5
     assert result["job"]["calibration_phase"] == "before"
     assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
-    assert result["job"]["profiling"]["kernel_name"] == result["selector"]
+    assert result["job"]["profiling"] == {
+        "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
+        "tool": "msprof op",
+        "captures": 3,
+        "aic_metrics": "BasicInfo",
+        "warm_up": 3,
+        "launch_count": 1,
+        "replay_mode": "kernel",
+        "kernel_name": result["selector"],
+        "driver_arguments": ["--kernel-name", result["selector"], "--replay-mode", "kernel"],
+    }
 
 
 def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):
@@ -124,6 +194,66 @@ def test_calibration_attempt_identity_changes_managed_job(tmp_path: Path):
     assert first["job"]["calibration_attempt_id"] == "wave-2-first"
     assert second["job"]["calibration_attempt_id"] == "wave-2-retry"
     assert first["job"] != second["job"]
+
+
+@pytest.mark.parametrize("product,mode", [("a3", "application"), ("a5", "kernel")])
+def test_bsa_replay_choice_is_product_specific(tmp_path: Path, product: str, mode: str):
+    run = run_backend(tmp_path, request("bsa"), "bsa", product=product)
+    result = json.loads(run.stdout)
+    assert run.returncode == 0, result
+    assert result["job"]["profiling"]["replay_mode"] == mode
+    assert result["replay_mode"] == mode
+
+
+def test_profile_attempt_identity_changes_managed_job(tmp_path: Path):
+    base = {"protocol_version": 1, "action": "profile", "benchmark": "matmul",
+            "device": 2, "cases": [7, 8, 9], "repeats": 3, "round": 1}
+    first_root, second_root = tmp_path / "first", tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = json.loads(run_backend(
+        first_root, {**base, "attempt_id": "experiment-1-primary"}, "matmul"
+    ).stdout)
+    second = json.loads(run_backend(
+        second_root, {**base, "attempt_id": "experiment-1-confirmation"}, "matmul"
+    ).stdout)
+    assert first["job"]["profile_attempt_id"] == "experiment-1-primary"
+    assert second["job"]["profile_attempt_id"] == "experiment-1-confirmation"
+    assert first["job"] != second["job"]
+
+
+def test_fully_fused_profile_passes_runtime_gate_before_exposing_timing(tmp_path: Path):
+    log = tmp_path / "jobs.jsonl"
+    result = json.loads(run_backend(
+        tmp_path, request("matmul"), "matmul", fully_fused=True, log=log
+    ).stdout)
+    assert result["status"] == "ok"
+    assert result["fusion_gate"] == {
+        "entrypoint": "candidate_kernel",
+        "kernel_name": "candidate_kernel_mix_aiv",
+        "cases": list(range(10)),
+        "logical_launches_per_case": 1,
+    }
+    assert result["cases"][0]["median_us"] == 12.5
+    jobs = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [(job["action"], job.get("scope"), job.get("cases")) for job in jobs] == [
+        ("check", "full", list(range(10))),
+        ("profile", None, [7, 8, 9]),
+    ]
+
+
+def test_fully_fused_profile_rejects_framework_fallback_without_timing(tmp_path: Path):
+    log = tmp_path / "jobs.jsonl"
+    result = json.loads(run_backend(
+        tmp_path, request("matmul"), "matmul", mode="fusion_fallback",
+        fully_fused=True, log=log,
+    ).stdout)
+    assert result["status"] == "submission_error"
+    assert "Torch/ACL compute" in result["diagnostics"]
+    assert result["cases"] == list(range(10))
+    assert "profile_cases" not in result
+    assert "fusion_gate" not in result
+    assert len(log.read_text().splitlines()) == 1
 
 
 def test_relocated_calibration_candidate_imports_and_launches_without_source_tree(
@@ -145,6 +275,15 @@ def test_relocated_calibration_candidate_imports_and_launches_without_source_tre
     fake_language.constexpr = int
     fake_language.float32 = "float32"
     fake_triton.language = fake_language
+    fake_driver = types.ModuleType("triton.runtime.driver")
+    fake_driver.active = types.SimpleNamespace(
+        utils=types.SimpleNamespace(
+            get_device_properties=lambda _device: {"num_aicore": 24}
+        )
+    )
+    fake_runtime = types.ModuleType("triton.runtime")
+    fake_runtime.driver = fake_driver
+    fake_triton.runtime = fake_runtime
     fake_torch = types.ModuleType("torch")
     fake_torch.float32 = "float32"
     output = object()
@@ -152,22 +291,34 @@ def test_relocated_calibration_candidate_imports_and_launches_without_source_tre
     fake_nn = types.ModuleType("torch.nn")
     fake_nn.Module = object
     fake_torch.nn = fake_nn
+    fake_torch_npu = types.ModuleType("torch_npu")
+    fake_torch_npu.npu = types.SimpleNamespace(current_device=lambda: 0)
     monkeypatch.setitem(sys.modules, "triton", fake_triton)
     monkeypatch.setitem(sys.modules, "triton.language", fake_language)
+    monkeypatch.setitem(sys.modules, "triton.runtime", fake_runtime)
+    monkeypatch.setitem(sys.modules, "triton.runtime.driver", fake_driver)
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.setitem(sys.modules, "torch.nn", fake_nn)
+    monkeypatch.setitem(sys.modules, "torch_npu", fake_torch_npu)
 
     spec = importlib.util.spec_from_file_location("relocated_calibration", relocated)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    tensor = lambda shape: types.SimpleNamespace(shape=shape, device="npu:0")
+    def tensor(shape):
+        return types.SimpleNamespace(shape=shape, device="npu:0")
+
     actual = module.Model().forward(tensor((256, 256)), tensor((256, 256)), tensor((256,)))
 
     assert actual is output
     assert module.KERNEL_NAME == "streaming_matmul_add_kernel_mix_aic"
-    assert launches[0][0] == (8, 8)
-    assert launches[0][2] == {"BLOCK_M": 32, "BLOCK_N": 32, "BLOCK_K": 32}
+    assert launches[0][0] == (24,)
+    assert launches[0][2] == {
+        "num_cores": 24,
+        "BLOCK_M": 32,
+        "BLOCK_N": 32,
+        "BLOCK_K": 32,
+    }
 
 
 def test_pinned_repository_assets_are_exact_and_have_fifty_cases():
@@ -258,6 +409,15 @@ def test_environment_failure_is_separate(tmp_path: Path):
     assert result["handle"] == "gz-a3:job-2"
 
 
+def test_profile_failure_preserves_requested_cases_instead_of_missing_measurements(tmp_path: Path):
+    requested = request()
+    result = json.loads(run_backend(tmp_path, requested, mode="submission_error").stdout)
+
+    assert result["status"] == "submission_error"
+    assert result["cases"] == requested["cases"]
+    assert "profile_cases" not in result
+
+
 def test_job_result_identity_mismatch_preserves_evidence(tmp_path: Path):
     result = json.loads(run_backend(tmp_path, request(), mode="wrong_identity").stdout)
     assert result["status"] == "infrastructure_error"
@@ -311,6 +471,71 @@ def test_adapter_rejects_controller_drift(tmp_path: Path, change: dict, message:
     assert message in result["diagnostics"]
 
 
+@pytest.mark.parametrize(("benchmark", "cases"), [
+    ("matmul", [7, 8, 9]),
+    ("gdn", [40, 49, 47, 46, 45]),
+    ("bsa", [47, 46, 44, 49, 43]),
+])
+@pytest.mark.parametrize("action", ["profile", "check"])
+def test_a5_accepts_authenticated_product_ranked_development_requests(
+        tmp_path: Path, benchmark: str, cases: list[int], action: str):
+    payload = request(benchmark, action=action)
+    payload.update(cases=cases, scope="development", round=1)
+    if action == "profile":
+        payload["repeats"] = 3
+    result = json.loads(run_backend(
+        tmp_path, payload, benchmark=benchmark, mode="echo", product="a5",
+    ).stdout)
+    assert result["status"] == "ok"
+    assert result["job"]["product"] == "a5"
+    assert result["job"]["runtime"] == "cann91"
+    assert result["job"]["cases"] == cases
+
+
+@pytest.mark.parametrize(("benchmark", "cases"), [
+    ("matmul", [9, 8]),
+    ("matmul", [9, 8, 8]),
+    ("matmul", [9, 8, 10]),
+    ("gdn", [40, 49, 47, 46]),
+    ("gdn", [40, 49, 47, 46, 50]),
+    ("bsa", [47, 46, 44, 49, 49]),
+])
+@pytest.mark.parametrize("action", ["profile", "check"])
+def test_ranked_development_requests_reject_invalid_case_sets(
+        tmp_path: Path, benchmark: str, cases: list[int], action: str):
+    payload = request(benchmark, action=action)
+    payload.update(cases=cases, scope="development", round=1)
+    if action == "profile":
+        payload["repeats"] = 3
+    result = json.loads(run_backend(
+        tmp_path, payload, benchmark=benchmark, mode="echo", product="a5",
+    ).stdout)
+    assert result["status"] == "infrastructure_error"
+    assert "development cases" in result["diagnostics"]
+
+
+def test_full_check_still_requires_the_exact_ordered_domain(tmp_path: Path):
+    for cases in ([9, 8, 0], list(reversed(range(10))), list(range(9))):
+        payload = request("matmul", action="check", cases=cases, scope="full")
+        result = json.loads(run_backend(
+            tmp_path, payload, benchmark="matmul", mode="echo", product="a5",
+        ).stdout)
+        assert result["status"] == "infrastructure_error"
+        assert "full check cases" in result["diagnostics"]
+
+
+def test_a3_configured_rankings_remain_accepted(tmp_path: Path):
+    for benchmark in ("matmul", "gdn", "bsa"):
+        payload = request(benchmark, action="profile")
+        result = json.loads(run_backend(
+            tmp_path, payload, benchmark=benchmark, mode="echo", product="a3",
+        ).stdout)
+        assert result["status"] == "ok"
+        assert result["job"]["cases"] == load_backend().BENCHMARKS[benchmark][
+            "development_cases"
+        ]
+
+
 def test_full_check_requires_ordered_all_fifty_and_forwards_it(tmp_path: Path):
     run = run_backend(tmp_path, request(action="check"), mode="echo")
     job = json.loads(run.stdout)["job"]
@@ -361,7 +586,7 @@ def test_missing_or_invalid_kernel_manifest_is_submission_failure(tmp_path: Path
     candidate.with_suffix(".manifest.json").write_text(json.dumps({"schema": "wrong", "kernel_name": "x"}))
     invalid = subprocess.run(command, input=json.dumps(request()), text=True, capture_output=True, check=False)
     assert json.loads(invalid.stdout)["status"] == "submission_error"
-    assert MANIFEST_SCHEMA_TEXT in json.loads(invalid.stdout)["diagnostics"]
+    assert "profiling-skill/candidate-kernel/v2" in json.loads(invalid.stdout)["diagnostics"]
 
 
 def test_generator_emits_exact_controller_cells(tmp_path: Path):
@@ -386,6 +611,7 @@ def test_generator_emits_exact_controller_cells(tmp_path: Path):
     assert cells["gdn-project-cannbot"]["treatment"] == "project-cannbot"
     command = cells["gdn-cannbot"]["backend"]["command"]
     assert command[command.index("--job-client-json") + 1] == encoded_client
+    assert cells["gdn-cannbot"]["backend"]["timeout_seconds"] == 7300
 
 
 @pytest.mark.parametrize("benchmark", ["gdn", "bsa", "matmul"])

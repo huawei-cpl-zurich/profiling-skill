@@ -1,0 +1,3147 @@
+{
+  "schema_version": 1,
+  "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+  "cells": {
+    "direct": {
+      "config": {
+        "id": "direct",
+        "case": "copy",
+        "variant": "baseline"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 23.799999,
+                "median": 23.799999,
+                "min": 23.799999,
+                "p90": 23.799999
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                23.799999
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "810a2d63cb73701da939a71006ad640b26c57d0107474fde1378fc8313ed4697",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "4d26e5ff31048fe14d7c8b3cfcc9783419d01543770c58c574ee96d82713137b"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 23.639999,
+                "median": 23.639999,
+                "min": 23.639999,
+                "p90": 23.639999
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                23.639999
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "91002f7d2e47961bc63efbe51daae2d19a2bf08ac1bb6a42bceeed05403dcd25",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "0b2b98f92eb1997ad26377c892577ae8ef95d5faedd1e7ff71981ffa72159986"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 24.5,
+                "median": 24.5,
+                "min": 24.5,
+                "p90": 24.5
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                24.5
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "6bf029691cf314c06e00898b8e7ade5ced625dea18e1cecbe8c43c42eb74cf38",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "a36fd3a1b232d9d6c06f2ab5bd80c5a40236cc25746f1e9784a465ec51480936"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": {
+          "source_sha256": "aeefbe8f64bc6c6f380071ba5d8eab38af6e10cc511b4ca6943d0c0b4cd3e666",
+          "basic_info_sha256": "bc260b87c3f90bbb960731e24b2fffb86712272044715c34fc38236313c0a6b0",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_memory"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/direct-PipeUtilization-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "6deb0156ac4a8e83a63b14e374e080e06217d3527fb5a1792e557915909df06d",
+          "display_csv": "../examples/a2-measured-evidence/direct-PipeUtilization.csv",
+          "display_csv_sha256": "aeefbe8f64bc6c6f380071ba5d8eab38af6e10cc511b4ca6943d0c0b4cd3e666",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 40,
+          "by_engine": {
+            "aiv": {
+              "row_count": 40,
+              "reported_metric_ranges": {
+                "aiv_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 20.721212,
+                  "median": 21.465152,
+                  "max": 22.993334
+                },
+                "aiv_total_cycles": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 34190.0,
+                  "median": 35417.5,
+                  "max": 37939.0
+                },
+                "aiv_vec_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.018788,
+                  "median": 0.018788,
+                  "max": 0.018788
+                },
+                "aiv_vec_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.000817,
+                  "median": 0.0008755,
+                  "max": 0.000907
+                },
+                "aiv_mte2_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 19.250303,
+                  "median": 19.649697500000002,
+                  "max": 20.489697
+                },
+                "aiv_mte2_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.862569,
+                  "median": 0.9174059999999999,
+                  "max": 0.948897
+                },
+                "aiv_mte2_active_bw(GB/s)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 4.747498,
+                  "median": 4.962930999999999,
+                  "max": 5.06269
+                },
+                "aiv_mte3_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 12.841818,
+                  "median": 13.292121000000002,
+                  "max": 14.212121
+                },
+                "aiv_mte3_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.571892,
+                  "median": 0.6206754999999999,
+                  "max": 0.666483
+                },
+                "aiv_mte3_active_bw(GB/s)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 6.844494,
+                  "median": 7.3396825,
+                  "max": 7.587872
+                },
+                "aiv_icache_miss_rate": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 3.696364,
+                  "median": 4.1309085,
+                  "max": 5.081212
+                },
+                "aiv_scalar_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.174018,
+                  "median": 0.19216450000000002,
+                  "max": 0.227066
+                },
+                "aiv_scalar_single_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.674545,
+                  "median": 0.674545,
+                  "max": 0.681212
+                },
+                "aiv_scalar_dual_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 1.689091,
+                  "median": 1.689091,
+                  "max": 1.705455
+                },
+                "aiv_scalar_mte2_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 18.304848,
+                  "median": 18.923333,
+                  "max": 20.203636
+                },
+                "aiv_scalar_mte3_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_stall_by_ub_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_vector_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_wait_ib_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.010909,
+                  "median": 0.010909,
+                  "max": 0.010909
+                },
+                "aiv_scalar_wait_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "7cd5b1df4abc942ea33fd687690491b48e97bb45fcdec1c0d90d17656c766748"
+          },
+          "ttadapter": {
+            "sha256": "312ac9b0ab2db73b13ab1b8dc6b4f2c76061c6f378fd8ff850244eaeeb24349d"
+          },
+          "ttir": {
+            "sha256": "6f1a6a9ccd55e9f0631ae84e0626e4288bd5f293f3c9d9f49daa08dafea8a0cb"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 4194304,
+          "block": 256,
+          "case": "copy",
+          "dtype": "float32",
+          "elements": 1048576,
+          "indirect": false,
+          "input_allocation_bytes": 8388608,
+          "logical_index_bytes": 0,
+          "logical_input_bytes": 4194304,
+          "logical_output_bytes": 4194304,
+          "physical_traffic": "unmeasured",
+          "stride": 1,
+          "variant": "baseline"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_memory",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 28.5,
+              "median": 28.5,
+              "min": 28.5,
+              "p90": 28.5
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              28.5
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "f61637e64494a07f61b1650702d27338ad2382286d18c5fc5894e0904ee73fe9",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "a3dfa7ec4aeea44fd55cd1ff42bd60fbbc058d728b21c879b035bfc30eca31b6"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          23.799999,
+          23.639999,
+          24.5
+        ],
+        "independent_capture_count": 3,
+        "median_us": 23.799999,
+        "min_us": 23.639999,
+        "max_us": 24.5,
+        "useful_read_write_GB_s": 352.46253581775363
+      }
+    },
+    "stride2": {
+      "config": {
+        "id": "stride2",
+        "case": "copy",
+        "variant": "candidate"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 1040.319946,
+                "median": 1040.319946,
+                "min": 1040.319946,
+                "p90": 1040.319946
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                1040.319946
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "00b8f815af4e15c6da3ab87dc424efbbf38f547019d130fc05f88696a254a060",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "37ffdf865d5576a987decc042f04ff107ae5bf8b3b47b5f0514d88f8cd5666aa"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 1004.679993,
+                "median": 1004.679993,
+                "min": 1004.679993,
+                "p90": 1004.679993
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                1004.679993
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "63219264d27dc501daae653d315b4f7b43d4da2d6f347c1edc7e570a0d2d3b55",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "a843e412ce416143db91345f8f903aa15741fa14015d264730916c266ce28041"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 1023.179993,
+                "median": 1023.179993,
+                "min": 1023.179993,
+                "p90": 1023.179993
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                1023.179993
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "ebd7d46b8290a49320908a387164116b5d461d57a5fc2c93020d861581d76b90",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "cc4ad2da62aeb4698cb5b829cfafe7c67dbff5ab9014c04a6c883ebcdaaafa5f"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": {
+          "source_sha256": "4b2a900f1bb0611023a3952c91560b22d6cf26371e2147b819e748431eac5451",
+          "basic_info_sha256": "68c22fd47bd66e1dcc88d1c2e451650840ea208184e75b5c664c186ab03ebce1",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_memory"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/stride2-PipeUtilization-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "f382efa53c50c1d6b06a605aef852f673646a5e4c6e63db36684f31ebbc37172",
+          "display_csv": "../examples/a2-measured-evidence/stride2-PipeUtilization.csv",
+          "display_csv_sha256": "4b2a900f1bb0611023a3952c91560b22d6cf26371e2147b819e748431eac5451",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 40,
+          "by_engine": {
+            "aiv": {
+              "row_count": 40,
+              "reported_metric_ranges": {
+                "aiv_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 906.388489,
+                  "median": 983.386383,
+                  "max": 1026.264282
+                },
+                "aiv_total_cycles": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 1495541.0,
+                  "median": 1622587.5,
+                  "max": 1693336.0
+                },
+                "aiv_vec_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 16.946667,
+                  "median": 16.946667,
+                  "max": 17.112728
+                },
+                "aiv_vec_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.016571,
+                  "median": 0.017233,
+                  "max": 0.018765
+                },
+                "aiv_mte2_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 904.916992,
+                  "median": 982.0803225,
+                  "max": 1024.345459
+                },
+                "aiv_mte2_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.998004,
+                  "median": 0.9988775,
+                  "max": 0.999486
+                },
+                "aiv_mte2_active_bw(GB/s)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 3.046649,
+                  "median": 3.1695919999999997,
+                  "max": 3.451034
+                },
+                "aiv_mte3_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 39.277576,
+                  "median": 45.158789,
+                  "max": 55.234547
+                },
+                "aiv_mte3_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.038807,
+                  "median": 0.045508,
+                  "max": 0.060536
+                },
+                "aiv_mte3_active_bw(GB/s)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 1.778388,
+                  "median": 2.16222,
+                  "max": 2.500879
+                },
+                "aiv_icache_miss_rate": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 5.335758,
+                  "median": 5.756364,
+                  "max": 6.70303
+                },
+                "aiv_scalar_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.005222,
+                  "median": 0.0058735,
+                  "max": 0.006891
+                },
+                "aiv_scalar_single_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 1.058182,
+                  "median": 1.058182,
+                  "max": 1.068485
+                },
+                "aiv_scalar_dual_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 2.673333,
+                  "median": 2.673333,
+                  "max": 2.699394
+                },
+                "aiv_scalar_mte2_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 899.095154,
+                  "median": 931.6951595,
+                  "max": 971.157593
+                },
+                "aiv_scalar_mte3_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_stall_by_ub_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_vector_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_wait_ib_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.013333,
+                  "median": 0.013333,
+                  "max": 0.013333
+                },
+                "aiv_scalar_wait_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "1c69f535ed1e28003fe3c476ba8ffbe151e77f97ddc2995b80c5b65ac307a8ca"
+          },
+          "ttadapter": {
+            "sha256": "86ade6166bcbcff892a0699c952766031e7063351bfb720822c97d9e70b2995d"
+          },
+          "ttir": {
+            "sha256": "a2d938e31fdf87d3ad75ff1ac33d870dbab94b796be37f64077267d894ef101a"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 8388604,
+          "block": 256,
+          "case": "copy",
+          "dtype": "float32",
+          "elements": 1048576,
+          "indirect": false,
+          "input_allocation_bytes": 8388608,
+          "logical_index_bytes": 0,
+          "logical_input_bytes": 4194304,
+          "logical_output_bytes": 4194304,
+          "physical_traffic": "unmeasured",
+          "stride": 2,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_memory",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 1028.47998,
+              "median": 1028.47998,
+              "min": 1028.47998,
+              "p90": 1028.47998
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              1028.47998
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "fe2cf13a96d9f2da50af4af136f07fc7fb588b2208295b5755e4b3e85906cf0a",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "795fff08492a6da6922e1c2d1b1353fb3ddca96c1692613613162e11fc3556b2"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          1040.319946,
+          1004.679993,
+          1023.179993
+        ],
+        "independent_capture_count": 3,
+        "median_us": 1023.179993,
+        "min_us": 1004.679993,
+        "max_us": 1040.319946,
+        "useful_read_write_GB_s": 8.198565313424771
+      }
+    },
+    "indexed": {
+      "config": {
+        "id": "indexed",
+        "case": "gather",
+        "variant": "candidate"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 608.73999,
+                "median": 608.73999,
+                "min": 608.73999,
+                "p90": 608.73999
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                608.73999
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "e058aab18e3a5737abb3315ab69c4290cb8fb19c37a7eb1d54826568fb5460a5",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "516c07a3cca959bf4ffb01049dea6bf8104a53eafcfcd3669537340f95e44ab7"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 609.26001,
+                "median": 609.26001,
+                "min": 609.26001,
+                "p90": 609.26001
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                609.26001
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "b29c5d1d923f04c4796fb7f706f1b3c959e7c3daa839e87689a4b9405eac978b",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "20ea5e886ee1c00d61c77c3dedace49c6c362b6c7e8a9cd26a9be817eee96f14"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 608.960022,
+                "median": 608.960022,
+                "min": 608.960022,
+                "p90": 608.960022
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                608.960022
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "44ddd46c7fdfbb64e00a0e4bb2686bee4de2244fea6062eed1e77a3e93f06f4e",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "d9e15d0146240471516b1e7db1b8b4bd74252efb3b7fb4cde191ffb557669ab1"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": {
+          "source_sha256": "de39e5510114e555b0c59f5e3cd8f491da67f2e3ebfc934fde518a179767ffe6",
+          "basic_info_sha256": "bec913b8d4f506718aed33a49545dc796dd1710b432c71698b9da3dfda352c9b",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_memory"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/indexed-PipeUtilization-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "11632e7e8b8bbc391c754abe20e42e66210482f885c2b3e01b67343b1fc2f040",
+          "display_csv": "../examples/a2-measured-evidence/indexed-PipeUtilization.csv",
+          "display_csv_sha256": "de39e5510114e555b0c59f5e3cd8f491da67f2e3ebfc934fde518a179767ffe6",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 40,
+          "by_engine": {
+            "aiv": {
+              "row_count": 40,
+              "reported_metric_ranges": {
+                "aiv_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 590.97876,
+                  "median": 597.256073,
+                  "max": 604.493958
+                },
+                "aiv_total_cycles": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 975115.0,
+                  "median": 985472.5,
+                  "max": 997415.0
+                },
+                "aiv_vec_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.018788,
+                  "median": 0.018788,
+                  "max": 0.018788
+                },
+                "aiv_vec_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 3.1e-05,
+                  "median": 3.1e-05,
+                  "max": 3.2e-05
+                },
+                "aiv_mte2_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 25.115757,
+                  "median": 26.7590905,
+                  "max": 27.848484
+                },
+                "aiv_mte2_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.042409,
+                  "median": 0.04486,
+                  "max": 0.046148
+                },
+                "aiv_mte2_active_bw(GB/s)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 3.520583,
+                  "median": 3.6554655,
+                  "max": 3.873058
+                },
+                "aiv_mte3_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 12.80303,
+                  "median": 13.298485,
+                  "max": 14.157576
+                },
+                "aiv_mte3_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.021546,
+                  "median": 0.022344000000000003,
+                  "max": 0.023426
+                },
+                "aiv_mte3_active_bw(GB/s)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 6.870864,
+                  "median": 7.336844,
+                  "max": 7.621054
+                },
+                "aiv_icache_miss_rate": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 565.189697,
+                  "median": 571.567871,
+                  "max": 578.671509
+                },
+                "aiv_scalar_ratio": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.955599,
+                  "median": 0.9569215,
+                  "max": 0.959334
+                },
+                "aiv_scalar_single_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 48.102425,
+                  "median": 48.102425,
+                  "max": 48.57394
+                },
+                "aiv_scalar_dual_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 34.016972,
+                  "median": 34.016972,
+                  "max": 34.350304
+                },
+                "aiv_scalar_mte2_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_mte3_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_stall_by_ub_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_vector_stall_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aiv_scalar_wait_ib_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 0.197576,
+                  "median": 0.197576,
+                  "max": 0.199394
+                },
+                "aiv_scalar_wait_time(us)": {
+                  "available_rows": 40,
+                  "unavailable_rows": 0,
+                  "min": 25.915758,
+                  "median": 26.8154545,
+                  "max": 28.192122
+                }
+              }
+            }
+          }
+        }
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "d52c4f0db263d19c0dbba508341e703225bf7f247880b886a0c59019aa98bd88"
+          },
+          "ttadapter": {
+            "sha256": "b1b342e07035405cdd1777aca0490901aa274788e30b1ff106ca3ccfe7bb772f"
+          },
+          "ttir": {
+            "sha256": "bfa89253c33aa23fbe23b70a31e61c8f26f6b78ce1e7465c7bd18eb2b6d4bbbc"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 4194304,
+          "block": 256,
+          "case": "gather",
+          "dtype": "float32",
+          "elements": 1048576,
+          "indirect": true,
+          "input_allocation_bytes": 8388608,
+          "logical_index_bytes": 4194304,
+          "logical_input_bytes": 4194304,
+          "logical_output_bytes": 4194304,
+          "physical_traffic": "unmeasured",
+          "stride": 1,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_memory",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 614.559998,
+              "median": 614.559998,
+              "min": 614.559998,
+              "p90": 614.559998
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              614.559998
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "7fd89df9b6dd33276a283998623f4f41946194fbc3068c93db2e2356cbb43a8f",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "3bea99c33395f0c35cbe2030b79f5d4e52c62293352714a319f8780649eb7694"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          608.73999,
+          609.26001,
+          608.960022
+        ],
+        "independent_capture_count": 3,
+        "median_us": 608.960022,
+        "min_us": 608.73999,
+        "max_us": 609.26001,
+        "useful_read_write_GB_s": 13.775301656830274
+      }
+    },
+    "stages1": {
+      "config": {
+        "id": "stages1",
+        "case": "matmul",
+        "variant": "baseline"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 36.380001,
+                "median": 36.380001,
+                "min": 36.380001,
+                "p90": 36.380001
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                36.380001
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "6cc3e84214ee0da8620682c469ac77627efb4d764d5d77a457043fe0fee3b713",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "24ccda754d2ed5a1bd613c10b9332e7dba80fb425b0936a006d45680bdb16459"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 37.599998,
+                "median": 37.599998,
+                "min": 37.599998,
+                "p90": 37.599998
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                37.599998
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "52ee596e4a0439298f67410fdb103e08f8c0db8d662467f01c14590d6361e7e5",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "254e5a0c81ae8d7d563ff9c9eb112b98437c2042c072a6e3105a7d8aebffa7a6"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 37.18,
+                "median": 37.18,
+                "min": 37.18,
+                "p90": 37.18
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                37.18
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "b1f127d6a039fe944cfef5d11e9c44f31cbd59cd80e946302b51e8162befd433",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "4e360ab07c94fd6a9199be3c0b7291fea0eb694f731032309391bee068c3d17b"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": {
+          "source_sha256": "37a459bcee5cdec9f0c5d88c8d94675720dd9237aaeb04b9547a09013229d7c0",
+          "basic_info_sha256": "684f91414d872665fceba955a568d2e5fc65810024098b91101833c66697b2fd",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_matmul"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/stages1-PipeUtilization-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "91be3e289562310e131b440b31cf5bbaea099e429304c8e7f48cc3a29dacd294",
+          "display_csv": "../examples/a2-measured-evidence/stages1-PipeUtilization.csv",
+          "display_csv_sha256": "37a459bcee5cdec9f0c5d88c8d94675720dd9237aaeb04b9547a09013229d7c0",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 20,
+          "by_engine": {
+            "aic": {
+              "row_count": 20,
+              "reported_metric_ranges": {
+                "aic_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 30.753939,
+                  "median": 33.0696985,
+                  "max": 35.227272
+                },
+                "aic_total_cycles": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 50744.0,
+                  "median": 54565.0,
+                  "max": 58125.0
+                },
+                "aic_cube_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 3.432727,
+                  "median": 3.718788,
+                  "max": 3.718788
+                },
+                "aic_cube_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.105566,
+                  "median": 0.1108145,
+                  "max": 0.116714
+                },
+                "aic_mte1_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 7.849091,
+                  "median": 8.4984845,
+                  "max": 8.544848
+                },
+                "aic_mte1_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.242546,
+                  "median": 0.253482,
+                  "max": 0.267647
+                },
+                "aic_mte2_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 28.918787,
+                  "median": 30.910303,
+                  "max": 33.73394
+                },
+                "aic_mte2_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.903027,
+                  "median": 0.936267,
+                  "max": 0.96774
+                },
+                "aic_mte3_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.001212,
+                  "median": 0.001212,
+                  "max": 0.001212
+                },
+                "aic_mte3_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 3.4e-05,
+                  "median": 3.7e-05,
+                  "max": 3.9e-05
+                },
+                "aic_mte3_active_bw(GB/s)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 113296.507812,
+                  "median": 122737.882812,
+                  "max": 122737.882812
+                },
+                "aic_fixpipe_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 2.033333,
+                  "median": 2.66,
+                  "max": 3.52303
+                },
+                "aic_fixpipe_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.066116,
+                  "median": 0.07908100000000001,
+                  "max": 0.108023
+                },
+                "aic_fixpipe_active_bw(GB/s)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 13.628836,
+                  "median": 18.477072,
+                  "max": 23.232609
+                },
+                "aic_icache_miss_rate": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 3.070303,
+                  "median": 3.249394,
+                  "max": 3.758182
+                },
+                "aic_scalar_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.088602,
+                  "median": 0.1005675,
+                  "max": 0.114907
+                },
+                "aic_scalar_single_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.904848,
+                  "median": 0.979394,
+                  "max": 0.979394
+                },
+                "aic_scalar_dual_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 1.347273,
+                  "median": 1.458182,
+                  "max": 1.458182
+                },
+                "aic_scalar_mte1_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 28.672121,
+                  "median": 31.716364,
+                  "max": 33.412727
+                },
+                "aic_scalar_mte2_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_mte3_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_cube_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_wait_ib_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.04,
+                  "median": 0.042424,
+                  "max": 0.042424
+                },
+                "aic_scalar_wait_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                }
+              }
+            }
+          }
+        },
+        "ResourceConflictRatio": {
+          "source_sha256": "1030e6ebb0a65d814b8f2d72c95e7a8a816f3374601fc4c053fe7bc6044bf920",
+          "basic_info_sha256": "12cbbc1c7ab69029274faee14f3fd02fe831bd1b2cae0cd1013b9530d3d5f8d4",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_matmul"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/stages1-ResourceConflictRatio-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "c71e6a65937878eaaec638788b0a49b72bfa67cb259e4136c4145d2d4a7ddd98",
+          "display_csv": "../examples/a2-measured-evidence/stages1-ResourceConflictRatio.csv",
+          "display_csv_sha256": "1030e6ebb0a65d814b8f2d72c95e7a8a816f3374601fc4c053fe7bc6044bf920",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 20,
+          "by_engine": {
+            "aic": {
+              "row_count": 20,
+              "reported_metric_ranges": {
+                "aic_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 33.091515,
+                  "median": 36.61788,
+                  "max": 37.927879
+                },
+                "aic_total_cycles": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 54601.0,
+                  "median": 60419.5,
+                  "max": 62581.0
+                },
+                "aic_cube_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.968395,
+                  "median": 0.980226,
+                  "max": 0.988769
+                },
+                "aic_mte1_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.952365,
+                  "median": 0.9636945,
+                  "max": 0.972077
+                },
+                "aic_mte2_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.959534,
+                  "median": 0.9701850000000001,
+                  "max": 0.97949
+                },
+                "aic_mte3_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "be54f37821f0ad190ddb961822a2bcb5c9d2a65dc638d191e2bb71f56fa4190e"
+          },
+          "ttadapter": {
+            "sha256": "af8abe3c14f0b2a50c1acc9a3ef9ab2387a13b09a34c3f64dc4db912aca32ba1"
+          },
+          "ttir": {
+            "sha256": "a27d81880aae99bbe1b92a8f3666141bba16ea4953424b5a356ad2836368f348"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 2097152,
+          "output_dtype": "float32",
+          "requested_num_stages": 1,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 268435456,
+          "variant": "baseline"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_matmul",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 38.040001,
+              "median": 38.040001,
+              "min": 38.040001,
+              "p90": 38.040001
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              38.040001
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "b60b3f88965f300cdf5309f3247e8c923eb6a84434c022a486e638ddbcb0d791",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "eedec83c8cffaa49c841d86d98b2cbc877b6a6dd06da3766457588489dd5b149"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          36.380001,
+          37.599998,
+          37.18
+        ],
+        "independent_capture_count": 3,
+        "median_us": 37.18,
+        "min_us": 36.380001,
+        "max_us": 37.599998,
+        "useful_TFLOP_s": 7.219888542227004
+      }
+    },
+    "stages2": {
+      "config": {
+        "id": "stages2",
+        "case": "matmul",
+        "variant": "candidate"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 36.02,
+                "median": 36.02,
+                "min": 36.02,
+                "p90": 36.02
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                36.02
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "5c5c38e0239228e18a272291d6e8272f679f116746356773a07ae869aaa803f3",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "dec353725d35eb268c5156f88edb28ebca67d8d77dc7a97047974b234684c90a"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 35.380001,
+                "median": 35.380001,
+                "min": 35.380001,
+                "p90": 35.380001
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                35.380001
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "e86392e24c475d9af916625fab48eaf4c43edda2d785f710e25f7321f88c9f52",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "548750716a5c7a7e884049fbad29a304a4017a59057897440df0ab2f4e4acf26"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 35.400002,
+                "median": 35.400002,
+                "min": 35.400002,
+                "p90": 35.400002
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                35.400002
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "73016cd3788b0f0894cb42dfd679053d5114fd93cbe098868ecd6f37813b9a3c",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "f74198ab6548f545df713298817f9729c59e071be47b850a340bda46ce9b98c3"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": {
+          "source_sha256": "4015156503fd845e11df866f901400489c57679cf1dd52e8a4893b1eb61fa384",
+          "basic_info_sha256": "2463d35981490dd428e3afcd587925434d8ce6181d248fa5312d3079da404c9b",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_matmul"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/stages2-PipeUtilization-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "d50789593f73ccd92e232473d87bbb0dbca725509850cf0d98bfa4ae3551a2dc",
+          "display_csv": "../examples/a2-measured-evidence/stages2-PipeUtilization.csv",
+          "display_csv_sha256": "4015156503fd845e11df866f901400489c57679cf1dd52e8a4893b1eb61fa384",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 20,
+          "by_engine": {
+            "aic": {
+              "row_count": 20,
+              "reported_metric_ranges": {
+                "aic_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 31.955151,
+                  "median": 34.0051515,
+                  "max": 36.041817
+                },
+                "aic_total_cycles": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 52726.0,
+                  "median": 56108.5,
+                  "max": 59469.0
+                },
+                "aic_cube_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 3.432727,
+                  "median": 3.718788,
+                  "max": 3.718788
+                },
+                "aic_cube_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.10318,
+                  "median": 0.1074135,
+                  "max": 0.113965
+                },
+                "aic_mte1_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 7.854546,
+                  "median": 8.536061,
+                  "max": 8.611515
+                },
+                "aic_mte1_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.237213,
+                  "median": 0.246689,
+                  "max": 0.261585
+                },
+                "aic_mte2_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 30.977575,
+                  "median": 33.023939,
+                  "max": 35.322426
+                },
+                "aic_mte2_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.959222,
+                  "median": 0.9695755,
+                  "max": 0.983009
+                },
+                "aic_mte3_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.001212,
+                  "median": 0.001212,
+                  "max": 0.001212
+                },
+                "aic_mte3_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 3.4e-05,
+                  "median": 3.6e-05,
+                  "max": 3.8e-05
+                },
+                "aic_mte3_active_bw(GB/s)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 113296.507812,
+                  "median": 122737.882812,
+                  "max": 122737.882812
+                },
+                "aic_fixpipe_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 2.334545,
+                  "median": 3.2045455,
+                  "max": 4.726666
+                },
+                "aic_fixpipe_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.071364,
+                  "median": 0.093259,
+                  "max": 0.131524
+                },
+                "aic_fixpipe_active_bw(GB/s)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 10.491762,
+                  "median": 15.026932500000001,
+                  "max": 19.608259
+                },
+                "aic_icache_miss_rate": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 5.201818,
+                  "median": 5.58,
+                  "max": 6.318182
+                },
+                "aic_scalar_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.151472,
+                  "median": 0.167943,
+                  "max": 0.17993
+                },
+                "aic_scalar_single_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.780606,
+                  "median": 0.844849,
+                  "max": 0.844849
+                },
+                "aic_scalar_dual_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 2.126061,
+                  "median": 2.301818,
+                  "max": 2.301818
+                },
+                "aic_scalar_mte1_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 26.987879,
+                  "median": 28.889696,
+                  "max": 31.006062
+                },
+                "aic_scalar_mte2_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_mte3_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_cube_stall_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                },
+                "aic_scalar_wait_ib_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.04,
+                  "median": 0.042424,
+                  "max": 0.042424
+                },
+                "aic_scalar_wait_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                }
+              }
+            }
+          }
+        },
+        "ResourceConflictRatio": {
+          "source_sha256": "5c76261782549689cf54fd76843cc0a4fed37cfd63d246a1bffff5a35b6ee092",
+          "basic_info_sha256": "6f2ac74a8d56dfa727896e1a2fa2a0119519270f105c2ca5a588160589091ae9",
+          "protocol": {
+            "warm_up": 3,
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "kernel_selector": "paired_matmul"
+          },
+          "basic_info_display_csv": "../examples/a2-measured-evidence/stages2-ResourceConflictRatio-OpBasicInfo.csv",
+          "basic_info_display_csv_sha256": "d3f52cefb532737779ad6299937ea92a0fc9e9625f931a50afe9efb1838994c1",
+          "display_csv": "../examples/a2-measured-evidence/stages2-ResourceConflictRatio.csv",
+          "display_csv_sha256": "5c76261782549689cf54fd76843cc0a4fed37cfd63d246a1bffff5a35b6ee092",
+          "display_transformation": "Original field names and string values, canonical LF CSV formatting. Source SHA-256 binds the original export separately.",
+          "row_count": 20,
+          "by_engine": {
+            "aic": {
+              "row_count": 20,
+              "reported_metric_ranges": {
+                "aic_time(us)": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 32.398788,
+                  "median": 35.248787,
+                  "max": 36.360607
+                },
+                "aic_total_cycles": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 53458.0,
+                  "median": 58160.5,
+                  "max": 59995.0
+                },
+                "aic_cube_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.96843,
+                  "median": 0.981314,
+                  "max": 0.988789
+                },
+                "aic_mte1_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.951696,
+                  "median": 0.9643725000000001,
+                  "max": 0.972305
+                },
+                "aic_mte2_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.957308,
+                  "median": 0.9700424999999999,
+                  "max": 0.977561
+                },
+                "aic_mte3_wait_ratio": {
+                  "available_rows": 20,
+                  "unavailable_rows": 0,
+                  "min": 0.0,
+                  "median": 0.0,
+                  "max": 0.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "88e3d1aa96f035e57199644e44a8d711ac44e26640c741fe7373836edbe30cb8"
+          },
+          "ttadapter": {
+            "sha256": "af8abe3c14f0b2a50c1acc9a3ef9ab2387a13b09a34c3f64dc4db912aca32ba1"
+          },
+          "ttir": {
+            "sha256": "a27d81880aae99bbe1b92a8f3666141bba16ea4953424b5a356ad2836368f348"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 2097152,
+          "output_dtype": "float32",
+          "requested_num_stages": 2,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 268435456,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_matmul",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 34.5,
+              "median": 34.5,
+              "min": 34.5,
+              "p90": 34.5
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              34.5
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "57d63d7aadb99969731ffa370a9aed06491499b6827f003bf4162857e1905d1e",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "ad1b4a0d63a7935d00f9a5fd330b224757aa5de3da58fddac3651d3fe5eae866"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          36.02,
+          35.380001,
+          35.400002
+        ],
+        "independent_capture_count": 3,
+        "median_us": 35.400002,
+        "min_us": 35.380001,
+        "max_us": 36.02,
+        "useful_TFLOP_s": 7.582922057462031
+      }
+    }
+  },
+  "capture_order": [
+    {
+      "sequence": 0,
+      "cell": "direct",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 1,
+      "cell": "stride2",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 2,
+      "cell": "indexed",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 3,
+      "cell": "stages1",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 4,
+      "cell": "stages2",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 5,
+      "cell": "direct",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-0"
+    },
+    {
+      "sequence": 6,
+      "cell": "stride2",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-0"
+    },
+    {
+      "sequence": 7,
+      "cell": "indexed",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-0"
+    },
+    {
+      "sequence": 8,
+      "cell": "stages1",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-0"
+    },
+    {
+      "sequence": 9,
+      "cell": "stages2",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-0"
+    },
+    {
+      "sequence": 10,
+      "cell": "stride2",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-1"
+    },
+    {
+      "sequence": 11,
+      "cell": "indexed",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-1"
+    },
+    {
+      "sequence": 12,
+      "cell": "stages1",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-1"
+    },
+    {
+      "sequence": 13,
+      "cell": "stages2",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-1"
+    },
+    {
+      "sequence": 14,
+      "cell": "direct",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-1"
+    },
+    {
+      "sequence": 15,
+      "cell": "indexed",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-2"
+    },
+    {
+      "sequence": 16,
+      "cell": "stages1",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-2"
+    },
+    {
+      "sequence": 17,
+      "cell": "stages2",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-2"
+    },
+    {
+      "sequence": 18,
+      "cell": "direct",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-2"
+    },
+    {
+      "sequence": 19,
+      "cell": "stride2",
+      "metric": "BasicInfo",
+      "capture_kind": "timing-2"
+    },
+    {
+      "sequence": 20,
+      "cell": "direct",
+      "metric": "PipeUtilization",
+      "capture_kind": "pipe"
+    },
+    {
+      "sequence": 21,
+      "cell": "stride2",
+      "metric": "PipeUtilization",
+      "capture_kind": "pipe"
+    },
+    {
+      "sequence": 22,
+      "cell": "indexed",
+      "metric": "PipeUtilization",
+      "capture_kind": "pipe"
+    },
+    {
+      "sequence": 23,
+      "cell": "stages1",
+      "metric": "PipeUtilization",
+      "capture_kind": "pipe"
+    },
+    {
+      "sequence": 24,
+      "cell": "stages2",
+      "metric": "PipeUtilization",
+      "capture_kind": "pipe"
+    },
+    {
+      "sequence": 25,
+      "cell": "stages1",
+      "metric": "ResourceConflictRatio",
+      "capture_kind": "conflict"
+    },
+    {
+      "sequence": 26,
+      "cell": "stages2",
+      "metric": "ResourceConflictRatio",
+      "capture_kind": "conflict"
+    },
+    {
+      "sequence": 27,
+      "cell": "copy-65536",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 28,
+      "cell": "copy-65536",
+      "metric": "BasicInfo",
+      "capture_kind": "timing"
+    },
+    {
+      "sequence": 29,
+      "cell": "copy-16777216",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 30,
+      "cell": "copy-16777216",
+      "metric": "BasicInfo",
+      "capture_kind": "timing"
+    },
+    {
+      "sequence": 31,
+      "cell": "gemm-256",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 32,
+      "cell": "gemm-256",
+      "metric": "BasicInfo",
+      "capture_kind": "timing"
+    },
+    {
+      "sequence": 33,
+      "cell": "gemm-1024",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 34,
+      "cell": "gemm-1024",
+      "metric": "BasicInfo",
+      "capture_kind": "timing"
+    },
+    {
+      "sequence": 35,
+      "cell": "gemm-2048",
+      "metric": "BasicInfo",
+      "capture_kind": "discovery"
+    },
+    {
+      "sequence": 36,
+      "cell": "gemm-2048",
+      "metric": "BasicInfo",
+      "capture_kind": "timing"
+    }
+  ],
+  "calibration": {
+    "copy-65536": {
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "991c3bbbdae42ff7d5c6038df2d466daf1b1a8bf060019fe35263cba00920fc9"
+          },
+          "ttadapter": {
+            "sha256": "2cc4a2574e611a67d9f02a2abbc4833e1f13f18a1d6af0b4b1e6cf04f1154efd"
+          },
+          "ttir": {
+            "sha256": "a3706e959aaa1c6668d5e2ffed6d5e4ef06481a33b7b28c7a9bcc0e81aef4166"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 262144,
+          "block": 256,
+          "case": "copy",
+          "dtype": "float32",
+          "elements": 65536,
+          "indirect": false,
+          "input_allocation_bytes": 524288,
+          "logical_index_bytes": 0,
+          "logical_input_bytes": 262144,
+          "logical_output_bytes": 262144,
+          "physical_traffic": "unmeasured",
+          "stride": 1,
+          "variant": "baseline"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 9.06,
+              "median": 9.06,
+              "min": 9.06,
+              "p90": 9.06
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              9.06
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "05273ec5ad3f79fe8fea235ec220eb268697beb8bb2dafa3262b87c2ee80a638",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "bc7a7ba8b7e7d3b1ad050fd25332593b77cd3577397cbf8fd7c62a9b61def854"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "timing": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 4.28,
+              "median": 4.26,
+              "min": 4.0,
+              "p90": 4.28
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              4.0,
+              4.28,
+              4.26
+            ],
+            "samples": 3
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "283e4f76f3e8fb7d39e1829d5058f64204e66a802a9e5ae0ec859c3e18a6ff4d",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": "paired_memory",
+          "launch_count": 3,
+          "replay_mode": "kernel",
+          "warm_up": 3
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "905c6a427c6b611c99985df71ceb0e8ed310e22cd004acaf97c8c68e27c453b1"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "26cc21382530cb5d40f1135532731ef341816d1800ec61d452b8852c38d0d01a"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "fbfbf3759195142d9c4250f028b9e71e0275d0633f3c47714ae4d78eee653385"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          4.0,
+          4.28,
+          4.26
+        ],
+        "capture_count": 1,
+        "samples_in_capture": 3,
+        "median_us": 4.26,
+        "min_us": 4.0,
+        "max_us": 4.28,
+        "rate": 123.07230046948357,
+        "rate_unit": "GB/s",
+        "repeat_scope": "Three launch samples within one BasicInfo capture, not three independent process captures."
+      }
+    },
+    "copy-16777216": {
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "c5a4a96fc8abd45ee3b1533147517bbd1bda97377a20c2d210e4a2d182c603ca"
+          },
+          "ttadapter": {
+            "sha256": "6e5dd7a5ce3b55c233cd298458cbf3890bf9671d42f4043251a72daf34290501"
+          },
+          "ttir": {
+            "sha256": "0b7e246fff73f676b09b06d4cadd5147873d0353919e6af8fce16c5b74f3b107"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 67108864,
+          "block": 256,
+          "case": "copy",
+          "dtype": "float32",
+          "elements": 16777216,
+          "indirect": false,
+          "input_allocation_bytes": 134217728,
+          "logical_index_bytes": 0,
+          "logical_input_bytes": 67108864,
+          "logical_output_bytes": 67108864,
+          "physical_traffic": "unmeasured",
+          "stride": 1,
+          "variant": "baseline"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 355.660004,
+              "median": 355.660004,
+              "min": 355.660004,
+              "p90": 355.660004
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              355.660004
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "ce8cc5ffbd7da37a1a7ef9e92a1b414ff62d6c88c00bf13beace3f8335322d09",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "d1daab2003fd4aec5a2c16aa5e05c61e37fb71d9a17c99a8495b65e5ccba85ac"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "timing": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 349.100006,
+              "median": 348.299988,
+              "min": 347.339996,
+              "p90": 349.100006
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              348.299988,
+              347.339996,
+              349.100006
+            ],
+            "samples": 3
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "3499743a2b5d351042cc46b2239f21e189a46e4cbb7b7673d53ba175a1e163ff",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": "paired_memory",
+          "launch_count": 3,
+          "replay_mode": "kernel",
+          "warm_up": 3
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "c0885b4abf54b84b4ba950aa5192eaa2e911fff417d940c1f379181798a7b3b7"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "f57f032c94e40e941e5df42ca53d4296783aa322f51e32dcf05a125fdf4769d8"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "d3ec66267e5609e7c88c95ab624e92356119781d490da7f47678f09378851293"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          348.299988,
+          347.339996,
+          349.100006
+        ],
+        "capture_count": 1,
+        "samples_in_capture": 3,
+        "median_us": 348.299988,
+        "min_us": 347.339996,
+        "max_us": 349.100006,
+        "rate": 385.3509406379882,
+        "rate_unit": "GB/s",
+        "repeat_scope": "Three launch samples within one BasicInfo capture, not three independent process captures."
+      }
+    },
+    "gemm-256": {
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "51b7b88263ff52a664bddd553eb458a89a7710b68ed7d418aeaa3e77f78dd79e"
+          },
+          "ttadapter": {
+            "sha256": "6e36c392ebd77f3dfb47673f40909aa0e52f003d8d37adacdd2d3e2057aa5d80"
+          },
+          "ttir": {
+            "sha256": "cadcaa3cded7aa3ff587f7e154394bbb7c906e07f31ac3116670f775d79d1a76"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 524288,
+          "output_dtype": "float32",
+          "requested_num_stages": 2,
+          "shape": [
+            256,
+            256,
+            256
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 33554432,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 10.18,
+              "median": 10.18,
+              "min": 10.18,
+              "p90": 10.18
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              10.18
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "1a239025ee335a673a1f669352b17bb1e4f4b37f267034330be94f99ad5276b0",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "83b5637e70af5d990d0519f000753ead4f42a584b3c1706a957ed6a70531705c"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "timing": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 7.64,
+              "median": 7.44,
+              "min": 7.36,
+              "p90": 7.64
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              7.64,
+              7.44,
+              7.36
+            ],
+            "samples": 3
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "a5205f397128e9067d3e4094666e229c3186e8f28c776c3a744e5e311663935b",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": "paired_matmul",
+          "launch_count": 3,
+          "replay_mode": "kernel",
+          "warm_up": 3
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "9cc2593ddc4e6e722e2918ee0fd2cfba5453ddc310cfa7b6ae5c92ce3094474f"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "52ab8ad385aa3394ad6833153ad987e77ca64569f8f32701ab3d54983c563505"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "b5034d0ed26288589fb2f7713025053601d301afa5fa2a8c295b4e18048cb87f"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          7.64,
+          7.44,
+          7.36
+        ],
+        "capture_count": 1,
+        "samples_in_capture": 3,
+        "median_us": 7.44,
+        "min_us": 7.36,
+        "max_us": 7.64,
+        "rate": 4.510004301075269,
+        "rate_unit": "TFLOP/s",
+        "repeat_scope": "Three launch samples within one BasicInfo capture, not three independent process captures."
+      }
+    },
+    "gemm-1024": {
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "413f5338350c5866c31aa4404d6f363028d15382d8c1e4aaeb42972e7be66a1b"
+          },
+          "ttadapter": {
+            "sha256": "d8bfb0355553297c5ca88f83cef13effc35273c007c9edb07c34452dd0fdf8ac"
+          },
+          "ttir": {
+            "sha256": "371bdaaa5749dfab105f65e1fbaf377e6eeebf294006eb60ad33cdcc066a1941"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 8388608,
+          "output_dtype": "float32",
+          "requested_num_stages": 2,
+          "shape": [
+            1024,
+            1024,
+            1024
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 2147483648,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 209.580002,
+              "median": 209.580002,
+              "min": 209.580002,
+              "p90": 209.580002
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              209.580002
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "da13e8d92d567603c2e6a14aeafd277fd352bcd9e6c0a4b2d35700f368935a30",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "5f56cb548406e5d30ae4d091d2b25c954cce4b56e539dae6216141e4d865f646"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "timing": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 205.619995,
+              "median": 204.860001,
+              "min": 204.160004,
+              "p90": 205.619995
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              204.860001,
+              204.160004,
+              205.619995
+            ],
+            "samples": 3
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "ccea8f82a842de65b2628849014028286f78dce2a055becc7065fb16b908ea1f",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": "paired_matmul",
+          "launch_count": 3,
+          "replay_mode": "kernel",
+          "warm_up": 3
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "b6444c8604962a21a2d8f44e1ea3904d06d3f94436275ec71d7eb4495888f76a"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "8a0a7b2a20b6fb43edab23154ef01b28168e4a0cb21dc1412db104c4e69648fc"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "2e9e1a69c374e0f96048083fc1c9dbc9cb2dd656b4223db46f9bcfb0203e3b5b"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          204.860001,
+          204.160004,
+          205.619995
+        ],
+        "capture_count": 1,
+        "samples_in_capture": 3,
+        "median_us": 204.860001,
+        "min_us": 204.160004,
+        "max_us": 205.619995,
+        "rate": 10.482688848566392,
+        "rate_unit": "TFLOP/s",
+        "repeat_scope": "Three launch samples within one BasicInfo capture, not three independent process captures."
+      }
+    },
+    "gemm-2048": {
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "aff2234594bebea0c4e2d30656699218b3a9b74aa8af01dbfbd5e5845fa7bb34"
+          },
+          "ttadapter": {
+            "sha256": "701a0b60a96e7b1139be54fa73ef583aa3997caed7cd9db0b5e0caf9db037af0"
+          },
+          "ttir": {
+            "sha256": "f58d505475370fcd58b683ab8dbcce544b34d68b6542aeaf4ac6011fc3ad91bd"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 33554432,
+          "output_dtype": "float32",
+          "requested_num_stages": 2,
+          "shape": [
+            2048,
+            2048,
+            2048
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 17179869184,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910B4-1",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 1404.280029,
+              "median": 1404.280029,
+              "min": 1404.280029,
+              "p90": 1404.280029
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              1404.280029
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "40210d38060955cbe3886c216c46e6f3a9ac2bd014770215bc2dee7dcdb2ed60",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "aab84de5acce8e446467e717e566174f4627de60a4f94859eae6d3a98acd8265"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "timing": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 1418.819946,
+              "median": 1417.160034,
+              "min": 1412.699951,
+              "p90": 1418.819946
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              1412.699951,
+              1417.160034,
+              1418.819946
+            ],
+            "samples": 3
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "0699b8728159eab947afd1da01043a5f40bdb38ee7594a7b37fd7740828a5157",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": "paired_matmul",
+          "launch_count": 3,
+          "replay_mode": "kernel",
+          "warm_up": 3
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "bd0ebea40df5dc4bd57e399e5738dace2a7bd6888c059629e2e4407e058be3a7"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "748ca4c2c88327e46b10acd4502f7fcc8c889564c0df1c26e262acc11b7dc6b7"
+          },
+          {
+            "matched_rows": 1,
+            "sha256": "e6e659af554c13996e6b43266fecfa1f34695066557d951cc584b9c61af7f576"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          1412.699951,
+          1417.160034,
+          1418.819946
+        ],
+        "capture_count": 1,
+        "samples_in_capture": 3,
+        "median_us": 1417.160034,
+        "min_us": 1412.699951,
+        "max_us": 1418.819946,
+        "rate": 12.122744624337889,
+        "rate_unit": "TFLOP/s",
+        "repeat_scope": "Three launch samples within one BasicInfo capture, not three independent process captures."
+      }
+    }
+  },
+  "source_record_sha256": "00d0426fb15849af429102b660f4c80d730fb933c525df3957a484842ab59007",
+  "dataset_role": "Fresh A2 series, separate from every historical A3 measurement; no sample pooling.",
+  "product_family": "A2",
+  "product": "Ascend910B4-1",
+  "normalization": "Raw reports and descriptive per-engine statistics; the A3-only normalizer was not used.",
+  "run_status": "complete",
+  "measurement_date_utc": "2026-10-22",
+  "omitted_infrastructure_field_names": [
+    "Device Id",
+    "Pid",
+    "application",
+    "isolation_waits",
+    "last_idle_check",
+    "logical_device",
+    "path",
+    "physical_device"
+  ],
+  "version_scope": "Timing payload versions are retained per correctness record; other diagnostic compiler context is bound separately.",
+  "report_scope": "Per-engine ranges summarize all exported rows. They are not whole-device utilization or common-clock phases; exported ratios and times retain independent normalization.",
+  "capture_contract": {
+    "paired_timing": "Three independent exact-selector BasicInfo captures per specialization, rotating capture order, warmup3,launch_count1,kernel replay; all raw samples retained.",
+    "diagnostics": "One independent PipeUtilization capture per specialization and one ResourceConflictRatio capture per matrix specialization; warmup3,launch_count1,kernel replay. All rows retained separately from timing.",
+    "calibration": "Five additional size points each have separate correctness and selector discovery, followed by one BasicInfo capture with three matching launch samples, warmup3,launch_count3,kernel replay,application iterations3. These are not independent process captures. The middle copy and matrix points use the separately declared paired timing samples.",
+    "shared_baseline": "Direct affine specialization is the baseline for copy and known identity-index gather; no historical A3 samples are pooled.",
+    "cache": "Each capture reuses its inputs for warmup/replay. Physical traffic, cache residence, and whole-process allocation are not measured."
+  },
+  "collection_scope": "One A2 product/device series. Timing, diagnostic and per-size calibration captures remain separately identified; no cross-product samples are pooled.",
+  "compiler_evidence": "../examples/a2-compiler-evidence/metadata.json",
+  "compiler_binding_scope": "All five ordinary binaries in this series match the corresponding new A2 debug captures. Historical A3 compiler evidence is a different product/binary series."
+}

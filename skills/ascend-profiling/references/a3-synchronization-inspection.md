@@ -221,3 +221,13 @@ This is compiler-confirmed buffering and event machinery bound to the ordinary
 binary. It does not by itself prove simultaneous transfer/compute overlap or
 quantify saved waiting. Use the separate timing and full wait/stall evidence in
 [the paired measurement interpretation](a3-paired-examples.md).
+
+
+## Separate A2 binary-bound examples
+
+The [A2 worked series](a2-paired-examples.md#binary-matched-late-ir-explains-why-the-memory-cases-differ)
+includes new full late dumps for direct, strided, indexed, and both matrix
+variants. Each debug binary matches its ordinary A2 counterpart. Those files
+show both DMA/layout and scalarized memory paths, plus independent A2 matrix
+buffer/event machinery. Keep their product/runtime/binary bindings separate
+from the historical A3 examples above.

@@ -27,6 +27,39 @@ including read and write; an identity-index gather adds `4N` logical index
 bytes. A stride-2 copy has the same useful count but a larger accessed span.
 Span, useful bytes and physical bus traffic are different quantities.
 
+### The paired GEMM: three byte counts that must not be mixed
+
+For the bundled square 512×512 GEMM, the mathematical minimum is
+`2N² + 2N² + 4N² = 2,097,152 bytes`: fp16 A and B read once and fp32 C
+written once. The source uses independent 32×32 output tiles with 64-wide K
+steps. Each output tile requests a 32×64 A slice and a 64×32 B slice per K
+step, so the **source-requested input count**, before compiler packing/cache,
+is:
+
+```text
+output tiles × K steps × bytes per step
+= (N/32)² × (N/64) × (32×64 + 64×32) × 2
+= 4N³/32
+= 16,777,216 input bytes at N 512
+```
+
+A is requested again for each of 16 output-column tiles; B is requested again
+for each of 16 output-row tiles. Adding 1,048,576 output bytes gives 17,825,792
+source-requested bytes (17 MiB, versus the 2 MiB mathematical minimum).
+For `2N³` useful FLOPs, those two byte models give intensities of about
+15.06 versus 128 FLOP/byte; neither is a measured DRAM intensity. The formula applies to these divisible dimensions and
+this exact tile; partial boundary tiles need the actual mask accounting.
+
+These are **not measured DRAM bytes**. Compiler transformations, ND/NZ packing,
+transaction granularity, hierarchy reuse and cache residency can change which
+physical transfers occur. Nor is the whole source-requested count automatically
+the numerator for a single core's MTE2 active bandwidth: match the path, core,
+capture and active-time definition. Use the logical minimum for an explicitly
+optimistic algorithmic bound, the tile count to investigate redundant requests,
+and validated traffic counters for a physical-bandwidth claim. Keeping all
+three visible suggests an actionable experiment: improve operand reuse across
+tiles while checking the resulting tile/resource and parallelism costs.
+
 An optimistic roofline lower bound is
 `max(F/P, Q/B)` and arithmetic intensity is `I = F/Q` FLOP/byte. It assumes
 sufficient overlap and parallelism. It excludes launch/startup, pipeline fill
@@ -41,8 +74,11 @@ bundled activity model deliberately supplies no A2/A3 capacity denominator.
 
 ## Build a measured reference envelope
 
-No calibrated size curve is bundled: the retained paired run ended before its
-size sweep. Its incomplete raw observations are documented in
+No calibrated **A3** size curve is bundled: the retained A3 paired run ended
+before its size sweep. The [A2 worked series](a2-paired-examples.md) is scoped
+to a different product and is not an A3 capacity or performance reference.
+Its [completed A2 reference curves](a2-paired-examples.md#a-measured-reference-curve-with-its-repeat-contract-visible)
+retain the actual per-size samples and distinct repeat policies. The historical A3 incomplete observations are documented in
 [paired examples](a3-paired-examples.md#retained-observations-an-explicitly-incomplete-measurement-series).
 The procedure below describes how to collect a new comparable reference.
 

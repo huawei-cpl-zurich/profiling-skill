@@ -78,6 +78,10 @@ dispersion, report the mechanism observation without a precise speedup. Sweep
 sizes and compare [empirical envelopes](a3-performance-envelope.md) before
 extrapolating a small-shape result.
 
+The separately collected [A2 worked series](a2-paired-examples.md) uses these
+same source controls on Ascend910B4-1. Its timing/counter evidence remains
+explicitly A2; it does not complete or replace this A3 series.
+
 ## Retained observations: an explicitly incomplete measurement series
 
 [Measured-pair evidence](a3-measured-pairs.json) retains all seven accepted

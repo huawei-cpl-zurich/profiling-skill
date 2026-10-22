@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "product_family": "A2",
+  "product": "Ascend910B4-1",
+  "capture_date_utc": "2026-10-22",
+  "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+  "stage": "IR Dump After GraphSyncSolver (hivm-graph-sync-solver)",
+  "versions": {
+    "torch": "2.10.0",
+    "torch_npu": "2.10.0",
+    "triton": "3.5.0",
+    "triton_ascend": "3.2.2",
+    "bishengir_compile": "1.2.0",
+    "bishengir_revision": "8796a8ac1508",
+    "LLVM": "19.1.7",
+    "LLVM_revision": "2430ab069eb1",
+    "msopprof": "26.1.0-56632dc4a944410c791538451dc2156a151bd105"
+  },
+  "display_transformation": "Retain the full function through its closing brace; omit trailing compiler warnings. Raw/display hashes are separate and IR line numbers remain unchanged.",
+  "binding_scope": "All five diagnostic debug npubin hashes equal the corresponding ordinary binaries. This binds compiler evidence to these A2 specializations, not to historical A3 binaries or to measured simultaneous overlap.",
+  "cells": {
+    "direct": {
+      "config": {
+        "accessed_input_span_bytes": 4194304,
+        "block": 256,
+        "case": "copy",
+        "dtype": "float32",
+        "elements": 1048576,
+        "indirect": false,
+        "input_allocation_bytes": 8388608,
+        "logical_index_bytes": 0,
+        "logical_input_bytes": 4194304,
+        "logical_output_bytes": 4194304,
+        "physical_traffic": "unmeasured",
+        "stride": 1,
+        "variant": "baseline"
+      },
+      "correctness": true,
+      "display_file": "direct.mlir",
+      "raw_npuir_sha256": "15e68834b6dc133ae27a453ca41979af920c348e89c3ba82715cf01608c7847d",
+      "display_sha256": "d66e8879415486a45bbbb8ec0a891d4e33e5a33cf0416b7513998d244f344028",
+      "ordinary_npubin_sha256": "7cd5b1df4abc942ea33fd687690491b48e97bb45fcdec1c0d90d17656c766748",
+      "debug_npubin_sha256": "7cd5b1df4abc942ea33fd687690491b48e97bb45fcdec1c0d90d17656c766748",
+      "early_artifact_hashes": {
+        "ttir": "6f1a6a9ccd55e9f0631ae84e0626e4288bd5f293f3c9d9f49daa08dafea8a0cb",
+        "ttadapter": "312ac9b0ab2db73b13ab1b8dc6b4f2c76061c6f378fd8ff850244eaeeb24349d"
+      }
+    },
+    "stride2": {
+      "config": {
+        "accessed_input_span_bytes": 8388604,
+        "block": 256,
+        "case": "copy",
+        "dtype": "float32",
+        "elements": 1048576,
+        "indirect": false,
+        "input_allocation_bytes": 8388608,
+        "logical_index_bytes": 0,
+        "logical_input_bytes": 4194304,
+        "logical_output_bytes": 4194304,
+        "physical_traffic": "unmeasured",
+        "stride": 2,
+        "variant": "candidate"
+      },
+      "correctness": true,
+      "display_file": "stride2.mlir",
+      "raw_npuir_sha256": "77355be28a19cbfe479c0c264f2f3a9c3c2d80ed6554eb11994238b001c409d7",
+      "display_sha256": "f127e1612b38fdd6998af4c319a6d8bef17d1121e644e55890fbc65fafc1a616",
+      "ordinary_npubin_sha256": "1c69f535ed1e28003fe3c476ba8ffbe151e77f97ddc2995b80c5b65ac307a8ca",
+      "debug_npubin_sha256": "1c69f535ed1e28003fe3c476ba8ffbe151e77f97ddc2995b80c5b65ac307a8ca",
+      "early_artifact_hashes": {
+        "ttir": "a2d938e31fdf87d3ad75ff1ac33d870dbab94b796be37f64077267d894ef101a",
+        "ttadapter": "86ade6166bcbcff892a0699c952766031e7063351bfb720822c97d9e70b2995d"
+      }
+    },
+    "indexed": {
+      "config": {
+        "accessed_input_span_bytes": 4194304,
+        "block": 256,
+        "case": "gather",
+        "dtype": "float32",
+        "elements": 1048576,
+        "indirect": true,
+        "input_allocation_bytes": 8388608,
+        "logical_index_bytes": 4194304,
+        "logical_input_bytes": 4194304,
+        "logical_output_bytes": 4194304,
+        "physical_traffic": "unmeasured",
+        "stride": 1,
+        "variant": "candidate"
+      },
+      "correctness": true,
+      "display_file": "indexed.mlir",
+      "raw_npuir_sha256": "a522b1971c3431946d81c915aa8f8fb9659e0f67ac1d7e378008f6f18d3e0a69",
+      "display_sha256": "684f119746a978c1a51006f0811fc595ca70c295aaacaf8b6af9cbb06f715d71",
+      "ordinary_npubin_sha256": "d52c4f0db263d19c0dbba508341e703225bf7f247880b886a0c59019aa98bd88",
+      "debug_npubin_sha256": "d52c4f0db263d19c0dbba508341e703225bf7f247880b886a0c59019aa98bd88",
+      "early_artifact_hashes": {
+        "ttir": "bfa89253c33aa23fbe23b70a31e61c8f26f6b78ce1e7465c7bd18eb2b6d4bbbc",
+        "ttadapter": "b1b342e07035405cdd1777aca0490901aa274788e30b1ff106ca3ccfe7bb772f"
+      }
+    },
+    "stages1": {
+      "config": {
+        "actual_buffering": "verify emitted compiler artifacts",
+        "case": "matmul",
+        "dtype": "float16",
+        "logical_minimum_bytes": 2097152,
+        "output_dtype": "float32",
+        "requested_num_stages": 1,
+        "shape": [
+          512,
+          512,
+          512
+        ],
+        "tile": [
+          32,
+          32,
+          64
+        ],
+        "useful_flops": 268435456,
+        "variant": "baseline"
+      },
+      "correctness": true,
+      "display_file": "stages1.mlir",
+      "raw_npuir_sha256": "11406d14ff22532c1d29ba483210e8803b06d41801a2fddd4b6b2066c07d9436",
+      "display_sha256": "5e53400555d6ae39621dc16d80ee9f1801909b515e38c578ac23b33a29c8798f",
+      "ordinary_npubin_sha256": "be54f37821f0ad190ddb961822a2bcb5c9d2a65dc638d191e2bb71f56fa4190e",
+      "debug_npubin_sha256": "be54f37821f0ad190ddb961822a2bcb5c9d2a65dc638d191e2bb71f56fa4190e",
+      "early_artifact_hashes": {
+        "ttir": "a27d81880aae99bbe1b92a8f3666141bba16ea4953424b5a356ad2836368f348",
+        "ttadapter": "af8abe3c14f0b2a50c1acc9a3ef9ab2387a13b09a34c3f64dc4db912aca32ba1"
+      }
+    },
+    "stages2": {
+      "config": {
+        "actual_buffering": "verify emitted compiler artifacts",
+        "case": "matmul",
+        "dtype": "float16",
+        "logical_minimum_bytes": 2097152,
+        "output_dtype": "float32",
+        "requested_num_stages": 2,
+        "shape": [
+          512,
+          512,
+          512
+        ],
+        "tile": [
+          32,
+          32,
+          64
+        ],
+        "useful_flops": 268435456,
+        "variant": "candidate"
+      },
+      "correctness": true,
+      "display_file": "stages2.mlir",
+      "raw_npuir_sha256": "1a5527c4b5ee84a7735e7135c6a9a54dee8643613eacc8a82f371d039182a85d",
+      "display_sha256": "4443c0edc9f09c1c0b3ef117ace31921e5d4f34200b7c81cbdf9ff67b9dde783",
+      "ordinary_npubin_sha256": "88e3d1aa96f035e57199644e44a8d711ac44e26640c741fe7373836edbe30cb8",
+      "debug_npubin_sha256": "88e3d1aa96f035e57199644e44a8d711ac44e26640c741fe7373836edbe30cb8",
+      "early_artifact_hashes": {
+        "ttir": "a27d81880aae99bbe1b92a8f3666141bba16ea4953424b5a356ad2836368f348",
+        "ttadapter": "af8abe3c14f0b2a50c1acc9a3ef9ab2387a13b09a34c3f64dc4db912aca32ba1"
+      }
+    }
+  }
+}

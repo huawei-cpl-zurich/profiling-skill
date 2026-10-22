@@ -69,7 +69,9 @@ a buffering or handoff explanation depends on late compiler IR, and
 shape-matched gap. Use the [paired examples](references/a3-paired-examples.md)
 for runnable copy, gather and matrix comparisons. Normalize single-launch pipe
 exports with `scripts/normalize_a3_pipe_evidence.py` and
-`references/a3-pipe-activity-model.json`. Block/sub-block rows are non-temporal
+`references/a3-pipe-activity-model.json`. The normalizer currently accepts A3 only; do not label A2 reports as A3 to use
+it. For A2, retain raw reports and use the explicitly scoped
+[A2 worked examples](references/a2-paired-examples.md). Block/sub-block rows are non-temporal
 activity observations, not phases or capacity evidence. High activity does not
 prove saturation. Optional [timeline and correctness diagnostics](references/a3-timeline-and-correctness.md)
 help resolve instruction ordering, attribution, or races; A3 simulation is not

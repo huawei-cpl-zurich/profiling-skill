@@ -113,7 +113,12 @@ memory bottleneck; values above 1 mean memory activity dominates; exactly 1 is
 unclassified. Cube utilization may approach the theoretical 100%, but no
 lower universal saturation cutoff is documented.
 
-## Normalize compact pipe evidence
+## Normalize compact A3 pipe evidence
+
+The included normalizer accepts `--product a3` only. A2 reports must retain
+their actual product and raw CSVs; do not relabel them to pass this interface.
+[A2 worked examples](a2-paired-examples.md) demonstrate complete row inspection
+and descriptive statistics without invoking the A3-only normalizer.
 
 Capture `PipeUtilization` and, when needed, `Memory` in separate comparable
 single-launch replays (`--launch-count=1`) with the same exact kernel selector.

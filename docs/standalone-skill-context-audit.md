@@ -55,3 +55,15 @@ active cycles from row cycles. The included empirical observations are explicitl
 incomplete (seven timing samples, no paired diagnostic groups or calibrated
 size curve). Complete binary-matched matrix IR is retained as compiler evidence,
 with raw/display hashes and removal of trailing compiler diagnostics.
+
+
+## Completed A2 worked series
+
+The follow-up retained a complete Ascend910B4-1 (A2) series:15 independent
+paired timing samples, seven full counter groups, five additional size points
+with three launch samples inside each capture, and five new binary-matched
+late compiler dumps. Full counter rows are stored as compact CSVs with separate
+original/display hashes, raw missing markers, and explicit engine scope.
+This A2 evidence remains separate from incomplete A3 attempts; it does not
+supply an A3 calibrated performance envelope. The A3-only normalizer was not
+used or relabeled. The generic example source remains frozen.

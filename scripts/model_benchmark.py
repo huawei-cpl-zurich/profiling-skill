@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Private controller for paired compiled Model measurements; never an agent fixture."""
+"""One paired acquisition primitive; use model_benchmark_repeated.py for reports.
+
+Private controller for compiled Models; never an agent fixture.
+"""
 import argparse
 import hashlib
 import importlib

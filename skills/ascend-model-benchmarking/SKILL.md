@@ -32,6 +32,12 @@ reimplement timings with ad hoc clocks or infer iteration boundaries from names.
 - Collect unprofiled synchronized full-forward latency separately from a warmed
   profiler replay. Report both; summed kernel durations are not elapsed latency.
   Busy-time includes device and AiCPU tasks per iteration; also report each separately.
+- Run **10 full paired repetitions per configuration/case** by default with
+  `scripts/model_benchmark_repeated.py`. Report mean and sample standard deviation
+  (`ddof=1`) of the ten per-run latency medians and ten correlated busy-time
+  medians. Preserve within-run percentiles/batches separately; those are not
+  independent repetitions. Retain failed runs and mark fewer than ten successes
+  incomplete, rather than silently replacing failures or rerunning until stable.
 - Preserve all samples and rows. Median-threshold outliers are flags, not deletions.
   Report clock/load differences and dispersion rather than selecting a fast retry.
 - Compare paired implementations on the same physical device/runtime/clock policy.

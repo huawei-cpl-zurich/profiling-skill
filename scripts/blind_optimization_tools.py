@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import runpy
 import shlex
 import shutil
@@ -182,12 +182,39 @@ class Tools:
         registry = module['load_registry'](Path(os.path.expanduser(os.environ.get('CPL_REMOTE_CONFIG', '~/.config/cpl/remotes.yaml'))))
         config = module['get_target'](registry, target)
         self.cwd = config['workspace']
+        self.backend = config['backend']
         self.target, self.runtime = target, runtime
         self.state = self.workspace.parent / 'tool-state'
         self.state.mkdir(exist_ok=True)
 
     def remote(self, *arguments):
-        command = [str(self.client), '--json', *map(str, arguments)]
+        arguments = list(map(str, arguments))
+        # Listener API paths are workspace-relative; payload shell paths remain
+        # absolute so changing the command cwd never changes archive locations.
+        if getattr(self, 'backend', None) == 'remote-agent' and len(arguments) > 1 and arguments[1] == self.target:
+            operation = arguments[0]
+            index = None
+            if operation == 'run' and '--cwd' in arguments:
+                index = arguments.index('--cwd') + 1
+            elif operation == 'upload':
+                index = 3
+            elif operation == 'download':
+                index = 2
+            if index is not None:
+                path = PurePosixPath(arguments[index])
+                if '..' in path.parts:
+                    raise ValueError('remote path must stay within the configured workspace')
+                if path.is_absolute():
+                    try:
+                        path = path.relative_to(PurePosixPath(self.cwd))
+                    except ValueError as error:
+                        raise ValueError('remote path must stay within the configured workspace') from error
+                if str(path) == '.':
+                    if operation != 'run':
+                        raise ValueError('remote transfer path must name an item in the workspace')
+                    path = PurePosixPath('.cpl-remote')
+                arguments[index] = str(path)
+        command = [str(self.client), '--json', *arguments]
         timeout = 240
         deadline = getattr(self, '_staging_deadline', None)
         if deadline and arguments[0] in ('targets', 'capabilities', 'preflight', 'upload', 'run'):

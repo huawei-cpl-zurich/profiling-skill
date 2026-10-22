@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
+import re
 import time
 
 
@@ -42,7 +43,24 @@ def activate(tools, folder, receipt):
     path = Path(folder) / 'activation.json'
     if 'activation_upload' not in receipt:
         if not path.exists():
-            logs = tools.remote('logs', receipt['handle'], '--tail', '100')
+            try:
+                logs = tools.remote('logs', receipt['handle'], '--tail', '100')
+            except RuntimeError as error:
+                # Listener log files may not exist immediately after admission.
+                # Confirm the SAME retained job is pending before waiting; a
+                # terminal failure or unrelated malformed response stays visible.
+                missing = re.search(r'/logs/stdout(?:\?\S*)? failed with status 404:\s*(\{[^\n]*\})', str(error))
+                try:
+                    log_missing = missing is not None and json.loads(missing[1]).get('detail') == 'log not found'
+                except (ValueError, AttributeError):
+                    log_missing = False
+                if not log_missing:
+                    raise
+                observed = tools.remote('observe', receipt['handle'])
+                if observed.get('state') in ('queued', 'dispatching', 'running',
+                                             'reconnecting', 'observation-unavailable'):
+                    return False
+                raise
             anchors = [json.loads(line.split('=', 1)[1])['monotonic']
                        for line in logs.get('content', '').splitlines() if line.startswith('PHASE_READY=')]
             if not anchors:

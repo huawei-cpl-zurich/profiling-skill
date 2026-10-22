@@ -60,14 +60,18 @@ def start(service, operation):
             if args[0] == 'preflight' and result.get('state') != 'completed':
                 raise RuntimeError('preflight unavailable')
         remote = tools.cwd.rstrip('/') + '/model-phase-' + ident
-        phase = dict(remote_folder=remote, first_call=ident, deadline=context['utc_deadline'])
+        phase = dict(remote_folder=remote, first_call=ident, deadline=context['utc_deadline'],
+                     activation_required=True)
         staging = folder / 'phase'
         shutil.copytree(service.bundle, staging)
         (staging / 'inbox').mkdir()
         shutil.copyfile(archive, staging / 'inbox' / (ident + '.tar.gz'))
         (staging / 'execute-phase.py').write_text(
-            'from pathlib import Path\nimport sys\nroot=Path(__file__).resolve().parent\n'
+            'from pathlib import Path\nimport os,sys\nroot=Path(__file__).resolve().parent\n'
             'sys.path[:0]=[str(root/"scripts"),str(root/"skills/ascend-model-benchmarking/scripts")]\n'
+            'from phase_deadline import wait_for_activation\n'
+            'os.environ["CAMPAIGN_DEADLINE_MONOTONIC"]=str(wait_for_activation(root/"activation.json",'
+            'float(os.environ["CAMPAIGN_REMAINING_SECONDS"])))\n'
             'import model_campaign_native as adapter\nfrom model_campaign_worker import phase\nphase(root,adapter)\n')
         bundle = folder / 'phase.tar.gz'
         with tarfile.open(bundle, 'w:gz') as stream:
@@ -140,6 +144,25 @@ def observe(tools, ident):
         receipt = launch(tools, receipt, folder)
         if not receipt.get('handle'):
             return dict(receipt, next='experiment-tool observe ' + ident)
+    phase = json.loads((tools.state / 'phase.json').read_text())
+    if phase.get('activation_required'):
+        from phase_deadline import activate
+        activation_folder = tools.state / phase['first_call'] / 'activation'
+        activation_folder.mkdir(exist_ok=True)
+        activation_receipt = activation_folder / 'receipt.json'
+        activation = json.loads(activation_receipt.read_text()) if activation_receipt.exists() else dict(
+            target=tools.target, handle=phase['handle'], remote_folder=phase['remote_folder'],
+            request=dict(utc_deadline=phase['deadline'], activation_required=True))
+        save(activation_receipt, activation)
+        try:
+            ready = activate(tools, activation_folder, activation)
+        except TimeoutError:
+            tools.remote('cancel', phase['handle'])
+            receipt.update(state='failed', failure_stage='budget')
+            save(folder / 'receipt.json', receipt)
+            return receipt
+        if not ready:
+            return dict(receipt, state='running', next='experiment-tool observe ' + ident)
     if 'upload' in receipt and receipt['upload'].get('state') not in TERMINAL:
         transfer = tools.transfer(receipt, 'upload')
         save(folder / 'receipt.json', receipt)

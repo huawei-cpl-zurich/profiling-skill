@@ -125,7 +125,8 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
 def phase(root, adapter):
     """One private process/device lease for the original role deadline."""
     root = Path(root)
-    deadline = time.monotonic() + float(os.environ['CAMPAIGN_REMAINING_SECONDS'])
+    deadline = float(os.environ.get('CAMPAIGN_DEADLINE_MONOTONIC',
+        time.monotonic() + float(os.environ['CAMPAIGN_REMAINING_SECONDS'])))
     runtime = {}
     def terminate(*_):
         raise SystemExit(0)

@@ -2,13 +2,8 @@
 import csv
 import json
 from pathlib import Path
-import shlex
 import statistics
-import subprocess
-import sys
 import time
-
-from a3_memory_batch import execute, validate_capture
 
 
 def audited_compiler():
@@ -127,14 +122,6 @@ def _rows(folder, pattern):
     return rows
 
 
-def _name(row):
-    names = {value for key, value in row.items() if value and 'name' in key.lower()
-             and ('kernel' in key.lower() or 'op' in key.lower())}
-    if len(names) != 1:
-        raise RuntimeError('ambiguous exported kernel name')
-    return names.pop()
-
-
 def pipes(root, env, remaining):
     """Application-level per-task PMU; deliberately not op-replay block PMU."""
     import torch
@@ -178,16 +165,3 @@ def pipes(root, env, remaining):
         discovered_names=names, captures=captures, warmup=20, samples=5)
     (output / 'pipe-evidence.json').write_text(json.dumps(result, indent=2))
     return result
-
-
-if __name__ == '__main__':
-    root = Path(sys.argv[1]).resolve()
-    sys.path[:0] = [str(root), str(root / 'scripts'),
-                   str(root / 'skills/ascend-model-benchmarking/scripts')]
-    import torch
-    prepared, _ = _prepare(root)
-    # Cold preparation is the first launch; profiler skips it plus20 warm launches.
-    with torch.inference_mode():
-        for _ in range(21):
-            prepared()
-        torch.npu.synchronize()

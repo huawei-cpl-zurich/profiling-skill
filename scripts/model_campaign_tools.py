@@ -61,7 +61,8 @@ def prepare(output, task='matmul'):
     helpers = private / 'skills/ascend-model-benchmarking/scripts'
     helpers.mkdir(parents=True)
     for name in ('model_campaign_worker.py', 'profile_device.py', 'a3_memory_batch.py',
-                 'private_campaign_cases.py', 'private_campaign_models.py', 'model_campaign_native.py', 'model_device.py'):
+                 'private_campaign_cases.py', 'private_campaign_models.py', 'model_campaign_native.py',
+                 'model_device.py', 'phase_deadline.py'):
         shutil.copyfile(source / 'scripts' / name, private / 'scripts' / name)
     for name in ('model_execution.py', 'candidate_probe.py', 'profile_capture.py', 'profile_accounting.py'):
         shutil.copyfile(source / 'skills/ascend-model-benchmarking/scripts' / name, helpers / name)

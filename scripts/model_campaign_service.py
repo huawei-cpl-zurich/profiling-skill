@@ -91,11 +91,12 @@ class CampaignService:
             receipt = json.loads(receipt_path.read_text())
             if not any(isinstance(receipt.get(key), dict) and receipt[key].get('state') not in TERMINAL
                        for key in ('upload', 'download')):
-                receipt.update(state=result['state'], failure_stage='infrastructure')
+                stage = result.get('failure_stage', 'infrastructure')
+                receipt.update(state=result['state'], failure_stage=stage)
                 save(receipt_path, receipt)
                 (private / 'results').mkdir(parents=True, exist_ok=True)
                 save(private / 'results/summary.json', dict(state=result['state'],
-                    failure_stage='infrastructure', source_sha256=receipt['request']['source_sha256'],
+                    failure_stage=stage, source_sha256=receipt['request']['source_sha256'],
                     diagnostic=dict(kind='terminal-evidence-unavailable',
                                     reason='retained job or transfer ended without a worker report')))
         if (private / 'results/summary.json').is_file():

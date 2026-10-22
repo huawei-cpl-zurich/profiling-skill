@@ -98,6 +98,7 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic):
         # remain remote; even this private archive is never directly agent-mounted.
         with tarfile.open(root / 'evidence.tar.gz', 'w:gz') as archive:
             for path in root.rglob('*'):
-                if path.is_file() and path.suffix in ('.json', '.csv', '.stdout', '.stderr', '.log'):
+                if path.is_file() and (path.suffix in ('.json', '.csv', '.stdout', '.stderr', '.log')
+                        or path.suffix == '.txt' and path.is_relative_to(root / 'diagnostics')):
                     if path.is_relative_to(output) or path.is_relative_to(root / 'measurement') or path.is_relative_to(root / 'diagnostics'):
                         archive.add(path, arcname=str(path.relative_to(root)))

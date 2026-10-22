@@ -144,7 +144,7 @@ def pipes(root, env, remaining):
         folder = output / label
         command = ['msprof', 'op', '--application=' + str(wrapper),
             '--output=' + str(folder / 'report'), '--aic-metrics=' + metric,
-            '--warm-up=21', '--launch-count=' + ('1' if selector else '5000'), '--kill=off']
+            '--warm-up=21', '--launch-count=' + ('5000' if metric == 'BasicInfo' else '1'), '--kill=off']
         if selector:
             command.append('--kernel-name=' + selector)
         process = execute(command, folder, env, timeout=remaining())
@@ -158,15 +158,22 @@ def pipes(root, env, remaining):
     names = sorted({row['name'] for row in discovered['tasks'] if row['kind'] == 'device'})
     if not names:
         raise RuntimeError('compiled candidate exported no kernel names')
+    mapping = {}
+    for index, hint in enumerate(names):
+        basic = capture('basic-' + str(index), 'BasicInfo', hint)
+        mapping[hint] = sorted({_name(row) for row in _rows(basic, '*OpBasicInfo*.csv')})
+        if not mapping[hint]:
+            raise RuntimeError('candidate trace hint exported no canonical BasicInfo selector')
+    selectors = sorted({name for values in mapping.values() for name in values})
     captures = []
-    for index, selector in enumerate(names):
+    for index, selector in enumerate(selectors):
         folder = capture('pipes-' + str(index), 'PipeUtilization', selector)
         basic, rows = _rows(folder, '*OpBasicInfo*.csv'), _rows(folder, '*PipeUtilization*.csv')
         if not rows or not basic or any(_name(row) != selector for row in basic):
             raise RuntimeError('exact-selector pipe export incomplete')
         captures.append(dict(selector=selector, basic_rows=basic, pipe_rows=rows))
     result = dict(state='complete', cases=['matmul-7-variant-0'],
-                  discovered_names=names, captures=captures, warmup=21)
+                  discovered_names=selectors, selector_mapping=mapping, captures=captures, warmup=21)
     (output / 'pipe-evidence.json').write_text(json.dumps(result, indent=2))
     return result
 

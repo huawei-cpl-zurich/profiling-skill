@@ -81,18 +81,53 @@ def test_pipe_discovery_follows_renamed_multiple_kernels(tmp_path, monkeypatch):
         report = folder / 'report'
         report.mkdir(parents=True)
         selector = next((arg.split('=', 1)[1] for arg in command if arg.startswith('--kernel-name=')), None)
-        names = [selector] if selector else ['renamed_stage_a', 'renamed_stage_b']
+        basic_discovery = '--aic-metrics=BasicInfo' in command
+        names = [selector + '.native'] if basic_discovery else [selector]
         (report / 'OpBasicInfo.csv').write_text('Kernel Name,Duration(us)\n' +
                                                ''.join(name + ',11\n' for name in names))
-        if selector:
+        if not basic_discovery:
             (report / 'PipeUtilization.csv').write_text('Kernel Name,vec_ratio\n' + selector + ',44\n')
         return SimpleNamespace(returncode=0, stdout='Profiling running finished. All task success.', stderr='')
     monkeypatch.setattr(native, 'execute', fake_execute)
     result = native.pipes(tmp_path, {}, lambda: 100)
-    assert result['discovered_names'] == ['renamed_stage_a', 'renamed_stage_b']
+    assert result['discovered_names'] == ['renamed_stage_a.native', 'renamed_stage_b.native']
+    assert result['selector_mapping'] == {'renamed_stage_a': ['renamed_stage_a.native'],
+                                          'renamed_stage_b': ['renamed_stage_b.native']}
     assert len(result['captures']) == 2
     assert [arg for command in calls for arg in command if arg.startswith('--kernel-name=')] == [
-        '--kernel-name=renamed_stage_a', '--kernel-name=renamed_stage_b']
+        '--kernel-name=renamed_stage_a', '--kernel-name=renamed_stage_b',
+        '--kernel-name=renamed_stage_a.native', '--kernel-name=renamed_stage_b.native']
+
+
+def test_native_triton_dependency_attribute_error_is_owned_and_observable(tmp_path, monkeypatch):
+    import ast
+    import importlib.util
+    from types import ModuleType
+    helper = Path(__file__).resolve().parents[1] / 'skills/ascend-model-benchmarking/scripts'
+    monkeypatch.syspath_prepend(str(helper))
+    import candidate_probe
+    language = ModuleType('triton.language')
+    jit = ModuleType('triton.runtime.jit')
+    jit.language = language
+    exec('class DependencyFinder:\n    def visit_Attribute(self, node):\n        return getattr(language, node.attr)\n', jit.__dict__)
+    source = 'import triton.language as tl\ndef kernel():\n    return tl.missing_operation()\n'
+    candidate = tmp_path / 'candidate.py'
+    candidate.write_text(source)
+    node = next(part for part in ast.walk(ast.parse(source)) if isinstance(part, ast.Attribute))
+    real_import = candidate_probe.importlib.import_module
+    monkeypatch.setattr(candidate_probe.importlib, 'import_module', lambda name:
+        {'triton.runtime.jit': jit, 'triton.language': language}.get(name) or real_import(name))
+    try:
+        jit.DependencyFinder().visit_Attribute(node)
+    except AttributeError as error:
+        report = candidate_probe._frontend_diagnostic(error, candidate)
+        assert report == dict(kind='triton-frontend', file='candidate.py', line=3,
+            source_line='    return tl.missing_operation()',
+            message="module 'triton.language' has no attribute 'missing_operation'")
+        candidate.write_text(source.replace('missing_operation', 'different_operation'))
+        assert candidate_probe._frontend_diagnostic(error, candidate) is None
+    else:
+        pytest.fail('expected actual missing-module-member error')
 
 
 def test_export_failed_check_never_qualifies(tmp_path):
@@ -205,7 +240,14 @@ def test_worker_probe_bound_and_remote_clock_skew(tmp_path, monkeypatch):
         assert probe(env)[0] is True
         return 3, env, SimpleNamespace(close=lambda: None)
     adapter = SimpleNamespace(check=lambda *args: dict(passed=True, variants=[0, 1]))
+    (tmp_path / 'diagnostics').mkdir()
+    (tmp_path / 'diagnostics/traceback.txt').write_text('PRIVATE COMPILER TRACE')
     result = worker.execute(tmp_path, adapter, acquire=acquire, monotonic=lambda: 0)
     assert result['state'] == 'completed' and result['physical_device'] == 3
     assert seen == ['torch', 'torch_npu']
     assert alarms == [240, 180, 240, 0]
+    import tarfile
+    with tarfile.open(tmp_path / 'evidence.tar.gz') as archive:
+        assert archive.extractfile('diagnostics/traceback.txt').read() == b'PRIVATE COMPILER TRACE'
+    tools.export(tmp_path, tmp_path / 'public')
+    assert 'PRIVATE COMPILER TRACE' not in (tmp_path / 'public/results/summary.json').read_text()

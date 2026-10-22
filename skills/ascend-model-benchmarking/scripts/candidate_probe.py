@@ -70,6 +70,45 @@ def _compiler_diagnostic(error, candidate_file):
     return None
 
 
+def _frontend_diagnostic(error, candidate_file):
+    """Triton dependency discovery can raise raw AttributeError before compilation.
+
+    Authenticate the real visitor and its AST, then release only a reconstructed
+    missing-language-member message owned by one expression in the candidate.
+    """
+    try:
+        jit = importlib.import_module('triton.runtime.jit')
+        language = importlib.import_module('triton.language')
+        source = Path(candidate_file).read_text()
+        tree = ast.parse(source)
+    except (ImportError, AttributeError, OSError, SyntaxError):
+        return None
+    aliases = {alias.asname or alias.name for node in ast.walk(tree)
+               if isinstance(node, ast.Import) for alias in node.names
+               if alias.name == 'triton.language'}
+    for item in _chain(error):
+        if not isinstance(item, AttributeError) or getattr(item, 'obj', None) is not language:
+            continue
+        trace = item.__traceback__
+        while trace:
+            frame = trace.tb_frame
+            node = frame.f_locals.get('node')
+            if frame.f_globals.get('__name__') == 'triton.runtime.jit' \
+                    and frame.f_code.co_name == 'visit_Attribute' \
+                    and isinstance(frame.f_locals.get('self'), jit.DependencyFinder) \
+                    and isinstance(node, ast.Attribute) and getattr(item, 'name', None) == node.attr:
+                matches = [part for part in ast.walk(tree) if isinstance(part, ast.Attribute)
+                    and isinstance(part.value, ast.Name) and part.value.id in aliases
+                    and ast.dump(part, include_attributes=False) == ast.dump(node, include_attributes=False)]
+                if len(matches) == 1:
+                    line = matches[0].lineno
+                    return dict(kind='triton-frontend', file=Path(candidate_file).name, line=line,
+                        source_line=source.splitlines()[line - 1],
+                        message="module 'triton.language' has no attribute '" + node.attr + "'")
+            trace = trace.tb_next
+    return None
+
+
 def _numeric_summary(actual, expected):
     """Single-tensor aggregate diagnostics; never serialize values or reprs."""
     torch = importlib.import_module("torch")
@@ -180,7 +219,8 @@ def probe_candidate(factory, case_provider, validator, *, candidate_file,
             result["category"] = "capability-unavailable"
         elif stage in ("candidate-eager-preflight", "candidate-input-mutation") or (stage == "candidate-preparation" and isinstance(error, ModelExecutionError)):
             result["category"] = "candidate-compile-or-runtime-error"
-            detail = _compiler_diagnostic(error, candidate_file) or _resource_diagnostic(error)
+            detail = (_compiler_diagnostic(error, candidate_file)
+                      or _frontend_diagnostic(error, candidate_file) or _resource_diagnostic(error))
             if detail:
                 result["diagnostic"] = detail
             else:

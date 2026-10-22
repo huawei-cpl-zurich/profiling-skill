@@ -20,7 +20,7 @@ def export(private, public):
     result['diagnostics'] = checked.get('diagnostics', [])
     measurement = value.get('result', {})
     result.update({key: measurement[key] for key in
-                  ('latency', 'busy_time', 'cases', 'discovered_names', 'warmup', 'samples') if key in measurement})
+                  ('latency', 'busy_time', 'cases', 'discovered_names', 'selector_mapping', 'warmup', 'samples') if key in measurement})
     result['captures'] = []
     for capture in measurement.get('captures', []):
         selector = capture['selector']
@@ -108,7 +108,8 @@ def main(argv=None):
               'Every operation independently checks compiled Model correctness on private input variants.\n'
               'Compilation/numerical failures include safe diagnostics; retry edits until role deadline, no attempt quota.\n'
               'timing measures warm synchronized full-forward latency; pipes discovers kernel names then collects metrics.\n'
-              'Effective captures: 3 warm latency samples, 1 BasicInfo discovery, 1 PipeUtilization per discovered selector.\n'
+              'Effective captures: 3 warm latency samples; scoped trace discovery, 1 BasicInfo replay per trace hint, '
+              '1 PipeUtilization per exported canonical selector.\n'
               'Evidence is evidence/CALL_ID/results/summary.json. Preserve original paths in analysis reports.\n'
               'Resume nonterminal infrastructure jobs with observe; do not duplicate dispatch.\n'
               'All staging/device waits are included in execution.json deadline; no implicit budget extension.')

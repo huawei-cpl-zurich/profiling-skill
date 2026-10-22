@@ -1,7 +1,7 @@
 # Actor — round $round_index
 
 You have $budget_seconds seconds including tool waits. Follow the supplied
-execution deadline; reserve the final 120 seconds to checkpoint and hand back.
+execution deadline; reserve the final $reporting_reserve_seconds seconds to checkpoint and hand back.
 Perform only this round, then stop. Your task is:
 
 $task_instruction

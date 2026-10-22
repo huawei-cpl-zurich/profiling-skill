@@ -172,6 +172,24 @@ def test_neutral_help_runs_without_remote_configuration(capsys):
     assert 'observe CALL_ID' in capsys.readouterr().out
 
 
+def test_help_reports_effective_capture_configuration_used_by_dispatch(monkeypatch, capsys):
+    prefix = ['--bundle', '/unused', '--workspace', '/unused', '--timing-captures', '3', '--pipe-captures', '1']
+    assert tools.main([*prefix, 'help']) == 0
+    effective = json.loads(capsys.readouterr().out.splitlines()[-1])['capture_configuration']
+    calls = []
+    class FakeTools:
+        def __init__(self, *args):
+            pass
+        def start(self, verb, implementation, sanitizer, **configuration):
+            calls.append((verb, configuration))
+            return {'state': 'completed', 'capture_configuration': configuration}
+    monkeypatch.setattr(tools, 'Tools', FakeTools)
+    assert tools.main([*prefix, 'pipes']) == 0
+    actual = json.loads(capsys.readouterr().out)['capture_configuration']
+    assert effective == actual == {'timing_captures': 3, 'pipe_captures': 1}
+    assert calls == [('pipes', effective)]
+
+
 @pytest.mark.parametrize('verb', ['ir', 'sanitize'])
 def test_native_optional_diagnostics_are_capability_results_without_remote_calls(tmp_path, verb):
     obj = instance(tmp_path)

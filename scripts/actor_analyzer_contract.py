@@ -71,6 +71,7 @@ def build_prompt(role, budget_seconds, round_index, task_instruction, candidate_
         raise ValueError("analyzer requires a frozen candidate_commit")
     return Template((PROMPTS / f"{role}.md").read_text()).substitute(
         budget_seconds=budget_seconds, round_index=round_index,
+        reporting_reserve_seconds=min(120, budget_seconds // 5),
         task_instruction=task_instruction,
         candidate_commit=candidate_commit or "No previous verified candidate")
 

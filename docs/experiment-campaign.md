@@ -165,7 +165,7 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --output /absolute/campaign-inputs/cannbot-freeze
 
 python "$ABS_REPOSITORY/scripts/generate_benchmark_config.py" \
-  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/bz_a3_job_client.py","--state-dir","/absolute/campaign-state/bz-a3-jobs","--placements-json","/absolute/campaign-inputs/bz-a3-placements.json","--remote-root","/existing/remote/profiling-skill","--runtime-activate","/profile/configured/python/bin/activate"]' \
+  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/bz_a3_job_client.py","--state-dir","/absolute/campaign-state/bz-a3-jobs","--placements-json","/absolute/campaign-inputs/bz-a3-placements.json","--cpl-remote-sha256","<installed-client-sha256>","--remote-root","/existing/remote/profiling-skill"]' \
   --candidate candidate.py \
   --candidate-manifest candidate.manifest.json \
   --output /absolute/campaign-inputs/controller.json
@@ -174,12 +174,11 @@ python "$ABS_REPOSITORY/scripts/generate_benchmark_config.py" \
 The BZ client routes uploads, retained execution, observation, and log
 retrieval through the globally installed `cpl-remote` command. The placements
 file maps campaign logical devices to `bz-a3-1` or `bz-a3-2` plus a physical
-device; the retained workload sees that device as logical device 0. The remote
+device using `target` and `device` fields; the retained workload sees that device
+as logical device 0. Set the client digest to the SHA256 of the installed global
+remote-access client, not a copied transport. The remote
 root must already exist and be writable in the target's registered execution
-context. `--runtime-activate` is the profile-configured absolute path to the
-target's Python activation script; the retained command sources it before
-selecting the physical device or invoking Python. Do not record a
-machine-specific value in repository configuration. After an interrupted observation, rerun the identical request so the
+context. After an interrupted observation, rerun the identical request so the
 client observes its recorded `remote:bz-a3-*:job:*` handle without dispatching
 a duplicate workload.
 
@@ -247,11 +246,12 @@ kernel, pass all correctness cases, and complete profiling without an
 infrastructure failure.
 
 Mutable candidates are staged with `gz_a3_job_client.py` through the neutral
-profile adapter's content-addressed managed-bundle actions. Upload, command,
-and result-transfer receipts live below the configured private state
-directory. Repeating an identical request resumes those receipts and never
-submits a duplicate command. The client has no raw SSH, SCP, Docker, or
-remote-agent route.
+global `$remote-access` client, using its registry workspace and named
+`py311-torch` runtime. Native-worker request and execution receipts live below
+the configured private state directory. Repeating an identical request resumes
+the retained handle rather than submitting a duplicate command. The client
+has no workspace adapter, activation-script, raw SSH, SCP, Docker, or raw
+remote-agent route. See [GZ-A3 JSON jobs](gz-a3-job-client.md).
 
 Production accepts only a version 2 controller-bound manifest. Before any
 cell starts, it verifies the runtime and bundle, copies the bundle into the
@@ -266,7 +266,7 @@ The checked-in production client returns candidate compilation, runtime, and
 correctness failures as counted results, including compiler tracebacks. A
 profile/device/service/transfer failure is an infrastructure exclusion. Every
 successful profile response binds the exact case and kernel name and includes
-compact `msprof op` evidence plus the durable `gz-a3:<job-id>` handle.
+compact `msprof op` evidence plus the durable `remote:gz-a3:job:<id>` handle.
 
 Once those gates are implemented, first exercise the exact frozen manifest
 with `--dry-run`. Dry-run preparation uses host temporary roots named

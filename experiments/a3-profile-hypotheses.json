@@ -1,0 +1,700 @@
+{
+  "schema": "profiling-skill/a3-profile-hypotheses/v1",
+  "seed": 20261013,
+  "hypotheses": [
+    {
+      "id": "loop-bound",
+      "question": "Does bounding work by local sequence length remove packed-tail control work?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_scalar_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "iterate fixed maximum and mask",
+        "after": "iterate local extent"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_vector_probe"
+        ],
+        "after": [
+          "a3_vector_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "short-local",
+          "n": 256,
+          "work": 64
+        },
+        {
+          "id": "long-local",
+          "n": 256,
+          "work": 256
+        }
+      ],
+      "expected_evidence": "Before latency/scalar activity tracks maximum extent; after tracks local extent.",
+      "falsifier": "Latency and pipe composition remain invariant when inactive tail grows.",
+      "sanity": {
+        "signals": [
+          "aiv_scalar_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "head-rank",
+      "question": "Does direct rank replace an O(H) scan?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_scalar_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "scan preceding head flags",
+        "after": "load precomputed rank"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_head_rank_probe"
+        ],
+        "after": [
+          "a3_head_rank_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "heads-16",
+          "n": 256,
+          "work": 16
+        },
+        {
+          "id": "heads-128",
+          "n": 256,
+          "work": 128
+        }
+      ],
+      "expected_evidence": "Before scalar activity and latency grow with head count; after stays flat.",
+      "falsifier": "The scan variant does not scale with head count or is compiled to the direct form.",
+      "sanity": {
+        "signals": [
+          "aiv_scalar_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "key-tile-size",
+      "question": "Does a larger key tile amortize loop and control overhead?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.03
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_scalar_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "64-element tile",
+        "after": "128-element tile"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_key_tile_probe"
+        ],
+        "after": [
+          "a3_key_tile_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "keys-512",
+          "n": 512,
+          "work": 512
+        },
+        {
+          "id": "keys-2048",
+          "n": 2048,
+          "work": 2048
+        }
+      ],
+      "expected_evidence": "Scalar share falls for 128 while useful vector work stays comparable.",
+      "falsifier": "The 128 tile raises latency/resource pressure or fails compilation.",
+      "sanity": {
+        "signals": [
+          "aiv_scalar_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "empty-tile-skip",
+      "question": "Does a whole-tile branch avoid work for empty sparse tiles?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_vec_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        },
+        {
+          "name": "aiv_mte2_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "compute every tile then mask",
+        "after": "branch around empty tiles"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_vector_probe"
+        ],
+        "after": [
+          "a3_empty_skip_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "dense",
+          "n": 1024,
+          "work": 1024
+        },
+        {
+          "id": "sparse-75",
+          "n": 1024,
+          "work": 256
+        }
+      ],
+      "expected_evidence": "After vector and MTE activity falls with rejected-tile fraction.",
+      "falsifier": "After remains flat across sparsity or branch overhead dominates.",
+      "sanity": {
+        "signals": [
+          "aiv_vec_ratio",
+          "aiv_mte2_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "scalar-mask-decision",
+      "question": "Does one scalar block decision beat lane-replicated decisions?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_scalar_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "load one decision per lane",
+        "after": "load and broadcast one scalar decision"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_vector_probe"
+        ],
+        "after": [
+          "a3_vector_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "blocks-8",
+          "n": 1024,
+          "work": 8
+        },
+        {
+          "id": "blocks-32",
+          "n": 4096,
+          "work": 32
+        }
+      ],
+      "expected_evidence": "After lowers scalar/control activity and latency as block count grows.",
+      "falsifier": "Compiler scalarizes both variants or broadcast overhead offsets the saving.",
+      "sanity": {
+        "signals": [
+          "aiv_scalar_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "load-masking",
+      "question": "When does fine-grained load masking cost more than transferred data?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.03
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_mte2_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        },
+        {
+          "name": "aiv_scalar_ratio",
+          "direction": "increase",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "load valid region then mask arithmetic",
+        "after": "mask loads with final predicate"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_vector_probe"
+        ],
+        "after": [
+          "a3_vector_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "regular-75",
+          "n": 1024,
+          "work": 768
+        },
+        {
+          "id": "irregular-25",
+          "n": 1024,
+          "work": 256
+        }
+      ],
+      "expected_evidence": "After lowers MTE activity; total latency reveals predicate-overhead crossover.",
+      "falsifier": "MTE activity does not fall or latency changes independently of selected density.",
+      "sanity": {
+        "signals": [
+          "aiv_mte2_ratio",
+          "aiv_scalar_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "schedule-knobs",
+      "question": "Are warp/stage settings cheap autotuning variables rather than profiler deductions?",
+      "expected": {
+        "direction": "no_change",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_vec_ratio",
+          "direction": "no_change",
+          "minimum_absolute_change": 0.05
+        }
+      ],
+      "variants": {
+        "before": "four warps one stage",
+        "after": "eight warps two stages"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_vector_probe"
+        ],
+        "after": [
+          "a3_vector_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "vector-4096",
+          "n": 4096,
+          "work": 32
+        },
+        {
+          "id": "vector-16384",
+          "n": 16384,
+          "work": 128
+        }
+      ],
+      "expected_evidence": "Timing can differ while pipe proportions lack a stable directional signature.",
+      "falsifier": "A repeatable pipe shift predicts the faster schedule across sizes."
+    },
+    {
+      "id": "row-reduction-vs-dot",
+      "question": "Does matrix tiling move row-wise reduction work to matrix/cube execution?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.1
+      },
+      "signal_predictions": [
+        {
+          "name": "aic_cube_ratio",
+          "direction": "increase",
+          "minimum_absolute_change": 0.02
+        },
+        {
+          "name": "aiv_vec_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "row-wise multiply and sum",
+        "after": "matrix-tiled dot"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_row_reduce_probe"
+        ],
+        "after": [
+          "a3_dot_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "square",
+          "n": 32,
+          "work": 32
+        },
+        {
+          "id": "square-64",
+          "n": 64,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "After shows matrix/cube activity and lower vector-dominated latency.",
+      "falsifier": "Dot lowers to the same vector work or incurs greater latency.",
+      "sanity": {
+        "signals": [
+          "aic_cube_ratio",
+          "aiv_vec_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "query-reuse",
+      "question": "Does processing multiple query rows reuse K/V data?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "aic_mte2_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "one query row per program",
+        "after": "four query rows per program"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_dot_probe"
+        ],
+        "after": [
+          "a3_dot_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "queries-32",
+          "n": 32,
+          "work": 32
+        },
+        {
+          "id": "queries-64",
+          "n": 64,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "After reduces MTE work per output without resource spill.",
+      "falsifier": "MTE work/output stays flat or resource pressure makes after slower.",
+      "sanity": {
+        "signals": [
+          "aic_mte2_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    },
+    {
+      "id": "sparse-mode-control",
+      "question": "What overhead comes from generic sparse-mode predicates?",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.03
+      },
+      "signal_predictions": [
+        {
+          "name": "aiv_scalar_ratio",
+          "direction": "decrease",
+          "minimum_absolute_change": 0.02
+        }
+      ],
+      "variants": {
+        "before": "generic per-element mode predicate",
+        "after": "mode-specialized bounds"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_vector_probe"
+        ],
+        "after": [
+          "a3_vector_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "dense-mode",
+          "n": 1024,
+          "work": 1024
+        },
+        {
+          "id": "causal-mode",
+          "n": 1024,
+          "work": 512
+        }
+      ],
+      "expected_evidence": "After lowers scalar/predicate activity for the same selected region.",
+      "falsifier": "Compiler specializes the generic predicate or pipe and latency evidence match.",
+      "sanity": {
+        "signals": [
+          "aiv_scalar_ratio"
+        ],
+        "minimum_absolute_change": 1e-06
+      }
+    }
+  ],
+  "timeline_probes": [
+    {
+      "id": "ordered-phases",
+      "expected": {
+        "direction": "no_change",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "timeline_phase_order",
+          "availability": "required"
+        }
+      ],
+      "variants": {
+        "before": "first stability replicate of load-compute-store",
+        "after": "second stability replicate of load-compute-store"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_phase_probe"
+        ],
+        "after": [
+          "a3_phase_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "balanced",
+          "n": 4096,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "Timeline places load, compute, and store relationships in program order.",
+      "falsifier": "Only aggregate activity is exposed or phase order cannot be attributed."
+    },
+    {
+      "id": "reversed-phases",
+      "expected": {
+        "direction": "no_change",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "timeline_phase_order",
+          "availability": "required"
+        }
+      ],
+      "variants": {
+        "before": "load-heavy then compute-heavy region",
+        "after": "compute-heavy then load-heavy region"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_phase_probe"
+        ],
+        "after": [
+          "a3_phase_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "balanced",
+          "n": 4096,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "Any temporal pipe signal reverses with phase order.",
+      "falsifier": "Exports are unchanged apart from noise or expose aggregates only."
+    },
+    {
+      "id": "repeated-phases",
+      "expected": {
+        "direction": "increase",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "timeline_phase_order",
+          "availability": "required"
+        }
+      ],
+      "variants": {
+        "before": "load-compute once",
+        "after": "load-compute-load signature"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_phase_probe"
+        ],
+        "after": [
+          "a3_phase_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "aba",
+          "n": 4096,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "Timeline resolves the repeated first-resource signature.",
+      "falsifier": "Repeated regions collapse into one aggregate relationship."
+    },
+    {
+      "id": "duration-scaled-phases",
+      "expected": {
+        "direction": "increase",
+        "minimum_relative_change": 0.1
+      },
+      "signal_predictions": [
+        {
+          "name": "timeline_phase_duration",
+          "availability": "required"
+        }
+      ],
+      "variants": {
+        "before": "short compute phase",
+        "after": "four-times-longer compute phase"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_phase_probe"
+        ],
+        "after": [
+          "a3_phase_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "compute-scale",
+          "n": 4096,
+          "work": 128
+        }
+      ],
+      "expected_evidence": "Attributed vector phase duration expands while phase order remains fixed.",
+      "falsifier": "No phase duration can be identified or all phases scale together."
+    },
+    {
+      "id": "serialized-vs-overlapped",
+      "expected": {
+        "direction": "decrease",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "timeline_pipe_overlap",
+          "availability": "required"
+        }
+      ],
+      "variants": {
+        "before": "dependency-serialized load and compute",
+        "after": "independent load and compute streams"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_phase_probe"
+        ],
+        "after": [
+          "a3_phase_probe"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "balanced",
+          "n": 4096,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "After exposes overlapping MTE/vector relationships if the export represents overlap.",
+      "falsifier": "Timeline relationships cannot distinguish overlap from serialization."
+    },
+    {
+      "id": "fused-vs-split",
+      "expected": {
+        "direction": "increase",
+        "minimum_relative_change": 0.05
+      },
+      "signal_predictions": [
+        {
+          "name": "timeline_kernel_boundaries",
+          "availability": "required"
+        }
+      ],
+      "variants": {
+        "before": "one fused multi-phase kernel",
+        "after": "three separate load, compute, and store phase kernels"
+      },
+      "kernel_names": {
+        "before": [
+          "a3_phase_probe"
+        ],
+        "after": [
+          "a3_phase_copy",
+          "a3_phase_compute",
+          "a3_phase_store"
+        ]
+      },
+      "sweeps": [
+        {
+          "id": "balanced",
+          "n": 4096,
+          "work": 64
+        }
+      ],
+      "expected_evidence": "Three split load, compute, and store launches form a known control timeline; fused evidence is compared against it.",
+      "falsifier": "Kernel/task boundaries or phase relationships cannot be recovered.",
+      "launch_contract": {
+        "before": 1,
+        "after": 3
+      }
+    }
+  ]
+}

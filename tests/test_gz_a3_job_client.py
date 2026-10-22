@@ -2,23 +2,36 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import functools
 import os
 import shutil
 import subprocess
 import sys
 import tarfile
+import types
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CLIENT = ROOT / "scripts/gz_a3_job_client.py"
 RUNNER = ROOT / "scripts/a3_benchmark_runner.py"
+FUSION_CONTRACT = ROOT / "scripts/fully_fused_contract.py"
 
 
 def load_runner():
     spec = importlib.util.spec_from_file_location("a3_benchmark_runner", RUNNER)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_fusion_contract():
+    spec = importlib.util.spec_from_file_location("fully_fused_contract_test", FUSION_CONTRACT)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader
     spec.loader.exec_module(module)
@@ -35,9 +48,59 @@ def load_client():
 
 def test_runner_classifies_source_and_triton_compilation_failures():
     module = load_runner()
+
+    class CompilationError(Exception):
+        pass
+
     assert module.classify(NameError("name 'tl' is not defined")) == "compile_error"
+    assert module.classify(CompilationError("at 17: invalid operands")) == "compile_error"
     assert module.classify(RuntimeError("Triton compilation failed at candidate.py:17")) == "compile_error"
     assert module.classify(RuntimeError("device kernel launch failed")) == "runtime_error"
+    assert module.classify(RuntimeError("Triton device kernel launch failed")) == "runtime_error"
+
+
+def test_runner_classifies_lazy_jit_failure_during_candidate_execution(monkeypatch, tmp_path: Path):
+    module = load_runner()
+
+    class CompilationError(Exception):
+        pass
+
+    class BaselineModel:
+        def __call__(self, *_inputs):
+            return "expected"
+
+    class CandidateModel:
+        def __call__(self, *_inputs):
+            raise CompilationError("at 23: unsupported tensor index")
+
+    baseline = SimpleNamespace(Model=BaselineModel)
+    candidate = SimpleNamespace(Model=CandidateModel)
+    fake_torch = SimpleNamespace(
+        no_grad=nullcontext,
+        npu=SimpleNamespace(synchronize=lambda: None),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setattr(
+        module, "load",
+        lambda path, _name: baseline if path.name == "baseline.py" else candidate,
+    )
+    monkeypatch.setattr(module, "selected_inputs", lambda *_args: (object(),))
+    monkeypatch.setattr(module, "clone", lambda value: value)
+
+    result = module.execute({
+        "benchmark": "bsa",
+        "action": "check",
+        "device": 0,
+        "cases": [47],
+        "scope": "development",
+        "baseline": str(tmp_path / "baseline.py"),
+        "candidate": str(tmp_path / "candidate.py"),
+        "case_spec": str(tmp_path / "cases.jsonl"),
+    })
+
+    assert result["status"] == "compile_error"
+    assert result["case_evidence"] == []
+    assert "CompilationError: at 23: unsupported tensor index" in result["diagnostics"]
 
 
 def test_runner_applies_the_job_specific_tolerance_contract():
@@ -48,6 +111,327 @@ def test_runner_applies_the_job_specific_tolerance_contract():
     actual = torch.tensor([1.015])
     assert runner.compare(actual, expected, rtol=1e-2, atol=0)[0] is False
     assert runner.compare(actual, expected, rtol=2e-2, atol=0)[0] is True
+
+
+def test_runner_acquires_trusted_launch_output_and_framework_evidence():
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Storage:
+        def __init__(self, pointer): self.pointer = pointer
+        def data_ptr(self): return self.pointer
+
+    class Tensor:
+        device = "npu:0"
+        def __init__(self, pointer): self.pointer = pointer
+        def untyped_storage(self): return Storage(self.pointer)
+
+    class Kernel:
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    source, output = Tensor(1), Tensor(2)
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    candidate.complete_kernel[(1,)](source, output)
+    evidence = audit.finish(7, output)
+    assert evidence["output_launch_id"] == "launch-0"
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+    audit.framework_ops.append(("aten.matmul.default", "torch"))
+    assert audit.finish(7, output)["operators"][-1]["origin"] == "torch"
+
+
+def test_runner_captures_auxiliary_triton_global_and_gate_rejects_two_launches():
+    runner = load_runner()
+    contract = load_fusion_contract()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "main_kernel_mix_aiv", "entrypoint": "main_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Storage:
+        def __init__(self, pointer): self.pointer = pointer
+        def data_ptr(self): return self.pointer
+
+    class Tensor:
+        device = "npu:0"
+        def __init__(self, pointer): self.pointer = pointer
+        def untyped_storage(self): return Storage(self.pointer)
+
+    class Kernel:
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.main_kernel = Kernel()
+    candidate.helper_kernel = Kernel()
+    source, temporary, output = Tensor(1), Tensor(2), Tensor(3)
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    candidate.main_kernel[(1,)](source, temporary)
+    candidate.helper_kernel[(1,)](temporary, output)
+    evidence = audit.finish(4, output)
+    assert [(op["entrypoint"], op["launch_id"]) for op in evidence["operators"]] == [
+        ("main_kernel", "launch-0"), ("helper_kernel", "launch-1"),
+    ]
+    with pytest.raises(contract.FusionContractError, match="exactly one logical"):
+        contract.validate_fusion_evidence(declaration, [evidence], expected_cases=[4])
+
+
+def test_runner_instruments_entrypoint_retained_on_model_class():
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Kernel:
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+
+    class Model:
+        kernel = candidate.complete_kernel
+
+    candidate.Model = Model
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    model = candidate.Model()
+    model.kernel[(1,)]("input", "output")
+    evidence = audit.finish(0, "output")
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+
+def test_runner_observes_direct_jit_run_launch_without_changing_arguments():
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+    calls = []
+
+    class Kernel:
+        def run(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return "launched"
+
+        def __getitem__(self, _grid): return lambda *_args, **_kwargs: None
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+
+    assert candidate.complete_kernel.run("input", "output", grid=(1,)) == "launched"
+    assert calls == [(('input', 'output'), {"grid": (1,)})]
+    evidence = audit.finish(0, "output")
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+
+@pytest.mark.parametrize("retention", ["closure", "default", "partial"])
+def test_runner_observes_entrypoint_captured_before_audit(retention):
+    runner = load_runner()
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+
+    class Kernel:
+        def run(self, *args, **kwargs):
+            return args[-1]
+
+        def __getitem__(self, grid):
+            return lambda *args, **kwargs: self.run(*args, grid=grid, **kwargs)
+
+    Kernel.__module__ = "triton.runtime.jit"
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    captured = candidate.complete_kernel
+    if retention == "closure":
+        def invoke(source, output):
+            return captured[(1,)](source, output)
+    elif retention == "default":
+        def invoke(source, output, kernel=captured):
+            return kernel[(1,)](source, output)
+    else:
+        def launch(kernel, source, output):
+            return kernel[(1,)](source, output)
+        invoke = functools.partial(launch, captured)
+
+    audit = runner.FusionRuntimeAudit(declaration)
+    audit.instrument(candidate)
+    assert invoke("input", "output") == "output"
+    evidence = audit.finish(0, "output")
+    assert evidence["operators"] == [{
+        "name": "complete_kernel_mix_aiv", "origin": "triton",
+        "entrypoint": "complete_kernel", "launch_id": "launch-0",
+        "component": "aiv",
+    }]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "aten.slice.Tensor", "aten.select.int", "aten.expand.default",
+        "aten.permute.default", "aten.transpose.int", "aten.view.default",
+    ],
+)
+def test_fusion_dispatch_allows_exact_metadata_operator_overloads(name):
+    runner = load_runner()
+    declaration = {
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    }
+    audit = runner.FusionRuntimeAudit(declaration)
+
+    class Operator:
+        def __str__(self): return name
+        def __call__(self, *_args, **_kwargs): return "result"
+
+    assert audit.dispatch_mode().__torch_dispatch__(Operator(), (), (), {}) == "result"
+    assert audit.framework_ops == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "aten.slice_scatter.default", "aten.select_scatter.default",
+        "aten.expand_copy.default", "aten.permute_copy.default",
+        "aten.transpose_copy.int",
+    ],
+)
+def test_fusion_dispatch_rejects_compute_ops_with_metadata_prefixes(name):
+    runner = load_runner()
+    audit = runner.FusionRuntimeAudit({
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    })
+
+    class Operator:
+        def __str__(self): return name
+        def __call__(self, *_args, **_kwargs): return "result"
+
+    assert audit.dispatch_mode().__torch_dispatch__(Operator(), (), (), {}) == "result"
+    assert audit.framework_ops == [(name, "torch")]
+
+
+def test_fusion_dispatch_allows_aliasing_reshape_but_rejects_copying_reshape():
+    import torch
+
+    runner = load_runner()
+
+    class Reshape:
+        _schema = SimpleNamespace(name="aten::reshape")
+
+        def __init__(self, result): self.result = result
+        def __str__(self): return "aten.reshape.default"
+        def __call__(self, *_args, **_kwargs): return self.result
+
+    source = torch.arange(12).reshape(3, 4)
+    alias = source.reshape(2, 6)
+    copied = source.t().reshape(12)
+    assert alias.untyped_storage().data_ptr() == source.untyped_storage().data_ptr()
+    assert copied.untyped_storage().data_ptr() != source.untyped_storage().data_ptr()
+
+    alias_audit = runner.FusionRuntimeAudit({
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    })
+    assert alias_audit.dispatch_mode().__torch_dispatch__(
+        Reshape(alias), (), (source, [2, 6]), {},
+    ) is alias
+    assert alias_audit.framework_ops == []
+
+    copy_audit = runner.FusionRuntimeAudit({
+        "kernel_name": "kernel_mix_aiv", "entrypoint": "kernel",
+    })
+    assert copy_audit.dispatch_mode().__torch_dispatch__(
+        Reshape(copied), (), (source.t(), [12]), {},
+    ) is copied
+    assert copy_audit.framework_ops == [("aten.reshape.default", "torch")]
+
+
+def test_runner_check_emits_fusion_evidence_from_the_real_candidate_forward(
+    monkeypatch, tmp_path: Path,
+):
+    import torch
+
+    runner = load_runner()
+
+    class Kernel:
+        def __getitem__(self, _grid):
+            def launch(source, output):
+                with torch._C._DisableTorchDispatch():
+                    output.copy_(source)
+            return launch
+
+    Kernel.__module__ = "triton.runtime.jit"
+    baseline = types.ModuleType("baseline")
+    baseline.Model = lambda: lambda value: value.clone()
+    candidate = types.ModuleType("candidate")
+    candidate.complete_kernel = Kernel()
+    candidate.torch = torch
+    exec(
+        "class Model:\n"
+        " def __init__(self):\n"
+        "  self.kernel = complete_kernel\n"
+        " def __call__(self, value):\n"
+        "  output = torch.empty_like(value)\n"
+        "  self.kernel[(1,)](value, output)\n"
+        "  return output\n",
+        candidate.__dict__,
+    )
+    monkeypatch.setattr(
+        runner, "load",
+        lambda _path, name: baseline if name == "frozen_baseline" else candidate,
+    )
+    monkeypatch.setattr(runner, "selected_inputs", lambda *_args: (torch.tensor([2.0]),))
+    monkeypatch.setattr(torch, "npu", SimpleNamespace(synchronize=lambda: None), raising=False)
+    cases = tmp_path / "cases.jsonl"
+    cases.write_text("{}\n")
+    declaration = {
+        "schema": "profiling-skill/candidate-kernel/v2",
+        "kernel_name": "complete_kernel_mix_aiv", "entrypoint": "complete_kernel",
+        "fusion": {"schema_version": 1, "mode": "single-logical-launch",
+                   "complete_operator": True},
+    }
+    result = runner.execute({
+        "benchmark": "matmul", "action": "check", "device": 0,
+        "cases": [0], "scope": "full", "baseline": "baseline.py",
+        "candidate": "candidate.py", "case_spec": str(cases),
+        "fusion_contract": declaration,
+    })
+    assert result["status"] == "ok", result.get("diagnostics")
+    assert result["fusion_evidence"][0]["output_launch_id"] == "launch-0"
+    assert result["fusion_evidence"][0]["operators"][0]["origin"] == "triton"
 
 
 class Marker:
@@ -131,237 +515,141 @@ def test_protocol_v1_default_tolerance_and_reference_setup_failure(monkeypatch, 
     assert events.index("clone") < events.index("timer")
 
 
-def fake_remote(tmp_path: Path) -> Path:
-    path = tmp_path / "cpl-remote.py"
-    path.write_text(r"""#!/usr/bin/env python3
-import json, math, os, sys, tarfile
-from pathlib import Path
-args=sys.argv[1:]
-def value(name): return args[args.index(name)+1]
-handle="remote:gz-a3:job:command-1"
-if Path(os.environ["FAKE_ROOT"]).is_file():
- handle="remote:gz-a3:job:"+Path(Path(os.environ["FAKE_ROOT"]).read_text()).parent.name[:24]
-if "upload" in args:
- Path(os.environ["FAKE_ROOT"]).write_text(args[args.index("upload")+2])
-elif "run" in args:
- archive=Path(Path(os.environ["FAKE_ROOT"]).read_text())
- handle="remote:gz-a3:job:"+archive.parent.name[:24]
- root=Path(os.environ["FAKE_OUT"]); root.mkdir(exist_ok=True)
- with tarfile.open(archive) as stream: stream.extractall(root,filter="data")
- job=json.loads((root/"job.json").read_text()); mode=os.environ.get("FAKE_MODE","ok")
- if os.environ.get("FAKE_RUN_LOG"):
-  with open(os.environ["FAKE_RUN_LOG"],"a") as log: log.write(handle+"\n")
- identity={k:job[k] for k in ("benchmark","action","device")}
- if job["action"]=="check": identity.update(cases=job["cases"],scope=job["scope"])
- elif job["action"]=="profile": identity.update(cases=job["cases"],repeats=job["repeats"])
- else: identity["case"]=job["case"]
- if job["action"]=="measure": identity["phase"]=job["phase"]
- if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"])
- rows=[{"case":case,"samples_us":[7.0,7.5,8.0],"median_us":7.5} for case in job.get("cases",[])]
- result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok","profile_cases":rows}
- if job["action"]=="measure": result["latency_us"]=10.0
- if job["action"]=="profile" and mode=="ok":
-  captures=[{"case":row["case"],"iteration":i,"duration_us":sample,
-   "kernel_name":job["profiling"]["kernel_name"]} for row in rows
-   for i,sample in enumerate(row["samples_us"])]
-  result["profile"]={"schema_version":1,"status":"success","profiler":"msprof-op",
-   "kernel_name":job["profiling"]["kernel_name"],"repeats":job["repeats"],
-   "cases":rows,"captures":captures,"geomean_us":math.exp(sum(math.log(7.5) for _ in rows)/len(rows))}
- Path(os.environ["FAKE_LOG"]).write_text("BZ_PRODUCTION_RESULT="+json.dumps(result)+"\n")
- print(json.dumps({"state":"running","handle":handle}))
-elif "observe" in args:
- print(json.dumps({"state":"completed","handle":handle,"exit":0}))
-elif "logs" in args:
- content=Path(os.environ["FAKE_LOG"]).read_text() if value("--stream")=="stdout" else ""
- print(json.dumps({"state":"completed","handle":handle,"content":content}))
-""")
-    path.chmod(0o755)
-    return path
-
-
-def executing_compile_adapter(tmp_path: Path) -> Path:
-    """Adapter double which packages results only when the payload exits zero."""
-    path = tmp_path / "executing-adapter.py"
-    path.write_text(r"""#!/usr/bin/env python3
-import hashlib, json, os, shutil, subprocess, sys, tarfile
-from pathlib import Path
-args=sys.argv[1:]
-action=next(x for x in ("stage","run-bundle","fetch-bundle-result") if x in args)
-def value(name): return args[args.index(name)+1]
-if action == "stage":
- root=Path(value("--source-root")); receipt=Path(value("--receipt"))
- fake=root/"profile_a3.py"
- fake.write_text(r'''#!/usr/bin/env python3
-import json, sys
-from pathlib import Path
-args=sys.argv[1:]
-def value(name): return args[args.index(name)+1]
-out=Path(value("--output")); out.mkdir(parents=True)
-job=json.loads(Path(value("--job")).read_text())
-Path(args[-1]).write_text(json.dumps({"status":"compile_error","diagnostics":"NameError from candidate.py",
- "benchmark":job["benchmark"],"action":"profile","device":job["device"],"case":job["case"],
- "round":job["round"],"kernel_name":job["profiling"]["kernel_name"]}))
-(out/"evidence.json").write_text(json.dumps({"status":"failure"}))
-(out/"msprof.log").write_text("compile failed\n")
-raise SystemExit(1)
-''')
- receipt.write_text(json.dumps({"state":"succeeded","root_digest":"x"}))
- Path(os.environ["FAKE_ROOT"]).write_text(str(root))
-elif action == "run-bundle":
- root=Path(os.environ["FAKE_ROOT"]).read_text(); root=Path(root)
- out=Path(os.environ["FAKE_OUT"]); out.mkdir()
- command=args[args.index("--")+1:]
- run=subprocess.run(command,cwd=root,env={**os.environ,"A3_BUNDLE_OUTPUT_DIR":str(out)})
- receipt=Path(value("--run-receipt"))
- if run.returncode:
-  receipt.write_text(json.dumps({"state":"failed","command_handle":"command-compile"}))
-  raise SystemExit(1)
- archive=Path(os.environ["FAKE_TAR"])
- with tarfile.open(archive,"w") as stream:
-  stream.add(out/"response.json",arcname="response.json")
-  stream.add(out/"profile/evidence.json",arcname="profile/evidence.json")
-  stream.add(out/"profile/msprof.log",arcname="profile/msprof.log")
- sha=hashlib.sha256(archive.read_bytes()).hexdigest()
- receipt.write_text(json.dumps({"state":"succeeded","command_handle":"command-compile",
-  "result_sha256":sha,"result_path":"results/x/result.tar"}))
-elif action == "fetch-bundle-result":
- shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
-""")
-    path.chmod(0o755)
-    return path
-
-
-def inputs(tmp_path: Path) -> tuple[dict, dict]:
-    for name in ("candidate.py", "baseline.py", "cases.jsonl"):
-        (tmp_path / name).write_text("{}\n" if name.endswith("jsonl") else "# source\n")
-    job = {
-        "protocol_version": 1, "profile": "gz-a3", "runtime": "py311-torch",
-        "benchmark": "gdn", "action": "profile", "device": 0, "logical_device": 0,
-        "candidate": str(tmp_path / "candidate.py"), "baseline": str(tmp_path / "baseline.py"),
-        "case_spec": str(tmp_path / "cases.jsonl"), "cases": [40], "repeats": 3, "round": 1,
-        "profiling": {"kernel_name": "candidate_kernel"},
+def test_attach_profile_evidence_accepts_resolved_and_legacy_exact_selectors(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    legacy = {
+        "status": "success", "kernel_name": "gdn_kernel", "cases": rows,
+        "captures": [{"case": 40, "iteration": 0, "duration_us": 7.0,
+                      "kernel_name": "gdn_kernel"}],
     }
-    remote = fake_remote(tmp_path)
-    env = {**os.environ, "FAKE_ROOT": str(tmp_path / "root.txt"),
-           "FAKE_OUT": str(tmp_path / "remote"),
-           "FAKE_LOG": str(tmp_path / "remote.log")}
-    command = [sys.executable, str(CLIENT), "--remote-json", json.dumps([str(remote)]),
-               "--remote-root", "/remote/profiling",
-               "--runtime-activate", "/runtime/bin/activate",
-               "--state-dir", str(tmp_path / "state")]
-    return job, {"env": env, "command": command}
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(legacy))
+    result = {"kernel_name": "gdn_kernel", "profile_cases": rows}
+    module.attach_profile_evidence(result, path)
+
+    resolved = json.loads(json.dumps(legacy))
+    resolved.update(kernel_name="gdn_kernel_mix_aiv",
+                    declared_kernel_name="gdn_kernel_mix_aiv",
+                    resolved_kernel_name="gdn_kernel")
+    resolved["captures"][0].update(declared_kernel_name="gdn_kernel_mix_aiv",
+                                    resolved_kernel_name="gdn_kernel")
+    path.write_text(json.dumps(resolved))
+    result = {"kernel_name": "gdn_kernel_mix_aiv",
+              "declared_kernel_name": "gdn_kernel_mix_aiv",
+              "resolved_kernel_name": "gdn_kernel", "profile_cases": rows}
+    module.attach_profile_evidence(result, path)
 
 
-def run(tmp_path: Path, mode: str = "ok"):
-    job, config = inputs(tmp_path)
-    config["env"]["FAKE_MODE"] = mode
-    process = subprocess.run(config["command"], input=json.dumps(job), text=True,
-                             capture_output=True, env=config["env"], check=False)
-    return process, json.loads(process.stdout)
+def test_attach_profile_evidence_rejects_selector_identity_drift(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    evidence = {
+        "status": "success", "kernel_name": "gdn_kernel_mix_aiv",
+        "declared_kernel_name": "gdn_kernel_mix_aiv", "resolved_kernel_name": "gdn_kernel",
+        "cases": rows, "captures": [{"case": 40, "iteration": 0,
+                                      "duration_us": 7.0, "kernel_name": "other",
+                                      "declared_kernel_name": "gdn_kernel_mix_aiv",
+                                      "resolved_kernel_name": "other"}],
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(evidence))
+    with pytest.raises(module.ClientError, match="selector identity"):
+        module.attach_profile_evidence(
+            {"kernel_name": "gdn_kernel_mix_aiv", "profile_cases": rows}, path)
 
 
-def test_profile_returns_bound_msprof_evidence_and_handle(tmp_path: Path):
-    process, result = run(tmp_path)
-    assert process.returncode == 0
-    assert result["status"] == "ok"
-    assert result["handle"].startswith("remote:gz-a3:job:")
-    assert result["kernel_name"] == "candidate_kernel"
-    assert result["profile_cases"][0]["median_us"] == 7.5
-    assert result["profile"]["status"] == "success"
-    assert result["artifacts"]["remote_profile_evidence"].endswith(
-        "/profile/evidence.json")
+def test_attach_profile_evidence_rejects_consistent_but_illegal_selector_mapping(tmp_path: Path):
+    module = load_client()
+    rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
+    evidence = {
+        "status": "success", "kernel_name": "gdn_kernel_mix_aiv",
+        "declared_kernel_name": "gdn_kernel_mix_aiv",
+        "resolved_kernel_name": "unrelated_kernel", "cases": rows,
+        "captures": [{"case": 40, "iteration": 0, "duration_us": 7.0,
+                      "kernel_name": "unrelated_kernel",
+                      "declared_kernel_name": "gdn_kernel_mix_aiv",
+                      "resolved_kernel_name": "unrelated_kernel"}],
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(evidence))
+    result = {"kernel_name": "gdn_kernel_mix_aiv",
+              "declared_kernel_name": "gdn_kernel_mix_aiv",
+              "resolved_kernel_name": "unrelated_kernel", "profile_cases": rows}
+
+    with pytest.raises(module.ClientError, match="selector identity"):
+        module.attach_profile_evidence(result, path)
 
 
-def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
-    process, result = run(tmp_path, "compile_error")
-    assert process.returncode == 2
-    assert result["status"] == "compile_error"
-    assert "NameError" in result["diagnostics"]
-    assert result["handle"].startswith("remote:gz-a3:job:")
+
+def transport_fixture(tmp_path, monkeypatch, status="ok", fail=None):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location(
+        "shared_bz_tests", ROOT / "tests/test_bz_a3_job_client.py")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    shared = helper.load()
+    transport = helper.FakeTransport(shared, status=status, fail=fail)
+    monkeypatch.setattr(shared, "GlobalCplRemoteTransport",
+                        lambda *_args, **_kwargs: transport)
+    job = helper.profile_job(tmp_path)
+    args = SimpleNamespace(
+        state_dir=tmp_path / "state", cpl_remote_sha256="f" * 64,
+        remote_root="/srv/profiling-skill-production", timeout=3600)
+    return load_client(), job, args, transport
 
 
-def test_batch_compile_failure_is_packaged_and_returned_by_managed_client(tmp_path: Path):
-    process, result = run(tmp_path, "compile_error")
+@pytest.mark.parametrize("status", ["ok", "compile_error", "runtime_error",
+                                   "correctness_error", "submission_error"])
+def test_gz_native_shared_transport_preserves_results(
+        tmp_path, monkeypatch, status):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch, status)
+    result = client.execute(job, args)
+    assert result["status"] == status
+    assert result["handle"] == "remote:gz-a3:job:job-1"
+    assert transport.executions[0][:3] == ("gz-a3", 0, "py311-torch")
+    if status == "ok":
+        assert result["profile"]["captures"]
+        assert result["profile_cases"][0]["median_us"] == 9.0
+    if status == "compile_error":
+        assert "NameError" in result["diagnostics"]
 
-    assert process.returncode == 2
-    assert result["status"] == "compile_error"
-    assert "candidate.py" in result["diagnostics"]
-    assert result["handle"].startswith("remote:gz-a3:job:")
+
+def test_gz_observer_interruption_retains_and_reuses_handle(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(
+        tmp_path, monkeypatch, fail="observer")
+    interrupted = client.execute(job, args)
+    assert interrupted["handle"] == "remote:gz-a3:job:retained"
+    assert interrupted["status"] == "infrastructure_error"
+    transport.fail = None
+    recovered = client.execute(job, args)
+    assert recovered["status"] == "ok"
+    assert recovered["handle"] == interrupted["handle"]
+    assert len(transport.executions) == 1
 
 
-def test_remote_failure_is_infrastructure_and_keeps_identity(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    config["command"][3] = json.dumps(["/missing/cpl-remote"])
-    process = subprocess.run(config["command"], input=json.dumps(job), text=True,
-                             capture_output=True, env=config["env"], check=False)
+def test_gz_cached_completion_and_calibration_identity(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    first = client.execute(job, args)
+    second = client.execute(job, args)
+    assert first["artifacts"]["request_digest"] == second["artifacts"]["request_digest"]
+    assert len(transport.executions) == 1
+    changed = client.execute({**job, "calibration_phase": "after"}, args)
+    assert changed["artifacts"]["request_digest"] != first["artifacts"]["request_digest"]
+    assert len(transport.executions) == 2
+
+
+@pytest.mark.parametrize("job", [[], None, "bad", {"device": "bad"},
+                                 {"action": "profile", "profiling": []}])
+def test_gz_invalid_request_returns_structured_failure(tmp_path, job):
+    command = [
+        sys.executable, str(CLIENT), "--cpl-remote-sha256", "invalid",
+        "--remote-root", "/srv/profiling-skill-production",
+        "--state-dir", str(tmp_path / "state")]
+    process = subprocess.run(command, input=json.dumps(job), text=True,
+                             capture_output=True, check=False)
     result = json.loads(process.stdout)
+    assert process.returncode == 2
     assert result["status"] == "infrastructure_error"
-    assert (result["benchmark"], result["cases"], result["device"]) == ("gdn", [40], 0)
-    assert "transport unavailable" in result["diagnostics"]
-
-
-def test_same_content_reuses_state_and_receipts(tmp_path: Path):
-    first, one = run(tmp_path)
-    second, two = run(tmp_path)
-    assert first.returncode == second.returncode == 0
-    assert one["artifacts"]["request_digest"] == two["artifacts"]["request_digest"]
-    assert len(list((tmp_path / "state").iterdir())) == 1
-
-
-def test_calibration_phases_create_distinct_digests_run_ids_and_results(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    run_log = tmp_path / "run-ids.txt"
-    config["env"]["FAKE_MODE"] = "ok"
-    config["env"]["FAKE_RUN_LOG"] = str(run_log)
-    results = []
-    for phase in ("before", "after"):
-        request = {**job, "calibration_phase": phase}
-        process = subprocess.run(
-            config["command"], input=json.dumps(request), text=True,
-            capture_output=True, env=config["env"], check=False,
-        )
-        assert process.returncode == 0
-        results.append(json.loads(process.stdout))
-
-    digests = [result["artifacts"]["request_digest"] for result in results]
-    run_ids = run_log.read_text().splitlines()
-    assert len(set(digests)) == len(set(run_ids)) == 2
-    assert run_ids == ["remote:gz-a3:job:" + digest[:24] for digest in digests]
-    assert results[0]["handle"] != results[1]["handle"]
-    assert len(list((tmp_path / "state").iterdir())) == 2
-
-
-def test_digest_ignores_caller_checkout_in_profile_driver(tmp_path: Path):
-    client = load_client()
-    job, _config = inputs(tmp_path)
-    job["profiling"]["driver"] = "/first/checkout/scripts/profile_a3.py"
-    first = client.prepare(job, tmp_path / "state-a", RUNNER, ROOT / "scripts/profile_a3.py")[1]
-    job["profiling"]["driver"] = "/other/checkout/scripts/profile_a3.py"
-    second = client.prepare(job, tmp_path / "state-b", RUNNER, ROOT / "scripts/profile_a3.py")[1]
-    assert first == second
-
-
-def test_completed_receipt_reuses_result_without_redispatch(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    run_log = tmp_path / "run-ids.txt"
-    config["env"]["FAKE_RUN_LOG"] = str(run_log)
-    results = []
-    for _ in range(2):
-        process = subprocess.run(
-            config["command"], input=json.dumps(job), text=True,
-            capture_output=True, env=config["env"], check=False)
-        assert process.returncode == 0
-        results.append(json.loads(process.stdout))
-    assert results[0] == results[1]
-    assert len(run_log.read_text().splitlines()) == 1
-def test_cli_returns_structured_error_for_invalid_runtime_activation(tmp_path: Path):
-    result = subprocess.run(
-        [sys.executable, str(CLIENT), "--state-dir", str(tmp_path / "state"),
-         "--remote-root", "/remote", "--runtime-activate", "/runtime/../bad"],
-        input=json.dumps({"action": "check", "benchmark": "bsa", "device": 0,
-                          "cases": [0], "scope": "development"}),
-        text=True, capture_output=True,
-    )
-    assert result.returncode == 2
-    assert json.loads(result.stdout)["status"] == "infrastructure_error"
-    assert "Traceback" not in result.stderr
+    assert result["failure_type"] == "request_error"
+    assert not process.stderr

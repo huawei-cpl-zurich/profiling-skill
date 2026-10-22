@@ -1,0 +1,212 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "benchmarks" / "a3_profile_microbench.py"
+MANIFEST = ROOT / "experiments" / "a3-profile-hypotheses.json"
+
+
+def load_module():
+    spec = importlib.util.spec_from_file_location("a3_profile_microbench", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_cli(*args: str):
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args], text=True, capture_output=True, check=False
+    )
+
+
+def test_manifest_has_ten_hypotheses_and_six_timeline_controls():
+    payload = json.loads(MANIFEST.read_text())
+    assert payload["schema"] == "profiling-skill/a3-profile-hypotheses/v1"
+    assert len(payload["hypotheses"]) == 10
+    assert {item["id"] for item in payload["timeline_probes"]} == {
+        "ordered-phases",
+        "reversed-phases",
+        "repeated-phases",
+        "duration-scaled-phases",
+        "serialized-vs-overlapped",
+        "fused-vs-split",
+    }
+    all_items = payload["hypotheses"] + payload["timeline_probes"]
+    for item in all_items:
+        assert set(item["variants"]) == {"before", "after"}
+        assert item["expected"]["direction"] in {"decrease", "increase", "no_change"}
+        assert 0 <= item["expected"]["minimum_relative_change"] < 1
+        assert isinstance(item["signal_predictions"], list)
+        assert item["expected_evidence"]
+        assert item["falsifier"]
+        assert item["sweeps"]
+    for item in payload["hypotheses"]:
+        if item["id"] == "schedule-knobs":
+            assert "sanity" not in item
+            continue
+        assert item["sanity"]["signals"]
+        assert item["sanity"]["minimum_absolute_change"] > 0
+    split = next(item for item in payload["timeline_probes"]
+                 if item["id"] == "fused-vs-split")
+    assert split["launch_contract"] == {
+        variant: len(split["kernel_names"][variant]) for variant in ("before", "after")
+    }
+    assert split["kernel_names"]["after"] == [
+        "a3_phase_copy", "a3_phase_compute", "a3_phase_store",
+    ]
+    assert split["launch_contract"]["after"] == 3
+
+
+def test_contract_is_deterministic_and_enumerates_every_manifest_experiment():
+    first = run_cli("--contract")
+    second = run_cli("--contract")
+    assert first.returncode == second.returncode == 0
+    assert first.stdout == second.stdout
+    contract = json.loads(first.stdout)
+    manifest = json.loads(MANIFEST.read_text())
+    expected = [x["id"] for x in manifest["hypotheses"] + manifest["timeline_probes"]]
+    assert [x["id"] for x in contract["experiments"]] == expected
+    assert contract["seed"] == 20261013
+    assert contract["variants"] == ["before", "after"]
+
+
+def test_deterministic_inputs_are_identical_for_pair_and_change_with_sweep():
+    module = load_module()
+    before = module.generate_inputs("loop-bound", "short-local")
+    after = module.generate_inputs("loop-bound", "short-local")
+    longer = module.generate_inputs("loop-bound", "long-local")
+    assert before.keys() == after.keys()
+    assert all(before[key].equal(after[key]) for key in before)
+    assert any(
+        before[key].shape != longer[key].shape or not before[key].equal(longer[key])
+        for key in before.keys() & longer.keys()
+    )
+
+
+def test_pair_runner_checks_equivalence_and_emits_profile_contract(monkeypatch):
+    module = load_module()
+
+    def fake_run(experiment, variant, sweep, launches):
+        return {
+            "status": "success",
+            "variant": variant,
+            "output": [1.0, 2.0],
+            "kernel_names": [f"probe_{variant}"],
+            "host_observed_us": [10.0] * launches,
+        }
+
+    monkeypatch.setattr(module, "run_variant", fake_run)
+    payload = module.run_pair("loop-bound", "short-local", 2)
+    assert payload["status"] == "success"
+    assert payload["equivalent"] is True
+    assert payload["expected_evidence"]
+    assert payload["falsifier"]
+    assert payload["profile"]["mode"] == "msprof-op"
+    assert payload["profile"]["kernel_names"] == ["probe_before", "probe_after"]
+
+
+def test_pair_runner_preserves_unsupported_as_inconclusive(monkeypatch):
+    module = load_module()
+
+    def fake_run(experiment, variant, sweep, launches):
+        if variant == "before":
+            return {"status": "unsupported", "reason": "compiler has no primitive"}
+        return {"status": "success", "variant": variant, "output": [1.0]}
+
+    monkeypatch.setattr(module, "run_variant", fake_run)
+    payload = module.run_pair("row-reduction-vs-dot", "square", 1)
+    assert payload["status"] == "inconclusive"
+    assert payload["equivalent"] is None
+    assert payload["results"]["before"]["reason"] == "compiler has no primitive"
+
+
+def test_cli_rejects_ambiguous_selection_and_unknown_sweep():
+    assert run_cli().returncode == 2
+    assert run_cli("--contract", "--experiment", "loop-bound").returncode == 2
+    result = run_cli("--experiment", "loop-bound", "--sweep", "not-a-sweep")
+    assert result.returncode == 2
+
+
+def test_cli_pair_writes_machine_readable_result(monkeypatch, tmp_path, capsys):
+    module = load_module()
+    monkeypatch.setattr(
+        module,
+        "run_pair",
+        lambda experiment, sweep, launches: {
+            "schema": "profiling-skill/a3-profile-result/v1",
+            "status": "success",
+            "experiment": experiment,
+            "sweep": sweep,
+            "launches": launches,
+        },
+    )
+    output = tmp_path / "result.json"
+    assert module.main([
+        "--experiment", "loop-bound", "--sweep", "short-local",
+        "--pair", "--launches", "2", "--json-output", str(output),
+    ]) == 0
+    assert json.loads(output.read_text()) == json.loads(capsys.readouterr().out)
+
+
+def test_reference_models_make_before_after_outputs_equivalent():
+    module = load_module()
+    for experiment in module.experiments():
+        sweep = experiment["sweeps"][0]["id"]
+        inputs = module.generate_inputs(experiment["id"], sweep)
+        before = module.reference_output(experiment["id"], "before", inputs)
+        after = module.reference_output(experiment["id"], "after", inputs)
+        assert module.outputs_close(before, after), experiment["id"]
+
+
+def test_split_control_launches_distinct_load_compute_store_kernels(monkeypatch):
+    module = load_module()
+    calls = []
+    allocations = [object(), object()]
+
+    class Kernel:
+        def __init__(self, name):
+            self.name = name
+
+        def __getitem__(self, grid):
+            def launch(source, destination, **kwargs):
+                calls.append((self.name, grid, source, destination, kwargs))
+            return launch
+
+    monkeypatch.setattr(module, "a3_phase_copy", Kernel("copy"))
+    monkeypatch.setattr(module, "a3_phase_compute", Kernel("compute"))
+    monkeypatch.setattr(module, "a3_phase_store", Kernel("store"), raising=False)
+    monkeypatch.setattr(module.torch, "empty_like", lambda _value: allocations.pop(0))
+    source, output = type("Tensor", (), {"shape": (4096,)})(), object()
+
+    names = module._launch(
+        "fused-vs-split", "after", {"x": source, "selected": None, "work": 64}, output
+    )
+
+    assert names == ["a3_phase_copy", "a3_phase_compute", "a3_phase_store"]
+    assert [item[0] for item in calls] == ["copy", "compute", "store"]
+    assert calls[0][2:] == (source, calls[0][3], {"n": 4096, "block": 128})
+    assert calls[1][2] is calls[0][3]
+    assert calls[2][2] is calls[1][3]
+    assert calls[2][3] is output
+
+
+def test_runtime_control_inputs_are_nontrivial_and_feed_reference_addresses():
+    module = load_module()
+    inputs = module.generate_inputs("head-rank", "heads-16")
+    assert 0 < int(inputs["rank"][0]) == int(inputs["head_flags"].sum()) < 16
+    shifted = module.reference_output("head-rank", "before", inputs)
+    plain = inputs["x"] * 1.5 + 2.0
+    assert not module.outputs_close(shifted, plain)
+
+    scalar = module.generate_inputs("scalar-mask-decision", "blocks-8")
+    by_block = scalar["selected"].reshape(-1, 128)
+    assert all(bool((row == row[0]).all()) for row in by_block)
+    assert bool(scalar["selected"].any()) and not bool(scalar["selected"].all())

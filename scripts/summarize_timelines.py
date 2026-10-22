@@ -6,21 +6,51 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import hashlib
 import io
 import json
 from collections import Counter, defaultdict
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 
 class InvalidTimeline(ValueError):
     pass
 
 
-def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict]:
-    payload = json.loads(path.read_text())
+MICROSECONDS_TO_NS = Decimal(1000)
+
+
+def trace_payload(path: Path) -> tuple[list[Any], dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise InvalidTimeline(f"cannot read timeline {path}: {error}") from error
     raw = payload.get("traceEvents", []) if isinstance(payload, dict) else payload
     if not isinstance(raw, list):
         raise InvalidTimeline(f"trace event list expected in {path}")
+    metadata = payload if isinstance(payload, dict) else {}
+    return raw, metadata
+
+
+def decimal_ns(value: Any, location: str) -> Decimal:
+    try:
+        converted = Decimal(str(value)) * MICROSECONDS_TO_NS
+    except (InvalidOperation, ValueError) as error:
+        raise InvalidTimeline(f"invalid {location}: {value!r}") from error
+    if not converted.is_finite() or converted < 0:
+        raise InvalidTimeline(f"{location} must be non-negative")
+    return converted
+
+
+def quantized_ns(value: Decimal) -> int:
+    """Map profiler float timestamps onto the integer-nanosecond contract."""
+    return int(value.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict]:
+    raw, _ = trace_payload(path)
     out = []
     for event in raw:
         if not isinstance(event, dict) or event.get("ph") not in (None, "X"):
@@ -38,6 +68,14 @@ def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict
                 or "unknown"
             ).lower()
         )
+        # msprof follows the trace-event convention: ts/dur are microseconds.
+        # displayTimeUnit is only a viewer rendering hint and does not scale them.
+        start_value_ns = decimal_ns(event["ts"], f"event timestamp in {path}")
+        duration_value_ns = decimal_ns(event["dur"], f"event duration in {path}")
+        if duration_value_ns == 0:
+            continue
+        start_ns = quantized_ns(start_value_ns)
+        end_ns = max(start_ns + 1, quantized_ns(start_value_ns + duration_value_ns))
         out.append(
             {
                 "source": source,
@@ -48,11 +86,136 @@ def events(path: Path, source: str, forced_pipe: str | None = None) -> list[dict
                 "pc": str(args.get("pc_addr", args.get("pc", ""))),
                 "start": float(event["ts"]),
                 "duration": float(event["dur"]),
+                "start_ns": start_ns,
+                "end_ns": end_ns,
             }
         )
     if not out:
         raise InvalidTimeline(f"no complete-duration events in {path}")
     return out
+
+
+def common_clock_phases(rows: list[dict]) -> list[dict[str, Any]]:
+    """Partition the observed window whenever its active-pipe set changes."""
+    changes: dict[int, Counter[str]] = defaultdict(Counter)
+    for row in rows:
+        pipe = row["pipe"]
+        changes[row["start_ns"]][pipe] += 1
+        changes[row["end_ns"]][pipe] -= 1
+    boundaries = sorted(changes)
+    active: Counter[str] = Counter()
+    phases = []
+    for start, end in zip(boundaries, boundaries[1:]):
+        for pipe, delta in changes[start].items():
+            active[pipe] += delta
+            if active[pipe] <= 0:
+                del active[pipe]
+        if end <= start:
+            continue
+        phases.append(
+            {
+                "phase_id": f"phase-{len(phases):04d}",
+                "start_ns": start,
+                "end_ns": end,
+                "metrics": {},
+                "activity": {"pipes": sorted(active)},
+                "capacity_join": {
+                    "state": "unavailable",
+                    "reason": "no exact-window capacity evidence",
+                },
+            }
+        )
+    return phases
+
+
+def require_object(value: Any, location: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise InvalidTimeline(f"{location} must be an object")
+    return value
+
+
+def join_capacity(
+    phases: list[dict[str, Any]], capacity_path: Path, timeline_hash: str, complete: bool
+) -> tuple[str, dict[str, Any]]:
+    try:
+        capacity = require_object(json.loads(capacity_path.read_text()), "capacity evidence")
+    except (OSError, json.JSONDecodeError) as error:
+        raise InvalidTimeline(
+            f"cannot read capacity evidence {capacity_path}: {error}"
+        ) from error
+    if capacity.get("schema_version") != 1:
+        raise InvalidTimeline("capacity evidence schema_version must be integer 1")
+    if (
+        capacity.get("product") != "a5"
+        or capacity.get("target_product") != "Ascend950/V6"
+    ):
+        raise InvalidTimeline("capacity evidence product must be a5 / Ascend950/V6")
+    if capacity.get("clock") != "pipe-timeline-common-clock-ns":
+        raise InvalidTimeline("capacity evidence clock is incompatible with PipeTimeline")
+    provenance = require_object(capacity.get("provenance"), "capacity evidence provenance")
+    capture_id = provenance.get("capture_id")
+    if not isinstance(capture_id, str) or not capture_id.strip():
+        raise InvalidTimeline("capacity evidence provenance.capture_id must be non-empty")
+    if provenance.get("timeline_source_sha256") != timeline_hash:
+        raise InvalidTimeline("capacity evidence timeline_source_sha256 does not match capture")
+    raw_windows = capacity.get("phases")
+    if not isinstance(raw_windows, list):
+        raise InvalidTimeline("capacity evidence phases must be an array")
+    windows: dict[tuple[int, int], dict[str, Any]] = {}
+    for index, raw in enumerate(raw_windows):
+        window = require_object(raw, f"capacity evidence phases[{index}]")
+        start, end = window.get("start_ns"), window.get("end_ns")
+        if type(start) is not int or type(end) is not int or start < 0 or end <= start:
+            raise InvalidTimeline(f"capacity evidence phases[{index}] has invalid boundaries")
+        key = (start, end)
+        if key in windows:
+            raise InvalidTimeline(f"duplicate capacity evidence window {start}:{end}")
+        windows[key] = require_object(
+            window.get("metrics"), f"capacity evidence phases[{index}].metrics"
+        )
+
+    for phase in phases:
+        if not complete:
+            phase["capacity_join"] = {
+                "state": "incompatible",
+                "reason": "common-clock timeline is marked truncated",
+            }
+            continue
+        matched = windows.get((phase["start_ns"], phase["end_ns"]))
+        if matched is not None:
+            phase["metrics"] = matched
+            phase["capacity_join"] = {"state": "matched-exact-window"}
+    return capture_id, provenance
+
+
+def phase_evidence(path: Path, rows: list[dict], capacity_path: Path | None) -> dict:
+    _, metadata = trace_payload(path)
+    trace_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    trace_metadata = metadata.get("metadata")
+    truncated = (
+        bool(trace_metadata.get("truncated", False))
+        if isinstance(trace_metadata, dict)
+        else False
+    )
+    phases = common_clock_phases(rows)
+    capture_id = f"pipe-timeline:{trace_hash[:16]}"
+    capacity_provenance = None
+    if capacity_path is not None:
+        capture_id, capacity_provenance = join_capacity(
+            phases, capacity_path, trace_hash, not truncated
+        )
+    return {
+        "schema_version": 1,
+        "product": "a5",
+        "target_product": "Ascend950/V6",
+        "clock": "pipe-timeline-common-clock-ns",
+        "source_timestamp_unit": "microseconds",
+        "time_quantization": "microseconds-to-nearest-nanosecond-half-up; positive events minimum 1ns",
+        "timeline_complete": not truncated,
+        "provenance": {"capture_id": capture_id, "source_sha256": trace_hash},
+        "capacity_provenance": capacity_provenance,
+        "phases": phases,
+    }
 
 
 def overlaps(rows: list[dict]) -> dict[str, float]:
@@ -91,11 +254,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pipe-timeline", type=Path)
     parser.add_argument("--instr", action="append", default=[], metavar="PIPE=TRACE")
+    parser.add_argument("--capacity-evidence", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    pipe_rows = (
-        events(args.pipe_timeline, "pipe-timeline") if args.pipe_timeline else []
-    )
+    try:
+        pipe_rows = (
+            events(args.pipe_timeline, "pipe-timeline") if args.pipe_timeline else []
+        )
+    except InvalidTimeline as error:
+        parser.error(str(error))
     if pipe_rows and {x["pipe"] for x in pipe_rows} <= {"scalar", "unknown"}:
         raise InvalidTimeline("PipeTimeline has no non-scalar pipeline tracks")
     instruction_rows = []
@@ -103,7 +270,10 @@ def main() -> int:
         if "=" not in item:
             parser.error("--instr requires PIPE=TRACE")
         pipe, path = item.split("=", 1)
-        trace_rows = events(Path(path), f"instr-{pipe}", pipe.lower())
+        try:
+            trace_rows = events(Path(path), f"instr-{pipe}", pipe.lower())
+        except InvalidTimeline as error:
+            parser.error(str(error))
         if len(trace_rows) >= 1024:
             raise InvalidTimeline(
                 f"instruction trace {path} reaches the known 1024-event cap"
@@ -135,6 +305,16 @@ def main() -> int:
     (args.output / "timeline-summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n"
     )
+    if args.pipe_timeline:
+        try:
+            evidence = phase_evidence(
+                args.pipe_timeline, pipe_rows, args.capacity_evidence
+            )
+        except InvalidTimeline as error:
+            parser.error(str(error))
+        (args.output / "phase-evidence.json").write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n"
+        )
     with (args.output / "timeline-events.csv.gz").open("wb") as raw:
         with gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as compressed:
             with io.TextIOWrapper(compressed, newline="") as stream:

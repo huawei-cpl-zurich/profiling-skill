@@ -35,12 +35,19 @@ submission consists of exactly these required files at workspace root:
    - Model must preserve the constructor and callable/forward interface of
      baseline.py's Model.
    - It must implement the operation using Triton-Ascend.
+   - The complete reference operation for every supplied case must execute as
+     one logical Triton entry-point launch. Compiler-generated AIC/AIV
+     components of that launch are allowed.
+   - Do not use PyTorch/ACL compute, reference or shape fallback, a partial
+     output-only kernel, or auxiliary Triton launches inside Model.forward.
    - Keep the best fully validated candidate in this file after every round.
 
 2. candidate.manifest.json
-   - Must contain:
-     {"schema":"profiling-skill/candidate-kernel/v1","kernel_name":"<exact exported kernel name>"}
+   - Must contain exactly:
+     {"schema":"profiling-skill/candidate-kernel/v2","kernel_name":"<exact exported kernel name>","entrypoint":"<Triton entrypoint>","fusion":{"schema_version":1,"mode":"single-logical-launch","complete_operator":true}}
    - kernel_name must be the exact Triton kernel selected for msprof timing.
+   - kernel_name must equal entrypoint or its compiler-generated `_mix_aic` or
+     `_mix_aiv` component.
 
 You may create temporary notes or source files, but the host evaluates only
 candidate.py and candidate.manifest.json. Do not rename the submission to

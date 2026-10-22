@@ -15,11 +15,20 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 
-VALID = {"ok", "compile_error", "runtime_error", "correctness_error", "infrastructure_error"}
+VALID = {"ok", "submission_error", "compile_error", "runtime_error",
+         "correctness_error", "infrastructure_error"}
 
 
 class ClientError(RuntimeError):
     pass
+
+
+def _valid_selector_mapping(declared: object, resolved: object) -> bool:
+    return (isinstance(declared, str) and bool(declared)
+            and isinstance(resolved, str) and bool(resolved)
+            and (resolved == declared
+                 or any(declared == resolved + suffix
+                        for suffix in ("_mix_aic", "_mix_aiv"))))
 
 
 def atomic_json(path: Path, value: dict) -> None:
@@ -113,6 +122,26 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
     evidence = json.loads(evidence_path.read_text())
     if evidence.get("status") != "success":
         raise ClientError(f"msprof op did not produce valid evidence: {evidence}")
+    declared = result.get("kernel_name")
+    explicit_names = ("declared_kernel_name" in evidence
+                      or "resolved_kernel_name" in evidence)
+    evidence_declared = evidence.get("declared_kernel_name") if explicit_names else declared
+    resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
+    captures = evidence.get("captures")
+    if (not isinstance(declared, str) or not declared
+            or evidence.get("kernel_name") != declared
+            or evidence_declared != declared
+            or not _valid_selector_mapping(declared, resolved)
+            or result.get("declared_kernel_name", declared) != declared
+            or result.get("resolved_kernel_name", resolved) != resolved
+            or not isinstance(captures, list)
+            or any(not isinstance(capture, dict)
+                   or capture.get("kernel_name") != resolved
+                   or (explicit_names and
+                       (capture.get("declared_kernel_name") != declared
+                        or capture.get("resolved_kernel_name") != resolved))
+                   for capture in captures)):
+        raise ClientError("remote response does not match compact profiling selector identity")
     # ``cases`` is the immutable input identity on the internal wire;
     # ``profile_cases`` contains the rows exposed as ``cases`` by experimentctl.
     if result.get("profile_cases") != evidence.get("cases"):
@@ -121,40 +150,53 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
 
 
 def execute(job: dict, args: argparse.Namespace) -> dict:
-    from bz_a3_job_client import BzA3JobClient, RemoteTransport
+    from bz_a3_job_client import BzA3JobClient, GlobalCplRemoteTransport
 
-    if job.get("action") == "profile":
-        job = json.loads(json.dumps(job))
-        job.setdefault("profiling", {})["tool"] = "msprof op"
+    class GzA3JobClient(BzA3JobClient):
+        TARGETS = {"gz-a3"}
+
+    if not isinstance(job, dict):
+        raise ClientError("job must be a JSON object")
+    request = json.loads(json.dumps(job))
+    if request.get("action") == "profile":
+        if not isinstance(request.get("profiling", {}), dict):
+            raise ClientError("profiling must be a JSON object")
+        request.setdefault("profiling", {}).setdefault("tool", "msprof op")
+    device = request.get("device")
+    placements = {str(device): {"target": "gz-a3", "device": device}}
     here = Path(__file__).resolve().parent
-    device = job.get("device")
-    placements = {str(device): {"profile": "gz-a3", "device": device}}
-    return BzA3JobClient(
-        RemoteTransport(args.remote, args.runtime_activate), args.state_dir, placements,
+    transport = GlobalCplRemoteTransport(
+        args.cpl_remote_sha256, args.remote_root, targets={"gz-a3"})
+    return GzA3JobClient(
+        transport, args.state_dir, placements,
         runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
         batch_profiler=here / "batch_profile_a3.py", remote_root=args.remote_root,
-        allowed_profiles={"gz-a3"},
-    ).run(job, args.timeout)
+    ).run(
+        request, args.timeout,
+        operation_mode=os.environ.get("PROFILING_SKILL_CONTROLLER_MODE", "submit"),
+        controller_request_sha256=os.environ.get(
+            "PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"),
+    )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--remote-json", default='["cpl-remote"]')
+    from bz_a3_job_client import JobError
+
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument("--cpl-remote-sha256", required=True)
     parser.add_argument("--remote-root", required=True)
-    parser.add_argument("--runtime-activate", required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=3600)
     args = parser.parse_args()
     try:
-        args.remote = json.loads(args.remote_json)
-        if (not isinstance(args.remote, list) or not args.remote
-                or not all(isinstance(x, str) and x for x in args.remote)):
-            raise ClientError("--remote-json must be a non-empty JSON string array")
         job = json.load(sys.stdin)
         result = execute(job, args)
-    except (ClientError, OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
-        bound = identity(job) if "job" in locals() and isinstance(job, dict) else {}
-        result = {"status": "infrastructure_error", "diagnostics": str(exc), **bound}
+    except (ClientError, JobError, OSError, ValueError, TypeError) as exc:
+        result = {
+            "status": "infrastructure_error",
+            "failure_type": exc.failure_type if isinstance(exc, JobError) else "request_error",
+            "diagnostics": str(exc), "handle": None,
+        }
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

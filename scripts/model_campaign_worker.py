@@ -129,7 +129,7 @@ def phase(root, adapter):
     runtime = {}
     def terminate(*_):
         raise SystemExit(0)
-    signal.signal(signal.SIGTERM, terminate)
+    previous = signal.signal(signal.SIGTERM, terminate)
     try:
         while time.monotonic() < deadline and not (root / 'stop').exists():
             for archive in sorted((root / 'inbox').glob('*.tar.gz')):
@@ -171,3 +171,4 @@ def phase(root, adapter):
     finally:
         if runtime.get('lease'):
             runtime['lease'].close()
+        signal.signal(signal.SIGTERM, previous)

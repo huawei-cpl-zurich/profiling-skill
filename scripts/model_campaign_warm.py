@@ -41,16 +41,18 @@ def start(service, operation):
             stream.add(folder / name, arcname=name)
     statefile = tools.state / 'phase.json'
     phase = json.loads(statefile.read_text()) if statefile.exists() else None
-    if phase and phase['deadline'] != context['utc_deadline']:
-        raise RuntimeError('phase workspace reused with another deadline')
     if phase and not phase.get('handle'):
         return dict(state='dispatch-unconfirmed', call_id=phase['first_call'],
                     recovery='Recover the original phase handle; never redispatch.')
     if phase:
         observed = tools.remote('observe', phase['handle'])
+        if phase['deadline'] != context['utc_deadline'] and observed['state'] not in TERMINAL:
+            return dict(state='phase-cleanup-required', handle=phase['handle'],
+                        diagnostic=dict(kind='previous-phase-not-terminal'))
         if observed['state'] in TERMINAL:
             # Only confirmed terminal workers may be replaced, never live or
             # unavailable ones. The original phase deadline still applies.
+            statefile.replace(tools.state / phase['first_call'] / 'phase.json')
             phase = None
     if phase is None:
         for args in (('targets',), ('capabilities', tools.target), ('preflight', tools.target)):
@@ -130,6 +132,10 @@ def launch(tools, receipt, folder):
 def observe(tools, ident):
     folder = tools.state / ident
     receipt = json.loads((folder / 'receipt.json').read_text())
+    evidence = tools.workspace / 'evidence' / ident
+    if (evidence / 'results/summary.json').is_file():
+        summary = json.loads((evidence / 'results/summary.json').read_text())
+        return dict(summary, call_id=ident, handle=receipt.get('handle'))
     if not receipt.get('handle'):
         receipt = launch(tools, receipt, folder)
         if not receipt.get('handle'):
@@ -144,7 +150,6 @@ def observe(tools, ident):
         observed = tools.remote('observe', receipt['handle'])
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
         return dict(receipt, state='observation-unavailable', next='experiment-tool observe ' + ident)
-    evidence = tools.workspace / 'evidence' / ident
     evidence.mkdir(parents=True, exist_ok=True)
     try:
         download = receipt.get('download')

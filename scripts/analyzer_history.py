@@ -88,6 +88,9 @@ def validate_round(report, ctx):
     eligible = {item['round'] for item in ctx['history'] if item['source_sha256'] != ctx['source_sha256']}
     if not set(selections) <= eligible:
         raise ValueError('comparison selects unknown or unchanged kernel')
+    sources = {item['round']: item['source_sha256'] for item in ctx['history']}
+    if len({sources[index] for index in selections}) != len(selections):
+        raise ValueError('comparison selections must identify distinct source kernels')
     if len(selections) > (1 if previous is not None else 0) and not comparison.get('selection_reason'):
         raise ValueError('optional older comparison requires selection_reason')
     if not isinstance(comparison.get('interpretation'), str) or not comparison['interpretation'].strip():
@@ -119,6 +122,10 @@ def measurements(summary, receipt, workload_identity=None):
             metrics[prefix] = value
     for boundary in ('timing', 'latency', 'busy_time'):
         flatten(summary.get(boundary), boundary)
+    cases = summary.get('cases')
+    seeded = cases is None and isinstance(summary.get('correctness'), list)
+    if seeded:
+        cases = [str(item['check']) for item in summary['correctness'] if 'check' in item]
     rows = {}
     for capture in summary.get('captures', []):
         selector = capture.get('selector')
@@ -127,12 +134,20 @@ def measurements(summary, receipt, workload_identity=None):
                 # Hardware sub-blocks must remain separate.
                 block = str(row.get('sub_block_id', 'all'))
                 case = capture.get('case', row.get('case'))
-                cases = summary.get('cases', [])
-                if case is None and len(cases) == 1:
+                if case is None and seeded and summary.get('launch_contract', {}).get('profile_stream_verified'):
+                    # Checks identify seeded validation cases, not individual profile
+                    # rows. The verified standalone stream is one workload launch.
+                    case = 'seeded-workload-aggregate'
+                if case is None and cases and len(cases) == 1:
                     case = str(cases[0])
                 if case is None:
                     continue  # Never average unrelated workload cases.
                 for name, value in row.items():
+                    if isinstance(value, str):
+                        try:
+                            value = float(value)
+                        except ValueError:
+                            continue
                     normalized = name.lower().replace('_', ' ')
                     if _numeric(value) and not any(token in normalized for token in
                             (' id', 'start time', 'block num', 'sub block', 'task type')):
@@ -144,20 +159,44 @@ def measurements(summary, receipt, workload_identity=None):
     ctx = {name: receipt.get(name) for name in ('target', 'runtime')}
     ctx.update({name: summary.get(name) for name in
         ('cases', 'collector', 'granularity', 'warmup', 'samples')})
+    ctx['cases'] = cases
     ctx['workload_identity'] = workload_identity
     ctx['capture'] = {name: request.get(name) for name in
         ('operation', 'verb', 'implementation', 'timing_captures', 'pipe_captures')}
     ctx['timing_semantics'] = {name: summary.get(name, {}).get('metric')
         for name in ('latency', 'busy_time') if isinstance(summary.get(name), dict)}
     return dict(context=ctx, metrics=metrics, source_sha256=summary['source_sha256'],
+                provenance={key: receipt.get(key, summary.get(key)) for key in ('call_id', 'handle')},
                 kernels=sorted({str(c.get('selector')) for c in summary.get('captures', [])}))
+
+
+def _aggregate(acquisitions):
+    grouped = {}
+    for item in acquisitions:
+        key = json.dumps(item['context'], sort_keys=True)
+        grouped.setdefault(key, []).append(item)
+    results = []
+    for key in sorted(grouped):
+        items = sorted(grouped[key], key=lambda item: json.dumps(item.get('provenance', {}), sort_keys=True))
+        values = {}
+        for item in items:
+            for name, value in item['metrics'].items():
+                values.setdefault(name, []).append(value)
+        results.append(dict(context=items[0]['context'],
+            metrics={name: median(samples) for name, samples in values.items()},
+            metric_counts={name: len(samples) for name, samples in values.items()},
+            kernels=sorted({kernel for item in items for kernel in item['kernels']}),
+            acquisition_count=len(items), provenance=[item.get('provenance', {}) for item in items]))
+    return results
 
 
 def pair(current, previous):
     pairs, gaps = [], []
-    for now in current:
+    previous = _aggregate(previous)
+    for now in _aggregate(current):
         compatible = [old for old in previous if old['context'] == now['context']
                       and all(now['context'].get(key) is not None for key in ('target', 'runtime', 'cases', 'workload_identity'))
+                      and bool(now['context']['cases'])
                       and any(now['context']['capture'].get(key) for key in ('operation', 'verb'))
                       and (now['context']['capture'].get('pipe_captures') is not None
                            or (all(now['context'].get(key) is not None for key in ('samples', 'warmup'))
@@ -180,7 +219,11 @@ def pair(current, previous):
                 continue
             before, after = old['metrics'][metric], now['metrics'][metric]
             pairs.append(dict(metric=metric, previous=before, current=after,
-                              delta=after-before, percent=(after-before)/before*100 if before else None))
+                              delta=after-before, percent=(after-before)/before*100 if before else None,
+                              aggregation='median_of_compatible_acquisitions',
+                              current_acquisitions=now['metric_counts'][metric],
+                              previous_acquisitions=old['metric_counts'][metric],
+                              current_provenance=now['provenance'], previous_provenance=old['provenance']))
     if not pairs:
         gaps.append('No comparable numeric measurements retained')
     return dict(pairs=pairs, gaps=sorted(set(gaps)))

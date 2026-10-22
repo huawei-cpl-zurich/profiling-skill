@@ -117,6 +117,18 @@ def test_controller_retains_sources_and_delivers_current_comparisons(tmp_path):
                 evidence=[dict(path=path, kind='profile', kernels=['matmul'], cases=['shape1'])],
                 bottlenecks=[dict(finding='Memory movement likely limits compute', confidence='low', evidence=[path])],
                 utilization=[dict(status='measured', description='MAC activity', cases=['shape1'], kernels=['matmul'], evidence=[path])])
+            # A realistic analyzer may keep two successful captures of the same
+            # candidate; the next round must still receive one pair per metric.
+            second = phase / 'candidate-snapshot/evidence/call2/results'
+            second.mkdir(parents=True)
+            data['timing']['mean_us'] += 2
+            (second / 'summary.json').write_text(json.dumps(data))
+            second_private = phase / 'tool-state/call2'
+            second_private.mkdir(parents=True)
+            acquisition['call_id'] = 'call2'
+            (second_private / 'receipt.json').write_text(json.dumps(acquisition))
+            value['evidence'].append(dict(path='evidence/call2/results/summary.json',
+                kind='profile', kernels=['matmul'], cases=['shape1']))
             (phase / 'analysis.json').write_text(json.dumps(value))
         return dict(exit_code=0)
     campaign = Campaign(tmp_path / 'run', bundle, {}, ['unused'], 'task', runner=runner, rounds=3)
@@ -124,6 +136,9 @@ def test_controller_retains_sources_and_delivers_current_comparisons(tmp_path):
     assert all(state['phases'][f'round-{index}-analyzer']['analysis_valid'] for index in (1,2,3))
     assert observed[0]['status'] == 'first'
     assert observed[1]['results'][0]['pairs']
+    assert all(pair['current_acquisitions'] == pair['previous_acquisitions'] == 2
+               for pair in observed[1]['results'][0]['pairs'])
+    assert len({pair['metric'] for pair in observed[1]['results'][0]['pairs']}) == len(observed[1]['results'][0]['pairs'])
     assert observed[1]['results'][0]['pairs'][0]['current'] != observed[1]['results'][0]['pairs'][0]['previous']
     third = json.loads((campaign.history / 'round-3/analysis.json').read_text())
     assert third['comparison']['status'] == 'unchanged'
@@ -215,3 +230,58 @@ def test_missing_profile_attempt_retains_source_and_marks_latest_invalid(tmp_pat
     assert (campaign.history / 'round-1/candidate.py').read_text() == 'kernel = 1\n'
     assert json.loads((campaign.workspace / 'analysis.json').read_text())['status'] == 'invalid'
     assert (campaign.workspace / 'experiments/round-1-analyzer/raw-analysis.json').is_file()
+
+
+def test_standalone_csv_profiles_preserve_seeded_workload_attribution():
+    value = dict(source_sha256='a'*64, correctness=[dict(check=i, correctness=True) for i in range(4)],
+        launch_contract=dict(profile_stream_verified=True),
+        timing=dict(samples_us=[8, 10, 12], median_us=10), captures=[dict(selector='gather',
+            basic_rows=[{'Duration(us)': '10', 'Device_id': '3'}],
+            pipe_rows=[{'aic_mac_ratio': '12.5', 'aic_mte2_ratio': '80',
+                        'Device_id': '3', 'Start Time(us)': '123', 'invalid': 'NaN', 'unsupported': 'N/A'}])])
+    now = history.measurements(value, receipt(), 'standalone-bundle')
+    assert now['context']['cases'] == ['0', '1', '2', '3']
+    key = 'kernel/gather/seeded-workload-aggregate/pipe_rows/all/aic_mte2_ratio'
+    assert now['metrics'][key] == 80
+    assert not any('Device_id' in key or 'invalid' in key for key in now['metrics'])
+    old = copy.deepcopy(now)
+    old['metrics'][key] = 40
+    result = history.pair([now], [old])
+    assert next(item for item in result['pairs'] if item['metric'] == key)['percent'] == 100
+    assert any(item['metric'].startswith('timing/') for item in result['pairs'])
+    value['launch_contract']['profile_stream_verified'] = False
+    unattributed = history.measurements(value, receipt(), 'standalone-bundle')
+    assert not any(key.startswith('kernel/') for key in unattributed['metrics'])
+
+
+def test_multiple_successful_acquisitions_are_paired_once_with_provenance():
+    def acquisition(duration, activity, call):
+        identity = receipt()
+        identity.update(call_id=call, handle='remote:gz-a3:job:' + call)
+        return history.measurements(summary(duration=duration, activity=activity), identity, 'workload')
+    old = [acquisition(10, 20, 'old1'), acquisition(30, 40, 'old2')]
+    new = [acquisition(8, 60, 'new1'), acquisition(12, 80, 'new2')]
+    result = history.pair(new, old)
+    pairs = {item['metric']: item for item in result['pairs']}
+    assert len(pairs) == len(result['pairs'])
+    timing = pairs['timing/mean_us']
+    assert (timing['previous'], timing['current'], timing['percent']) == (20, 10, -50)
+    assert timing['previous_acquisitions'] == timing['current_acquisitions'] == 2
+    assert {item['call_id'] for item in timing['previous_provenance']} == {'old1', 'old2'}
+    assert pairs['kernel/matmul/shape1/pipe_rows/all/mac_ratio']['delta'] == 40
+    assert history.pair(new, list(reversed(old)))['pairs'] == result['pairs']
+
+
+def test_optional_older_selection_cannot_repeat_previous_source(tmp_path):
+    for index, source in enumerate((b'A', b'B', b'A'), 1):
+        folder = tmp_path / f'round-{index}'
+        folder.mkdir()
+        (folder / 'candidate.py').write_bytes(source)
+        (folder / 'record.json').write_text(json.dumps(dict(round=index,
+            source_sha256=hashlib.sha256(source).hexdigest())))
+    ctx = history.context(tmp_path, b'C', 'a'*40, 4)
+    value = report(ctx)
+    value['comparison'].update(rounds=[3, 1], selection_reason='Compare original A')
+    with pytest.raises(ValueError, match='distinct source'): history.validate_round(value, ctx)
+    value['comparison']['rounds'] = [3, 2]
+    history.validate_round(value, ctx)

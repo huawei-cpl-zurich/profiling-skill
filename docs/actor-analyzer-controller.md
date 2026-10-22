@@ -233,3 +233,11 @@ assumptions and sources remain visible.
 The next actor reads the latest status, validated report, selected historical
 reports and kernel sources through `/history`, and records which findings it
 considered. The analyzer interprets evidence; the actor chooses optimizations.
+
+Compatible successful acquisitions within a round are reduced to one median per
+metric before pairing, with acquisition counts and original call/handle provenance
+retained in each pair. Standalone CSV metrics accept finite numeric strings;
+seeded correctness IDs identify the validation workload, while a verified
+single-launch profile stays explicitly labeled as a workload aggregate rather
+than being attributed to each seed. Historical comparison selections must
+represent different source hashes, including when a kernel recurs in later rounds.

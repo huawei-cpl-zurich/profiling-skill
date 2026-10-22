@@ -788,7 +788,8 @@ def test_role_launcher_analyzer_completion_requires_process_success_not_commits(
     (auth / 'auth.json').write_text('{}')
     campaign.auth_home = auth
     phase = campaign.root / ('round-1-' + role)
-    launcher = RoleLauncher(campaign, phase, role, 60, None)
+    launcher = RoleLauncher(campaign, phase, role, 60,
+                            campaign.git('rev-parse', 'HEAD').strip() if role == 'analyzer' else None)
     def launch(self, preflight_only=False):
         self.root.mkdir()
         result = dict(returncode=returncode, timed_out=timed_out,

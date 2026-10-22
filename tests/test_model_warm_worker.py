@@ -43,7 +43,8 @@ def test_phase_reuses_runtime_and_recovers_candidate_failures(tmp_path, monkeypa
     assert leases == [True, False]
 
 
-def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
+@pytest.mark.parametrize('capability_state', ['completed', 'available'])
+def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path, capability_state):
     from model_campaign_service import CampaignService, CampaignTools
     from model_campaign_tools import export
     public, bundle = tmp_path / 'public', tmp_path / 'bundle'
@@ -64,7 +65,7 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
     def remote(*args):
         calls.append(args)
         if args[0] in ('targets', 'capabilities', 'preflight'):
-            return dict(state='completed')
+            return dict(state=capability_state if args[0] == 'capabilities' else 'completed')
         if args[0] == 'upload':
             source, target = Path(args[2]), Path(args[3])
             if fail_request[0] and source.name == 'request.tar.gz':

@@ -58,7 +58,8 @@ def start(service, operation):
         try:
             for args in (('targets',), ('capabilities', tools.target), ('preflight', tools.target)):
                 result = tools.remote(*args)
-                if result.get('state') != 'completed':
+                accepted = {'completed', 'available'} if args[0] == 'capabilities' else {'completed'}
+                if result.get('state') not in accepted:
                     raise RuntimeError('discovery unavailable')
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
             receipt = dict(call_id=ident, target=tools.target, runtime=tools.runtime, cwd=tools.cwd,

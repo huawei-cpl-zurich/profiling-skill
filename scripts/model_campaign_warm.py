@@ -84,8 +84,12 @@ def start(service, operation):
     if phase.get('handle'):
         receipt['handle'] = phase['handle']
         save(folder / 'receipt.json', receipt)
-        receipt['upload'] = tools.remote('upload', tools.target, archive,
-            phase['remote_folder'] + '/inbox/' + ident + '.tar.gz')
+        try:
+            receipt['upload'] = tools.remote('upload', tools.target, archive,
+                phase['remote_folder'] + '/inbox/' + ident + '.tar.gz')
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            receipt['failure_stage'] = 'budget' if isinstance(error, TimeoutError) else 'infrastructure'
+            return service.publish(cancel_request(tools, receipt, folder))
         save(folder / 'receipt.json', receipt)
     else:
         save(statefile, phase)
@@ -93,13 +97,26 @@ def start(service, operation):
         try:
             receipt['upload'] = tools.remote('upload', tools.target, bundle,
                                             phase['remote_folder'] + '.tar.gz')
-        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
-            receipt.update(state='failed', failure_stage='infrastructure')
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
+            receipt.update(state='failed', failure_stage=
+                           'budget' if isinstance(error, TimeoutError) else 'infrastructure')
             statefile.replace(folder / 'phase.json')
             save(folder / 'receipt.json', receipt)
             return service.publish(receipt)
         save(folder / 'receipt.json', receipt)
     return service.observe(ident)
+
+
+def cancel_request(tools, receipt, folder):
+    """An uncertain request transfer cannot leave an executable late request."""
+    try:
+        result = tools.remote('cancel', receipt['handle'])
+        receipt['state'] = 'failed' if result.get('state') in TERMINAL else 'observation-unavailable'
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+        receipt['state'] = 'observation-unavailable'
+    receipt.setdefault('failure_stage', 'infrastructure')
+    save(folder / 'receipt.json', receipt)
+    return receipt
 
 
 def launch(tools, receipt, folder):
@@ -179,8 +196,12 @@ def observe(tools, ident):
         transfer = tools.transfer(receipt, 'upload')
         save(folder / 'receipt.json', receipt)
         if transfer['state'] != 'completed':
+            if transfer['state'] in TERMINAL:
+                return cancel_request(tools, receipt, folder)
             return dict(receipt, state='transfer-pending' if transfer['state'] not in TERMINAL else 'failed',
                         next='experiment-tool observe ' + ident)
+    if receipt.get('upload', {}).get('state') in {'failed', 'cancelled'}:
+        return cancel_request(tools, receipt, folder)
     try:
         observed = tools.remote('observe', receipt['handle'])
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):

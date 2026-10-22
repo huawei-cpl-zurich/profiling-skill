@@ -46,3 +46,12 @@ multi-buffer guides are version-dependent descriptions; the older pinned
 AscendNPU-IR operation definitions remain identified separately. The guides do
 not assume that a compiler option guarantees overlap or that static wait counts
 measure dynamic stall time.
+
+A real report also invalidated an overly broad explanation of the activity
+ratio denominator: its exported time/ratio pairs implied about17μs, versus
+12.69μs row duration and17.399652μs BasicInfo duration. The guide now retains
+those scopes separately and records raw CSV bindings; it does not reconstruct
+active cycles from row cycles. The included empirical observations are explicitly
+incomplete (seven timing samples, no paired diagnostic groups or calibrated
+size curve). Complete binary-matched matrix IR is retained as compiler evidence,
+with raw/display hashes and removal of trailing compiler diagnostics.

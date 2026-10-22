@@ -21,12 +21,12 @@ A memory-space name describes storage, not automatically the executing pipe.
 | L0A × L0B → L0C/CC accumulation | Cube (`PIPE_M`) | Lowered matrix multiply, dtype and tile. A matrix macro may include several resources rather than one Cube instruction. |
 | L0C/CC → GM | FIXPIPE | `fixpipe`, conversion mode, layout, destination address and exact result dtype. A source `tl.store(dot(...))` need not use MTE3. |
 | L0C/CC → L1 | FIXPIPE | Same result-movement family with L1 destination, not an input MTE1 copy. |
-| UB → GM ordinary Vector output | MTE3 | Lowered `store`/copy, contiguous versus scalarized route, conversion and supported atomic mode. |
+| UB → GM ordinary Vector output | MTE3 | The pinned `StoreOp` is MTE3 for UB→GM, including its supported add/max/min atomic modes; this does not classify arbitrary non-UB scatter/atomic families. |
 | L1 → GM through NZ→ND conversion | MTE3 | `nz2nd` is a separate outbound conversion path; MTE3 is not limited to UB stores. |
 | UB → UB lowered `CopyOp` | Vector (`PIPE_V`) in the pinned mapping | Confirm it is the reviewed UB-to-UB CopyOp; local copies consume work even though they do not reach GM. |
 | Arithmetic, masks, conversions, reductions and other local layout operations | Vector for the pinned Vector base operation, with specialization-dependent exceptions | Inspect the actual operation: scalar-looking expressions can introduce Vector conversions or scalar loops; do not generalize a CopyOp mapping to every layout operation. |
 | Indexed GM reads lowered into per-element address/load loops | Scalar can dominate | Actual scalar loads, loop trip count, index movement and instruction path. Runtime identity indices do not make the compiled operation a contiguous DMA. |
-| Scalarized or irregular output writes | Emitted store instruction determines the resource | A source store is not a universal MTE3 assertion. Check scalar versus DMA writes, address space, supported scatter/atomic form and any intermediate UB/workspace conversion. |
+| Other scalar/scatter/atomic output families | Unverified in this inventory | If decoded scalar machine LD/ST instructions are present, their execution belongs to Scalar rather than DMA. No such output example is established here; do not assign an arbitrary `tl.store` family to MTE3 without the actual lowering. |
 | Result conversion/activation/scale before final output | Vector and/or FIXPIPE plus movement | Follow the accumulator into UB/workspace and final destination. A fused epilogue can introduce cross-core handoff and several pipes. |
 | Flags, barriers and core handoffs | Synchronization, not a data-transfer pipe | Producer, consumer, event/flag, address and lifetime; naming MTE2 in a wait does not make the wait MTE2 activity. |
 
@@ -48,8 +48,9 @@ block/sub-block/core type across candidates, retaining both absolute time and
 ratio. Cover all rows rather than choosing a convenient core. Rows with different
 start times have no common exported clock.
 
-Activity answers “how much of this row's task-cycle window contained the counted
-work?” Capacity answers “how much validated useful work could that resource
+Activity ratios describe counted work under the exporter's normalization.
+That denominator is not automatically a row's duration/cycles or BasicInfo
+task duration: check the real values as shown in the glossary. Capacity answers “how much validated useful work could that resource
 sustain?” They differ. High MTE2 activity with poor bytes per active microsecond
 suggests inefficient transfers; high scalar activity with low MTE2 can be an
 indirect-memory instruction path. A faster candidate can have a larger dominant

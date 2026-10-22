@@ -75,9 +75,12 @@ multipliers, core ceilings, or utilization formulas to A2/A3 captures.
 
 ## Pipe and data-path inventory
 
-`PipeUtilization` ratios are `active_cycles / taskCyc`. They locate work and
-show its composition over the task, but they are not a validated fraction of
-the pipe's maximum throughput. Even a ratio near 100% does not by itself prove
+The pinned source expresses `PipeUtilization` ratios as
+`active_cycles / taskCyc`, but the exported `taskCyc` normalization must be
+verified for the installed exporter. Do not equate it automatically with a
+row's `aic_total_cycles`/`aiv_total_cycles`, row duration, or BasicInfo task
+duration. Ratios locate activity; they are not a validated fraction of the
+pipe's maximum throughput. Even a ratio near 100% does not by itself prove
 capacity saturation.
 
 | Exported field | A2/A3 pipe | Code meaning | Evidence kind |
@@ -177,8 +180,8 @@ The wildcard is explanatory, never a literal CSV column or a physical-device ID.
 | Field family | Unit and scope | Use |
 | --- | --- | --- |
 | `block_id`, `sub_block_id` | Exported task-block and core/sub-core identifiers | Join only exact keys within validated matching reports; do not interpret an identifier as a timestamp. |
-| `aic_time(us)`, `aiv_time(us)` | Per-Cube/per-Vector unit's allocated-task window, μs | Row denominator; not the separately captured kernel latency or sum over cores. |
-| `aic_total_cycles`, `aiv_total_cycles` | Cycles in that unit's task window | Ratio denominator and time/cycle consistency check. |
+| `aic_time(us)`, `aiv_time(us)` | Per-Cube/per-Vector unit's allocated-task window, μs | A row-local duration; not automatically the exported-ratio denominator, separately captured latency, or sum over cores. |
+| `aic_total_cycles`, `aiv_total_cycles` | Cycles in that unit's task window | Time/cycle consistency check; not automatically the denominator used by the exported activity ratios. |
 | `aic_cube_time(us)`, `aic_cube_ratio` | Cube instruction time and active-cycle fraction | Arithmetic activity, not achieved FLOP/s or percentage of theoretical FLOP capacity. |
 | `aiv_vec_time(us)`, `aiv_vec_ratio` | Vector instruction time and active-cycle fraction | Arithmetic, conversion and applicable local-copy activity. |
 | `ai*_scalar_time(us)`, `ai*_scalar_ratio` | Scalar instruction time and active-cycle fraction | Address/control/scalarized work; use the subcategories below to investigate. |
@@ -207,29 +210,56 @@ Counterpart AIC/AIV columns are not copied into the wrong engine's observation.
 Existing `activity`, `metrics`, and unknown-saturation outputs are unchanged.
 There is no conversion of active bandwidth into capacity classification.
 
-### Worked arithmetic: one row, one capture
+### Verify the denominator before doing arithmetic
 
-This is an illustrative calculation, not a measured result. Suppose one AIV row
-has `aiv_time(us)=10`, `aiv_total_cycles=18000`,
-`aiv_mte2_ratio=0.6`, `aiv_mte2_time(us)=6`, and
-`aiv_scalar_wait_time(us)=2`.
+A real A3 mixed-kernel capture exposes the danger of substituting row duration.
+Representative Cube fields were:
 
-- Counted MTE2 active cycles = `0.6 × 18000 = 10800`. At a consistent
-  `18000 / 10 = 1800 cycles/μs`, that corresponds to `6 μs`.
-- The intra-core scalar-wait fraction of this task window is `2 / 10 = 0.2`.
-  This derived fraction has that narrow meaning; it is not 20% of every pipe's
-  idle time or a guaranteed removable 2 μs critical-path cost.
-- If the same transfer moves a validated `600000` bytes in those `6 μs`, its
-  active bandwidth is `600000 / (6 × 1000) = 100 GB/s`. Across the whole
-  `10 μs` task window it is `60 GB/s`. Calling both numbers “bandwidth” without
-  the denominator hides the gap.
+```text
+aic_time(us) = 12.689445       aic_total_cycles = 22841
+aic_cube_ratio = 0.04         aic_cube_time(us) = 0.68
+aic_mte2_ratio = 0.663235     aic_mte2_time(us) = 11.275
+```
 
-For any ratio `r`, `r × total_cycles` estimates the counted cycles when the
-ratio definition uses that denominator. `cycles / frequency_Hz × 10^6` converts
-to microseconds only with the corresponding observed frequency. Rounded CSV
-times/fractions can disagree slightly; frequency changes and differing event
-scopes require investigation, not silent correction. Do not reconstruct a
-missing authoritative time from unrelated captures.
+The row's time/cycle pair implies approximately `1800 cycles/μs`, but
+`0.68 / 0.04 = 17 μs` and `11.275 / 0.663235 ≈ 17 μs`, not `12.689445 μs`.
+A Vector row similarly had `0.117778 / 0.006928 ≈ 17 μs` for Vector and
+`0.980556 / 0.05768 ≈ 17 μs` for MTE2, despite a row time of `12.597222 μs`.
+The same report's BasicInfo task duration was `17.399652 μs`, **also different**.
+Neither row time nor BasicInfo can simply replace the normalization window.
+Preserve all three quantities separately; the implied window is a consistency
+observation, not a validated exporter formula or a reconstructed timeline.
+
+The [compact denominator example](a3-ratio-denominator-example.json) preserves
+the selected raw fields. Source SHA-256 bindings: PipeUtilization
+`e1cee99c65323908f14e1d8e1ecda60d8da847044a69fa6d24d0ebf3eb024b1d`;
+same-report OpBasicInfo
+`3b0f4bfabaa9847b28b12433d9f17650df682cff74109baea6338eb3f907a0da`.
+The selector was `streaming_matmul_add_kernel_mix_aic`; the report described
+24 Cube blocks and 48 Vector sub-blocks at a reported frequency of1800 MHz.
+These are diagnostic report values, not an independent latency comparison.
+
+For a ratio `r`, multiplying by cycles is valid only after establishing that
+those exact cycles are its denominator. Similarly, `r × row_time` is not a
+substitute for the exported active time without a validated matching scope.
+The normalizer preserves reported fractions and active times separately and
+does not reconstruct active cycles or classify capacity from them.
+
+### Worked arithmetic with explicit scopes
+
+This calculation is illustrative, not a measured result. Suppose a row reports
+`10 μs` duration and `2 μs` intra-core scalar wait. Their derived ratio is
+`2/10 = 0.2` **of that chosen row-duration window**. It is neither an exported
+pipe ratio nor 20% of every pipe's idle time, and it does not prove a removable
+2 μs critical-path cost.
+
+If a validated transfer moved `600000` bytes during its **reported** `6 μs`
+active time, active bandwidth would be `600000/(6 × 1000) = 100 GB/s`.
+Using a separately defined whole-task window of `10 μs` would give `60 GB/s`.
+State the bytes, window and unit rather than treating both as one bandwidth.
+Cycles convert to microseconds via `cycles/frequency_Hz × 10^6` only with the
+corresponding frequency and event scope. Rounding, frequency changes and
+exporter normalization differences must remain visible, not silently corrected.
 
 A row can have Cube 70%, MTE2 60% and scalar 40% because resources overlap.
 The sum is not 170% device utilization, and `100% − sum` is not idle time.
@@ -239,8 +269,8 @@ do not add them into a critical-path budget.
 ## Diagnose waits and stalls
 
 First retain all available categories with their core/row and capture. Compare
-absolute microseconds alongside fractions of the same row's task window; a
-smaller task can raise a wait fraction while reducing absolute wait time.
+absolute microseconds alongside explicitly labeled derived fractions of a
+chosen window; exported pipe ratios can use a different normalization. A smaller task can raise a wait fraction while reducing absolute wait time.
 An absent counter means unavailable, not zero. A reported zero describes only
 that event and coverage. A nonzero stall can overlap useful work elsewhere.
 

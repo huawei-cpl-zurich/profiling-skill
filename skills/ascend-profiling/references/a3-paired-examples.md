@@ -39,7 +39,7 @@ and one-program probes do not establish device-wide compute capacity.
    least three interleaved exact-selector BasicInfo captures per variant with
    the same warmup, launch count, replay mode and device conditions. Retain all
    declared samples and dispersion, including failures separately.
-3. Capture PipeUtilization for each exact selector with launch count1. Inspect
+3. Capture PipeUtilization for each exact selector with launch count 1. Inspect
    every block/sub-block/core type. Retain absolute active time and all available
    wait/stall fields alongside activity fractions.
 4. Add a separate ResourceConflictRatio capture if supported and relevant.
@@ -77,3 +77,49 @@ If the candidate is slower, keep that result. If timings overlap their
 dispersion, report the mechanism observation without a precise speedup. Sweep
 sizes and compare [empirical envelopes](a3-performance-envelope.md) before
 extrapolating a small-shape result.
+
+## Retained observations: an explicitly incomplete measurement series
+
+[Measured-pair evidence](a3-measured-pairs.json) retains all seven accepted
+exact-selector BasicInfo timing samples, successful correctness for all five
+specializations, discovery records, compiler/source hashes and capture order.
+The capture date was 2026-10-22 and the product was Ascend910_9382. Timing payloads
+record Torch 2.10.0+cpu, Torch-NPU 2.10.0, Triton 3.5.0 and Triton-Ascend 3.2.2.
+This is **not a completed three-repeat study**: the device ceased to satisfy
+idle requirements before the remaining repetitions, pipe/conflict groups and
+calibration sweep. Those missing results are `null`, not zero or passing.
+
+| Control | Accepted ordinary task-duration samples, μs | What these samples establish |
+| --- | --- | --- |
+| Direct contiguous copy, N 1048576 | 20.760416 | One observation of the direct baseline; also the shared identity-gather baseline because its specialization/input contract is identical. |
+| Stride 2 copy, same N and allocation | 873.217468,881.017639 | Two observed durations for the changed access pattern. Useful read/write bytes remain8 MiB; physical traffic and instruction-path cause were not measured. |
+| Runtime identity-index gather, same N | 476.489532,478.649567 | Two observations of the semantically equivalent indexed path, with 4 MiB additional logical index reads. No late memory IR or pipe capture establishes scalarization in this run. |
+| Matrix 512³, requested stages 1 | 36.680733 | One timing observation bound to the single-buffer binary. |
+| Matrix 512³, requested stages 2 | 34.240685 | One timing observation bound to the double-buffer binary; insufficient repetition for a stable speedup claim. |
+
+Every accepted timing capture used kernel replay, warmup 3, launch count 1 and one
+application launch. BasicInfo discovery was a separate wider-window operation.
+The common exported names (`paired_memory` or `paired_matmul`) do not prove
+binary identity: specialization and compiled hashes distinguish variants.
+
+The copy/gather observations motivate a transfer/addressing-path investigation,
+but latency alone does not identify scalar instructions, DRAM bandwidth or
+saturation. The correct next capture is each variant's late memory IR and
+PipeUtilization, followed by conflict groups only for a specific hypothesis.
+The direct rate from one sample is descriptive, not a calibrated envelope for
+the strided or arbitrary-index contract.
+
+The matrix pair supports a stronger **compiler** conclusion. Its diagnostic
+late-IR captures produced byte-identical ordinary/debug binaries for each
+variant. [Complete late dumps and annotations](a3-synchronization-inspection.md#real-matched-matrix-example-flags-and-buffer-slots)
+show input cbuf slots growing 8192 → 16384 bytes, modulo 2 slot/event selection,
+MTE2↔MTE1 dependency flags, macro-internal synchronization operands and FIXPIPE
+output. Those facts establish the buffering transformation, not its dynamic
+critical-path benefit. Without matched pipe/wait evidence and completed timing
+repetitions, do not attribute the observed duration difference to eliminated
+waits or claim measured overlap.
+
+No empirical size curve was collected. The
+[envelope reference](a3-performance-envelope.md) provides explicit formulas and
+a runnable sweep procedure; it does not supply a measured device ceiling or
+invent missing calibration points.

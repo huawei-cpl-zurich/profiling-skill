@@ -41,6 +41,11 @@ bundled activity model deliberately supplies no A2/A3 capacity denominator.
 
 ## Build a measured reference envelope
 
+No calibrated size curve is bundled: the retained paired run ended before its
+size sweep. Its incomplete raw observations are documented in
+[paired examples](a3-paired-examples.md#retained-observations-an-explicitly-incomplete-measurement-series).
+The procedure below describes how to collect a new comparable reference.
+
 Use `examples/a3_paired_probes.py` for reproducible reference controls, with
 BasicInfo as the timing method and exact exported selectors discovered first.
 Sweep copy counts, for example `65536`, `1048576`, `16777216`, and GEMM square

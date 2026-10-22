@@ -7,6 +7,10 @@
     "source": "Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb",
     "revision": "922ce56938fe48063bbffb5019b65645b2bb77cb"
   },
+  "interpretation": {
+    "ratio_normalization": "preserve exported fractions; denominator is not assumed equal to row duration, row total cycles, or BasicInfo task duration",
+    "reported_times": "retain independently; do not reconstruct active cycles from ratios without a validated matching denominator"
+  },
   "saturation": {
     "state": "unknown",
     "reason": "activity fractions have no validated A2/A3 capacity denominator or saturation threshold"

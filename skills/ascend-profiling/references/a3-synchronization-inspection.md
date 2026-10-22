@@ -25,6 +25,7 @@ For an existing Triton launcher, the same functional interface is:
 
 ```python
 compiled = kernel[grid](*arguments, **compile_options)
+artifact_directory.mkdir(parents=True, exist_ok=True)
 for stage, content in compiled.asm.items():
     data = content if isinstance(content, bytes) else str(content).encode()
     (artifact_directory / stage).write_bytes(data)
@@ -35,8 +36,60 @@ bind them to source/options and the measured dispatch. The included helper
 sanitizes stage names into filenames and records those hashes. Available keys
 and pass positions depend on the installed compiler.
 
-Do not invent an environment variable or assume an installed
-build accepts another version's pass name.
+### Verified late-IR diagnostic capture
+
+On the measured Triton-Ascend 3.2.2 backend (Triton 3.5.0,
+`bishengir-compile 1.2.0`, revision `8796a8ac1508`, CANN 9.1.0), ordinary
+`compiled.asm` exposed only `ttir`, `ttadapter`, and `npubin`. **It did not
+contain late NPUIR.** Setting the environment variable `TRITON_DEBUG=1` alone
+did not produce that missing stage.
+
+The verified route is to enable the JIT's actual debug option for a diagnostic
+compilation:
+
+```python
+@triton.jit(debug=True)
+def kernel(...):
+    ...
+compiled = kernel[grid](*arguments, **compile_options)
+```
+
+For the included probe, create a diagnostic copy with both JIT decorators
+enabled, retaining the original timed source unchanged:
+
+```bash
+sed 's/@triton.jit$/@triton.jit(debug=True)/' \
+  examples/a3_paired_probes.py > /absolute/diagnostic_workload.py
+sha256sum examples/a3_paired_probes.py /absolute/diagnostic_workload.py
+```
+
+The diagnostic copy has a different source hash; retain both source hashes and
+compare compiled binaries. Run it with fresh cache and dump locations:
+
+```bash
+TRITON_DEBUG=1 TRITON_ALWAYS_COMPILE=1 TRITON_DISABLE_CACHE=1 \
+TRITON_CACHE_DIR=/absolute/evidence/debug-cache \
+TRITON_DUMP_DIR=/absolute/evidence/debug-dump \
+python3 /absolute/diagnostic_workload.py --case matmul --variant candidate \
+  --matrix-size 512 --artifacts /absolute/evidence/debug-asm
+```
+
+The backend's `debug=True` option enabled
+`--bishengir-print-ir-after=hivm-graph-sync-solver` and saved
+`kernel.npuir.mlir` under the dump directory's specialization subdirectory.
+Inspect its header: the verified files say
+`IR Dump After GraphSyncSolver (hivm-graph-sync-solver)`. The flag alone is not
+a portable pass contract; another compiler version can change the pass or
+available dump. Keep this as a diagnostic compilation, recheck correctness,
+and compare `npubin` hashes before attributing it to the measured kernel.
+Do not treat diagnostic execution time as ordinary timing.
+
+The retained paired captures used the same example source and shapes and
+produced byte-identical `npubin` in ordinary and debug-enabled compilation for
+each variant. [Compiler evidence metadata](../examples/compiler-evidence/metadata.json)
+records the two binary bindings, source/version identity, raw dump hashes and
+display hashes. The displayed complete dumps remove trailing compiler warnings;
+the actual IR and its line numbers are retained.
 
 A practical search in the retained artifact directory is:
 
@@ -127,3 +180,44 @@ slower resource-constrained kernel. Zero scalar wait with nonzero queue or
 handoff stalls is consistent. If the binary cannot be decoded or the relevant
 stage is unavailable, say which mechanism remains inferred and test a narrower
 controlled variant instead of claiming exact instruction placement.
+
+## Real matched matrix example: flags and buffer slots
+
+The supplied [stages 1 dump](../examples/compiler-evidence/stages1.mlir) and
+[stages 2 dump](../examples/compiler-evidence/stages2.mlir) are from the bundled
+512×512 fp16/float32 matrix pair, tile 32×32×64. The early TTIR and adapter hashes
+were identical across stages 1/2; these late dumps expose the transformation.
+
+Baseline lines 65/90 have one cbuf base for each operand, offsets 0/4096. The
+candidate lines 80–83 have two slots per operand, offsets 4096/12288 and0/8192:
+
+```mlir
+%50 = hivm.hir.pointer_cast(%c4096_i64, %c12288_i64) : memref<2x4x16x16xf16, #hivm.address_space<cbuf>>
+annotation.mark %50 {hivm.multi_buffer = 2 : i32} : memref<2x4x16x16xf16, #hivm.address_space<cbuf>>
+%51 = hivm.hir.pointer_cast(%c0_i64_0, %c8192_i64) : memref<4x2x16x16xf16, #hivm.address_space<cbuf>>
+annotation.mark %51 {hivm.multi_buffer = 2 : i32} : memref<4x2x16x16xf16, #hivm.address_space<cbuf>>
+```
+
+Each operand slot is 4096 bytes. This input cbuf allocation therefore grows
+8192 → 16384 bytes; it is not a statement about all memory used by the kernel.
+Candidate line 71 computes modulo 2; lines 75/79 select event pairs 3/4 and 1/2.
+The next input must wait until MTE1 has released the chosen slot; once loaded,
+MTE2 signals that MTE1 can consume it (candidate lines 107–109, intervening
+transfer operands omitted here):
+
+```text
+hivm.hir.wait_flag[<PIPE_MTE1>, <PIPE_MTE2>, %49]
+hivm.hir.nd2nz ...
+hivm.hir.set_flag[<PIPE_MTE2>, <PIPE_MTE1>, <EVENT_ID0>]
+```
+
+The matrix macro at candidate line 130 carries `sync_related_args`, so counting
+only standalone flags misses its internal dependency operands. For the result,
+lines 132/140 order `PIPE_M → PIPE_FIX`; the emitted FIXPIPE writes the CC
+accumulator to GM. The `PIPE_FIX → PIPE_M` release protects accumulator reuse.
+The final `PIPE_ALL` barrier is a distinct full-pipe ordering point.
+
+This is compiler-confirmed buffering and event machinery bound to the ordinary
+binary. It does not by itself prove simultaneous transfer/compute overlap or
+quantify saved waiting. Use the separate timing and full wait/stall evidence in
+[the paired measurement interpretation](a3-paired-examples.md).

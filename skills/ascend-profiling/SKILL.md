@@ -26,7 +26,8 @@ are not portable.
 - Optional compiler attribution requires matching compiler artifacts and tools;
   simulation requires the product-compatible simulator; race/memory diagnostics
   require `mssanitizer` and supported instrumentation. These are not prerequisites
-  for ordinary timing or pipe profiling.
+  for ordinary timing or pipe profiling. Compiler-diagnostic command examples
+  additionally use Bash, `rg`, `sed`, and `sha256sum` for file inspection.
 
 Commands in references run from this skill folder; alternatively use absolute
 paths to its scripts and references. Workload and output paths belong to the

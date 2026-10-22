@@ -82,7 +82,8 @@ def test_not_yet_created_log_waits_for_same_retained_worker(tmp_path, state):
         calls.append(args)
         if args[0] == 'logs':
             if not ready[0]:
-                raise RuntimeError('logs/stdout HTTP404 log not found')
+                raise RuntimeError('GET http://listener/api/v1/commands/original/logs/stdout?tail=100 '
+                    'failed with status 404: {"detail":"log not found"}')
             return dict(content='PHASE_READY=' + json.dumps(dict(monotonic=100)))
         if args[0] == 'observe':
             return dict(state=state, handle=item['handle'])
@@ -101,10 +102,30 @@ def test_not_yet_created_log_waits_for_same_retained_worker(tmp_path, state):
 def test_log_error_on_terminal_worker_is_not_hidden(tmp_path):
     def remote(*args):
         if args[0] == 'logs':
-            raise RuntimeError('missing terminal logs')
+            raise RuntimeError('GET http://listener/logs/stdout?tail=100 '
+                'failed with status 404: {"detail":"log not found"}')
         return dict(state='failed')
-    with pytest.raises(RuntimeError, match='missing terminal logs'):
+    with pytest.raises(RuntimeError, match='log not found'):
         gate.activate(SimpleNamespace(remote=remote), tmp_path, receipt())
+
+
+@pytest.mark.parametrize('message', [
+    'GET http://listener/logs/stdout?tail=100 failed with status 403: {"detail":"unauthorized"}',
+    'transport response unavailable: malformed JSON response',
+    'GET http://listener/logs/stdout?tail=100 failed with status 404: {"detail":"endpoint not found"}',
+    'GET http://listener/logs/stdout?tail=100 failed with status 404: {bad json}',
+    'GET http://listener/jobs/original failed with status 404: {"detail":"log not found"}',
+])
+def test_unrelated_log_failures_are_not_relabelled_pending(tmp_path, message):
+    calls = []
+    def remote(*args):
+        calls.append(args)
+        if args[0] == 'logs':
+            raise RuntimeError(message)
+        return dict(state='running')
+    with pytest.raises(RuntimeError, match='GET|transport response'):
+        gate.activate(SimpleNamespace(remote=remote), tmp_path, receipt())
+    assert calls == [('logs', 'remote:t:job:original', '--tail', '100')]
 
 
 def test_legacy_deadline_job_without_handshake_remains_observable(tmp_path):

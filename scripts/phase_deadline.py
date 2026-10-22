@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 import math
 from pathlib import Path
+import re
 import time
 
 
@@ -44,10 +45,17 @@ def activate(tools, folder, receipt):
         if not path.exists():
             try:
                 logs = tools.remote('logs', receipt['handle'], '--tail', '100')
-            except RuntimeError:
+            except RuntimeError as error:
                 # Listener log files may not exist immediately after admission.
                 # Confirm the SAME retained job is pending before waiting; a
                 # terminal failure or unrelated malformed response stays visible.
+                missing = re.search(r'/logs/stdout(?:\?\S*)? failed with status 404:\s*(\{[^\n]*\})', str(error))
+                try:
+                    log_missing = missing is not None and json.loads(missing[1]).get('detail') == 'log not found'
+                except (ValueError, AttributeError):
+                    log_missing = False
+                if not log_missing:
+                    raise
                 observed = tools.remote('observe', receipt['handle'])
                 if observed.get('state') in ('queued', 'dispatching', 'running',
                                              'reconnecting', 'observation-unavailable'):

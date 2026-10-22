@@ -132,8 +132,8 @@ if output.name == 'run-0001': payload['cases'] = [None]
             child.write_text('''import os, pathlib, sys, time
 output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])
 output.mkdir()
-(output / 'pid').write_text(str(os.getpid()))
 print('retained running log', flush=True)
+(output / 'pid').write_text(str(os.getpid()))
 time.sleep(30)
 ''')
             output = base / 'runs'

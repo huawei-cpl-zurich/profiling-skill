@@ -266,6 +266,7 @@ def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
 
 def exercise_remote_program(tmp_path, verb, count, extra, event_error=None, settings=None):
     shutil.copyfile(Path(tools.__file__).with_name('phase_deadline.py'), tmp_path / 'phase_deadline.py')
+    shutil.copyfile(Path(tools.__file__).with_name('blind_evidence.py'), tmp_path / 'blind_evidence.py')
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     request = dict(verb=verb, implementation='candidate', source_sha256='a' * 64, **(settings or {}))
     if verb == 'events':
@@ -345,6 +346,10 @@ def summarize(samples): return {'samples_us':samples,'median_us':2}
         assert summary['kernel_contract']['exported_selector_available'] is False
         assert 'selector' not in summary
         assert not (tmp_path / 'results/discovery').exists()
+        assert summary['compiler_evidence']['available'] is False
+        with tarfile.open(tmp_path / 'evidence.tar.gz') as archive:
+            assert 'build/compile.stderr' in archive.getnames()
+            assert not any(name.startswith('compiler-evidence/') for name in archive.getnames())
         return
     if extra and verb in ('timing', 'pipes'):
         assert result.returncode == 1
@@ -477,6 +482,8 @@ def test_pre_dispatch_failure_is_terminal_and_preserves_source_identity(tmp_path
 @pytest.mark.parametrize('budget,delay,stage', [(300, 0, 'environment'), (.2, .3, 'budget')])
 def test_worker_bounds_inventory_probe_and_retains_failure_identity(tmp_path, budget, delay, stage):
     shutil.copyfile(Path(tools.__file__).with_name('phase_deadline.py'), tmp_path / 'phase_deadline.py')
+    shutil.copyfile(Path(tools.__file__).with_name('blind_evidence.py'), tmp_path / 'blind_evidence.py')
+    tools.save(tmp_path / 'task.json', dict(language='triton'))
     tools.save(tmp_path / 'activation.json', dict(cutoff_monotonic=time.monotonic() + budget))
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb='check', implementation='candidate',

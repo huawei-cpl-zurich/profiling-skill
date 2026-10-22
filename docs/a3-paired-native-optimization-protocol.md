@@ -67,6 +67,12 @@ native compiler-IR tools are capability gaps, not zero counters or agent faults.
 The domain helper copies candidate bytes before submission, compiles the source,
 returns compiler diagnostics and checks outputs. Profiler operations verify one
 exported compute launch; `events` labels its weaker trusted-host evidence explicitly.
+Native build intermediates may contain the trusted seeded host oracle. Compact
+agent evidence therefore retains compiler stdout/stderr but omits native build
+IR, preprocessed sources, disassembly and metadata containing source annotations.
+Native candidate/device-only IR is explicitly unavailable until the compiler
+producer can establish that role; filenames alone are not sufficient provenance.
+Full artifacts remain remote for coordinator-only inspection.
 The same retained remote handle is observed after interruptions. No direct
 SSH/client bypass or duplicate dispatch. Use at most two replacements only
 after terminal infrastructure failure; infrastructure-invalid cells are unscored.

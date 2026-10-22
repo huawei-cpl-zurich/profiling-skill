@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profile_device import bounded_run, wait_for_device
 from phase_deadline import wait_for_activation
+from blind_evidence import compact_evidence
 from a3_memory_batch import execute, capture, duration, summarize, validate_capture
 root = Path(__file__).resolve().parent
 request = json.loads((root / 'request.json').read_text())
@@ -168,15 +169,7 @@ except BaseException as error:
 finally:
     signal.setitimer(signal.ITIMER_REAL, 0)
     if lease: lease.close()
-    (output / 'summary.json').write_text(json.dumps(summary, indent=2))
-    # Compact reports and inventoried compiler outputs, never raw profiler payloads.
-    with tarfile.open(root / 'evidence.tar.gz', 'w:gz') as archive:
-        for base in (output, root / 'compiler-evidence', root / 'build'):
-            if base.exists():
-                for path in base.rglob('*'):
-                    if path.is_file() and (base.name == 'compiler-evidence' or path.suffix in
-                            ('.json', '.log', '.csv', '.txt', '.mlir', '.ll', '.s', '.asci', '.stdout', '.stderr')):
-                        archive.add(path, arcname=str(path.relative_to(root)))
+    compact_evidence(root, output, summary)
     print(json.dumps(summary), flush=True)
 sys.exit(0 if summary['state'] == 'completed' else 1)
 '''
@@ -288,7 +281,7 @@ class Tools:
             shutil.copyfile(self.bundle / 'a3_native_build.py', folder / 'a3_native_build.py')
         shutil.copyfile(source, folder / source.name)
         helpers = Path(__file__).resolve().parent
-        for name in ('profile_device.py', 'a3_memory_batch.py', 'phase_deadline.py'):
+        for name in ('profile_device.py', 'a3_memory_batch.py', 'phase_deadline.py', 'blind_evidence.py'):
             shutil.copyfile(helpers / name, folder / name)
         request = dict(verb=verb, implementation=implementation, sanitizer=sanitizer,
                        timing_captures=timing_captures, pipe_captures=pipe_captures,

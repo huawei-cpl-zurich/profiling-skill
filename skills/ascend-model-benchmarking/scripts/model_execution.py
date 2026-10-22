@@ -166,6 +166,8 @@ def prepare_model(factory, args, kwargs, validate, *, compiler=None,
             stage = "compiled-forward"
             output = compiled(*args, **kwargs)
             synchronize()
+    except TimeoutError:
+        raise
     except Exception as exc:
         raise ModelExecutionError(f"required fullgraph {compiler.backend_name} execution failed: {exc}",
                                   compiler.last_failure or stage) from exc

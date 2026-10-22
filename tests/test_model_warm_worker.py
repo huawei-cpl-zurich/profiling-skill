@@ -1,0 +1,109 @@
+import json
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+import shutil
+import tarfile
+from datetime import datetime, timedelta, timezone
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+
+
+def test_phase_reuses_runtime_and_recovers_candidate_failures(tmp_path, monkeypatch):
+    import model_campaign_worker as worker
+    requests = []
+    for index in range(3):
+        root = tmp_path / 'calls' / str(index)
+        root.mkdir(parents=True)
+        (root / 'request.json').write_text(json.dumps(dict(operation='check',
+            host_remaining_seconds=30, source_sha256=str(index))))
+        requests.append(root)
+    imports, leases = [], []
+    monkeypatch.setattr(worker.importlib, 'import_module', lambda name:
+        imports.append(name) or SimpleNamespace(npu=SimpleNamespace(set_device=lambda _: None,
+            synchronize=lambda: None), ones=lambda *a, **k: None))
+    def acquire(probe):
+        env = dict(ASCEND_RT_VISIBLE_DEVICES='2')
+        assert probe(env)[0]
+        leases.append(True)
+        return 2, env, SimpleNamespace(close=lambda: leases.append(False))
+    adapter = SimpleNamespace(check=lambda root, env, remaining:
+        dict(passed=root.name != '1', variants=[0, 1]))
+    runtime = {}
+    results = [worker.execute(root, adapter, acquire=acquire, runtime=runtime) for root in requests]
+    assert [value['state'] for value in results] == ['completed', 'failed', 'completed']
+    assert imports == ['torch', 'torch_npu']
+    assert leases == [True]
+    runtime['lease'].close()
+    assert leases == [True, False]
+
+
+def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
+    from model_campaign_service import CampaignService, CampaignTools
+    from model_campaign_tools import export
+    public, bundle = tmp_path / 'public', tmp_path / 'bundle'
+    public.mkdir()
+    bundle.mkdir()
+    (bundle / 'private-provider').write_text('not transferred repeatedly')
+    (public / 'execution.json').write_text(json.dumps(dict(utc_deadline=
+        (datetime.now(timezone.utc) + timedelta(seconds=600)).isoformat())))
+    tools = CampaignTools.__new__(CampaignTools)
+    tools.state, tools.workspace = tmp_path / 'state', tmp_path / 'private'
+    tools.state.mkdir()
+    tools.cwd, tools.target, tools.runtime = str(tmp_path / 'remote'), 'test', 'runtime'
+    calls, submitted = [], []
+    worker_handle = 'remote:test:job:worker'
+    pending = [True]
+    def remote(*args):
+        calls.append(args)
+        if args[0] in ('targets', 'capabilities', 'preflight'):
+            return dict(state='completed')
+        if args[0] == 'upload':
+            source, target = Path(args[2]), Path(args[3])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            if source.name == 'phase.tar.gz':
+                folder = Path(str(target)[:-7])
+                folder.mkdir()
+                with tarfile.open(source) as stream:
+                    stream.extractall(folder, filter='data')
+            return dict(state='completed')
+        if args[0] == 'run':
+            return dict(state='running', handle=worker_handle)
+        if args[0] == 'observe':
+            return dict(state='running', handle=worker_handle)
+        if args[0] == 'download':
+            if pending[0]:
+                return dict(state='failed')
+            target = Path(args[2])
+            phase = target.parents[2]
+            ident = target.parent.name
+            with tarfile.open(phase / 'inbox' / (ident + '.tar.gz')) as stream:
+                request = json.loads(stream.extractfile('request.json').read())
+                submitted.append(stream.extractfile('candidate.py').read())
+            result = tmp_path / ('result-' + ident)
+            (result / 'results').mkdir(parents=True, exist_ok=True)
+            (result / 'results/summary.json').write_text(json.dumps(dict(state='completed',
+                source_sha256=request['source_sha256'], worker_pid=42,
+                check=dict(passed=True, variants=[0, 1]))))
+            with tarfile.open(args[3], 'w:gz') as stream:
+                stream.add(result / 'results/summary.json', arcname='results/summary.json')
+            return dict(state='completed')
+        raise AssertionError(args)
+    tools.remote = remote
+    service = CampaignService(tools, bundle, public, export)
+    (public / 'candidate.py').write_text('version one')
+    first = service.start('check')
+    assert first['state'] == 'running'
+    # Lost observations and edits do not create another request or worker.
+    (public / 'candidate.py').write_text('not submitted')
+    assert service.start('check')['call_id'] == first['call_id']
+    pending[0] = False
+    assert service.observe(first['call_id'])['worker_pid'] == 42
+    for source in ('version two', 'version three'):
+        (public / 'candidate.py').write_text(source)
+        assert service.start('check')['worker_pid'] == 42
+    assert submitted == [b'version one', b'version two', b'version three']
+    assert len([call for call in calls if call[0] == 'run']) == 1
+    uploads = [Path(call[2]).name for call in calls if call[0] == 'upload']
+    assert uploads == ['phase.tar.gz', 'request.tar.gz', 'request.tar.gz']

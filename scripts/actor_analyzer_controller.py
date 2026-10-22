@@ -75,12 +75,16 @@ def cleanup_phase(phase, remote=managed_observation):
         return {'state': 'terminal', 'calls': []}
     config = json.loads(ownership.read_text())
     calls, uncertain = [], False
-    for path in sorted(Path(config['directory']).glob('*/receipt.json')):
+    paths = sorted(Path(config['directory']).glob('*/receipt.json'))
+    phase_worker = Path(config['directory']) / 'phase.json'
+    if phase_worker.exists():
+        paths.insert(0, phase_worker)
+    for path in paths:
         if path.parent.name in config['existing']:
             continue
         try:
             receipt = json.loads(path.read_text())
-            if receipt.get('state') in ('completed', 'failed', 'cancelled'):
+            if path != phase_worker and receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
             if receipt.get('dispatch_intent') and not receipt.get('handle'):
                 uncertain = True

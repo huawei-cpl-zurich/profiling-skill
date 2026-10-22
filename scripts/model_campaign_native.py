@@ -134,46 +134,46 @@ def _name(row):
 
 
 def pipes(root, env, remaining):
+    """Application-level per-task PMU; deliberately not op-replay block PMU."""
+    import torch
+    import torch_npu
+    from torch_npu.profiler.experimental_config import AiCMetrics
+    from profile_capture import Acquisition
     output = root / 'measurement'
     output.mkdir(exist_ok=True)
-    wrapper = root / 'application.sh'
-    wrapper.write_text('#!/bin/sh\nexec ' + shlex.join([
-        sys.executable, str(root / 'scripts/model_campaign_native.py'), str(root)]) + '\n')
-    wrapper.chmod(0o700)
-    def capture(label, metric, selector=None):
-        folder = output / label
-        command = ['msprof', 'op', '--application=' + str(wrapper),
-            '--output=' + str(folder / 'report'), '--aic-metrics=' + metric,
-            '--warm-up=21', '--launch-count=' + ('5000' if metric == 'BasicInfo' else '1'), '--kill=off']
-        if selector:
-            command.append('--kernel-name=' + selector)
-        process = execute(command, folder, env, timeout=remaining())
-        validate_capture(process.returncode, process.stdout + process.stderr)
-        return folder / 'report'
-    # Discovery must be scoped to the warmed candidate, not reference/setup tasks
-    # that a whole-process msprof BasicInfo capture would also observe.
-    from profile_capture import Acquisition
     prepared, _ = _prepare(root)
     discovered = Acquisition().profile(prepared, samples=1, output=output / 'discovery')
     names = sorted({row['name'] for row in discovered['tasks'] if row['kind'] == 'device'})
     if not names:
         raise RuntimeError('compiled candidate exported no kernel names')
-    mapping = {}
-    for index, hint in enumerate(names):
-        basic = capture('basic-' + str(index), 'BasicInfo', hint)
-        mapping[hint] = sorted({_name(row) for row in _rows(basic, '*OpBasicInfo*.csv')})
-        if not mapping[hint]:
-            raise RuntimeError('candidate trace hint exported no canonical BasicInfo selector')
-    selectors = sorted({name for values in mapping.values() for name in values})
-    captures = []
-    for index, selector in enumerate(selectors):
-        folder = capture('pipes-' + str(index), 'PipeUtilization', selector)
-        basic, rows = _rows(folder, '*OpBasicInfo*.csv'), _rows(folder, '*PipeUtilization*.csv')
-        if not rows or not basic or any(_name(row) != selector for row in basic):
-            raise RuntimeError('exact-selector pipe export incomplete')
-        captures.append(dict(selector=selector, basic_rows=basic, pipe_rows=rows))
+    profiler = torch_npu.profiler
+    with torch.inference_mode(), prepared.compiler.monitor_compilation():
+        for _ in range(20):
+            prepared()
+        torch.npu.synchronize()
+        before = prepared.compiler.snapshot()
+        with profiler.profile(activities=[profiler.ProfilerActivity.CPU, profiler.ProfilerActivity.NPU],
+                experimental_config=profiler._ExperimentalConfig(
+                    profiler_level=profiler.ProfilerLevel.Level1,
+                    aic_metrics=AiCMetrics.PipeUtilization, data_simplification=False),
+                schedule=profiler.schedule(wait=0, warmup=0, active=5, repeat=1),
+                on_trace_ready=profiler.tensorboard_trace_handler(str(output / 'pmu'))) as capture:
+            for _ in range(5):
+                remaining()
+                prepared()
+                torch.npu.synchronize()
+                if prepared.compiler.snapshot() != before:
+                    raise RuntimeError('compilation during PMU measurement')
+                capture.step()
+    rows = _rows(output / 'pmu', '*kernel_details.csv')
+    captures = [dict(selector=name, basic_rows=[],
+        pipe_rows=[row for row in rows if row.get('Name') == name]) for name in names]
+    if any(len(item['pipe_rows']) < 5 or not any(
+            key.endswith('_ratio') for row in item['pipe_rows'] for key in row) for item in captures):
+        raise RuntimeError('application PMU export incomplete')
     result = dict(state='complete', cases=['matmul-7-variant-0'],
-                  discovered_names=selectors, selector_mapping=mapping, captures=captures, warmup=21)
+        collector='Torch-NPU application PMU', granularity='per-task',
+        discovered_names=names, captures=captures, warmup=20, samples=5)
     (output / 'pipe-evidence.json').write_text(json.dumps(result, indent=2))
     return result
 

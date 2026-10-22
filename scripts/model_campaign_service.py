@@ -23,6 +23,13 @@ OPERATIONS = {'check', 'benchmark', 'pipes', 'screen'}
 
 class CampaignTools(Tools):
     """Keep the existing handle/transfer recovery, cap every dispatch by deadline."""
+    def observe(self, ident):
+        receipt = json.loads((self.state / ident / 'receipt.json').read_text())
+        if receipt.get('warm'):
+            from model_campaign_warm import observe
+            return observe(self, ident)
+        return super().observe(ident)
+
     def dispatch(self, folder, receipt):
         if receipt.get('dispatch_intent') or receipt.get('handle'):
             return super().dispatch(folder, receipt)
@@ -123,6 +130,9 @@ class CampaignService:
     def start(self, operation):
         if operation not in OPERATIONS:
             raise ValueError('unknown operation')
+        if isinstance(self.tools, CampaignTools):
+            from model_campaign_warm import start
+            return start(self, operation)
         # Resuming a prior call is lifecycle safety, not a trial/round quota.
         for path in sorted(self.tools.state.glob('*/receipt.json')):
             prior = json.loads(path.read_text())

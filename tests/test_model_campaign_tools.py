@@ -299,3 +299,62 @@ def test_worker_probe_bound_and_remote_clock_skew(tmp_path, monkeypatch):
         assert archive.extractfile('diagnostics/traceback.txt').read() == b'PRIVATE COMPILER TRACE'
     tools.export(tmp_path, tmp_path / 'public')
     assert 'PRIVATE COMPILER TRACE' not in (tmp_path / 'public/results/summary.json').read_text()
+
+
+@pytest.mark.parametrize('failure', ['mutation', 'eager-timeout', 'compiled-timeout',
+    'wrapped-compiled-timeout', 'validator-timeout', 'compiled-validator-timeout'])
+def test_probe_checks_compiled_input_integrity_and_preserves_deadlines(tmp_path, monkeypatch, failure):
+    from contextlib import nullcontext
+    helpers = Path(__file__).resolve().parents[1] / 'skills/ascend-model-benchmarking/scripts'
+    monkeypatch.syspath_prepend(str(helpers))
+    import candidate_probe
+    class Tensor:
+        def __init__(self, value): self.value = value
+        def detach(self): return self
+        def clone(self): return Tensor(self.value)
+    def assert_close(left, right, **kwargs):
+        assert left.value == right.value, 'input mutated'
+    tensor = Tensor(1)
+    torch = SimpleNamespace(Tensor=Tensor, inference_mode=nullcontext,
+        utils=SimpleNamespace(_pytree=SimpleNamespace(tree_flatten=lambda value: ([tensor], None))),
+        testing=SimpleNamespace(assert_close=assert_close))
+    monkeypatch.setitem(sys.modules, 'torch', torch)
+    class Model:
+        def __call__(self, value):
+            if failure == 'eager-timeout': raise TimeoutError('original deadline')
+            return value
+    def prepare(factory, args, kwargs, validate, **options):
+        if failure == 'compiled-timeout': raise TimeoutError('original deadline')
+        if failure == 'wrapped-compiled-timeout':
+            try:
+                raise TimeoutError('original deadline')
+            except TimeoutError as error:
+                raise RuntimeError('backend wrapper') from error
+        if failure == 'mutation': tensor.value = 2
+        validate(tensor)
+        return SimpleNamespace(evidence={'compile_count': 1, 'compiled_executions': 1})
+    validations = []
+    def validate(*args):
+        validations.append(True)
+        if failure == 'validator-timeout': raise TimeoutError('original deadline')
+        if failure == 'compiled-validator-timeout' and len(validations) == 2:
+            raise TimeoutError('original deadline')
+    monkeypatch.setattr(candidate_probe, 'prepare_model', prepare)
+    options = dict(candidate_file=tmp_path / 'candidate.py', evidence_dir=tmp_path / 'diagnostics',
+        backend='npu-inductor', compiler=SimpleNamespace(backend_name='npu-inductor', torch=torch))
+    if failure == 'mutation':
+        result = candidate_probe.probe_candidate(Model, lambda: [((tensor,), {})], validate, **options)
+        assert result['state'] == 'failed' and result['phase'] == 'candidate-input-mutation'
+    else:
+        with pytest.raises(TimeoutError, match='original deadline'):
+            candidate_probe.probe_candidate(Model, lambda: [((tensor,), {})], validate, **options)
+
+
+def test_candidate_import_deadline_is_not_a_compile_failure(tmp_path, monkeypatch):
+    (tmp_path / 'candidate.py').write_text('raise TimeoutError("original deadline")\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, 'candidate', raising=False)
+    for name in ('torch', 'torch_npu', 'candidate_probe', 'private_campaign_cases'):
+        monkeypatch.setitem(sys.modules, name, SimpleNamespace(probe_candidate=None, make_case=None, validate=None))
+    with pytest.raises(TimeoutError, match='original deadline'):
+        native.check(tmp_path, {}, lambda: 100)

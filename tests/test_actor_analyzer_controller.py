@@ -809,3 +809,34 @@ def test_role_launcher_analyzer_completion_requires_process_success_not_commits(
             'round-1-analyzer': dict(state='terminal', candidate_commit='abc',
                                     analysis_valid=True, result=result)})
         assert not reconcile(None, {CELLS[0]: observed}, 1)['stopped']
+
+
+@pytest.mark.parametrize('changed', [False, True])
+def test_actor_carry_forward_qualification_tracks_source_not_phase_commit(tmp_path, changed):
+    actors = []
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            actors.append(phase.name)
+            if len(actors) == 1:
+                (campaign.workspace / 'candidate.py').write_text('value = 1\n')
+                campaign.qualify(phase, dict(state='completed', correctness=True,
+                    source_sha256=digest(campaign.workspace / 'candidate.py')))
+            elif changed:
+                (campaign.workspace / 'candidate.py').write_text('value = 2\n')
+        else:
+            (phase / 'analysis.json').write_text(json.dumps(dict(candidate_commit=commit,
+                profiling=dict(status='unavailable', reason='fixture'), evidence=[],
+                observations=[], bottlenecks=[], ceilings=[], unknowns=[])))
+        return dict(exit_code=0)
+    campaign = make_campaign(tmp_path, runner, rounds=2)
+    result = campaign.run()
+    actor = result['phases']['round-2-actor']
+    analyzer = result['phases']['round-2-analyzer']
+    assert actor['candidate_verified'] is (not changed)
+    if not changed:
+        assert actor['candidate_commit'] == analyzer['candidate_commit'] == result['verified']
+        assert actor['carried_forward_from'] == result['phases']['round-1-actor']['candidate_commit']
+    else:
+        assert actor['candidate_commit'] != analyzer['candidate_commit']
+        from campaign_batch import failure
+        assert failure(result) == 'unverified candidate'

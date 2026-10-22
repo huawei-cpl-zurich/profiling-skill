@@ -486,6 +486,13 @@ class Campaign:
                        and item.get('source_sha256') == candidate_hash(self.workspace)
                        for item in records):
                     state['verified'] = commit
+            previous = state.get('verified')
+            if previous and previous != commit:
+                verified_source = subprocess.check_output(['git', '-C', str(self.workspace),
+                    'show', previous + ':candidate.py'])
+                if candidate_hash(self.workspace) == hashlib.sha256(verified_source).hexdigest():
+                    state['verified'] = commit
+                    entry['carried_forward_from'] = previous
             entry['candidate_commit'] = commit
             entry['candidate_verified'] = state.get('verified') == commit
         else:

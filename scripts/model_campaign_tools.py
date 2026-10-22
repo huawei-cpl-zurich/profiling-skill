@@ -91,7 +91,10 @@ def prepare(output, task='matmul', reference_root=None, profile_index=None, chec
         adapter = importlib.import_module('comparison_' + task)
         metadata = adapter.prepare(private / 'reference', reference_root)
         released = metadata.get('public', metadata)
-        (public / 'candidate.py').write_text(released['starter'])
+        starter = released['starter']
+        if task == 'bsa':
+            starter += '\nclass Model(torch.nn.Module):\n    forward = staticmethod(forward)\n'
+        (public / 'candidate.py').write_text(starter)
         api = released.get('api')
         if api is None:
             api = ('Model.forward(' + ', '.join(released['arguments']) + ') -> '

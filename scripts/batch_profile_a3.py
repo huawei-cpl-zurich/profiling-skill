@@ -35,6 +35,7 @@ def identity(job: dict) -> dict:
         "repeats": job["repeats"],
         "round": job["round"],
         "kernel_name": job["profiling"]["kernel_name"],
+        "replay_mode": job["profiling"].get("replay_mode", "kernel"),
     }
 
 
@@ -64,14 +65,17 @@ def failure(job: dict, status: str, diagnostics: str, captures: list[dict],
 def emit_failure(output: Path, response_path: Path, result: dict,
                  captures: list[dict], logs: list[str]) -> int:
     write_json(response_path, result)
-    write_json(output / "evidence.json", {
+    evidence = {
         "schema_version": 1,
         "status": "failure",
         "failure": {"kind": result["status"], "message": result["diagnostics"]},
         "declared_kernel_name": result.get("declared_kernel_name"),
         "resolved_kernel_name": result.get("resolved_kernel_name"),
         "captures": captures,
-    })
+    }
+    if "replay_mode" in result:
+        evidence["replay_mode"] = result["replay_mode"]
+    write_json(output / "evidence.json", evidence)
     (output / "msprof.log").write_text(bounded_log(logs))
     return 1
 
@@ -82,7 +86,7 @@ def fallback_selector(selector: str) -> str | None:
 
 
 def read_capture(evidence_path: Path, run: subprocess.CompletedProcess[str],
-                 selector: str) -> tuple[str, float | str]:
+                 selector: str, replay_mode: str = "kernel") -> tuple[str, float | str]:
     """Return (success, latency), (selector_miss, message), or (error, message)."""
     try:
         evidence = json.loads(evidence_path.read_text())
@@ -106,8 +110,13 @@ def read_capture(evidence_path: Path, run: subprocess.CompletedProcess[str],
         return "error", f"profiler exited with status {run.returncode} despite success evidence"
     try:
         kernels = evidence["kernels"]
-        if len(kernels) != 1 or kernels[0].get("name") != selector:
+        selected = kernels[0].get("name") if len(kernels) == 1 else None
+        if selected != selector and not (
+                replay_mode == "application" and selected == selector + "_mix_aic"):
             raise ValueError("selected kernel identity mismatch")
+        protocol = evidence.get("protocol", {})
+        if not isinstance(protocol, dict) or protocol.get("replay_mode", "kernel") != replay_mode:
+            raise ValueError("capture replay mode does not match job")
         latency = float(kernels[0]["duration_us"]["median"])
         if not math.isfinite(latency) or latency <= 0:
             raise ValueError("latency must be positive and finite")
@@ -121,6 +130,11 @@ def read_capture(evidence_path: Path, run: subprocess.CompletedProcess[str],
 def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
             response_path: Path, kernel_name: str) -> int:
     bound = identity(job)
+    replay_mode = bound["replay_mode"]
+    if replay_mode not in {"kernel", "application"}:
+        result = failure(job, "infrastructure_error",
+                         f"unsupported replay mode: {replay_mode!r}", [])
+        return emit_failure(output, response_path, result, [], [])
     if kernel_name != bound["kernel_name"]:
         result = failure(job, "infrastructure_error",
                          "batch kernel selector does not match job", [])
@@ -155,7 +169,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                 capture_dir = work / f"{capture_id}{suffix}"
                 command = [
                     sys.executable, str(profiler), "--output", str(capture_dir),
-                    "--kernel-name", selector, "--target-family",
+                    "--kernel-name", selector, "--replay-mode", replay_mode, "--target-family",
                     ("Ascend-A5" if job.get("product") == "a5" else "Ascend-A2-A3"),
                     "--", sys.executable, str(runner),
                     "--job", str(item_job_path), "--output", str(item_response),
@@ -179,7 +193,8 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                     result = failure(job, status, str(remote.get("diagnostics", "")), captures,
                                      resolved_kernel_name)
                     return emit_failure(output, response_path, result, captures, logs)
-                capture_status, detail = read_capture(capture_dir / "evidence.json", run, selector)
+                capture_status, detail = read_capture(
+                    capture_dir / "evidence.json", run, selector, replay_mode)
                 if capture_status == "success":
                     latency = float(detail)
                     resolved_kernel_name = selector
@@ -198,6 +213,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                 "case": case,
                 "iteration": iteration,
                 "duration_us": latency,
+                "replay_mode": replay_mode,
                 "kernel_name": resolved_kernel_name,
                 "declared_kernel_name": declared_kernel_name,
                 "resolved_kernel_name": resolved_kernel_name,
@@ -215,6 +231,7 @@ def execute(job: dict, *, runner: Path, profiler: Path, output: Path,
                           else "Ascend-A2-A3"),
         "profiler": "msprof-op",
         "timing_scope": "device-task",
+        "replay_mode": replay_mode,
         "kernel_name": declared_kernel_name,
         "declared_kernel_name": declared_kernel_name,
         "resolved_kernel_name": resolved_kernel_name,

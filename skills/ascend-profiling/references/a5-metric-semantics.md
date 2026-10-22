@@ -3,11 +3,9 @@
 These rules apply to the validated Ascend 950/A5 target (28 AIC and 56 AIV).
 Do not transfer event IDs, byte multipliers, or ceilings to another product.
 
-The profiler source names this architecture **Ascend950/V6**. `bz-a5` is a
-local target label, not a vendor product name; record live product output when
-using that target as evidence. The pipe definitions below come from
-`Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb` through
-`ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics`.
+The profiler source names this architecture **Ascend950/V6**. Record actual
+product output and core counts rather than assuming another device matches. The pipe definitions below come from
+`Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb`.
 
 ## Pipes and code-level meaning
 

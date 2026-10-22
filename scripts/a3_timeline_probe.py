@@ -11,6 +11,9 @@ from pathlib import Path
 import signal
 import subprocess
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills/ascend-profiling/scripts"))
+
 from summarize_a3_simulator import summarize
 
 

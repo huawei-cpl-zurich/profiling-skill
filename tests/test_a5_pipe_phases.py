@@ -9,9 +9,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-SUMMARIZER = ROOT / "scripts" / "summarize_timelines.py"
-ANALYZER = ROOT / "scripts" / "analyze_pipe_saturation.py"
-MODEL = ROOT / "references" / "a5-pipe-capacity-model.json"
+SUMMARIZER = ROOT / "skills/ascend-profiling/scripts" / "summarize_timelines.py"
+ANALYZER = ROOT / "skills/ascend-profiling/scripts" / "analyze_pipe_saturation.py"
+MODEL = ROOT / "skills/ascend-profiling/references" / "a5-pipe-capacity-model.json"
 
 
 def write_trace(

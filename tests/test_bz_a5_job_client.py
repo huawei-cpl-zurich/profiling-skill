@@ -101,7 +101,7 @@ def client(tmp_path: Path, transport):
     return module.BzA5JobClient(
         transport, tmp_path / "state", {"0": {"target": "bz-a5", "device": 4}},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/home/mariodrumond/.profiling-skill/production",
     )
@@ -222,7 +222,7 @@ def test_a5_upgrade_observes_legacy_provenance_handle_without_restaging(
     request = job(tmp_path)
     kwargs = {
         "runner": ROOT / "scripts/a3_benchmark_runner.py",
-        "profiler": ROOT / "scripts/profile_a3.py",
+        "profiler": ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         "batch_profiler": ROOT / "scripts/batch_profile_a3.py",
         "remote_root": "/home/mariodrumond/.profiling-skill/production",
     }
@@ -263,7 +263,7 @@ def test_a5_rejects_wrong_product_runtime_and_target_before_dispatch(tmp_path: P
         module.BzA5JobClient(
             transport, tmp_path / "bad", {"0": {"target": "bz-a3-1", "device": 0}},
             runner=ROOT / "scripts/a3_benchmark_runner.py",
-            profiler=ROOT / "scripts/profile_a3.py",
+            profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
             batch_profiler=ROOT / "scripts/batch_profile_a3.py", remote_root="/remote",
         )
     except module.JobError as error:

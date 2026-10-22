@@ -34,7 +34,7 @@ stage="artifacts/ascend-profiling/${operation}"
 remote_out="${stage}/compact"
 mkdir -p "$output"
 
-upload=("$TLA_ROOT/execution-profiles/bz-a5/scp.sh" --recursive upload "$skill_root/scripts" "$stage")
+upload=("$TLA_ROOT/execution-profiles/bz-a5/scp.sh" --recursive upload "$skill_root/skills/ascend-profiling/scripts" "$stage")
 curate=(python3 "$stage/scripts/curate_profile.py" --input "$remote_root" --output "$remote_out" --mode "$mode")
 for kernel in "${kernels[@]}"; do curate+=(--kernel-name "$kernel"); done
 

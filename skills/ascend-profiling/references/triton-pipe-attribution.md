@@ -11,8 +11,9 @@ python3 scripts/query_triton_pipe_attribution.py --construct triton_dot --produc
 
 The inventory is pinned to Triton-Ascend 3.2.0 commit
 `23ac2717c0a38ba962cbd4a0425fc069e7ae104d` and its GitCode AscendNPU-IR
-submodule commit `af5499b3b9f3dbab50b2834bcfff5da5c2a1d920`. Its `ref://` selectors point
-to curated immutable GitCode snapshots, not GitHub mirrors.
+submodule commit `af5499b3b9f3dbab50b2834bcfff5da5c2a1d920`. Citations name
+the repository, revision, source path, and line interval at that revision; they
+are provenance identifiers, not installed files or a required source service.
 
 ## Read the status literally
 
@@ -48,18 +49,14 @@ for how these distinctions change profiler interpretation.
 ## Resolve an unknown mapping
 
 When exact attribution matters, optionally capture the candidate or a focused
-single-operation probe with the installed `mlir-triton-dump` workflow so its
-manifest retains TTIR, adapter and compiler-consumer inputs. Inspect later
+single-operation probe with compiler artifact capture enabled, retaining TTIR, adapter IR,
+compiler-consumer inputs, command options, and source/binary hashes. Inspect later
 scheduled IR when buffering/flags are the question. Collect product-correct
-profiler evidence through `remote-access` or the supplied benchmark interface.
+profiler evidence from the configured workload environment.
 A qualified instruction trace can relate activity to emitted instructions;
 activity alone proves neither source attribution nor capacity saturation.
 Keep A3 simulation separate from A5 hardware timelines. This escalation is not
 a mandatory compiler-dump gate for every optimization.
-
-The probe's `--contract` output uses `constructs[]`; every identifier is an
-independent lookup key for this inventory. Do not join several constructs into
-an unreviewed composite attribution.
 
 Do not transfer an A3 result to A2 or A5. The current inventory has live A3
 scope; A2 and A5 queries deliberately return `unknown` until pinned compiler

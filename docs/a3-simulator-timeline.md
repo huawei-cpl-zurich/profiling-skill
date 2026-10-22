@@ -80,7 +80,7 @@ The worker deliberately does not generate or guess these configurations.
 
 ## Retained trace interpretation
 
-`scripts/summarize_a3_simulator.py --report RETAINED_ROOT/report --kernel-name EXACT_NAME`
+`skills/ascend-profiling/scripts/summarize_a3_simulator.py --report RETAINED_ROOT/report --kernel-name EXACT_NAME`
 analyzes retained `OPPROF_*/simulator/trace.json` files **in place** and prints
 compact JSON. Run through the global remote-access client and a named runtime.
 No fresh profiling workload is dispatched by this reader.

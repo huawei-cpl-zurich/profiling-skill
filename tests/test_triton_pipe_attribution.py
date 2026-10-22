@@ -8,8 +8,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-SCRIPT = ROOT / "scripts" / "query_triton_pipe_attribution.py"
-DATA = ROOT / "references" / "triton-pipe-attribution.json"
+SCRIPT = ROOT / "skills/ascend-profiling/scripts" / "query_triton_pipe_attribution.py"
+DATA = ROOT / "skills/ascend-profiling/references" / "triton-pipe-attribution.json"
 PROBE = ROOT / "benchmarks" / "triton_pipe_probe.py"
 
 
@@ -57,7 +57,8 @@ def test_direct_copy_lookup_preserves_compiler_provenance_and_scope():
         "triton_ascend": "23ac2717c0a38ba962cbd4a0425fc069e7ae104d",
     }
     assert result["citations"]
-    assert all(item.startswith("ref://") for item in result["citations"])
+    assert all(item.startswith("AscendNPU-IR@" + result["compiler_revisions"]["ascendnpuir"] + ":")
+               for item in result["citations"])
 
 
 def test_all_source_proven_direct_mappings_are_queryable():

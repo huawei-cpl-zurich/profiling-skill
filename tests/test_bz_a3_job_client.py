@@ -129,7 +129,7 @@ def client(tmp_path: Path, transport, placements=None, interrupt_marker=None):
     return module, module.BzA3JobClient(
         transport or FakeTransport(module), tmp_path / "state", placements,
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/srv/profiling-skill-production",
         interrupt_after_dispatch=interrupt_marker,
@@ -306,7 +306,7 @@ def test_resolved_placement_change_does_not_reuse_request_state(
     original = module.BzA3JobClient(
         original_transport, state, {"0": {"target": "bz-a3-1", "device": 2}},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/srv/profiling-skill-production",
     ).run(job)
@@ -314,7 +314,7 @@ def test_resolved_placement_change_does_not_reuse_request_state(
     changed = module.BzA3JobClient(
         changed_transport, state, {"0": placement},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/srv/profiling-skill-production",
     ).run(job)
@@ -638,7 +638,7 @@ def test_placement_and_profile_contract_are_validated_before_transport(tmp_path:
             module.BzA3JobClient(
                 transport, tmp_path / f"state-{index}", placements,
                 runner=ROOT / "scripts/a3_benchmark_runner.py",
-                profiler=ROOT / "scripts/profile_a3.py",
+                profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
                 batch_profiler=ROOT / "scripts/batch_profile_a3.py",
                 remote_root="/srv/profiling-skill-production",
             )
@@ -714,7 +714,7 @@ def test_configured_remote_root_owns_staging_runs_and_evidence(tmp_path: Path):
     subject = module.BzA3JobClient(
         transport, tmp_path / "state", {"0": {"target": "bz-a3-2", "device": 3}},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root=remote_root,
     )
@@ -742,7 +742,7 @@ def test_unsafe_remote_root_is_rejected_before_transport(
             transport, tmp_path / "state",
             {"0": {"target": "bz-a3-2", "device": 3}},
             runner=ROOT / "scripts/a3_benchmark_runner.py",
-            profiler=ROOT / "scripts/profile_a3.py",
+            profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
             batch_profiler=ROOT / "scripts/batch_profile_a3.py",
             remote_root=remote_root,
         )
@@ -753,7 +753,7 @@ def production_client(module, transport, state: Path, remote_root: str):
     return module.BzA3JobClient(
         transport, state, {"0": {"target": "bz-a3-2", "device": 3}},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root=remote_root,
     )
@@ -943,7 +943,7 @@ def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
     subject = module.BzA3JobClient(
         transport, tmp_path / "state", {"2": {"target": "bz-a3-1", "device": 5}},
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/srv/profiling-skill-production",
     )
@@ -1087,7 +1087,7 @@ def test_global_transport_hash_pins_skill_client_and_recovers_same_handle(
     subject = module.BzA3JobClient(
         transport, tmp_path / "state", placements,
         runner=ROOT / "scripts/a3_benchmark_runner.py",
-        profiler=ROOT / "scripts/profile_a3.py",
+        profiler=ROOT / "skills/ascend-profiling/scripts/profile_a3.py",
         batch_profiler=ROOT / "scripts/batch_profile_a3.py",
         remote_root="/srv/profiling-skill-production",
     )

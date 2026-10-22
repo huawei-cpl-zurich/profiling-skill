@@ -67,7 +67,7 @@ class PilotTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.source = self.root / 'source'
         self.source.mkdir()
-        for relative in [*('scripts/' + name for name in pilot.HELPERS), *pilot.GUIDANCE,
+        for relative in [*('scripts/' + name for name in pilot.HELPERS), *(str(pilot.SKILL_ROOT / name) for name in pilot.GUIDANCE),
                          'benchmarks/blind_before_tasks.py',
                          'benchmarks/natural_before_tasks.py',
                          'benchmarks/natural_task_support/runner.py',
@@ -83,6 +83,7 @@ class PilotTests(unittest.TestCase):
         (self.source / 'benchmarks/natural_before_tasks.py').write_text(
             EXPORTER.replace('starting kernel', 'natural starting kernel'))
         # These source-only answers must not enter the guidance snapshot.
+        (self.source / 'references').mkdir()
         (self.source / 'references/answers.json').write_text('private')
         self.output = self.root / 'cohort'
         self.model = dict(name='explicit-model', reasoning_effort='high')
@@ -162,7 +163,7 @@ class PilotTests(unittest.TestCase):
         self.assertFalse((self.output / 'started.json').exists())
 
     def test_missing_source_can_be_repaired_without_reserving_output(self):
-        for relative in ('scripts/profile_device.py', 'references/a2-a3-msprof-op.md',
+        for relative in ('scripts/profile_device.py', 'skills/ascend-profiling/references/a2-a3-msprof-op.md',
                          'benchmarks/blind_task_support/runner.py'):
             with self.subTest(source=relative):
                 original = self.source / relative

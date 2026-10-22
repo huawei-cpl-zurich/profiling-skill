@@ -17,8 +17,8 @@ variation of per-core cycles. `SAMPLE_PMU_SUMMARY` is supporting evidence.
 Samples have no source-stage identity and no per-sample pipe counters.
 
 The A5 CLI sample rate is at most 100 Hz. A microsecond kernel therefore needs
-a long repeated correctness-checked burst (the validated FA campaign used
-20,000 launches). Sample-mode duration is diagnostic, not the retention gate.
+a long repeated correctness-checked burst spanning multiple sample intervals.
+Sample-mode duration is diagnostic, not an ordinary timing baseline.
 
 ### PipeTimeline
 

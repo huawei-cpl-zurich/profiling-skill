@@ -15,6 +15,9 @@ import a3_memory_batch as base
 from a3_controlled_memory_batch import checked_output, checkpoint, memory_capture, probe, save
 from a3_native_build import build
 from a3_profile_sync import cases, command
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills/ascend-profiling/scripts"))
+
 from summarize_a3_simulator import parse_trace
 
 

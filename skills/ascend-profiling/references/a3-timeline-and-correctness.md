@@ -6,7 +6,7 @@ optimization. None replaces the benchmark's ordinary device timing.
 
 ## Compiler evidence
 
-Use `$mlir-triton-dump` to retain compiler invocations, target/options, source
+Retain compiler invocations, target/options, source
 and artifact hashes, and relevant stages. TTIR and adapter IR can establish
 loops, copies, scalar extraction or masks at those stages; final buffering,
 flags and scheduling may appear only later. Inspect the stage that can answer
@@ -33,7 +33,7 @@ provide source phases or capacity evidence.
 
 For Triton, use an explicitly supported simulator route from the installed
 tool/compiler documentation. Resolve the observed SoC and its matching
-simulator library through the execution profile. Keep that setup local to
+simulator library from the installed product-compatible toolchain. Keep that setup local to
 the capture, not shared runtime configuration. Never borrow A5 `PipeTimeline`
 or per-pipe `InstrTimeline` semantics for A3.
 

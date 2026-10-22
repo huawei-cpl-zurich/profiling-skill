@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,13 @@ SUPPORTED_PRODUCTS = {"a2", "a3", "a5"}
 
 class InvalidInventory(ValueError):
     pass
+
+
+def valid_citation(value: str) -> bool:
+    # Retain compatibility with caller-supplied broker inventories while the
+    # bundled inventory uses independently readable source coordinates.
+    return value.startswith("ref://") or bool(re.fullmatch(
+        r"[A-Za-z0-9_-]+@[0-9a-f]{40}:[^\s]+:L[0-9]+-L[0-9]+", value))
 
 
 def require_string(value: Any, location: str) -> str:
@@ -79,8 +87,8 @@ def validate_inventory(raw: Any) -> dict[str, Any]:
             raise InvalidInventory(f"lowering_path[{index}].status must be direct")
         require_string(step.get("summary"), f"lowering_path[{index}].summary")
         citation = require_string(step.get("citation"), f"lowering_path[{index}].citation")
-        if not citation.startswith("ref://"):
-            raise InvalidInventory(f"lowering_path[{index}].citation must be ref://")
+        if not valid_citation(citation):
+            raise InvalidInventory(f"lowering_path[{index}].citation must identify a source revision or use ref://")
 
     mappings = raw.get("mappings")
     if not isinstance(mappings, list) or not mappings:
@@ -100,8 +108,8 @@ def validate_inventory(raw: Any) -> dict[str, Any]:
         if any(product not in SUPPORTED_PRODUCTS for product in products):
             raise InvalidInventory(f"mapping {construct!r} has invalid product")
         citations = require_strings(mapping.get("citations"), f"mapping {construct!r}.citations")
-        if any(not citation.startswith("ref://") for citation in citations):
-            raise InvalidInventory(f"mapping {construct!r} citations must be ref://")
+        if any(not valid_citation(citation) for citation in citations):
+            raise InvalidInventory(f"mapping {construct!r} citations must identify a source revision or use ref://")
         if status == "unknown":
             if mapping.get("compiler_pipe") is not None or mapping.get("profiler_pipe") is not None:
                 raise InvalidInventory(f"mapping {construct!r}: unknown mapping must not name a pipe")

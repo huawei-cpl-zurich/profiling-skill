@@ -13,12 +13,10 @@ import time
 
 HELPERS = ('blind_optimization_launcher.py', 'production_launcher.py',
            'blind_optimization_tools.py', 'profile_device.py', 'a3_memory_batch.py')
-GUIDANCE = ('SKILL.md', *('references/' + name for name in (
-    'triton-pipe-attribution.md', 'a2-a3-msprof-op.md', 'a3-performance-reasoning.md',
-    'acquisition-workflow.md', 'a3-timeline-and-correctness.md',
-    'triton-pipe-attribution.json', 'a3-pipe-activity-model.json',
-    'pipe-saturation-contract.md', 'a5-pipe-capacity-model.json',
-    'a5-metric-semantics.md', 'a5-timeline-semantics.md')))
+SKILL_ROOT = Path('skills/ascend-profiling')
+GUIDANCE = tuple(str(p.relative_to(Path(__file__).resolve().parents[1] / SKILL_ROOT))
+                 for p in sorted((Path(__file__).resolve().parents[1] / SKILL_ROOT).rglob('*'))
+                 if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc')
 WAVES = (((1, True), (2, False), (3, True)), ((1, False), (2, True), (3, False)),
          ((4, False), (5, True), (6, False)), ((4, True), (5, False), (6, True)))
 SUITES = {'original': ('blind_before_tasks.py', 'blind_task_support',
@@ -43,7 +41,7 @@ def prepare(source, output, model, forbidden, budget_seconds=600, task_suite='or
                for key in ('name', 'reasoning_effort')):
         raise ValueError('explicit model name and reasoning_effort required')
     snapshots = [(source / 'scripts' / name, output / 'runtime' / name) for name in HELPERS]
-    snapshots += [(source / name, output / 'skill' / name) for name in GUIDANCE]
+    snapshots += [(source / SKILL_ROOT / name, output / 'skill' / name) for name in GUIDANCE]
     exporter_name, support, protocol = SUITES[task_suite]
     snapshots += [(source / 'benchmarks' / name, output / 'exporter' / name) for name in (
         exporter_name, support + '/runner.py', 'blind_task_support/native_host.asc')]

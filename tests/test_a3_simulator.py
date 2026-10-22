@@ -10,7 +10,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("simulator", ROOT / "scripts/summarize_a3_simulator.py")
+SPEC = importlib.util.spec_from_file_location("simulator", ROOT / "skills/ascend-profiling/scripts/summarize_a3_simulator.py")
 sim = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(sim)
 FIXTURE = ROOT / "tests/fixtures/a3-simulator-excerpts.json"

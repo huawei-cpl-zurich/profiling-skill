@@ -96,7 +96,7 @@ def main() -> int:
         client = BzA5JobClient(
             A5GlobalCplRemoteTransport(args.cpl_remote_sha256, args.remote_root),
             args.state_dir, placements,
-            runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
+            runner=here / "a3_benchmark_runner.py", profiler=here.parent / "skills/ascend-profiling/scripts/profile_a3.py",
             batch_profiler=here / "batch_profile_a3.py", remote_root=args.remote_root,
             interrupt_after_dispatch=args.canary_interrupt_after_dispatch_once,
         )

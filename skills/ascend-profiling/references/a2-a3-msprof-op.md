@@ -3,18 +3,13 @@
 This guide applies only to Ascend A2/A3. Do not import A5/V6 event IDs,
 ceilings, bandwidth multipliers, `PipeTimeline`, or per-pipe `InstrTimeline`
 semantics. The source-backed definitions below come from
-`Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb` through
-`ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics`.
+`Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb`.
 
-For live control acquisition in an ordinary checkout, use
-`scripts/acquire_profile.py` as described in
-[Two-pass live profile acquisition](acquisition-workflow.md). It owns the
-deployed profiler flags, named runtime, device environment, and retained
-transport lifecycle. `scripts/profile_a3.py` is the lower-level primitive for
-code already running inside a managed A3 job. A supplied target-aware benchmark
-interface can own the same discovery/selection workflow instead. In either route, the workload
-and profiler see logical device 0; do not pass a host physical ID to Triton
-code.
+Read [Two-pass acquisition](acquisition-workflow.md) for discovery and exact
+selection. `scripts/profile_a3.py` runs directly in the configured workload
+environment; profiler and application must agree on device addressing. The helper
+preserves an inherited `ASCEND_RT_VISIBLE_DEVICES` value and defaults it to `0`
+when unset. Set the workload's intended visibility explicitly before running it.
 
 The helper runs one bounded `BasicInfo` capture and writes:
 
@@ -23,31 +18,29 @@ The helper runs one bounded `BasicInfo` capture and writes:
 - `evidence.json`: compact, deterministic latency evidence also printed as one
   JSON line.
 
-Example inside the managed job:
+Example from the skill folder:
 
 ```bash
 python scripts/profile_a3.py \
-  --output artifacts/profile/round-1-case-47 \
+  --output /absolute/evidence/timing \
   --kernel-name '<exact exported kernel>' \
   --warm-up 3 --launch-count 1 -- \
-  python benchmark_case.py --case 47
+  python /absolute/workload.py
 ```
 
 `--replay-mode` accepts exactly `kernel` or `application` and defaults to
-`kernel`. Use `application` for BSA, where large cases can fail before capture
-when kernel replay cannot create its memory snapshot:
+`kernel`. Use `application` when kernel replay cannot create its required memory snapshot:
 
 ```bash
 python scripts/profile_a3.py \
-  --output artifacts/profile/bsa-case-47 \
+  --output /absolute/evidence/application-timing \
   --kernel-name '<exact exported kernel>' \
   --replay-mode application --warm-up 3 --launch-count 1 -- \
-  python benchmark_case.py --case 47
+  python /absolute/workload.py
 ```
 
 The compact evidence records the actual mode in `protocol.replay_mode`.
-Managed batch evidence also binds `replay_mode` at the result and capture
-levels; evidence with a mode different from the frozen job is invalid.
+Do not combine samples captured with different replay modes.
 
 For performance measurements, `--kernel-name` is required: an unfiltered
 capture may select the first framework setup operator rather than the Triton
@@ -124,7 +117,7 @@ single-launch replays (`--launch-count=1`) with the same exact kernel selector.
 Each replay's `OpBasicInfo` must contain exactly one total row, and that row
 must exactly match the selector. Repeated launches and multi-operator exports
 are rejected rather than ambiguously associated. Keep the vendor report
-remotely and pass only its compact exported CSVs to:
+at its capture location and pass its exported CSVs to:
 
 ```bash
 python3 scripts/normalize_a3_pipe_evidence.py \
@@ -132,10 +125,10 @@ python3 scripts/normalize_a3_pipe_evidence.py \
   --activity-model references/a3-pipe-activity-model.json \
   --basic-info PipeCapture/OpBasicInfo.csv \
   --pipe-utilization PipeCapture/PipeUtilization.csv \
-  --capture-id '<pipe replay durable handle>' \
+  --capture-id '<unique pipe capture ID>' \
   --memory-access MemoryCapture/Memory.csv \
   --memory-basic-info MemoryCapture/OpBasicInfo.csv \
-  --memory-capture-id '<distinct memory replay durable handle>' \
+  --memory-capture-id '<distinct memory capture ID>' \
   --kernel-name '<exact exported kernel>' \
   --launch-count 1 \
   --output activity-evidence.json

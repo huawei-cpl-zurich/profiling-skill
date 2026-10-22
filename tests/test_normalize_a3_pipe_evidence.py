@@ -11,8 +11,8 @@ import pytest
 
 
 ROOT = Path(__file__).parents[1]
-NORMALIZER = ROOT / "scripts" / "normalize_a3_pipe_evidence.py"
-MODEL = ROOT / "references" / "a3-pipe-activity-model.json"
+NORMALIZER = ROOT / "skills/ascend-profiling/scripts" / "normalize_a3_pipe_evidence.py"
+MODEL = ROOT / "skills/ascend-profiling/references" / "a3-pipe-activity-model.json"
 
 
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:

@@ -3,7 +3,7 @@
   "product": "a5",
   "provenance": {
     "revision": "Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb",
-    "source": "ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics"
+    "source": "Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb"
   },
   "resources": [
     {

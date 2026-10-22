@@ -15,6 +15,8 @@ are not portable.
   product and requested metric. Check `msprof op --help` for installed syntax.
 - A compatible Ascend runtime, driver, and accessible device are configured.
   The workload's compiler/framework dependencies must already be installed.
+  The bundled paired examples additionally require Torch, Torch-NPU, and
+  compatible Triton-Ascend; `--manifest` works without these device packages.
 - A runnable workload checks correctness and returns nonzero on failure. Know
   its inputs, kernel implementation, device selection, and timing contract.
 - The included `profile_a3.py` capture helper preserves an existing
@@ -56,7 +58,15 @@ replay when memory snapshot requirements prevent kernel replay, recording the
 choice consistently.
 
 Read [performance reasoning](references/a3-performance-reasoning.md) when
-choosing hypotheses or interpreting activity. Normalize single-launch pipe
+choosing hypotheses or interpreting activity; it covers common data paths,
+store routing, scalarized accesses and the next measurement to choose. Read the
+[field glossary](references/a2-a3-msprof-op.md#field-glossary-and-calculations)
+for row/cycle/time calculations and wait/stall diagnosis. Read
+[generated synchronization](references/a3-synchronization-inspection.md) when
+a buffering or handoff explanation depends on late compiler IR, and
+[performance envelopes](references/a3-performance-envelope.md) to quantify a
+shape-matched gap. Use the [paired examples](references/a3-paired-examples.md)
+for runnable copy, gather and matrix comparisons. Normalize single-launch pipe
 exports with `scripts/normalize_a3_pipe_evidence.py` and
 `references/a3-pipe-activity-model.json`. Block/sub-block rows are non-temporal
 activity observations, not phases or capacity evidence. High activity does not

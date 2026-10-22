@@ -224,3 +224,36 @@ def test_rejects_bad_ratio_and_preserves_sub_nanosecond_duration(tmp_path: Path)
         "reported_duration_us": "0.0005", "resolution_ns": 1,
         "rounding": "ceiling",
     }
+
+
+def test_available_row_diagnostics_preserve_values_units_and_missingness(tmp_path):
+    run = run_normalizer(tmp_path, [aic_row(**{
+        'aic_scalar_time(us)': '1.25',
+        'aic_scalar_wait_time(us)': '0',
+        'aic_scalar_wait_id7_time(us)': 'NA',
+        'aic_scalar_mte2_stall_time(us)': '0.375',
+        'aic_scalar_wait_ib_time(us)': '',
+        'aic_fixpipe_active_bw(GB/s)': '14.5',
+        'aic_icache_miss_rate': '0.01',
+        'aiv_scalar_wait_time(us)': 'NA',
+    })])
+    assert run.returncode == 0, run.stderr
+    row = json.loads(run.stdout)['observations'][0]
+    reported = row['reported_metrics']
+    assert reported['aic_scalar_time(us)'] == dict(value=1.25, raw_value='1.25', unit='us')
+    assert reported['aic_scalar_wait_time(us)']['value'] == 0
+    assert reported['aic_scalar_wait_id7_time(us)']['value'] is None
+    assert reported['aic_scalar_wait_ib_time(us)']['value'] is None
+    assert reported['aic_scalar_mte2_stall_time(us)']['value'] == 0.375
+    assert reported['aic_fixpipe_active_bw(GB/s)']['unit'] == 'GB/s'
+    assert reported['aic_icache_miss_rate']['unit'] is None
+    assert 'aic_scalar_wait_id0_time(us)' not in reported
+    assert 'aiv_scalar_wait_time(us)' not in reported
+    assert row['saturation']['state'] == 'unknown'
+
+
+@pytest.mark.parametrize('value', ['broken', 'inf', '-inf'])
+def test_invalid_available_diagnostic_is_rejected(tmp_path, value):
+    run = run_normalizer(tmp_path, [aiv_row(**{'aiv_scalar_stall_by_ub_time(us)': value})])
+    assert run.returncode != 0
+    assert 'aiv_scalar_stall_by_ub_time(us)' in run.stderr

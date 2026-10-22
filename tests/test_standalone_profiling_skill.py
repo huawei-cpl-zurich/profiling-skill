@@ -52,6 +52,23 @@ print('Profiling running finished. All task success.')
         '--evidence', str(capacity)], cwd=work, env=env, text=True,
         capture_output=True, check=True)
     assert json.loads(analyzed.stdout)['phases'][0]['resources'][0]['state'] == 'saturated'
+    basic = work / 'OpBasicInfo.csv'
+    pipe = work / 'PipeUtilization.csv'
+    basic.write_text('Op Name,Task Duration(us)\nexample_kernel,10\n')
+    pipe.write_text('block_id,sub_block_id,aiv_time(us),aiv_mte2_ratio,aiv_scalar_wait_time(us)\n'
+                    '0,vector0,10,0.6,2\n')
+    normalized = subprocess.run([sys.executable, '-I',
+        str(installed / 'scripts/normalize_a3_pipe_evidence.py'), '--product', 'a3',
+        '--activity-model', str(installed / 'references/a3-pipe-activity-model.json'),
+        '--basic-info', str(basic), '--pipe-utilization', str(pipe),
+        '--capture-id', 'isolated-pipe', '--kernel-name', 'example_kernel'],
+        cwd=work, env=env, text=True, capture_output=True, check=True)
+    observation = json.loads(normalized.stdout)['observations'][0]
+    assert observation['reported_metrics']['aiv_scalar_wait_time(us)']['value'] == 2
+    manifest = subprocess.run([sys.executable, '-I',
+        str(installed / 'examples/a3_paired_probes.py'), '--manifest'],
+        cwd=work, env=env, text=True, capture_output=True, check=True)
+    assert len(json.loads(manifest.stdout)) == 6
     for script in (installed / 'scripts').glob('*.py'):
         result = subprocess.run([sys.executable, '-I', str(script), '--help'],
                                 cwd=work, env=env, capture_output=True, text=True)

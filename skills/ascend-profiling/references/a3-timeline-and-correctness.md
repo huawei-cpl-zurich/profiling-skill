@@ -23,6 +23,10 @@ Compile-only inspection need not execute an old kernel: preserve that boundary
 when asked for retrospective analysis. Do not silently turn inspection into
 another runtime or profiling campaign.
 
+For a concrete late-IR search and annotated producer/consumer examples, read
+[generated synchronization](a3-synchronization-inspection.md). It covers
+intra-core flags, cross-core handoffs, macro-internal waits and buffer reuse.
+
 ## A3 simulated timelines are not A5 hardware timelines
 
 The automatic A3 `TimelineDetail` instruction route involves context/argument

@@ -30,3 +30,19 @@ Key original locations: `SKILL.md:38` (campaign entrypoint), `SKILL.md:104`
 
 No unresolved project-specific wording is intentionally required by the
 standalone skill. Benchmark and infrastructure material remains repository-only.
+
+## A3 interpretation follow-up
+
+The standalone A3 material now expands former shorthand (“applicable outbound
+DMA”, “wait-like metrics”, and “inspect later IR”) into explicit source-backed
+routes, exported fields, calculations, diagnosis tables and late-stage search
+instructions. Separate references distinguish an architectural lower bound from
+a shape-matched measured envelope and show three generic paired controls.
+
+New public field authority: Ascend/msopprof
+`a52c8694979016be703006ec242901519bef31d8`, A2/A3 PipeUtilization and
+ResourceConflictRatio sections. Current official compiler auto-sync and
+multi-buffer guides are version-dependent descriptions; the older pinned
+AscendNPU-IR operation definitions remain identified separately. The guides do
+not assume that a compiler option guarantees overlap or that static wait counts
+measure dynamic stall time.

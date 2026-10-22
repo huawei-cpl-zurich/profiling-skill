@@ -164,3 +164,120 @@ Sampled usage is based on task cycles divided by frequency times elapsed
 interval, so use it to locate active and inactive intervals only when the
 capture provides those inputs. It does not change the fail-closed saturation
 result.
+
+## Field glossary and calculations
+
+The following names are the A2/A3 section of the
+[official profiler field reference](https://github.com/Ascend/msopprof/blob/a52c8694979016be703006ec242901519bef31d8/docs/en/user_guide/msopprof_performance_data.md#pipeutilization-execution-time-and-ratios-of-compute-units-and-mtes).
+The source revision is `a52c8694979016be703006ec242901519bef31d8`. Installed
+versions can omit fields, especially event-ID waits and instrumented bandwidth.
+`ai*` below expands to `aic` or `aiv`; `id*` spans `id0` through `id15`.
+The wildcard is explanatory, never a literal CSV column or a physical-device ID.
+
+| Field family | Unit and scope | Use |
+| --- | --- | --- |
+| `block_id`, `sub_block_id` | Exported task-block and core/sub-core identifiers | Join only exact keys within validated matching reports; do not interpret an identifier as a timestamp. |
+| `aic_time(us)`, `aiv_time(us)` | Per-Cube/per-Vector unit's allocated-task window, μs | Row denominator; not the separately captured kernel latency or sum over cores. |
+| `aic_total_cycles`, `aiv_total_cycles` | Cycles in that unit's task window | Ratio denominator and time/cycle consistency check. |
+| `aic_cube_time(us)`, `aic_cube_ratio` | Cube instruction time and active-cycle fraction | Arithmetic activity, not achieved FLOP/s or percentage of theoretical FLOP capacity. |
+| `aiv_vec_time(us)`, `aiv_vec_ratio` | Vector instruction time and active-cycle fraction | Arithmetic, conversion and applicable local-copy activity. |
+| `ai*_scalar_time(us)`, `ai*_scalar_ratio` | Scalar instruction time and active-cycle fraction | Address/control/scalarized work; use the subcategories below to investigate. |
+| `ai*_scalar_single_time(us)`, `ai*_scalar_dual_time(us)` | Single-issue and dual-issue time | Compare instruction issuance modes; neither alone is an instruction count. |
+| `aic_mte1_time(us)`, `aic_mte1_ratio` | L1→L0A/B transfer time/fraction | The documented time excludes transfer waiting; inspect MTE1 waits separately. |
+| `ai*_mte2_time(us)`, `ai*_mte2_ratio` | Input-transfer time/fraction | Confirm path and transfer shape; fractions are not bandwidth. |
+| `ai*_mte3_time(us)`, `ai*_mte3_ratio` | Outbound-transfer time/fraction | Includes applicable output instructions, not every source-level store. |
+| `aic_fixpipe_time(us)`, `aic_fixpipe_ratio` | L0C→GM/L1 movement/conversion time/fraction | Diagnose matrix-result output independently from MTE3. |
+| `ai*_scalar_wait_time(us)` | Intra-core scalar wait blocking, μs | Event wait category, not all synchronization or all idle time. |
+| `ai*_scalar_wait_id0_time(us)` … `ai*_scalar_wait_id15_time(us)` | Inter-core wait-ID blocking, μs | Only emitted when available; correlate IDs with bound generated sync, not guessed source phases. |
+| `aic_scalar_mte1_stall_time(us)`, `ai*_scalar_mte2_stall_time(us)`, `ai*_scalar_mte3_stall_time(us)` | Scalar blocked by the named full instruction queue, μs | Backpressure while issuing movement work; distinct from an explicit wait instruction. |
+| `aic_scalar_cube_stall_time(us)`, `aiv_scalar_vector_stall_time(us)` | Scalar blocked by Cube/Vector instruction queues, μs | Producer issue rate versus consumer progress; high values can accompany useful busy compute. |
+| `ai*_scalar_wait_ib_time(us)` | Scalar instruction-buffer/iCache wait, μs | Investigate code size, fetch path and control flow, rather than automatically adding data buffers. |
+| `aiv_scalar_stall_by_ub_time(us)` | Scalar blockage associated with UB, μs | A symptom requiring UB conflict/dependency evidence; not an automatic proof of a bank conflict. |
+| `ai*_icache_miss_rate` | Exported iCache rate; retain installation's scale | Compare with IB waiting; do not assume an unlabeled rate is a percentage. |
+| `aic_mte3_active_bw(GB/s)`, `aiv_mte3_active_bw(GB/s)` | Bytes per active outbound-transfer time, decimal GB/s | Different denominator from whole-task useful-byte bandwidth. |
+| `aic_fixpipe_active_bw(GB/s)`, `aiv_mte2_active_bw(GB/s)` | Active FIXPIPE/input-transfer bandwidth, decimal GB/s | Preserve path/core scope and the profiler's traffic definition. |
+| `aic_mte1_active_bw(GB/s)`, `aic_mte2_active_bw(GB/s)` | Instrumented active bandwidth for matrix-input channels | A2/A3 availability requires `MemoryDetail` dynamic instrumentation; do not assume ordinary PipeUtilization contains them. |
+
+The normalizer preserves available row-local fields in optional
+`observations[].reported_metrics`, keyed by the **original CSV column name**.
+Each entry has numeric `value`, exact trimmed `raw_value`, and `unit` (`us`,
+`cycles`, `fraction`, `GB/s`, or `null` for an unlabeled unknown scale).
+A present empty/NA field has `value: null`; an absent column has no entry.
+Counterpart AIC/AIV columns are not copied into the wrong engine's observation.
+Existing `activity`, `metrics`, and unknown-saturation outputs are unchanged.
+There is no conversion of active bandwidth into capacity classification.
+
+### Worked arithmetic: one row, one capture
+
+This is an illustrative calculation, not a measured result. Suppose one AIV row
+has `aiv_time(us)=10`, `aiv_total_cycles=18000`,
+`aiv_mte2_ratio=0.6`, `aiv_mte2_time(us)=6`, and
+`aiv_scalar_wait_time(us)=2`.
+
+- Counted MTE2 active cycles = `0.6 × 18000 = 10800`. At a consistent
+  `18000 / 10 = 1800 cycles/μs`, that corresponds to `6 μs`.
+- The intra-core scalar-wait fraction of this task window is `2 / 10 = 0.2`.
+  This derived fraction has that narrow meaning; it is not 20% of every pipe's
+  idle time or a guaranteed removable 2 μs critical-path cost.
+- If the same transfer moves a validated `600000` bytes in those `6 μs`, its
+  active bandwidth is `600000 / (6 × 1000) = 100 GB/s`. Across the whole
+  `10 μs` task window it is `60 GB/s`. Calling both numbers “bandwidth” without
+  the denominator hides the gap.
+
+For any ratio `r`, `r × total_cycles` estimates the counted cycles when the
+ratio definition uses that denominator. `cycles / frequency_Hz × 10^6` converts
+to microseconds only with the corresponding observed frequency. Rounded CSV
+times/fractions can disagree slightly; frequency changes and differing event
+scopes require investigation, not silent correction. Do not reconstruct a
+missing authoritative time from unrelated captures.
+
+A row can have Cube 70%, MTE2 60% and scalar 40% because resources overlap.
+The sum is not 170% device utilization, and `100% − sum` is not idle time.
+Scalar subcategory times are not promised to partition scalar or task time;
+do not add them into a critical-path budget.
+
+## Diagnose waits and stalls
+
+First retain all available categories with their core/row and capture. Compare
+absolute microseconds alongside fractions of the same row's task window; a
+smaller task can raise a wait fraction while reducing absolute wait time.
+An absent counter means unavailable, not zero. A reported zero describes only
+that event and coverage. A nonzero stall can overlap useful work elsewhere.
+
+| Observation | Competing explanation to test | Next measurement / candidate |
+| --- | --- | --- |
+| Intra-core `scalar_wait_time` is large | True producer→consumer dependency, or reuse of one buffer delaying the next iteration | Pair generated set/wait with the actual addresses and lifetime; inspect whether an independent buffer/iteration can overlap safely. |
+| One or more `scalar_wait_id*` fields are large | Cube/Vector handoff imbalance, flag reuse, or a slow producer | Identify the matching cross-core flag and both core types; compare producer movement/compute and consumer epilogue. Do not map `id7` to “core7” or a source phase without compiler evidence. |
+| MTE1/2/3 queue stalls are large | Movement pipe cannot accept issue as fast as scalar produces it | Compare named pipe active time, transfer sizes, strides, and active bandwidth where valid. Test coalescing/reuse/batching before blindly increasing unrolling. |
+| Cube/Vector queue stalls are large | Useful compute consumes the queue, or dependency/resource pressure prevents progress | Check compute workload and conflict metrics; reduce redundant operations or improve independent scheduling only after identifying which. |
+| IB wait / iCache miss is large | Large unrolled body, branch/loop path, instruction fetch pressure | Compare late code size and a smaller-unroll variant; extra buffers do not directly repair instruction fetch. |
+| UB stall is large | UB access conflict, dependency, or transfer interaction | Capture `ResourceConflictRatio`, inspect layout/stride and actual concurrent operations; change one layout/padding choice. |
+| Explicit waits are zero but latency falls after scheduling change | Queue stalls, macro-internal synchronization, critical startup/drain or another counter changed | Inspect full stall categories and late IR/macro operands; zero explicit wait is not evidence that buffering was irrelevant. |
+
+Capture `ResourceConflictRatio` separately with the exact selected kernel,
+launch count 1 and matching inputs/replay mode. Check support with installed
+`msprof op --help`:
+
+```bash
+msprof op --output=/absolute/evidence/conflicts \
+  --aic-metrics=ResourceConflictRatio --kernel-name='<exact exported kernel>' \
+  --warm-up=3 --launch-count=1 --application='python3 /absolute/workload.py'
+```
+
+The [official conflict field definitions](https://github.com/Ascend/msopprof/blob/a52c8694979016be703006ec242901519bef31d8/docs/en/user_guide/msopprof_performance_data.md#resourceconflictratio-resource-conflict-ratio)
+separate `aiv_vec_bankgroup_cflt_ratio` (stride/bank-group interaction),
+`aiv_vec_bank_cflt_ratio` (operand-address/bank interaction),
+`aiv_vec_resc_cflt_ratio` (execution-resource contention), and
+`aiv_vec_mte_cflt_ratio` (Vector/MTE interaction), with
+`aiv_vec_total_cflt_ratio` as broader conflict evidence. The remaining
+`aic_cube_wait_ratio`, `aiv_vec_wait_ratio`, `aic_mte1_wait_ratio`,
+`ai*_mte2_wait_ratio`, and `ai*_mte3_wait_ratio` describe blocked-instruction
+cycle ratios, not the scalar explicit-wait categories above. Preserve the
+source definition/denominator: do not equate all ratios to task-cycle fractions
+or add overlapping conflict ratios. A second replay cannot prove temporal
+alignment with the PipeUtilization replay.
+
+Changing padding/layout, transfer granularity, tile shape or buffering is a
+hypothesis. Recheck correctness, inspect whether the intended lowering changed,
+and compare independent BasicInfo samples; conflict reductions without timing
+improvement are diagnostic observations.

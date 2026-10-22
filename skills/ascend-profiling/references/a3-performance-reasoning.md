@@ -1,103 +1,111 @@
 # A3: connect code, execution and performance
 
-Use this guide to form explanations, not to select a predetermined rewrite.
-The observations motivating it are A3-specific; compiler versions and layouts
-can change the result. Separate architectural expectations, actual emitted
-operations, measured activity and unresolved hypotheses.
+Use this guide to choose a discriminating measurement, not a predetermined
+rewrite. Keep four layers separate: architectural path, emitted operation,
+reported counter, and observed effect on independently measured task latency.
+A3 observations do not establish A2 or A5 behavior.
 
-## Which resource can execute the work?
+## Follow addresses and instructions, not source load/store names
 
-| Resource | Architectural role and interpretation boundary |
-| --- | --- |
-| Scalar | Address calculations, loop/predicate/control instructions; scalarized indirect GM loads can also dominate. High scalar activity need not be arithmetic overhead. |
-| Vector | Vector arithmetic, conversions, masking and reductions; some local copies also use Vector. Scalar-looking source can introduce vector work. |
-| Cube | Matrix multiply/accumulate work. Confirm the lowered matrix operation or suitable runtime evidence; `tl.dot` is not a universal single-pipe guarantee. |
-| MTE1 | L1 to L0A/L0B matrix operand movement. Confirm actual address spaces and lowered copies. |
-| MTE2 | DMA input paths such as GM to L1/UB. A tensor `tl.load`, especially an indexed gather, need not become an efficient MTE2 transfer. |
-| MTE3 | Applicable outbound DMA paths, notably UB to GM. Not every store or matrix-result write is an MTE3 operation. |
-| FIXPIPE | Applicable matrix-result movement/conversion, including observed CC/L0C to GM lowering. Verify that path instead of attributing output to an incidental MTE3 field. |
+GM is global device memory, UB is Vector local storage, L1/cbuf stages matrix
+operands, L0A/L0B feed Cube, and L0C/CC holds matrix accumulators. `PIPE_M` names
+the matrix/Cube pipe in compiler IR; `PIPE_FIX` names result movement/conversion.
+A memory-space name describes storage, not automatically the executing pipe.
 
-These architectural roles do not update the pinned compiler inventory's
-`direct`/`inferred`/`unknown` statuses. The inventory documents particular
-reviewed operations, not every compiler version. See [compiler attribution](triton-pipe-attribution.md)
-and [export semantics](a2-a3-msprof-op.md) for those separate evidence layers.
+| Common operation / path | Expected resource | What to verify before attribution |
+| --- | --- | --- |
+| Contiguous GM → UB input | MTE2 | Lowered `load`/DMA addressing, transfer dimensions, valid slice and stride. An indirect source load can take a different path. |
+| GM → L1/cbuf matrix input, including ND→NZ packing | MTE2 | `nd2nz` or copy destination in cbuf; distinguish requested useful elements from packed/strided physical transfer. |
+| GM → L0A/L0B where the emitted instruction supports it | MTE2 | These channels are listed by A2/A3 MemoryDetail; do not assume the compiler bypasses L1 merely because the architecture exposes them. |
+| L1/cbuf → L0A/L0B operands | MTE1 | Address spaces and operand-copy/matrix macro expansion. `mmadL1` can include this movement internally. |
+| L0A × L0B → L0C/CC accumulation | Cube (`PIPE_M`) | Lowered matrix multiply, dtype and tile. A matrix macro may include several resources rather than one Cube instruction. |
+| L0C/CC → GM | FIXPIPE | `fixpipe`, conversion mode, layout, destination address and exact result dtype. A source `tl.store(dot(...))` need not use MTE3. |
+| L0C/CC → L1 | FIXPIPE | Same result-movement family with L1 destination, not an input MTE1 copy. |
+| UB → GM ordinary Vector output | MTE3 | Lowered `store`/copy, contiguous versus scalarized route, conversion and supported atomic mode. |
+| L1 → GM through NZ→ND conversion | MTE3 | `nz2nd` is a separate outbound conversion path; MTE3 is not limited to UB stores. |
+| UB → UB lowered `CopyOp` | Vector (`PIPE_V`) in the pinned mapping | Confirm it is the reviewed UB-to-UB CopyOp; local copies consume work even though they do not reach GM. |
+| Arithmetic, masks, conversions, reductions and other local layout operations | Vector for the pinned Vector base operation, with specialization-dependent exceptions | Inspect the actual operation: scalar-looking expressions can introduce Vector conversions or scalar loops; do not generalize a CopyOp mapping to every layout operation. |
+| Indexed GM reads lowered into per-element address/load loops | Scalar can dominate | Actual scalar loads, loop trip count, index movement and instruction path. Runtime identity indices do not make the compiled operation a contiguous DMA. |
+| Scalarized or irregular output writes | Emitted store instruction determines the resource | A source store is not a universal MTE3 assertion. Check scalar versus DMA writes, address space, supported scatter/atomic form and any intermediate UB/workspace conversion. |
+| Result conversion/activation/scale before final output | Vector and/or FIXPIPE plus movement | Follow the accumulator into UB/workspace and final destination. A fused epilogue can introduce cross-core handoff and several pipes. |
+| Flags, barriers and core handoffs | Synchronization, not a data-transfer pipe | Producer, consumer, event/flag, address and lifetime; naming MTE2 in a wait does not make the wait MTE2 activity. |
 
-## Activity, throughput and time answer different questions
+Pinned compiler evidence is AscendNPU-IR
+`af5499b3b9f3dbab50b2834bcfff5da5c2a1d920`:
+`bishengir/include/bishengir/Dialect/HIVM/IR/HIVMDMAOps.td:1–620` defines
+Load/MTE2, Store/MTE3, Fixpipe/FIX, ND2NZ/MTE2 and NZ2ND/MTE3;
+`HIVMMacroOps.td:1–300` defines compound matrix operations and sync operands.
+The [official multi-buffer guide](https://ascendnpu-ir.gitcode.com/en/developer_guide/features/multi_buffer.html)
+explains the corresponding L1, L0C, UB and workspace producer/consumer chains.
+These mappings supplement the narrower [query inventory](triton-pipe-attribution.md);
+they do not silently change its reviewed `direct`/`inferred`/`unknown` statuses.
 
-The useful objective is efficient useful work with avoidable stalls and gaps
-removed, not making an arbitrary utilization percentage large. A resource
-approaching a validated capacity can identify the next limit, but does not
-prove that the algorithm, traffic or layout is already optimal.
+## What did the profiler actually measure?
 
-- Pipe activity divides active cycles by a task/row window. It does not say
-  whether active transfers were efficient or peak bandwidth was reached.
-  Near-full MTE2 activity can coexist with very different latencies.
-- Compare absolute active time alongside fractions. A faster kernel may keep
-  the same dominant fraction, or increase it because total time shrank.
-- Keep matched core/sub-core rows separate from whole-device coverage. One
-  reported block is not necessarily representative or the critical block.
-- Pipe intervals can overlap. Do not sum active times into a latency
-  decomposition, or multiply a median ratio by an independently measured
-  median task time. Separate replays cannot establish simultaneous overlap.
-- A bandwidth claim needs validated bytes, units and its exact active-time or
-  whole-task denominator. Tiny intervals can yield misleadingly large active
-  bandwidth. Missing fields remain unavailable, not zero.
+Read [the field glossary and calculations](a2-a3-msprof-op.md#field-glossary-and-calculations)
+before deciding that a large fraction is a bottleneck. Compare the same
+block/sub-block/core type across candidates, retaining both absolute time and
+ratio. Cover all rows rather than choosing a convenient core. Rows with different
+start times have no common exported clock.
 
-Use ordinary timing to decide whether a change helped and instrumented
-evidence to explain why. A change in counters without a reliable timing
-change is a mechanism observation, not an established optimization gain.
+Activity answers “how much of this row's task-cycle window contained the counted
+work?” Capacity answers “how much validated useful work could that resource
+sustain?” They differ. High MTE2 activity with poor bytes per active microsecond
+suggests inefficient transfers; high scalar activity with low MTE2 can be an
+indirect-memory instruction path. A faster candidate can have a larger dominant
+fraction simply because its denominator shrank.
 
-## Source constructs can hide a different execution path
+Do not sum overlapping active times into a latency decomposition. Never multiply
+a ratio median from one replay by a latency median from another to manufacture
+active time. Use same-row exported times, with their capture identity. A scalar
+wait counter of zero rules out only that counted event in that capture; queue,
+inter-core, instruction-fetch and UB stalls are distinct. Follow the
+[wait/stall decision table](a2-a3-msprof-op.md#diagnose-waits-and-stalls), then
+inspect [generated synchronization](a3-synchronization-inspection.md).
 
-**Indirect loads:** a tensor gather can lower to copying indices followed by
-a scalar load loop. Runtime indices that happen to be contiguous do not
-necessarily enable a direct-copy lowering. High scalar activity with low MTE2
-activity can therefore be a memory problem. Consider locality, instruction
-path and access semantics separately; do not assume one universal remedy.
+## Source constructs can hide a different path
 
-**Masks:** placing a predicate on `tl.load` does not guarantee fewer physical
-bytes. A compiler may copy the valid contiguous slice, then apply vector masks.
-Lower MTE2 time alone cannot prove traffic reduction; additional indexing or
-vector work may outweigh it. Inspect emitted copies and masks if that
-distinction matters to the explanation.
+**Indirect accesses.** First establish whether the address is affine, a
+compile-time index or a runtime-loaded index. A gather can copy indices and then
+iterate scalar loads even when values happen to form an identity permutation.
+Compare a semantically equivalent affine implementation only when the index
+contract permits it. For genuinely arbitrary indices, test locality, index
+representation and coalescing rather than replacing them with assumed order.
 
-**Scalar decisions:** extracting a scalar or broadcasting a decision may add
-scalar/vector conversions, conditional work and cross-pipe set/wait
-dependencies. Scalar-looking source is not automatically cheaper. Correlate
-both scalar and vector costs, while preserving the same useful work.
+**Masks and sparse work.** A masked load can copy a contiguous valid slice and
+apply predicates afterward. Count useful bytes separately from transferred
+bytes. Sparse predicates do not establish sparse physical traffic. Moving
+predicates can add scalar loops, vector selection or output writes; inspect all
+those paths and check full correctness.
 
-**Scheduling knobs:** equal TTIR or adapter IR does not prove tuning options
-were inert. Buffer rotation and synchronization can appear later. Change
-knobs independently when attributing their effects; a combined change cannot
-identify each knob's contribution. Autotuning finds candidates; selected
-candidate profiling explains mechanisms without needing expensive profiling
-for every option.
+**Scalar decisions.** Scalar extraction/broadcast can add conversions and
+cross-pipe handoffs. High scalar activity is not necessarily a user-written loop,
+and unrolling can enlarge code and worsen instruction-fetch stalls. Locate the
+emitted loop before choosing a remedy.
 
-**Overlap:** source load/compute order does not prove independence or realized
-overlap. Runtime aliasing, live ranges and dependencies matter. A source-level
-phase label is not a source map or a common hardware clock.
+**Buffering and scheduling.** Equal early IR can lead to different buffer
+addresses, rotating flags and final scheduling. Compare compiler arguments and
+late memory/sync IR. More buffers permit overlap but increase local-memory
+footprint; changed static flag counts do not measure dynamic waiting. A compiler
+can fall back after resource pressure, so record what it emitted, not just the
+requested option.
 
-## Synchronization and small matrix work
+**Small matrix work.** Equal Cube time with different task latency points to
+movement, FIXPIPE/epilogue, setup, handoffs or scheduling as competing causes.
+A one-program matrix probe is not a device-wide capacity test. Use multiple
+matrix sizes and enough programs/K tiles before extrapolating to a steady state.
 
-Wait-like metrics have specific scopes. Zero `scalar_wait_time` does not mean
-zero synchronization overhead. Moving a wait can change latency or another
-stall field without changing that counter. Conversely, not every source wait
-change must cause a large stall change. Retain source intent separately from
-verified emitted flags and actual instruction timing; an undecodable binary
-does not establish machine-level placement.
+## Turn the gap into the next action
 
-Equal Cube-active time can coexist with different whole-kernel durations.
-For small matrix work, compare input movement, output/FIXPIPE, layout and
-scalar/setup costs before claiming different matrix arithmetic efficiency.
-Small one-program controls do not establish device-wide Cube saturation.
-Do not subtract overlapping pipe times to assign an exact overhead budget.
+Use [architectural and empirical envelopes](a3-performance-envelope.md) to name
+the limiting resource, the useful-work definition, and what remains unmeasured.
+A candidate near an empirical envelope can still improve by reducing bytes,
+reusing operands or changing the algorithm. A candidate far below it needs an
+explanation at the actual shape and dispatch scale, not an arbitrary utilization
+goal. [Paired examples](a3-paired-examples.md) show how to bind source changes,
+late IR, counters and ordinary timing without conflating them.
 
-## Make the conclusion falsifiable
-
-Record the candidate identity, shapes/layouts, exact selector, controlled
-change, predicted observable effect, actual timing and diagnostic results.
-Explain competing causes and the next discriminating observation when needed.
-Distinguish observed correlation from compiler-confirmed mechanism and from
-critical-path proof. Retain all declared samples and their dispersion; a noisy
-result may support a hypothesis but not a precise speedup. Do not blame a
-device merely because compilation, correctness or timings surprised you.
+Record a prediction before changing code: which counter/path should change and
+why should ordinary timing improve? If timing and counters disagree, retain the
+result, competing causes, and the next measurement. Correctness, profiler
+availability and speedup are separate outcomes.

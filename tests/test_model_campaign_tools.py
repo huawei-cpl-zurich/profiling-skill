@@ -189,11 +189,17 @@ def test_worker_probe_bound_and_remote_clock_skew(tmp_path, monkeypatch):
     (tmp_path / 'request.json').write_text(json.dumps(dict(operation='check',
         utc_deadline='2000-01-01T00:00:00+00:00', host_remaining_seconds=240,
         source_sha256='a' * 64)))
-    seen = []
-    def run(command, **kwargs):
-        seen.append(kwargs['timeout'])
-        return SimpleNamespace(returncode=0, stderr='')
-    monkeypatch.setattr(worker, 'bounded_run', run)
+    import os
+    seen, alarms = [], []
+    def load(name):
+        assert os.environ['ASCEND_RT_VISIBLE_DEVICES'] == '3'
+        seen.append(name)
+        return SimpleNamespace(npu=SimpleNamespace(set_device=lambda device: None,
+            synchronize=lambda: None), ones=lambda *args, **kwargs: None)
+    monkeypatch.setattr(worker.importlib, 'import_module', load)
+    monkeypatch.setattr(worker, 'bounded_run', lambda *args, **kwargs: pytest.fail('no child runtime initialization'))
+    monkeypatch.setattr(worker.signal, 'setitimer', lambda kind, value: alarms.append(value))
+    monkeypatch.setenv('ASCEND_RT_VISIBLE_DEVICES', 'previous')
     def acquire(probe):
         env = dict(ASCEND_RT_VISIBLE_DEVICES='3')
         assert probe(env)[0] is True
@@ -201,4 +207,5 @@ def test_worker_probe_bound_and_remote_clock_skew(tmp_path, monkeypatch):
     adapter = SimpleNamespace(check=lambda *args: dict(passed=True, variants=[0, 1]))
     result = worker.execute(tmp_path, adapter, acquire=acquire, monotonic=lambda: 0)
     assert result['state'] == 'completed' and result['physical_device'] == 3
-    assert seen == [180]
+    assert seen == ['torch', 'torch_npu']
+    assert alarms == [240, 180, 240, 0]

@@ -1,6 +1,7 @@
 """Trusted retained worker; task adapters and all evidence stay outside sandboxes."""
 from datetime import datetime, timezone
 import json
+import importlib
 import os
 from pathlib import Path
 import signal
@@ -41,10 +42,21 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic):
             summary.update(physical_device=int(env['ASCEND_RT_VISIBLE_DEVICES']), logical_device=0,
                            progress='runtime-probe')
             print('MODEL_STAGE=runtime-probe', flush=True)
-            result = bounded_run([sys.executable, '-c',
-                'import torch,torch_npu;torch.npu.set_device(0);torch.ones(1,device="npu");torch.npu.synchronize()'],
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=min(180., remaining()))
-            return result.returncode == 0, result.stderr[-2000:]
+            # Import once in the retained worker, after selecting its visibility.
+            # A subprocess probe pays the64s native import twice before any work.
+            # The selector aborts on a failed probe rather than switching devices
+            # inside a process with an initialized device runtime.
+            os.environ.update(env)
+            signal.setitimer(signal.ITIMER_REAL, min(180., remaining()) or .001)
+            try:
+                torch = importlib.import_module('torch')
+                importlib.import_module('torch_npu')
+                torch.npu.set_device(0)
+                torch.ones(1, device='npu')
+                torch.npu.synchronize()
+                return True, ''
+            finally:
+                signal.setitimer(signal.ITIMER_REAL, remaining() or .001)
         if acquire is None:
             from model_device import acquire as select
             physical, env, lease = select(probe, remaining)

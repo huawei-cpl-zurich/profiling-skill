@@ -183,3 +183,29 @@ for path in ('/analysis/extra.json', '/workspace/candidate.py', '/report-repair/
         assert json.loads((launcher.reports / 'analysis.json').read_text()) == dict(fixed=True)
     finally:
         launcher.socket_temporary.cleanup()
+
+
+def test_simultaneous_optional_citation_and_unsupported_diff_errors_are_both_reported(tmp_path):
+    launcher, raw, _ = fixture(tmp_path)
+    raw['optimizations'] = [dict(status='observed', description='Tile geometry changed', diff_lines=['+BLOCK_M=64'])]
+    save(launcher.reports / 'analysis.json', raw)
+    with pytest.raises(ValueError) as errors:
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
+    assert 'kernel/case' in str(errors.value) and 'diff_lines' in str(errors.value)
+    partial = copy.deepcopy(raw);partial['evidence'].pop()
+    save(launcher.reports / 'analysis.json', partial)
+    with pytest.raises(ValueError, match='diff_lines'):
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
+    save(launcher.reports / 'analysis.json', raw)
+    def run(*args):
+        feedback = json.loads((launcher.root / 'report-repair/feedback.json').read_text())
+        assert 'kernel/case' in feedback['error'] and 'diff_lines' in feedback['error']
+        assert not feedback['source_diff_available']
+        assert feedback['trusted_context']['status'] == 'first'
+        assert 'use none' in feedback['optimization_attribution']
+        corrected = copy.deepcopy(raw);corrected['evidence'].pop()
+        corrected['optimizations'] = [dict(status='none', description='No provided historical source diff')]
+        save(launcher.reports / 'analysis.json', corrected)
+        return success()
+    assert repair(launcher, success(), run, save, clock=lambda: 0)['report_repair']['valid']
+    assert json.loads((launcher.root / 'report-repair/initial-report.json').read_text()) == raw

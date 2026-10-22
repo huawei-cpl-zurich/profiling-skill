@@ -541,51 +541,60 @@ class Campaign:
         if snapshot_source.is_file() and digest(snapshot_source) != expected_source:
             raise ValueError('frozen analyzer candidate source changed')
         evidence_sha256 = {}
+        errors = []
         for evidence in report['evidence']:
-            original = phase / 'candidate-snapshot' / evidence['path']
-            retained = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
-            path = retained if retained.exists() else original
-            if not path.is_file() or path.is_symlink() or not original.is_file() \
-                    or digest(path) != digest(original):
-                raise ValueError('analysis cites missing evidence: ' + evidence['path'])
-            evidence_sha256[evidence['path']] = digest(path)
-            relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
-            original_summary = phase / 'candidate-snapshot' / relative_summary
-            retained_summary = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
-            summary_path = retained_summary if retained_summary.exists() else original_summary
-            if not summary_path.is_file() or summary_path.is_symlink() \
-                    or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
-                raise ValueError('citation lacks its authoritative call summary')
-            evidence_sha256[str(relative_summary)] = digest(summary_path)
-            summary = json.loads(summary_path.read_text())
-            validate_citation(evidence, summary, expected_source, path)
-            receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
-            receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
-            acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
-                hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
+            try:
+                original = phase / 'candidate-snapshot' / evidence['path']
+                retained = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
+                path = retained if retained.exists() else original
+                if not path.is_file() or path.is_symlink() or not original.is_file() \
+                        or digest(path) != digest(original):
+                    raise ValueError('analysis cites missing evidence: ' + evidence['path'])
+                evidence_sha256[evidence['path']] = digest(path)
+                relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
+                original_summary = phase / 'candidate-snapshot' / relative_summary
+                retained_summary = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
+                summary_path = retained_summary if retained_summary.exists() else original_summary
+                if not summary_path.is_file() or summary_path.is_symlink() \
+                        or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
+                    raise ValueError('citation lacks its authoritative call summary')
+                evidence_sha256[str(relative_summary)] = digest(summary_path)
+                summary = json.loads(summary_path.read_text())
+                validate_citation(evidence, summary, expected_source, path)
+                receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
+                receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+                acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
+                    hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
+            except (ValueError, OSError) as error:
+                errors.append(evidence['path'] + ': ' + str(error))
         if self.analysis_contract == 2:
-            ctx = json.loads((self.history / 'context.json').read_text())
-            attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
-            attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
-                            and item.get('request', {}).get('source_sha256') == expected_source
-                            for item in attempts)
-            required_path = phase / 'required-profile.json'
-            required = json.loads(required_path.read_text()) if required_path.is_file() else {}
-            attempted |= (required.get('source_sha256') == expected_source
-                          and required.get('command_dispatched') is True
-                          and required.get('profile_attempt_arguments') == ['pipes'])
-            if ctx['status'] != 'unchanged' and not attempted:
-                raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
-            if required.get('state') == 'completed' and required.get('evidence'):
-                acquired_path = phase / 'candidate-snapshot' / required['evidence']
-                acquired = json.loads(acquired_path.read_text())
-                if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
-                        item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
-                    raise ValueError('analysis must cite the controller-acquired profile')
-            if ctx['status'] == 'unchanged' and not attempted:
-                repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
-                acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
-            report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+            try:
+                ctx = json.loads((self.history / 'context.json').read_text())
+                attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
+                attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
+                                and item.get('request', {}).get('source_sha256') == expected_source
+                                for item in attempts)
+                required_path = phase / 'required-profile.json'
+                required = json.loads(required_path.read_text()) if required_path.is_file() else {}
+                attempted |= (required.get('source_sha256') == expected_source
+                              and required.get('command_dispatched') is True
+                              and required.get('profile_attempt_arguments') == ['pipes'])
+                if ctx['status'] != 'unchanged' and not attempted:
+                    raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
+                if required.get('state') == 'completed' and required.get('evidence'):
+                    acquired_path = phase / 'candidate-snapshot' / required['evidence']
+                    acquired = json.loads(acquired_path.read_text())
+                    if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
+                            item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
+                        raise ValueError('analysis must cite the controller-acquired profile')
+                if ctx['status'] == 'unchanged' and not attempted:
+                    repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
+                    acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
+                report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+            except (ValueError, OSError) as error:
+                errors.append('history/semantics: ' + str(error))
+        if errors:
+            raise ValueError('; '.join(errors))
         return report, evidence_sha256, acquisitions
 
     def finish_phase(self, phase, role, entry, state):

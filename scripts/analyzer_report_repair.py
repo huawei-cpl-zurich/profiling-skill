@@ -65,7 +65,12 @@ def repair(launcher, result, run, save, *, clock=time.monotonic):
             reason='No repair allowance inside the original deadline'))
         return result
     source = hashlib.sha256((launcher.workspace / 'candidate.py').read_bytes()).hexdigest()
-    feedback = dict(error=error, source_sha256=source, allowed_citations=permitted_citations(launcher),
+    context = json.loads((launcher.campaign.history / 'context.json').read_text())
+    feedback = dict(error=error, source_sha256=source, trusted_context=context,
+                    source_diff_available=bool(context.get('source_diff')),
+                    optimization_attribution=('No source diff exists: observed optimization entries are unsupported; use none with an explanation'
+                        if not context.get('source_diff') else 'Observed optimizations must cite exact provided source_diff lines'),
+                    allowed_citations=permitted_citations(launcher),
                     policy='Exactly one report-only repair; no remote/device commands or source changes')
     save(directory / 'feedback.json', feedback)
     shutil.copyfile(launcher.frozen / 'prompt.md', directory / 'original-instructions.md')
@@ -73,7 +78,7 @@ def repair(launcher, result, run, save, *, clock=time.monotonic):
     config = json.loads(config_path.read_text());config['report_repair_only'] = True;save(config_path, config)
     launcher.report_repair_only = True
     if not report.exists(): report.touch()
-    prompt = ('Repair only /analysis/analysis.json. Read /report-repair/feedback.json for the exact validator '
+    prompt = ('Repair only /analysis/analysis.json. Correct ALL reported issues, not just the first citation. Read /report-repair/feedback.json for the exact validator '
         'error and authoritative permitted citation metadata, /report-repair/initial-report.json if present, '
         'and /report-repair/original-instructions.md for the report contract. Preserve supported analysis; '
         'remove unsupported citations and dependent claims, and state missing evidence honestly. '

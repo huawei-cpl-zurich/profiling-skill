@@ -273,7 +273,14 @@ class RoleLauncher(BlindLauncher):
         observer = threading.Thread(target=watchdog, daemon=True)
         observer.start()
         try:
-            return super().launch(preflight_only)
+            result = super().launch(preflight_only)
+            # Analyzers write a report, never candidate commits. Their report is
+            # validated independently by finish_phase before any batch gate.
+            if (self.role == 'analyzer' and result.get('returncode') == 0
+                    and result.get('timed_out') is False):
+                result['exit_code'] = 0
+                save(self.root / 'receipt.json', result)
+            return result
         finally:
             done.set()
             observer.join()

@@ -258,6 +258,9 @@ class BlindLauncher(ProductionLauncher):
             raise LaunchError("isolation preflight failed: " + result["stderr"])
         return result
 
+    def before_agent(self) -> None:
+        """Optional trusted work charged to the existing execution deadline."""
+
     def launch(self, preflight_only: bool = False) -> dict:
         self.prepare()
         self.preflight()
@@ -278,11 +281,12 @@ class BlindLauncher(ProductionLauncher):
             if preflight_only:
                 command = [*self.base_command(), "experiment-tool", "help"]
             else:
+                self.before_agent()
                 command = [*self.base_command(), "/runtime/node/bin/codex", "exec", "--json",
                            "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
                            "-m", self.model["name"], "-c", f'model_reasoning_effort="{self.model["reasoning_effort"]}"',
                            (self.frozen / "prompt.md").read_text()]
-            result = execute(command, self.root, self.timeout,
+            result = execute(command, self.root, max(.001, self.deadline_monotonic - time.monotonic()),
                              (self.root / "agent.jsonl", self.root / "agent.stderr"))
         finally:
             server.shutdown()

@@ -3,7 +3,15 @@ The JSON example above describes the legacy common fields. For contract 2 also
 set contract_version: 2 and source_sha256 from /history/context.json. The history
 mount is controller-owned, read-only, and contains only this experiment.
 
-Every new distinct verified kernel requires a supplied-tool profile attempt.
+The controller already performs the required supplied-tool profile acquisition
+for each new distinct verified kernel before you start. Read required_profile in
+/history/context.json and use its exact current-source original evidence path.
+Do not repeat that acquisition or substitute an actor capture for a successful
+controller acquisition. Its staging/checks/captures/waits consumed part of your
+original budget: /workspace/execution.json still has the original role deadline.
+If required acquisition failed or remains observation-required, report the
+retained diagnostics and missing measurements honestly; never duplicate its
+dispatch or extend the deadline.
 For an unchanged kernel, cite its repeated_round retained record and explain
 reuse; do not recapture merely for historical comparison. Never extend the role
 deadline or recapture older kernels. Retain unavailable diagnostics honestly.

@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-from blind_optimization_launcher import BlindLauncher, LaunchError, write_json
+from blind_optimization_launcher import BlindLauncher, LaunchError, write_json, execute
 from actor_analyzer_contract import build_prompt, validate_analysis
 import analyzer_history
 
@@ -271,6 +271,11 @@ class RoleLauncher(BlindLauncher):
         save(self.root / 'owned-tools.json', {'directory': str(directory),
                                               'existing': [p.name for p in directory.glob('*')]})
 
+    def before_agent(self):
+        if self.role == 'analyzer' and self.campaign.analysis_contract == 2:
+            from analyzer_profile_acquisition import acquire
+            acquire(self, execute, save)
+
     def launch(self, preflight_only=False):
         done, cleanup_lock = threading.Event(), threading.Lock()
         def watchdog():
@@ -485,7 +490,7 @@ class Campaign:
         archive = self.workspace / 'experiments' / phase.name
         archive.mkdir(parents=True, exist_ok=True)
         for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr',
-                     'qualifications.jsonl', 'cleanup.json'):
+                     'qualifications.jsonl', 'cleanup.json', 'required-profile.json'):
             if (phase / name).is_file():
                 shutil.copyfile(phase / name, archive / name)
         if role == 'actor':
@@ -552,8 +557,19 @@ class Campaign:
                     attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
                                     and item.get('request', {}).get('source_sha256') == expected_source
                                     for item in attempts)
+                    required_path = phase / 'required-profile.json'
+                    required = json.loads(required_path.read_text()) if required_path.is_file() else {}
+                    attempted |= (required.get('source_sha256') == expected_source
+                                  and required.get('command_dispatched') is True
+                                  and required.get('profile_attempt_arguments') == ['pipes'])
                     if ctx['status'] != 'unchanged' and not attempted:
                         raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
+                    if required.get('state') == 'completed' and required.get('evidence'):
+                        acquired_path = phase / 'candidate-snapshot' / required['evidence']
+                        acquired = json.loads(acquired_path.read_text())
+                        if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
+                                item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
+                            raise ValueError('analysis must cite the controller-acquired profile')
                     if ctx['status'] == 'unchanged' and not attempted:
                         repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
                         acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
@@ -574,6 +590,8 @@ class Campaign:
                               source_sha256=hashlib.sha256(source).hexdigest(),
                               analysis_valid=entry['analysis_valid'],
                               analysis_error=entry.get('analysis_error'),
+                              required_profile=json.loads((phase / 'required-profile.json').read_text())
+                                  if (phase / 'required-profile.json').is_file() else None,
                               evidence_sha256=entry.get('evidence_sha256', {}),
                               acquisitions=list(acquisitions.values()) if entry['analysis_valid'] else [],
                               bottlenecks=report['bottlenecks'] if entry['analysis_valid'] else [])

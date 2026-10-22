@@ -82,7 +82,8 @@ def test_selection_and_diff_attribution(tmp_path):
     assert history.finalize(value, ctx, tmp_path, [])['comparison']['results'][0]['gaps']
 
 
-def test_controller_retains_sources_and_delivers_current_comparisons(tmp_path):
+@pytest.mark.parametrize('cite_controller', [True, False])
+def test_controller_retains_sources_and_delivers_current_comparisons(tmp_path, cite_controller):
     bundle = tmp_path / 'bundle'
     bundle.mkdir()
     (bundle / 'candidate.py').write_text('value = 0\n')
@@ -127,12 +128,24 @@ def test_controller_retains_sources_and_delivers_current_comparisons(tmp_path):
             second_private.mkdir(parents=True)
             acquisition['call_id'] = 'call2'
             (second_private / 'receipt.json').write_text(json.dumps(acquisition))
-            value['evidence'].append(dict(path='evidence/call2/results/summary.json',
-                kind='profile', kernels=['matmul'], cases=['shape1']))
+            required = dict(source_sha256=ctx['source_sha256'], state='completed',
+                evidence='evidence/call2/results/summary.json', command_dispatched=True,
+                profile_attempt_arguments=['pipes'])
+            (phase / 'required-profile.json').write_text(json.dumps(required))
+            if cite_controller:
+                value['evidence'].append(dict(path=required['evidence'],
+                    kind='profile', kernels=['matmul'], cases=['shape1']))
             (phase / 'analysis.json').write_text(json.dumps(value))
         return dict(exit_code=0)
-    campaign = Campaign(tmp_path / 'run', bundle, {}, ['unused'], 'task', runner=runner, rounds=3)
+    campaign = Campaign(tmp_path / 'run', bundle, {}, ['unused'], 'task', runner=runner, rounds=3 if cite_controller else 1)
     state = campaign.run()
+    retained = json.loads((campaign.history / 'round-1/record.json').read_text())
+    assert retained['required_profile']['evidence'] == 'evidence/call2/results/summary.json'
+    assert (campaign.workspace / 'experiments/round-1-analyzer/required-profile.json').is_file()
+    if not cite_controller:
+        assert not state['phases']['round-1-analyzer']['analysis_valid']
+        assert 'controller-acquired profile' in state['phases']['round-1-analyzer']['analysis_error']
+        return
     assert all(state['phases'][f'round-{index}-analyzer']['analysis_valid'] for index in (1,2,3))
     assert observed[0]['status'] == 'first'
     assert observed[1]['results'][0]['pairs']
@@ -211,7 +224,8 @@ def test_optional_older_selection_requires_reason_and_distinct_identity(tmp_path
     with pytest.raises(ValueError, match='at most two'): history.validate_round(value, ctx)
 
 
-def test_missing_profile_attempt_retains_source_and_marks_latest_invalid(tmp_path):
+@pytest.mark.parametrize('attempted', [False, True])
+def test_profile_attempt_failure_retains_source_and_explicit_latest_status(tmp_path, attempted):
     bundle = tmp_path / 'bundle'
     bundle.mkdir()
     (bundle / 'candidate.py').write_text('kernel = 1\n')
@@ -223,12 +237,17 @@ def test_missing_profile_attempt_retains_source_and_marks_latest_invalid(tmp_pat
         else:
             ctx = json.loads((campaign.history / 'context.json').read_text())
             (phase / 'analysis.json').write_text(json.dumps(report(ctx)))
+            if attempted:
+                (phase / 'required-profile.json').write_text(json.dumps(dict(
+                    source_sha256=ctx['source_sha256'], state='failed', error='transport unavailable',
+                    command_dispatched=True, profile_attempt_arguments=['pipes'])))
         return dict(exit_code=0)
     campaign = Campaign(tmp_path / 'run', bundle, {}, ['unused'], 'task', runner=runner, rounds=1)
     state = campaign.run()
-    assert not state['phases']['round-1-analyzer']['analysis_valid']
+    assert state['phases']['round-1-analyzer']['analysis_valid'] == attempted
     assert (campaign.history / 'round-1/candidate.py').read_text() == 'kernel = 1\n'
-    assert json.loads((campaign.workspace / 'analysis.json').read_text())['status'] == 'invalid'
+    latest = json.loads((campaign.workspace / 'analysis.json').read_text())
+    assert latest['profiling']['status'] == 'unavailable' if attempted else latest['status'] == 'invalid'
     assert (campaign.workspace / 'experiments/round-1-analyzer/raw-analysis.json').is_file()
 
 

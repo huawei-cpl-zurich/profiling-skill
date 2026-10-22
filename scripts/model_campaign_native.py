@@ -1,14 +1,10 @@
 """Private native matmul Model adapter. Never mount this into optimizer folders."""
 import csv
 import json
+import math
 from pathlib import Path
-import shlex
 import statistics
-import subprocess
-import sys
 import time
-
-from a3_memory_batch import execute, validate_capture
 
 
 def audited_compiler():
@@ -110,6 +106,7 @@ def benchmark(root, env, remaining):
     capture = Acquisition().profile(prepared, samples=3, output=root / 'measurement/timing-trace')
     accounting = account_profile(capture['iterations'], capture['tasks'], capture_complete=True)
     return dict(state='complete', cases=[case['id']], warmup=20, samples=3,
+        discovered_names=sorted({row['name'] for row in capture['tasks'] if row['kind'] == 'device'}),
         busy_time=dict(metric=accounting['metric'],
                        samples_us=[row['device_busy_us'] for row in accounting['iterations']],
                        active_union_samples_us=[row['device_active_union_us'] for row in accounting['iterations']],
@@ -127,67 +124,69 @@ def _rows(folder, pattern):
     return rows
 
 
-def _name(row):
-    names = {value for key, value in row.items() if value and 'name' in key.lower()
-             and ('kernel' in key.lower() or 'op' in key.lower())}
-    if len(names) != 1:
-        raise RuntimeError('ambiguous exported kernel name')
-    return names.pop()
+def validate_pmu_captures(captures, samples=5):
+    """Require distinct attributable tasks with available finite pipe evidence."""
+    if not captures:
+        raise RuntimeError('application PMU export incomplete')
+    for capture in captures:
+        identities = set()
+        for row in capture['pipe_rows']:
+            identity = tuple(str(row.get(key, '')).strip()
+                             for key in ('Device_id', 'Stream ID', 'Task ID'))
+            if any(value in ('', 'N/A', 'NA', '-') for value in identity):
+                continue
+            for key, value in row.items():
+                if not key.endswith('_ratio'):
+                    continue
+                try:
+                    usable = math.isfinite(float(value))
+                except (TypeError, ValueError):
+                    usable = False
+                if usable:
+                    identities.add(identity)
+                    break
+        if len(identities) < samples:
+            raise RuntimeError('application PMU export incomplete')
 
 
 def pipes(root, env, remaining):
+    """Application-level per-task PMU; deliberately not op-replay block PMU."""
+    import torch
+    import torch_npu
+    from torch_npu.profiler.experimental_config import AiCMetrics
+    from profile_capture import Acquisition
     output = root / 'measurement'
     output.mkdir(exist_ok=True)
-    wrapper = root / 'application.sh'
-    wrapper.write_text('#!/bin/sh\nexec ' + shlex.join([
-        sys.executable, str(root / 'scripts/model_campaign_native.py'), str(root)]) + '\n')
-    wrapper.chmod(0o700)
-    def capture(label, metric, selector=None):
-        folder = output / label
-        command = ['msprof', 'op', '--application=' + str(wrapper),
-            '--output=' + str(folder / 'report'), '--aic-metrics=' + metric,
-            '--warm-up=21', '--launch-count=' + ('5000' if metric == 'BasicInfo' else '1'), '--kill=off']
-        if selector:
-            command.append('--kernel-name=' + selector)
-        process = execute(command, folder, env, timeout=remaining())
-        validate_capture(process.returncode, process.stdout + process.stderr)
-        return folder / 'report'
-    # Discovery must be scoped to the warmed candidate, not reference/setup tasks
-    # that a whole-process msprof BasicInfo capture would also observe.
-    from profile_capture import Acquisition
     prepared, _ = _prepare(root)
     discovered = Acquisition().profile(prepared, samples=1, output=output / 'discovery')
     names = sorted({row['name'] for row in discovered['tasks'] if row['kind'] == 'device'})
     if not names:
         raise RuntimeError('compiled candidate exported no kernel names')
-    mapping = {}
-    for index, hint in enumerate(names):
-        basic = capture('basic-' + str(index), 'BasicInfo', hint)
-        mapping[hint] = sorted({_name(row) for row in _rows(basic, '*OpBasicInfo*.csv')})
-        if not mapping[hint]:
-            raise RuntimeError('candidate trace hint exported no canonical BasicInfo selector')
-    selectors = sorted({name for values in mapping.values() for name in values})
-    captures = []
-    for index, selector in enumerate(selectors):
-        folder = capture('pipes-' + str(index), 'PipeUtilization', selector)
-        basic, rows = _rows(folder, '*OpBasicInfo*.csv'), _rows(folder, '*PipeUtilization*.csv')
-        if not rows or not basic or any(_name(row) != selector for row in basic):
-            raise RuntimeError('exact-selector pipe export incomplete')
-        captures.append(dict(selector=selector, basic_rows=basic, pipe_rows=rows))
-    result = dict(state='complete', cases=['matmul-7-variant-0'],
-                  discovered_names=selectors, selector_mapping=mapping, captures=captures, warmup=21)
-    (output / 'pipe-evidence.json').write_text(json.dumps(result, indent=2))
-    return result
-
-
-if __name__ == '__main__':
-    root = Path(sys.argv[1]).resolve()
-    sys.path[:0] = [str(root), str(root / 'scripts'),
-                   str(root / 'skills/ascend-model-benchmarking/scripts')]
-    import torch
-    prepared, _ = _prepare(root)
-    # Cold preparation is the first launch; profiler skips it plus20 warm launches.
-    with torch.inference_mode():
-        for _ in range(21):
+    profiler = torch_npu.profiler
+    with torch.inference_mode(), prepared.compiler.monitor_compilation():
+        for _ in range(20):
             prepared()
         torch.npu.synchronize()
+        before = prepared.compiler.snapshot()
+        with profiler.profile(activities=[profiler.ProfilerActivity.CPU, profiler.ProfilerActivity.NPU],
+                experimental_config=profiler._ExperimentalConfig(
+                    profiler_level=profiler.ProfilerLevel.Level1,
+                    aic_metrics=AiCMetrics.PipeUtilization, data_simplification=False),
+                schedule=profiler.schedule(wait=0, warmup=0, active=5, repeat=1),
+                on_trace_ready=profiler.tensorboard_trace_handler(str(output / 'pmu'))) as capture:
+            for _ in range(5):
+                remaining()
+                prepared()
+                torch.npu.synchronize()
+                if prepared.compiler.snapshot() != before:
+                    raise RuntimeError('compilation during PMU measurement')
+                capture.step()
+    rows = _rows(output / 'pmu', '*kernel_details.csv')
+    captures = [dict(selector=name, basic_rows=[],
+        pipe_rows=[row for row in rows if row.get('Name') == name]) for name in names]
+    validate_pmu_captures(captures)
+    result = dict(state='complete', cases=['matmul-7-variant-0'],
+        collector='Torch-NPU application PMU', granularity='per-task',
+        discovered_names=names, captures=captures, warmup=20, samples=5)
+    (output / 'pipe-evidence.json').write_text(json.dumps(result, indent=2))
+    return result

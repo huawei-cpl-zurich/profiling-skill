@@ -31,17 +31,47 @@ def test_export_preserves_trusted_identity_and_pipe_rows_not_private_text(tmp_pa
         error='SECRET ORACLE', traceback='PRIVATE INPUT', result=dict(
             busy_time=dict(samples_us=[11, 12, 13], active_union_samples_us=[9, 10, 11]), captures=[
             dict(selector='candidate_kernel', pipe_rows=[{'Name': 'candidate_kernel',
-                'vec_ratio': '14.3', 'sub_block_id': 'vector0', 'private': 'SECRET ORACLE'},
+                'vec_ratio': '14.3', 'sub_block_id': 'vector0', 'private': 'SECRET ORACLE',
+                'unsupported_ratio': 'NaN', 'unsupported_time': 'inf'},
                 {'sub_block_id': 'SECRET ORACLE'}])]))
     (private / 'results/summary.json').write_text(json.dumps(value))
     tools.export(private, tmp_path / 'public')
-    report = json.loads((tmp_path / 'public/results/summary.json').read_text())
+    report = json.loads((tmp_path / 'public/results/summary.json').read_text(),
+                        parse_constant=lambda value: pytest.fail('nonfinite JSON number: ' + value))
     assert report['correctness'] is True
     assert report['source_sha256'] == value['source_sha256']
     assert report['busy_time']['active_union_samples_us'] == [9, 10, 11]
     assert report['captures'][0]['pipe_rows'] == [
         {'Name': 'candidate_kernel', 'vec_ratio': 14.3, 'sub_block_id': 'vector0'}, {}]
     assert 'SECRET' not in json.dumps(report)
+
+
+def test_warm_timing_exports_only_names_from_actual_device_capture(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(
+        npu=SimpleNamespace(synchronize=lambda: None)))
+    monkeypatch.setattr(native, '_prepare', lambda root:
+        (lambda: calls.append('forward'), dict(id='private-case')))
+    class Acquisition:
+        def profile(self, prepared, **kwargs):
+            assert kwargs['samples'] == 3
+            return dict(iterations=[{}] * 3, tasks=[
+                dict(name='kernel_b', kind='device'), dict(name='kernel_a', kind='device'),
+                dict(name='kernel_a', kind='device'), dict(name='setup_cpu', kind='aicpu')])
+    monkeypatch.setitem(sys.modules, 'profile_capture', SimpleNamespace(Acquisition=Acquisition))
+    monkeypatch.setitem(sys.modules, 'profile_accounting', SimpleNamespace(account_profile=
+        lambda *args, **kwargs: dict(metric='busy-time', iterations=[
+            dict(device_busy_us=4, device_active_union_us=3)] * 3)))
+    result = native.benchmark(tmp_path, {}, lambda: 100)
+    assert result['discovered_names'] == ['kernel_a', 'kernel_b']
+    assert len(calls) == 80
+    private = tmp_path / 'private'
+    (private / 'results').mkdir(parents=True)
+    (private / 'results/summary.json').write_text(json.dumps(dict(state='completed',
+        check=dict(passed=True, variants=[0, 1]), result=result)))
+    tools.export(private, tmp_path / 'public')
+    published = json.loads((tmp_path / 'public/results/summary.json').read_text())
+    assert published['discovered_names'] == ['kernel_a', 'kernel_b']
 
 
 def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, capsys):
@@ -70,35 +100,90 @@ def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, 
     assert called == ['benchmark', 'abc123']
 
 
-def test_pipe_discovery_follows_renamed_multiple_kernels(tmp_path, monkeypatch):
-    calls = []
-    monkeypatch.setattr(native, '_prepare', lambda root: (object(), {}))
+@pytest.mark.parametrize('problem', ['valid', 'incomplete', 'duplicates', 'blank', 'na',
+                                    'nan', 'infinite', 'partial', 'multi-launch'])
+def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monkeypatch, problem):
+    from contextlib import nullcontext
+    from types import ModuleType
+    calls, steps, synchronized = [], [], []
+    names = ('renamed_stage_a', 'renamed_stage_b')
+    compiler = SimpleNamespace(monitor_compilation=nullcontext, snapshot=lambda: 0)
+    class Prepared:
+        def __init__(self):
+            self.compiler = compiler
+        def __call__(self):
+            calls.append('forward')
+    monkeypatch.setattr(native, '_prepare', lambda root: (Prepared(), {}))
     class Acquisition:
         def profile(self, prepared, **kwargs):
-            return dict(tasks=[dict(name=name, kind='device') for name in
-                               ('renamed_stage_a', 'renamed_stage_b')])
+            assert kwargs['samples'] == 1
+            return dict(tasks=[dict(name=name, kind='device') for name in names])
     monkeypatch.setitem(sys.modules, 'profile_capture', SimpleNamespace(Acquisition=Acquisition))
-    def fake_execute(command, folder, env, timeout):
-        calls.append(command)
-        report = folder / 'report'
-        report.mkdir(parents=True)
-        selector = next((arg.split('=', 1)[1] for arg in command if arg.startswith('--kernel-name=')), None)
-        basic_discovery = '--aic-metrics=BasicInfo' in command
-        names = [selector + '.native'] if basic_discovery else [selector]
-        (report / 'OpBasicInfo.csv').write_text('Kernel Name,Duration(us)\n' +
-                                               ''.join(name + ',11\n' for name in names))
-        if not basic_discovery:
-            (report / 'PipeUtilization.csv').write_text('Kernel Name,vec_ratio\n' + selector + ',44\n')
-        return SimpleNamespace(returncode=0, stdout='Profiling running finished. All task success.', stderr='')
-    monkeypatch.setattr(native, 'execute', fake_execute)
+    def handler(folder):
+        def export():
+            output = Path(folder)
+            output.mkdir(parents=True)
+            count = 4 if problem == 'incomplete' else 10 if problem == 'multi-launch' else 5
+            rows = []
+            for name in names:
+                for task in range(count):
+                    identity = 0 if problem == 'duplicates' else task
+                    ratio = {'blank': '', 'na': 'N/A', 'nan': 'NaN', 'infinite': 'inf'}.get(problem, '44')
+                    if problem == 'partial' and task:
+                        ratio = 'N/A'
+                    rows.append(f'{name},0,47,{identity},{ratio},N/A\n')
+            (output / 'kernel_details.csv').write_text(
+                'Name,Device_id,Stream ID,Task ID,aiv_mte2_ratio,aic_mac_ratio\n' + ''.join(rows))
+        return export
+    def profile(**kwargs):
+        assert kwargs['activities'] == ['cpu', 'npu']
+        assert kwargs['schedule'] == dict(wait=0, warmup=0, active=5, repeat=1)
+        assert kwargs['experimental_config']['aic_metrics'] == 'pipes'
+        class Capture:
+            def __enter__(self):
+                return self
+            def step(self):
+                steps.append(len(calls))
+            def __exit__(self, kind, error, tb):
+                assert kind is None
+                assert len(steps) == 5
+                kwargs['on_trace_ready']()
+        return Capture()
+    profiler = SimpleNamespace(profile=profile, schedule=lambda **kw: kw,
+        _ExperimentalConfig=lambda **kw: kw, tensorboard_trace_handler=handler,
+        ProfilerActivity=SimpleNamespace(CPU='cpu', NPU='npu'),
+        ProfilerLevel=SimpleNamespace(Level1='level1'))
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(inference_mode=nullcontext,
+        npu=SimpleNamespace(synchronize=lambda: synchronized.append(True))))
+    monkeypatch.setitem(sys.modules, 'torch_npu', SimpleNamespace(profiler=profiler))
+    config = ModuleType('torch_npu.profiler.experimental_config')
+    config.AiCMetrics = SimpleNamespace(PipeUtilization='pipes')
+    monkeypatch.setitem(sys.modules, 'torch_npu.profiler.experimental_config', config)
+    if problem not in ('valid', 'multi-launch'):
+        with pytest.raises(RuntimeError, match='export incomplete'):
+            native.pipes(tmp_path, {}, lambda: 100)
+        return
     result = native.pipes(tmp_path, {}, lambda: 100)
-    assert result['discovered_names'] == ['renamed_stage_a.native', 'renamed_stage_b.native']
-    assert result['selector_mapping'] == {'renamed_stage_a': ['renamed_stage_a.native'],
-                                          'renamed_stage_b': ['renamed_stage_b.native']}
-    assert len(result['captures']) == 2
-    assert [arg for command in calls for arg in command if arg.startswith('--kernel-name=')] == [
-        '--kernel-name=renamed_stage_a', '--kernel-name=renamed_stage_b',
-        '--kernel-name=renamed_stage_a.native', '--kernel-name=renamed_stage_b.native']
+    assert len(calls) == 25
+    assert steps == [21, 22, 23, 24, 25]
+    assert len(synchronized) == 6
+    assert result['collector'] == 'Torch-NPU application PMU'
+    assert result['granularity'] == 'per-task'
+    assert result['discovered_names'] == list(names)
+    count = 10 if problem == 'multi-launch' else 5
+    assert [len(capture['pipe_rows']) for capture in result['captures']] == [count, count]
+    assert all(row['Name'] == capture['selector'] for capture in result['captures']
+               for row in capture['pipe_rows'])
+    private = tmp_path / 'private'
+    (private / 'results').mkdir(parents=True)
+    (private / 'results/summary.json').write_text(json.dumps(dict(state='completed',
+        check=dict(passed=True, variants=[0, 1]), result=result)))
+    tools.export(private, tmp_path / 'public')
+    public = json.loads((tmp_path / 'public/results/summary.json').read_text())
+    assert public['collector'] == result['collector']
+    assert public['granularity'] == result['granularity']
+    assert public['captures'][0]['pipe_rows'][0]['aiv_mte2_ratio'] == 44
+    assert public['captures'][0]['pipe_rows'][0]['aic_mac_ratio'] == 'N/A'
 
 
 @pytest.mark.parametrize('finder_name', ['DependenciesFinder', 'DependencyFinder'])

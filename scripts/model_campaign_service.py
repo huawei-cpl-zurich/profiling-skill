@@ -23,6 +23,13 @@ OPERATIONS = {'check', 'benchmark', 'pipes', 'screen'}
 
 class CampaignTools(Tools):
     """Keep the existing handle/transfer recovery, cap every dispatch by deadline."""
+    def observe(self, ident):
+        receipt = json.loads((self.state / ident / 'receipt.json').read_text())
+        if receipt.get('warm'):
+            from model_campaign_warm import observe
+            return observe(self, ident)
+        return super().observe(ident)
+
     def dispatch(self, folder, receipt):
         if receipt.get('dispatch_intent') or receipt.get('handle'):
             return super().dispatch(folder, receipt)
@@ -84,11 +91,12 @@ class CampaignService:
             receipt = json.loads(receipt_path.read_text())
             if not any(isinstance(receipt.get(key), dict) and receipt[key].get('state') not in TERMINAL
                        for key in ('upload', 'download')):
-                receipt.update(state=result['state'], failure_stage='infrastructure')
+                stage = result.get('failure_stage', 'infrastructure')
+                receipt.update(state=result['state'], failure_stage=stage)
                 save(receipt_path, receipt)
                 (private / 'results').mkdir(parents=True, exist_ok=True)
                 save(private / 'results/summary.json', dict(state=result['state'],
-                    failure_stage='infrastructure', source_sha256=receipt['request']['source_sha256'],
+                    failure_stage=stage, source_sha256=receipt['request']['source_sha256'],
                     diagnostic=dict(kind='terminal-evidence-unavailable',
                                     reason='retained job or transfer ended without a worker report')))
         if (private / 'results/summary.json').is_file():
@@ -123,6 +131,9 @@ class CampaignService:
     def start(self, operation):
         if operation not in OPERATIONS:
             raise ValueError('unknown operation')
+        if isinstance(self.tools, CampaignTools):
+            from model_campaign_warm import start
+            return start(self, operation)
         # Resuming a prior call is lifecycle safety, not a trial/round quota.
         for path in sorted(self.tools.state.glob('*/receipt.json')):
             prior = json.loads(path.read_text())

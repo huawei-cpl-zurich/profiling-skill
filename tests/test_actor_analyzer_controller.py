@@ -545,6 +545,7 @@ def test_valid_profile_uses_controller_owned_evidence_despite_report_path_confli
             summary.parent.mkdir(parents=True)
             summary.write_text(json.dumps({'state': 'completed', 'correctness': True,
                 'source_sha256': digest(campaign.workspace / 'candidate.py'),
+                'selector': 'task_kernel', 'cases': ['1'],
                 'captures': [{'pipe_rows': [{'vector_ratio': '40'}]}]}))
             (phase / 'reports').mkdir()
             (phase / 'reports/evidence').write_text('unrelated mistaken file')
@@ -662,6 +663,7 @@ def test_unavailable_pipe_analysis_handoff_uses_original_timing_compiler_paths(t
                 'timing': 'evidence/retained-timing/results/summary.json',
                 'compiler': 'evidence/retained-ir/compiler-evidence/candidate/ttir.txt'}
             retained = {'timing': json.dumps({'state': 'completed', 'selector': 'task_kernel',
+                'correctness': [{'correctness': True, 'check': 0}],
                 'timing': {'median_us': 3245.815}, 'source_sha256': digest(campaign.workspace / 'candidate.py')}),
                 'compiler': 'tt.func @task_kernel() { return }'}
             (phase / 'reports').mkdir()
@@ -670,12 +672,19 @@ def test_unavailable_pipe_analysis_handoff_uses_original_timing_compiler_paths(t
                 original = phase / 'candidate-snapshot' / relative
                 original.parent.mkdir(parents=True, exist_ok=True)
                 original.write_text(retained[kind])
+                if kind == 'compiler':
+                    summary = original.parents[2] / 'results/summary.json'
+                    summary.parent.mkdir()
+                    summary.write_text(json.dumps(dict(state='completed', implementation='candidate',
+                        source_sha256=digest(campaign.workspace / 'candidate.py'),
+                        correctness=[dict(correctness=True, check=0, selector='task_kernel')],
+                        compiler_artifacts={'ttir.txt': digest(original)})))
                 if aliases:
                     relative = 'evidence/' + kind + '.json'
                     alias = phase / 'reports' / relative
                     alias.parent.mkdir(parents=True, exist_ok=True)
                     alias.write_text(retained[kind])
-                evidence.append({'path': relative, 'kind': kind, 'kernels': ['task_kernel'], 'cases': ['task01']})
+                evidence.append({'path': relative, 'kind': kind, 'kernels': ['task_kernel'], 'cases': ['0']})
             report = {'candidate_commit': commit, 'profiling': {'status': 'unavailable',
                       'reason': 'Retained pipe handle remained observation-unavailable'},
                       'evidence': evidence, 'observations': [{'finding': 'Timing retained; pipe bottleneck unknown',
@@ -693,3 +702,51 @@ def test_unavailable_pipe_analysis_handoff_uses_original_timing_compiler_paths(t
         assert handoff['evidence'][0]['path'] == 'evidence/retained-timing/results/summary.json'
         assert 'tt.func @task_kernel' in campaign.git('show',
             'HEAD:experiments/round-1-analyzer/trusted-evidence/retained-ir/compiler-evidence/candidate/ttir.txt')
+
+
+@pytest.mark.parametrize('kind,defect', [(kind, defect)
+    for kind in ('timing', 'compiler', 'profile')
+    for defect in ('stale-source', 'baseline', 'wrong-kernel', 'wrong-case',
+        'missing-summary', 'failed-call', 'missing-identities', 'artifact-mismatch', 'none')
+    if defect != 'artifact-mismatch' or kind == 'compiler'])
+def test_analysis_binds_all_citations_to_authoritative_candidate_call(tmp_path, kind, defect):
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            campaign.qualify(phase, dict(state='completed', correctness=True,
+                source_sha256=digest(campaign.workspace / 'candidate.py')))
+        else:
+            call = phase / 'candidate-snapshot/evidence/call'
+            (call / 'results').mkdir(parents=True)
+            summary = dict(state='completed', implementation='candidate',
+                source_sha256=digest(campaign.workspace / 'candidate.py'),
+                correctness=[dict(correctness=True, check=0, selector='task_kernel')],
+                selector='task_kernel', cases=['case-0'], timing={'median_us': 10},
+                captures=[dict(selector='task_kernel', pipe_rows=[{'vector_ratio': 40}])])
+            relative = 'evidence/call/results/summary.json'
+            if kind == 'compiler':
+                artifact = call / 'compiler-evidence/candidate/ttir.txt'
+                artifact.parent.mkdir(parents=True)
+                artifact.write_text('tt.func @task_kernel() { return }')
+                summary['compiler_artifacts'] = {'ttir.txt': digest(artifact)}
+                relative = 'evidence/call/compiler-evidence/candidate/ttir.txt'
+                if defect == 'artifact-mismatch': artifact.write_text('different artifact')
+            if defect == 'stale-source': summary['source_sha256'] = 'a' * 64
+            if defect == 'baseline': summary['implementation'] = 'baseline'
+            if defect == 'failed-call': summary['state'] = 'failed'
+            if defect == 'missing-identities':
+                for field in ('selector', 'cases'): summary.pop(field)
+                summary['correctness'] = True
+                summary['captures'][0].pop('selector')
+            if defect != 'missing-summary':
+                (call / 'results/summary.json').write_text(json.dumps(summary))
+            report = dict(candidate_commit=commit,
+                profiling={'status': 'acquired'} if kind == 'profile' else {'status': 'unavailable', 'reason': 'not requested'},
+                evidence=[dict(path=relative, kind=kind,
+                    kernels=['invented' if defect == 'wrong-kernel' else 'task_kernel'],
+                    cases=['invented' if defect == 'wrong-case' else 'case-0'])],
+                observations=[], bottlenecks=[], ceilings=[], unknowns=[])
+            (phase / 'analysis.json').write_text(json.dumps(report))
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=1)
+    state = campaign.run()
+    assert state['phases']['round-1-analyzer']['analysis_valid'] == (defect == 'none')

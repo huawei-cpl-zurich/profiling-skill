@@ -2,6 +2,7 @@
 """Private Model-task tool boundary for isolated optimization roles."""
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 import shutil
@@ -14,14 +15,16 @@ def export(private, public):
     """Release constructed diagnostics/numeric rows, never oracle text or inputs."""
     value = json.loads((private / 'results/summary.json').read_text())
     result = {key: value[key] for key in ('state', 'failure_stage', 'operation',
-              'source_sha256', 'physical_device', 'logical_device', 'diagnostic', 'progress') if key in value}
+              'source_sha256', 'physical_device', 'logical_device', 'diagnostic', 'progress', 'worker_pid',
+              'runtime_initializations', 'torch_module_id') if key in value}
     checked = value.get('check', {})
     result['correctness'] = checked.get('passed') is True and checked.get('variants') == [0, 1]
     # candidate_probe already authenticates candidate-owned compiler diagnostics.
     result['diagnostics'] = checked.get('diagnostics', [])
     measurement = value.get('result', {})
     result.update({key: measurement[key] for key in
-                  ('latency', 'busy_time', 'cases', 'discovered_names', 'selector_mapping', 'warmup', 'samples') if key in measurement})
+                  ('latency', 'busy_time', 'cases', 'discovered_names', 'selector_mapping', 'warmup', 'samples',
+                   'collector', 'granularity') if key in measurement})
     result['captures'] = []
     for capture in measurement.get('captures', []):
         selector = capture['selector']
@@ -32,7 +35,9 @@ def export(private, public):
                 numeric = {}
                 for key, item in row.items():
                     try:
-                        numeric[key] = float(item)
+                        number = float(item)
+                        if math.isfinite(number):
+                            numeric[key] = number
                     except (TypeError, ValueError):
                         if item == selector or item in ('N/A', 'NA', '-', ''):
                             numeric[key] = item
@@ -43,7 +48,7 @@ def export(private, public):
         result['captures'].append(clean)
     public.mkdir(parents=True)
     (public / 'results').mkdir()
-    (public / 'results/summary.json').write_text(json.dumps(result, indent=2))
+    (public / 'results/summary.json').write_text(json.dumps(result, indent=2, allow_nan=False))
 
 
 def prepare(output, task='matmul'):
@@ -112,9 +117,9 @@ def main(argv=None):
         print('experiment-tool check|timing|pipes; experiment-tool observe CALL_ID\n'
               'Every operation independently checks compiled Model correctness on private input variants.\n'
               'Compilation/numerical failures include safe diagnostics; retry edits until role deadline, no attempt quota.\n'
-              'timing measures warm synchronized full-forward latency; pipes discovers kernel names then collects metrics.\n'
-              'Effective captures: 3 warm latency samples; scoped trace discovery, 1 BasicInfo replay per trace hint, '
-              '1 PipeUtilization per exported canonical selector.\n'
+              'timing measures warm synchronized full-forward latency.\n'
+              'pipes: Torch-NPU application PMU, per-task PipeUtilization; 20 warmups, 5 measured forwards.\n'
+              'Not msprof op replay: no per-block distributions or inferred bandwidth/ceilings.\n'
               'Evidence is evidence/CALL_ID/results/summary.json. Preserve original paths in analysis reports.\n'
               'Resume nonterminal infrastructure jobs with observe; do not duplicate dispatch.\n'
               'All staging/device waits are included in execution.json deadline; no implicit budget extension.')

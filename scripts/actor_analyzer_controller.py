@@ -52,6 +52,43 @@ def correct(result):
             isinstance(item, dict) and item.get('correctness') is True for item in records))
 
 
+def validate_citation(evidence, summary, expected_source, artifact):
+    """Bind all claimed identities to the trusted call, never the report itself."""
+    if not isinstance(summary, dict) or summary.get('source_sha256') != expected_source \
+            or summary.get('implementation', 'candidate') != 'candidate' or not correct(summary):
+        raise ValueError('citation lacks successful frozen candidate provenance')
+    captures = summary.get('captures', [])
+    kernels = {summary.get('selector')}
+    kernels.update(summary.get('discovered_names', []))
+    kernels.update(item.get('selector') for item in captures)
+    records = summary.get('correctness', [])
+    if isinstance(records, list):
+        kernels.update(item.get('selector') for item in records)
+    kernels.discard(None)
+    # Legacy standalone runners identify seeded cases by check index, while
+    # Model adapters export explicit semantic case IDs. Do not invent task aliases.
+    cases = summary.get('cases')
+    if cases is None:
+        cases = [item['check'] for item in records if 'check' in item] if isinstance(records, list) else []
+    if not set(evidence['kernels']) <= kernels \
+            or not set(evidence['cases']) <= {str(item) for item in cases}:
+        raise ValueError('citation kernel/case claims are not supported by the trusted call')
+    kind = evidence['kind']
+    if kind == 'profile' and not any(item.get('pipe_rows') for item in captures):
+        raise ValueError('profile citation lacks acquired candidate pipe evidence')
+    if kind == 'timing' and not any(summary.get(key) for key in ('timing', 'latency', 'busy_time')):
+        raise ValueError('timing citation lacks acquired timing evidence')
+    if kind == 'compiler':
+        inventory = summary.get('compiler_artifacts', {})
+        if not inventory:
+            raise ValueError('compiler citation lacks inventoried artifacts')
+        parts = Path(evidence['path']).parts[2:]
+        if parts != ('results', 'summary.json') and (
+                len(parts) != 3 or parts[:2] != ('compiler-evidence', 'candidate')
+                or inventory.get(parts[-1]) != digest(artifact)):
+            raise ValueError('compiler citation does not match the candidate artifact inventory')
+
+
 def retain_result(phase, result):
     """Journal trusted tool identity now; qualify final candidate bytes later."""
     source = result.get('source_sha256')
@@ -75,12 +112,16 @@ def cleanup_phase(phase, remote=managed_observation):
         return {'state': 'terminal', 'calls': []}
     config = json.loads(ownership.read_text())
     calls, uncertain = [], False
-    for path in sorted(Path(config['directory']).glob('*/receipt.json')):
+    paths = sorted(Path(config['directory']).glob('*/receipt.json'))
+    phase_worker = Path(config['directory']) / 'phase.json'
+    if phase_worker.exists():
+        paths.insert(0, phase_worker)
+    for path in paths:
         if path.parent.name in config['existing']:
             continue
         try:
             receipt = json.loads(path.read_text())
-            if receipt.get('state') in ('completed', 'failed', 'cancelled'):
+            if path != phase_worker and receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
             if receipt.get('dispatch_intent') and not receipt.get('handle'):
                 uncertain = True
@@ -419,11 +460,14 @@ class Campaign:
                             or digest(path) != digest(original):
                         raise ValueError('analysis cites missing evidence: ' + evidence['path'])
                     entry['evidence_sha256'][evidence['path']] = digest(path)
-                    if evidence['kind'] == 'profile':
-                        summary = json.loads(path.read_text())
-                        if summary.get('source_sha256') != expected_source or not correct(summary) \
-                                or not any(item.get('pipe_rows') for item in summary.get('captures', [])):
-                            raise ValueError('profile citation lacks acquired candidate pipe evidence')
+                    relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
+                    summary_path = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
+                    original_summary = phase / 'candidate-snapshot' / relative_summary
+                    if not summary_path.is_file() or summary_path.is_symlink() \
+                            or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
+                        raise ValueError('citation lacks its authoritative call summary')
+                    entry['evidence_sha256'][str(relative_summary)] = digest(summary_path)
+                    validate_citation(evidence, json.loads(summary_path.read_text()), expected_source, path)
                 shutil.copyfile(report_path, self.workspace / 'analysis.json')
                 entry['analysis_valid'] = True
             except (ValueError, OSError) as error:

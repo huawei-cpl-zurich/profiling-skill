@@ -36,7 +36,7 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
                    source_sha256=request['source_sha256'], worker_pid=os.getpid())
     lease = None
     try:
-        if request.get('activation_required'):
+        if runtime is None and request.get('activation_required'):
             from phase_deadline import wait_for_activation
             cutoff = wait_for_activation(root / 'activation.json', remaining())
             budget = min(budget, cutoff - started)

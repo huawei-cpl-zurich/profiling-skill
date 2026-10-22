@@ -7,6 +7,8 @@ import tarfile
 import os
 import hashlib
 import time
+import pytest
+import subprocess
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -58,12 +60,16 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
     worker_handle = 'remote:test:job:worker'
     worker_state = ['running']
     pending = [True]
+    fail_request = [False]
     def remote(*args):
         calls.append(args)
         if args[0] in ('targets', 'capabilities', 'preflight'):
             return dict(state='completed')
         if args[0] == 'upload':
             source, target = Path(args[2]), Path(args[3])
+            if fail_request[0] and source.name == 'request.tar.gz':
+                fail_request[0] = False
+                raise TimeoutError('original role deadline expired')
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
             if source.name == 'phase.tar.gz':
@@ -73,9 +79,13 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
                     stream.extractall(folder, filter='data')
             return dict(state='completed')
         if args[0] == 'run':
+            worker_state[0] = 'running'
             return dict(state='running', handle=worker_handle)
         if args[0] == 'observe':
             return dict(state=worker_state[0], handle=worker_handle)
+        if args[0] == 'cancel':
+            worker_state[0] = 'cancelled'
+            return dict(state='cancelled', handle=worker_handle)
         if args[0] == 'logs':
             return dict(state='running', content='PHASE_READY=' + json.dumps(dict(monotonic=time.monotonic())))
         if args[0] == 'download':
@@ -121,6 +131,12 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
     assert service.start('check')['worker_pid'] == 42
     assert len([call for call in calls if call[0] == 'run']) == 2
     assert (tools.state / first['call_id'] / 'phase.json').exists()
+    fail_request[0] = True
+    failed = service.start('check')
+    assert failed['state'] == 'failed' and failed['failure_stage'] == 'budget'
+    assert worker_state[0] == 'cancelled'
+    assert service.start('check')['worker_pid'] == 42
+    assert len([call for call in calls if call[0] == 'run']) == 3
 
 
 def test_phase_loop_loads_revisions_and_releases_one_lease(tmp_path, monkeypatch):
@@ -166,7 +182,9 @@ def test_phase_loop_loads_revisions_and_releases_one_lease(tmp_path, monkeypatch
     assert {value['runtime_initializations'] for value in results} == {1}
 
 
-def test_failed_bootstrap_upload_is_retryable_without_a_worker(tmp_path):
+@pytest.mark.parametrize('failure', ['failed', TimeoutError('original role deadline expired'),
+    subprocess.TimeoutExpired('transport', 240)])
+def test_failed_bootstrap_upload_is_retryable_without_a_worker(tmp_path, failure):
     from model_campaign_service import CampaignService, CampaignTools
     from model_campaign_tools import export
     public, bundle = tmp_path / 'public', tmp_path / 'bundle'
@@ -185,6 +203,8 @@ def test_failed_bootstrap_upload_is_retryable_without_a_worker(tmp_path):
             return dict(state='completed')
         if args[0] == 'upload':
             uploads.append(args)
+            if len(uploads) == 1 and isinstance(failure, Exception):
+                raise failure
             return dict(state='failed' if len(uploads) == 1 else 'completed')
         if args[0] == 'run':
             runs.append(args)
@@ -195,7 +215,8 @@ def test_failed_bootstrap_upload_is_retryable_without_a_worker(tmp_path):
     tools.remote = remote
     service = CampaignService(tools, bundle, public, export)
     failed = service.start('check')
-    assert failed['state'] == 'failed' and failed['failure_stage'] == 'infrastructure'
+    expected = 'budget' if isinstance(failure, TimeoutError) else 'infrastructure'
+    assert failed['state'] == 'failed' and failed['failure_stage'] == expected
     assert not runs
     pending = service.start('check')
     assert pending['state'] == 'running' and len(runs) == 1

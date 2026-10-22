@@ -284,7 +284,7 @@ def _shutdown_phase(tools):
         phase['shutdown'] = dict(dispatch_intent=True)
         save(phasefile, phase)
         control = tools.remote('run', tools.target, '--runtime', tools.runtime,
-                               '--cwd', phase['remote_folder'], '--file', script)
+                               '--cwd', tools.cwd, '--file', script)
         phase['shutdown'].update(control)
         save(phasefile, phase)
     else:

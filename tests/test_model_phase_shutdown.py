@@ -15,15 +15,18 @@ from model_campaign_warm import shutdown_phase
 def test_shutdown_closes_owned_process_but_not_unrelated_sibling(tmp_path, hung):
     root = tmp_path / 'phase'
     root.mkdir()
+    (root / 'measurement').mkdir()
     script = root / 'execute-phase.py'
-    script.write_text('''import os,json,signal,time
+    script.write_text('''import os,json,signal,time,subprocess,sys
 from pathlib import Path
 root=Path.cwd()
+child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'],cwd=root/'measurement')
+(root/'child.json').write_text(json.dumps(dict(pid=child.pid)))
 (root/'worker.json').write_text(json.dumps(dict(pid=os.getpid(),start=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()[19])))
 ''' + ("signal.signal(signal.SIGTERM,signal.SIG_IGN)\nwhile True:time.sleep(.05)\n" if hung else
        "while not (root/'stop').exists():time.sleep(.05)\n"))
     owned = subprocess.Popen([sys.executable, str(script)], cwd=root)
-    peer = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(30)'], cwd=tmp_path)
+    peer = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(30)'], cwd=root)
     try:
         for _ in range(100):
             if (root / 'worker.json').exists(): break
@@ -32,6 +35,7 @@ root=Path.cwd()
         owned.wait(timeout=2)
         assert result['state'] == 'terminal' and result['worker_closed']
         assert owned.pid in result['owned_pids']
+        assert json.loads((root/'child.json').read_text())['pid'] in result['owned_pids']
         assert peer.poll() is None
     finally:
         if owned.poll() is None: owned.kill()
@@ -51,7 +55,7 @@ def test_shutdown_reuses_control_handle_after_outer_job_already_cancelled(tmp_pa
         if verb == 'run': return dict(state='running', handle='remote:fake:job:stop')
         assert args[0] == 'remote:fake:job:stop'
         return dict(state='running' if len(calls) == 2 else 'completed', exit=0)
-    tools = SimpleNamespace(state=state, target='fake', runtime='runtime', remote=remote)
+    tools = SimpleNamespace(state=state, target='fake', runtime='runtime', cwd=str(tmp_path), remote=remote)
     assert shutdown_phase(tools)['worker_closed'] is False
     result = shutdown_phase(tools)
     assert result['worker_closed'] is True
@@ -83,7 +87,16 @@ def test_uncertain_shutdown_dispatch_never_duplicates(tmp_path):
     def remote(*args):
         calls.append(args)
         raise TimeoutError('lost acknowledgement')
-    tools = SimpleNamespace(state=state, target='fake', runtime='runtime', remote=remote)
+    tools = SimpleNamespace(state=state, target='fake', runtime='runtime', cwd=str(tmp_path), remote=remote)
     assert shutdown_phase(tools)['worker_closed'] is False
     assert shutdown_phase(tools)['worker_closed'] is False
     assert len(calls) == 1
+
+
+def test_shutdown_marks_queued_phase_before_worker_admission(tmp_path, monkeypatch):
+    import model_campaign_worker as worker
+    root = tmp_path / 'not-created-yet'
+    assert shutdown(root, grace=.01)['worker_closed'] is True
+    monkeypatch.setenv('CAMPAIGN_REMAINING_SECONDS', '10')
+    worker.phase(root, SimpleNamespace(check=lambda *args: pytest.fail('late workload admitted')))
+    assert (root / 'stop').is_file()

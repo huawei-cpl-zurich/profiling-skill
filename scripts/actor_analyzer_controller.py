@@ -520,7 +520,7 @@ class Campaign:
         launcher.resume_before_agent = phase.exists()
         return launcher.launch()
 
-    def validate_phase_analysis(self, phase, commit):
+    def validate_phase_analysis(self, phase, commit, *, require_retained=False):
         """Read-only authoritative validation shared by repair and publication."""
         report_path = phase / 'reports/analysis.json'
         if not report_path.exists():
@@ -545,8 +545,12 @@ class Campaign:
         for evidence in report['evidence']:
             try:
                 original = phase / 'candidate-snapshot' / evidence['path']
+                if any(Path(part).match('*.tar.gz') for part in Path(evidence['path']).parts):
+                    raise ValueError('analysis cites archive excluded from retained evidence: ' + evidence['path'])
                 retained = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
-                path = retained if retained.exists() else original
+                path = retained if require_retained or retained.exists() else original
+                if require_retained and not retained.is_file():
+                    raise ValueError('analysis cites missing retained evidence: ' + evidence['path'])
                 if not path.is_file() or path.is_symlink() or not original.is_file() \
                         or digest(path) != digest(original):
                     raise ValueError('analysis cites missing evidence: ' + evidence['path'])
@@ -554,7 +558,7 @@ class Campaign:
                 relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
                 original_summary = phase / 'candidate-snapshot' / relative_summary
                 retained_summary = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
-                summary_path = retained_summary if retained_summary.exists() else original_summary
+                summary_path = retained_summary if require_retained or retained_summary.exists() else original_summary
                 if not summary_path.is_file() or summary_path.is_symlink() \
                         or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
                     raise ValueError('citation lacks its authoritative call summary')
@@ -656,7 +660,7 @@ class Campaign:
                 shutil.copyfile(report_path, archive / 'raw-analysis.json')
             acquisitions = {}
             try:
-                report, entry['evidence_sha256'], acquisitions = self.validate_phase_analysis(phase, entry['candidate_commit'])
+                report, entry['evidence_sha256'], acquisitions = self.validate_phase_analysis(phase, entry['candidate_commit'], require_retained=True)
                 save(self.workspace / 'analysis.json', report)
                 entry['analysis_valid'] = True
             except (ValueError, OSError) as error:

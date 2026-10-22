@@ -209,3 +209,62 @@ def test_simultaneous_optional_citation_and_unsupported_diff_errors_are_both_rep
         return success()
     assert repair(launcher, success(), run, save, clock=lambda: 0)['report_repair']['valid']
     assert json.loads((launcher.root / 'report-repair/initial-report.json').read_text()) == raw
+
+
+def test_publication_requires_retained_artifact_but_precheck_accepts_original(tmp_path):
+    import shutil
+    launcher, raw, state = fixture(tmp_path)
+    raw['evidence'].pop();save(launcher.reports / 'analysis.json', raw)
+    # Pre-cleanup validation uses the actual original captures.
+    launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
+    with pytest.raises(ValueError, match='missing retained evidence'):
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit, require_retained=True)
+    shutil.copytree(launcher.workspace / 'evidence', launcher.root / 'trusted-evidence',
+                    ignore=shutil.ignore_patterns('*.tar.gz'))
+    launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit, require_retained=True)
+    entry = dict(candidate_commit=launcher.commit)
+    launcher.campaign.finish_phase(launcher.root, 'analyzer', entry, state)
+    assert entry['analysis_valid']
+    for item in raw['evidence']:
+        retained = launcher.campaign.history / 'round-1' / item['path']
+        assert retained.read_bytes() == (launcher.workspace / item['path']).read_bytes()
+
+
+def test_excluded_archive_citation_is_rejected_before_repair_and_publication(tmp_path):
+    from actor_analyzer_controller import validate_citation
+    launcher, raw, state = fixture(tmp_path)
+    archive = launcher.workspace / 'evidence/check/compiler-evidence/candidate/bundle.tar.gz'
+    archive.parent.mkdir(parents=True);archive.write_bytes(b'compiler artifact archive')
+    summary_path = launcher.workspace / 'evidence/check/results/summary.json'
+    summary = json.loads(summary_path.read_text())
+    summary.update(selector='kernel', cases=['case'], compiler_artifacts={archive.name: digest(archive)})
+    save(summary_path, summary)
+    item = dict(path=str(archive.relative_to(launcher.workspace)), kind='compiler', kernels=['kernel'], cases=['case'])
+    # Attribution/inventory is genuine; retention policy still excludes the artifact.
+    validate_citation(item, summary, raw['source_sha256'], archive)
+    raw['evidence'][-1] = item;save(launcher.reports / 'analysis.json', raw)
+    with pytest.raises(ValueError, match='archive excluded'):
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
+    entry = dict(candidate_commit=launcher.commit)
+    launcher.campaign.finish_phase(launcher.root, 'analyzer', entry, state)
+    assert not entry['analysis_valid'] and 'archive excluded' in entry['analysis_error']
+    assert not (launcher.campaign.history / 'round-1' / item['path']).exists()
+
+
+def test_retained_compiler_artifact_also_requires_its_retained_summary(tmp_path):
+    import shutil
+    launcher, raw, _ = fixture(tmp_path)
+    artifact = launcher.workspace / 'evidence/check/compiler-evidence/candidate/kernel.ll'
+    artifact.parent.mkdir(parents=True);artifact.write_text('compiler IR')
+    summary_path = launcher.workspace / 'evidence/check/results/summary.json'
+    summary = json.loads(summary_path.read_text())
+    summary.update(selector='kernel', cases=['case'], compiler_artifacts={artifact.name: digest(artifact)})
+    save(summary_path, summary)
+    raw['evidence'][-1] = dict(path=str(artifact.relative_to(launcher.workspace)), kind='compiler', kernels=['kernel'], cases=['case'])
+    save(launcher.reports / 'analysis.json', raw)
+    shutil.copytree(launcher.workspace / 'evidence', launcher.root / 'trusted-evidence')
+    launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit, require_retained=True)
+    (launcher.root / 'trusted-evidence/check/results/summary.json').unlink()
+    launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
+    with pytest.raises(ValueError, match='authoritative call summary'):
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit, require_retained=True)

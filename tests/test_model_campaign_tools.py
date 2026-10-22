@@ -604,3 +604,41 @@ def test_completed_warm_phase_transport_outage_is_retryable(tmp_path):
     assert result['state'] == 'observation-unavailable'
     assert result['next'] == 'experiment-tool observe callid'
     assert result['handle'] == receipt['handle']
+
+
+@pytest.mark.parametrize('child_exit', ['sigterm', 'systemexit'])
+def test_forked_runtime_child_cannot_publish_parent_report(tmp_path, child_exit):
+    import subprocess
+    script = r'''
+import hashlib,io,json,os,signal,sys,tarfile,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import model_campaign_worker as worker
+root=Path(sys.argv[2]);(root/'inbox').mkdir(parents=True)
+candidate=b'class Model: pass\n'
+request=dict(operation='check',host_remaining_seconds=10,source_sha256=hashlib.sha256(candidate).hexdigest())
+with tarfile.open(root/'inbox/call.tar.gz','w:gz') as archive:
+ for name,data in [('candidate.py',candidate),('request.json',json.dumps(request).encode())]:
+  info=tarfile.TarInfo(name);info.size=len(data);archive.addfile(info,io.BytesIO(data))
+sys.modules['model_device']=types.SimpleNamespace(acquire=lambda probe,remaining:(0,{},None))
+def check(call,env,remaining):
+ child=os.fork()
+ if child==0:
+  if sys.argv[3]=='sigterm': os.kill(os.getpid(),signal.SIGTERM)
+  raise SystemExit(0)
+ os.waitpid(child,0)
+ assert not (call/'results/summary.json').exists(), 'child published parent report'
+ assert not (call/'evidence.tar.gz').exists(), 'child published parent evidence'
+ (root/'stop').touch()
+ return dict(passed=True,variants=[0,1])
+os.environ['CAMPAIGN_REMAINING_SECONDS']='10'
+worker.phase(root,types.SimpleNamespace(check=check))
+report=json.loads((root/'calls/call/results/summary.json').read_text())
+assert report['state']=='completed' and report['worker_pid']==os.getpid()
+'''
+    result = subprocess.run([sys.executable, '-c', script,
+        str(Path(__file__).resolve().parents[1] / 'scripts'), str(tmp_path / 'phase'), child_exit],
+        capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    summary = json.loads((tmp_path / 'phase/calls/call/results/summary.json').read_text())
+    assert summary['check'] == dict(passed=True, variants=[0, 1])

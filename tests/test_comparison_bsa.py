@@ -88,3 +88,19 @@ def test_repeatability_and_attribute_mutation(root):
     a['args'][5][0]=99
     with pytest.raises(AssertionError,match='mutation'):
         bsa.validate(a,'candidate',a['expected'])
+
+
+def test_half_scale_is_static_fullgraph_metadata():
+    pytest.importorskip('triton')
+    path = Path(__file__).parents[1] / 'benchmarks/comparison_bsa_starter.py'
+    spec = importlib.util.spec_from_file_location('bsa_starter', path)
+    starter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(starter)
+    for scale in (0.1234567, -0.3333333, 0., 1e-8, 65504., 1e10):
+        expected = torch.tensor(scale, dtype=torch.float16).item()
+        assert starter._half_scale(scale) == expected
+    def apply(x):
+        return x * starter._half_scale(0.1234567)
+    compiled = torch.compile(apply, fullgraph=True, backend='eager')
+    x = torch.arange(7, dtype=torch.float32)
+    torch.testing.assert_close(compiled(x), apply(x))

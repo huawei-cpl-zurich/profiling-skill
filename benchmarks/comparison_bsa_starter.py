@@ -1,7 +1,19 @@
 """Deliberately naive row-wise RainFusionAttention Triton starting point."""
+import math
+import struct
+
 import torch
 import triton
 import triton.language as tl
+
+
+@torch.compiler.assume_constant_result
+def _half_scale(scale):
+    """Round static API metadata without reading a runtime tensor on the host."""
+    try:
+        return struct.unpack("e", struct.pack("e", scale))[0]
+    except OverflowError:
+        return math.copysign(float("inf"), scale)
 
 
 @triton.jit
@@ -50,7 +62,7 @@ def forward(query,key,value,select_idx,select_num_idx,block_shape,
         raise ValueError('starter requires contiguous tensors')
     scale=float(scale_value)
     if inner_precise==1:
-        scale=float(torch.tensor(scale,dtype=torch.float16).item())
+        scale=_half_scale(scale)
     out=torch.empty_like(query,dtype=torch.float32)
     qo=ko=bo=0
     sx,sy=map(int,block_shape)

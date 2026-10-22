@@ -273,7 +273,14 @@ class RoleLauncher(BlindLauncher):
         observer = threading.Thread(target=watchdog, daemon=True)
         observer.start()
         try:
-            return super().launch(preflight_only)
+            result = super().launch(preflight_only)
+            # Analyzers write a report, never candidate commits. Their report is
+            # validated independently by finish_phase before any batch gate.
+            if (self.role == 'analyzer' and result.get('returncode') == 0
+                    and result.get('timed_out') is False):
+                result['exit_code'] = 0
+                save(self.root / 'receipt.json', result)
+            return result
         finally:
             done.set()
             observer.join()
@@ -479,6 +486,13 @@ class Campaign:
                        and item.get('source_sha256') == candidate_hash(self.workspace)
                        for item in records):
                     state['verified'] = commit
+            previous = state.get('verified')
+            if previous and previous != commit:
+                verified_source = subprocess.check_output(['git', '-C', str(self.workspace),
+                    'show', previous + ':candidate.py'])
+                if candidate_hash(self.workspace) == hashlib.sha256(verified_source).hexdigest():
+                    state['verified'] = commit
+                    entry['carried_forward_from'] = previous
             entry['candidate_commit'] = commit
             entry['candidate_verified'] = state.get('verified') == commit
         else:

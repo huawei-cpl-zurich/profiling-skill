@@ -134,6 +134,20 @@ handle are not charged. Exhaustion is reported as `billed_checks_exhausted`;
 
 ## Recovery and evidence
 
+Initialization retains the complete execution configuration in the ignored cell
+folder. Reopening a cell with changed prompt, skills, target, runtime, budgets,
+agent command or transport fails before any remote call; restore the original
+configuration or initialize a separate cell. Cells predating this snapshot must
+be reconciled manually, not silently resumed with new execution inputs.
+
+All registered targets, including A5, use the global `cpl-remote` backend. Omit
+`remote_transport` or set it to `{"kind": "cpl-remote"}`. Legacy
+`bz-a5-wrapper` configurations fail with migration guidance; remove wrapper
+paths and choose a registered target, named runtime and registry workspace.
+Profiling commands and exact kernel selectors belong in the retained terminal
+gate, not a second transport implementation. This transport contract is not
+evidence that A5 runtime execution has been validated.
+
 ```bash
 python scripts/simple_experiment_runner.py init --root /path/to/runs --config cell.json
 python scripts/simple_experiment_runner.py run --root /path/to/runs --config cell.json

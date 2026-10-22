@@ -5,7 +5,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import base64
 
 
 SPEC = importlib.util.spec_from_file_location(
@@ -121,150 +120,15 @@ def success(us=12.5):
     return {"outcome": "success", "stdout": "PASS", "stderr": "", "profile_summary": {"duration_us": us}}
 
 
-class WrapperInvoke:
-    def __init__(self, profile_outputs):
-        self.profile_outputs = list(profile_outputs)
-        self.commands = []
-
-    def __call__(self, command, **_kwargs):
-        self.commands.append(command)
-        name = Path(command[0]).name
-        if name == "triton.sh":
-            return subprocess.CompletedProcess(command, 0, "triton ready\n", "")
-        if name == "select-device.sh":
-            return subprocess.CompletedProcess(command, 0, "BZ_A5_DEVICE=3\n", "")
-        if name == "scp.sh":
-            return subprocess.CompletedProcess(
-                command, 0,
-                "BZ_A5_TRANSFER_HANDLE=remote:bz-a5:transfer:t1\n"
-                "BZ_A5_TRANSFER_STATE=completed\n", "",
-            )
-        assert name == "profile-msprof.sh"
-        value = self.profile_outputs.pop(0)
-        if isinstance(value, Exception):
-            raise value
-        return subprocess.CompletedProcess(command, *value)
-
-
-def wrapper_root(tmp_path):
-    root = tmp_path / "wrapper"
-    root.mkdir()
-    for name in ("triton.sh", "select-device.sh", "scp.sh", "profile-msprof.sh"):
-        path = root / name
-        path.write_text("#!/bin/sh\n")
-        path.chmod(0o700)
-    return root
-
-
-def wrapper_output(envelope, csv="Kernel Name,Task Duration(us)\nstream_kernel,12.5\n"):
-    encoded_result = base64.b64encode(json.dumps(envelope).encode()).decode()
-    encoded_csv = base64.b64encode(csv.encode()).decode()
-    stdout = (
-        "SESSION_STATE=completed session=campaign-abc exit=0 "
-        "handle=remote:bz-a5:session:campaign-abc\n"
-        f"MSPROF_PROFILE_RESULT_BASE64={encoded_result}\n"
-        f"MSPROF_PROFILE_CSV_BASE64={encoded_csv}\n"
-    )
-    return 0, stdout, ""
-
-
-def test_bz_a5_wrapper_transport_profiles_exact_selector_and_returns_compact_evidence(tmp_path):
-    invoke = WrapperInvoke([wrapper_output({"schema": runner.RESULT_SCHEMA, "outcome": "success"})])
-    transport = runner.BzA5WrapperRemote({
-        "wrapper_root": str(wrapper_root(tmp_path)),
-        "state_root": str(tmp_path / "state"),
-        "kernel_name": "stream_kernel",
-        "timeout_seconds": 90,
-    }, invoke=invoke)
-    request = {
-        "target": "bz-a5", "campaign": "campaign", "cell": "a5-matmul-guarded",
-        "round": 1, "remote_workspace": "/remote/work",
-    }
-    assert transport.preflight(request)["physical_device"] == 3
-    script = tmp_path / "run.sh"
-    script.write_text("#!/bin/sh\necho ok\n")
-    handle = transport.submit(request, script)
-    result = transport.observe(handle)
-
-    assert handle.startswith("remote:bz-a5:session:simple-")
-    profile = next(command for command in invoke.commands if Path(command[0]).name == "profile-msprof.sh")
-    assert profile[profile.index("--device") + 1] == "3"
-    assert profile[profile.index("--kernel-name") + 1] == "stream_kernel"
-    assert profile[profile.index("--metric") + 1] == "OpBasicInfo"
-    assert result["outcome"] == "success"
-    assert result["profile_summary"]["durations_us"] == [12.5]
-    assert result["profile_summary"]["physical_device"] == 3
-    assert "MSPROF_PROFILE_CSV_BASE64" not in result["stdout"]
-
-
-def test_bz_a5_wrapper_transport_resume_reuses_session_after_observer_loss(tmp_path):
-    success_output = wrapper_output({"schema": runner.RESULT_SCHEMA, "outcome": "success"})
-    invoke = WrapperInvoke([subprocess.TimeoutExpired("profile", 10), success_output])
-    transport = runner.BzA5WrapperRemote({
-        "wrapper_root": str(wrapper_root(tmp_path)), "state_root": str(tmp_path / "state"),
-        "kernel_name": "stream_kernel",
-    }, invoke=invoke)
-    request = {"target": "bz-a5", "campaign": "campaign", "cell": "cell",
-               "round": 2, "remote_workspace": "/remote/work"}
-    transport.preflight(request)
-    script = tmp_path / "run.sh"
-    script.write_text("#!/bin/sh\necho ok\n")
-
-    handle = transport.submit(request, script)
-    result = transport.observe(handle)
-
-    profiles = [command for command in invoke.commands if Path(command[0]).name == "profile-msprof.sh"]
-    assert result["outcome"] == "success" and len(profiles) == 2
-    assert profiles[0] == profiles[1]
-    receipt = json.loads(next((tmp_path / "state").glob("*.json")).read_text())
-    assert receipt["handle"] == handle and receipt["attempts"] == 2
-
-
-def test_bz_a5_wrapper_transport_fails_closed_on_wrong_target_or_selector(tmp_path):
-    root = wrapper_root(tmp_path)
-    for configuration, message in [
-        ({"wrapper_root": str(root), "state_root": str(tmp_path / "s")}, "kernel_name"),
-        ({"wrapper_root": "relative", "state_root": str(tmp_path / "s"),
-          "kernel_name": "kernel"}, "wrapper_root"),
-    ]:
-        with pytest.raises(runner.RunnerError, match=message):
-            runner.BzA5WrapperRemote(configuration, invoke=WrapperInvoke([]))
-    transport = runner.BzA5WrapperRemote({
-        "wrapper_root": str(root), "state_root": str(tmp_path / "state"),
-        "kernel_name": "stream_kernel",
-    }, invoke=WrapperInvoke([]))
-    with pytest.raises(runner.PreflightFailure, match="requires target bz-a5"):
-        transport.preflight({"target": "bz-a3-1"})
-
-
-def test_remote_factory_selects_only_explicit_a5_wrapper_transport(tmp_path):
-    root = wrapper_root(tmp_path)
-    remote = runner._remote_from_config({"remote_transport": {
-        "kind": "bz-a5-wrapper", "wrapper_root": str(root),
-        "state_root": str(tmp_path / "state"), "kernel_name": "stream_kernel",
-    }}, invoke=WrapperInvoke([]))
-    assert isinstance(remote, runner.BzA5WrapperRemote)
-    with pytest.raises(runner.RunnerError, match="unsupported remote transport"):
-        runner._remote_from_config({"remote_transport": {"kind": "raw-ssh"}}, invoke=WrapperInvoke([]))
-
-
-def test_remote_factory_binds_selector_to_immutable_candidate_manifest(tmp_path):
-    root = wrapper_root(tmp_path)
-    manifest = tmp_path / "candidate-manifest.json"
-    manifest.write_text(json.dumps({"kernel_name": "manifest_kernel"}))
-    base = {"remote_transport": {
-        "kind": "bz-a5-wrapper", "wrapper_root": str(root),
-        "state_root": str(tmp_path / "state"),
-    }}
-    remote = runner._remote_from_config(
-        base, invoke=WrapperInvoke([]), candidate_manifest_path=manifest,
-    )
-    assert remote.kernel_name == "manifest_kernel"
-    base["remote_transport"]["kernel_name"] = "drifted_kernel"
-    with pytest.raises(runner.RunnerError, match="conflicts"):
-        runner._remote_from_config(
-            base, invoke=WrapperInvoke([]), candidate_manifest_path=manifest,
-        )
+def test_remote_factory_uses_global_client_for_a5_and_rejects_legacy():
+    def invoke(*args, **kwargs):
+        raise AssertionError("factory must not dispatch")
+    for config_value in ({}, {"remote_transport": {"kind": "cpl-remote"}}):
+        assert isinstance(runner._remote_from_config(config_value, invoke=invoke), runner.CplRemote)
+    with pytest.raises(runner.RunnerError, match="obsolete"):
+        runner._remote_from_config({"remote_transport": {"kind": "bz-a5-wrapper"}}, invoke=invoke)
+    with pytest.raises(runner.RunnerError, match="unsupported"):
+        runner._remote_from_config({"remote_transport": {"kind": "raw-ssh"}}, invoke=invoke)
 
 
 def test_init_creates_isolated_repo_and_branch(tmp_path):
@@ -279,6 +143,62 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
     assert (cell.path / "terminal-gate.sh").read_text() == 'python "$CANDIDATE_PATH"\n'
     assert state["billed_checks_used"] == 0
     assert state["task_sha256"] is None and not (cell.repo / "TASK.md").exists()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("prompt", "different task"), ("target", "other-target"),
+    ("runtime", "other-runtime"), ("remote_workspace", "/other/work"),
+    ("skill_paths", []), ("rounds", 99),
+    ("remote_transport", {"kind": "bz-a5-wrapper"}),
+    ("agent_command", ["other-agent"]),
+])
+def test_reopening_cell_rejects_external_config_drift(tmp_path, field, value):
+    cell = initialized(tmp_path, Remote([]))
+    changed = {**cell.config, field: value}
+    with pytest.raises(runner.RunnerError, match="configuration changed"):
+        runner.ExperimentCell(cell.root, changed, Agent(), Remote([]))
+
+
+def test_a5_global_client_persists_handle_before_observation_and_restart(tmp_path):
+    handle = "remote:bz-a5:job:retained"
+    commands = []
+    interrupted = True
+    cell = None
+
+    def invoke(command, **kwargs):
+        nonlocal interrupted
+        operation = command[2]
+        commands.append(command)
+        if operation == "capabilities":
+            receipt = {"target": "bz-a5", "capabilities": {
+                "run": True, "observe": True, "logs": True}}
+        elif operation == "preflight":
+            receipt = {"target": "bz-a5", "state": "completed"}
+        elif operation == "run":
+            receipt = {"target": "bz-a5", "handle": handle}
+        elif operation == "observe":
+            assert (cell.path / "attempts/1/remote-job-id.txt").read_text().strip() == handle
+            assert command[3:] == [handle, "--wait"]
+            if interrupted:
+                interrupted = False
+                raise subprocess.TimeoutExpired(command, 1)
+            receipt = {"target": "bz-a5", "handle": handle, "state": "completed", "exit": 0}
+        else:
+            assert operation == "logs"
+            content = json.dumps({"schema": runner.RESULT_SCHEMA, "outcome": "success"})
+            receipt = {"target": "bz-a5", "handle": handle,
+                       "content": content if command[command.index("--stream") + 1] == "stdout" else ""}
+        return subprocess.CompletedProcess(command, 0, json.dumps(receipt), "")
+
+    cell = initialized(tmp_path, runner._remote_from_config({}, invoke=invoke),
+                       target="bz-a5", rounds=1)
+    original = json.loads(json.dumps(cell.config))
+    assert cell.run()["status"] == "infrastructure_unknown"
+    cell = runner.ExperimentCell(cell.root, original, Agent(),
+                                 runner._remote_from_config(original, invoke=invoke))
+    assert cell.resume()["status"] == "complete"
+    assert sum(command[2] == "run" for command in commands) == 1
+    assert sum(command[2] == "observe" for command in commands) == 2
 
 
 def test_init_snapshots_optional_task_and_records_it_with_round_evidence(tmp_path):

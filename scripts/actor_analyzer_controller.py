@@ -480,6 +480,7 @@ class Campaign:
                        for item in records):
                     state['verified'] = commit
             entry['candidate_commit'] = commit
+            entry['candidate_verified'] = state.get('verified') == commit
         else:
             report_path = phase / 'reports/analysis.json'
             if not report_path.exists():
@@ -565,7 +566,9 @@ class Campaign:
                         reason=entry['analysis_error']))
             self.commit(phase.name + ': performance analysis and diagnostics')
 
-    def run(self):
+    def run(self, stop_after_round=None):
+        if stop_after_round is not None and not 1 <= stop_after_round <= self.rounds:
+            raise ValueError("checkpoint round outside configured campaign")
         self.root.parent.mkdir(parents=True, exist_ok=True)
         # The kernel releases this lock on interruption; persistent phase intents
         # distinguish observation from permission to dispatch another agent.
@@ -631,6 +634,10 @@ class Campaign:
                     save(self.root / 'state.json', state)
                     if entry['cleanup']['state'] != 'terminal':
                         return {**state, 'state': 'observation-required', 'pending_phase': name}
+                if stop_after_round == index and index < self.rounds:
+                    state['state'] = 'checkpoint'
+                    save(self.root / 'state.json', state)
+                    return state
             state['state'] = 'completed'
             save(self.root / 'state.json', state)
             return state
@@ -650,6 +657,7 @@ def main():
     parser.add_argument('--profiling-skill', type=Path, action='append', default=[])
     parser.add_argument('--coding-skill', type=Path, action='append', default=[])
     parser.add_argument('--rounds', type=int, default=4)
+    parser.add_argument('--stop-after-round', type=int)
     parser.add_argument('--actor-budget', type=int, default=1200)
     parser.add_argument('--analyzer-budget', type=int, default=600)
     parser.add_argument('--actor-only', action='store_true')
@@ -658,9 +666,9 @@ def main():
                       json.loads(args.tool_command_json.read_text()), args.instruction.read_text(),
                       skill=args.skill, rounds=args.rounds, actor_budget=args.actor_budget,
                       analyzer_budget=args.analyzer_budget, actor_only=args.actor_only,
-                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run()
+                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run(stop_after_round=args.stop_after_round)
     print(json.dumps(result, indent=2))
-    return 0 if result['state'] == 'completed' else 75
+    return 0 if result['state'] in ('completed', 'checkpoint') else 75
 
 
 if __name__ == '__main__':

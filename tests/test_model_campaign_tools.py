@@ -113,7 +113,7 @@ def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monke
             self.compiler = compiler
         def __call__(self):
             calls.append('forward')
-    monkeypatch.setattr(native, '_prepare', lambda root: (Prepared(), {}))
+    monkeypatch.setattr(native, '_prepare', lambda root: (Prepared(), {'id': 'operator-case'}))
     class Acquisition:
         def profile(self, prepared, **kwargs):
             assert kwargs['samples'] == 1
@@ -457,3 +457,63 @@ def test_model_service_requests_activation_before_native_dispatch(tmp_path):
     result = service.start('check')
     request = json.loads((state / result['call_id'] / 'request.json').read_text())
     assert request['activation_required'] is True
+
+
+def test_task_router_selects_private_cases_and_variants(tmp_path, monkeypatch):
+    import model_campaign_task as router
+    config = dict(task='gdn', profile_index=3, check_indices=[0, 3])
+    (tmp_path / 'private-task.json').write_text(json.dumps(config))
+    calls = []
+    validator = object()
+    def make(root, index, variant=0):
+        calls.append((root, index, variant))
+        return dict(id=f'gdn-{index}-v{variant}')
+    monkeypatch.setitem(sys.modules, 'comparison_gdn', SimpleNamespace(make_case=make, validate=validator))
+    case, validate = router.case(tmp_path, variant=1)
+    assert case['id'] == 'gdn-3-v1' and validate is validator
+    assert calls == [(tmp_path / 'reference', 3, 1)]
+    assert router.check_indices(tmp_path) == [0, 3]
+
+
+def test_prepare_comparison_releases_no_private_material(tmp_path, monkeypatch):
+    def prepare(private, root):
+        private.mkdir()
+        (private / 'secret').write_text('PRIVATE ORACLE')
+        return dict(public=dict(arguments=['x'], outputs=['y'], starter='class Model: pass\n'))
+    monkeypatch.setitem(sys.modules, 'comparison_gdn', SimpleNamespace(prepare=prepare,
+        specifications=lambda root: [None] * 7))
+    # Copy sources through the actual preparation boundary without changing source tree.
+    original = tools.shutil.copyfile
+    def copy(source, dest):
+        if Path(source).name in ('comparison_gdn.py', 'comparison_gdn_starter.py'):
+            Path(dest).write_text('# private adapter placeholder\n')
+        else:
+            original(source, dest)
+    monkeypatch.setattr(tools.shutil, 'copyfile', copy)
+    result = tools.prepare(tmp_path / 'bundle', 'gdn', tmp_path / 'references')
+    public, private = Path(result['public']), Path(result['private'])
+    assert 'PRIVATE ORACLE' not in ''.join(p.read_text() for p in public.iterdir())
+    assert (private / 'reference/secret').read_text() == 'PRIVATE ORACLE'
+    assert json.loads((private / 'private-task.json').read_text())['check_indices'] == [0, 6]
+    assert json.loads((public / 'task.json').read_text())['task'] == 'gdn'
+
+
+def test_prepare_wraps_bsa_function_without_changing_public_call(tmp_path, monkeypatch):
+    def prepare(private, root):
+        private.mkdir()
+        return dict(api='forward(value)', starter='import torch\ndef forward(value): return value\n')
+    monkeypatch.setitem(sys.modules, 'comparison_bsa', SimpleNamespace(prepare=prepare,
+        specifications=lambda root: [None] * 50))
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(nn=SimpleNamespace(Module=object)))
+    original = tools.shutil.copyfile
+    def copy(source, dest):
+        if Path(source).name in ('comparison_bsa.py', 'comparison_bsa_starter.py'):
+            Path(dest).write_text('# private adapter\n')
+        else:
+            original(source, dest)
+    monkeypatch.setattr(tools.shutil, 'copyfile', copy)
+    bundle = tools.prepare(tmp_path / 'bundle', 'bsa', tmp_path / 'references')
+    namespace = {}
+    exec((Path(bundle['public']) / 'candidate.py').read_text(), namespace)
+    marker = object()
+    assert namespace['Model']().forward(marker) is marker

@@ -241,3 +241,26 @@ seeded correctness IDs identify the validation workload, while a verified
 single-launch profile stays explicitly labeled as a workload aggregate rather
 than being attributed to each seed. Historical comparison selections must
 represent different source hashes, including when a kernel recurs in later rounds.
+
+### Multi-operator batches and checkpoints
+
+`model_campaign_tools.py prepare --task matmul|gdn|bsa --output DIR`
+accepts `--reference-root` for private comparison references. Optional
+`--profile-index` and `--check-indices` select the explicit supplied case and
+bounded per-call correctness subset. Full baseline/case qualification remains
+a prerequisite outside worker calls. Only API, task descriptor and original
+naive starter are released; reference sources and fixtures stay private.
+
+`actor_analyzer_controller.py --stop-after-round 1` checkpoints a configured
+four-round campaign without changing its immutable budgets or round count.
+Resume using the same output and configuration without the checkpoint option.
+The existing phase records prevent replaying completed roles.
+
+The trusted `campaign_batch.reconcile` boundary takes retained controller states
+and device capacity, then returns durable admissions or cancellation requests.
+Persist decisions before acting. Only admitted cells may start role clocks.
+Three successful matmul round-one checkpoints release the remaining cells and
+matmul continuations. Terminal matmul candidate/analyzer failures permanently
+freeze admission. Record batch-owned remote handles in `handles`; invoke
+`cancel_owned` with the installed cpl-remote cancellation boundary and observe
+nonterminal cancellation receipts. Lost observation never permits redispatch.

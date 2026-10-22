@@ -69,7 +69,8 @@ class FakeTransport:
         ]
         captures = [
             {"case": row["case"], "iteration": iteration,
-             "duration_us": sample, "kernel_name": "gdn_kernel",
+            "duration_us": sample, "kernel_name": "gdn_kernel",
+            "replay_mode": "kernel",
              "evidence_sha256": "a" * 64, "msprof_log_sha256": "b" * 64}
             for row in rows for iteration, sample in enumerate(row["samples_us"])
         ]
@@ -78,12 +79,14 @@ class FakeTransport:
             "diagnostics": "NameError: tl" if self.status == "compile_error" else "",
             "benchmark": "gdn", "action": "profile", "device": 0,
             "cases": [40, 49], "repeats": 3, "round": 1,
-            "kernel_name": "gdn_kernel", "passed": self.status == "ok",
+            "kernel_name": "gdn_kernel", "replay_mode": "kernel",
+            "passed": self.status == "ok",
             "profile_cases": rows,
             "profile": {
                 "schema_version": 1, "status": "success", "profiler": "msprof-op",
                 "target_family": "Ascend-A2-A3",
                 "kernel_name": "gdn_kernel", "repeats": 3,
+                "replay_mode": "kernel",
                 "cases": rows, "captures": captures,
                 "geomean_us": math.sqrt(99.0),
             },
@@ -115,7 +118,8 @@ def profile_job(tmp_path: Path):
         "baseline": assets["baseline.py"], "case_spec": assets["cases.jsonl"],
         "cases": [40, 49], "repeats": 3, "round": 1,
         "tolerances": {"rtol": 0.02, "atol": 0.02},
-        "profiling": {"kernel_name": "gdn_kernel", "tool": "msprof op"},
+        "profiling": {"kernel_name": "gdn_kernel", "tool": "msprof op",
+                      "replay_mode": "kernel"},
     }
 
 
@@ -918,14 +922,17 @@ def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
                          "median_us": 8.0} for case in cases]
                 captures = [{"case": case, "iteration": iteration,
                              "duration_us": 8.0,
-                             "kernel_name": job["profiling"]["kernel_name"]}
+                             "kernel_name": job["profiling"]["kernel_name"],
+                             "replay_mode": job["profiling"]["replay_mode"]}
                             for case in cases for iteration in range(repeats)]
                 payload.update(
                     cases=cases, repeats=repeats, round=job["round"],
                     kernel_name=job["profiling"]["kernel_name"],
+                    replay_mode=job["profiling"]["replay_mode"],
                     profile_cases=rows,
                     profile={"status": "success", "profiler": "msprof-op",
                              "kernel_name": job["profiling"]["kernel_name"],
+                             "replay_mode": job["profiling"]["replay_mode"],
                              "repeats": repeats, "cases": rows,
                              "captures": captures, "geomean_us": 8.0},
                 )
@@ -970,7 +977,7 @@ def test_actual_backend_nonzero_campaign_device_round_trips_for_all_actions(
 
 @pytest.mark.parametrize("corruption", [
     "missing", "kernel", "repeats", "cases", "sample_count", "nonfinite",
-    "captures", "geomean", "non_object_row",
+    "captures", "geomean", "replay_mode", "non_object_row",
 ])
 def test_profile_rejects_malformed_compact_evidence_before_receipting(
         tmp_path: Path, corruption: str):
@@ -997,6 +1004,8 @@ def test_profile_rejects_malformed_compact_evidence_before_receipting(
                 evidence["captures"].pop()
             elif corruption == "geomean":
                 evidence["geomean_us"] = float("inf")
+            elif corruption == "replay_mode":
+                evidence["replay_mode"] = "application"
             else:
                 payload["profile_cases"].append("not-a-case-row")
                 evidence["cases"].append("not-a-case-row")
@@ -1009,6 +1018,18 @@ def test_profile_rejects_malformed_compact_evidence_before_receipting(
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "profile_tool_error"
     assert not list((tmp_path / "state").glob("*/completed.json"))
+
+
+def test_profile_rejects_unsupported_replay_mode_before_dispatch(tmp_path: Path):
+    module = load()
+    transport = FakeTransport(module)
+    _module, subject = client(tmp_path, transport)
+    job = profile_job(tmp_path)
+    job["profiling"]["replay_mode"] = "invalid"
+    result = subject.run(job)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert transport.executions == []
 
 
 def test_cli_rejects_abbreviated_singleton_flags(tmp_path: Path):
@@ -1042,7 +1063,7 @@ elif action == "logs":
  stream=args[args.index("--stream")+1]
  rows=[{"case":40,"samples_us":[8.0,9.0,10.0],"median_us":9.0},{"case":49,"samples_us":[10.0,11.0,12.0],"median_us":11.0}]
  captures=[{"case":r["case"],"iteration":i,"duration_us":v,"kernel_name":"gdn_kernel"} for r in rows for i,v in enumerate(r["samples_us"])]
- result={"status":"ok","diagnostics":"","benchmark":"gdn","action":"profile","device":0,"cases":[40,49],"repeats":3,"round":1,"kernel_name":"gdn_kernel","passed":True,"profile_cases":rows,"profile":{"status":"success","profiler":"msprof-op","kernel_name":"gdn_kernel","repeats":3,"cases":rows,"captures":captures,"geomean_us":(99.0 ** .5)}}
+ result={"status":"ok","diagnostics":"","benchmark":"gdn","action":"profile","device":0,"cases":[40,49],"repeats":3,"round":1,"kernel_name":"gdn_kernel","replay_mode":"kernel","passed":True,"profile_cases":rows,"profile":{"status":"success","profiler":"msprof-op","kernel_name":"gdn_kernel","repeats":3,"cases":rows,"captures":captures,"geomean_us":(99.0 ** .5)}}
  payload={"target":"bz-a3-2","operation":"logs","state":"completed","handle":handle,"content":("BZ_PRODUCTION_RESULT="+json.dumps(result)+"\\n") if stream == "stdout" else ""}
 else: raise SystemExit(9)
 if action == "upload": print("sending incremental file list")

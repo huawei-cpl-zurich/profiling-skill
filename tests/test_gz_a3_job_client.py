@@ -539,7 +539,7 @@ elif action == "run-bundle":
  elif job["action"]=="profile": identity.update(cases=job["cases"],repeats=job["repeats"])
  else: identity["case"]=job["case"]
  if job["action"]=="measure": identity["phase"]=job["phase"]
- if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"])
+ if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"],replay_mode=job["profiling"].get("replay_mode","kernel"))
  out=Path(os.environ["FAKE_OUT"]); out.mkdir(exist_ok=True)
  rows=[{"case":case,"samples_us":[7.0,7.5,8.0],"median_us":7.5} for case in job.get("cases",[])]
  result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok","profile_cases":rows}
@@ -548,10 +548,12 @@ elif action == "run-bundle":
  if job["action"]=="profile":
   (out/"profile").mkdir(exist_ok=True)
   captures=[{"case":row["case"],"iteration":iteration,"duration_us":sample,
+             "replay_mode":job["profiling"].get("replay_mode","kernel"),
              "kernel_name":job["profiling"]["kernel_name"]}
             for row in rows for iteration,sample in enumerate(row["samples_us"])]
   (out/"profile/evidence.json").write_text(json.dumps({"status":"success",
-      "kernel_name":job["profiling"]["kernel_name"],"cases":rows,"captures":captures}))
+       "replay_mode":job["profiling"].get("replay_mode","kernel"),
+       "kernel_name":job["profiling"]["kernel_name"],"cases":rows,"captures":captures}))
   (out/"profile/msprof.log").write_text("Profiling finished\n")
  archive=Path(os.environ["FAKE_TAR"])
  with tarfile.open(archive,"w") as stream:
@@ -820,3 +822,16 @@ def test_partial_retained_fetch_is_quarantined_and_refetched(tmp_path: Path):
     assert second.returncode == 0
     assert recovered["status"] == "ok"
     assert list(state.glob("result.invalid-*.tar"))
+@pytest.mark.parametrize("captures", [None, [], ["not-an-object"]])
+def test_profile_evidence_rejects_missing_or_malformed_capture_bindings(
+        tmp_path: Path, captures):
+    module = load_client()
+    path = tmp_path / "evidence.json"
+    evidence = {"status": "success", "cases": [{"case": 7}],
+                "replay_mode": "application"}
+    if captures is not None:
+        evidence["captures"] = captures
+    path.write_text(json.dumps(evidence))
+    result = {"profile_cases": [{"case": 7}], "replay_mode": "application"}
+    with pytest.raises(module.ClientError, match="selector identity|replay mode"):
+        module.attach_profile_evidence(result, path)

@@ -20,6 +20,7 @@ from pathlib import Path
 SUCCESS_LINE = "Profiling running finished. All task success."
 NAME_FIELDS = ("Op Name", "OpName", "Kernel Name", "kernel_name")
 DURATION_FIELDS = ("Task Duration(us)", "Task Duration (us)", "task_duration_us")
+REPLAY_MODES = ("kernel", "application")
 
 
 class InvalidCapture(RuntimeError):
@@ -62,8 +63,11 @@ def summarize(
     *,
     warm_up: int,
     launch_count: int,
+    replay_mode: str = "kernel",
     target_family: str = "Ascend-A2-A3",
 ) -> dict:
+    if replay_mode not in REPLAY_MODES:
+        raise InvalidCapture(f"unsupported replay mode: {replay_mode!r}")
     files = sorted(root.rglob("OpBasicInfo*.csv"))
     if not files:
         error = SelectorMiss if kernel else InvalidCapture
@@ -84,7 +88,13 @@ def summarize(
             accepted = 0
             for raw in reader:
                 name = (raw.get(name_field) or "").strip()
-                if kernel and name != kernel:
+                # Application replay reports generated device task names (for
+                # example ``candidate_mix_aic``) rather than the source-level
+                # Triton symbol accepted by kernel replay.  Keep selection
+                # narrow while accepting that stable msprof suffix.
+                if kernel and name != kernel and not (
+                    replay_mode == "application" and name == kernel + "_mix_aic"
+                ):
                     continue
                 try:
                     duration = float((raw.get(duration_field) or "").strip())
@@ -139,7 +149,7 @@ def summarize(
         "protocol": {
             "warm_up": warm_up,
             "launch_count": launch_count,
-            "replay_mode": "kernel",
+            "replay_mode": replay_mode,
             "kernel_selector": kernel,
         },
         "kernels": kernels,
@@ -160,6 +170,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--kernel-name")
     parser.add_argument("--warm-up", type=int, default=3)
     parser.add_argument("--launch-count", type=positive_int, default=1)
+    parser.add_argument("--replay-mode", choices=REPLAY_MODES, default="kernel")
     parser.add_argument("--target-family", choices=("Ascend-A2-A3", "Ascend-A5"),
                         default="Ascend-A2-A3")
     parser.add_argument("--timeout", type=positive_int, default=600)
@@ -199,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
         "--aic-metrics=BasicInfo",
         f"--warm-up={args.warm_up}",
         f"--launch-count={args.launch_count}",
-        "--replay-mode=kernel",
+        f"--replay-mode={args.replay_mode}",
     ]
     if args.kernel_name:
         command.append(f"--kernel-name={args.kernel_name}")
@@ -250,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             args.kernel_name,
             warm_up=args.warm_up,
             launch_count=args.launch_count,
+            replay_mode=args.replay_mode,
             target_family=args.target_family,
         )
         evidence["status"] = "success"
@@ -274,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
                 "msprof_returncode": returncode,
             },
             "application": args.application,
+            "protocol": {
+                "warm_up": args.warm_up,
+                "launch_count": args.launch_count,
+                "replay_mode": args.replay_mode,
+                "kernel_selector": args.kernel_name,
+            },
             "msprof_log": str(log),
         }
         if args.kernel_name:

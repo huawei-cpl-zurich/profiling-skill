@@ -76,6 +76,16 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
         checked = adapter.check(root, env, remaining)
         summary['check'] = checked
         if checked.get('passed') is not True or set(checked.get('variants', [])) != {0, 1}:
+            if runtime:
+                try:
+                    torch = sys.modules['torch']
+                    torch.ones(1, device='npu')
+                    torch.npu.synchronize()
+                except TimeoutError:
+                    raise
+                except Exception:
+                    summary.update(failure_stage='infrastructure',
+                        diagnostic=dict(kind='phase-runtime-unavailable'))
             return summary
         if request['operation'] != 'check':
             summary['failure_stage'] = 'measurement'

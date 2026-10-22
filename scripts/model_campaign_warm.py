@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shlex
 import shutil
+import subprocess
 import tarfile
 import uuid
 
@@ -48,9 +49,10 @@ def start(service, operation):
     if phase:
         observed = tools.remote('observe', phase['handle'])
         if observed['state'] in TERMINAL:
-            return dict(state='failed', failure_stage='infrastructure',
-                        diagnostic=dict(kind='phase-worker-terminal'))
-    else:
+            # Only confirmed terminal workers may be replaced, never live or
+            # unavailable ones. The original phase deadline still applies.
+            phase = None
+    if phase is None:
         for args in (('targets',), ('capabilities', tools.target), ('preflight', tools.target)):
             result = tools.remote(*args)
             if args[0] == 'preflight' and result.get('state') != 'completed':
@@ -69,9 +71,6 @@ def start(service, operation):
         with tarfile.open(bundle, 'w:gz') as stream:
             for path in staging.iterdir():
                 stream.add(path, arcname=path.name)
-        upload = tools.remote('upload', tools.target, bundle, remote + '.tar.gz')
-        if upload.get('state') != 'completed':
-            raise RuntimeError('phase bundle upload incomplete; no worker dispatched')
     receipt = dict(call_id=ident, target=tools.target, runtime=tools.runtime, cwd=tools.cwd,
         state='prepared', request=request, warm=True,
         remote_folder=phase['remote_folder'] + '/calls/' + ident)
@@ -83,35 +82,67 @@ def start(service, operation):
             phase['remote_folder'] + '/inbox/' + ident + '.tar.gz')
         save(folder / 'receipt.json', receipt)
     else:
-        remaining = service.remaining(context)
-        script = '#!/bin/bash\nset -eu\nexport CAMPAIGN_REMAINING_SECONDS=' + shlex.quote(str(remaining))
-        script += '\nmkdir -p ' + shlex.quote(phase['remote_folder'])
-        script += '\ntar -xzf ' + shlex.quote(phase['remote_folder'] + '.tar.gz')
-        script += ' -C ' + shlex.quote(phase['remote_folder'])
-        script += '\ncd ' + shlex.quote(phase['remote_folder']) + '\nexec python execute-phase.py\n'
-        (folder / 'run.sh').write_text(script)
-        # Persist intent before remote dispatch. Unknown responses never repeat it.
         save(statefile, phase)
-        receipt['dispatch_intent'] = True
-        save(folder / 'receipt.json', receipt)
-        dispatched = tools.remote('run', tools.target, '--runtime', tools.runtime,
-            '--cwd', tools.cwd, '--file', folder / 'run.sh')
-        if not dispatched.get('handle'):
-            return dict(state='dispatch-unconfirmed', call_id=ident)
-        phase['handle'] = receipt['handle'] = dispatched['handle']
-        save(statefile, phase)
+        receipt['bootstrap'] = True
+        receipt['upload'] = tools.remote('upload', tools.target, bundle,
+                                        phase['remote_folder'] + '.tar.gz')
         save(folder / 'receipt.json', receipt)
     return service.observe(ident)
+
+
+def launch(tools, receipt, folder):
+    phasefile = tools.state / 'phase.json'
+    phase = json.loads(phasefile.read_text())
+    if phase.get('dispatch_intent'):
+        return dict(receipt, state='dispatch-unconfirmed')
+    upload = tools.transfer(receipt, 'upload')
+    save(folder / 'receipt.json', receipt)
+    if upload['state'] != 'completed':
+        return dict(receipt, state='transfer-pending' if upload['state'] not in TERMINAL else 'failed')
+    deadline = receipt['request']['utc_deadline']
+    remaining = (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()
+    if remaining <= 0:
+        receipt.update(state='failed', failure_stage='budget')
+        save(folder / 'receipt.json', receipt)
+        return receipt
+    tools._staging_deadline = deadline
+    script = '#!/bin/bash\nset -eu\nexport CAMPAIGN_REMAINING_SECONDS=' + shlex.quote(str(remaining))
+    script += '\nmkdir -p ' + shlex.quote(phase['remote_folder'])
+    script += '\ntar -xzf ' + shlex.quote(phase['remote_folder'] + '.tar.gz')
+    script += ' -C ' + shlex.quote(phase['remote_folder'])
+    script += '\ncd ' + shlex.quote(phase['remote_folder']) + '\nexec python execute-phase.py\n'
+    (folder / 'run.sh').write_text(script)
+    phase['dispatch_intent'] = receipt['dispatch_intent'] = True
+    save(phasefile, phase)
+    save(folder / 'receipt.json', receipt)
+    try:
+        dispatched = tools.remote('run', tools.target, '--runtime', tools.runtime,
+            '--cwd', tools.cwd, '--file', folder / 'run.sh')
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+        return dict(receipt, state='dispatch-unconfirmed')
+    if dispatched.get('handle'):
+        phase['handle'] = receipt['handle'] = dispatched['handle']
+        save(phasefile, phase)
+        save(folder / 'receipt.json', receipt)
+    return receipt
 
 
 def observe(tools, ident):
     folder = tools.state / ident
     receipt = json.loads((folder / 'receipt.json').read_text())
     if not receipt.get('handle'):
-        return dict(receipt, state='dispatch-unconfirmed')
+        receipt = launch(tools, receipt, folder)
+        if not receipt.get('handle'):
+            return dict(receipt, next='experiment-tool observe ' + ident)
+    if 'upload' in receipt and receipt['upload'].get('state') not in TERMINAL:
+        transfer = tools.transfer(receipt, 'upload')
+        save(folder / 'receipt.json', receipt)
+        if transfer['state'] != 'completed':
+            return dict(receipt, state='transfer-pending' if transfer['state'] not in TERMINAL else 'failed',
+                        next='experiment-tool observe ' + ident)
     try:
         observed = tools.remote('observe', receipt['handle'])
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
         return dict(receipt, state='observation-unavailable', next='experiment-tool observe ' + ident)
     evidence = tools.workspace / 'evidence' / ident
     evidence.mkdir(parents=True, exist_ok=True)
@@ -143,7 +174,7 @@ def observe(tools, ident):
         receipt['state'] = summary['state']
         save(folder / 'receipt.json', receipt)
         return dict(summary, call_id=ident, handle=receipt['handle'])
-    except (OSError, RuntimeError, ValueError, tarfile.TarError):
+    except (OSError, RuntimeError, ValueError, tarfile.TarError, subprocess.TimeoutExpired):
         receipt['state'] = observed['state'] if observed['state'] in TERMINAL else 'running'
         save(folder / 'receipt.json', receipt)
         return dict(receipt, next='experiment-tool observe ' + ident) if receipt['state'] not in TERMINAL else receipt

@@ -106,6 +106,7 @@ def benchmark(root, env, remaining):
     capture = Acquisition().profile(prepared, samples=3, output=root / 'measurement/timing-trace')
     accounting = account_profile(capture['iterations'], capture['tasks'], capture_complete=True)
     return dict(state='complete', cases=[case['id']], warmup=20, samples=3,
+        discovered_names=sorted({row['name'] for row in capture['tasks'] if row['kind'] == 'device'}),
         busy_time=dict(metric=accounting['metric'],
                        samples_us=[row['device_busy_us'] for row in accounting['iterations']],
                        active_union_samples_us=[row['device_active_union_us'] for row in accounting['iterations']],

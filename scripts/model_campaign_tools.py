@@ -48,7 +48,7 @@ def export(private, public):
         result['captures'].append(clean)
     public.mkdir(parents=True)
     (public / 'results').mkdir()
-    (public / 'results/summary.json').write_text(json.dumps(result, indent=2))
+    (public / 'results/summary.json').write_text(json.dumps(result, indent=2, allow_nan=False))
 
 
 def prepare(output, task='matmul'):

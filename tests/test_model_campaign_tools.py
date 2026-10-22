@@ -36,13 +36,42 @@ def test_export_preserves_trusted_identity_and_pipe_rows_not_private_text(tmp_pa
                 {'sub_block_id': 'SECRET ORACLE'}])]))
     (private / 'results/summary.json').write_text(json.dumps(value))
     tools.export(private, tmp_path / 'public')
-    report = json.loads((tmp_path / 'public/results/summary.json').read_text())
+    report = json.loads((tmp_path / 'public/results/summary.json').read_text(),
+                        parse_constant=lambda value: pytest.fail('nonfinite JSON number: ' + value))
     assert report['correctness'] is True
     assert report['source_sha256'] == value['source_sha256']
     assert report['busy_time']['active_union_samples_us'] == [9, 10, 11]
     assert report['captures'][0]['pipe_rows'] == [
         {'Name': 'candidate_kernel', 'vec_ratio': 14.3, 'sub_block_id': 'vector0'}, {}]
     assert 'SECRET' not in json.dumps(report)
+
+
+def test_warm_timing_exports_only_names_from_actual_device_capture(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(
+        npu=SimpleNamespace(synchronize=lambda: None)))
+    monkeypatch.setattr(native, '_prepare', lambda root:
+        (lambda: calls.append('forward'), dict(id='private-case')))
+    class Acquisition:
+        def profile(self, prepared, **kwargs):
+            assert kwargs['samples'] == 3
+            return dict(iterations=[{}] * 3, tasks=[
+                dict(name='kernel_b', kind='device'), dict(name='kernel_a', kind='device'),
+                dict(name='kernel_a', kind='device'), dict(name='setup_cpu', kind='aicpu')])
+    monkeypatch.setitem(sys.modules, 'profile_capture', SimpleNamespace(Acquisition=Acquisition))
+    monkeypatch.setitem(sys.modules, 'profile_accounting', SimpleNamespace(account_profile=
+        lambda *args, **kwargs: dict(metric='busy-time', iterations=[
+            dict(device_busy_us=4, device_active_union_us=3)] * 3)))
+    result = native.benchmark(tmp_path, {}, lambda: 100)
+    assert result['discovered_names'] == ['kernel_a', 'kernel_b']
+    assert len(calls) == 80
+    private = tmp_path / 'private'
+    (private / 'results').mkdir(parents=True)
+    (private / 'results/summary.json').write_text(json.dumps(dict(state='completed',
+        check=dict(passed=True, variants=[0, 1]), result=result)))
+    tools.export(private, tmp_path / 'public')
+    published = json.loads((tmp_path / 'public/results/summary.json').read_text())
+    assert published['discovered_names'] == ['kernel_a', 'kernel_b']
 
 
 def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, capsys):

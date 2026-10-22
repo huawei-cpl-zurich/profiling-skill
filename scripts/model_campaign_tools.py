@@ -16,7 +16,7 @@ def export(private, public):
     value = json.loads((private / 'results/summary.json').read_text())
     result = {key: value[key] for key in ('state', 'failure_stage', 'operation',
               'source_sha256', 'physical_device', 'logical_device', 'diagnostic', 'progress', 'worker_pid',
-              'runtime_initializations', 'torch_module_id') if key in value}
+              'runtime_initializations', 'torch_module_id', 'correctness_provenance') if key in value}
     checked = value.get('check', {})
     result['correctness'] = checked.get('passed') is True and checked.get('variants') == [0, 1]
     # candidate_probe already authenticates candidate-owned compiler diagnostics.
@@ -162,7 +162,9 @@ def main(argv=None):
     options = parser.parse_args(argv)
     if options.verb == 'help':
         print('experiment-tool check|timing|pipes; experiment-tool observe CALL_ID\n'
-              'Every operation independently checks compiled Model correctness on private input variants.\n'
+              'check always validates all configured cases/variants; changed sources also require full checks.\n'
+              'timing/pipes may reuse a passed same-phase source proof, identified by correctness_provenance.\n'
+              'Measurements always prepare and validate their profile case afresh.\n'
               'Compilation/numerical failures include safe diagnostics; retry edits until role deadline, no attempt quota.\n'
               'timing measures warm synchronized full-forward latency.\n'
               'pipes: Torch-NPU application PMU, per-task PipeUtilization; 20 warmups, 5 measured forwards.\n'

@@ -845,3 +845,26 @@ def test_actor_carry_forward_qualification_tracks_source_not_phase_commit(tmp_pa
 def test_public_bridge_cannot_request_trusted_phase_shutdown(tmp_path):
     with pytest.raises(ValueError, match='trusted controller'):
         bridge(tmp_path / 'absent-config.json', ['stop'])
+
+
+def test_cleanup_preserves_shutdown_handle_and_worker_acknowledgment(tmp_path, monkeypatch):
+    import model_campaign_warm as warm
+    phase = tmp_path / 'role'
+    phase.mkdir()
+    state = tmp_path / 'tool-state'
+    state.mkdir()
+    receipt = dict(handle='remote:fake:job:worker', remote_folder='/owned/phase')
+    (state/'phase.json').write_text(json.dumps(receipt))
+    (phase/'owned-tools.json').write_text(json.dumps(dict(directory=str(state), existing=[])))
+    def stop(path):
+        value = json.loads(path.read_text())
+        value['shutdown'] = dict(handle='remote:fake:job:control',
+            acknowledgment=dict(state='terminal', worker_closed=True))
+        path.write_text(json.dumps(value))
+        return dict(state='terminal', worker_closed=True)
+    monkeypatch.setattr(warm, 'shutdown_owned_phase', stop)
+    result = cleanup_phase(phase, lambda *args: dict(state='completed'))
+    assert result['state'] == 'terminal'
+    saved = json.loads((state/'phase.json').read_text())
+    assert saved['shutdown']['handle'] == 'remote:fake:job:control'
+    assert saved['shutdown']['acknowledgment']['worker_closed'] is True

@@ -31,14 +31,16 @@ def test_export_preserves_trusted_identity_and_pipe_rows_not_private_text(tmp_pa
         error='SECRET ORACLE', traceback='PRIVATE INPUT', result=dict(
             busy_time=dict(samples_us=[11, 12, 13], active_union_samples_us=[9, 10, 11]), captures=[
             dict(selector='candidate_kernel', pipe_rows=[{'Name': 'candidate_kernel',
-                'vec_ratio': '14.3', 'private': 'SECRET ORACLE'}])]))
+                'vec_ratio': '14.3', 'sub_block_id': 'vector0', 'private': 'SECRET ORACLE'},
+                {'sub_block_id': 'SECRET ORACLE'}])]))
     (private / 'results/summary.json').write_text(json.dumps(value))
     tools.export(private, tmp_path / 'public')
     report = json.loads((tmp_path / 'public/results/summary.json').read_text())
     assert report['correctness'] is True
     assert report['source_sha256'] == value['source_sha256']
     assert report['busy_time']['active_union_samples_us'] == [9, 10, 11]
-    assert report['captures'][0]['pipe_rows'] == [{'Name': 'candidate_kernel', 'vec_ratio': 14.3}]
+    assert report['captures'][0]['pipe_rows'] == [
+        {'Name': 'candidate_kernel', 'vec_ratio': 14.3, 'sub_block_id': 'vector0'}, {}]
     assert 'SECRET' not in json.dumps(report)
 
 
@@ -99,7 +101,8 @@ def test_pipe_discovery_follows_renamed_multiple_kernels(tmp_path, monkeypatch):
         '--kernel-name=renamed_stage_a.native', '--kernel-name=renamed_stage_b.native']
 
 
-def test_native_triton_dependency_attribute_error_is_owned_and_observable(tmp_path, monkeypatch):
+@pytest.mark.parametrize('finder_name', ['DependenciesFinder', 'DependencyFinder'])
+def test_native_triton_dependency_attribute_error_is_owned_and_observable(tmp_path, monkeypatch, finder_name):
     import ast
     import importlib.util
     from types import ModuleType
@@ -109,7 +112,7 @@ def test_native_triton_dependency_attribute_error_is_owned_and_observable(tmp_pa
     language = ModuleType('triton.language')
     jit = ModuleType('triton.runtime.jit')
     jit.language = language
-    exec('class DependencyFinder:\n    def visit_Attribute(self, node):\n        return getattr(language, node.attr)\n', jit.__dict__)
+    exec('class ' + finder_name + ':\n    def visit_Attribute(self, node):\n        return getattr(language, node.attr)\n', jit.__dict__)
     source = 'import triton.language as tl\ndef kernel():\n    return tl.missing_operation()\n'
     candidate = tmp_path / 'candidate.py'
     candidate.write_text(source)
@@ -118,13 +121,15 @@ def test_native_triton_dependency_attribute_error_is_owned_and_observable(tmp_pa
     monkeypatch.setattr(candidate_probe.importlib, 'import_module', lambda name:
         {'triton.runtime.jit': jit, 'triton.language': language}.get(name) or real_import(name))
     try:
-        jit.DependencyFinder().visit_Attribute(node)
+        getattr(jit, finder_name)().visit_Attribute(node)
     except AttributeError as error:
         report = candidate_probe._frontend_diagnostic(error, candidate)
         assert report == dict(kind='triton-frontend', file='candidate.py', line=3,
             source_line='    return tl.missing_operation()',
             message="module 'triton.language' has no attribute 'missing_operation'")
         candidate.write_text(source.replace('missing_operation', 'different_operation'))
+        assert candidate_probe._frontend_diagnostic(error, candidate) is None
+        delattr(jit, finder_name)
         assert candidate_probe._frontend_diagnostic(error, candidate) is None
     else:
         pytest.fail('expected actual missing-module-member error')

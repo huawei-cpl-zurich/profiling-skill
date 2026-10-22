@@ -2,6 +2,7 @@
 """Private Model-task tool boundary for isolated optimization roles."""
 import argparse
 import json
+import re
 from pathlib import Path
 import shutil
 import sys
@@ -34,6 +35,9 @@ def export(private, public):
                         numeric[key] = float(item)
                     except (TypeError, ValueError):
                         if item == selector or item in ('N/A', 'NA', '-', ''):
+                            numeric[key] = item
+                        elif key == 'sub_block_id' and isinstance(item, str) \
+                                and re.fullmatch(r'(cube|vector)[0-9]+', item):
                             numeric[key] = item
                 clean[field].append(numeric)
         result['captures'].append(clean)

@@ -86,6 +86,10 @@ def _frontend_diagnostic(error, candidate_file):
     aliases = {alias.asname or alias.name for node in ast.walk(tree)
                if isinstance(node, ast.Import) for alias in node.names
                if alias.name == 'triton.language'}
+    finder_types = tuple(value for name in ('DependenciesFinder', 'DependencyFinder')
+                         if isinstance(value := getattr(jit, name, None), type))
+    if not finder_types:
+        return None
     for item in _chain(error):
         if not isinstance(item, AttributeError) or getattr(item, 'obj', None) is not language:
             continue
@@ -95,7 +99,7 @@ def _frontend_diagnostic(error, candidate_file):
             node = frame.f_locals.get('node')
             if frame.f_globals.get('__name__') == 'triton.runtime.jit' \
                     and frame.f_code.co_name == 'visit_Attribute' \
-                    and isinstance(frame.f_locals.get('self'), jit.DependencyFinder) \
+                    and isinstance(frame.f_locals.get('self'), finder_types) \
                     and isinstance(node, ast.Attribute) and getattr(item, 'name', None) == node.attr:
                 matches = [part for part in ast.walk(tree) if isinstance(part, ast.Attribute)
                     and isinstance(part.value, ast.Name) and part.value.id in aliases

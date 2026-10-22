@@ -36,6 +36,12 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
                    source_sha256=request['source_sha256'], worker_pid=os.getpid())
     lease = None
     try:
+        if request.get('activation_required'):
+            from phase_deadline import wait_for_activation
+            cutoff = wait_for_activation(root / 'activation.json', remaining())
+            budget = min(budget, cutoff - started)
+            if remaining() <= 0:
+                raise TimeoutError('original round deadline expired before activation')
         signal.signal(signal.SIGALRM, expire)
         signal.setitimer(signal.ITIMER_REAL, remaining() or .001)
         def probe(env):

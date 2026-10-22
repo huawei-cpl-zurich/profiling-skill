@@ -151,7 +151,7 @@ class CampaignService:
         # The trusted bundle is a directory, never a caller-selected archive.
         shutil.copytree(self.bundle, folder)
         shutil.copyfile(source, folder / 'candidate.py')
-        request = dict(operation=operation, utc_deadline=context['utc_deadline'],
+        request = dict(operation=operation, utc_deadline=context['utc_deadline'], activation_required=True,
                        host_remaining_seconds=self.remaining(context),
                        source_sha256=hashlib.sha256((folder / 'candidate.py').read_bytes()).hexdigest())
         save(folder / 'request.json', request)

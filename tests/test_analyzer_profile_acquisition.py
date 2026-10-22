@@ -131,8 +131,11 @@ def test_campaign_run_resumes_pre_model_interruption_without_new_clock(tmp_path,
     monkeypatch.setattr(controller.RoleLauncher, 'preflight', lambda self: {})
     monkeypatch.setattr(controller.RoleLauncher, 'base_command', lambda self: ['fake-model'])
     monkeypatch.setattr(controller, 'cleanup_phase', lambda phase: dict(state='terminal', calls=[]))
+    auth = tmp_path / 'fake-auth'
+    auth.mkdir()
+    (auth / 'auth.json').write_text('{}')
     campaign = controller.Campaign(tmp_path / 'campaign', bundle, dict(name='fake', reasoning_effort='low'),
-                                   ['fake-tool'], 'task', rounds=1)
+                                   ['fake-tool'], 'task', rounds=1, auth_home=auth)
     phase = campaign.root / 'round-1-analyzer'
     fail = [True]
     prepare = controller.RoleLauncher.prepare

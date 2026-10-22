@@ -74,6 +74,23 @@ class CampaignService:
         ident = result['call_id']
         private = self.tools.workspace / 'evidence' / ident
         public = self.public / 'evidence' / ident
+        pending_transfer = any(isinstance(result.get(key), dict) and
+            result[key].get('state') not in TERMINAL for key in ('upload', 'download', 'evidence_transfer'))
+        if not (private / 'results/summary.json').exists() and result.get('state') in {'failed', 'cancelled'} \
+                and not result.get('next') and not pending_transfer:
+            # A confirmed terminal job/transfer with no recoverable worker report
+            # must release the cell for debugging. Unknown/live handles never do.
+            receipt_path = self.tools.state / ident / 'receipt.json'
+            receipt = json.loads(receipt_path.read_text())
+            if not any(isinstance(receipt.get(key), dict) and receipt[key].get('state') not in TERMINAL
+                       for key in ('upload', 'download')):
+                receipt.update(state=result['state'], failure_stage='infrastructure')
+                save(receipt_path, receipt)
+                (private / 'results').mkdir(parents=True, exist_ok=True)
+                save(private / 'results/summary.json', dict(state=result['state'],
+                    failure_stage='infrastructure', source_sha256=receipt['request']['source_sha256'],
+                    diagnostic=dict(kind='terminal-evidence-unavailable',
+                                    reason='retained job or transfer ended without a worker report')))
         if (private / 'results/summary.json').is_file():
             if not public.exists():
                 public.parent.mkdir(parents=True, exist_ok=True)

@@ -51,29 +51,42 @@ def _prepare(root, index=7, variant=0):
 def check(root, env, remaining):
     import torch
     import torch_npu
-    import candidate
     from candidate_probe import probe_candidate
     from private_campaign_cases import make_case, validate
+    try:
+        import candidate
+    except Exception as error:
+        owned = Path(root / 'candidate.py').resolve()
+        line = getattr(error, 'lineno', None) if getattr(error, 'filename', None) == str(owned) else None
+        trace = error.__traceback__
+        while trace:
+            if Path(trace.tb_frame.f_code.co_filename).resolve() == owned:
+                line = trace.tb_lineno
+            trace = trace.tb_next
+        detail = dict(kind='candidate-import', error_type=type(error).__name__)
+        if line:
+            detail.update(file='candidate.py', line=line)
+            if isinstance(error, (SyntaxError, NameError)):
+                detail['message'] = (error.msg if isinstance(error, SyntaxError) else str(error))[:4096]
+        return dict(passed=False, variants=[], diagnostics=[dict(state='failed',
+            category='candidate-compile-or-runtime-error', diagnostic=detail)])
     # Tiny, independent M/N/K tails, and a real performance shape, two data variants.
     results = []
     for variant in (0, 1):
-        operation = json.loads((root / 'request.json').read_text())['operation']
-        indices = range(8) if operation == 'check' else (7,)
-        cases = [make_case('matmul', index, variant=variant) for index in indices]
-        current = iter(cases)
-        active = {}
-        def provider():
-            for case in current:
-                active['case'] = case
-                yield case['args'], {}
-        result = probe_candidate(candidate.Model, provider,
-            lambda output, args, kwargs: validate(active['case'], 'candidate', output),
-            candidate_file=root / 'candidate.py', evidence_dir=root / 'diagnostics' / str(variant),
-            backend='npu-inductor', synchronize=torch.npu.synchronize,
-            reference=lambda args, kwargs: active['case']['expected'], compiler=audited_compiler())
-        results.append(result)
-        if result['state'] != 'passed':
-            return dict(passed=False, variants=list(range(variant)), diagnostics=results)
+        for index in range(8):
+            case = make_case('matmul', index, variant=variant)
+            # Each proof gets an actual new backend capture. Neither Dynamo's
+            # eight-specialization limit nor a warm Python cache substitutes for it.
+            torch._dynamo.reset()
+            result = probe_candidate(candidate.Model, lambda: [(case['args'], {})],
+                lambda output, args, kwargs: validate(case, 'candidate', output),
+                candidate_file=root / 'candidate.py',
+                evidence_dir=root / 'diagnostics' / str(variant) / str(index),
+                backend='npu-inductor', synchronize=torch.npu.synchronize,
+                reference=lambda args, kwargs: case['expected'], compiler=audited_compiler())
+            results.append(result)
+            if result['state'] != 'passed':
+                return dict(passed=False, variants=list(range(variant)), diagnostics=results)
     return dict(passed=True, variants=[0, 1], diagnostics=results)
 
 

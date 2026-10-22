@@ -57,6 +57,7 @@ def acquire(probe, remaining, *, query=None, sleep=time.sleep, lease_root=None):
                     lease.close()
                     continue
                 env = dict(os.environ, ASCEND_RT_VISIBLE_DEVICES=str(device[2]), ASCEND_DEVICE_ID='0')
+                print('DEVICE_PROBING=' + str(device[2]), flush=True)
                 result = probe(env)
                 ok, reason = result if isinstance(result, tuple) else (result, 'runtime probe failed')
                 if ok:

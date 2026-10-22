@@ -38,9 +38,12 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic):
         signal.signal(signal.SIGALRM, expire)
         signal.setitimer(signal.ITIMER_REAL, remaining() or .001)
         def probe(env):
+            summary.update(physical_device=int(env['ASCEND_RT_VISIBLE_DEVICES']), logical_device=0,
+                           progress='runtime-probe')
+            print('MODEL_STAGE=runtime-probe', flush=True)
             result = bounded_run([sys.executable, '-c',
                 'import torch,torch_npu;torch.npu.set_device(0);torch.ones(1,device="npu");torch.npu.synchronize()'],
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=min(30., remaining()))
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=min(180., remaining()))
             return result.returncode == 0, result.stderr[-2000:]
         if acquire is None:
             from model_device import acquire as select
@@ -49,12 +52,16 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic):
             physical, env, lease = acquire(probe)
         os.environ.update(env)
         summary.update(physical_device=physical, logical_device=0, failure_stage='candidate')
+        summary['progress'] = 'correctness-check'
+        print('MODEL_STAGE=correctness-check', flush=True)
         checked = adapter.check(root, env, remaining)
         summary['check'] = checked
         if checked.get('passed') is not True or set(checked.get('variants', [])) != {0, 1}:
             return summary
         if request['operation'] != 'check':
             summary['failure_stage'] = 'measurement'
+            summary['progress'] = request['operation']
+            print('MODEL_STAGE=' + request['operation'], flush=True)
             summary['result'] = getattr(adapter, request['operation'])(root, env, remaining)
             if summary['result'].get('state') not in ('complete', 'completed'):
                 return summary
@@ -63,6 +70,8 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic):
         return summary
     except Exception as error:
         summary.update(error=str(error), traceback=traceback.format_exc())
+        summary['diagnostic'] = dict(kind='worker-failure', error_type=type(error).__name__,
+                                    stage=summary.get('progress', 'device-acquisition'))
         if isinstance(error, TimeoutError):
             summary['failure_stage'] = 'budget'
         return summary

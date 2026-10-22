@@ -121,3 +121,84 @@ def test_compiled_graph_rejects_pytorch_compute_but_allows_multiple_triton(monke
         compiler.backend_wrapper(graph('torch.matmul', 'triton_kernel_wrapper_mutation'), [])
     with pytest.raises(RuntimeError, match='no Triton'):
         compiler.backend_wrapper(graph('torch.empty'), [])
+
+
+def test_every_operation_checks_all_shapes_and_variants_with_fresh_capture(tmp_path, monkeypatch):
+    resets, checks = [], []
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(
+        _dynamo=SimpleNamespace(reset=lambda: resets.append(True)),
+        npu=SimpleNamespace(synchronize=lambda: None)))
+    monkeypatch.setitem(sys.modules, 'torch_npu', SimpleNamespace())
+    monkeypatch.setitem(sys.modules, 'candidate', SimpleNamespace(Model=object))
+    monkeypatch.setitem(sys.modules, 'private_campaign_cases', SimpleNamespace(
+        make_case=lambda task, index, variant: dict(args=(index, variant), expected=0),
+        validate=lambda *args: None))
+    def probe(factory, provider, validator, **kwargs):
+        checks.extend(list(provider()))
+        return dict(state='passed')
+    monkeypatch.setitem(sys.modules, 'candidate_probe', SimpleNamespace(probe_candidate=probe))
+    monkeypatch.setattr(native, 'audited_compiler', lambda: object())
+    for operation in ('check', 'benchmark', 'pipes'):
+        (tmp_path / 'request.json').write_text(json.dumps(dict(operation=operation)))
+        result = native.check(tmp_path, {}, lambda: 100)
+        assert result['passed'] and result['variants'] == [0, 1]
+    assert len(resets) == len(checks) == 48
+    assert {args for args, kwargs in checks} == {(index, variant) for index in range(8) for variant in (0, 1)}
+
+
+def test_candidate_import_syntax_error_is_observable_without_private_trace(tmp_path, monkeypatch):
+    (tmp_path / 'candidate.py').write_text('def broken(:\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, 'candidate', raising=False)
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace())
+    monkeypatch.setitem(sys.modules, 'torch_npu', SimpleNamespace())
+    monkeypatch.setitem(sys.modules, 'candidate_probe', SimpleNamespace(probe_candidate=lambda *args: None))
+    monkeypatch.setitem(sys.modules, 'private_campaign_cases', SimpleNamespace(make_case=None, validate=None))
+    result = native.check(tmp_path, {}, lambda: 100)
+    assert not result['passed']
+    detail = result['diagnostics'][0]['diagnostic']
+    assert detail['file'] == 'candidate.py' and detail['line'] == 1
+    assert detail['error_type'] == 'SyntaxError' and detail['message']
+    assert str(tmp_path) not in json.dumps(result)
+
+
+def test_terminal_evidence_failure_releases_call_but_pending_transfer_does_not(tmp_path):
+    from model_campaign_service import CampaignService
+    from blind_optimization_tools import save
+    public = tmp_path / 'public'
+    public.mkdir()
+    save(public / 'execution.json', dict(utc_deadline='2000-01-01T00:00:00+00:00'))
+    client = SimpleNamespace(workspace=tmp_path / 'private/workspace', state=tmp_path / 'tool-state')
+    receipt = dict(call_id='abc123', state='failed', handle='remote:test:job:one',
+                   request=dict(source_sha256='a' * 64), download=dict(state='running'))
+    (client.state / 'abc123').mkdir(parents=True)
+    save(client.state / 'abc123/receipt.json', receipt)
+    service = tools.CampaignService(client, tmp_path / 'bundle', public, tools.export)
+    pending = service.publish(receipt)
+    assert pending['next'] and not (public / 'evidence/abc123/results/summary.json').exists()
+    receipt['download']['state'] = 'failed'
+    save(client.state / 'abc123/receipt.json', receipt)
+    final = service.publish(receipt)
+    assert final['state'] == 'failed' and final['failure_stage'] == 'infrastructure'
+    assert 'next' not in final and final['diagnostic']['kind'] == 'terminal-evidence-unavailable'
+    assert service.start('check')['failure_stage'] == 'budget'
+
+
+def test_worker_probe_bound_and_remote_clock_skew(tmp_path, monkeypatch):
+    import model_campaign_worker as worker
+    (tmp_path / 'request.json').write_text(json.dumps(dict(operation='check',
+        utc_deadline='2000-01-01T00:00:00+00:00', host_remaining_seconds=240,
+        source_sha256='a' * 64)))
+    seen = []
+    def run(command, **kwargs):
+        seen.append(kwargs['timeout'])
+        return SimpleNamespace(returncode=0, stderr='')
+    monkeypatch.setattr(worker, 'bounded_run', run)
+    def acquire(probe):
+        env = dict(ASCEND_RT_VISIBLE_DEVICES='3')
+        assert probe(env)[0] is True
+        return 3, env, SimpleNamespace(close=lambda: None)
+    adapter = SimpleNamespace(check=lambda *args: dict(passed=True, variants=[0, 1]))
+    result = worker.execute(tmp_path, adapter, acquire=acquire, monotonic=lambda: 0)
+    assert result['state'] == 'completed' and result['physical_device'] == 3
+    assert seen == [180]

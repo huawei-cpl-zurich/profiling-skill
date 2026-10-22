@@ -13,7 +13,7 @@ def export(private, public):
     """Release constructed diagnostics/numeric rows, never oracle text or inputs."""
     value = json.loads((private / 'results/summary.json').read_text())
     result = {key: value[key] for key in ('state', 'failure_stage', 'operation',
-              'source_sha256', 'physical_device', 'logical_device') if key in value}
+              'source_sha256', 'physical_device', 'logical_device', 'diagnostic', 'progress') if key in value}
     checked = value.get('check', {})
     result['correctness'] = checked.get('passed') is True and checked.get('variants') == [0, 1]
     # candidate_probe already authenticates candidate-owned compiler diagnostics.

@@ -7,6 +7,13 @@ gate: two strict paired wins, two ties and two losses, rather than the required
 four wins out of six. Benefit remains unproven. This is a small qualitative
 native A3 pilot, not a statistical result or an A2/A5/Triton generalization.
 
+**Retrospective isolation qualification:** the historical evidence-return path
+also copied host-containing compiler intermediates into agent-visible folders.
+The trials therefore cannot be presented as a clean blinded optimization
+assessment. The recorded scores and failed usefulness gate are retained, not
+rescored or promoted. See the isolation audit below; exposure is established,
+but exploitation is not.
+
 All twelve agents finished naturally, committed code/reasoning/compact
 evidence, and passed the trusted numerical checks. Source-level work-contract
 audits rejected two final candidates in each arm. Numerical agreement is not
@@ -52,6 +59,9 @@ recurrence and distinct per-repetition payloads. The skill itself was not
 tuned against scored outcomes.
 
 ## Blind scoring
+
+This section describes assessor masking, not proof that the optimizer's trusted
+host/oracle boundary held. The retrospective audit below found that it did not.
 
 Three fresh contextless, read-only assessors each reviewed four anonymous
 participants from one task. They received code, authored reasoning, raw compact
@@ -167,6 +177,36 @@ Native machine instructions were not decoded, and a default `racecheck` request
 field was not native sanitizer instrumentation. Missing race/ordering proof
 was reported as unknown rather than a demonstrated hazard. In particular,
 sampled correctness does not by itself prove arbitrary barrier removal safe.
+
+## Retrospective host/oracle exposure audit
+
+During the integration review, the native evidence archive was found to include
+build-tree `.asci`, `.ll`, `.mlir` and related compiler intermediates after
+ordinary execution/profiling calls, not only an explicit compiler-IR request.
+Some native intermediates contain the trusted host and seeded input/reference
+implementation as well as the candidate. Optimizer filesystem isolation did
+not protect an oracle returned through this ordinary evidence channel.
+
+A read-only audit of the retained original cohort found **180 host-containing
+`.asci` files in ten of twelve agent workspace evidence trees**. These contain
+the trusted `main` and expected-output calculations. The other two retained
+trees have no such files now; cleanup and incomplete retention mean that this
+does not establish that those agents were unexposed. All twelve original
+`agent.jsonl` command streams were inspected: none explicitly named an `.asci`,
+`.ll`, `.mlir` or host-source file in its recorded command. This narrow negative
+finding is **not proof that no artifact was read**, nor a complete access audit.
+No observed exploitation is established; the existing work-contract violations
+must not be relabeled as deliberate oracle gaming on this evidence.
+
+The preserved two-wins/two-ties/two-losses result remains a historical score of
+these recorded trials. It does not establish an uncontaminated causal comparison
+of the skill snapshots. Anonymous assessor masking and frozen grading still
+describe the scoring process, but cannot repair optimizer information exposure.
+No trial was rerun, no score or preregistered criterion changed, and benefit
+remains unproven. The ledger carries this qualification separately from outcomes.
+The paired-task implementation's fix restricts ordinary native build returns to
+build stdout/stderr and leaves native IR unavailable until a device-only producer
+role can be established; that fix does not retroactively sanitize this cohort.
 
 ## Reproduction and disposition
 

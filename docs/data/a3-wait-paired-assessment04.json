@@ -1,5 +1,23 @@
 {
   "campaign": "a3-wait-paired-04",
+  "isolation_qualification": {
+    "status": "host_oracle_exposure_confirmed",
+    "clean_blinded_optimization_assessment": false,
+    "scores_changed": false,
+    "retrospective_audit": "2026-10-22 integration review; read-only original cohort artifacts and all twelve agent command streams",
+    "provenance": {
+      "frozen_runner": "c6c9af9b34f43604b67172c52f64c96b9fa5a866:scripts/blind_optimization_tools.py",
+      "boundary": "ordinary evidence archive recursively returned build-tree compiler intermediates",
+      "retained_host_containing_asci_files": 180,
+      "retained_workspace_trees_with_host_artifacts": 10,
+      "trial_workspace_trees_audited": 12,
+      "missing_artifacts_do_not_establish_unexposed_trials": true
+    },
+    "observed_explicit_artifact_read_commands": 0,
+    "explicit_command_scope": "recorded commands naming .asci, .ll, .mlir or host-source files; absence is not proof of no reads",
+    "exploitation": "not established; no complete file-access audit",
+    "disposition": "Retain historical scores and failed usefulness gate; do not claim clean causal skill evidence or infer deliberate gaming. No reruns or acceptance changes."
+  },
   "comparison": "previous skill body versus wait-lesson delta; common applicability metadata",
   "source_commit": "c6c9af9b34f43604b67172c52f64c96b9fa5a866",
   "old_skill_body": "b5a3949c5d8fc5e8c28630c1ee9a074081d1253b",

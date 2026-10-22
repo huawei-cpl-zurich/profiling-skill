@@ -242,11 +242,15 @@ class ExperimentCell:
             if retained != self.config:
                 raise RunnerError("execution configuration changed after initialization")
             self.config = retained
+        self._execution_config = json.loads(json.dumps(self.config))
 
     def _state(self) -> dict:
         if not self.state_path.is_file():
             raise RunnerError("cell is not initialized")
-        self.config = _object((self.path / "execution-config.json").read_text(), "execution configuration")
+        retained = _object((self.path / "execution-config.json").read_text(), "execution configuration")
+        if retained != self._execution_config:
+            raise RunnerError("execution configuration changed after initialization")
+        self.config = json.loads(json.dumps(self._execution_config))
         return json.loads(self.state_path.read_text())
 
     def _save(self, state: dict) -> dict:

@@ -159,6 +159,25 @@ def test_reopening_cell_rejects_external_config_drift(tmp_path, field, value):
         runner.ExperimentCell(cell.root, changed, Agent(), Remote([]))
 
 
+@pytest.mark.parametrize("operation", ["run", "resume"])
+@pytest.mark.parametrize("field,value", [("target", "other-target"), ("runtime", "other-runtime")])
+def test_live_cell_rejects_retained_execution_config_drift_before_effects(tmp_path, operation, field, value):
+    remote = Remote([runner.ObservationLost("observer disconnected")])
+    cell = initialized(tmp_path, remote)
+    if operation == "resume":
+        assert cell.run()["status"] == "infrastructure_unknown"
+    before = (len(cell.agent.requests), len(cell.agent.analyses), len(remote.preflights),
+              len(remote.submitted), len(remote.observed))
+    frozen = cell.path / "execution-config.json"
+    changed = json.loads(frozen.read_text())
+    changed[field] = value
+    frozen.write_text(json.dumps(changed))
+    with pytest.raises(runner.RunnerError, match="configuration changed"):
+        getattr(cell, operation)()
+    assert (len(cell.agent.requests), len(cell.agent.analyses), len(remote.preflights),
+            len(remote.submitted), len(remote.observed)) == before
+
+
 def test_a5_global_client_persists_handle_before_observation_and_restart(tmp_path):
     handle = "remote:bz-a5:job:retained"
     commands = []

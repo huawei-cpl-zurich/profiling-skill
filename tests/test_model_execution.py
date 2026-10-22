@@ -49,6 +49,62 @@ class ExecutionTests(unittest.TestCase):
             lambda: model or (lambda x: x + 1), (value,), {},
             lambda result: self.assertEqual(result, value + 1), compiler=compiler)
 
+    def eager(self, model=None):
+        return execution.prepare_eager_model(
+            lambda: model or (lambda x: x + 1), (3,), {},
+            lambda value: self.assertEqual(value, 4),
+            execution=execution.EagerExecution(torch_module=FakeTorch()))
+
+    def test_explicit_eager_never_loads_or_calls_graph_backend(self):
+        torch = FakeTorch()
+        torch.compile = lambda *args, **kwargs: self.fail("eager invoked compiler")
+        with patch.object(execution.importlib, "import_module", side_effect=ModuleNotFoundError("triton", name="triton")):
+            prepared = execution.prepare_eager_model(lambda: lambda x: x + 1,
+                (3,), {}, lambda value: self.assertEqual(value, 4),
+                execution=execution.EagerExecution(torch_module=torch))
+        self.assertEqual(prepared.evidence["execution_mode"], "eager")
+        self.assertEqual(prepared.evidence["compiled_executions"], 0)
+        self.assertIsNone(prepared.evidence["backend"])
+
+    def test_eager_reference_compiled_candidate_keep_full_measurements(self):
+        baseline, candidate = self.eager(), self.prepare()
+        report = execution.benchmark_pair(baseline, candidate,
+            synchronize=lambda: None, clock=Clock())
+        self.assertEqual(report["execution_evidence"]["baseline"]["execution_mode"], "eager")
+        self.assertEqual(report["execution_evidence"]["candidate"]["execution_mode"], "compiled")
+        self.assertEqual(baseline.compiler.executions, 0)
+        self.assertEqual(candidate.compiler.executions, 171)
+        self.assertEqual([len(batch) for batch in report["baseline"]["batches_ms"]], [50] * 3)
+
+    def test_eager_validation_and_failures_are_not_silently_retried(self):
+        with self.assertRaises(AssertionError):
+            self.eager(model=lambda x: 0)
+        def failed(x):
+            raise RuntimeError("eager error")
+        with self.assertRaisesRegex(execution.ModelExecutionError, "eager error"):
+            self.eager(model=failed)
+
+    def test_eager_does_not_relax_compiled_candidate_execution_proof(self):
+        candidate = self.prepare()
+        candidate.compiled = lambda *args: 4
+        with self.assertRaisesRegex(execution.MeasurementError, "every sample"):
+            execution.benchmark_pair(self.eager(), candidate,
+                synchronize=lambda: None, clock=Clock())
+
+    def test_eager_late_triton_compilation_is_still_rejected(self):
+        baseline = self.eager()
+        original = baseline.compiled
+        calls = 0
+        def late(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 21:
+                baseline.compiler.triton_compilations += 1
+            return original(*args)
+        baseline.compiled = late
+        with self.assertRaisesRegex(execution.MeasurementError, "compilation"):
+            execution.benchmark_pair(baseline, self.prepare(), synchronize=lambda: None, clock=Clock())
+
     def test_compiles_and_validates_before_measurement(self):
         prepared = self.prepare()
         self.assertEqual(prepared.evidence["backend"], "torchair-ge")

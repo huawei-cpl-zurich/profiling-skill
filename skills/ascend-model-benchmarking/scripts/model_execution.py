@@ -131,6 +131,45 @@ class GraphCompiler:
 GECompiler = GraphCompiler
 
 
+class EagerExecution(GraphCompiler):
+    """Explicit eager reference; monitor compilation without loading a backend."""
+    def __init__(self, *, torch_module=None):
+        self.torch = torch_module or importlib.import_module("torch")
+        self.backend_name = None
+        self.compilations = self.triton_compilations = self.executions = 0
+        self.graphs = []
+
+
+def prepare_eager_model(factory, args, kwargs, validate, *, execution=None,
+                        synchronize=lambda: None):
+    execution = execution or EagerExecution()
+    start = time.perf_counter_ns()
+    stage = "model-construction"
+    try:
+        with execution.torch.inference_mode(), execution.monitor_compilation():
+            model = factory()
+            if hasattr(model, "eval"):
+                model.eval()
+            stage = "eager-forward"
+            output = model(*args, **kwargs)
+            synchronize()
+    except TimeoutError:
+        raise
+    except Exception as exc:
+        raise ModelExecutionError(f"explicit eager reference failed: {exc}", stage) from exc
+    validate(output)
+    return PreparedModel(model, tuple(args), dict(kwargs), execution, {
+        "execution_mode": "eager", "backend": None, "fullgraph": False,
+        "autograd_mode": "inference", "model_mode": "eval-if-supported",
+        "torch_version": execution.torch.__version__, "graphs": [],
+        "compile_count": 0, "compiled_executions": 0,
+        "triton_compile_count": execution.triton_compilations,
+        "cold_prepare_ms": (time.perf_counter_ns() - start) / 1e6,
+        "cold_prepare_includes": "factory + first execution + synchronization",
+        "custom_kernel_identity_verified": False,
+    })
+
+
 class PreparedModel:
     def __init__(self, compiled, args, kwargs, compiler, evidence):
         self.compiled = compiled
@@ -178,7 +217,7 @@ def prepare_model(factory, args, kwargs, validate, *, compiler=None,
             f"executions={compiler.executions - before[1]}); eager is forbidden")
     validate(output)
     evidence = {
-        "backend": compiler.backend_name, "fullgraph": True, "dynamic": False,
+        "execution_mode": "compiled", "backend": compiler.backend_name, "fullgraph": True, "dynamic": False,
         "autograd_mode": "inference", "model_mode": "eval-if-supported",
         "torch_version": compiler.torch.__version__, "graphs": list(compiler.graphs),
         "compile_count": compiler.compilations, "compiled_executions": compiler.executions,
@@ -281,7 +320,8 @@ def benchmark_pair(baseline, candidate, *, synchronize, batches=3, samples=50,
                                 "actual_compile_counts": {
                                     key: item.compiler.snapshot() for key, item in models.items()},
                             })
-                if model.compiler.executions - executions < samples:
+                if (model.evidence.get("execution_mode", "compiled") == "compiled"
+                        and model.compiler.executions - executions < samples):
                     raise MeasurementError("compiled graph was not executed for every sample")
                 results[name].append(values)
                 synchronize()

@@ -1163,6 +1163,92 @@ def test_global_transport_accepts_only_real_global_job_handle_format():
             module.GlobalCplRemoteTransport._validate_handle("bz-a3-1", invalid)
 
 
+@pytest.mark.parametrize("state", [
+    "queued", "dispatching", "running", "reconnecting", "observation-unavailable",
+])
+def test_global_transport_retains_every_pending_state(monkeypatch, tmp_path, state):
+    module = load()
+    executable, digest, _log = _install_fake_global_cpl_remote(tmp_path)
+    handle = "remote:bz-a3-2:job:pending"
+    calls = []
+
+    def invoke(argv, timeout):
+        action = argv[2]
+        calls.append(action)
+        return module.CommandResult(0, json.dumps({
+            "target": "bz-a3-2", "handle": handle, "state": state,
+        }), "")
+
+    transport = module.GlobalCplRemoteTransport(
+        digest, "/srv/profiling", invoke, executable=executable)
+    assert transport.dispatch("bz-a3-2", 3, "py311-torch", "test", "true", 30) == handle
+    with pytest.raises(module.JobError, match="not terminal") as caught:
+        transport.observe("bz-a3-2", handle, 30)
+    assert caught.value.handle == handle
+    assert calls == ["run", "observe"]
+
+
+@pytest.mark.parametrize("stdout", ["not JSON", "{}", '{"handle":"wrong"}'])
+def test_global_dispatch_without_durable_handle_is_uncertain(tmp_path, stdout):
+    module = load()
+    executable, digest, _log = _install_fake_global_cpl_remote(tmp_path)
+    transport = module.GlobalCplRemoteTransport(
+        digest, "/srv/profiling",
+        lambda _argv, _timeout: module.CommandResult(0, stdout, ""),
+        executable=executable)
+    with pytest.raises(module.JobError) as caught:
+        transport.dispatch("bz-a3-2", 3, "py311-torch", "test", "true", 30)
+    assert caught.value.dispatch_uncertain
+    assert caught.value.handle is None
+
+
+def test_global_observation_shares_deadline_with_result_and_logs(monkeypatch, tmp_path):
+    module = load()
+    executable, digest, _log = _install_fake_global_cpl_remote(tmp_path)
+    handle = "remote:bz-a3-2:job:pending"
+    clock = [100.0]
+    calls = []
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    def invoke(argv, timeout):
+        action = argv[2]
+        calls.append((action, timeout))
+        clock[0] += 3.0
+        return module.CommandResult(0, json.dumps({
+            "target": "bz-a3-2", "handle": handle, "state": "completed",
+            "exit": 0, "content": "compact output",
+        }), "")
+
+    transport = module.GlobalCplRemoteTransport(
+        digest, "/srv/profiling", invoke, executable=executable)
+    result = transport.observe("bz-a3-2", handle, 30)
+    assert result.stdout == result.stderr == "compact output"
+    assert calls == [("observe", 30), ("result", 27), ("logs", 24), ("logs", 21)]
+
+
+def test_global_observation_exhaustion_preserves_handle_without_more_calls(monkeypatch, tmp_path):
+    module = load()
+    executable, digest, _log = _install_fake_global_cpl_remote(tmp_path)
+    handle = "remote:bz-a3-2:job:pending"
+    clock = [100.0]
+    calls = []
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    def invoke(argv, timeout):
+        calls.append(argv[2])
+        clock[0] += timeout
+        return module.CommandResult(0, json.dumps({
+            "target": "bz-a3-2", "handle": handle, "state": "completed",
+        }), "")
+
+    transport = module.GlobalCplRemoteTransport(
+        digest, "/srv/profiling", invoke, executable=executable)
+    with pytest.raises(module.JobError, match="deadline exhausted") as caught:
+        transport.observe("bz-a3-2", handle, 3)
+    assert caught.value.handle == handle
+    assert calls == ["observe"]
+
+
 @pytest.mark.parametrize("runtime", [None, "", "py310", "py311-torch; id", True])
 def test_unsupported_runtime_is_rejected_before_transport(tmp_path: Path, runtime):
     module = load()

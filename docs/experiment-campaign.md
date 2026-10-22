@@ -165,11 +165,22 @@ python "$ABS_REPOSITORY/scripts/campaign.py" \
   --output /absolute/campaign-inputs/cannbot-freeze
 
 python "$ABS_REPOSITORY/scripts/generate_benchmark_config.py" \
-  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/gz_a3_job_client.py","--adapter-json","[\"/absolute/orchestration/execution-profiles/catlass-validation.sh\"]","--state-dir","/absolute/campaign-state/gz-a3-jobs"]' \
+  --job-client-json '["python","/absolute/approved/profiling-skill/scripts/bz_a3_job_client.py","--state-dir","/absolute/campaign-state/bz-a3-jobs","--placements-json","/absolute/campaign-inputs/bz-a3-placements.json","--cpl-remote-sha256","<installed-client-sha256>","--remote-root","/existing/remote/profiling-skill"]' \
   --candidate candidate.py \
   --candidate-manifest candidate.manifest.json \
   --output /absolute/campaign-inputs/controller.json
 ```
+
+The BZ client routes uploads, retained execution, observation, and log
+retrieval through the globally installed `cpl-remote` command. The placements
+file maps campaign logical devices to `bz-a3-1` or `bz-a3-2` plus a physical
+device using `target` and `device` fields; the retained workload sees that device
+as logical device 0. Set the client digest to the SHA256 of the installed global
+remote-access client, not a copied transport. The remote
+root must already exist and be writable in the target's registered execution
+context. After an interrupted observation, rerun the identical request so the
+client observes its recorded `remote:bz-a3-*:job:*` handle without dispatching
+a duplicate workload.
 
 Generate the campaign manifest with the checked-in executable CLI. The
 following commands are deliberately absolute so the manifest records resolved

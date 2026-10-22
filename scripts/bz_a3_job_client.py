@@ -180,22 +180,32 @@ class GlobalCplRemoteTransport:
                 stream.write(wrapped)
                 stream.flush()
                 path = Path(stream.name)
-            payload = self._call([
-                "run", target, "--runtime", runtime, "--file", str(path),
-                "--cwd", self.remote_root, "--timeout", str(timeout),
-            ], timeout)
+            try:
+                payload = self._call([
+                    "run", target, "--runtime", runtime, "--file", str(path),
+                    "--cwd", self.remote_root, "--timeout", str(timeout),
+                ], timeout)
+            except JobError as exc:
+                if exc.handle is None:
+                    exc.dispatch_uncertain = True
+                raise
         finally:
             if path is not None:
                 path.unlink(missing_ok=True)
-        handle = self._validate_handle(target, payload.get("handle"))
+        try:
+            handle = self._validate_handle(target, payload.get("handle"))
+        except JobError as exc:
+            exc.dispatch_uncertain = True
+            raise
         state = payload.get("state")
-        if state not in {"running", "reconnecting", "observation-unavailable",
+        if state not in {"queued", "dispatching", "running", "reconnecting", "observation-unavailable",
                          "completed", "failed", "cancelled"}:
             raise JobError("transport_error", "cpl-remote returned an invalid run state",
                            handle)
         return handle
 
     def observe(self, target: str, handle: str, timeout: int) -> CommandResult:
+        deadline = time.monotonic() + timeout
         self._validate_handle(target, handle)
         payload = self._call(
             ["observe", handle, "--wait", "--timeout", str(timeout)], timeout,
@@ -204,14 +214,22 @@ class GlobalCplRemoteTransport:
         if payload.get("handle") != handle or payload.get("target") != target:
             raise JobError("transport_error", "cpl-remote observation identity mismatch",
                            handle)
-        if payload.get("state") in {"running", "reconnecting", "observation-unavailable"}:
+        if payload.get("state") in {"queued", "dispatching", "running", "reconnecting", "observation-unavailable"}:
             raise JobError("observer_error", "retained job is not terminal", handle)
         if payload.get("state") not in {"completed", "failed", "cancelled"}:
             raise JobError("observer_error", "retained job returned an invalid state", handle)
-        return self._collect(target, handle, timeout)
+        return self._collect(target, handle, deadline)
 
-    def _collect(self, target: str, handle: str, timeout: int) -> CommandResult:
-        terminal = self._call(["result", handle], timeout, handle=handle)
+    @staticmethod
+    def _remaining(deadline: float, handle: str) -> int:
+        remaining = math.ceil(deadline - time.monotonic())
+        if remaining < 1:
+            raise JobError("observer_error", "remote observation deadline exhausted", handle)
+        return remaining
+
+    def _collect(self, target: str, handle: str, deadline: float) -> CommandResult:
+        terminal = self._call(["result", handle], self._remaining(deadline, handle),
+                              handle=handle)
         if terminal.get("handle") != handle or terminal.get("target") != target:
             raise JobError("transport_error", "cpl-remote result identity mismatch", handle)
         state = terminal.get("state")
@@ -220,7 +238,8 @@ class GlobalCplRemoteTransport:
         streams = {}
         for name, tail in (("stdout", 1), ("stderr", 200)):
             payload = self._call(
-                ["logs", handle, "--stream", name, "--tail", str(tail)], timeout,
+                ["logs", handle, "--stream", name, "--tail", str(tail)],
+                self._remaining(deadline, handle),
                 handle=handle,
             )
             if (payload.get("handle") != handle or payload.get("target") != target

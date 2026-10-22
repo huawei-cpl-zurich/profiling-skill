@@ -990,8 +990,9 @@ def test_failed_manual_bz_observation_requires_reconciliation(
     assert result["handle"] == "bz-a3-1:recovered"
 
 
+@pytest.mark.parametrize("failure", ["timeout", "missing_handle"])
 def test_remote_timeout_after_possible_dispatch_never_falls_back_or_replays(
-    tmp_path: Path,
+    tmp_path: Path, failure,
 ):
     config, manifest, placements = inputs(tmp_path)
     root = tmp_path / "campaign"
@@ -1008,6 +1009,8 @@ def test_remote_timeout_after_possible_dispatch_never_falls_back_or_replays(
         if "upload" in argv:
             return module.diagnostic_campaign.subprocess.CompletedProcess(argv, 0, "", "")
         remote_runs.append((argv, timeout))
+        if failure == "missing_handle":
+            return bz_client.CommandResult(0, '{"state":"running"}', "")
         raise bz_client.DiagnosticError(
             "transport_error", "remote response timed out",
             invocation_timeout=True)

@@ -516,6 +516,55 @@ def test_observe_failure_preserves_handle_from_initial_dispatch():
         raise AssertionError("observer failure should preserve retained handle")
 
 
+@pytest.mark.parametrize("initial_state", ["completed", "running"])
+@pytest.mark.parametrize("resume", [False, True])
+def test_log_failure_preserves_known_handle(initial_state, resume):
+    module = load()
+    handle = "remote:bz-a3-1:job:retained"
+
+    def invoke(argv, _timeout):
+        if "logs" in argv:
+            raise module.DiagnosticError("transport_error", "log response timed out",
+                                         invocation_timeout=True)
+        return module.CommandResult(0, json.dumps({
+            "state": "completed" if "observe" in argv else initial_state,
+            "handle": handle, "exit": 0,
+        }), "")
+
+    transport = module.RemoteTransport(["remote"], invoke)
+    with pytest.raises(module.DiagnosticError) as caught:
+        if resume:
+            transport.observe("bz-a3-1", handle, 30)
+        else:
+            transport.execute("bz-a3-1", 2, "/remote", "true", 30)
+    assert caught.value.handle == handle
+    assert caught.value.failure_type == "observer_error"
+    assert caught.value.invocation_timeout
+    assert not caught.value.dispatch_uncertain
+
+
+@pytest.mark.parametrize("profile", ["bz-a3-1", "bz-a3-2"])
+@pytest.mark.parametrize("runtime", [None, "configured-runtime"])
+def test_diagnostic_run_selects_named_runtime(profile, runtime):
+    module = load()
+    calls = []
+    handle = f"remote:{profile}:job:retained"
+
+    def invoke(argv, _timeout):
+        calls.append(argv)
+        return module.CommandResult(0, json.dumps({
+            "state": "completed", "handle": handle, "exit": 0, "content": "",
+        }), "")
+
+    options = {} if runtime is None else {"runtime": runtime}
+    transport = module.RemoteTransport(["remote"], invoke, **options)
+    _result, returned = transport.execute(profile, 2, "/remote", "true", 30)
+    assert returned == handle
+    run = calls[0]
+    assert run[run.index("--runtime") + 1] == (runtime or "py311-torch")
+    assert run[run.index("--cwd") + 1] == "/remote"
+
+
 def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "infrastructure_error")
     assert result["status"] == "infrastructure_error"

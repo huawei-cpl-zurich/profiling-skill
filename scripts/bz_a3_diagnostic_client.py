@@ -66,8 +66,9 @@ def _text(value: str | bytes | None) -> str:
 class RemoteTransport:
     """Global cpl-remote retained execution boundary; replaceable in tests."""
 
-    def __init__(self, remote: list[str], invoke: Callable = _run):
-        self.remote, self.invoke = remote, invoke
+    def __init__(self, remote: list[str], invoke: Callable = _run,
+                 *, runtime: str = "py311-torch"):
+        self.remote, self.invoke, self.runtime = remote, invoke, runtime
 
     def upload(self, profile: str, source: Path, destination: str, timeout: int) -> None:
         result = self.invoke(self.remote + ["upload", profile, str(source), destination], timeout)
@@ -124,7 +125,8 @@ class RemoteTransport:
                 command_file.write(payload)
                 command_file.flush()
                 result = self.invoke(self.remote + [
-                    "--json", "run", profile, "--file", command_file.name,
+                    "--json", "run", profile, "--runtime", self.runtime,
+                    "--file", command_file.name,
                     "--cwd", remote_cwd, "--timeout", str(timeout),
                 ], timeout)
         except DiagnosticError as exc:
@@ -138,25 +140,28 @@ class RemoteTransport:
             raise DiagnosticError(
                 "transport_error", "cpl-remote run returned no durable handle",
                 dispatch_uncertain=True)
-        if _nonterminal(result.stdout + result.stderr):
-            try:
+        try:
+            if _nonterminal(result.stdout + result.stderr):
                 result = self.observe(profile, handle, _remaining(deadline, handle))
-            except DiagnosticError as exc:
-                if exc.handle:
-                    raise
-                raise DiagnosticError("observer_error", str(exc), handle) from exc
-        else:
-            result = self._completed(result, handle, deadline)
+            else:
+                result = self._completed(result, handle, deadline)
+        except DiagnosticError as exc:
+            raise DiagnosticError("observer_error", str(exc), handle,
+                                  invocation_timeout=exc.invocation_timeout) from exc
         return result, handle
 
     def observe(self, profile: str, handle: str, timeout: int) -> CommandResult:
         deadline = time.monotonic() + timeout
-        result = self.invoke(
-            self.remote + ["--json", "observe", handle, "--wait", "--timeout",
-                           str(timeout)], timeout)
-        if _nonterminal(result.stdout + result.stderr):
-            raise DiagnosticError("observer_error", "retained job is not terminal", handle)
-        return self._completed(result, handle, deadline)
+        try:
+            result = self.invoke(
+                self.remote + ["--json", "observe", handle, "--wait", "--timeout",
+                               str(timeout)], timeout)
+            if _nonterminal(result.stdout + result.stderr):
+                raise DiagnosticError("observer_error", "retained job is not terminal", handle)
+            return self._completed(result, handle, deadline)
+        except DiagnosticError as exc:
+            raise DiagnosticError("observer_error", str(exc), handle,
+                                  invocation_timeout=exc.invocation_timeout) from exc
 
 
 def _bounded(value: str, limit: int = 64 * 1024) -> str:

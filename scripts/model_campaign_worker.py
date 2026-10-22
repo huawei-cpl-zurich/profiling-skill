@@ -13,7 +13,7 @@ import traceback
 from profile_device import bounded_run, wait_for_device
 
 
-def execute(root, adapter, *, acquire=wait_for_device, monotonic=time.monotonic):
+def execute(root, adapter, *, acquire=None, monotonic=time.monotonic):
     """Adapter check(root,env,remaining) must validate variants 0 and 1.
 
     It returns {passed: bool, variants: [0,1], ...} with candidate-only safe
@@ -23,13 +23,12 @@ def execute(root, adapter, *, acquire=wait_for_device, monotonic=time.monotonic)
     """
     root = Path(root)
     request = json.loads((root / 'request.json').read_text())
-    deadline = datetime.fromisoformat(request['utc_deadline'])
     budget = min(float(request['host_remaining_seconds']),
                  float(os.environ.get('CAMPAIGN_REMAINING_SECONDS', request['host_remaining_seconds'])))
     started = monotonic()
     def remaining():
-        return max(0., min((deadline - datetime.now(timezone.utc)).total_seconds(),
-                          budget - (monotonic() - started)))
+        # Host has already subtracted staging; remote UTC can be skewed.
+        return max(0., budget - (monotonic() - started))
     def expire(*_):
         raise TimeoutError('original round deadline expired')
     summary = dict(state='failed', failure_stage='infrastructure', operation=request['operation'],
@@ -43,7 +42,11 @@ def execute(root, adapter, *, acquire=wait_for_device, monotonic=time.monotonic)
                 'import torch,torch_npu;torch.npu.set_device(0);torch.ones(1,device="npu");torch.npu.synchronize()'],
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=min(30., remaining()))
             return result.returncode == 0, result.stderr[-2000:]
-        physical, env, lease = acquire(probe)
+        if acquire is None:
+            from model_device import acquire as select
+            physical, env, lease = select(probe, remaining)
+        else:
+            physical, env, lease = acquire(probe)
         os.environ.update(env)
         summary.update(physical_device=physical, logical_device=0, failure_stage='candidate')
         checked = adapter.check(root, env, remaining)

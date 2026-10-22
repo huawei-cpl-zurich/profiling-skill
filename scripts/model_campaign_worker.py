@@ -111,6 +111,8 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
             summary['failure_stage'] = 'budget'
         return summary
     finally:
+        print('MODEL_REPORT_WRITER=' + json.dumps(dict(owner_pid=summary['worker_pid'],
+            writer_pid=os.getpid(), operation=request['operation'], state=summary['state'])), flush=True)
         signal.setitimer(signal.ITIMER_REAL, 0)
         if lease and runtime is None:
             lease.close()
@@ -134,7 +136,10 @@ def phase(root, adapter):
     deadline = float(os.environ.get('CAMPAIGN_DEADLINE_MONOTONIC',
         time.monotonic() + float(os.environ['CAMPAIGN_REMAINING_SECONDS'])))
     runtime = {}
-    def terminate(*_):
+    phase_pid = os.getpid()
+    def terminate(signum, *_):
+        print('MODEL_PHASE_SIGNAL=' + json.dumps(dict(owner_pid=phase_pid,
+            receiver_pid=os.getpid(), signal=signum)), flush=True)
         raise SystemExit(0)
     previous = signal.signal(signal.SIGTERM, terminate)
     try:

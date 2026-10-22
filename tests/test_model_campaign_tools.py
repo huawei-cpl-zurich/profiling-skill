@@ -100,3 +100,22 @@ def test_export_failed_check_never_qualifies(tmp_path):
     tools.export(tmp_path, tmp_path / 'public')
     result = json.loads((tmp_path / 'public/results/summary.json').read_text())
     assert result['correctness'] is False
+
+
+def test_compiled_graph_rejects_pytorch_compute_but_allows_multiple_triton(monkeypatch):
+    class GraphCompiler:
+        def __init__(self, **kwargs):
+            pass
+        def backend_wrapper(self, graph, inputs):
+            return 'compiled'
+    monkeypatch.setitem(sys.modules, 'model_execution', SimpleNamespace(GraphCompiler=GraphCompiler))
+    compiler = native.audited_compiler()
+    def graph(*targets):
+        return SimpleNamespace(graph=SimpleNamespace(nodes=[
+            SimpleNamespace(op='call_function', target=target) for target in targets]))
+    assert compiler.backend_wrapper(graph('torch.empty', 'triton_kernel_wrapper_mutation',
+                                           'triton_kernel_wrapper_mutation'), []) == 'compiled'
+    with pytest.raises(RuntimeError, match='non-Triton'):
+        compiler.backend_wrapper(graph('torch.matmul', 'triton_kernel_wrapper_mutation'), [])
+    with pytest.raises(RuntimeError, match='no Triton'):
+        compiler.backend_wrapper(graph('torch.empty'), [])

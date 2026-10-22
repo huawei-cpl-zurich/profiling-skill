@@ -6,6 +6,7 @@ import shutil
 import tarfile
 import os
 import hashlib
+import time
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -75,6 +76,8 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
             return dict(state='running', handle=worker_handle)
         if args[0] == 'observe':
             return dict(state=worker_state[0], handle=worker_handle)
+        if args[0] == 'logs':
+            return dict(state='running', content='PHASE_READY=' + json.dumps(dict(monotonic=time.monotonic())))
         if args[0] == 'download':
             if pending[0]:
                 return dict(state='failed')
@@ -109,7 +112,7 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path):
     assert submitted == [b'version one', b'version two', b'version three']
     assert len([call for call in calls if call[0] == 'run']) == 1
     uploads = [Path(call[2]).name for call in calls if call[0] == 'upload']
-    assert uploads == ['phase.tar.gz', 'request.tar.gz', 'request.tar.gz']
+    assert uploads == ['phase.tar.gz', 'activation.json', 'request.tar.gz', 'request.tar.gz']
     (public / 'execution.json').write_text(json.dumps(dict(utc_deadline=
         (datetime.now(timezone.utc) + timedelta(seconds=1200)).isoformat())))
     assert service.start('check')['state'] == 'phase-cleanup-required'

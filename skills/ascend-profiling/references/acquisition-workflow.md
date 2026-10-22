@@ -49,6 +49,8 @@ msprof op --output=/absolute/evidence/pipe --aic-metrics=PipeUtilization \
 If selecting a device explicitly, use the same device addressing convention
 in profiler and application. A visibility mask can change application device
 indices; do not mix physical and remapped indices. Preserve that mapping.
+`profile_a3.py` preserves `ASCEND_RT_VISIBLE_DEVICES` when set and defaults it
+to `0` otherwise; configure this explicitly before using another device.
 
 For A2/A3 normalization, each pipe or memory replay must export one total
 `OpBasicInfo` row matching the selector and use launch count 1. Read

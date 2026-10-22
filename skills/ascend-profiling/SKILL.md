@@ -17,6 +17,9 @@ are not portable.
   The workload's compiler/framework dependencies must already be installed.
 - A runnable workload checks correctness and returns nonzero on failure. Know
   its inputs, kernel implementation, device selection, and timing contract.
+- The included `profile_a3.py` capture helper preserves an existing
+  `ASCEND_RT_VISIBLE_DEVICES` mask and sets it to `0` when absent. Set the mask
+  explicitly to select another device, using the resulting application indices.
 - Included helpers use Python 3.10 or later and only the standard library.
 - Optional compiler attribution requires matching compiler artifacts and tools;
   simulation requires the product-compatible simulator; race/memory diagnostics

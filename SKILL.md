@@ -95,12 +95,13 @@ exposes it to the application as logical device 0. Do not use direct SSH,
 Docker, or a raw remote-agent client.
 
 Mutable experiment candidates use `scripts/gz_a3_job_client.py`, which calls
-only the neutral `$gz-a3` adapter's `stage`, `run-bundle`, and
-`fetch-bundle-result` actions. It retains content-addressed upload, command,
-and download receipts in a private state directory so an interrupted observer
-resumes the same handle. The managed-bundle engine's `--client` and `--remote`
-options remain internal integration APIs: do not invoke them directly or use
-raw SCP, SSH, Docker, or a raw remote-agent client.
+the installed global `$remote-access` client and its registry-selected
+`py311-torch` named runtime. It shares the native A3 worker and compact-result
+validation with the BZ client, retaining request and execution provenance in a
+private state directory. After an observer interruption, reuse that directory
+and request to observe the same `remote:gz-a3:job:<id>` handle. Do not use
+workspace transport adapters, activation scripts, raw SCP, SSH, Docker, or a
+raw remote-agent client. See [GZ-A3 JSON jobs](docs/gz-a3-job-client.md).
 
 For reusable control acquisition, use the two-pass workflow above.
 `scripts/profile_a3.py` remains an in-job primitive for an already selected A3

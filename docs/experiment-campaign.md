@@ -246,11 +246,12 @@ kernel, pass all correctness cases, and complete profiling without an
 infrastructure failure.
 
 Mutable candidates are staged with `gz_a3_job_client.py` through the neutral
-profile adapter's content-addressed managed-bundle actions. Upload, command,
-and result-transfer receipts live below the configured private state
-directory. Repeating an identical request resumes those receipts and never
-submits a duplicate command. The client has no raw SSH, SCP, Docker, or
-remote-agent route.
+global `$remote-access` client, using its registry workspace and named
+`py311-torch` runtime. Native-worker request and execution receipts live below
+the configured private state directory. Repeating an identical request resumes
+the retained handle rather than submitting a duplicate command. The client
+has no workspace adapter, activation-script, raw SSH, SCP, Docker, or raw
+remote-agent route. See [GZ-A3 JSON jobs](gz-a3-job-client.md).
 
 Production accepts only a version 2 controller-bound manifest. Before any
 cell starts, it verifies the runtime and bundle, copies the bundle into the
@@ -265,7 +266,7 @@ The checked-in production client returns candidate compilation, runtime, and
 correctness failures as counted results, including compiler tracebacks. A
 profile/device/service/transfer failure is an infrastructure exclusion. Every
 successful profile response binds the exact case and kernel name and includes
-compact `msprof op` evidence plus the durable `gz-a3:<job-id>` handle.
+compact `msprof op` evidence plus the durable `remote:gz-a3:job:<id>` handle.
 
 Once those gates are implemented, first exercise the exact frozen manifest
 with `--dry-run`. Dry-run preparation uses host temporary roots named

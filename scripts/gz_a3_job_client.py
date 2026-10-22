@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production JSON client for profile-managed, mutable GZ-A3 workloads."""
+"""Production JSON client for retained GZ-A3 workloads via global cpl-remote."""
 
 from __future__ import annotations
 
@@ -158,90 +158,66 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
 
 
 def execute(job: dict, args: argparse.Namespace) -> dict:
+    from bz_a3_job_client import BzA3JobClient, GlobalCplRemoteTransport
+
+    class GzA3JobClient(BzA3JobClient):
+        TARGETS = {"gz-a3"}
+
+        def _remote_script(self, archive, archive_sha, run_root, timeout, job):
+            # Upload paths use the registry namespace, but run's cwd is already
+            # our staging child. Materialize absolute paths before cd'ing into
+            # the extracted worker directory so its script paths remain valid.
+            prefix = self.remote_root + "/"
+            if not archive.startswith(prefix) or not run_root.startswith(prefix):
+                raise ClientError("GZ worker paths must stay below the staging root")
+            script = super()._remote_script(
+                archive[len(prefix):], archive_sha, run_root[len(prefix):], timeout, job)
+            assignment, rest = script.split("\ntest ", 1)
+            return (assignment + '\narchive="$PWD/$archive"; run_root="$PWD/$run_root"'
+                    + "\ntest " + rest)
+
+    if not isinstance(job, dict):
+        raise ClientError("job must be a JSON object")
+    request = json.loads(json.dumps(job))
+    if request.get("action") == "profile":
+        if not isinstance(request.get("profiling", {}), dict):
+            raise ClientError("profiling must be a JSON object")
+        request.setdefault("profiling", {}).setdefault("tool", "msprof op")
+    device = request.get("device")
+    placements = {str(device): {"target": "gz-a3", "device": device}}
     here = Path(__file__).resolve().parent
-    stage, key = prepare(
-        job, args.state_dir, here / "a3_benchmark_runner.py", here / "profile_a3.py",
-        here / "batch_profile_a3.py",
+    transport = GlobalCplRemoteTransport(
+        args.cpl_remote_sha256, args.remote_root, targets={"gz-a3"})
+    return GzA3JobClient(
+        transport, args.state_dir, placements,
+        runner=here / "a3_benchmark_runner.py", profiler=here / "profile_a3.py",
+        batch_profiler=here / "batch_profile_a3.py", remote_root=args.remote_root,
+    ).run(
+        request, args.timeout,
+        operation_mode=os.environ.get("PROFILING_SKILL_CONTROLLER_MODE", "submit"),
+        controller_request_sha256=os.environ.get(
+            "PROFILING_SKILL_CONTROLLER_REQUEST_SHA256"),
     )
-    state = stage.parent
-    upload = state / "upload.json"
-    run_receipt = state / "run.json"
-    transfer = state / "download.json"
-    result_tar = state / "result.tar"
-    result_dir = state / "result"
-    includes = ["candidate.py", "baseline.py", "baseline.json", "runner.py", "job.json"]
-    if job["action"] == "profile":
-        includes.extend(("profile_a3.py", "batch_profile_a3.py"))
-    stage_cmd = args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-stage-{key[:16]}",
-                                "stage", "--source-root", str(stage), "--receipt", str(upload)]
-    for name in includes:
-        stage_cmd += ["--include", name]
-    staged = call(stage_cmd, args.timeout)
-    if staged.returncode:
-        raise ClientError(f"bundle staging failed\n{staged.stdout}{staged.stderr}")
-    command = "python3 runner.py --job job.json --output \"$A3_BUNDLE_OUTPUT_DIR/response.json\""
-    results = ["response.json"]
-    if job["action"] == "profile":
-        kernel = job["profiling"]["kernel_name"]
-        command = (f"python3 batch_profile_a3.py --job job.json --runner runner.py "
-                   f"--profiler profile_a3.py --output \"$A3_BUNDLE_OUTPUT_DIR/profile\" "
-                   f"--response \"$A3_BUNDLE_OUTPUT_DIR/response.json\" "
-                   f"--kernel-name {shlex.quote(kernel)} || {{ "
-                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/response.json\" && "
-                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/profile/evidence.json\" && "
-                   f"test -f \"$A3_BUNDLE_OUTPUT_DIR/profile/msprof.log\"; }}")
-        results.extend(("profile/evidence.json", "profile/msprof.log"))
-    run_cmd = args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-run-{key[:16]}",
-                              "run-bundle", "--receipt", str(upload), "--run-receipt", str(run_receipt),
-                              "--run-id", key[:24], "--device", str(job["device"]),
-                              "--runtime", "py311-torch", "--timeout", str(args.timeout)]
-    for name in results:
-        run_cmd += ["--result", name]
-    run = call(run_cmd + ["--", "bash", "-c", command], args.timeout + 30)
-    receipt = json.loads(run_receipt.read_text()) if run_receipt.exists() else {}
-    handle = f"gz-a3:{receipt['command_handle']}" if receipt.get("command_handle") else None
-    if run.returncode or receipt.get("state") != "succeeded":
-        raise ClientError(f"managed command failed or observation was interrupted; handle={handle}\n{run.stdout}{run.stderr}")
-    expected = receipt.get("result_sha256")
-    if not result_dir.exists():
-        if result_tar.exists() and hashlib.sha256(result_tar.read_bytes()).hexdigest() != expected:
-            actual = hashlib.sha256(result_tar.read_bytes()).hexdigest()
-            quarantine = state / f"result.invalid-{actual[:12]}.tar"
-            result_tar.replace(quarantine)
-        if not result_tar.exists():
-            fetch = call(args.adapter + ["--profile", "gz-a3", "--operation", f"experiment-fetch-{key[:16]}",
-                         "fetch-bundle-result", "--run-receipt", str(run_receipt), "--transfer-receipt", str(transfer),
-                         "--expected-sha256", str(expected), "--output", str(result_tar), "--timeout", str(args.timeout)], args.timeout)
-            if fetch.returncode:
-                raise ClientError(f"result fetch failed; handle={handle}\n{fetch.stdout}{fetch.stderr}")
-        safe_extract(result_tar, result_dir)
-    result = json.loads((result_dir / "response.json").read_text())
-    if result.get("status") not in VALID:
-        raise ClientError("remote harness returned an invalid status")
-    result["handle"] = handle
-    result["artifacts"] = {"request_digest": key, "result_sha256": expected,
-                           "profile": str(result_dir / "profile/evidence.json") if job["action"] == "profile" else None,
-                           "msprof_log": str(result_dir / "profile/msprof.log") if job["action"] == "profile" else None}
-    if job["action"] == "profile" and result["status"] == "ok":
-        attach_profile_evidence(result, result_dir / "profile/evidence.json")
-    return result
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--adapter-json", required=True)
+    from bz_a3_job_client import JobError
+
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument("--cpl-remote-sha256", required=True)
+    parser.add_argument("--remote-root", required=True)
     parser.add_argument("--state-dir", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=3600)
     args = parser.parse_args()
     try:
-        args.adapter = json.loads(args.adapter_json)
-        if not isinstance(args.adapter, list) or not args.adapter or not all(isinstance(x, str) and x for x in args.adapter):
-            raise ClientError("--adapter-json must be a non-empty JSON string array")
         job = json.load(sys.stdin)
         result = execute(job, args)
-    except (ClientError, OSError, ValueError, json.JSONDecodeError) as exc:
-        bound = identity(job) if "job" in locals() and isinstance(job, dict) else {}
-        result = {"status": "infrastructure_error", "diagnostics": str(exc), **bound}
+    except (ClientError, JobError, OSError, ValueError, TypeError) as exc:
+        result = {
+            "status": "infrastructure_error",
+            "failure_type": exc.failure_type if isinstance(exc, JobError) else "request_error",
+            "diagnostics": str(exc), "handle": None,
+        }
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

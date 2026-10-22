@@ -14,9 +14,13 @@ def eligible(health, usages, processes):
     def number(name):
         match = re.search(r'^\s*' + re.escape(name) + r'\s*:\s*(\d+)\s*$', usages, re.M)
         return int(match.group(1)) if match else None
+    aggregate_present = re.search(r'^\s*NPU Utilization\(%\)\s*:', usages, re.M)
     return bool(re.search(r'^\s*Health Status\s*:\s*OK\s*$', health, re.M)
         and all(number(name) == 0 for name in
-                ('Aicore Usage Rate(%)', 'Aivector Usage Rate(%)', 'NPU Utilization(%)'))
+                ('Aicore Usage Rate(%)', 'Aivector Usage Rate(%)'))
+        # Native releases may report only the two engine rates. If the
+        # aggregate is provided, malformed/nonzero observations still fail.
+        and (not aggregate_present or number('NPU Utilization(%)') == 0)
         and number('HBM Capacity(MB)') is not None
         and number('HBM Usage Rate(%)') is not None
         and number('HBM Capacity(MB)') * (100 - number('HBM Usage Rate(%)')) / 100 >= 4096

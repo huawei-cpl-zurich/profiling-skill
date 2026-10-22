@@ -17,6 +17,7 @@ def make_campaign(tmp_path, runner, **options):
     (bundle / 'API.md').write_text('Public API')
     (bundle / 'private.py').write_text('secret')
     (bundle / 'task.json').write_text(json.dumps({'public_files': ['candidate.py', 'API.md']}))
+    options.setdefault('analysis_contract', 1)
     return Campaign(tmp_path / 'run', bundle, {'name': 'test', 'reasoning_effort': 'low'},
                     ['unused'], 'Optimize public API', runner=runner, **options)
 

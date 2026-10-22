@@ -196,3 +196,48 @@ configured actor seconds. The paired arm additionally has 2,400 configured
 analyzer seconds: report configured and observed elapsed time separately,
 including timeouts and infrastructure waiting. Assessment is a retained human
 audit artifact, not an automated claim of reasoning quality or speedup.
+
+### Structured round history (contract 2)
+
+Fresh campaigns use analysis contract 2. Campaigns whose saved configuration
+predates that version resume with their original report contract. The role
+budgets and tool capture counts are unchanged.
+
+The controller exposes read-only `/history/context.json`, including the frozen
+source hash, source diff, previous distinct verified round, repeated-round
+identity, and a compact index. Each `round-N` retains exact `candidate.py`, its
+commit/hash, original compact evidence, validation status, and the validated
+`analysis.json` when available. Invalid reports remain in phase diagnostics;
+the latest handoff explicitly identifies failure instead of silently retaining
+an older report.
+
+The analyzer adds `contract_version: 2`, `source_sha256`, nonempty `optimizations`
+and `utilization` lists, nonempty roofline `ceilings`, and a `comparison` object.
+See the supplied history prompt for field shapes. Observed optimization entries
+cite exact changed diff lines. Utilization entries cover every cited profile
+case/kernel with measured evidence or explicit unavailability. Bottlenecks carry
+confidence and original evidence references. A new kernel requires a recorded
+`pipes` tool attempt; failed acquisitions produce honest incomplete reports.
+Unchanged kernels can reuse their original retained evidence without recapture.
+
+Comparisons must include the previous distinct verified kernel and may select
+one additional older distinct kernel with a reason. Controller code computes
+numeric deltas from original summaries, including non-runtime pipeline metrics;
+it does not accept analyzer-authored numeric pairs. Pairing requires common
+workload, node, runtime, cases, and capture settings. Different physical devices
+on the same node are equivalent. Unattributed multi-case kernel rows are not
+averaged. Changed kernel decomposition retains workload timing comparisons and
+explicitly reports missing kernel pairs. Roofline fractions are estimates whose
+assumptions and sources remain visible.
+
+The next actor reads the latest status, validated report, selected historical
+reports and kernel sources through `/history`, and records which findings it
+considered. The analyzer interprets evidence; the actor chooses optimizations.
+
+Compatible successful acquisitions within a round are reduced to one median per
+metric before pairing, with acquisition counts and original call/handle provenance
+retained in each pair. Standalone CSV metrics accept finite numeric strings;
+seeded correctness IDs identify the validation workload, while a verified
+single-launch profile stays explicitly labeled as a workload aggregate rather
+than being attributed to each seed. Historical comparison selections must
+represent different source hashes, including when a kernel recurs in later rounds.

@@ -517,3 +517,43 @@ def test_prepare_wraps_bsa_function_without_changing_public_call(tmp_path, monke
     exec((Path(bundle['public']) / 'candidate.py').read_text(), namespace)
     marker = object()
     assert namespace['Model']().forward(marker) is marker
+
+
+@pytest.mark.parametrize('task,arity', [('gdn', 9), ('bsa', 12)])
+def test_warm_calls_route_profile_and_variants_to_private_phase_bundle(tmp_path, monkeypatch, task, arity):
+    import model_campaign_task as router
+    phase = tmp_path / 'phase'
+    call = phase / 'calls/call-id'
+    call.mkdir(parents=True)
+    (call / 'candidate.py').write_text('class Model: pass\n')
+    reference = phase / 'reference'
+    reference.mkdir()
+    (reference / 'oracle-marker').write_text(task)
+    (phase / 'private-task.json').write_text(json.dumps(dict(task=task,
+        profile_index=3, check_indices=[1, 3])))
+    seen = []
+    def make_case(root, index, variant=0):
+        assert (root / 'oracle-marker').read_text() == task
+        seen.append((index, variant))
+        return dict(id=f'{task}-{index}-v{variant}', args=[task] * arity)
+    monkeypatch.setitem(sys.modules, 'comparison_' + task,
+        SimpleNamespace(make_case=make_case, validate=lambda *args: None))
+    assert router.trusted_bundle_root(call) == phase
+    profile, _ = router.case(call)
+    assert profile['id'] == f'{task}-3-v0' and len(profile['args']) == arity
+    for variant in (0, 1):
+        for index in router.check_indices(call):
+            case, _ = router.case(call, index, variant)
+            assert case['args'] == [task] * arity
+            assert case['id'] == f'{task}-{index}-v{variant}'
+    assert seen == [(3, 0), (1, 0), (3, 0), (1, 1), (3, 1)]
+    assert not (call / 'private-task.json').exists()
+    assert not (call / 'reference').exists()
+    assert router.configuration(phase)['task'] == task
+
+
+def test_legacy_unconfigured_warm_layout_preserves_matmul_defaults(tmp_path):
+    import model_campaign_task as router
+    call = tmp_path / 'phase/calls/id'
+    call.mkdir(parents=True)
+    assert router.configuration(call) == dict(task='matmul', profile_index=7, check_indices=list(range(8)))

@@ -557,3 +557,31 @@ def test_legacy_unconfigured_warm_layout_preserves_matmul_defaults(tmp_path):
     call = tmp_path / 'phase/calls/id'
     call.mkdir(parents=True)
     assert router.configuration(call) == dict(task='matmul', profile_index=7, check_indices=list(range(8)))
+
+
+@pytest.mark.parametrize('remote_state,expected', [('completed', 'failed'), ('failed', 'failed'),
+                                                 ('cancelled', 'cancelled'), ('running', 'running')])
+def test_warm_terminal_missing_report_finishes_without_dispatch(tmp_path, remote_state, expected):
+    import model_campaign_warm as warm
+    state = tmp_path / 'state'
+    folder = state / 'callid'
+    folder.mkdir(parents=True)
+    receipt = dict(call_id='callid', handle='remote:gz-a3:job:original',
+                   remote_folder='phase/calls/callid', request=dict(source_sha256='a' * 64))
+    (folder / 'receipt.json').write_text(json.dumps(receipt))
+    (state / 'phase.json').write_text(json.dumps(dict(handle=receipt['handle'])))
+    calls = []
+    def remote(verb, *args):
+        calls.append(verb)
+        if verb == 'observe':
+            return dict(state=remote_state)
+        assert verb == 'download'
+        raise RuntimeError('call evidence does not exist')
+    client = SimpleNamespace(state=state, workspace=tmp_path / 'private', target='gz-a3', remote=remote)
+    result = warm.observe(client, 'callid')
+    assert result['state'] == expected and result['handle'] == receipt['handle']
+    assert calls == ['observe', 'download']
+    assert ('next' in result) is (remote_state == 'running')
+    if remote_state == 'completed':
+        assert result['failure_stage'] == 'infrastructure'
+        assert result['diagnostic']['phase_state'] == 'completed'

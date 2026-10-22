@@ -247,5 +247,11 @@ def observe(tools, ident):
         return dict(summary, call_id=ident, handle=receipt['handle'])
     except (OSError, RuntimeError, ValueError, tarfile.TarError, subprocess.TimeoutExpired):
         receipt['state'] = observed['state'] if observed['state'] in TERMINAL else 'running'
+        if observed['state'] == 'completed':
+            # A completed phase cannot produce a missing call report later.
+            # Preserve its handle, but do not advertise endless evidence_pending.
+            receipt.update(state='failed', failure_stage='infrastructure',
+                           diagnostic=dict(kind='terminal-evidence-unavailable',
+                               phase_state='completed'))
         save(folder / 'receipt.json', receipt)
         return dict(receipt, next='experiment-tool observe ' + ident) if receipt['state'] not in TERMINAL else receipt

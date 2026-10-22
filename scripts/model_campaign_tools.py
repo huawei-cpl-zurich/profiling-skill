@@ -157,7 +157,7 @@ def main(argv=None):
     parser.add_argument('--runtime', default='py311-torch')
     parser.add_argument('--devices', type=lambda value: [int(item) for item in value.split(',')],
                         help='comma-separated allowed physical IDs (for example 2,5)')
-    parser.add_argument('verb', choices=('help', 'check', 'timing', 'pipes', 'observe'))
+    parser.add_argument('verb', choices=('help', 'check', 'timing', 'pipes', 'observe', 'stop'))
     parser.add_argument('call_id', nargs='?')
     options = parser.parse_args(argv)
     if options.verb == 'help':
@@ -182,6 +182,11 @@ def main(argv=None):
     # Match controller cleanup ownership and pending-call discovery exactly.
     tools.state = options.workspace.parent / 'tool-state'
     tools.state.mkdir(exist_ok=True)
+    if options.verb == 'stop':
+        from model_campaign_warm import shutdown_phase
+        result = shutdown_phase(tools)
+        print(json.dumps(result))
+        return 0 if result['state'] == 'terminal' else 75
     service = CampaignService(tools, options.bundle, options.workspace, export)
     result = service.observe(options.call_id) if options.verb == 'observe' else service.start(
         'benchmark' if options.verb == 'timing' else options.verb)

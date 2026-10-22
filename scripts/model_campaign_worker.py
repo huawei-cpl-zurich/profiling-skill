@@ -138,6 +138,8 @@ def phase(root, adapter):
         time.monotonic() + float(os.environ['CAMPAIGN_REMAINING_SECONDS'])))
     runtime = {}
     phase_pid = os.getpid()
+    start = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]
+    (root / 'worker.json').write_text(json.dumps(dict(pid=phase_pid, start=start)))
     def terminate(signum, *_):
         if os.getpid() != phase_pid:
             os._exit(128 + signum)

@@ -565,6 +565,35 @@ def test_diagnostic_run_selects_named_runtime(profile, runtime):
     assert run[run.index("--cwd") + 1] == "/remote"
 
 
+def test_masked_diagnostic_executes_on_logical_zero(monkeypatch):
+    module = load()
+    handle = "remote:bz-a3-1:job:masked"
+    observed = []
+    monkeypatch.setenv("ASCEND_DEVICE_ID", "7")
+    monkeypatch.setenv("ASCEND_RT_VISIBLE_DEVICES", "7")
+
+    def invoke(argv, _timeout):
+        if "run" in argv:
+            script = argv[argv.index("--file") + 1]
+            result = subprocess.run(["bash", script], text=True, capture_output=True,
+                                    check=True)
+            observed.append(json.loads(result.stdout))
+        return module.CommandResult(0, json.dumps({
+            "state": "completed", "handle": handle, "exit": 0, "content": "",
+        }), "")
+
+    script = (f"{sys.executable} -c 'import json, os; "
+              'print(json.dumps({name: os.environ[name] for name in '
+              '("ASCEND_RT_VISIBLE_DEVICES", "ASCEND_DEVICE_ID", "DEVICE_ID")}))'
+              "'\n")
+    result, retained = module.RemoteTransport(["remote"], invoke).execute(
+        "bz-a3-1", 3, "/remote", script, 30)
+    assert result.returncode == 0
+    assert retained == handle
+    assert observed == [{"ASCEND_RT_VISIBLE_DEVICES": "3", "ASCEND_DEVICE_ID": "0",
+                         "DEVICE_ID": "0"}]
+
+
 def test_structured_remote_infrastructure_result_is_preserved(tmp_path: Path):
     _module, _transport, result = run(tmp_path, "infrastructure_error")
     assert result["status"] == "infrastructure_error"

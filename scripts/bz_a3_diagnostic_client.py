@@ -119,6 +119,7 @@ class RemoteTransport:
         deadline = time.monotonic() + timeout
         payload = ("#!/usr/bin/env bash\nset -euo pipefail\n"
                    f"export ASCEND_RT_VISIBLE_DEVICES={device}\n"
+                   "export ASCEND_DEVICE_ID=0\n"
                    "export DEVICE_ID=0\n" + script)
         try:
             with tempfile.NamedTemporaryFile("w", suffix=".sh") as command_file:

@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import shutil
 import tarfile
 import time
 from datetime import datetime, timedelta, timezone
@@ -113,11 +114,15 @@ def test_dispatch_intent_prevents_duplicate_after_unknown_submission(tmp_path, f
     assert len(calls) == 1 and calls[0][0] == 'run'
 
 
-def test_terminal_retrieval_materializes_compact_result(tmp_path):
+@pytest.mark.parametrize('legacy_deadline', [False, True])
+def test_terminal_retrieval_materializes_compact_result(tmp_path, legacy_deadline):
     obj = instance(tmp_path)
     folder = obj.state / 'abc123'
     folder.mkdir()
-    tools.save(folder / 'receipt.json', dict(target='original-target', handle='remote:t:job:same', remote_folder='/remote/call'))
+    receipt = dict(target='original-target', handle='remote:t:job:same', remote_folder='/remote/call')
+    if legacy_deadline:
+        receipt['request'] = dict(utc_deadline='2000-01-01T00:00:00+00:00')
+    tools.save(folder / 'receipt.json', receipt)
     payload = tmp_path / 'summary.json'
     tools.save(payload, dict(state='failed', failure_stage='candidate', error='compiler diagnostic'))
     def remote(*args):
@@ -142,6 +147,24 @@ def test_remote_calls_global_cli_json_boundary_and_keeps_diagnostics(tmp_path):
     journal = json.loads((obj.state / 'transport.jsonl').read_text())
     assert journal['command'][0] == str(obj.client)
     assert journal['code'] == 0
+
+
+@pytest.mark.parametrize('deadline_expired', [True, False])
+def test_transport_timeout_distinguishes_original_deadline_from_client_timeout(tmp_path, monkeypatch, deadline_expired):
+    obj = instance(tmp_path)
+    obj.client = tmp_path / 'managed-client'
+    obj._staging_deadline = (datetime.now(timezone.utc) + timedelta(seconds=.05 if deadline_expired else 600)).isoformat()
+    def timed_out(command, **kwargs):
+        if deadline_expired:
+            assert 0 < kwargs['timeout'] <= .05
+            time.sleep(.06)
+        else:
+            assert kwargs['timeout'] == 240
+        raise subprocess.TimeoutExpired(command, kwargs['timeout'])
+    monkeypatch.setattr(tools.subprocess, 'run', timed_out)
+    expected = TimeoutError if deadline_expired else subprocess.TimeoutExpired
+    with pytest.raises(expected):
+        obj.remote('preflight', obj.target)
 
 
 def test_neutral_help_runs_without_remote_configuration(capsys):
@@ -243,6 +266,7 @@ def test_download_resume_observes_then_fetches_without_new_transfer(tmp_path):
 
 @pytest.mark.parametrize('verb,count,extra,settings', [('timing', 5, False, {}), ('pipes', 3, False, {}), ('ir', 0, False, {}), ('check', 0, False, {}), ('timing', 5, True, {}), ('timing', 3, False, {'timing_captures': 3}), ('pipes', 1, False, {'pipe_captures': 1})])
 def test_remote_program_discovers_exported_name_before_exact_captures(tmp_path, verb, count, extra, settings):
+    shutil.copyfile(Path(tools.__file__).with_name('phase_deadline.py'), tmp_path / 'phase_deadline.py')
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb=verb, implementation='candidate', source_sha256='a' * 64, **settings))
     tools.save(tmp_path / 'task.json', dict(selector='task_kernel', language='triton'))
@@ -329,6 +353,30 @@ def test_pending_request_is_observed_even_after_candidate_changes(tmp_path):
     assert obj.start('check', 'candidate', 'racecheck') == dict(observed='abc123')
 
 
+def test_observation_activates_only_existing_job_and_keeps_its_original_deadline(tmp_path):
+    obj = instance(tmp_path)
+    folder = obj.state / 'original'
+    folder.mkdir()
+    deadline = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+    tools.save(folder / 'receipt.json', dict(call_id='original', state='running', target='t',
+        remote_folder='/original', handle='remote:t:job:original',
+        request=dict(utc_deadline=deadline, activation_required=True)))
+    calls = []
+    def remote(*args):
+        calls.append(args)
+        if args[0] == 'logs':
+            return dict(content='PHASE_READY=' + json.dumps(dict(monotonic=100)))
+        return dict(state='running') if args[0] == 'observe' else dict(state='completed')
+    obj.remote = remote
+    result = obj.observe('original')
+    assert result['state'] == 'running'
+    assert result['activation_state'] == 'activated'
+    assert result['request']['utc_deadline'] == deadline
+    assert [x[0] for x in calls] == ['logs', 'upload', 'observe']
+    assert calls[-1][1] == 'remote:t:job:original'
+    assert 150 < json.loads((folder / 'activation.json').read_text())['cutoff_monotonic'] <= 160
+
+
 @pytest.mark.parametrize('settings,counts', [({}, (5, 3)), ({'timing_captures': 3, 'pipe_captures': 1}, (3, 1))])
 def test_request_deadline_survives_staging_and_dispatch(tmp_path, settings, counts):
     obj = instance(tmp_path)
@@ -382,8 +430,10 @@ def test_pre_dispatch_failure_is_terminal_and_preserves_source_identity(tmp_path
     assert 'dispatch_intent' not in saved
 
 
-@pytest.mark.parametrize('budget,delay,stage', [(300, 0, 'environment'), (.03, .1, 'budget')])
+@pytest.mark.parametrize('budget,delay,stage', [(300, 0, 'environment'), (.2, .3, 'budget')])
 def test_worker_bounds_inventory_probe_and_retains_failure_identity(tmp_path, budget, delay, stage):
+    shutil.copyfile(Path(tools.__file__).with_name('phase_deadline.py'), tmp_path / 'phase_deadline.py')
+    tools.save(tmp_path / 'activation.json', dict(cutoff_monotonic=time.monotonic() + budget))
     (tmp_path / 'execute.py').write_text(tools.REMOTE_PROGRAM)
     tools.save(tmp_path / 'request.json', dict(verb='check', implementation='candidate',
         source_sha256='b' * 64, host_remaining_seconds=budget,

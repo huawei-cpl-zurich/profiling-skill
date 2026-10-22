@@ -58,7 +58,7 @@ def check(root, env, remaining):
     results = []
     for variant in (0, 1):
         operation = json.loads((root / 'request.json').read_text())['operation']
-        indices = (0, 1, 2, 3, 4, 7) if operation == 'check' else (7,)
+        indices = range(8) if operation == 'check' else (7,)
         cases = [make_case('matmul', index, variant=variant) for index in indices]
         current = iter(cases)
         active = {}

@@ -28,7 +28,8 @@ def test_export_preserves_trusted_identity_and_pipe_rows_not_private_text(tmp_pa
     (private / 'results').mkdir(parents=True)
     value = dict(state='completed', source_sha256=hashlib.sha256(b'candidate').hexdigest(),
         check=dict(passed=True, variants=[0, 1], diagnostics=[dict(state='passed')]),
-        error='SECRET ORACLE', traceback='PRIVATE INPUT', result=dict(captures=[
+        error='SECRET ORACLE', traceback='PRIVATE INPUT', result=dict(
+            busy_time=dict(samples_us=[11, 12, 13], active_union_samples_us=[9, 10, 11]), captures=[
             dict(selector='candidate_kernel', pipe_rows=[{'Name': 'candidate_kernel',
                 'vec_ratio': '14.3', 'private': 'SECRET ORACLE'}])]))
     (private / 'results/summary.json').write_text(json.dumps(value))
@@ -36,6 +37,7 @@ def test_export_preserves_trusted_identity_and_pipe_rows_not_private_text(tmp_pa
     report = json.loads((tmp_path / 'public/results/summary.json').read_text())
     assert report['correctness'] is True
     assert report['source_sha256'] == value['source_sha256']
+    assert report['busy_time']['active_union_samples_us'] == [9, 10, 11]
     assert report['captures'][0]['pipe_rows'] == [{'Name': 'candidate_kernel', 'vec_ratio': 14.3}]
     assert 'SECRET' not in json.dumps(report)
 

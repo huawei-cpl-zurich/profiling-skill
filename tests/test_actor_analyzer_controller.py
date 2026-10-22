@@ -751,3 +751,24 @@ def test_analysis_binds_all_citations_to_authoritative_candidate_call(tmp_path, 
     campaign = make_campaign(tmp_path, runner, rounds=1)
     state = campaign.run()
     assert state['phases']['round-1-analyzer']['analysis_valid'] == (defect == 'none')
+
+
+def test_checkpoint_resumes_original_four_rounds(tmp_path):
+    seen = []
+    def runner(campaign, phase, role, budget, commit):
+        seen.append((phase.name, budget))
+        if role == 'actor':
+            (campaign.workspace / 'candidate.py').write_text('value = ' + str(len(seen)))
+            campaign.qualify(phase, dict(state='completed', correctness=True,
+                source_sha256=digest(campaign.workspace / 'candidate.py')))
+        else:
+            (phase / 'analysis.json').write_text(json.dumps(dict(candidate_commit=commit,
+                profiling=dict(status='unavailable', reason='fixture'), evidence=[],
+                observations=[], bottlenecks=[], ceilings=[], unknowns=[])))
+        return dict(exit_code=0)
+    campaign = make_campaign(tmp_path, runner)
+    assert campaign.run(stop_after_round=1)['state'] == 'checkpoint'
+    assert len(seen) == 2 and campaign.rounds == 4
+    assert campaign.run()['state'] == 'completed'
+    assert len(seen) == 8
+    assert len({name for name, budget in seen}) == 8

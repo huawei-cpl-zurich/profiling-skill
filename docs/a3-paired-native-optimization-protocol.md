@@ -57,9 +57,10 @@ measurement scope and may include host-submission gaps; it is not intrinsic
 kernel latency. It succeeds independently of msprof availability: its one-launch
 per-iteration contract is supported by the immutable kernel-only trusted host,
 not discovery of an actual exported selector or inspection of the device stream.
-Event/correctness failures still fail the operation. `check`, `timing` and
-`pipes` retain actual profiler selector discovery; profiler commands disable
-the event loop. Preserve noisy
+Event/correctness failures still fail the operation. `timing` and `pipes`
+verify the exported single-launch stream through profiler selector discovery;
+`check` verifies the trusted host contract without requiring the profiler.
+Profiler commands disable the event loop. Preserve noisy
 samples; no selective retries or required speedup. Missing optional Memory or
 native compiler-IR tools are capability gaps, not zero counters or agent faults.
 

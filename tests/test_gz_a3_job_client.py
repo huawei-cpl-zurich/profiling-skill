@@ -723,3 +723,39 @@ def test_gz_invalid_request_returns_structured_failure(tmp_path, job):
     assert result["status"] == "infrastructure_error"
     assert result["failure_type"] == "request_error"
     assert not process.stderr
+
+@pytest.mark.parametrize("captures", [None, [], ["not-an-object"]])
+def test_profile_evidence_rejects_missing_or_malformed_capture_bindings(
+        tmp_path: Path, captures):
+    module = load_client()
+    path = tmp_path / "evidence.json"
+    evidence = {"status": "success", "cases": [{"case": 7}],
+                "kernel_name": "candidate_kernel", "replay_mode": "application"}
+    if captures is not None:
+        evidence["captures"] = captures
+    path.write_text(json.dumps(evidence))
+    result = {"profile_cases": [{"case": 7}], "kernel_name": "candidate_kernel",
+              "replay_mode": "application"}
+    with pytest.raises(module.ClientError, match="selector identity|replay mode"):
+        module.attach_profile_evidence(result, path)
+
+
+@pytest.mark.parametrize("capture_mode", ["application", "kernel"])
+def test_profile_evidence_binds_application_replay_mode(tmp_path, capture_mode):
+    module = load_client()
+    path = tmp_path / "evidence.json"
+    evidence = {
+        "status": "success", "kernel_name": "candidate_kernel",
+        "replay_mode": "application", "cases": [{"case": 7}],
+        "captures": [{"kernel_name": "candidate_kernel", "case": 7,
+                      "replay_mode": capture_mode}],
+    }
+    path.write_text(json.dumps(evidence))
+    result = {"kernel_name": "candidate_kernel", "profile_cases": [{"case": 7}],
+              "replay_mode": "application"}
+    if capture_mode == "application":
+        module.attach_profile_evidence(result, path)
+        assert result["profile"]["captures"][0]["replay_mode"] == "application"
+    else:
+        with pytest.raises(module.ClientError, match="replay mode"):
+            module.attach_profile_evidence(result, path)

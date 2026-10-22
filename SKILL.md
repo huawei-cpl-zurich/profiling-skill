@@ -107,6 +107,9 @@ For reusable control acquisition, use the two-pass workflow above.
 `scripts/profile_a3.py` remains an in-job primitive for an already selected A3
 kernel. Run independent timing captures for repetitions and use their median
 and dispersion; do not use profiled Python wall time.
+Kernel replay is the default. For A2/A3 workloads whose kernel replay cannot
+create a memory snapshot, explicitly select `--replay-mode application` and
+retain that mode in the compact evidence; do not silently mix replay methods.
 
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, A3 pipe inventory, normalization command, and interpretation

@@ -329,7 +329,8 @@ def _identity(job: dict) -> dict:
     else:
         result.update(cases=job["cases"], repeats=job["repeats"],
                       round=job["round"],
-                      kernel_name=job["profiling"]["kernel_name"])
+                      kernel_name=job["profiling"]["kernel_name"],
+                      replay_mode=job["profiling"].get("replay_mode", "kernel"))
     return result
 
 
@@ -345,6 +346,10 @@ def _parse_result(stdout: str, expected: dict) -> dict:
         raise JobError("transport_error", "remote result is invalid JSON") from exc
     if not isinstance(result, dict) or result.get("status") not in RESULTS:
         raise JobError("transport_error", "remote result has an invalid status")
+    # Historical kernel-replay receipts omitted the mode. Application replay
+    # must always bind its mode explicitly, including on resumed jobs.
+    if expected.get("replay_mode") == "kernel":
+        result.setdefault("replay_mode", "kernel")
     mismatch = [key for key, value in expected.items() if result.get(key) != value]
     if mismatch:
         raise JobError("transport_error",
@@ -369,6 +374,7 @@ def _valid_selector_mapping(declared: object, resolved: object) -> bool:
 def _validate_profile_evidence(result: dict, job: dict) -> None:
     evidence = result.get("profile")
     rows = result.get("profile_cases")
+    replay_mode = job["profiling"].get("replay_mode", "kernel")
     declared = job["profiling"]["kernel_name"]
     repeats = job["repeats"]
     target_family = "Ascend-A5" if job.get("product") == "a5" else "Ascend-A2-A3"
@@ -379,6 +385,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
     if (not isinstance(evidence, dict) or evidence.get("status") != "success"
             or evidence.get("profiler") != "msprof-op"
+            or evidence.get("replay_mode", "kernel") != replay_mode
             or evidence.get("target_family", "Ascend-A2-A3") != target_family
             or evidence.get("kernel_name") != declared
             or evidence_declared != declared
@@ -408,6 +415,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     if (not isinstance(captures, list) or len(captures) != len(expected)
             or any(not isinstance(capture, dict)
                    or (capture.get("case"), capture.get("iteration")) != identity[:2]
+                   or capture.get("replay_mode", "kernel") != replay_mode
                    or capture.get("kernel_name") != resolved
                    or (explicit_names and
                        (capture.get("declared_kernel_name") != declared
@@ -724,6 +732,7 @@ class BzA3JobClient:
             if (not isinstance(profile, dict) or profile.get("tool") != "msprof op"
                     or not isinstance(profile.get("kernel_name"), str)
                     or not profile["kernel_name"].strip() or not valid_cases
+                    or profile.get("replay_mode", "kernel") not in {"kernel", "application"}
                     or isinstance(job.get("repeats"), bool)
                     or not isinstance(job.get("repeats"), int)
                     or job["repeats"] < 1

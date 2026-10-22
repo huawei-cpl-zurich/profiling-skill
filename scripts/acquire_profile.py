@@ -14,12 +14,14 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 
 TARGETS = {
-    "a3": {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch"},
+    "a3": {"bz-a3-1": "py311-torch", "bz-a3-2": "py311-torch", "gz-a3": "py311-torch"},
     "a5": {"bz-a5": "cann91"},
 }
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -132,7 +134,13 @@ def build_bundle(
             "sha256": hashlib.sha256(raw).hexdigest(),
         }
         manifest_files.append(item)
-        files.append({**item, "data_b64": base64.b64encode(raw).decode()})
+        compressed = zlib.compress(raw, level=9)
+        if len(compressed) < len(raw):
+            files.append({**item, "encoding": "zlib+base64",
+                          "data_b64": base64.b64encode(compressed).decode()})
+        else:
+            files.append({**item, "encoding": "base64",
+                          "data_b64": base64.b64encode(raw).decode()})
     if selected not in {item["path"] for item in manifest_files}:
         raise AcquisitionError("entrypoint is not a regular file in the bundle")
     manifest = {"schema_version": 1, "entrypoint": selected, "files": manifest_files}
@@ -204,6 +212,31 @@ def validate_evidence(value, mode, product, target, dispatch_key, identity):
             phase="evidence",
             classification="evidence_failure",
         )
+    if mode == "timeline":
+        availability = capture.get("availability")
+        if availability not in {"available", "unavailable"}:
+            raise AcquisitionError(
+                "TimelineDetail availability is missing",
+                phase="evidence", classification="evidence_failure",
+            )
+        if availability == "available" and not capture.get("sources"):
+            raise AcquisitionError(
+                "available TimelineDetail evidence has no compact sources",
+                phase="evidence", classification="evidence_failure",
+            )
+        semantics = capture.get("timeline_semantics")
+        if not isinstance(semantics, dict) or not isinstance(
+            semantics.get("events"), list
+        ) or len(semantics["events"]) > 256:
+            raise AcquisitionError(
+                "TimelineDetail compact semantics are missing or unbounded",
+                phase="evidence", classification="evidence_failure",
+            )
+        if availability == "available" and not semantics.get("selectors_complete"):
+            raise AcquisitionError(
+                "TimelineDetail did not cover every expected selector",
+                phase="evidence", classification="evidence_failure",
+            )
     saturation = value.get("saturation")
     if not isinstance(saturation, dict) or saturation.get("state") != "unknown":
         raise AcquisitionError(
@@ -232,7 +265,7 @@ def _read_basic(path: Path, product: str, target: str, identity: dict) -> dict:
     return value
 
 
-def _remote_program(mode, product, target, dispatch_key, spec, kernel_name, launches):
+def _remote_program(mode, product, target, dispatch_key, spec, kernel_names, launches):
     encoded = {
         "__MODE__": repr(mode),
         "__PRODUCT__": repr(product),
@@ -241,22 +274,25 @@ def _remote_program(mode, product, target, dispatch_key, spec, kernel_name, laun
         "__KEY__": repr(base64.b64encode(dispatch_key.encode()).decode()),
         "__IDENTITY__": repr(base64.b64encode(canonical(spec.identity)).decode()),
         "__FILES__": repr(base64.b64encode(canonical(spec.files)).decode()),
-        "__KERNEL__": repr(base64.b64encode(canonical(kernel_name)).decode()),
+        "__KERNELS__": repr(base64.b64encode(canonical(kernel_names)).decode()),
         "__METRIC__": repr(
             "--aic-metrics=BasicInfo"
             if mode == "basic"
-            else "--aic-metrics=PipeUtilization"
+            else ("--aic-metrics=PipeUtilization" if mode == "pipe"
+                  else "--aic-metrics=TimelineDetail")
         ),
         "__LAUNCHES__": str(launches),
+        "__DEVICE_HELPER__": (Path(__file__).with_name("profile_device.py")).read_text(),
     }
     program = r'''#!/usr/bin/env python3
-import base64, csv, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile
+import base64, csv, fcntl, hashlib, json, os, pathlib, shlex, subprocess, sys, tempfile, zlib
 
 MODE=__MODE__; PRODUCT=__PRODUCT__; TARGET=__TARGET__; RUNTIME=__RUNTIME__
 DISPATCH_KEY=base64.b64decode(__KEY__).decode()
 IDENTITY=json.loads(base64.b64decode(__IDENTITY__))
 FILES=json.loads(base64.b64decode(__FILES__))
-KERNEL_NAME=json.loads(base64.b64decode(__KERNEL__))
+KERNEL_NAMES=json.loads(base64.b64decode(__KERNELS__))
+KERNEL_NAME=KERNEL_NAMES[0] if len(KERNEL_NAMES)==1 else None
 METRIC_ARG=__METRIC__; LAUNCH_COUNT=__LAUNCHES__
 SUCCESS="Profiling running finished. All task success."
 NAME_FIELDS=("Op Name","OpName","Kernel Name","kernel_name","Name")
@@ -275,16 +311,16 @@ torch.npu.synchronize(); assert float(y.cpu()[3]) == 4.0
 """
 
 def pick_device():
-    failures=[]
-    for physical in range(8):
-        env=os.environ.copy(); env["ASCEND_RT_VISIBLE_DEVICES"]=str(physical); env["ASCEND_DEVICE_ID"]="0"
+    def probe(env):
         try:
-            result=subprocess.run([sys.executable,"-c",PROBE],text=True,capture_output=True,env=env,timeout=20)
+            result=bounded_run([sys.executable,"-c",PROBE],text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=20)
         except subprocess.TimeoutExpired:
-            failures.append("%d:timeout"%physical); continue
-        if result.returncode == 0: return physical,env
-        failures.append("%d:%s"%(physical,(result.stderr or result.stdout)[-160:]))
-    fail("device-probe","device_unavailable","no device passed bounded probe: "+"; ".join(failures))
+            return False,"runtime probe exceeded 20 seconds"
+        return result.returncode == 0,(result.stderr or result.stdout)[-1000:]
+    try: return wait_for_device(probe)
+    except Exception as exc: fail("device-probe","host_environment",str(exc))
+
+__DEVICE_HELPER__
 
 def name_field(fields):
     direct=next((field for field in NAME_FIELDS if field in fields),None)
@@ -322,6 +358,101 @@ def collect(root,metric):
         fail("evidence","evidence_failure","no usable %s rows; files=%r"%(metric,inventory[:80]))
     return named,sources
 
+def file_sha256(path):
+    digest=hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda:stream.read(1024*1024),b""): digest.update(chunk)
+    return digest.hexdigest()
+
+def number(value):
+    try:
+        parsed=float(value)
+        return parsed if parsed==parsed and abs(parsed)!=float("inf") else None
+    except (TypeError,ValueError): return None
+
+def first(row,names):
+    lowered={str(key).lower().replace("_"," "):value for key,value in row.items()}
+    for wanted in names:
+        if wanted in lowered: return lowered[wanted],wanted
+    return None,None
+
+def timeline_phase(label):
+    text=label.lower()
+    if any(word in text for word in ("store","write","copy out","mte3")): return "store"
+    if any(word in text for word in ("load","read","copy","dma","mte2","mte1")): return "load"
+    if any(word in text for word in ("compute","vector","cube","dot")): return "compute"
+    return None
+
+def normalize_event(item):
+    if not isinstance(item,dict): return None
+    name_value,_=first(item,("name","op name","kernel name","task name"))
+    name=str(name_value or "").strip()
+    args=item.get("args") if isinstance(item.get("args"),dict) else {}
+    # Instruction details can mention a waited-on pipe (e.g. BAR PIPE:MTE2).
+    # Such operands do not identify either the execution lane or a source phase.
+    label=" ".join((name,str(item.get("cat","")),str(item.get("type","")),
+                    str(args.get("pipe",""))))
+    start,start_field=first(item,("ts","start(us)","start time(us)","start time","start(ns)"))
+    duration,duration_field=first(item,("dur","duration(us)","task duration(us)","duration","duration(ns)"))
+    start=number(start); duration=number(duration)
+    if start is None or duration is None or duration < 0: return None
+    if start_field and "(ns)" in start_field: start/=1000.0
+    if duration_field and "(ns)" in duration_field: duration/=1000.0
+    selector=next((value for value in KERNEL_NAMES if value in label),None)
+    phase=timeline_phase(label)
+    if not name and not selector and not phase: return None
+    return {"name":name or selector or phase,"start_us":start,"duration_us":duration,
+            **({"selector":selector} if selector else {}),**({"phase":phase} if phase else {})}
+
+def timeline_items(path):
+    try:
+      if path.suffix.lower()==".json":
+        value=json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(value,dict): value=value.get("traceEvents",value.get("events",[]))
+        return value if isinstance(value,list) else []
+      if path.suffix.lower()==".csv":
+        with path.open(newline="",encoding="utf-8-sig") as stream: return list(csv.DictReader(stream))
+    except (OSError,UnicodeError,json.JSONDecodeError,csv.Error): return []
+    return []
+
+def compact_timeline(paths):
+    events=[]
+    hardware_paths=[path for path in paths if "simulator" not in path.parts]
+    simulator_inputs=len(paths)-len(hardware_paths)
+    for path in hardware_paths[:128]:
+      for item in timeline_items(path):
+        event=normalize_event(item)
+        if event is not None: events.append(event)
+        if len(events)>=256: break
+      if len(events)>=256: break
+    events.sort(key=lambda item:(item["start_us"],item["duration_us"],item["name"]))
+    kernel_events=[item for item in events if item.get("selector")]
+    kernel_order=[]
+    for item in kernel_events:
+      if not kernel_order or kernel_order[-1]!=item["selector"]: kernel_order.append(item["selector"])
+    phase_events=[item for item in events if item.get("phase")]
+    phase_order=[]
+    for item in phase_events:
+      if not phase_order or phase_order[-1]!=item["phase"]: phase_order.append(item["phase"])
+    phase_duration={}
+    for item in phase_events: phase_duration[item["phase"]]=phase_duration.get(item["phase"],0.0)+item["duration_us"]
+    overlap=0.0
+    loads=[item for item in phase_events if item["phase"]=="load"]
+    computes=[item for item in phase_events if item["phase"]=="compute"]
+    for left in loads:
+      for right in computes:
+        overlap+=max(0.0,min(left["start_us"]+left["duration_us"],right["start_us"]+right["duration_us"])-max(left["start_us"],right["start_us"]))
+    observed=sorted({item["selector"] for item in kernel_events})
+    starts=[item["start_us"] for item in events]; ends=[item["start_us"]+item["duration_us"] for item in events]
+    return {"schema_version":1,"event_count":len(events),"events":events,
+      "simulator_inputs_excluded":simulator_inputs,
+      "truncated":len(events)>=256,"expected_selectors":KERNEL_NAMES,
+      "observed_selectors":observed,"selectors_complete":set(KERNEL_NAMES)<=set(observed),
+      "kernel_order":kernel_order,"kernel_boundaries":kernel_events,
+      "phase_order":phase_order,"phase_duration_us":phase_duration,
+      "load_compute_overlap_us":overlap,
+      "bounds_us":({"start":min(starts),"end":max(ends),"duration":max(ends)-min(starts)} if events else None)}
+
 def materialize(root):
     bundle=root/"bundle"; bundle.mkdir()
     manifest_files=[]
@@ -329,6 +460,8 @@ def materialize(root):
         rel=pathlib.PurePosixPath(item["path"])
         if rel.is_absolute() or ".." in rel.parts: fail("bundle","bundle_failure","unsafe path")
         raw=base64.b64decode(item["data_b64"],validate=True)
+        if item.get("encoding")=="zlib+base64": raw=zlib.decompress(raw)
+        elif item.get("encoding")!="base64": fail("bundle","bundle_failure","unsupported encoding")
         if len(raw)!=item["size"] or hashlib.sha256(raw).hexdigest()!=item["sha256"]:
             fail("bundle","bundle_failure","file identity mismatch: "+item["path"])
         path=bundle/pathlib.Path(*rel.parts); path.parent.mkdir(parents=True,exist_ok=True)
@@ -339,46 +472,94 @@ def materialize(root):
         fail("bundle","bundle_failure","manifest identity mismatch")
     return bundle
 
-physical,env=pick_device()
+def device_failure(value):
+    text=value.lower()
+    return any(marker in text for marker in (
+      "tsdopen","lazysetdevice","out of memory","device is busy","set device failed"))
+
+physical,env,device_lease=pick_device()
 retention=hashlib.sha256((DISPATCH_KEY+"\0"+MODE).encode()).hexdigest()[:20]
 retained_parent=pathlib.Path.cwd()/".cpl-profile-evidence"; retained_parent.mkdir(parents=True,exist_ok=True)
 root=pathlib.Path(tempfile.mkdtemp(prefix=retention+"-",dir=retained_parent))
 try:
     bundle=materialize(root); entry=bundle/pathlib.PurePosixPath(IDENTITY["entrypoint"])
     argv=([sys.executable,str(entry)] if entry.suffix==".py" else [str(entry)])+IDENTITY["arguments"]
-    try: check=subprocess.run(argv,cwd=bundle,text=True,capture_output=True,env=env,timeout=300)
+    try: check=bounded_run(argv,cwd=bundle,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=300)
     except subprocess.TimeoutExpired as exc: fail("workload","workload_failure","timeout: "+str(exc))
-    if check.returncode: fail("workload","workload_failure","exit %d: %s"%(check.returncode,(check.stderr or check.stdout)[-2000:]))
+    (root/"workload.stdout.log").write_text(check.stdout)
+    (root/"workload.stderr.log").write_text(check.stderr)
+    if check.returncode:
+        detail=(check.stderr or check.stdout)[-2000:]
+        fail("workload","device_unavailable" if device_failure(detail) else "workload_failure","exit %d: %s"%(check.returncode,detail))
     wrapper=root/"workload.sh"
     wrapper.write_text("#!/bin/sh\nset -eu\ncd "+shlex.quote(str(bundle))+"\nexec "+shlex.join(argv)+"\n"); wrapper.chmod(0o700)
-    metric="BasicInfo" if MODE=="basic" else "PipeUtilization"; report=root/"report"
+    metric={"basic":"BasicInfo","pipe":"PipeUtilization","timeline":"TimelineDetail"}[MODE]; report=root/"report"
     command=["msprof","op","--application="+str(wrapper),"--output="+str(report),METRIC_ARG,
              "--warm-up=0","--launch-count="+str(LAUNCH_COUNT),"--kill=off"]
     if MODE=="pipe": command.append("--kernel-name="+KERNEL_NAME)
-    try: result=subprocess.run(command,text=True,capture_output=True,env=env,timeout=600)
+    try: result=bounded_run(command,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,timeout=600)
     except subprocess.TimeoutExpired as exc: fail("profiler","profiler_failure","timeout: "+str(exc))
     transcript=result.stdout+result.stderr
-    if result.returncode: fail("profiler","profiler_failure","exit %d: %s"%(result.returncode,transcript[-2000:]))
+    (root/"profiler.stdout.log").write_text(result.stdout)
+    (root/"profiler.stderr.log").write_text(result.stderr)
+    if result.returncode and device_failure(transcript):
+        fail("profiler","device_unavailable","exit %d: %s"%(result.returncode,transcript[-2000:]))
+    if result.returncode: fail("profiler","device_unavailable" if device_failure(transcript) else "profiler_failure","exit %d: %s"%(result.returncode,transcript[-2000:]))
     if SUCCESS not in transcript: fail("profiler","profiler_failure","terminal success marker missing: "+transcript[-1000:])
-    rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
+    if MODE=="timeline":
+        inventory=[{"name":str(p.relative_to(report)),"bytes":p.stat().st_size}
+                   for p in sorted(report.rglob("*")) if p.is_file()]
+        timeline_files=sorted(p for p in report.rglob("*") if p.is_file() and p.suffix.lower() in {".json",".csv"} and any(word in str(p.relative_to(report)).lower() for word in ("timeline","trace","event")))
+        hardware_timeline_files=[p for p in timeline_files if "simulator" not in p.parts]
+        sources=[{"name":p.name,"bytes":p.stat().st_size,"role":"TimelineDetail","sha256":file_sha256(p)} for p in hardware_timeline_files[:128]]
+        timeline_semantics=compact_timeline(timeline_files)
+        availability="available" if timeline_semantics["event_count"] and timeline_semantics["selectors_complete"] and "TimelineDetail data collection failed" not in transcript else "unavailable"
+        basic_rows,basic_sources=collect(report,"BasicInfo") if csv_files(report,"BasicInfo") else ([],[])
+        sources.extend(basic_sources)
+        rows=[]; names=sorted({name for name,_ in basic_rows}) or timeline_semantics["observed_selectors"]
+        timeline_diagnostic=("collection_failed" if "TimelineDetail data collection failed" in transcript else
+          "semantic_events" if availability=="available" else
+          "selector_coverage_incomplete" if timeline_semantics["event_count"] else
+          "unsupported_event_schema" if timeline_files else
+          "raw_binary_only" if any(item["name"].endswith(".bin") for item in inventory) else
+          "no_timeline_exports")
+    else:
+        rows,sources=collect(report,metric); names=sorted({name for name,_ in rows})
     if len(names)>256: fail("evidence","evidence_failure","observed kernel count exceeds compact bound")
-    selected=[] if MODE=="basic" else [row for name,row in rows if name==KERNEL_NAME]
+    selected=([row for name,row in rows] if MODE=="basic" else
+              [] if MODE=="timeline" else [row for name,row in rows if name==KERNEL_NAME])
     if MODE=="pipe" and not selected: fail("evidence","evidence_failure","no row for exact selector")
-    if len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
+    row_count=len(selected)
+    if MODE=="basic": selected=selected[:128]
+    elif len(selected)>128: fail("evidence","evidence_failure","exact-selector rows exceed compact bound")
     def normalized(value):
         return value.replace(str(root),"$RETAINED_ROOT")
     def stream_digest(value):
         raw=normalized(value).encode(); return {"bytes":len(raw),"sha256":hashlib.sha256(raw).hexdigest()}
+    workload_result=None
+    for line in check.stdout[-65536:].splitlines():
+        try: value=json.loads(line)
+        except (ValueError,TypeError): continue
+        if isinstance(value,dict): workload_result=value
     evidence={"schema_version":2,"schema":"cpl.profile-acquisition.v2","status":"success","phase":MODE,"product":PRODUCT,"target":TARGET,
       "runtime":RUNTIME,"dispatch_key":DISPATCH_KEY,"device":{"physical_id":physical,"logical_id":0},
       "provenance":{"product":PRODUCT,"target":TARGET},"workload":IDENTITY,
-      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr)},
+      "normal_run":{"exit_code":0,"stdout":stream_digest(check.stdout),"stderr":stream_digest(check.stderr),"workload_result":workload_result},
       "capture":{"metric":metric,"observed_kernel_names":names,
       "inventory_scope":{"launch_bound":LAUNCH_COUNT,"complete":False,
       "reason":"msprof exports observed names but no total application launch count"},
-      "selected_kernel":KERNEL_NAME,"rows":selected,"sources":sources,
+      "selected_kernel":KERNEL_NAME,"expected_kernel_names":KERNEL_NAMES,"rows":selected,"row_count":row_count,"rows_truncated":row_count>len(selected),"sources":sources,
       "log_sha256":hashlib.sha256(normalized(transcript).encode()).hexdigest()},
       "saturation":{"state":"unknown","reason":"activity-only evidence has no reviewed capacity denominator"}}
+    if MODE=="timeline":
+      evidence["capture"]["availability"]=availability
+      evidence["capture"]["diagnostics"]={"classification":timeline_diagnostic,
+        "inventory":inventory[:128],"inventory_truncated":len(inventory)>128,
+        "profiler_transcript_tail":normalized(transcript[-3000:])}
+      evidence["capture"]["timeline_semantics"]=timeline_semantics
+      evidence["capture"]["reason"]=("TimelineDetail export parsed into bounded semantic evidence" if availability=="available" else "successful TimelineDetail command produced no supported semantic events")
+      if timeline_diagnostic=="collection_failed":
+        evidence["capture"]["reason"]="TimelineDetail collection failed despite zero exit status; inspect retained profiler transcript"
     raw=(json.dumps(evidence,sort_keys=True,separators=(",",":"))+"\n").encode()
     if str(root).encode() in raw: fail("evidence","evidence_failure","retained report path leaked into compact evidence")
     digest=hashlib.sha256(raw).hexdigest()
@@ -390,6 +571,12 @@ except Exception as exc: fail("controller","host_environment",repr(exc))
 '''
     for marker, value in encoded.items():
         program = program.replace(marker, value)
+    if target == "gz-a3":
+        # The named runtime supplies PATH. Remove inherited listener Python
+        # overrides before interpreter startup, including subprocess probes.
+        program = ("#!/bin/sh\nset -eu\nunset PYTHONHOME PYTHONPATH\n"
+                   "exec python - <<'CPL_ACQUIRE_PROGRAM'\n" + program
+                   + "\nCPL_ACQUIRE_PROGRAM\n")
     return program
 
 
@@ -405,10 +592,13 @@ def render_remote_payload(
         if isinstance(workload, BundleSpec)
         else build_bundle(workload=Path(workload), arguments=arguments)
     )
-    if mode == "pipe" and not kernel_name:
-        raise AcquisitionError("pipe pass requires --kernel-name")
+    kernel_names = ([kernel_name] if isinstance(kernel_name, str) else list(kernel_name or []))
+    if mode in {"pipe", "timeline"} and not kernel_names:
+        raise AcquisitionError(f"{mode} pass requires --kernel-name")
+    if mode == "pipe" and len(kernel_names) != 1:
+        raise AcquisitionError("pipe pass requires exactly one --kernel-name")
     return _remote_program(
-        mode, product, target, dispatch_key, spec, kernel_name, launches
+        mode, product, target, dispatch_key, spec, kernel_names, launches
     )
 
 
@@ -534,7 +724,10 @@ def _logs(cpl, handle, stream, tail, attempts):
 
 def _observe_terminal(cpl, handle, attempts):
     last = None
-    for _ in range(max(attempts, 1)):
+    remaining = max(attempts, 1)
+    missing = False
+    while remaining:
+        remaining -= 1
         try:
             value = _invoke(
                 cpl,
@@ -545,6 +738,7 @@ def _observe_terminal(cpl, handle, attempts):
             )
         except AcquisitionError as exc:
             last = exc
+            missing = False
             if exc.classification != "transport_error":
                 raise
             continue
@@ -557,6 +751,22 @@ def _observe_terminal(cpl, handle, attempts):
             )
         if value.get("state") in TERMINAL:
             return value
+        if value.get("state") == "missing" and value.get("backend") == "ssh":
+            if missing:
+                raise AcquisitionError(
+                    "confirmed missing dispatch: same retained handle absent in two authoritative observations",
+                    phase="confirmed_missing_dispatch",
+                    classification="host_environment",
+                    handle=handle,
+                )
+            missing = True
+            # The SSH transport creates its directory before starting a job and
+            # never deletes it. Confirm absence rather than treating a dropped
+            # observer connection as proof. Allow confirmation at budget=1.
+            remaining = max(remaining, 1)
+            time.sleep(3)
+        else:
+            missing = False
         last = AcquisitionError(
             "retained job is not terminal",
             phase="observe",
@@ -646,7 +856,7 @@ def request_metadata(args, identity):
         "runtime": TARGETS[args.product][args.target],
         "dispatch_key": args.dispatch_key,
         "workload": identity,
-        "kernel_name": args.kernel_name,
+        "kernel_names": args.kernel_name,
         "launch_count": args.launch_count,
     }
 
@@ -715,7 +925,7 @@ def _normalized_argv(argv):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("basic", "pipe"))
+    parser.add_argument("mode", choices=("basic", "pipe", "timeline"))
     parser.add_argument("--product", choices=sorted(TARGETS), required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--dispatch-key", required=True)
@@ -725,7 +935,7 @@ def parse_args(argv=None):
     parser.add_argument("--entrypoint")
     parser.add_argument("--workload-arg", action="append", default=[])
     parser.add_argument("--basic-evidence", type=Path)
-    parser.add_argument("--kernel-name")
+    parser.add_argument("--kernel-name", action="append", default=[])
     parser.add_argument("--launch-count", type=launch_count, default=5000)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--dispatch-receipt", type=Path)
@@ -741,8 +951,10 @@ def parse_args(argv=None):
     args = parser.parse_args(_normalized_argv(argv))
     if args.mode == "basic" and (args.basic_evidence or args.kernel_name):
         parser.error("basic pass does not accept selector options")
-    if args.mode == "pipe" and (not args.basic_evidence or not args.kernel_name):
-        parser.error("pipe pass requires --basic-evidence and --kernel-name")
+    if args.mode in {"pipe", "timeline"} and (not args.basic_evidence or not args.kernel_name):
+        parser.error(f"{args.mode} pass requires --basic-evidence and --kernel-name")
+    if args.mode == "pipe" and len(args.kernel_name) != 1:
+        parser.error("pipe pass requires exactly one --kernel-name")
     if args.bundle and not args.entrypoint:
         parser.error("--bundle requires --entrypoint")
     if args.workload and args.entrypoint:
@@ -770,13 +982,13 @@ def main(argv=None):
             entrypoint=args.entrypoint,
             arguments=args.workload_arg,
         )
-        if args.mode == "pipe":
+        if args.mode in {"pipe", "timeline"}:
             basic = _read_basic(
                 args.basic_evidence, args.product, args.target, spec.identity
             )
-            if args.kernel_name not in basic["capture"]["observed_kernel_names"]:
+            if not set(args.kernel_name) <= set(basic["capture"]["observed_kernel_names"]):
                 raise AcquisitionError(
-                    "--kernel-name must be one exact observed BasicInfo kernel"
+                    "every --kernel-name must be an exact observed BasicInfo kernel"
                 )
         request = request_metadata(args, spec.identity)
         if args.resume_handle:
@@ -810,16 +1022,11 @@ def main(argv=None):
                 args.launch_count,
             )
             script = _stage_payload(payload, args.evidence)
-            run_argv = [
-                "run",
-                args.target,
-                "--runtime",
-                TARGETS[args.product][args.target],
-                "--file",
-                str(script),
-                "--timeout",
-                "900",
-            ]
+            run_argv = ["run", args.target]
+            runtime = TARGETS[args.product][args.target]
+            if runtime is not None:
+                run_argv.extend(["--runtime", runtime])
+            run_argv.extend(["--file", str(script), "--timeout", "900"])
             if os.environ.get("CPL_REMOTE_MODE") == "retained-broker":
                 run_argv.extend(["--dispatch-key", args.dispatch_key])
             try:
@@ -873,10 +1080,19 @@ def main(argv=None):
                 handle=handle,
             )
         if result.get("state") != "completed" or result.get("exit") not in (None, 0):
-            raise remote_failure(
-                _logs(args.cpl_remote, handle, "stderr", 80, args.transport_attempts),
-                handle,
-            )
+            try:
+                stderr = _logs(
+                    args.cpl_remote, handle, "stderr", 80, args.transport_attempts
+                )
+            except AcquisitionError as exc:
+                raise AcquisitionError(
+                    "terminal remote job failed but its diagnostic log is unavailable",
+                    phase="logs",
+                    classification="host_environment",
+                    handle=handle,
+                    excerpt=exc.excerpt or str(exc),
+                ) from exc
+            raise remote_failure(stderr, handle)
         raw = _decode(
             _logs(args.cpl_remote, handle, "stdout", 20, args.transport_attempts),
             args.mode,

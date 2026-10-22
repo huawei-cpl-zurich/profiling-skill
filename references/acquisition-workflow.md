@@ -1,8 +1,10 @@
 # Two-pass live profile acquisition
 
 Use this workflow for a Torch/Triton workload whose success exit proves its
-compilation, runtime, and correctness. It supports A3 on `bz-a3-1` or
-`bz-a3-2`, and A5 on `bz-a5`. The helper selects the named runtime and a
+compilation, runtime, and correctness. It supports A3 on `gz-a3`, `bz-a3-1`, or
+`bz-a3-2`, and A5 on `bz-a5`. A3 selects the configured `py311-torch` runtime;
+A5 selects `cann91`. GZ clears inherited `PYTHONHOME` and `PYTHONPATH` before
+starting Python, preserving the runtime's PATH. The helper selects a
 bounded functional device probe; the workload addresses logical device 0.
 
 Prefer a bundle so sibling imports, data, generated modules, and the selected

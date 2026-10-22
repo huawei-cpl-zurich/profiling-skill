@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,16 @@ import pytest
 
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / "scripts" / "acquire_profile.py"
+
+
+@pytest.fixture(autouse=True)
+def idle_inventory(tmp_path, monkeypatch):
+    smi = tmp_path / "npu-smi"
+    smi.write_text("#!/usr/bin/env python3\nimport sys\n"
+                   "print('0 0 0 0 Ascend910\\n0 1 12 12 Ascend910' if '-m' in sys.argv else "
+                   "'| 0 Ascend910 | OK | 20 |\\n| 0 0 | bus | 0 0 / 0 100 / 65536 |\\n| 0 Ascend910 | OK | 20 |\\n| 1 12 | bus | 0 0 / 0 100 / 65536 |\\n| NPU Chip | Process id | Process name |\\n| No running processes found in NPU 0 |')\n")
+    smi.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
 
 
 def load_module():
@@ -129,7 +140,9 @@ args = sys.argv[1:]
 log = pathlib.Path(os.environ["CPL_TEST_LOG"])
 with log.open("a") as f: f.write(json.dumps(args) + "\\n")
 joined = " ".join(args)
-target = "bz-a5" if "bz-a5" in joined else ("bz-a3-2" if "bz-a3-2" in joined else "bz-a3-1")
+target = ("bz-a5" if "bz-a5" in joined else
+          ("gz-a3" if "gz-a3" in joined else
+           ("bz-a3-2" if "bz-a3-2" in joined else "bz-a3-1")))
 handle = "remote:" + target + ":job:job-7"
 action = next(x for x in args if x in ("run", "observe", "result", "logs"))
 scenario = {scenario!r}
@@ -146,6 +159,16 @@ if action == "run":
     emit({{"target": target, "backend": "broker", "operation": "run", "state": "running", "handle": handle}})
 elif action == "observe":
     marker = log.with_suffix(".observe")
+    if scenario in ("missing-twice", "missing-running-completed", "missing-reconnecting-missing", "broker-missing"):
+        count = int(marker.read_text()) if marker.exists() else 0
+        marker.write_text(str(count + 1))
+        states = {{"missing-twice": ["missing", "missing"],
+                  "missing-running-completed": ["missing", "running", "completed"],
+                  "missing-reconnecting-missing": ["missing", "reconnecting", "missing"],
+                  "broker-missing": ["missing", "missing"]}}[scenario]
+        state = states[min(count, len(states)-1)]
+        emit({{"target": target, "backend": "broker" if scenario == "broker-missing" else "ssh", "operation": "observe", "state": state, "handle": handle}})
+        raise SystemExit(1 if state == "missing" else 0)
     if scenario == "interrupt-always" or (scenario == "interrupt-once" and not marker.exists()):
         marker.write_text("1")
         print("temporary observer loss", file=sys.stderr)
@@ -384,6 +407,7 @@ def test_text_receipt_rejects_conflicting_duplicate_metadata():
     [
         ("a3", "bz-a3-1", "py311-torch"),
         ("a3", "bz-a3-2", "py311-torch"),
+        ("a3", "gz-a3", "py311-torch"),
         ("a5", "bz-a5", "cann91"),
     ],
 )
@@ -401,6 +425,34 @@ def test_basic_uses_product_runtime_and_writes_exact_remote_bytes(
     assert hashlib.sha256(expected).hexdigest() in result.stdout
 
 
+def test_gz_payload_cleans_python_environment_before_runtime_start(tmp_path):
+    module = load_module()
+    workload = tmp_path / "work.py"
+    workload.write_text("print('ok')\n")
+    tools = tmp_path / "runtime-bin"
+    tools.mkdir()
+    python = tools / "python"
+    python.write_text(
+        "#!/bin/sh\n"
+        "test -z \"${PYTHONHOME+x}\" || exit 31\n"
+        "test -z \"${PYTHONPATH+x}\" || exit 32\n"
+        "printf '%s\\n' \"$PATH\"\n"
+    )
+    python.chmod(0o755)
+    payload = tmp_path / "payload.sh"
+    payload.write_text(module.render_remote_payload(
+        "basic", "a3", "gz-a3", "key", workload, [], None, 1
+    ))
+    selected_path = f"{tools}:{os.environ['PATH']}"
+    result = subprocess.run(
+        ["/bin/sh", str(payload)], text=True, capture_output=True,
+        env={**os.environ, "PATH": selected_path, "PYTHONHOME": "/invalid",
+             "PYTHONPATH": "/invalid"},
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == selected_path
+
+
 def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):
     module = load_module()
     workload = tmp_path / "anything.sh"
@@ -415,7 +467,6 @@ def test_payload_owns_flags_but_not_workload_or_selector_semantics(tmp_path):
     assert '"--kill=off"' in payload
     assert "--replay-mode" not in payload
     assert "ASCEND_RT_VISIBLE_DEVICES" in payload
-    assert "range(8)" in payload and "timeout=20" in payload
     assert "matmul" not in payload.lower()
     assert "FILES=json.loads(base64.b64decode(" in payload
     assert payload.count('print("ACQUIRE_EVIDENCE_B64="') == 1
@@ -497,6 +548,43 @@ def test_nonterminal_observation_reobserves_same_handle(tmp_path):
     assert result.returncode == 0, result.stderr
     observes = [call for call in calls if "observe" in call]
     assert len(observes) == 2
+    assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_confirmed_missing_dispatch_is_infrastructure_not_infinite_pending(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="missing-twice", attempts=1)
+    assert result.returncode == 1 and not output.exists()
+    assert "classification=host_environment phase=confirmed_missing_dispatch" in result.stderr
+    assert len([call for call in calls if "observe" in call]) == 2
+    assert len([call for call in calls if "run" in call]) == 1
+    assert not any("result" in call or "logs" in call for call in calls)
+
+
+def test_missing_then_running_then_completed_preserves_same_handle(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="missing-running-completed", attempts=3)
+    assert result.returncode == 0 and output.exists(), result.stderr
+    observes = [call for call in calls if "observe" in call]
+    assert len(observes) == 3
+    assert all(call[call.index("observe") + 1] == "remote:bz-a3-1:job:job-7" for call in observes)
+    assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_reconnecting_breaks_missing_confirmation(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="missing-reconnecting-missing", attempts=3)
+    # A fourth authoritative missing is needed after the reconnect; no replacement
+    # launches while state could represent an existing workload.
+    assert "classification=host_environment phase=confirmed_missing_dispatch" in result.stderr
+    assert not output.exists()
+    assert len([call for call in calls if "observe" in call]) == 4
+    assert len([call for call in calls if "run" in call]) == 1
+
+
+def test_non_ssh_missing_is_not_assumed_absent_dispatch(tmp_path):
+    result, output, _, calls, _ = run_cli(tmp_path, "basic", scenario="broker-missing", attempts=2)
+    assert result.returncode == 1 and not output.exists()
+    assert "classification=transport_error phase=observe" in result.stderr
+    assert "confirmed_missing_dispatch" not in result.stderr
+    assert len([call for call in calls if "observe" in call]) == 2
     assert len([call for call in calls if "run" in call]) == 1
 
 
@@ -634,11 +722,206 @@ def test_activity_evidence_cannot_claim_saturation(tmp_path):
         )
 
 
-@pytest.mark.parametrize("mode", ["basic", "pipe"])
-def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
+def test_a3_payload_leases_device_and_classifies_runtime_device_failures(tmp_path):
+    module = load_module()
+    workload = tmp_path / "w.py"
+    workload.write_text("print('ok')\n")
+    payload = module.render_remote_payload(
+        "basic", "a3", "bz-a3-1", "lease", workload, [], None, 1
+    )
+    assert "fcntl.flock" in payload
+    assert "device-lease" in payload
+    for marker in ("tsdopen", "lazysetdevice", "out of memory"):
+        assert marker in payload.lower()
+
+
+def test_generated_payload_shares_home_device_leases_across_cwds(tmp_path):
+    module = load_module()
+    workload = tmp_path / "work.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\n"
+        "class NPU:\n def set_device(self,x): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\n"
+        "class V:\n def __add__(self,x): return self\n def cpu(self): return self\n def __getitem__(self,x): return 4.0\n"
+        "def arange(*a,**k): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    msprof = tools / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib,sys,time\n"
+        "out=pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output=')))/'OPPROF'\n"
+        "out.mkdir(parents=True)\n"
+        "(out/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\nprobe,1\\n')\n"
+        "time.sleep(0.5)\n"
+        "print('Profiling running finished. All task success.')\n"
+    )
+    msprof.chmod(0o755)
+    scripts, processes = [], []
+    home = tmp_path / "home"
+    home.mkdir()
+    environment = {
+        **os.environ, "HOME": str(home),
+        "PATH": f"{tools}:{os.environ['PATH']}", "PYTHONPATH": str(modules),
+    }
+    for index in range(2):
+        cwd = tmp_path / f"cwd-{index}"
+        cwd.mkdir()
+        script = cwd / "payload.py"
+        script.write_text(module.render_remote_payload(
+            "basic", "a3", "bz-a3-1", f"lease-{index}", workload, [], None, 1
+        ))
+        scripts.append(script)
+    processes.append(subprocess.Popen(
+        ["python3", str(scripts[0])], cwd=scripts[0].parent, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+    ))
+    lock = home / ".cpl-device-leases/device-lease-0.lock"
+    deadline = time.monotonic() + 3
+    while not lock.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert lock.exists()
+    processes.append(subprocess.Popen(
+        ["python3", str(scripts[1])], cwd=scripts[1].parent, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
+    ))
+    devices = []
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 0, stderr
+        encoded = next(line.split("=", 1)[1] for line in stdout.splitlines()
+                       if line.startswith("ACQUIRE_EVIDENCE_B64="))
+        devices.append(json.loads(base64.b64decode(encoded))["device"]["physical_id"])
+    assert sorted(devices) == [0, 12]
+
+
+def test_timeline_payload_retains_attempted_export_absence(tmp_path):
+    module = load_module()
+    workload = tmp_path / "w.py"
+    workload.write_text("print('ok')\n")
+    payload = module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "timeline", workload, [], "kernel", 1
+    )
+    assert "TimelineDetail" in payload
+    assert '"availability":"unavailable"' in payload or "availability" in payload
+
+
+def test_timeline_payload_does_not_hide_profiler_failure(tmp_path):
+    module = load_module()
+    workload = tmp_path / "workload.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\nclass NPU:\n def set_device(self, value): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\nclass V:\n def __add__(self, value): return self\n"
+        " def cpu(self): return self\n def __getitem__(self, key): return 4.0\n"
+        "def arange(*args, **kwargs): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    msprof = tmp_path / "msprof"
+    msprof.write_text("#!/bin/sh\necho profiler-crashed >&2\nexit 7\n")
+    msprof.chmod(0o755)
+    payload = tmp_path / "payload.py"
+    payload.write_text(module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "failed-timeline", workload, [],
+        ["copy_kernel", "compute_kernel"], 2,
+    ))
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PYTHONPATH"] = str(modules)
+    env["HOME"] = str(tmp_path / "home")
+    Path(env["HOME"]).mkdir()
+
+    run = subprocess.run(
+        ["python3", str(payload)], cwd=tmp_path, env=env,
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode != 0
+    failure = next(
+        json.loads(line.split("=", 1)[1]) for line in run.stderr.splitlines()
+        if line.startswith("ACQUIRE_FAILURE_JSON=")
+    )
+    assert failure["classification"] == "profiler_failure"
+    assert "profiler-crashed" in failure["message"]
+
+
+@pytest.mark.parametrize("collection_failed", [False, True])
+def test_timeline_payload_returns_bounded_semantic_summary_for_all_selectors(tmp_path, collection_failed):
+    module = load_module()
+    workload = tmp_path / "workload.py"
+    workload.write_text("print('ok')\n")
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    (modules / "torch.py").write_text(
+        "float32=object()\nclass NPU:\n def set_device(self, value): pass\n def synchronize(self): pass\n"
+        "npu=NPU()\nclass V:\n def __add__(self, value): return self\n"
+        " def cpu(self): return self\n def __getitem__(self, key): return 4.0\n"
+        "def arange(*args, **kwargs): return V()\n"
+    )
+    (modules / "torch_npu.py").write_text("")
+    msprof = tmp_path / "msprof"
+    msprof.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json,pathlib,sys\n"
+        "root=pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output=')))\n"
+        "root.mkdir(parents=True)\n"
+        "events=[\n"
+        " {'name':'copy_kernel','cat':'kernel mte load','ph':'X','ts':0,'dur':4},\n"
+        " {'name':'compute_kernel','cat':'kernel vector compute','ph':'X','ts':3,'dur':5},\n"
+        " {'name':'store result','cat':'mte store','ph':'X','ts':8,'dur':2}]\n"
+        "(root/'timeline.json').write_text(json.dumps({'traceEvents':events}))\n"
+        "(root/'visualize_data.bin').write_bytes(b'raw vendor report')\n"
+        f"print('TimelineDetail data collection failed' if {collection_failed!r} else '')\n"
+        "print('Profiling running finished. All task success.')\n"
+    )
+    msprof.chmod(0o755)
+    payload = tmp_path / "payload.py"
+    payload.write_text(module.render_remote_payload(
+        "timeline", "a3", "bz-a3-1", "semantic-timeline", workload, [],
+        ["copy_kernel", "compute_kernel"], 2,
+    ))
+    env = os.environ.copy()
+    env["PATH"] = f"{tmp_path}:{env['PATH']}"
+    env["PYTHONPATH"] = str(modules)
+    env["HOME"] = str(tmp_path / "home")
+    Path(env["HOME"]).mkdir()
+
+    run = subprocess.run(
+        ["python3", str(payload)], cwd=tmp_path, env=env,
+        text=True, capture_output=True, check=False,
+    )
+
+    assert run.returncode == 0, run.stderr
+    raw = next(line.split("=", 1)[1] for line in run.stdout.splitlines()
+               if line.startswith("ACQUIRE_EVIDENCE_B64="))
+    capture = json.loads(base64.b64decode(raw))["capture"]
+    semantic = capture["timeline_semantics"]
+    assert capture["expected_kernel_names"] == ["copy_kernel", "compute_kernel"]
+    assert semantic["selectors_complete"] is True
+    assert semantic["kernel_order"] == ["copy_kernel", "compute_kernel"]
+    assert semantic["phase_order"] == ["load", "compute", "store"]
+    assert semantic["phase_duration_us"] == {"compute": 5.0, "load": 4.0, "store": 2.0}
+    assert semantic["load_compute_overlap_us"] == 1.0
+    assert semantic["event_count"] == 3
+    assert len(semantic["events"]) <= 256
+    assert capture["diagnostics"]["classification"] == ("collection_failed" if collection_failed else "semantic_events")
+    assert capture["availability"] == ("unavailable" if collection_failed else "available")
+    assert any(item["name"] == "visualize_data.bin" for item in capture["diagnostics"]["inventory"])
+    assert capture["observed_kernel_names"] == ["compute_kernel", "copy_kernel"]
+
+
+@pytest.mark.parametrize("mode,count", [("basic", 1), ("pipe", 1), ("basic", 5000)])
+def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode, count):
     module = load_module()
     workload = tmp_path / "workload.sh"
-    workload.write_text("#!/bin/sh\nexit 0\n")
+    workload.write_text("#!/bin/sh\nprintf '%s\\n' '{\"old\":1}' 'not json' '[]' '{\"correct\":true,\"compiler\":\"retained\"}'\n")
     workload.chmod(0o755)
     modules = tmp_path / "modules"
     modules.mkdir()
@@ -661,7 +944,7 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
         "import pathlib, sys\n"
         "output = pathlib.Path(next(x.split('=',1)[1] for x in sys.argv if x.startswith('--output='))) / 'OPPROF_live'\n"
         "output.mkdir(parents=True)\n"
-        "(output/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\nexact.kernel/7,3.5\\n')\n"
+        f"(output/'OpBasicInfo.csv').write_text('Op Name,Task Duration(us)\\n'+ 'exact.kernel/7,3.5\\n'*{count})\n"
         "if '--aic-metrics=PipeUtilization' in sys.argv:\n"
         " (output/'PipeUtilization.csv').write_text('block_id,sub_block_id,aic_cube_ratio\\n0,cube0,0.75\\n')\n"
         "print('Profiling running finished. All task success. output='+str(output))\n"
@@ -725,9 +1008,14 @@ def test_rendered_payload_parses_deployed_csv_shapes(tmp_path, mode):
     assert evidence["schema"] == "cpl.profile-acquisition.v2"
     assert evidence["provenance"] == {"product": "a3", "target": "bz-a3-1"}
     assert evidence["normal_run"]["exit_code"] == 0
-    assert set(evidence["normal_run"]) == {"exit_code", "stdout", "stderr"}
+    assert set(evidence["normal_run"]) == {"exit_code", "stdout", "stderr", "workload_result"}
+    assert evidence["normal_run"]["workload_result"] == {"correct": True, "compiler": "retained"}
     assert evidence["capture"]["observed_kernel_names"] == ["exact.kernel/7"]
-    assert len(evidence["capture"]["rows"]) == (1 if mode == "pipe" else 0)
+    assert len(evidence["capture"]["rows"]) == (min(count, 128) if mode == "basic" else 1)
+    assert evidence["capture"]["row_count"] == count
+    assert evidence["capture"]["rows_truncated"] == (count > 128)
+    if mode == "basic":
+        assert evidence["capture"]["rows"] == [{"Op Name": "exact.kernel/7", "Task Duration(us)": "3.5"}] * min(count, 128)
     if mode == "pipe":
         assert evidence["capture"]["sources"][0]["role"] == "PipeUtilization"
         assert evidence["capture"]["sources"][1]["role"] == "selector_binding"
@@ -748,6 +1036,17 @@ def test_bundle_manifest_binds_sibling_imports_and_data(tmp_path):
         bundle=bundle, entrypoint="main.py", arguments=["--x"]
     )
     assert changed.identity["manifest_sha256"] != original
+
+
+def test_bundle_compresses_repetitive_sources_without_changing_manifest_identity(tmp_path):
+    module = load_module()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    source = bundle / "main.py"
+    source.write_text("value = 1\n" * 2000)
+    spec = module.build_bundle(bundle=bundle, entrypoint="main.py", arguments=[])
+    assert spec.files[0]["encoding"] == "zlib+base64"
+    assert spec.identity == identity(source, [])
 
 
 def test_pipe_rejects_changed_sibling_file_before_dispatch(tmp_path):

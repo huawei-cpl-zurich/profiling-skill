@@ -6,12 +6,13 @@ semantics. The source-backed definitions below come from
 `Ascend/msprof@922ce56938fe48063bbffb5019b65645b2bb77cb` through
 `ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics`.
 
-For live control acquisition from an agent, use
+For live control acquisition in an ordinary checkout, use
 `scripts/acquire_profile.py` as described in
 [Two-pass live profile acquisition](acquisition-workflow.md). It owns the
 deployed profiler flags, named runtime, device environment, and retained
 transport lifecycle. `scripts/profile_a3.py` is the lower-level primitive for
-code already running inside a managed A3 job. In either route, the workload
+code already running inside a managed A3 job. A supplied target-aware benchmark
+interface can own the same discovery/selection workflow instead. In either route, the workload
 and profiler see logical device 0; do not pass a host physical ID to Triton
 code.
 
@@ -40,7 +41,9 @@ The workload must execute one deterministic case, validate its result, and
 return nonzero on compilation, runtime, or correctness failure. Keep input
 construction and host-to-device transfer outside the profiled launch whenever
 the benchmark interface permits it. Use separate captures for repetitions;
-the experiment controller should take the median of successful captures.
+the experiment controller should report the median and dispersion of all
+declared valid captures, retaining failed captures separately. Do not select a
+favorable stable subset or repeatedly sample until variability disappears.
 
 ## Evidence contract
 
@@ -71,19 +74,21 @@ capacity saturation.
 | Exported field | A2/A3 pipe | Code meaning | Evidence kind |
 | --- | --- | --- | --- |
 | `aic_cube_ratio` | AIC Cube | matrix multiply/accumulate work such as lowered dot operations | activity only |
-| `aiv_vec_ratio` | AIV Vector | elementwise/vector arithmetic and conversions | activity only |
-| `aic_scalar_ratio`, `aiv_scalar_ratio` | AIC/AIV Scalar | scalar address, loop, predicate, and control work | activity only |
+| `aiv_vec_ratio` | AIV Vector | vector arithmetic, conversions, masks, reductions and applicable local copies | activity only |
+| `aic_scalar_ratio`, `aiv_scalar_ratio` | AIC/AIV Scalar | scalar address, loop, predicate/control work; scalarized indirect loads can also contribute | activity only |
 | `aic_mte1_ratio` | AIC MTE1 | L1 to L0A/L0B operand movement | activity only |
 | `aic_mte2_ratio`, `aiv_mte2_ratio` | AIC/AIV MTE2 | DDR/GM into the AI Core memory hierarchy | activity only |
-| `aic_mte3_ratio`, `aiv_mte3_ratio` | AIC/AIV MTE3 | AI Core memory hierarchy back to DDR/GM | activity only |
-| `aic_fixpipe_ratio` | AIC FixPipe | deployed exporter activity; source attribution is unresolved | activity only |
+| `aic_mte3_ratio`, `aiv_mte3_ratio` | AIC/AIV MTE3 | applicable outbound DMA paths such as UB to GM; not every store | activity only |
+| `aic_fixpipe_ratio` | AIC FixPipe | applicable matrix-result movement/conversion; exact event mapping remains unresolved | activity only |
 
 The source maps the default event pairs as vector `0x8`, cube `0xa`, scalar
 `0x9`, MTE1 `0xb`, MTE2 `0xc`, and MTE3 `0xd`. These identifiers are recorded
 for A2/A3 attribution only; they are not transferable to A5/V6. The deployed
 A3 exporter also emits FixPipe, but the retrieved default-event definition did
 not establish its A2/A3 event mapping, so the model preserves it as an
-unvalidated activity field.
+unvalidated activity field. Observed A3 compiler lowering includes CC/L0C to
+GM through FIXPIPE; this is not a validation of every exporter field or a
+portable mapping of all matrix outputs.
 
 `MemoryAccess` can expose GM→L1, L0C→L1, L0C→GM, GM→UB, and UB→GM paths. The
 retrieved source did not establish their export scaling, so retain values and
@@ -142,6 +147,10 @@ block/sub-block observation, but cannot prove a saturated bottleneck or locate
 a temporal phase.
 
 `TimelineDetail` flow events describe mapping relationships, not capacity.
+Automatic instruction capture and explicit Triton simulation are distinct;
+read [A3 timelines and correctness diagnostics](a3-timeline-and-correctness.md)
+before interpreting instruction traces. Neither simulator timestamps nor pipe
+instrumentation replace the benchmark's separate BasicInfo timing captures.
 Sampled usage is based on task cycles divided by frequency times elapsed
 interval, so use it to locate active and inactive intervals only when the
 capture provides those inputs. It does not change the fail-closed saturation

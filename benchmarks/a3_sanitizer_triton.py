@@ -1,0 +1,51 @@
+"""Deliberate overlapping/disjoint program writes; sanitizer qualification only."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import torch
+import torch_npu
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def a3_sanitizer_write(Y, OVERLAP: tl.constexpr, BLOCK: tl.constexpr):
+    pid = tl.program_id(0)
+    offsets = tl.arange(0, BLOCK)
+    destination = offsets if OVERLAP else pid * BLOCK + offsets
+    tl.store(Y + destination, tl.full((BLOCK,), 1, tl.int32))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--mutant', action='store_true')
+    parser.add_argument('--artifacts', type=Path, required=True)
+    args = parser.parse_args()
+    args.artifacts.mkdir(parents=True, exist_ok=False)
+    y = torch.zeros(8192, dtype=torch.int32, device='npu')
+    compiled = a3_sanitizer_write[(2,)](y, args.mutant, 4096)
+    torch.npu.synchronize()
+    artifacts = []
+    for name, value in compiled.asm.items():
+        if isinstance(value, (str, bytes)):
+            content = value.encode() if isinstance(value, str) else value
+            destination = args.artifacts / (name + ('.txt' if isinstance(value, str) else '.bin'))
+            destination.write_bytes(content)
+            artifacts.append(dict(stage=name, sha256=hashlib.sha256(content).hexdigest()))
+    expected = torch.ones_like(y)
+    if args.mutant:
+        expected[4096:] = 0
+    correct = torch.equal(y.cpu(), expected.cpu())
+    identity = dict(correctness=correct, mutant=args.mutant, artifacts=artifacts,
+                    kernel_name=compiled.name,
+                    instrumentation_requested=os.environ.get('TRITON_ENABLE_SANITIZER'),
+                    metadata=str(compiled.metadata))
+    (args.artifacts / 'manifest.json').write_text(json.dumps(identity, indent=2))
+    print(json.dumps(identity))
+    return int(not correct)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

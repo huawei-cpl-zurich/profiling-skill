@@ -1,0 +1,834 @@
+from __future__ import annotations
+
+import csv
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+
+ROOT = Path(__file__).parents[1]
+SCRIPT = ROOT / "scripts" / "build_profile_reverse_report.py"
+PLANNED_HYPOTHESES = ROOT / "references" / "a3-profiling-hypotheses.json"
+
+
+def write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def fixtures(tmp_path: Path) -> tuple[Path, Path, Path]:
+    manifest = {
+        "schema_version": 1,
+        "campaign_id": "fixture-campaign",
+        "starter_candidate_id": "starter",
+        "references": [
+            {
+                "query_id": "8dfb07b37dc34532974f00418ea65306",
+                "citation": "ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics",
+            }
+        ],
+        "candidates": [
+            {
+                "candidate_id": "starter",
+                "treatment": "starter",
+                "round": 0,
+                "option": 0,
+                "source_hash": "aaa",
+                "parent_candidate_id": None,
+                "duplicate_of": None,
+                "source_features": {"loop_bound": "total_k"},
+                "code_delta": ["frozen starter"],
+            },
+            {
+                "candidate_id": "fast",
+                "treatment": "guarded-new",
+                "round": 1,
+                "option": 2,
+                "source_hash": "bbb",
+                "parent_candidate_id": "starter",
+                "duplicate_of": None,
+                "source_features": {"loop_bound": "sequence_k"},
+                "code_delta": ["bound the loop by sequence length"],
+            },
+            {
+                "candidate_id": "fast-copy",
+                "treatment": "guarded-new",
+                "round": 2,
+                "option": 1,
+                "source_hash": "bbb",
+                "parent_candidate_id": "fast",
+                "duplicate_of": "fast",
+                "source_features": {"loop_bound": "sequence_k"},
+                "code_delta": ["no source change"],
+            },
+            {
+                "candidate_id": "compile-fail",
+                "treatment": "guarded-old",
+                "round": 2,
+                "option": 9,
+                "source_hash": "ccc",
+                "parent_candidate_id": "starter",
+                "duplicate_of": None,
+                "source_features": {"block_n": 512},
+                "code_delta": ["increase block size"],
+            },
+            {
+                "candidate_id": "cannbot-incomplete",
+                "treatment": "cannbot-only",
+                "round": 1,
+                "option": 0,
+                "source_hash": None,
+                "parent_candidate_id": "starter",
+                "duplicate_of": None,
+                "lineage_state": "incomplete",
+                "lineage_note": "attempt directory exists but produced source is missing",
+                "source_features": {},
+                "code_delta": [],
+            },
+        ],
+    }
+    captures = {
+        "schema_version": 1,
+        "captures": [
+            {"candidate_id": "starter", "case_id": "43", "status": "valid", "latency_us": 100.0, "profile": {"metrics": {"aiv_vector": 0.7}, "saturation": {"state": "unknown", "reason": "no validated denominator"}}},
+            {"candidate_id": "starter", "case_id": "43", "status": "valid", "latency_us": 102.0},
+            {"candidate_id": "starter", "case_id": "44", "status": "valid", "latency_us": 200.0},
+            {"candidate_id": "fast", "case_id": "43", "status": "valid", "latency_us": 50.0, "profile": {"metrics": {"aiv_vector": 0.5}}},
+            {"candidate_id": "fast", "case_id": "43", "status": "valid", "latency_us": 52.0},
+            {"candidate_id": "fast", "case_id": "44", "status": "valid", "latency_us": 100.0},
+            {"candidate_id": "compile-fail", "case_id": "43", "status": "candidate_failure", "failure": {"kind": "compilation", "message": "resource limit"}},
+            {"candidate_id": "compile-fail", "case_id": "44", "status": "infrastructure_failure", "failure": {"kind": "transport", "message": "observer timeout"}},
+        ],
+    }
+    hypotheses = {
+        "schema_version": 1,
+        "results": [
+            {
+                "hypothesis_id": "local-loop-bound",
+                "title": "Local loop bounds remove control work",
+                "expected": {"direction": "decrease", "minimum_relative_change": 0.1},
+                "measurements": [{"status": "valid", "before": 100.0, "after": 70.0}],
+                "signals": [
+                    {"name": "scalar_activity", "relationship": "tracks_outcome", "summary": "fell with latency"},
+                    {"name": "mte_activity", "relationship": "context_only", "summary": "changed without capacity semantics"},
+                ],
+            },
+            {
+                "hypothesis_id": "large-tile",
+                "title": "A very large tile is faster",
+                "expected": {"direction": "decrease", "minimum_relative_change": 0.1},
+                "measurements": [{"status": "valid", "before": 100.0, "after": 125.0}],
+                "signals": [{"name": "activity_ratio", "relationship": "contradicts_outcome", "summary": "looked better while latency regressed"}],
+            },
+            {
+                "hypothesis_id": "schedule",
+                "title": "Schedule choice has a large effect",
+                "expected": {"direction": "decrease", "minimum_relative_change": 0.1},
+                "measurements": [{"status": "valid", "before": 100.0, "after": 97.0}],
+                "signals": [],
+            },
+            {
+                "hypothesis_id": "timeline-order",
+                "title": "Timeline exposes phase order",
+                "expected": {"direction": "increase", "minimum_relative_change": 0.1},
+                "measurements": [{"status": "infrastructure_failure"}],
+                "signals": [{"name": "timeline_phase_order", "relationship": "not_exported", "summary": "not present"}],
+            },
+        ],
+    }
+    paths = tuple(tmp_path / name for name in ("manifest.json", "captures.json", "hypotheses.json"))
+    for path, value in zip(paths, (manifest, captures, hypotheses)):
+        write_json(path, value)
+    return paths  # type: ignore[return-value]
+
+
+def test_builds_joined_outputs_and_preserves_failures_and_duplicates(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+
+    report = json.loads((output / "report.json").read_text())
+    by_id = {item["candidate_id"]: item for item in report["candidates"]}
+    assert by_id["fast"]["cases"]["43"]["median_latency_us"] == 51.0
+    assert by_id["fast"]["cases"]["43"]["latency_samples_us"] == [50.0, 52.0]
+    assert by_id["fast"]["cases"]["43"]["profile_metrics"] == {"aiv_vector": 0.5}
+    assert by_id["fast"]["cases"]["43"]["starter_speedup"] == 101.0 / 51.0
+    assert by_id["fast"]["geometric_mean"]["starter_speedup"] > 1.98
+    assert by_id["fast"]["geometric_mean"]["parent_speedup"] > 1.98
+    assert by_id["fast-copy"]["duplicate_of"] == "fast"
+    assert by_id["fast-copy"]["evidence_source_candidate_id"] == "fast"
+    assert by_id["compile-fail"]["failures"] == [
+        {"case_id": "43", "status": "candidate_failure", "kind": "compilation", "message": "resource limit"},
+        {"case_id": "44", "status": "infrastructure_failure", "kind": "transport", "message": "observer timeout"},
+    ]
+    assert by_id["compile-fail"]["geometric_mean"]["starter_speedup"] is None
+    assert by_id["cannbot-incomplete"]["lineage_state"] == "incomplete"
+    assert by_id["cannbot-incomplete"]["lineage_note"] == "attempt directory exists but produced source is missing"
+    assert by_id["cannbot-incomplete"]["cases"] == {}
+    assert by_id["fast"]["saturation"] == {
+        "state": "unknown",
+        "reason": "no validated capacity evidence",
+    }
+
+    verdicts = {item["hypothesis_id"]: item["classification"] for item in report["hypotheses"]}
+    assert verdicts == {
+        "local-loop-bound": "supported",
+        "large-tile": "refuted",
+        "schedule": "inconclusive",
+        "timeline-order": "unavailable",
+    }
+    signals = {item["signal"]: item["classification"] for item in report["signals"]}
+    assert signals == {
+        "activity_ratio": "misleading",
+        "mte_activity": "contextual",
+        "scalar_activity": "useful",
+        "timeline_phase_order": "unavailable",
+    }
+
+    markdown = (output / "report.md").read_text()
+    assert "Partial evidence" in markdown
+    assert "bound the loop by sequence length" in markdown
+    assert "ref://profiling-skill/common/profiling/repos/ascend-msprof-pipe-memory-timeline-semantics" in markdown
+    assert "Saturation: unknown" in markdown
+    assert "unavailablex" not in markdown
+
+    with (output / "candidates.csv").open(newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert [row["candidate_id"] for row in rows] == [
+        "cannbot-incomplete", "compile-fail", "fast", "fast-copy", "starter"
+    ]
+
+
+def test_auxiliary_cases_do_not_change_declared_aggregate_speedups(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    manifest_doc = json.loads(manifest.read_text())
+    manifest_doc["required_case_ids"] = ["43", "44"]
+    write_json(manifest, manifest_doc)
+    payload = json.loads(captures.read_text())
+    payload["captures"].extend([
+        {"candidate_id": "starter", "case_id": "auxiliary", "status": "valid", "latency_us": 1000.0},
+        {"candidate_id": "fast", "case_id": "auxiliary", "status": "valid", "latency_us": 10.0},
+    ])
+    write_json(captures, payload)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    candidate = next(item for item in json.loads((output / "report.json").read_text())["candidates"]
+                     if item["candidate_id"] == "fast")
+    expected = (101.0 / 51.0 * 2.0) ** 0.5
+    assert candidate["geometric_mean"]["starter_speedup"] == pytest.approx(expected)
+    assert candidate["geometric_mean"]["parent_speedup"] == pytest.approx(expected)
+    assert candidate["cases"]["auxiliary"]["parent_speedup"] == 100.0
+
+
+@pytest.mark.parametrize("parent_id", ["fast", "fast-copy"])
+def test_rejects_self_and_multicandidate_parent_cycles(tmp_path: Path, parent_id: str):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(manifest.read_text())
+    payload["candidates"][1]["parent_candidate_id"] = parent_id
+    write_json(manifest, payload)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 2
+    assert "parent cycle" in run.stderr
+    assert not (output / "report.json").exists()
+
+
+def test_rejects_unknown_candidate_and_does_not_infer_saturation(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(captures.read_text())
+    payload["captures"].append({"candidate_id": "missing", "case_id": "43", "status": "valid", "latency_us": 1})
+    write_json(captures, payload)
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(hypotheses), "--output-dir", str(tmp_path / "out")],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "unknown candidate" in run.stderr
+
+
+def test_rejects_unvalidated_saturation_claim(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(captures.read_text())
+    payload["captures"][0]["profile"]["saturation"] = {"state": "saturated", "reason": "ratio was high"}
+    write_json(captures, payload)
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(hypotheses), "--output-dir", str(tmp_path / "out")],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "validated capacity evidence" in run.stderr
+
+
+def test_checked_in_hypotheses_are_valid_unavailable_scaffold(tmp_path: Path):
+    manifest, captures, _ = fixtures(tmp_path)
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(tmp_path / "planned")],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((tmp_path / "planned" / "report.json").read_text())
+    assert len(report["hypotheses"]) == 11
+    assert {item["classification"] for item in report["hypotheses"]} == {"unavailable"}
+    assert report["report_state"] == "partial"
+
+
+def test_failed_starter_preserves_failure_evidence_without_relative_speedup(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(captures.read_text())
+    payload["captures"] = [row for row in payload["captures"] if row["candidate_id"] != "starter"]
+    provenance = {"target": "bz-a3-1", "handle": "remote:retained-contract-failure"}
+    payload["captures"].append({
+        "candidate_id": "starter", "case_id": "__execution__", "status": "candidate_failure",
+        "failure": {"kind": "correctness_error", "message": "not one fused logical launch",
+                    "provenance": provenance, "evidence_sha256": "f" * 64, "terminal": True},
+    })
+    write_json(captures, payload)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    by_id = {item["candidate_id"]: item for item in report["candidates"]}
+    failure = by_id["starter"]["failures"][0]
+    assert failure["provenance"] == provenance
+    assert failure["evidence_sha256"] == "f" * 64
+    assert failure["terminal"] is True
+    assert all(item["geometric_mean"]["starter_speedup"] is None for item in by_id.values())
+    assert by_id["fast"]["geometric_mean"]["latency_us"] is not None
+
+
+def test_consumes_producer_manifest_and_nested_results_without_inventing_lineage(
+    tmp_path: Path,
+):
+    source_a, source_b, source_c = "SOURCE_A", "SOURCE_B", "SOURCE_C"
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "campaign_root": "/retained/campaign",
+        "environment": {"product": "a3", "runtime": "named"},
+        "occurrences": [
+            {"occurrence_id": "starter-occ", "execution_id": "exec-a", "treatment": "starter", "round": 0, "position": 0, "option_id": "starter", "recoverability": "recoverable", "source_sha256": "a", "is_starter": True},
+            {"occurrence_id": "fast-occ", "execution_id": "exec-b", "treatment": "guarded", "round": 1, "position": 0, "option_id": "fast", "recoverability": "recoverable", "source_sha256": "b", "parent_occurrence_id": "starter-occ", "lineage_note": "request-declared incumbent", "parent_feature_deltas": {"loop_bound": {"before": "total_packed_k", "after": "per_sequence_k"}, "block_n": {"before": 64, "after": 128}}, "hypothesis": "local K bound"},
+            {"occurrence_id": "fast-duplicate", "execution_id": "exec-b", "treatment": "guarded", "round": 2, "position": 1, "option_id": "same", "recoverability": "recoverable", "source_sha256": "b"},
+            {"occurrence_id": "failed-occ", "execution_id": "exec-c", "treatment": "cannbot", "round": 1, "position": 0, "option_id": "bad", "recoverability": "recoverable", "source_sha256": "c"},
+            {"occurrence_id": "lost-occ", "treatment": "cannbot", "round": 1, "position": 1, "option_id": "lost", "recoverability": "source_unavailable", "artifact_diagnostics": "sanitized artifact omitted source"},
+        ],
+        "executions": [
+            {"execution_id": "exec-a", "source": source_a, "source_sha256": "a", "parameters": {"BLOCK_N": 64}, "features": {"loop_bound": "total_packed_k", "block_n": 64}, "occurrence_ids": ["starter-occ"]},
+            {"execution_id": "exec-b", "source": source_b, "source_sha256": "b", "parameters": {"BLOCK_N": 128}, "features": {"loop_bound": "per_sequence_k", "block_n": 128}, "occurrence_ids": ["fast-occ", "fast-duplicate"]},
+            {"execution_id": "exec-c", "source": source_c, "source_sha256": "c", "parameters": {"BLOCK_N": 512}, "features": {"loop_bound": "total_packed_k", "block_n": 512}, "occurrence_ids": ["failed-occ"]},
+        ],
+    }
+    provenance = {"target": "bz-a3-2", "runtime": "named", "physical_device": 1, "command": ["run"], "handle": "remote:job-1"}
+    results = {
+        "schema": "profiling-skill/bsa-candidate-results/v1",
+        "cases": [47, 48],
+        "executions": {
+            "exec-a": {"status": "running", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 101.0, "relative_range": 0.02, "accepted_sample_indexes": [0, 1], "samples": [
+                {"duration_us": 100.0, "pipe_utilization": {"aiv_vec_ratio": 0.7}, "evidence_sha256": "1" * 64, "provenance": provenance},
+                {"duration_us": 102.0, "pipe_utilization": {"aiv_vec_ratio": 0.72}, "evidence_sha256": "2" * 64, "provenance": provenance},
+                {"duration_us": 150.0, "pipe_utilization": {"aiv_vec_ratio": 0.99}, "evidence_sha256": "9" * 64, "provenance": provenance},
+            ]}, "48": {"status": "measurement_unstable", "accepted_sample_indexes": [], "samples": [
+                {"duration_us": 180.0, "pipe_utilization": {"aiv_vec_ratio": 0.8}, "evidence_sha256": "8" * 64, "provenance": provenance}
+            ]}}, "infrastructure_failures": []},
+            "exec-b": {"status": "running", "kernel_name": "kernel", "cases": {"47": {"status": "completed", "median_us": 50.0, "relative_range": 0.04, "accepted_sample_indexes": [0, 1], "samples": [
+                {"duration_us": 49.0, "pipe_utilization": {"aiv_vec_ratio": 0.5}, "evidence_sha256": "3" * 64, "provenance": provenance},
+                {"duration_us": 51.0, "pipe_utilization": {"aiv_vec_ratio": 0.52}, "evidence_sha256": "4" * 64, "provenance": provenance},
+            ]}, "48": {"status": "pending", "samples": []}}, "infrastructure_failures": [{"kind": "transport", "diagnostics": "recovered observer"}]},
+            "exec-c": {"status": "candidate_failure", "kernel_name": None, "cases": {"47": {"status": "pending", "samples": []}, "48": {"status": "pending", "samples": []}}, "failure": {"kind": "compile_error", "category": "candidate", "diagnostics": "resource limit"}, "infrastructure_failures": []},
+        },
+    }
+    manifest_path, results_path, hypotheses_path = (
+        tmp_path / "producer-manifest.json",
+        tmp_path / "producer-results.json",
+        tmp_path / "hypotheses.json",
+    )
+    write_json(manifest_path, manifest)
+    write_json(results_path, results)
+    (tmp_path / "legacy").mkdir()
+    _, _, legacy_hypotheses = fixtures(tmp_path / "legacy")
+    hypotheses_path.write_text(legacy_hypotheses.read_text())
+
+    output = tmp_path / "producer-report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--results", str(results_path), "--hypotheses", str(hypotheses_path), "--output-dir", str(output)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    by_id = {item["candidate_id"]: item for item in report["candidates"]}
+    assert set(by_id) == {"starter-occ", "fast-occ", "fast-duplicate", "failed-occ", "lost-occ"}
+    assert by_id["fast-duplicate"]["duplicate_of"] == "fast-occ"
+    assert by_id["fast-duplicate"]["evidence_source_candidate_id"] == "fast-occ"
+    assert by_id["fast-occ"]["kernel_name"] == "kernel"
+    assert by_id["fast-occ"]["source_features"] == {"loop_bound": "per_sequence_k", "block_n": 128}
+    assert by_id["fast-occ"]["code_delta"] == {
+        "loop_bound": {"before": "total_packed_k", "after": "per_sequence_k"},
+        "block_n": {"before": 64, "after": 128},
+    }
+    assert by_id["fast-occ"]["hypothesis"] == "local K bound"
+    assert by_id["fast-occ"]["lineage_note"] == "request-declared incumbent"
+    assert by_id["failed-occ"]["lineage_state"] == "unlinked"
+    assert by_id["fast-occ"]["cases"]["47"]["starter_speedup"] == 101.0 / 50.0
+    assert by_id["fast-occ"]["cases"]["47"]["parent_speedup"] == 101.0 / 50.0
+    assert by_id["fast-occ"]["cases"]["47"]["profile_metrics"] == {"aiv_vec_ratio": 0.51}
+    assert by_id["starter-occ"]["cases"]["47"]["latency_samples_us"] == [100.0, 102.0]
+    assert len(by_id["starter-occ"]["cases"]["47"]["samples"]) == 3
+    assert by_id["starter-occ"]["cases"]["47"]["samples"][2]["accepted"] is False
+    assert by_id["starter-occ"]["cases"]["48"]["median_latency_us"] is None
+    assert len(by_id["starter-occ"]["cases"]["48"]["samples"]) == 1
+    assert by_id["fast-occ"]["geometric_mean"]["latency_us"] is None
+    assert by_id["fast-occ"]["geometric_mean"]["starter_speedup"] is None
+    assert by_id["fast-occ"]["aggregate_coverage"]["missing_case_ids"] == ["48"]
+    sample = by_id["fast-occ"]["cases"]["47"]["samples"][0]
+    assert sample["evidence_sha256"] == "3" * 64
+    assert sample["provenance"]["handle"] == "remote:job-1"
+    assert by_id["fast-occ"]["infrastructure_failures"][0]["message"] == "recovered observer"
+    assert by_id["fast-duplicate"]["infrastructure_failures"][0]["message"] == "recovered observer"
+    assert by_id["failed-occ"]["failures"][0]["kind"] == "compile_error"
+    assert by_id["lost-occ"]["lineage_state"] == "unrecoverable"
+    assert by_id["lost-occ"]["parent_candidate_id"] is None
+    assert by_id["lost-occ"]["geometric_mean"]["starter_speedup"] is None
+    assert report["report_state"] == "partial"
+
+
+@pytest.mark.parametrize("case_status", ["pending", "measurement_unstable", "acquisition_exhausted", "completed"])
+def test_missing_producer_acceptance_does_not_create_timings(tmp_path: Path, case_status: str):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "occurrences": [{"occurrence_id": "only", "execution_id": "exec", "recoverability": "recoverable"}],
+        "executions": [{"execution_id": "exec", "occurrence_ids": ["only"], "parameters": {}}],
+    }
+    results = {
+        "schema": "profiling-skill/bsa-candidate-results/v1",
+        "cases": [47],
+        "executions": {"exec": {
+            "status": case_status,
+            "cases": {"47": {"status": case_status, "samples": [
+                {"duration_us": value, "pipe_utilization": {}, "provenance": {}}
+                for value in (10.0, 40.0, 80.0)
+            ]}},
+            "infrastructure_failures": [],
+        }},
+    }
+    manifest_path, results_path = tmp_path / "manifest.json", tmp_path / "results.json"
+    write_json(manifest_path, manifest)
+    write_json(results_path, results)
+    output = tmp_path / "out"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--results", str(results_path),
+         "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    candidate = json.loads((output / "report.json").read_text())["candidates"][0]
+    case = candidate["cases"]["47"]
+    assert len(case["samples"]) == 3
+    assert all(sample["accepted"] is False for sample in case["samples"])
+    assert case["latency_samples_us"] == []
+    assert case["median_latency_us"] is None
+    assert candidate["geometric_mean"]["latency_us"] is None
+    assert candidate["aggregate_coverage"]["missing_case_ids"] == ["47"]
+
+
+def test_producer_schema_without_explicit_starter_or_parent_has_no_speedups(tmp_path: Path):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "occurrences": [{"occurrence_id": "only", "execution_id": "exec", "recoverability": "recoverable"}],
+        "executions": [{"execution_id": "exec", "occurrence_ids": ["only"], "parameters": {}}],
+    }
+    results = {
+        "schema": "profiling-skill/bsa-candidate-results/v1",
+        "executions": {"exec": {"status": "completed", "cases": {"47": {"status": "completed", "samples": [{"duration_us": 9.0, "pipe_utilization": {}, "provenance": {}}]}}, "infrastructure_failures": []}},
+    }
+    manifest_path, results_path = tmp_path / "manifest.json", tmp_path / "results.json"
+    write_json(manifest_path, manifest)
+    write_json(results_path, results)
+    output = tmp_path / "out"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--captures", str(results_path), "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(output)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    candidate = json.loads((output / "report.json").read_text())["candidates"][0]
+    assert candidate["parent_candidate_id"] is None
+    assert candidate["cases"]["47"]["starter_speedup"] is None
+    assert candidate["cases"]["47"]["parent_speedup"] is None
+
+
+def test_accepts_only_paired_microcampaign_hypothesis_results(tmp_path: Path):
+    manifest, captures, _ = fixtures(tmp_path)
+    paired = {
+        "schema_version": 1,
+        "manifest_sha256": "a" * 64,
+        "raw_cells": [
+            {"id": "loop/small/before", "variant": "before"},
+            {"id": "loop/small/after", "variant": "after"},
+        ],
+        "results": [{
+            "hypothesis_id": "loop",
+            "title": "Local loop bounds reduce time",
+            "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+            "measurements": [{
+                "status": "valid", "before": 100.0, "after": 80.0,
+                "sweep": "small", "metric": "core-time proxy", "unit": "us",
+                "before_cell_id": "loop/small/before", "after_cell_id": "loop/small/after",
+            }],
+            "signals": [],
+            "falsification": "after does not improve",
+        }],
+    }
+    paired_path = tmp_path / "paired.json"
+    write_json(paired_path, paired)
+    output = tmp_path / "paired-out"
+    accepted = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(paired_path), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    assert json.loads((output / "report.json").read_text())["hypotheses"][0]["classification"] == "supported"
+
+    raw_path = tmp_path / "raw.json"
+    write_json(raw_path, {"schema_version": 1, "results": [
+        {"id": "loop/small/before", "experiment": "loop", "sweep": "small", "variant": "before", "status": "success", "measurements": {"median": 100.0}}
+    ]})
+    rejected = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures), "--hypotheses", str(raw_path), "--output-dir", str(tmp_path / "raw-out")],
+        text=True, capture_output=True, check=False,
+    )
+    assert rejected.returncode == 2
+    assert "raw unpaired microcampaign cells" in rejected.stderr
+
+
+def test_consumes_merged_results_and_preserves_structured_pipe_components(tmp_path: Path):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "campaign_root": "/campaign",
+        "starter_occurrence_id": "starter",
+        "occurrences": [
+            {"occurrence_id": "starter", "execution_id": "exec-starter", "recoverability": "recoverable", "lineage_role": "starter"},
+            {"occurrence_id": "candidate", "execution_id": "exec-candidate", "recoverability": "recoverable", "parent_occurrence_id": "starter", "lineage_note": "request-declared incumbent", "parent_feature_deltas": {"block_n": {"before": 64, "after": 128}}},
+        ],
+        "executions": [
+            {"execution_id": "exec-starter", "features": {"block_n": 64}, "occurrence_ids": ["starter"]},
+            {"execution_id": "exec-candidate", "features": {"block_n": 128}, "occurrence_ids": ["candidate"]},
+        ],
+    }
+    pipe = {
+        "metric": "PipeUtilization", "selector": "kernel_mix",
+        "rows": [
+            {"block_id": "0", "sub_block_id": "vector0", "aiv_vec_ratio": "0.50", "aiv_scalar_ratio": "0.20"},
+            {"block_id": "0", "sub_block_id": "cube0", "aic_cube_ratio": "0.70", "aic_scalar_ratio": "0.10"},
+        ],
+    }
+    provenance = {"target": "bz-a3-1", "handle": "remote:one"}
+    merged = {
+        "schema": "profiling-skill/bsa-candidate-merged-results/v1",
+        "manifest_sha256": "f" * 64,
+        "run_contract": {"cases": [43, 44], "stable_samples": 1, "max_samples": 3, "variability_threshold": 0.05, "require_provenance": True},
+        "shard_count": 2,
+        "present_shards": [0],
+        "missing_shards": [1],
+        "missing_execution_ids": ["exec-candidate"],
+        "sources": [{"path": "shard-0.json", "shard_index": 0}],
+        "executions": {"exec-starter": {
+            "status": "completed", "kernel_name": "kernel_mix", "infrastructure_failures": [],
+            "basic_info": {"kernel_names": ["kernel_mix"], "evidence_sha256": "0" * 64, "provenance": provenance},
+            "cases": {
+                "43": {"status": "completed", "accepted_sample_indexes": [0], "samples": [{"duration_us": 10.0, "pipe_utilization": pipe, "evidence_sha256": "1" * 64, "provenance": provenance}]},
+                "44": {"status": "completed", "accepted_sample_indexes": [0], "samples": [{"duration_us": 20.0, "pipe_utilization": pipe, "evidence_sha256": "2" * 64, "provenance": provenance}]},
+            },
+        }},
+    }
+    manifest_path, results_path = tmp_path / "manifest.json", tmp_path / "merged.json"
+    write_json(manifest_path, manifest)
+    write_json(results_path, merged)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path), "--results", str(results_path), "--hypotheses", str(PLANNED_HYPOTHESES), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    assert report["campaign_evidence"]["result_schema"] == "profiling-skill/bsa-candidate-merged-results/v1"
+    assert report["campaign_evidence"]["missing_shards"] == [1]
+    assert report["campaign_evidence"]["missing_execution_ids"] == ["exec-candidate"]
+    assert report["report_state"] == "partial"
+    candidates = {item["candidate_id"]: item for item in report["candidates"]}
+    starter = candidates["starter"]
+    assert starter["lineage_state"] == "starter"
+    assert starter["geometric_mean"]["latency_us"] == pytest.approx((10.0 * 20.0) ** 0.5)
+    components = starter["cases"]["43"]["profile_components"]
+    assert components == [
+        {"metric": "PipeUtilization", "selector": "kernel_mix", "block_id": "0", "sub_block_id": "cube0", "metrics": {"aic_cube_ratio": 0.7, "aic_scalar_ratio": 0.1}},
+        {"metric": "PipeUtilization", "selector": "kernel_mix", "block_id": "0", "sub_block_id": "vector0", "metrics": {"aiv_scalar_ratio": 0.2, "aiv_vec_ratio": 0.5}},
+    ]
+    assert starter["cases"]["43"]["profile_metrics"] == {}
+    assert candidates["candidate"]["execution_status"] == "missing"
+    assert candidates["candidate"]["geometric_mean"]["latency_us"] is None
+    markdown = (output / "report.md").read_text()
+    assert "Missing shards: `1`" in markdown
+    assert "Missing executions: `exec-candidate`" in markdown
+    assert "BasicInfo for `starter`" in markdown
+    assert "remote:one" in markdown
+    assert "selector=`kernel_mix` block=`0` sub-block=`vector0`" in markdown
+    assert "aiv_vec_ratio" in markdown
+
+
+def test_consumes_final_multi_component_candidate_and_hypothesis_shapes(tmp_path: Path):
+    manifest = {
+        "schema": "profiling-skill/bsa-candidate-manifest/v1",
+        "campaign_root": "/campaign",
+        "starter_occurrence_id": "starter",
+        "occurrences": [{
+            "occurrence_id": "starter", "execution_id": "exec-starter",
+            "recoverability": "recoverable", "lineage_role": "starter",
+        }],
+        "executions": [{
+            "execution_id": "exec-starter", "features": {"block_n": 64},
+            "occurrence_ids": ["starter"],
+        }],
+    }
+    provenance = {
+        "target": "bz-a3-1", "runtime": "py311-torch", "physical_device": 2,
+        "command": ["cpl-remote", "run"], "handle": "remote:component",
+    }
+
+    def component(selector: str, sub_block: str, ratio: str, digest: str) -> dict:
+        return {
+            "duration_us": 10.0 if sub_block == "cube0" else 12.0,
+            "pipe_utilization": {
+                "metric": "PipeUtilization", "selector": selector,
+                "rows": [{
+                    "block_id": "0", "sub_block_id": sub_block,
+                    "activity_ratio": ratio,
+                }],
+            },
+            "evidence_sha256": digest * 64,
+            "provenance": provenance,
+        }
+
+    merged = {
+        "schema": "profiling-skill/bsa-candidate-merged-results/v1",
+        "manifest_sha256": "f" * 64,
+        "run_contract": {
+            "cases": [47], "stable_samples": 1, "max_samples": 3,
+            "variability_threshold": 0.05, "require_provenance": True,
+            "sample_selection": "first_stable_consecutive_window",
+        },
+        "shard_count": 1, "present_shards": [0], "missing_shards": [],
+        "missing_execution_ids": [],
+        "sources": [{"path": "shard-0.json", "shard_index": 0}],
+        "executions": {"exec-starter": {
+            "status": "completed", "kernel_name": "bsa_aic",
+            "selectors": ["bsa_aic", "bsa_aiv"],
+            "components": [
+                {"selector": "bsa_aic", "kind": "aic"},
+                {"selector": "bsa_aiv", "kind": "aiv"},
+            ],
+            "basic_info": {
+                "kernel_names": ["bsa_aic", "bsa_aiv"],
+                "components": [
+                    {"selector": "bsa_aic", "kind": "aic"},
+                    {"selector": "bsa_aiv", "kind": "aiv"},
+                ],
+                "compact": {"metric": "BasicInfo", "rows": []},
+                "evidence_sha256": "0" * 64, "provenance": provenance,
+            },
+            "cases": {"47": {
+                "status": "completed", "accepted_sample_indexes": [0],
+                "median_us": 12.0, "relative_range": 0.0,
+                "samples": [{
+                    "duration_us": 12.0,
+                    "duration_aggregation": "max_component_duration",
+                    "components": {
+                        "bsa_aic": component("bsa_aic", "cube0", "0.70", "1"),
+                        "bsa_aiv": component("bsa_aiv", "vector0", "0.50", "2"),
+                    },
+                }],
+            }},
+            "infrastructure_failures": [], "geomean_us": 12.0,
+        }},
+    }
+    hypotheses = {
+        "schema_version": 1, "manifest_sha256": "a" * 64,
+        "raw_cells": [
+            {"id": "tile/long/before", "variant": "before", "status": "success"},
+            {"id": "tile/long/after", "variant": "after", "status": "success"},
+        ],
+        "results": [{
+            "hypothesis_id": "tile", "title": "Larger tile reduces latency",
+            "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+            "falsification": "latency does not decrease",
+            "measurements": [{
+                "status": "valid", "sweep": "long", "before": 20.0, "after": 12.0,
+                "metric": "latency", "unit": "us",
+                "before_cell_id": "tile/long/before", "after_cell_id": "tile/long/after",
+            }],
+            "signals": [{
+                "name": "aiv_vec_ratio", "relationship": "tracks_outcome",
+                "summary": "changed with latency",
+            }],
+        }],
+    }
+    manifest_path, results_path, hypotheses_path = (
+        tmp_path / "manifest.json", tmp_path / "merged.json", tmp_path / "hypotheses.json",
+    )
+    write_json(manifest_path, manifest)
+    write_json(results_path, merged)
+    write_json(hypotheses_path, hypotheses)
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest_path),
+         "--results", str(results_path), "--hypotheses", str(hypotheses_path),
+         "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    starter = report["candidates"][0]
+    assert starter["geometric_mean"]["latency_us"] == 12.0
+    sample = starter["cases"]["47"]["samples"][0]
+    assert set(sample["profile_evidence"]["components"]) == {"bsa_aic", "bsa_aiv"}
+    assert sample["provenance"]["components"]["bsa_aiv"]["handle"] == "remote:component"
+    assert sample["evidence_sha256"]["components"]["bsa_aic"] == "1" * 64
+    assert starter["cases"]["47"]["profile_components"] == [
+        {"component_selector": "bsa_aic", "metric": "PipeUtilization",
+         "selector": "bsa_aic", "block_id": "0", "sub_block_id": "cube0",
+         "metrics": {"activity_ratio": 0.7}},
+        {"component_selector": "bsa_aiv", "metric": "PipeUtilization",
+         "selector": "bsa_aiv", "block_id": "0", "sub_block_id": "vector0",
+         "metrics": {"activity_ratio": 0.5}},
+    ]
+    assert report["hypotheses"][0]["classification"] == "supported"
+    assert report["signals"][0]["classification"] == "useful"
+    markdown = (output / "report.md").read_text()
+    assert "component=`bsa_aiv` selector=`bsa_aiv`" in markdown
+    assert "remote:component" in markdown
+
+
+@pytest.mark.parametrize("direction,after", [("decrease", 50.0), ("increase", 200.0), ("no_change", 100.0)])
+def test_timing_controls_do_not_validate_timeline_and_retain_provenance(
+    tmp_path: Path, direction: str, after: float,
+):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    identity = {"target": "gz-a3", "runtime": "named", "benchmark_sha256": "b" * 64}
+    raw_cells = [
+        {"id": "phase/before", "variant": "before", "status": "success",
+         "timeline": {"availability": "unavailable", "events": []}},
+        {"id": "phase/after", "variant": "after", "status": "success",
+         "timeline": {"availability": "unavailable", "events": []}},
+    ]
+    measurement = {"status": "valid", "before": 100.0, "after": after,
+                   "before_cell_id": "phase/before", "after_cell_id": "phase/after",
+                   "metric": "core-time proxy", "unit": "us"}
+    write_json(hypotheses, {
+        "schema_version": 1, "manifest_sha256": "a" * 64,
+        "campaign_identity": identity, "reporting_revision": "reporter-only",
+        "raw_cells": raw_cells,
+        "results": [{"hypothesis_id": "ordered-phases", "title": "Known phase order",
+                     "expected": {"direction": direction, "minimum_relative_change": 0.05},
+                     "measurements": [measurement],
+                     "signals": [{"name": "timeline_phase_order", "relationship": "not_exported"}]}],
+    })
+    output = tmp_path / "report"
+    run = subprocess.run(
+        [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+         "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+        text=True, capture_output=True, check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads((output / "report.json").read_text())
+    assert report["hypotheses"][0]["classification"] == "unavailable"
+    assert report["hypotheses"][0]["measurements"] == [measurement]
+    assert report["hypothesis_evidence"]["campaign_identity"] == identity
+    assert report["hypothesis_evidence"]["reporting_revision"] == "reporter-only"
+    assert report["hypothesis_evidence"]["raw_cells"] == raw_cells
+    assert report["report_state"] == "partial"
+
+
+@pytest.mark.parametrize("relationship,expected", [
+    ("tracks_outcome", "supported"), ("contradicts_outcome", "refuted"),
+    ("context_only", "inconclusive"),
+])
+def test_validated_timeline_assessments_are_separate_from_scalar_timing(
+    tmp_path: Path, relationship: str, expected: str,
+):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    raw_cells = [
+        {"id": f"phase/{variant}", "experiment": "reversed-phases", "variant": variant,
+         "timeline": {"status": "available", "semantics": {
+             "selectors_complete": True, "event_count": 3,
+             "phase_order": order,
+         }}}
+        for variant, order in (("before", ["load", "compute", "store"]),
+                               ("after", ["compute", "load", "store"]))
+    ]
+    payload = {
+        "schema_version": 1, "manifest_sha256": "a" * 64, "raw_cells": raw_cells,
+        "results": [{"hypothesis_id": "reversed-phases", "title": "Reversed phase order",
+                     "expected": {"direction": "decrease", "minimum_relative_change": 0.05},
+                     "measurements": [{"status": "valid", "before": 100.0, "after": 100.0,
+                                       "before_cell_id": "phase/before", "after_cell_id": "phase/after"}],
+                     "signals": [{"name": "timeline_phase_order", "relationship": relationship}]}],
+    }
+    for mode in ("complete", "incomplete"):
+        if mode == "incomplete":
+            raw_cells[1]["timeline"]["semantics"]["selectors_complete"] = False
+        write_json(hypotheses, payload)
+        output = tmp_path / mode
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+             "--hypotheses", str(hypotheses), "--output-dir", str(output)],
+            text=True, capture_output=True, check=False,
+        )
+        assert run.returncode == 0, run.stderr
+        report = json.loads((output / "report.json").read_text())
+        assert report["hypotheses"][0]["classification"] == (expected if mode == "complete" else "unavailable")
+
+
+def test_compact_markdown_does_not_discard_json_or_csv_evidence(tmp_path: Path):
+    manifest, captures, hypotheses = fixtures(tmp_path)
+    payload = json.loads(captures.read_text())
+    payload["captures"][-2]["failure"]["message"] = "retained diagnostic " * 2000
+    write_json(captures, payload)
+    for mode in ("full", "compact"):
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), "--manifest", str(manifest), "--captures", str(captures),
+             "--hypotheses", str(hypotheses), "--output-dir", str(tmp_path / mode),
+             *(["--compact-markdown"] if mode == "compact" else [])],
+            text=True, capture_output=True, check=False,
+        )
+        assert run.returncode == 0, run.stderr
+    assert (tmp_path / "full/report.json").read_bytes() == (tmp_path / "compact/report.json").read_bytes()
+    assert (tmp_path / "full/candidates.csv").read_bytes() == (tmp_path / "compact/candidates.csv").read_bytes()
+    assert (tmp_path / "compact/report.md").stat().st_size < (tmp_path / "full/report.md").stat().st_size / 2

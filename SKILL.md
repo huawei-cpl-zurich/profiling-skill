@@ -5,26 +5,60 @@ description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascen
 
 # Ascend kernel profiling
 
-Select the target before collecting or interpreting evidence. Product-specific
-metrics are not portable.
+Identify a performance question, obtain trustworthy evidence, connect it to the
+code actually executed, make a controlled change, and check whether the result
+supports the explanation. Product-specific metrics are not portable.
+
+Resolve the observed SoC, CANN/compiler/profiler versions, execution profile,
+and candidate identity. Use the user-wide `$remote-access` client for remote
+operations; the selected profile owns runtime setup and device addressing.
+
+## Interpret before optimizing
+
+For A3, read [performance reasoning](references/a3-performance-reasoning.md)
+when choosing a hypothesis or interpreting pipes. It explains architectural
+paths versus actual compiler lowering, scalarized memory, masking, buffering,
+wait counters and small matrix work. High activity is not proof of capacity
+saturation, nor a reason to stop optimizing.
+
+Use the benchmark's declared latency method. For A3 controls using `msprof op`,
+separate exact-kernel `BasicInfo` captures provide device-task latency; Python
+wall time, instrumented pipe durations, simulator timestamps and sanitizer
+durations are different quantities. Keep all declared samples and report their
+aggregation and dispersion; do not sample until a favorable window appears.
+Keep correctness, timing and profiler availability as separate outcomes.
+
+Compiler dumps and sanitizer checks are optional diagnostic escalations, not
+mandatory gates for ordinary optimization. Read [A3 timelines and correctness
+diagnostics](references/a3-timeline-and-correctness.md) when instruction order,
+attribution or races are in doubt. A3 simulated timelines are not A5 hardware
+timelines; do not transfer newly observed A3 mechanisms to A2 or A5 without
+validation.
 
 ## Run agent experiment campaigns
 
-Use `scripts/simple_experiment_runner.py` as the only supported experiment
-campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
+Use `scripts/simple_experiment_runner.py` as the supported multi-round kernel
+optimization campaign entrypoint. It provides `init`, `run`, `resume`, and `report` for one
 isolated Git-backed cell. Read [Simple experiment runner](docs/simple-experiment-runner.md)
 for its configuration, agent protocol, retained evidence, and recovery rules.
 Run separate cells concurrently at the orchestration layer; do not add a
 second scheduler, admission controller, receipt graph, or migration layer.
+Independent profiling, diagnostic, and blinded-evaluation drivers remain
+supported; they are not alternate optimization campaign controllers.
 
 ## Acquire live control evidence
 
-For generic Torch/Triton workload acquisition on `bz-a3-1`, `bz-a3-2`, or
-`bz-a5`, use `scripts/acquire_profile.py`; do not construct raw `msprof op`
-flags. The helper owns the named runtime, content-addressed workload bundle,
+Use a supplied target-aware measurement interface when the benchmark provides
+one. Discover exported names first, then select the exact intended kernel for
+timing and pipe captures. Do not replace the benchmark's timing contract.
+
+In an ordinary checkout, `scripts/acquire_profile.py` is the supported helper
+for generic Torch/Triton acquisition on `gz-a3`, `bz-a3-1`, `bz-a3-2`, or
+`bz-a5`; do not reconstruct its raw `msprof op` flags. It owns the named
+runtime, content-addressed workload bundle,
 bounded device probe, deployed profiler syntax, persisted `cpl-remote` handle,
 resume lifecycle, and compact evidence.
-Run the installed skill's helper in place. Do not copy it into an experiment
+When using that helper, run it in place. Do not copy it into an experiment
 workspace, patch it, or synthesize a replacement; pass the workload bundle and
 evidence paths to the installed executable.
 Read [Two-pass acquisition](references/acquisition-workflow.md), run its
@@ -43,27 +77,30 @@ timeline occupancy, and composition are useful localization evidence but are
 not capacity denominators and cannot establish saturation by themselves.
 
 Read [Pipe saturation contract](references/pipe-saturation-contract.md) before
-creating model or evidence JSON. No built-in A2/A3 or A5 capacity model is
-provided yet; return `unknown` rather than borrowing another product's model.
+creating model or evidence JSON. No built-in A2/A3 capacity model is provided.
+For A5, `references/a5-pipe-capacity-model.json` covers only its narrowly
+reviewed Cube and GM-to-L1 resources with the documented product and metric
+definitions; it is not a universal capacity model. Unmodeled resources and
+missing capacity evidence remain `unknown`; never borrow another product's model.
 A2/A3 `PipeUtilization` block rows are non-temporal activity observations, not
 phase evidence, and must never be passed to this analyzer.
 
 ## Triton compiler attribution
 
-Before mapping a Triton construct to a hardware pipe, query the pinned
-compiler inventory with `scripts/query_triton_pipe_attribution.py`. Read
+For reviewed compiler mappings, query the pinned inventory with
+`scripts/query_triton_pipe_attribution.py`. Read
 [Triton-to-pipe attribution](references/triton-pipe-attribution.md) for its
 direct, inferred, and unknown semantics. A known compiler pass sequence does
 not make an original Triton operation single-pipe. Keep unsupported mappings
-unknown and use the focused probe plus `mlir-triton-dump` workflow when exact
-emitted operations are required.
+unknown. If the explanation depends on actual emitted operations, the optional
+`mlir-triton-dump` workflow can resolve it; early IR alone may miss scheduling.
 
 ## A2/A3 Triton timing and pipe evidence
 
 Use the repository's `$gz-a3` profile and its native `py311-torch` runtime only
 for repository-managed GZ compiler validation, mutable experiment bundles, and
-the workflows below. Generic BZ A3 acquisition uses the mandatory two-pass
-helper above.
+the workflows below. Generic BZ A3 acquisition uses the two-pass workflow
+above or the supplied target-aware benchmark interface.
 Select an eligible physical device through that profile; the one-shot job
 exposes it to the application as logical device 0. Do not use direct SSH,
 Docker, or a raw remote-agent client.
@@ -76,10 +113,10 @@ resumes the same handle. The managed-bundle engine's `--client` and `--remote`
 options remain internal integration APIs: do not invoke them directly or use
 raw SCP, SSH, Docker, or a raw remote-agent client.
 
-For reusable control acquisition, use the mandatory two-pass helper above.
+For reusable control acquisition, use the two-pass workflow above.
 `scripts/profile_a3.py` remains an in-job primitive for an already selected A3
-kernel. Run independent timing captures for repetitions and use their median;
-do not use profiled Python wall time.
+kernel. Run independent timing captures for repetitions and use their median
+and dispersion; do not use profiled Python wall time.
 
 Read [A2/A3 msprof-op evidence](references/a2-a3-msprof-op.md) for the command,
 JSON contract, A3 pipe inventory, normalization command, and interpretation
@@ -91,42 +128,20 @@ fields and emits `unknown` saturation for every observation; it is not a
 capacity model. Preserve the full transcript so compilation and runtime errors
 remain actionable.
 
-### Development diagnostics before profiling
+### Actionable diagnostics
 
-Make the submission contract explicit before spending a scarce device check.
-Name the candidate module, exported entrypoint, constructor requirements,
-callable signature, output structure, and manifest fields that the harness
-will load. Derive these requirements from the harness or supplied baseline;
-do not silently substitute a convention from another coding skill. A contract
-probe should import and instantiate the candidate locally when that can be
-done without an accelerator.
+Derive the callable/output contract from the supplied harness or baseline,
+not another coding skill's convention. Retain exact commands, compiler/runtime
+exceptions and the evidence location. Keep bulky logs and profiler trees
+remote and return compact excerpts. A profiler's successful exit alone does
+not establish workload correctness or a valid selected-kernel export.
 
-When an experiment grants one billed development check, enforce that limit in
-the runner. Use the check for the smallest representative case that can
-expose compilation or runtime errors, then let the agent repair files locally
-from the returned diagnostic. Malformed prepare responses are rejected before
-dispatch and without billing, but they do not justify another device check.
-The host, not the candidate-writing agent, owns the final check across the complete case
-set and records the candidate identity and durable job handle.
-
-Keep bulky compiler and runtime output beside the remote job. Return a compact
-diagnostic containing the failure phase and the actionable exception or
-compiler excerpt, together with a stable handle that can retrieve the retained
-evidence. Do not move profiler trees or unrestricted logs merely to diagnose a
-candidate failure.
-
-Classify failures by cause as well as dispatch state. Before a remote job
-exists, only transport, service, or host-environment failures are discardable
-infrastructure. Candidate-side validation, import, and submission failures
-reported by the host-owned terminal gate—including a reported missing
-submission—are counted candidate outcomes even when no handle was created.
-Do not infer validation that the harness does not perform. Once dispatch yields
-a durable handle, observe that same job.
-Count compilation, import, launch, runtime, correctness, and workload timeouts
-when the remote harness reports them as terminal candidate outcomes. A
-runner, transport, or observer timeout is not a candidate result: resume
-observation through the same handle, and never submit a duplicate merely
-because observation stopped.
+Distinguish candidate compilation/runtime/correctness errors from profiler or
+harness errors and transport failures. A controller timeout is not a kernel
+failure: observe the existing durable handle after interruptions, never
+duplicate a live job. Use the experiment's declared retry and scoring policy,
+not a universal device-check budget. See the acquisition reference's failure
+receipts for the existing helper classifications.
 
 ## Ascend 950/A5 diagnosis
 
@@ -139,8 +154,8 @@ not apply its event IDs, ceilings, formulas, `PipeTimeline`, or per-pipe
 Use the configured TLA integration checkout (`TLA_ROOT`) and its checked-in
 BZ-A5 wrappers for Catlass DSL and AscendC repository workflows. Read that
 checkout's `AGENTS.md` and `$bz-a5` guidance before launching those workflows.
-Generic BZ-A5 Torch/Triton control acquisition uses the mandatory two-pass
-helper above. Never substitute direct SSH, SCP, Docker, or an ad-hoc CANN
+Generic BZ-A5 Torch/Triton control acquisition uses the two-pass workflow
+above. Never substitute direct SSH, SCP, Docker, or an ad-hoc CANN
 environment.
 
 ## Choose evidence by question

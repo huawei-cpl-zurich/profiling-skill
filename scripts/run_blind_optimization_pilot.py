@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Freeze and run six paired optimization tasks in four balanced waves."""
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
+import json
+from pathlib import Path
+import runpy
+import shutil
+import subprocess
+import sys
+import time
+
+HELPERS = ('blind_optimization_launcher.py', 'production_launcher.py',
+           'blind_optimization_tools.py', 'profile_device.py', 'a3_memory_batch.py')
+GUIDANCE = ('SKILL.md', *('references/' + name for name in (
+    'triton-pipe-attribution.md', 'a2-a3-msprof-op.md', 'a3-performance-reasoning.md',
+    'acquisition-workflow.md', 'a3-timeline-and-correctness.md',
+    'triton-pipe-attribution.json', 'a3-pipe-activity-model.json',
+    'pipe-saturation-contract.md', 'a5-pipe-capacity-model.json',
+    'a5-metric-semantics.md', 'a5-timeline-semantics.md')))
+WAVES = (((1, True), (2, False), (3, True)), ((1, False), (2, True), (3, False)),
+         ((4, False), (5, True), (6, False)), ((4, True), (5, False), (6, True)))
+SUITES = {'original': ('blind_before_tasks.py', 'blind_task_support',
+                       'blind-profiling-optimization-protocol.md'),
+          'natural': ('natural_before_tasks.py', 'natural_task_support',
+                      'natural-profiling-evaluation-protocol.md')}
+
+
+def write_json(path, value):
+    path.write_text(json.dumps(value, indent=2) + '\n')
+
+
+def prepare(source, output, model, forbidden, budget_seconds=600, task_suite='original'):
+    source, output = source.resolve(), output.resolve()
+    if type(budget_seconds) is not int or budget_seconds <= 0:
+        raise ValueError('budget_seconds must be a positive integer')
+    if task_suite not in SUITES:
+        raise ValueError('unknown task suite: ' + str(task_suite))
+    if any(output.is_relative_to(path.resolve()) for path in (*forbidden, source)):
+        raise ValueError('output must be outside source and forbidden workspaces')
+    if not all(isinstance(model.get(key), str) and model[key].strip()
+               for key in ('name', 'reasoning_effort')):
+        raise ValueError('explicit model name and reasoning_effort required')
+    snapshots = [(source / 'scripts' / name, output / 'runtime' / name) for name in HELPERS]
+    snapshots += [(source / name, output / 'skill' / name) for name in GUIDANCE]
+    exporter_name, support, protocol = SUITES[task_suite]
+    snapshots += [(source / 'benchmarks' / name, output / 'exporter' / name) for name in (
+        exporter_name, support + '/runner.py', 'blind_task_support/native_host.asc')]
+    snapshots += [(source / 'docs' / protocol, output / 'protocol' / protocol)]
+    for original, _ in snapshots:
+        if not original.is_file():
+            raise FileNotFoundError('required source file missing: ' + str(original))
+    output.mkdir(parents=True, exist_ok=False, mode=0o700)
+    for original, target in snapshots:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(original, target)
+    exporter = runpy.run_path(str(output / 'exporter' / exporter_name))
+    (output / 'bundles').mkdir()
+    for index in range(1, 7):
+        task = f'task{index:02}'
+        exporter['export'](task, output / 'bundles' / task)
+        write_json(output / f'{task}-tool.json', [sys.executable,
+                   str(output / 'runtime/blind_optimization_tools.py'),
+                   '--bundle', str(output / 'bundles' / task)])
+    launcher = runpy.run_path(str(output / 'runtime/blind_optimization_launcher.py'))
+    (output / 'prompt.md').write_text(launcher['build_prompt'](budget_seconds))
+    write_json(output / 'model.json', model)
+    hashes = {str(p.relative_to(output)): hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in output.rglob('*') if p.is_file() and '__pycache__' not in p.parts}
+    revision = subprocess.run(['git', '-C', str(source), 'rev-parse', 'HEAD'],
+                              capture_output=True, text=True)
+    write_json(output / 'manifest.json', dict(schema_version=1, source_revision=revision.stdout.strip(),
+               files=hashes, waves=WAVES, wall_budget_seconds=budget_seconds,
+               task_suite=task_suite, protocol='protocol/' + protocol, model=model,
+               forbidden=[str(p.resolve()) for p in forbidden]))
+    return output
+
+
+def run_cohort(output):
+    manifest = json.loads((output / 'manifest.json').read_text())
+    if (output / 'started.json').exists():
+        raise FileExistsError('cohort already started; inspect its retained results')
+    actual = {str(p.relative_to(output)) for p in output.rglob('*')
+              if p.is_file() and '__pycache__' not in p.parts and p != output / 'manifest.json'}
+    if actual != set(manifest['files']):
+        raise ValueError('changed frozen input file set')
+    for name, expected in manifest['files'].items():
+        if hashlib.sha256((output / name).read_bytes()).hexdigest() != expected:
+            raise ValueError('changed frozen input: ' + name)
+    waves = manifest['waves']
+    if not isinstance(waves, list) or len(waves) != 4 or not all(
+            isinstance(wave, list) and len(wave) == 3 for wave in waves):
+        raise ValueError('invalid frozen wave schedule')
+    cells = [cell for wave in waves for cell in wave]
+    if not all(isinstance(cell, list) and len(cell) == 2 and type(cell[0]) is int
+               and 1 <= cell[0] <= 6 and type(cell[1]) is bool for cell in cells) or \
+            len({tuple(cell) for cell in cells}) != 12:
+        raise ValueError('invalid frozen wave schedule')
+    # Exclusive creation prevents an accidental second launch, including after interruption.
+    with (output / 'started.json').open('x') as stream:
+        json.dump(dict(started=time.time()), stream)
+
+    def run(cell):
+        index, guidance = cell
+        task = f'task{index:02}'
+        name = task + ('-guidance' if guidance else '-control')
+        command = [sys.executable, str(output / 'runtime/blind_optimization_launcher.py'),
+                   '--bundle', str(output / 'bundles' / task), '--prompt', str(output / 'prompt.md'),
+                   '--output', str(output / name), '--model-json', str(output / 'model.json'),
+                   '--tool-command-json', str(output / f'{task}-tool.json'),
+                   '--budget-seconds', str(manifest['wall_budget_seconds'])]
+        for path in manifest['forbidden']:
+            command += ['--forbidden', path]
+        if guidance:
+            command += ['--skill', str(output / 'skill')]
+        result = dict(cell=name, command=command, started=time.time())
+        try:
+            with (output / f'{name}-controller.log').open('x') as stream:
+                result['controller_exit'] = subprocess.run(command, stdout=stream,
+                                                           stderr=subprocess.STDOUT).returncode
+            receipt = output / name / 'receipt.json'
+            result['receipt'] = json.loads(receipt.read_text()) if receipt.exists() else None
+        except (OSError, ValueError) as error:
+            result.update(controller_exit=74, error=str(error))
+        result['ended'] = time.time()
+        write_json(output / f'{name}-result.json', result)
+        return result
+
+    results = []
+    for index, wave in enumerate(waves, 1):
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            cells = list(pool.map(run, wave))
+        write_json(output / f'wave-{index}.json', cells)
+        results.extend(cells)
+    return int(any(cell['controller_exit'] for cell in results))
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source-root', type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--model-json', type=Path, required=True)
+    parser.add_argument('--forbidden-workspace', type=Path, action='append', required=True)
+    parser.add_argument('--prepare-only', action='store_true')
+    parser.add_argument('--budget-seconds', type=int, default=600)
+    parser.add_argument('--task-suite', choices=SUITES, default='original')
+    args = parser.parse_args()
+    output = prepare(args.source_root, args.output, json.loads(args.model_json.read_text()),
+                     args.forbidden_workspace, args.budget_seconds, args.task_suite)
+    return 0 if args.prepare_only else run_cohort(output)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

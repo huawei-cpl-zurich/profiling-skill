@@ -27,3 +27,18 @@ for an isolated simple-runner cell and leave it unchanged during the run.
 
 The reproducible experiment lifecycle is documented in
 [`docs/simple-experiment-runner.md`](../docs/simple-experiment-runner.md).
+
+`natural_before_tasks.py` exports six additional, independent before-only Triton
+bundles: two gather/recurrent weighted-moment regimes, two masked nonlinear
+softmax regimes, and two tiled matmul/fused nonlinear epilogue regimes. For example:
+
+```bash
+python benchmarks/natural_before_tasks.py export --task task01 --output /tmp/task01
+python /tmp/task01/runner.py --cpu-only --checks 4
+```
+
+Only the four files in `task.json`'s `public_files` list belong in an optimizer
+workspace. The seeded reference runner and neutral-tool native host compatibility
+file are trusted controller support. Optional pipe evidence is available through
+the experiment tool; acquiring it is not a task requirement. Private scoped
+qualification variants support controller comparisons before scored evaluation.

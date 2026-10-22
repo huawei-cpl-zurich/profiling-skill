@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ascend Model Benchmarking"
+  short_description: "Warm Model latency and correlated device busy-time"
+  default_prompt: "Use $ascend-model-benchmarking to compare warmed compiled Model latency and device busy-time with retained evidence."

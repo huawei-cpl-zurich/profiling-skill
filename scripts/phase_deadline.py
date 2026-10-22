@@ -42,7 +42,17 @@ def activate(tools, folder, receipt):
     path = Path(folder) / 'activation.json'
     if 'activation_upload' not in receipt:
         if not path.exists():
-            logs = tools.remote('logs', receipt['handle'], '--tail', '100')
+            try:
+                logs = tools.remote('logs', receipt['handle'], '--tail', '100')
+            except RuntimeError:
+                # Listener log files may not exist immediately after admission.
+                # Confirm the SAME retained job is pending before waiting; a
+                # terminal failure or unrelated malformed response stays visible.
+                observed = tools.remote('observe', receipt['handle'])
+                if observed.get('state') in ('queued', 'dispatching', 'running',
+                                             'reconnecting', 'observation-unavailable'):
+                    return False
+                raise
             anchors = [json.loads(line.split('=', 1)[1])['monotonic']
                        for line in logs.get('content', '').splitlines() if line.startswith('PHASE_READY=')]
             if not anchors:

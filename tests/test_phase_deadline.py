@@ -74,6 +74,39 @@ def test_no_ready_anchor_never_activates(tmp_path):
     assert not (tmp_path / 'activation.json').exists()
 
 
+@pytest.mark.parametrize('state', ['queued', 'dispatching', 'running', 'reconnecting', 'observation-unavailable'])
+def test_not_yet_created_log_waits_for_same_retained_worker(tmp_path, state):
+    item, calls = receipt(), []
+    ready = [False]
+    def remote(*args):
+        calls.append(args)
+        if args[0] == 'logs':
+            if not ready[0]:
+                raise RuntimeError('logs/stdout HTTP404 log not found')
+            return dict(content='PHASE_READY=' + json.dumps(dict(monotonic=100)))
+        if args[0] == 'observe':
+            return dict(state=state, handle=item['handle'])
+        assert args[0] == 'upload'
+        return dict(state='completed')
+    tool = SimpleNamespace(remote=remote, transfer=lambda r, k: dict(state='completed'))
+    assert gate.activate(tool, tmp_path, item) is False
+    assert calls == [('logs', item['handle'], '--tail', '100'), ('observe', item['handle'])]
+    assert not (tmp_path / 'activation.json').exists()
+    ready[0] = True
+    assert gate.activate(tool, tmp_path, item) is True
+    assert len([c for c in calls if c[0] == 'upload']) == 1
+    assert item['handle'] == 'remote:t:job:original'
+
+
+def test_log_error_on_terminal_worker_is_not_hidden(tmp_path):
+    def remote(*args):
+        if args[0] == 'logs':
+            raise RuntimeError('missing terminal logs')
+        return dict(state='failed')
+    with pytest.raises(RuntimeError, match='missing terminal logs'):
+        gate.activate(SimpleNamespace(remote=remote), tmp_path, receipt())
+
+
 def test_legacy_deadline_job_without_handshake_remains_observable(tmp_path):
     item = receipt()
     item['request'].pop('activation_required')

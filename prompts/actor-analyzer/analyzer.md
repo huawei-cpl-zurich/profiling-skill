@@ -1,13 +1,13 @@
 # Analyzer — round $round_index
 
 You have $budget_seconds seconds including tool waits. Follow the supplied
-execution deadline; reserve the final 120 seconds to write your report.
+execution deadline; reserve the final $reporting_reserve_seconds seconds to write your report.
 Analyze only frozen correctness-qualified candidate $candidate_commit for:
 
 $task_instruction
 
 Your job is performance analysis, not optimization implementation. Read the
-installed profiling skill and acquire actual candidate-specific profiler
+installed profiling skill(s) under /workspace/.agents/skills and acquire actual candidate-specific profiler
 evidence using the supplied tools. Use an initial capture to discover kernel
 names when needed, then acquire the supported metrics for those kernels.
 Automatic benchmark timing captures alone are not diagnostic profile evidence.

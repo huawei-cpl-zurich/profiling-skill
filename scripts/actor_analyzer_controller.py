@@ -157,8 +157,11 @@ class RoleLauncher(BlindLauncher):
                      'Timing verification does not require diagnostic profiling analysis.\n')
         prompt.write_text(text)
         super().__init__(phase, campaign.bundle, prompt, campaign.model,
-                         ['unused'], skill=campaign.skill, timeout=budget,
+                         ['unused'], skill=campaign.skill or (
+                             campaign.root / 'profiling-skills/ascend-profiling'
+                             if 'ascend-profiling' in campaign.profiling_skills else None), timeout=budget,
                          auth_home=campaign.auth_home)
+        self.finish_reserve_seconds = min(120, budget // 5)
 
     def prepare(self):
         super().prepare()
@@ -180,6 +183,16 @@ class RoleLauncher(BlindLauncher):
         self.tool_command = [sys.executable, str(Path(__file__).resolve()), 'tool', str(config)]
         self.reports = self.root / 'reports'
         self.reports.mkdir()
+        for name in self.campaign.profiling_skills:
+            (self.workspace / '.agents/skills' / name).mkdir(parents=True, exist_ok=True)
+            if name == 'ascend-profiling':  # Parent launcher already snapshots this mount.
+                if skill_manifest(self.frozen / 'skill') != self.campaign.config['profiling_skills'][name]:
+                    raise LaunchError('profiling snapshot changed during role preparation')
+                continue
+            shutil.copytree(self.campaign.root / 'profiling-skills' / name,
+                            self.frozen / 'profiling-skills' / name)
+            if skill_manifest(self.frozen / 'profiling-skills' / name) != self.campaign.config['profiling_skills'][name]:
+                raise LaunchError('profiling snapshot changed during role preparation')
         if self.role == 'actor':
             for name in self.campaign.coding_skills:
                 shutil.copytree(self.campaign.root / 'coding-skills' / name,
@@ -229,6 +242,10 @@ class RoleLauncher(BlindLauncher):
             retained.append(command[index])
             index += 1
         # Both roles can record work without mutating immutable public API files.
+        for name in self.campaign.profiling_skills:
+            if name != 'ascend-profiling':
+                retained += ['--ro-bind', str(self.frozen / 'profiling-skills' / name),
+                             '/workspace/.agents/skills/' + name]
         if self.role == 'actor':
             for name in self.campaign.coding_skills:
                 retained += ['--ro-bind', str(self.frozen / 'coding-skills' / name),
@@ -239,7 +256,7 @@ class RoleLauncher(BlindLauncher):
 class Campaign:
     def __init__(self, output, bundle, model, tool_command, instruction, *, skill=None,
                  rounds=4, actor_budget=1200, analyzer_budget=600, actor_only=False,
-                 auth_home=None, runner=None, coding_skills=()):
+                 auth_home=None, runner=None, coding_skills=(), profiling_skills=()):
         if min(rounds, actor_budget, analyzer_budget) <= 0:
             raise ValueError('rounds and budgets must be positive')
         self.root, self.bundle = Path(output).resolve(), Path(bundle).resolve()
@@ -250,10 +267,18 @@ class Campaign:
         self.auth_home = auth_home
         self.rounds, self.actor_budget, self.analyzer_budget = rounds, actor_budget, analyzer_budget
         self.actor_only, self.runner = actor_only, runner or self.launch_role
+        self.profiling_skills = {}
+        for directory in profiling_skills:
+            directory = Path(directory).resolve()
+            if directory.name in self.profiling_skills or (skill and directory.name == 'ascend-profiling'):
+                raise ValueError('profiling skill names must be unique')
+            skill_manifest(directory)
+            self.profiling_skills[directory.name] = directory
         self.coding_skills = {}
         for directory in coding_skills:
             directory = Path(directory).resolve()
             if directory.name in self.coding_skills or directory.name == 'ascend-profiling' \
+                    or directory.name in self.profiling_skills \
                     or not (directory / 'SKILL.md').is_file() \
                     or any(p.is_symlink() for p in directory.rglob('*')):
                 raise ValueError('coding skill needs unique name, SKILL.md, and no symlinks')
@@ -278,6 +303,10 @@ class Campaign:
                            profiling_manifest=skill_manifest(self.profiling_source) if skill else None,
                            coding_skills={name: skill_manifest(directory)
                                for name, directory in self.coding_skills.items()})
+        # Omit the new key for legacy campaigns so their resume configuration is unchanged.
+        if self.profiling_skills:
+            self.config['profiling_skills'] = {name: skill_manifest(directory)
+                for name, directory in self.profiling_skills.items()}
 
     def verify_inputs(self):
         if directory_manifest(self.bundle) != self.config['bundle_manifest']:
@@ -287,6 +316,9 @@ class Campaign:
         for name, expected in self.config['coding_skills'].items():
             if skill_manifest(self.root / 'coding-skills' / name) != expected:
                 raise LaunchError('coding snapshot changed; preserve original evidence')
+        for name, expected in self.config.get('profiling_skills', {}).items():
+            if skill_manifest(self.root / 'profiling-skills' / name) != expected:
+                raise LaunchError('profiling snapshot changed; preserve original evidence')
 
     def qualified(self, result):
         return correct(result) and (not self.single_kernel or
@@ -311,6 +343,8 @@ class Campaign:
                 raise LaunchError('profiling source changed during snapshot creation')
         for name, directory in self.coding_skills.items():
             shutil.copytree(directory, self.root / 'coding-skills' / name)
+        for name, directory in self.profiling_skills.items():
+            shutil.copytree(directory, self.root / 'profiling-skills' / name)
         self.verify_inputs()
         for name in ['candidate.py', *self.public_files]:
             source = self.bundle / name
@@ -460,6 +494,7 @@ def main():
     for name in ('output', 'bundle', 'model-json', 'tool-command-json', 'instruction'):
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--skill', type=Path)
+    parser.add_argument('--profiling-skill', type=Path, action='append', default=[])
     parser.add_argument('--coding-skill', type=Path, action='append', default=[])
     parser.add_argument('--rounds', type=int, default=4)
     parser.add_argument('--actor-budget', type=int, default=1200)
@@ -470,7 +505,7 @@ def main():
                       json.loads(args.tool_command_json.read_text()), args.instruction.read_text(),
                       skill=args.skill, rounds=args.rounds, actor_budget=args.actor_budget,
                       analyzer_budget=args.analyzer_budget, actor_only=args.actor_only,
-                      coding_skills=args.coding_skill).run()
+                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run()
     print(json.dumps(result, indent=2))
     return 0 if result['state'] == 'completed' else 75
 

@@ -309,6 +309,104 @@ def test_coding_skill_symlink_rejected_before_campaign_creation(tmp_path):
     assert not (tmp_path / 'run').exists()
 
 
+@pytest.mark.parametrize('role', ['actor', 'analyzer'])
+@pytest.mark.parametrize('names', [('cannbot-profiler',), ('cannbot-profiler', 'ascend-profiling'),
+                                 ('ascend-profiling',)])
+def test_named_profilers_real_isolated_cli_with_actor_only_coding(tmp_path, role, names):
+    import shutil
+    if not shutil.which('bwrap') or not shutil.which('codex'):
+        pytest.skip('Bubblewrap and Codex required')
+    profilers = []
+    for name in names:
+        directory = tmp_path / name
+        directory.mkdir()
+        (directory / 'SKILL.md').write_text(name + ' pinned')
+        profilers.append(directory)
+    coding = tmp_path / 'coding'
+    coding.mkdir()
+    (coding / 'SKILL.md').write_text('coding pinned')
+    auth = tmp_path / 'auth'
+    auth.mkdir()
+    (auth / 'auth.json').write_text('{}')
+    campaign = make_campaign(tmp_path, None, rounds=1, profiling_skills=profilers,
+                             coding_skills=[coding], auth_home=auth)
+    campaign.prepare()
+    for directory in profilers:
+        (directory / 'SKILL.md').write_text('changed source')
+    phase = campaign.root / ('round-1-' + role)
+    budget = 600 if role == 'actor' else 240
+    launcher = RoleLauncher(campaign, phase, role, budget, campaign.git('rev-parse', 'HEAD').strip())
+    runtime = tmp_path / 'fake-runtime'
+    (runtime / 'bin').mkdir(parents=True)
+    (runtime / 'lib/node_modules').mkdir(parents=True)
+    (runtime / 'bin/node').touch()
+    launcher.codex = runtime / 'bin/codex'
+    launcher.codex.write_text('''#!/usr/bin/python3
+import json, subprocess
+from pathlib import Path
+skills = Path('/workspace/.agents/skills')
+names = ''' + repr(names) + '''
+for name in names:
+    source = skills / name / 'SKILL.md'
+    assert source.read_text() == name + ' pinned'
+    try: source.write_text('tampered')
+    except OSError: pass
+    else: raise AssertionError('profiling skill writable')
+assert (skills / 'coding/SKILL.md').exists() == ''' + repr(role == 'actor') + '''
+assert (skills / 'ascend-profiling/SKILL.md').exists() == ('ascend-profiling' in names)
+execution = json.loads(Path('/workspace/execution.json').read_text())
+assert execution['wall_budget_seconds'] == ''' + str(budget) + '''
+assert execution['finish_reserve_seconds'] == ''' + str(min(120, budget // 5)) + '''
+if ''' + repr(role == 'actor') + ''':
+    Path('notes.md').write_text('Skills read and evidence recorded')
+    subprocess.run(['git', 'add', 'notes.md'], check=True)
+    subprocess.run(['git', 'commit', '-m', 'Record experiment'], check=True)
+else:
+    Path('/analysis/analysis.json').write_text('{}')
+''')
+    launcher.codex.chmod(0o755)
+    result = launcher.launch()
+    assert result['returncode'] == 0, (phase / 'agent.stderr').read_text()
+    if role == 'analyzer':
+        assert (phase / 'reports/analysis.json').is_file()
+
+
+def test_named_profilers_resume_drift_and_tampering_block_dispatch(tmp_path):
+    skill = tmp_path / 'cannbot-profiler'
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('pinned')
+    calls = []
+    campaign = make_campaign(tmp_path, lambda *args: calls.append(1) or {'exit_code': 0},
+                             rounds=1, profiling_skills=[skill])
+    campaign.run()
+    assert campaign.run()['state'] == 'completed'
+    assert len(calls) == 1
+    (skill / 'SKILL.md').write_text('source changed')
+    replacement = Campaign(campaign.root, campaign.bundle, campaign.model, campaign.tool_command,
+                           campaign.instruction, rounds=1, profiling_skills=[skill])
+    with pytest.raises(Exception, match='configuration changed'):
+        replacement.run()
+    (campaign.root / 'profiling-skills/cannbot-profiler/SKILL.md').write_text('tampered')
+    with pytest.raises(Exception, match='profiling snapshot changed'):
+        campaign.run()
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('conflict', ['duplicate', 'coding', 'legacy', 'symlink'])
+def test_named_profilers_reject_conflicting_or_linked_inputs(tmp_path, conflict):
+    skill = tmp_path / ('ascend-profiling' if conflict == 'legacy' else 'profiler')
+    skill.mkdir()
+    (skill / 'SKILL.md').write_text('guidance')
+    options = {'profiling_skills': [skill]}
+    if conflict == 'duplicate': options['profiling_skills'].append(skill)
+    if conflict == 'coding': options['coding_skills'] = [skill]
+    if conflict == 'legacy': options['skill'] = skill
+    if conflict == 'symlink': (skill / 'alias').symlink_to(skill / 'SKILL.md')
+    with pytest.raises(ValueError):
+        make_campaign(tmp_path, None, **options)
+    assert not (tmp_path / 'run').exists()
+
+
 def test_profiling_snapshot_frozen_across_roles_and_resume_source_change_rejected(tmp_path):
     skill = tmp_path / 'profiling-source'
     skill.mkdir()

@@ -2,8 +2,12 @@ import json
 from pathlib import Path
 import sys
 import subprocess
+import os
+import signal
+import time
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import model_benchmark_repeated as repeated
@@ -75,6 +79,114 @@ class RepeatedBenchmarkTests(unittest.TestCase):
         result = repeated.aggregate([[], report()], 2)
         self.assertEqual(result['failed_repetitions'], 1)
         self.assertEqual(result['completed_repetitions'], 1)
+
+    def test_malformed_cases_count_failed_and_do_not_abort_series(self):
+        for cases in ('not-a-list', {'id': 'shape'}, [None], [1], [], ['case']):
+            with self.subTest(cases=cases):
+                malformed = report()
+                malformed['cases'] = cases
+                result = repeated.aggregate([malformed, report()], 2)
+                self.assertEqual(result['failed_repetitions'], 1)
+                self.assertEqual(result['completed_repetitions'], 1)
+                self.assertEqual(result['attempted_repetitions'], 2)
+                self.assertEqual(result['running_repetitions'], 0)
+                self.assertEqual(result['unattempted_repetitions'], 0)
+
+    def test_malformed_child_preserves_report_and_continues_next_repetition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            child = base / 'child.py'
+            child.write_text('''import json, pathlib, sys
+output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])
+output.mkdir()
+payload = json.loads(sys.argv[1])
+if output.name == 'run-0001': payload['cases'] = [None]
+(output / 'report.json').write_text(json.dumps(payload))
+''')
+            output = base / 'runs'
+            result = repeated.run_repeated(output, [], repetitions=3,
+                command=[sys.executable, str(child), json.dumps(report())])
+            self.assertEqual(result['completed_repetitions'], 2)
+            self.assertEqual(result['failed_repetitions'], 1)
+            self.assertEqual(result['attempted_repetitions'], 3)
+            self.assertEqual(result['running_repetitions'], 0)
+            self.assertEqual(result['unattempted_repetitions'], 0)
+            self.assertEqual([row['state'] for row in result['runs']], ['failed', 'complete', 'complete'])
+            self.assertEqual(json.loads((output / 'run-0001/report.json').read_text())['cases'], [None])
+
+    def test_failed_atomic_replace_preserves_previous_valid_summary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'summary.json'
+            repeated.save(path, {'running': 1})
+            with patch.object(repeated.os, 'replace', side_effect=OSError('interrupted replace')):
+                with self.assertRaises(OSError):
+                    repeated.save(path, {'completed': 1})
+            self.assertEqual(json.loads(path.read_text()), {'running': 1})
+            self.assertEqual(list(Path(directory).iterdir()), [path])
+
+    @unittest.skipUnless(hasattr(os, 'killpg'), 'requires POSIX process groups')
+    def test_interruption_retains_running_entry_before_child_finishes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            child = base / 'child.py'
+            child.write_text('''import os, pathlib, sys, time
+output = pathlib.Path(sys.argv[sys.argv.index('--output') + 1])
+output.mkdir()
+(output / 'pid').write_text(str(os.getpid()))
+print('retained running log', flush=True)
+time.sleep(30)
+''')
+            output = base / 'runs'
+            driver = ('import sys; sys.path.insert(0, sys.argv[1]); '
+                      'import model_benchmark_repeated as r; '
+                      'r.run_repeated(sys.argv[2], [], command=[sys.executable, sys.argv[3]])')
+            process = subprocess.Popen([sys.executable, '-c', driver,
+                str(Path(repeated.__file__).parent), str(output), str(child)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+            child_pid = None
+            try:
+                deadline = time.monotonic() + 8
+                while time.monotonic() < deadline:
+                    pidfile = output / 'run-0001/pid'
+                    if pidfile.exists():
+                        try:
+                            child_pid = int(pidfile.read_text())
+                            break
+                        except ValueError:
+                            pass
+                    if process.poll() is not None:
+                        self.fail(process.stderr.read().decode())
+                    time.sleep(.01)
+                self.assertIsNotNone(child_pid, 'bounded child did not start')
+                os.killpg(process.pid, signal.SIGTERM)
+                process.wait(timeout=5)
+                result = json.loads((output / 'summary.json').read_text())
+                self.assertEqual(result['attempted_repetitions'], 1)
+                self.assertEqual(result['running_repetitions'], 1)
+                self.assertEqual(result['completed_repetitions'], 0)
+                self.assertEqual(result['failed_repetitions'], 0)
+                self.assertEqual(result['unattempted_repetitions'], 9)
+                entry = result['runs'][0]
+                self.assertEqual(entry['state'], 'running')
+                self.assertEqual(entry['command'][-1], str(output / 'run-0001'))
+                self.assertEqual(entry['report'], 'run-0001/report.json')
+                self.assertIn('retained running log', (output / entry['log']).read_text())
+            finally:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=5)
+                process.stderr.close()
+                stat = Path(f'/proc/{child_pid}/stat')
+                deadline = time.monotonic() + 2
+                while child_pid is not None and stat.exists() and time.monotonic() < deadline:
+                    if stat.read_text().split()[2] == 'Z':
+                        break
+                    time.sleep(.01)
+                if child_pid is not None and stat.exists():
+                    # A reparented zombie is already dead; it cannot retain NPU work.
+                    self.assertEqual(stat.read_text().split()[2], 'Z')
 
     def test_real_cli_forwards_backend_and_reports_failed_hook(self):
         with tempfile.TemporaryDirectory() as directory:

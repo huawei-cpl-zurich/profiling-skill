@@ -25,14 +25,22 @@ stops execution early, retain the last summary and all child artifacts and repor
 the series incomplete, including any final in-flight child not yet summarized.
 
 The output directory must not already exist. Each child retains its unmodified
-`run-NNNN/report.json`, raw artifacts and a sibling `run-NNNN.log`; the parent
-updates `summary.json` after every attempt. This includes requested/completed/
-failed/unattempted counts, failures, raw report paths, metric values, units,
+`run-NNNN/report.json`, raw artifacts and a sibling `run-NNNN.log`. Before launching
+each child, the parent atomically updates `summary.json` with its exact command,
+evidence paths and `running` state, then atomically finalizes that entry afterward.
+This includes requested/attempted/completed/failed/running/unattempted counts,
+failures, raw report paths, metric values, units,
 arithmetic mean and sample standard deviation (`ddof=1`). Means summarize per-run
 medians, never pooled call samples. Source and case specialization changes reject
 the affected run. Qualified runs remain qualified; cross-repetition condition
 equivalence requires separate inspection of retained telemetry. A failed child
 counts as one failed repetition, not an invisible retry.
+After an interruption, a retained `running` entry means its outcome is unknown,
+not that it was never attempted. Observe the same outer job and inspect that
+entry's artifacts; the controller does not automatically restart it. Attempted
+equals completed plus failed plus running; requested equals attempted plus
+unattempted. Malformed reports are retained as failed attempts and do not abort
+the remaining planned repetitions.
 
 Exit 0 means all requested acquisitions completed,
 not necessarily comparable clocks or a correctness claim beyond the validator.

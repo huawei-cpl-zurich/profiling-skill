@@ -3,14 +3,28 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import statistics
 import subprocess
 import sys
+import tempfile
 
 
 def save(path, value):
-    path.write_text(json.dumps(value, indent=2, allow_nan=False) + '\n')
+    payload = json.dumps(value, indent=2, allow_nan=False) + '\n'
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', dir=path.parent,
+                prefix='.' + path.name + '-', delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def metrics(case):
@@ -29,9 +43,10 @@ def metrics(case):
     return values
 
 
-def aggregate(reports, requested=10):
+def aggregate(reports, requested=10, *, running=0):
     """Summarize complete paired runs only; retain every failed run explicitly."""
-    if type(requested) is not int or requested < 1 or len(reports) > requested:
+    if (type(requested) is not int or requested < 1 or type(running) is not int
+            or running not in (0, 1) or len(reports) + running > requested):
         raise ValueError('requested repetitions must be positive and cover all supplied reports')
     result = dict(state='incomplete', requested_repetitions=requested,
         completed_repetitions=0, failed_repetitions=0, failures=[], cases=[],
@@ -47,7 +62,10 @@ def aggregate(reports, requested=10):
             if report.get('state') != 'complete':
                 raise ValueError(report.get('error', 'single-run acquisition did not complete'))
             cases = report['cases']
-            if not cases or any(row.get('state') != 'complete' for row in cases):
+            if (not isinstance(cases, list) or not cases
+                    or any(not isinstance(row, dict) for row in cases)):
+                raise ValueError('cases must be a nonempty list of objects')
+            if any(row.get('state') != 'complete' for row in cases):
                 raise ValueError('missing or incomplete cases')
             keyed = {row['id']: row for row in cases}
             if len(keyed) != len(cases):
@@ -57,20 +75,25 @@ def aggregate(reports, requested=10):
                            for name, row in keyed.items()})
             if identity is not None and identity != current:
                 raise ValueError('source or case specialization changed between repetitions')
+            assessment = report.get('comparability', {'reasons': ['missing telemetry']})
+            if not isinstance(assessment, dict):
+                raise ValueError('comparability assessment must be an object')
             identity = current
             for name, measurement in values.items():
                 target = rows.setdefault(name, {})
                 for key, value in measurement.items():
                     target.setdefault(key, []).append(value)
             result['completed_repetitions'] += 1
-            if report.get('comparability', {}).get('comparable') is not True:
+            if assessment.get('comparable') is not True:
                 comparable = False
                 result['comparability']['reasons'].append(dict(repetition=index,
-                    assessment=report.get('comparability', {'reasons': ['missing telemetry']})))
+                    assessment=assessment))
         except (KeyError, TypeError, ValueError) as error:
             result['failures'].append(dict(repetition=index, error=str(error)))
     result['failed_repetitions'] = len(result['failures'])
-    result['unattempted_repetitions'] = requested - len(reports)
+    result['running_repetitions'] = running
+    result['attempted_repetitions'] = len(reports) + running
+    result['unattempted_repetitions'] = requested - result['attempted_repetitions']
     for name, measurements in rows.items():
         summary = {}
         for key, values in measurements.items():
@@ -110,6 +133,13 @@ def run_repeated(output, arguments, repetitions=10, *, command=None):
         invocation = [*command, *arguments, '--output', str(child_output)]
         returncode = None
         with (output / f'run-{index:04d}.log').open('w') as log:
+            entry = dict(repetition=index, state='running', command=invocation, returncode=None,
+                report=str(child_output.relative_to(output) / 'report.json'),
+                log=f'run-{index:04d}.log')
+            runs.append(entry)
+            result = aggregate(reports, repetitions, running=1)
+            result['runs'] = runs
+            save(output / 'summary.json', result)
             try:
                 returncode = subprocess.run(invocation, stdout=log, stderr=subprocess.STDOUT,
                                             check=False).returncode
@@ -122,10 +152,9 @@ def run_repeated(output, arguments, repetitions=10, *, command=None):
             except (OSError, ValueError) as error:
                 report = dict(state='failed', error=f'{type(error).__name__}: {error}')
         reports.append(report)
-        runs.append(dict(repetition=index, command=invocation, returncode=returncode,
-            report=str(child_output.relative_to(output) / 'report.json'),
-            log=f'run-{index:04d}.log'))
         result = aggregate(reports, repetitions)
+        entry.update(returncode=returncode, state='failed' if any(
+            failure['repetition'] == index for failure in result['failures']) else 'complete')
         result['runs'] = runs
         save(output / 'summary.json', result)
     return result

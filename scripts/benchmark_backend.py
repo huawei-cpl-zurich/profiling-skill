@@ -36,6 +36,7 @@ MATMUL_REVISION = "9e39c8d3ee94ebd657ad4a9ee031718665b43efa"
 MATMUL_SOURCE_SHA256 = "c877d1db26a820bc861c756d47bd94c60a7c737a3addbaf5844d04081653e250"
 BENCHMARKS = {
     "gdn": {
+        "replay_mode": "kernel",
         "device": 0,
         "development_cases": [40, 49, 47, 46, 45],
         "all_cases": list(range(50)),
@@ -49,6 +50,7 @@ BENCHMARKS = {
         },
     },
     "bsa": {
+        "replay_mode": "application",
         "device": 1,
         "development_cases": [47, 46, 49, 44, 43],
         "all_cases": list(range(50)),
@@ -62,6 +64,7 @@ BENCHMARKS = {
         },
     },
     "matmul": {
+        "replay_mode": "kernel",
         "device": 2,
         "development_cases": [7, 8, 9],
         "all_cases": list(range(10)),
@@ -237,6 +240,7 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             job["profile_attempt_id"] = request["attempt_id"]
         if kernel_name is None:
             raise ValueError("profile job requires a kernel selector")
+        replay_mode = spec["replay_mode"] if product == "a3" else "kernel"
         job["profiling"] = {
             "driver": str((root / "scripts/profile_a3.py").resolve()),
             "tool": "msprof op",
@@ -244,9 +248,9 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             "aic_metrics": "BasicInfo",
             "warm_up": 3,
             "launch_count": 1,
-            "replay_mode": "kernel",
+            "replay_mode": replay_mode,
             "kernel_name": kernel_name,
-            "driver_arguments": ["--kernel-name", kernel_name],
+            "driver_arguments": ["--kernel-name", kernel_name, "--replay-mode", replay_mode],
         }
     if fusion_contract is not None:
         job["fusion_contract"] = fusion_contract
@@ -266,6 +270,7 @@ def identity_fields(job: dict[str, Any]) -> dict[str, Any]:
     if job["action"] == "profile":
         fields["round"] = job["round"]
         fields["kernel_name"] = job["profiling"]["kernel_name"]
+        fields["replay_mode"] = job["profiling"].get("replay_mode", "kernel")
     return fields
 
 

@@ -515,149 +515,6 @@ def test_protocol_v1_default_tolerance_and_reference_setup_failure(monkeypatch, 
     assert events.index("clone") < events.index("timer")
 
 
-def fake_adapter(tmp_path: Path) -> Path:
-    path = tmp_path / "adapter.py"
-    path.write_text(r"""#!/usr/bin/env python3
-import hashlib, json, os, shutil, sys, tarfile
-from pathlib import Path
-args=sys.argv[1:]
-action=next(x for x in ("stage","run-bundle","fetch-bundle-result") if x in args)
-def value(name): return args[args.index(name)+1]
-if action == "stage":
- root=Path(value("--source-root")); receipt=Path(value("--receipt"))
- digest=hashlib.sha256(b"payload").hexdigest()
- receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"upload","root_digest":digest,"archive_sha256":"a"*64,"remote":"a3-gz","remote_path":f"incoming/profiling-workloads/{digest}/bundle.tar","state":"succeeded","transfer_handle":"upload-1"}))
- Path(os.environ["FAKE_ROOT"]).write_text(str(root))
-elif action == "run-bundle":
- receipt=Path(value("--run-receipt")); root=Path(os.environ["FAKE_ROOT"]).read_text(); root=Path(root)
- run_id=value("--run-id")
- if os.environ.get("FAKE_RUN_LOG"):
-  with open(os.environ["FAKE_RUN_LOG"],"a") as stream: stream.write(run_id+"\n")
- job=json.loads((root/"job.json").read_text()); mode=os.environ.get("FAKE_MODE","ok")
- identity={k:job[k] for k in ("benchmark","action","device")}
- if job["action"]=="check": identity.update(cases=job["cases"],scope=job["scope"])
- elif job["action"]=="profile": identity.update(cases=job["cases"],repeats=job["repeats"])
- else: identity["case"]=job["case"]
- if job["action"]=="measure": identity["phase"]=job["phase"]
- if job["action"]=="profile": identity.update(round=job["round"],kernel_name=job["profiling"]["kernel_name"])
- out=Path(os.environ["FAKE_OUT"]); out.mkdir(exist_ok=True)
- rows=[{"case":case,"samples_us":[7.0,7.5,8.0],"median_us":7.5} for case in job.get("cases",[])]
- result={"status":mode,"diagnostics":"Triton compilation NameError at candidate.py:17" if mode=="compile_error" else "",**identity,"passed":mode=="ok","profile_cases":rows}
- if job["action"]=="measure": result["latency_us"]=10.0
- (out/"response.json").write_text(json.dumps(result))
- if job["action"]=="profile":
-  (out/"profile").mkdir(exist_ok=True)
-  captures=[{"case":row["case"],"iteration":iteration,"duration_us":sample,
-             "kernel_name":job["profiling"]["kernel_name"]}
-            for row in rows for iteration,sample in enumerate(row["samples_us"])]
-  (out/"profile/evidence.json").write_text(json.dumps({"status":"success",
-      "kernel_name":job["profiling"]["kernel_name"],"cases":rows,"captures":captures}))
-  (out/"profile/msprof.log").write_text("Profiling finished\n")
- archive=Path(os.environ["FAKE_TAR"])
- with tarfile.open(archive,"w") as stream:
-  stream.add(out/"response.json",arcname="response.json")
-  if job["action"]=="profile":
-   stream.add(out/"profile/evidence.json",arcname="profile/evidence.json")
-   stream.add(out/"profile/msprof.log",arcname="profile/msprof.log")
- sha=hashlib.sha256(archive.read_bytes()).hexdigest()
- handle="command-"+run_id if os.environ.get("FAKE_RUN_LOG") else "command-1"
- receipt.write_text(json.dumps({"protocol":"a3-managed-bundle/v1","kind":"run","state":"succeeded","command_handle":handle,"result_sha256":sha,"result_path":"results/x/result.tar"}))
-elif action == "fetch-bundle-result":
- shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
-""")
-    path.chmod(0o755)
-    return path
-
-
-def executing_compile_adapter(tmp_path: Path) -> Path:
-    """Adapter double which packages results only when the payload exits zero."""
-    path = tmp_path / "executing-adapter.py"
-    path.write_text(r"""#!/usr/bin/env python3
-import hashlib, json, os, shutil, subprocess, sys, tarfile
-from pathlib import Path
-args=sys.argv[1:]
-action=next(x for x in ("stage","run-bundle","fetch-bundle-result") if x in args)
-def value(name): return args[args.index(name)+1]
-if action == "stage":
- root=Path(value("--source-root")); receipt=Path(value("--receipt"))
- fake=root/"profile_a3.py"
- fake.write_text(r'''#!/usr/bin/env python3
-import json, sys
-from pathlib import Path
-args=sys.argv[1:]
-def value(name): return args[args.index(name)+1]
-out=Path(value("--output")); out.mkdir(parents=True)
-job=json.loads(Path(value("--job")).read_text())
-Path(args[-1]).write_text(json.dumps({"status":"compile_error","diagnostics":"NameError from candidate.py",
- "benchmark":job["benchmark"],"action":"profile","device":job["device"],"case":job["case"],
- "round":job["round"],"kernel_name":job["profiling"]["kernel_name"]}))
-(out/"evidence.json").write_text(json.dumps({"status":"failure"}))
-(out/"msprof.log").write_text("compile failed\n")
-raise SystemExit(1)
-''')
- receipt.write_text(json.dumps({"state":"succeeded","root_digest":"x"}))
- Path(os.environ["FAKE_ROOT"]).write_text(str(root))
-elif action == "run-bundle":
- root=Path(os.environ["FAKE_ROOT"]).read_text(); root=Path(root)
- out=Path(os.environ["FAKE_OUT"]); out.mkdir()
- command=args[args.index("--")+1:]
- run=subprocess.run(command,cwd=root,env={**os.environ,"A3_BUNDLE_OUTPUT_DIR":str(out)})
- receipt=Path(value("--run-receipt"))
- if run.returncode:
-  receipt.write_text(json.dumps({"state":"failed","command_handle":"command-compile"}))
-  raise SystemExit(1)
- archive=Path(os.environ["FAKE_TAR"])
- with tarfile.open(archive,"w") as stream:
-  stream.add(out/"response.json",arcname="response.json")
-  stream.add(out/"profile/evidence.json",arcname="profile/evidence.json")
-  stream.add(out/"profile/msprof.log",arcname="profile/msprof.log")
- sha=hashlib.sha256(archive.read_bytes()).hexdigest()
- receipt.write_text(json.dumps({"state":"succeeded","command_handle":"command-compile",
-  "result_sha256":sha,"result_path":"results/x/result.tar"}))
-elif action == "fetch-bundle-result":
- shutil.copyfile(os.environ["FAKE_TAR"],value("--output"))
-""")
-    path.chmod(0o755)
-    return path
-
-
-def inputs(tmp_path: Path) -> tuple[dict, dict]:
-    for name in ("candidate.py", "baseline.py", "cases.jsonl"):
-        (tmp_path / name).write_text("{}\n" if name.endswith("jsonl") else "# source\n")
-    job = {
-        "protocol_version": 1, "profile": "gz-a3", "runtime": "py311-torch",
-        "benchmark": "gdn", "action": "profile", "device": 0, "logical_device": 0,
-        "candidate": str(tmp_path / "candidate.py"), "baseline": str(tmp_path / "baseline.py"),
-        "case_spec": str(tmp_path / "cases.jsonl"), "cases": [40], "repeats": 3, "round": 1,
-        "profiling": {"kernel_name": "candidate_kernel"},
-    }
-    adapter = fake_adapter(tmp_path)
-    env = {**os.environ, "FAKE_ROOT": str(tmp_path / "root.txt"),
-           "FAKE_OUT": str(tmp_path / "remote"), "FAKE_TAR": str(tmp_path / "result.tar")}
-    command = [sys.executable, str(CLIENT), "--adapter-json", json.dumps([str(adapter)]),
-               "--state-dir", str(tmp_path / "state")]
-    return job, {"env": env, "command": command}
-
-
-def run(tmp_path: Path, mode: str = "ok"):
-    job, config = inputs(tmp_path)
-    config["env"]["FAKE_MODE"] = mode
-    process = subprocess.run(config["command"], input=json.dumps(job), text=True,
-                             capture_output=True, env=config["env"], check=False)
-    return process, json.loads(process.stdout)
-
-
-def test_profile_returns_bound_msprof_evidence_and_handle(tmp_path: Path):
-    process, result = run(tmp_path)
-    assert process.returncode == 0
-    assert result["status"] == "ok"
-    assert result["handle"] == "gz-a3:command-1"
-    assert result["kernel_name"] == "candidate_kernel"
-    assert result["profile_cases"][0]["median_us"] == 7.5
-    assert result["profile"]["status"] == "success"
-    assert Path(result["artifacts"]["msprof_log"]).read_text() == "Profiling finished\n"
-
-
 def test_attach_profile_evidence_accepts_resolved_and_legacy_exact_selectors(tmp_path: Path):
     module = load_client()
     rows = [{"case": 40, "samples_us": [7.0], "median_us": 7.0}]
@@ -724,99 +581,181 @@ def test_attach_profile_evidence_rejects_consistent_but_illegal_selector_mapping
         module.attach_profile_evidence(result, path)
 
 
-def test_compilation_diagnostic_is_counted_and_retrieved(tmp_path: Path):
-    process, result = run(tmp_path, "compile_error")
-    assert process.returncode == 2
-    assert result["status"] == "compile_error"
-    assert "NameError" in result["diagnostics"]
-    assert result["handle"] == "gz-a3:command-1"
+
+def transport_fixture(tmp_path, monkeypatch, status="ok", fail=None):
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location(
+        "shared_bz_tests", ROOT / "tests/test_bz_a3_job_client.py")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    shared = helper.load()
+    transport = helper.FakeTransport(shared, status=status, fail=fail)
+    monkeypatch.setattr(shared, "GlobalCplRemoteTransport",
+                        lambda *_args, **_kwargs: transport)
+    job = helper.profile_job(tmp_path)
+    args = SimpleNamespace(
+        state_dir=tmp_path / "state", cpl_remote_sha256="f" * 64,
+        remote_root="profiling-skill-production", timeout=3600)
+    return load_client(), job, args, transport
 
 
-def test_selector_submission_error_is_counted_and_keeps_profile_identity(tmp_path: Path):
-    process, result = run(tmp_path, "submission_error")
-
-    assert process.returncode == 2
-    assert result["status"] == "submission_error"
-    assert result["cases"] == [40]
-    assert result["kernel_name"] == "candidate_kernel"
-
-
-def test_batch_compile_failure_is_packaged_and_returned_by_managed_client(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    adapter = executing_compile_adapter(tmp_path)
-    config["command"][3] = json.dumps([str(adapter)])
-    process = subprocess.run(
-        config["command"], input=json.dumps(job), text=True,
-        capture_output=True, env=config["env"], check=False,
-    )
-    result = json.loads(process.stdout)
-
-    assert process.returncode == 2
-    assert result["status"] == "compile_error"
-    assert result["diagnostics"] == "NameError from candidate.py"
-    assert result["handle"] == "gz-a3:command-compile"
-    assert Path(result["artifacts"]["profile"]).is_file()
+@pytest.mark.parametrize("status", ["ok", "compile_error", "runtime_error",
+                                   "correctness_error", "submission_error"])
+def test_gz_native_shared_transport_preserves_results(
+        tmp_path, monkeypatch, status):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch, status)
+    result = client.execute(job, args)
+    assert result["status"] == status
+    assert result["handle"] == "remote:gz-a3:job:job-1"
+    assert transport.executions[0][:3] == ("gz-a3", 0, "py311-torch")
+    if status == "ok":
+        assert result["profile"]["captures"]
+        assert result["profile_cases"][0]["median_us"] == 9.0
+    if status == "compile_error":
+        assert "NameError" in result["diagnostics"]
 
 
-def test_adapter_failure_is_infrastructure_and_keeps_identity(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    config["command"][3] = json.dumps(["/missing/adapter"])
-    process = subprocess.run(config["command"], input=json.dumps(job), text=True,
-                             capture_output=True, env=config["env"], check=False)
-    result = json.loads(process.stdout)
-    assert result["status"] == "infrastructure_error"
-    assert (result["benchmark"], result["cases"], result["device"]) == ("gdn", [40], 0)
-    assert "managed adapter unavailable" in result["diagnostics"]
-
-
-def test_same_content_reuses_state_and_receipts(tmp_path: Path):
-    first, one = run(tmp_path)
-    second, two = run(tmp_path)
-    assert first.returncode == second.returncode == 0
-    assert one["artifacts"]["request_digest"] == two["artifacts"]["request_digest"]
-    assert len(list((tmp_path / "state").iterdir())) == 1
-
-
-def test_calibration_phases_create_distinct_digests_run_ids_and_results(tmp_path: Path):
-    job, config = inputs(tmp_path)
-    run_log = tmp_path / "run-ids.txt"
-    config["env"]["FAKE_MODE"] = "ok"
-    config["env"]["FAKE_RUN_LOG"] = str(run_log)
-    results = []
-    for phase in ("before", "after"):
-        request = {**job, "calibration_phase": phase}
-        process = subprocess.run(
-            config["command"], input=json.dumps(request), text=True,
-            capture_output=True, env=config["env"], check=False,
-        )
-        assert process.returncode == 0
-        results.append(json.loads(process.stdout))
-
-    digests = [result["artifacts"]["request_digest"] for result in results]
-    run_ids = run_log.read_text().splitlines()
-    assert len(set(digests)) == len(set(run_ids)) == 2
-    assert run_ids == [digest[:24] for digest in digests]
-    assert results[0]["handle"] != results[1]["handle"]
-    assert len(list((tmp_path / "state").iterdir())) == 2
-
-
-def test_digest_ignores_caller_checkout_in_profile_driver(tmp_path: Path):
-    client = load_client()
-    job, _config = inputs(tmp_path)
-    job["profiling"]["driver"] = "/first/checkout/scripts/profile_a3.py"
-    first = client.prepare(job, tmp_path / "state-a", RUNNER, ROOT / "scripts/profile_a3.py")[1]
-    job["profiling"]["driver"] = "/other/checkout/scripts/profile_a3.py"
-    second = client.prepare(job, tmp_path / "state-b", RUNNER, ROOT / "scripts/profile_a3.py")[1]
-    assert first == second
-
-
-def test_partial_retained_fetch_is_quarantined_and_refetched(tmp_path: Path):
-    first, result = run(tmp_path)
-    assert first.returncode == 0
-    state = tmp_path / "state" / result["artifacts"]["request_digest"]
-    shutil.rmtree(state / "result")
-    (state / "result.tar").write_bytes(b"partial")
-    second, recovered = run(tmp_path)
-    assert second.returncode == 0
+def test_gz_observer_interruption_retains_and_reuses_handle(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(
+        tmp_path, monkeypatch, fail="observer")
+    interrupted = client.execute(job, args)
+    assert interrupted["handle"] == "remote:gz-a3:job:retained"
+    assert interrupted["status"] == "infrastructure_error"
+    transport.fail = None
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
+    recovered = client.execute(job, args)
     assert recovered["status"] == "ok"
-    assert list(state.glob("result.invalid-*.tar"))
+    assert recovered["handle"] == interrupted["handle"]
+    assert len(transport.executions) == 1
+
+
+def test_gz_empty_observe_cannot_submit_or_create_state(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
+    result = client.execute(job, args)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert not transport.uploads
+    assert not transport.executions
+    assert not args.state_dir.exists()
+
+
+@pytest.mark.parametrize("drift", ["source", "client_digest"])
+def test_gz_observe_identity_drift_never_resubmits(tmp_path, monkeypatch, drift):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    first = client.execute(job, args)
+    assert first["status"] == "ok"
+    states = set(args.state_dir.iterdir())
+    transport.uploads.clear()
+    transport.executions.clear()
+    if drift == "source":
+        with Path(job["candidate"]).open("a") as stream:
+            stream.write("# changed candidate\n")
+    else:
+        transport.expected_sha256 = "e" * 64
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
+    result = client.execute(job, args)
+    assert result["status"] == "infrastructure_error"
+    assert not transport.uploads
+    assert not transport.executions
+    assert set(args.state_dir.iterdir()) == states
+
+
+def test_gz_cached_completion_and_calibration_identity(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    first = client.execute(job, args)
+    second = client.execute(job, args)
+    assert first["artifacts"]["request_digest"] == second["artifacts"]["request_digest"]
+    assert len(transport.executions) == 1
+    changed = client.execute({**job, "calibration_phase": "after"}, args)
+    assert changed["artifacts"]["request_digest"] != first["artifacts"]["request_digest"]
+    assert len(transport.executions) == 2
+
+
+def test_gz_worker_resolves_namespace_paths_before_changing_directory(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    job.update(action="check", scope="development")
+    client.execute(job, args)
+    script = transport.executions[0][4]
+    archive = transport.uploads[0][1]
+    namespace_destination = transport.uploads[0][2]
+    cwd = tmp_path / args.remote_root
+    cwd.mkdir()
+    remote_archive = tmp_path / namespace_destination
+    # Replace the actual device worker with a deterministic host stand-in.
+    # Keep the real generated archive/extraction/cwd/response framing protocol.
+    with tarfile.open(archive) as stream:
+        stream.extractall(tmp_path / "payload", filter="data")
+    worker = tmp_path / "payload/runner.py"
+    worker.write_text('import json, pathlib\n'
+                      'pathlib.Path("response.json").write_text(json.dumps({"status":"ok"}))\n')
+    old_digest = __import__("hashlib").sha256(archive.read_bytes()).hexdigest()
+    with tarfile.open(remote_archive, "w") as stream:
+        for path in (tmp_path / "payload").iterdir():
+            stream.add(path, arcname=path.name)
+    new_digest = __import__("hashlib").sha256(remote_archive.read_bytes()).hexdigest()
+    process = subprocess.run(["bash", "-c", script.replace(old_digest, new_digest)],
+                             cwd=cwd, capture_output=True, text=True)
+    assert process.returncode == 0, process.stderr
+    assert 'BZ_PRODUCTION_RESULT={"status": "ok"}' in process.stdout
+
+
+@pytest.mark.parametrize("root", [".", "/absolute/staging", "../escape", "a//b", "a/./b"])
+def test_gz_rejects_non_namespace_roots(tmp_path, monkeypatch, root):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    args.remote_root = root
+    with pytest.raises(transport.module.JobError, match="workspace-relative"):
+        client.execute(job, args)
+    assert not transport.executions
+
+
+@pytest.mark.parametrize("job", [[], None, "bad", {"device": "bad"},
+                                 {"action": "profile", "profiling": []}])
+def test_gz_invalid_request_returns_structured_failure(tmp_path, job):
+    command = [
+        sys.executable, str(CLIENT), "--cpl-remote-sha256", "invalid",
+        "--remote-root", "/srv/profiling-skill-production",
+        "--state-dir", str(tmp_path / "state")]
+    process = subprocess.run(command, input=json.dumps(job), text=True,
+                             capture_output=True, check=False)
+    result = json.loads(process.stdout)
+    assert process.returncode == 2
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert not process.stderr
+
+@pytest.mark.parametrize("captures", [None, [], ["not-an-object"]])
+def test_profile_evidence_rejects_missing_or_malformed_capture_bindings(
+        tmp_path: Path, captures):
+    module = load_client()
+    path = tmp_path / "evidence.json"
+    evidence = {"status": "success", "cases": [{"case": 7}],
+                "kernel_name": "candidate_kernel", "replay_mode": "application"}
+    if captures is not None:
+        evidence["captures"] = captures
+    path.write_text(json.dumps(evidence))
+    result = {"profile_cases": [{"case": 7}], "kernel_name": "candidate_kernel",
+              "replay_mode": "application"}
+    with pytest.raises(module.ClientError, match="selector identity|replay mode"):
+        module.attach_profile_evidence(result, path)
+
+
+@pytest.mark.parametrize("capture_mode", ["application", "kernel"])
+def test_profile_evidence_binds_application_replay_mode(tmp_path, capture_mode):
+    module = load_client()
+    path = tmp_path / "evidence.json"
+    evidence = {
+        "status": "success", "kernel_name": "candidate_kernel",
+        "replay_mode": "application", "cases": [{"case": 7}],
+        "captures": [{"kernel_name": "candidate_kernel", "case": 7,
+                      "replay_mode": capture_mode}],
+    }
+    path.write_text(json.dumps(evidence))
+    result = {"kernel_name": "candidate_kernel", "profile_cases": [{"case": 7}],
+              "replay_mode": "application"}
+    if capture_mode == "application":
+        module.attach_profile_evidence(result, path)
+        assert result["profile"]["captures"][0]["replay_mode"] == "application"
+    else:
+        with pytest.raises(module.ClientError, match="replay mode"):
+            module.attach_profile_evidence(result, path)

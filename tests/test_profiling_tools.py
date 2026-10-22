@@ -589,6 +589,75 @@ with (target / 'OpBasicInfo_1.csv').open('w', newline='') as stream:
     assert len(evidence["sources"][0]["sha256"]) == 64
 
 
+def test_a3_profile_runs_application_replay_and_records_actual_mode(tmp_path: Path):
+    msprof = fake_msprof(
+        tmp_path,
+        """\
+assert '--replay-mode=application' in sys.argv
+with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['Op Name', 'Task Duration(us)'])
+    writer.writeheader()
+    writer.writerow({'Op Name': 'wanted', 'Task Duration(us)': '5.0'})
+""",
+    )
+    result = subprocess.run(
+        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+         "--kernel-name", "wanted", "--replay-mode", "application", "--msprof", str(msprof),
+         "--", "python3", "case.py"],
+        text=True, capture_output=True, check=True,
+    )
+    assert json.loads(result.stdout)["protocol"]["replay_mode"] == "application"
+
+
+def test_a3_application_replay_accepts_generated_task_suffix(tmp_path: Path):
+    msprof = fake_msprof(
+        tmp_path,
+        """\
+with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['Op Name', 'Task Duration(us)'])
+    writer.writeheader()
+    writer.writerow({'Op Name': 'wanted_mix_aic', 'Task Duration(us)': '5.0'})
+""",
+    )
+    result = subprocess.run(
+        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+         "--kernel-name", "wanted", "--replay-mode", "application", "--msprof", str(msprof),
+         "--", "python3", "case.py"],
+        text=True, capture_output=True, check=True,
+    )
+    assert json.loads(result.stdout)["kernels"][0]["name"] == "wanted_mix_aic"
+
+
+def test_a3_application_replay_rejects_unrelated_prefixed_task(tmp_path: Path):
+    msprof = fake_msprof(
+        tmp_path,
+        """\
+with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
+    writer = csv.DictWriter(stream, fieldnames=['Op Name', 'Task Duration(us)'])
+    writer.writeheader()
+    writer.writerow({'Op Name': 'wanted_fast', 'Task Duration(us)': '5.0'})
+""",
+    )
+    result = subprocess.run(
+        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+         "--kernel-name", "wanted", "--replay-mode", "application", "--msprof", str(msprof),
+         "--", "python3", "case.py"],
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 1
+    assert json.loads(result.stdout)["status"] == "failure"
+
+
+def test_a3_profile_rejects_unknown_replay_mode_before_launch(tmp_path: Path):
+    result = subprocess.run(
+        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+         "--replay-mode", "unsafe", "--", "python3", "case.py"],
+        text=True, capture_output=True,
+    )
+    assert result.returncode == 2
+    assert "invalid choice" in result.stderr
+
+
 def test_a3_profile_rejects_success_without_matching_kernel(tmp_path: Path):
     msprof = fake_msprof(
         tmp_path,

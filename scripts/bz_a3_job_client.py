@@ -126,9 +126,10 @@ class GlobalCplRemoteTransport:
         if not os.access(self.executable, os.X_OK):
             raise JobError("transport_error", "global cpl-remote is not executable")
         self.expected_sha256 = expected_sha256
-        self.remote_root = validate_remote_root(remote_root)
         self.invoke = invoke
         self.targets = set(TARGETS if targets is None else targets)
+        self.remote_root = validate_remote_root(
+            remote_root, relative=self.targets == {"gz-a3"})
 
     def _call(self, arguments: list[str], timeout: int,
               *, handle: str | None = None) -> dict:
@@ -180,22 +181,32 @@ class GlobalCplRemoteTransport:
                 stream.write(wrapped)
                 stream.flush()
                 path = Path(stream.name)
-            payload = self._call([
-                "run", target, "--runtime", runtime, "--file", str(path),
-                "--cwd", self.remote_root, "--timeout", str(timeout),
-            ], timeout)
+            try:
+                payload = self._call([
+                    "run", target, "--runtime", runtime, "--file", str(path),
+                    "--cwd", self.remote_root, "--timeout", str(timeout),
+                ], timeout)
+            except JobError as exc:
+                if exc.handle is None:
+                    exc.dispatch_uncertain = True
+                raise
         finally:
             if path is not None:
                 path.unlink(missing_ok=True)
-        handle = self._validate_handle(target, payload.get("handle"))
+        try:
+            handle = self._validate_handle(target, payload.get("handle"))
+        except JobError as exc:
+            exc.dispatch_uncertain = True
+            raise
         state = payload.get("state")
-        if state not in {"running", "reconnecting", "observation-unavailable",
+        if state not in {"queued", "dispatching", "running", "reconnecting", "observation-unavailable",
                          "completed", "failed", "cancelled"}:
             raise JobError("transport_error", "cpl-remote returned an invalid run state",
                            handle)
         return handle
 
     def observe(self, target: str, handle: str, timeout: int) -> CommandResult:
+        deadline = time.monotonic() + timeout
         self._validate_handle(target, handle)
         payload = self._call(
             ["observe", handle, "--wait", "--timeout", str(timeout)], timeout,
@@ -204,14 +215,22 @@ class GlobalCplRemoteTransport:
         if payload.get("handle") != handle or payload.get("target") != target:
             raise JobError("transport_error", "cpl-remote observation identity mismatch",
                            handle)
-        if payload.get("state") in {"running", "reconnecting", "observation-unavailable"}:
+        if payload.get("state") in {"queued", "dispatching", "running", "reconnecting", "observation-unavailable"}:
             raise JobError("observer_error", "retained job is not terminal", handle)
         if payload.get("state") not in {"completed", "failed", "cancelled"}:
             raise JobError("observer_error", "retained job returned an invalid state", handle)
-        return self._collect(target, handle, timeout)
+        return self._collect(target, handle, deadline)
 
-    def _collect(self, target: str, handle: str, timeout: int) -> CommandResult:
-        terminal = self._call(["result", handle], timeout, handle=handle)
+    @staticmethod
+    def _remaining(deadline: float, handle: str) -> int:
+        remaining = math.ceil(deadline - time.monotonic())
+        if remaining < 1:
+            raise JobError("observer_error", "remote observation deadline exhausted", handle)
+        return remaining
+
+    def _collect(self, target: str, handle: str, deadline: float) -> CommandResult:
+        terminal = self._call(["result", handle], self._remaining(deadline, handle),
+                              handle=handle)
         if terminal.get("handle") != handle or terminal.get("target") != target:
             raise JobError("transport_error", "cpl-remote result identity mismatch", handle)
         state = terminal.get("state")
@@ -220,7 +239,8 @@ class GlobalCplRemoteTransport:
         streams = {}
         for name, tail in (("stdout", 1), ("stderr", 200)):
             payload = self._call(
-                ["logs", handle, "--stream", name, "--tail", str(tail)], timeout,
+                ["logs", handle, "--stream", name, "--tail", str(tail)],
+                self._remaining(deadline, handle),
                 handle=handle,
             )
             if (payload.get("handle") != handle or payload.get("target") != target
@@ -285,7 +305,13 @@ def validate_placements(value: object, targets: set[str] = TARGETS) -> dict[int,
     return result
 
 
-def validate_remote_root(value: object) -> str:
+def validate_remote_root(value: object, *, relative: bool = False) -> str:
+    if relative:
+        if (not isinstance(value, str) or not 1 <= len(value) <= 240
+                or not re.fullmatch(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*", value)
+                or any(part in {".", ".."} for part in value.split("/"))):
+            raise JobError("request_error", "GZ remote root must be a non-root workspace-relative path")
+        return value
     if (not isinstance(value, str) or len(value) < 2 or len(value) > 240
             or not re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
             or str(PurePosixPath(value)) != value
@@ -303,7 +329,8 @@ def _identity(job: dict) -> dict:
     else:
         result.update(cases=job["cases"], repeats=job["repeats"],
                       round=job["round"],
-                      kernel_name=job["profiling"]["kernel_name"])
+                      kernel_name=job["profiling"]["kernel_name"],
+                      replay_mode=job["profiling"].get("replay_mode", "kernel"))
     return result
 
 
@@ -319,6 +346,10 @@ def _parse_result(stdout: str, expected: dict) -> dict:
         raise JobError("transport_error", "remote result is invalid JSON") from exc
     if not isinstance(result, dict) or result.get("status") not in RESULTS:
         raise JobError("transport_error", "remote result has an invalid status")
+    # Historical kernel-replay receipts omitted the mode. Application replay
+    # must always bind its mode explicitly, including on resumed jobs.
+    if expected.get("replay_mode") == "kernel":
+        result.setdefault("replay_mode", "kernel")
     mismatch = [key for key, value in expected.items() if result.get(key) != value]
     if mismatch:
         raise JobError("transport_error",
@@ -343,6 +374,7 @@ def _valid_selector_mapping(declared: object, resolved: object) -> bool:
 def _validate_profile_evidence(result: dict, job: dict) -> None:
     evidence = result.get("profile")
     rows = result.get("profile_cases")
+    replay_mode = job["profiling"].get("replay_mode", "kernel")
     declared = job["profiling"]["kernel_name"]
     repeats = job["repeats"]
     target_family = "Ascend-A5" if job.get("product") == "a5" else "Ascend-A2-A3"
@@ -353,6 +385,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     resolved = evidence.get("resolved_kernel_name") if explicit_names else declared
     if (not isinstance(evidence, dict) or evidence.get("status") != "success"
             or evidence.get("profiler") != "msprof-op"
+            or evidence.get("replay_mode", "kernel") != replay_mode
             or evidence.get("target_family", "Ascend-A2-A3") != target_family
             or evidence.get("kernel_name") != declared
             or evidence_declared != declared
@@ -382,6 +415,7 @@ def _validate_profile_evidence(result: dict, job: dict) -> None:
     if (not isinstance(captures, list) or len(captures) != len(expected)
             or any(not isinstance(capture, dict)
                    or (capture.get("case"), capture.get("iteration")) != identity[:2]
+                   or capture.get("replay_mode", "kernel") != replay_mode
                    or capture.get("kernel_name") != resolved
                    or (explicit_names and
                        (capture.get("declared_kernel_name") != declared
@@ -417,7 +451,8 @@ class BzA3JobClient:
         self.placements_sha256 = _json_sha(self.placements)
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler
-        self.remote_root = validate_remote_root(remote_root)
+        self.remote_root = validate_remote_root(
+            remote_root, relative=self.TARGETS == {"gz-a3"})
         self.interrupt_after_dispatch = (
             Path(interrupt_after_dispatch).resolve()
             if interrupt_after_dispatch is not None else None
@@ -477,6 +512,9 @@ class BzA3JobClient:
             if len(candidates) > 1:
                 raise JobError(
                     "request_error", "conflicting current and legacy request receipts")
+            if operation_mode == "observe" and not candidates:
+                raise JobError("request_error",
+                               "observe-only request has no retained receipt for this identity")
             if candidates:
                 request_sha, provenance = candidates[0]
             else:
@@ -516,6 +554,11 @@ class BzA3JobClient:
                 response = self.transport.observe(
                     placement["target"], handle, self._remaining(deadline, handle))
             else:
+                # Recheck under the request lock: a receipt may have disappeared
+                # after identity lookup. Observation never authorizes submission.
+                if operation_mode == "observe":
+                    raise JobError("request_error",
+                                   "observe-only request has no retained dispatch receipt")
                 self._archive(archive, stage_files, remote_job)
                 # cpl-remote's rsync transport does not create destination
                 # parents. The configured root is therefore a pre-provisioned
@@ -689,6 +732,7 @@ class BzA3JobClient:
             if (not isinstance(profile, dict) or profile.get("tool") != "msprof op"
                     or not isinstance(profile.get("kernel_name"), str)
                     or not profile["kernel_name"].strip() or not valid_cases
+                    or profile.get("replay_mode", "kernel") not in {"kernel", "application"}
                     or isinstance(job.get("repeats"), bool)
                     or not isinstance(job.get("repeats"), int)
                     or job["repeats"] < 1

@@ -215,6 +215,7 @@ def observe(tools, ident):
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
         return dict(receipt, state='observation-unavailable', next='experiment-tool observe ' + ident)
     evidence.mkdir(parents=True, exist_ok=True)
+    terminal_evidence_failure = False
     try:
         download = receipt.get('download')
         if download and download.get('state') not in TERMINAL:
@@ -230,12 +231,14 @@ def observe(tools, ident):
             save(folder / 'receipt.json', receipt)
             return dict(receipt, state='running', next='experiment-tool observe ' + ident)
         if download['state'] != 'completed':
+            terminal_evidence_failure = True
             receipt.pop('download', None)
             raise RuntimeError('evidence not yet available')
         if download.get('handle'):
             fetched = tools.remote('fetch', download['handle'], evidence / 'evidence.tar.gz')
             if fetched.get('state') != 'completed':
                 return dict(receipt, state='running', next='experiment-tool observe ' + ident)
+        terminal_evidence_failure = True  # Completed transfer: any remaining error is local evidence.
         with tarfile.open(evidence / 'evidence.tar.gz') as stream:
             for entry in stream.getmembers():
                 if not entry.isfile() or not (evidence / entry.name).resolve().is_relative_to(evidence.resolve()):
@@ -247,5 +250,13 @@ def observe(tools, ident):
         return dict(summary, call_id=ident, handle=receipt['handle'])
     except (OSError, RuntimeError, ValueError, tarfile.TarError, subprocess.TimeoutExpired):
         receipt['state'] = observed['state'] if observed['state'] in TERMINAL else 'running'
+        if observed['state'] == 'completed' and terminal_evidence_failure:
+            # A completed phase cannot produce a missing call report later.
+            # Preserve its handle, but do not advertise endless evidence_pending.
+            receipt.update(state='failed', failure_stage='infrastructure',
+                           diagnostic=dict(kind='terminal-evidence-unavailable',
+                               phase_state='completed'))
+        elif observed['state'] == 'completed':
+            receipt['state'] = 'observation-unavailable'
         save(folder / 'receipt.json', receipt)
         return dict(receipt, next='experiment-tool observe ' + ident) if receipt['state'] not in TERMINAL else receipt

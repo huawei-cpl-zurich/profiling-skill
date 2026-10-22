@@ -22,6 +22,7 @@ import csv, hashlib, json, os, re, shlex, signal, subprocess, sys, tarfile, time
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profile_device import bounded_run, wait_for_device
+from phase_deadline import wait_for_activation
 from a3_memory_batch import execute, capture, duration, summarize, validate_capture
 root = Path(__file__).resolve().parent
 request = json.loads((root / 'request.json').read_text())
@@ -53,6 +54,8 @@ def execute(argv, folder, env, *, timeout=600):
 lease = None
 stage = 'environment'
 try:
+    if request.get('activation_required'):
+        relative_budget = wait_for_activation(root / 'activation.json', remaining()) - started
     signal.signal(signal.SIGALRM, expire)
     signal.setitimer(signal.ITIMER_REAL, remaining())
     def query(*arguments):
@@ -191,7 +194,13 @@ class Tools:
             timeout = min(timeout, (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds())
             if timeout <= 0:
                 raise TimeoutError('original role deadline expired during staging')
-        result = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
+        try:
+            result = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            deadline = getattr(self, '_staging_deadline', None)
+            if deadline and datetime.fromisoformat(deadline) <= datetime.now(timezone.utc):
+                raise TimeoutError('original role deadline expired during transport') from error
+            raise
         with (self.state / 'transport.jsonl').open('a') as stream:
             stream.write(json.dumps(dict(command=command, code=result.returncode,
                                          stdout=result.stdout, stderr=result.stderr)) + '\n')
@@ -226,7 +235,7 @@ class Tools:
             shutil.copyfile(self.bundle / name, folder / name)
         shutil.copyfile(source, folder / source.name)
         helpers = Path(__file__).resolve().parent
-        for name in ('profile_device.py', 'a3_memory_batch.py'):
+        for name in ('profile_device.py', 'a3_memory_batch.py', 'phase_deadline.py'):
             shutil.copyfile(helpers / name, folder / name)
         request = dict(verb=verb, implementation=implementation, sanitizer=sanitizer,
                        timing_captures=timing_captures, pipe_captures=pipe_captures,
@@ -238,7 +247,7 @@ class Tools:
             if budget <= 0:
                 return dict(state='failed', failure_stage='budget', error='original role deadline expired',
                             source_sha256=request['source_sha256'])
-            request.update(utc_deadline=deadline, host_remaining_seconds=budget)
+            request.update(utc_deadline=deadline, host_remaining_seconds=budget, activation_required=True)
             self._staging_deadline = deadline
         save(folder / 'request.json', request)
         (folder / 'execute.py').write_text(REMOTE_PROGRAM)
@@ -344,6 +353,16 @@ class Tools:
             if transfer['state'] != 'completed':
                 return dict(receipt, state='transfer-pending', next='experiment-tool observe ' + ident)
             return self.dispatch(folder, receipt)
+        try:
+            activate = runpy.run_path(str(Path(__file__).with_name('phase_deadline.py')))['activate']
+            if not activate(self, folder, receipt):
+                return dict(receipt, next='experiment-tool observe ' + ident)
+        except TimeoutError as error:
+            receipt.update(state='failed', failure_stage='budget', error=str(error))
+            save(folder / 'receipt.json', receipt)
+            return receipt
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            return dict(receipt, activation_error=str(error), next='experiment-tool observe ' + ident)
         try:
             result = self.remote('observe', receipt['handle'], '--wait', '--timeout', '120')
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:

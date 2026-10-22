@@ -621,8 +621,48 @@ with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
     evidence = json.loads(result.stdout)
     assert evidence["status"] == "failure"
     assert evidence["failure"]["kind"] == "profiling"
+    assert evidence["failure"]["reason"] == "selector_miss"
+    assert evidence["failure"]["kernel_selector"] == "wanted"
     assert "matching 'wanted'" in evidence["failure"]["message"]
     assert (output / "msprof.log").read_text().endswith(SUCCESS_LINE + "\n")
+
+
+def test_a3_profile_clean_success_without_csv_is_selector_miss(tmp_path: Path):
+    msprof = fake_msprof(tmp_path, "pass")
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        [
+            "python3", str(ROOT / "scripts/profile_a3.py"),
+            "--output", str(output), "--kernel-name", "missing_mix_aiv",
+            "--msprof", str(msprof), "--", "python3", "case.py",
+        ],
+        text=True,
+        capture_output=True,
+    )
+
+    evidence = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert evidence["failure"] == {
+        "kernel_selector": "missing_mix_aiv",
+        "kind": "profiling",
+        "message": f"no OpBasicInfo CSV under {output / 'raw'}",
+        "msprof_returncode": 0,
+        "reason": "selector_miss",
+    }
+
+
+def test_a3_profile_without_selector_does_not_call_missing_csv_a_selector_miss(tmp_path: Path):
+    msprof = fake_msprof(tmp_path, "pass")
+    output = tmp_path / "capture"
+    result = subprocess.run(
+        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(output),
+         "--msprof", str(msprof), "--", "python3", "case.py"],
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 1
+    assert json.loads(result.stdout)["failure"]["reason"] == "invalid_capture"
 
 
 def test_a3_profile_preserves_nonzero_profiler_failure(tmp_path: Path):
@@ -646,6 +686,7 @@ def test_a3_profile_preserves_nonzero_profiler_failure(tmp_path: Path):
     evidence = json.loads(result.stdout)
     assert result.returncode == 1
     assert evidence["failure"]["msprof_returncode"] == 17
+    assert evidence["failure"]["reason"] == "tool_failure"
     assert evidence["failure"]["message"] == "msprof exited with status 17"
     assert "profiler stopped" in (output / "msprof.log").read_text()
 

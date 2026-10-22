@@ -27,6 +27,36 @@ FIX, and scalar activity. Cross-pipe overlap may be measured only inside one
 valid capture containing the required tracks. A scalar-only trace is not a
 mixed-kernel common clock.
 
+`scripts/summarize_timelines.py` partitions that common clock at every event
+start and end. The profiler exports `ts` and `dur` as cycle-derived
+floating-point microseconds; Chrome trace `displayTimeUnit` is only a viewer
+hint and does not rescale those values. Boundaries are deterministically
+rounded half-up to integer nanoseconds; positive events receive a minimum
+one-nanosecond width and the compact evidence records the source unit and
+quantization policy. Adjacent intervals retain the resulting
+integer-nanosecond boundary and the set of active pipes; an empty set is an
+observed no-pipe gap. These
+activity phases locate overlap and bubbles but do not establish saturation.
+The generated `phase-evidence.json` is accepted by
+`analyze_pipe_saturation.py`.
+
+Optional capacity evidence is joined only when it names product `a5`, target
+product `Ascend950/V6`, the same raw timeline SHA-256, the common-clock domain,
+and an interval whose boundaries exactly equal a generated phase. A task-wide
+metric is not copied into smaller phases. A missing exact window remains
+`unknown`; an explicitly truncated common timeline retains its activity
+phases but rejects all capacity joins.
+
+```bash
+python3 scripts/summarize_timelines.py \
+  --pipe-timeline PipeTimeline.json \
+  --capacity-evidence exact-window-capacity.json \
+  --output compact-timeline
+python3 scripts/analyze_pipe_saturation.py \
+  --product a5 --model references/a5-pipe-capacity-model.json \
+  --evidence compact-timeline/phase-evidence.json
+```
+
 ### InstrTimeline
 
 Capture `InstrTimeline` separately for cube, vector, MTE1, MTE2, MTE3, and FIX.

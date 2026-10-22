@@ -70,6 +70,7 @@ TREATMENT_SKILLS = {
 CONTROLLER_SCRIPTS = (
     "experimentctl.py",
     "benchmark_backend.py",
+    "fully_fused_contract.py",
     "gz_a3_job_client.py",
     "bz_a3_job_client.py",
     "a3_benchmark_runner.py",

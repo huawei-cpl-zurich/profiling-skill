@@ -10,11 +10,25 @@ no SSH, container, or device-discovery fallback.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+_FUSION_SPEC = importlib.util.spec_from_file_location(
+    "_profiling_skill_fully_fused_contract",
+    Path(__file__).resolve().with_name("fully_fused_contract.py"),
+)
+if _FUSION_SPEC is None or _FUSION_SPEC.loader is None:
+    raise ImportError("cannot load the sibling fully fused contract")
+_fusion = importlib.util.module_from_spec(_FUSION_SPEC)
+_FUSION_SPEC.loader.exec_module(_fusion)
+FusionContractError = _fusion.FusionContractError
+FUSED_MANIFEST_SCHEMA = _fusion.MANIFEST_SCHEMA
+validate_fusion_evidence = _fusion.validate_fusion_evidence
+validate_fused_manifest = _fusion.validate_manifest
 
 
 PINNED_REVISION = "a42c54b916189500e2f7cb47640980f230f2eb65"
@@ -74,6 +88,16 @@ def response(status: str, diagnostics: str, **values: Any) -> dict[str, Any]:
     return {"status": status, "diagnostics": diagnostics, **values}
 
 
+def _valid_development_cases(cases: object, spec: dict[str, Any]) -> bool:
+    """Accept a controller-ranked development sequence, not an arbitrary set."""
+    return (
+        isinstance(cases, list)
+        and len(cases) == len(spec["development_cases"])
+        and all(type(case) is int and case in spec["all_cases"] for case in cases)
+        and len(cases) == len(set(cases))
+    )
+
+
 def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     spec = BENCHMARKS[benchmark]
     if not isinstance(raw, dict):
@@ -99,14 +123,20 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
             )
         return raw, None
     if action == "profile":
-        if raw.get("cases") != spec["development_cases"]:
-            return None, response("infrastructure_error", "profile cases are not the exact configured sequence")
+        if not _valid_development_cases(raw.get("cases"), spec):
+            return None, response(
+                "infrastructure_error",
+                "profile cases must be valid development cases: unique, in-domain, and the configured length",
+            )
         repeats = raw.get("repeats")
         if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 1:
             return None, response("infrastructure_error", "profile repeats must be a positive integer")
         if (isinstance(raw.get("round"), bool) or not isinstance(raw.get("round"), int)
                 or raw["round"] < 1):
             return None, response("infrastructure_error", "profile round must be a positive integer")
+        if ("attempt_id" in raw and (not isinstance(raw["attempt_id"], str)
+                                     or not raw["attempt_id"].strip())):
+            return None, response("infrastructure_error", "profile attempt identity must be non-empty")
     elif action == "measure":
         case = raw.get("case")
         if isinstance(case, bool) or case not in spec["all_cases"]:
@@ -114,9 +144,22 @@ def validate_request(raw: Any, benchmark: str) -> tuple[dict[str, Any] | None, d
         if raw.get("phase") not in {"warmup", "sample"}:
             return None, response("infrastructure_error", "measure phase must be warmup or sample")
     else:
-        expected = spec["all_cases"] if raw.get("scope") == "full" else spec["development_cases"]
-        if raw.get("cases") != expected:
-            return None, response("infrastructure_error", "check cases are not the exact configured sequence")
+        scope = raw.get("scope")
+        if scope == "full":
+            if raw.get("cases") != spec["all_cases"]:
+                return None, response(
+                    "infrastructure_error", "full check cases must be the exact configured domain",
+                )
+        elif scope == "development":
+            if not _valid_development_cases(raw.get("cases"), spec):
+                return None, response(
+                    "infrastructure_error",
+                    "check development cases must be unique, in-domain, and the configured length",
+                )
+        else:
+            return None, response(
+                "infrastructure_error", "check scope must be development or full",
+            )
     return raw, None
 
 
@@ -133,14 +176,43 @@ def load_kernel_selector(path: Path) -> tuple[str | None, dict[str, Any] | None]
     return kernel_name, None
 
 
+def load_candidate_contract(
+    path: Path, *, allow_legacy_v1: bool = False,
+) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Load a legacy selector or a fully-fused v2 declaration."""
+    try:
+        manifest = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        return None, None, response(
+            "submission_error", f"cannot load candidate kernel manifest {path}: {error}"
+        )
+    if isinstance(manifest, dict) and manifest.get("schema") == FUSED_MANIFEST_SCHEMA:
+        try:
+            declaration = validate_fused_manifest(manifest)
+        except FusionContractError as error:
+            return None, None, response("submission_error", str(error))
+        return declaration["kernel_name"], declaration, None
+    if not allow_legacy_v1:
+        return None, None, response(
+            "submission_error",
+            f"new profiling requires schema {FUSED_MANIFEST_SCHEMA}; "
+            "legacy v1 replay must be explicitly enabled",
+        )
+    kernel, failure = load_kernel_selector(path)
+    return kernel, None, failure
+
+
 def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Path,
-             kernel_name: str | None = None) -> dict[str, Any]:
+             kernel_name: str | None = None, *, product: str = "a3",
+             runtime: str = "py311-torch",
+             fusion_contract: dict[str, Any] | None = None) -> dict[str, Any]:
     spec = BENCHMARKS[benchmark]
     action = request["action"]
     job = {
         "protocol_version": 1,
-        "profile": "gz-a3",
-        "runtime": "py311-torch",
+        "profile": "gz-a3" if product == "a3" else "bz-a5",
+        "product": product,
+        "runtime": runtime,
         "benchmark": benchmark,
         "device": request["device"],
         "logical_device": 0,
@@ -161,6 +233,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
         job["phase"] = request["phase"]
     else:
         job.update(cases=request["cases"], repeats=request["repeats"], round=request["round"])
+        if "attempt_id" in request:
+            job["profile_attempt_id"] = request["attempt_id"]
         if kernel_name is None:
             raise ValueError("profile job requires a kernel selector")
         job["profiling"] = {
@@ -174,6 +248,8 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             "kernel_name": kernel_name,
             "driver_arguments": ["--kernel-name", kernel_name],
         }
+    if fusion_contract is not None:
+        job["fusion_contract"] = fusion_contract
     return job
 
 
@@ -229,7 +305,19 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
             handle=result.get("handle"),
             evidence=result,
         )
-    if job["action"] == "profile":
+    if status == "ok" and "fusion_contract" in job:
+        try:
+            fusion = validate_fusion_evidence(
+                job["fusion_contract"], result.get("fusion_evidence"),
+                expected_cases=job["cases"],
+            )
+        except FusionContractError as error:
+            return response(
+                "submission_error", f"fully fused runtime gate failed: {error}",
+                handle=result.get("handle"), **identity_fields(job),
+            )
+        result["fusion_gate"] = fusion
+    if job["action"] == "profile" and status == "ok":
         result["cases"] = result.pop("profile_cases", None)
     return result
 
@@ -237,12 +325,22 @@ def invoke(command: list[str], job: dict[str, Any], timeout: int) -> dict[str, A
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--benchmark", choices=sorted(BENCHMARKS), required=True)
+    parser.add_argument("--product", choices=("a3", "a5"), default="a3")
+    parser.add_argument("--runtime", choices=("py311-torch", "cann91"))
     parser.add_argument("--candidate", type=Path, default=Path("candidate.py"))
     parser.add_argument("--candidate-manifest", type=Path)
     parser.add_argument("--job-client-json", required=True,
                         help="JSON string array containing the executable and exact arguments")
     parser.add_argument("--timeout", type=int, default=3600)
-    return parser.parse_args()
+    parser.add_argument("--allow-legacy-v1", action="store_true",
+                        help="replay an explicitly historical v1 candidate")
+    args = parser.parse_args()
+    expected_runtime = {"a3": "py311-torch", "a5": "cann91"}[args.product]
+    if args.runtime is None:
+        args.runtime = expected_runtime
+    elif args.runtime != expected_runtime:
+        parser.error(f"product {args.product} requires runtime {expected_runtime}")
+    return args
 
 
 def parse_command(value: str) -> list[str]:
@@ -274,11 +372,12 @@ def main() -> int:
             elif request["action"] == "calibrate":
                 calibration_request = {
                     "action": "profile", "device": request["device"],
-                    "cases": [7], "repeats": 1, "round": request["wave"],
+                    "cases": [7], "repeats": 3, "round": request["wave"],
                 }
                 calibration = root / "benchmarks/matmul/calibration.py"
                 job = make_job(calibration_request, "matmul", calibration, root,
-                               "streaming_matmul_add_kernel_mix_aic")
+                               "streaming_matmul_add_kernel_mix_aic",
+                               product=args.product, runtime=args.runtime)
                 # This opaque field deliberately participates in the managed
                 # request digest without changing the runner's profile schema.
                 job["calibration_phase"] = request["phase"]
@@ -293,20 +392,50 @@ def main() -> int:
                     selector="streaming_matmul_add_kernel_mix_aic",
                 )
                 if result.get("status") == "ok":
-                    result["latency_us"] = result["cases"][0]["samples_us"][0]
+                    result["samples_us"] = result["cases"][0]["samples_us"]
+                    result["median_us"] = result["cases"][0]["median_us"]
+                    result["latency_us"] = result["median_us"]
             elif not args.candidate.is_file():
                 result = response("submission_error", f"candidate source does not exist: {args.candidate}")
             else:
                 kernel_name = None
+                fusion_contract = None
                 if request["action"] == "profile":
                     manifest = args.candidate_manifest or args.candidate.with_suffix(".manifest.json")
-                    kernel_name, result = load_kernel_selector(manifest)
-                if kernel_name is not None or request["action"] != "profile":
-                    result = invoke(
-                        command,
-                        make_job(request, args.benchmark, args.candidate, root, kernel_name),
-                        args.timeout,
+                    kernel_name, fusion_contract, result = load_candidate_contract(
+                        manifest, allow_legacy_v1=args.allow_legacy_v1,
                     )
+                if kernel_name is not None or request["action"] != "profile":
+                    fusion_result = None
+                    if fusion_contract is not None:
+                        full_check = {
+                            "action": "check", "device": request["device"],
+                            "cases": BENCHMARKS[args.benchmark]["all_cases"],
+                            "scope": "full", "round": request["round"],
+                        }
+                        fusion_result = invoke(
+                            command,
+                            make_job(
+                                full_check, args.benchmark, args.candidate, root,
+                                product=args.product, runtime=args.runtime,
+                                fusion_contract=fusion_contract,
+                            ),
+                            args.timeout,
+                        )
+                        result = fusion_result
+                    if fusion_contract is None or result.get("status") == "ok":
+                        result = invoke(
+                            command,
+                            make_job(
+                                request, args.benchmark, args.candidate, root,
+                                kernel_name,
+                                product=args.product, runtime=args.runtime,
+                            ),
+                            args.timeout,
+                        )
+                        if result.get("status") == "ok" and fusion_result is not None:
+                            result["fusion_gate"] = fusion_result["fusion_gate"]
+                            result["fusion_handle"] = fusion_result.get("handle")
     print(json.dumps(result, sort_keys=True))
     return 0 if result["status"] == "ok" else 2
 

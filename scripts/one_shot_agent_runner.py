@@ -104,6 +104,17 @@ def _validated_supplementary_assets(assets: dict) -> dict[str, str]:
     return supplementary
 
 
+def _validated_starter_assets(assets: dict) -> tuple[str, str] | None:
+    starter = assets.get("starter")
+    manifest = assets.get("candidate_manifest")
+    if starter is None and manifest is None:
+        return None
+    if (not isinstance(starter, str) or not Path(starter).is_file()
+            or not isinstance(manifest, str) or not Path(manifest).is_file()):
+        raise RunnerError("starter and candidate manifest must be regular files")
+    return starter, manifest
+
+
 def _run_group(command: list[str], prompt: str, timeout: int) -> subprocess.CompletedProcess:
     with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout_file, \
             tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stderr_file:
@@ -429,6 +440,7 @@ class OneShotRunner:
             if request.get("benchmark") not in {"matmul", "bsa", "gdn"}:
                 raise RunnerError("two-shot benchmark must be matmul, bsa, or gdn")
         _validated_supplementary_assets(self.assets)
+        _validated_starter_assets(self.assets)
         if set(request["skills"]) != set(request["skill_sha256"]):
             raise RunnerError("skill inventory and hashes differ")
         from campaign import TREATMENT_SKILLS
@@ -545,6 +557,10 @@ class OneShotRunner:
                 shutil.copy2(source, workspace / name)
             if "baseline.json" not in supplementary:
                 shutil.copy2(self.assets["case_spec"], workspace / "baseline.json")
+            starter = _validated_starter_assets(self.assets)
+            if starter is not None:
+                shutil.copy2(starter[0], workspace / "candidate.py")
+                shutil.copy2(starter[1], workspace / "candidate.manifest.json")
             two_shot = request["operation"] == "two_shot"
             (workspace / "AGENTS.md").write_text(
                 "Write candidate.py and candidate.manifest.json. Use only declared local skills. "

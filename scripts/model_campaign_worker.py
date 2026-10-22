@@ -113,21 +113,22 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
     finally:
         print('MODEL_REPORT_WRITER=' + json.dumps(dict(owner_pid=summary['worker_pid'],
             writer_pid=os.getpid(), operation=request['operation'], state=summary['state'])), flush=True)
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        if lease and runtime is None:
-            lease.close()
-        output = root / 'results'
-        output.mkdir(exist_ok=True)
-        (output / 'summary.json').write_text(json.dumps(summary, indent=2))
-        # Bundle compact evidence only. Raw profile payloads and all providers
-        # remain remote; even this private archive is never directly agent-mounted.
-        with tarfile.open(root / 'evidence.pending', 'w:gz') as archive:
-            for path in root.rglob('*'):
-                if path.is_file() and (path.suffix in ('.json', '.csv', '.stdout', '.stderr', '.log')
-                        or path.suffix == '.txt' and path.is_relative_to(root / 'diagnostics')):
-                    if path.is_relative_to(output) or path.is_relative_to(root / 'measurement') or path.is_relative_to(root / 'diagnostics'):
-                        archive.add(path, arcname=str(path.relative_to(root)))
-        (root / 'evidence.pending').replace(root / 'evidence.tar.gz')
+        if os.getpid() == summary['worker_pid']:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            if lease and runtime is None:
+                lease.close()
+            output = root / 'results'
+            output.mkdir(exist_ok=True)
+            (output / 'summary.json').write_text(json.dumps(summary, indent=2))
+            # Bundle compact evidence only. Raw profile payloads and all providers
+            # remain remote; even this private archive is never directly agent-mounted.
+            with tarfile.open(root / 'evidence.pending', 'w:gz') as archive:
+                for path in root.rglob('*'):
+                    if path.is_file() and (path.suffix in ('.json', '.csv', '.stdout', '.stderr', '.log')
+                            or path.suffix == '.txt' and path.is_relative_to(root / 'diagnostics')):
+                        if path.is_relative_to(output) or path.is_relative_to(root / 'measurement') or path.is_relative_to(root / 'diagnostics'):
+                            archive.add(path, arcname=str(path.relative_to(root)))
+            (root / 'evidence.pending').replace(root / 'evidence.tar.gz')
 
 
 def phase(root, adapter):
@@ -138,6 +139,8 @@ def phase(root, adapter):
     runtime = {}
     phase_pid = os.getpid()
     def terminate(signum, *_):
+        if os.getpid() != phase_pid:
+            os._exit(128 + signum)
         print('MODEL_PHASE_SIGNAL=' + json.dumps(dict(owner_pid=phase_pid,
             receiver_pid=os.getpid(), signal=signum)), flush=True)
         raise SystemExit(0)

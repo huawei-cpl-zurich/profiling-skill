@@ -166,6 +166,19 @@ class CplRemote:
                 "remote_exit": exit_code}
 
 
+def _remote_from_config(config: dict, invoke: Callable | None = None):
+    transport = config.get("remote_transport")
+    if transport is None or transport == {"kind": "cpl-remote"}:
+        return CplRemote(invoke=invoke)
+    if isinstance(transport, dict) and transport.get("kind") == "bz-a5-wrapper":
+        raise RunnerError(
+            'bz-a5-wrapper is obsolete; use remote_transport={"kind": "cpl-remote"} '
+            "with a registered target, named runtime and remote_workspace. "
+            "Keep profiling and exact selectors in terminal_gate_path."
+        )
+    raise RunnerError("unsupported remote transport; use cpl-remote")
+
+
 class SubprocessAgent:
     """JSON stdin/stdout agent command with a cell-private environment."""
 
@@ -212,7 +225,7 @@ class SubprocessAgent:
 
 class ExperimentCell:
     def __init__(self, root: Path, config: dict, agent, remote):
-        self.root, self.config, self.agent, self.remote = Path(root), config, agent, remote
+        self.root, self.config, self.agent, self.remote = Path(root), json.loads(json.dumps(config)), agent, remote
         for name in ("campaign", "product", "task", "treatment"):
             if not isinstance(config.get(name), str) or not config[name]:
                 raise RunnerError(f"missing configuration field: {name}")
@@ -221,10 +234,23 @@ class ExperimentCell:
         self.repo, self.state_path = self.path / "repo", self.path / "state.json"
         self.agent_home = self.path / "agent-home"
         self.branch = f"experiment/{config['campaign']}/{self.name}"
+        frozen = self.path / "execution-config.json"
+        if self.state_path.is_file():
+            if not frozen.is_file():
+                raise RunnerError("existing cell lacks frozen execution configuration; reconcile manually")
+            retained = _object(frozen.read_text(), "execution configuration")
+            if retained != self.config:
+                raise RunnerError("execution configuration changed after initialization")
+            self.config = retained
+        self._execution_config = json.loads(json.dumps(self.config))
 
     def _state(self) -> dict:
         if not self.state_path.is_file():
             raise RunnerError("cell is not initialized")
+        retained = _object((self.path / "execution-config.json").read_text(), "execution configuration")
+        if retained != self._execution_config:
+            raise RunnerError("execution configuration changed after initialization")
+        self.config = json.loads(json.dumps(self._execution_config))
         return json.loads(self.state_path.read_text())
 
     def _save(self, state: dict) -> dict:
@@ -314,6 +340,7 @@ class ExperimentCell:
             retained_gate = temporary / "terminal-gate.sh"
             retained_gate.write_bytes(gate_content)
             retained_gate.chmod(0o500)
+            _write_json(temporary / "execution-config.json", self.config)
             _write_json(temporary / "state.json", {
                 "status": "ready", "round": 1, "attempts": 0,
                 "infrastructure_failures": 0, "candidate_repairs": 0,
@@ -625,7 +652,7 @@ def main() -> int:
     cell = ExperimentCell(args.root, config, None, None)
     if args.command in {"run", "resume"}:
         cell.agent = SubprocessAgent(config["agent_command"], cell.repo, cell.agent_home)
-        cell.remote = CplRemote()
+        cell.remote = _remote_from_config(cell.config)
     value = getattr(cell, args.command)()
     print(json.dumps(value, indent=2, sort_keys=True))
     return 0

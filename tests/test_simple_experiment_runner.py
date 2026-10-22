@@ -120,6 +120,17 @@ def success(us=12.5):
     return {"outcome": "success", "stdout": "PASS", "stderr": "", "profile_summary": {"duration_us": us}}
 
 
+def test_remote_factory_uses_global_client_for_a5_and_rejects_legacy():
+    def invoke(*args, **kwargs):
+        raise AssertionError("factory must not dispatch")
+    for config_value in ({}, {"remote_transport": {"kind": "cpl-remote"}}):
+        assert isinstance(runner._remote_from_config(config_value, invoke=invoke), runner.CplRemote)
+    with pytest.raises(runner.RunnerError, match="obsolete"):
+        runner._remote_from_config({"remote_transport": {"kind": "bz-a5-wrapper"}}, invoke=invoke)
+    with pytest.raises(runner.RunnerError, match="unsupported"):
+        runner._remote_from_config({"remote_transport": {"kind": "raw-ssh"}}, invoke=invoke)
+
+
 def test_init_creates_isolated_repo_and_branch(tmp_path):
     cell = initialized(tmp_path, Remote([]))
     assert cell.path == tmp_path / "runs" / "trial" / "a3-matmul-guarded"
@@ -132,6 +143,81 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
     assert (cell.path / "terminal-gate.sh").read_text() == 'python "$CANDIDATE_PATH"\n'
     assert state["billed_checks_used"] == 0
     assert state["task_sha256"] is None and not (cell.repo / "TASK.md").exists()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("prompt", "different task"), ("target", "other-target"),
+    ("runtime", "other-runtime"), ("remote_workspace", "/other/work"),
+    ("skill_paths", []), ("rounds", 99),
+    ("remote_transport", {"kind": "bz-a5-wrapper"}),
+    ("agent_command", ["other-agent"]),
+])
+def test_reopening_cell_rejects_external_config_drift(tmp_path, field, value):
+    cell = initialized(tmp_path, Remote([]))
+    changed = {**cell.config, field: value}
+    with pytest.raises(runner.RunnerError, match="configuration changed"):
+        runner.ExperimentCell(cell.root, changed, Agent(), Remote([]))
+
+
+@pytest.mark.parametrize("operation", ["run", "resume"])
+@pytest.mark.parametrize("field,value", [("target", "other-target"), ("runtime", "other-runtime")])
+def test_live_cell_rejects_retained_execution_config_drift_before_effects(tmp_path, operation, field, value):
+    remote = Remote([runner.ObservationLost("observer disconnected")])
+    cell = initialized(tmp_path, remote)
+    if operation == "resume":
+        assert cell.run()["status"] == "infrastructure_unknown"
+    before = (len(cell.agent.requests), len(cell.agent.analyses), len(remote.preflights),
+              len(remote.submitted), len(remote.observed))
+    frozen = cell.path / "execution-config.json"
+    changed = json.loads(frozen.read_text())
+    changed[field] = value
+    frozen.write_text(json.dumps(changed))
+    with pytest.raises(runner.RunnerError, match="configuration changed"):
+        getattr(cell, operation)()
+    assert (len(cell.agent.requests), len(cell.agent.analyses), len(remote.preflights),
+            len(remote.submitted), len(remote.observed)) == before
+
+
+def test_a5_global_client_persists_handle_before_observation_and_restart(tmp_path):
+    handle = "remote:bz-a5:job:retained"
+    commands = []
+    interrupted = True
+    cell = None
+
+    def invoke(command, **kwargs):
+        nonlocal interrupted
+        operation = command[2]
+        commands.append(command)
+        if operation == "capabilities":
+            receipt = {"target": "bz-a5", "capabilities": {
+                "run": True, "observe": True, "logs": True}}
+        elif operation == "preflight":
+            receipt = {"target": "bz-a5", "state": "completed"}
+        elif operation == "run":
+            receipt = {"target": "bz-a5", "handle": handle}
+        elif operation == "observe":
+            assert (cell.path / "attempts/1/remote-job-id.txt").read_text().strip() == handle
+            assert command[3:] == [handle, "--wait"]
+            if interrupted:
+                interrupted = False
+                raise subprocess.TimeoutExpired(command, 1)
+            receipt = {"target": "bz-a5", "handle": handle, "state": "completed", "exit": 0}
+        else:
+            assert operation == "logs"
+            content = json.dumps({"schema": runner.RESULT_SCHEMA, "outcome": "success"})
+            receipt = {"target": "bz-a5", "handle": handle,
+                       "content": content if command[command.index("--stream") + 1] == "stdout" else ""}
+        return subprocess.CompletedProcess(command, 0, json.dumps(receipt), "")
+
+    cell = initialized(tmp_path, runner._remote_from_config({}, invoke=invoke),
+                       target="bz-a5", rounds=1)
+    original = json.loads(json.dumps(cell.config))
+    assert cell.run()["status"] == "infrastructure_unknown"
+    cell = runner.ExperimentCell(cell.root, original, Agent(),
+                                 runner._remote_from_config(original, invoke=invoke))
+    assert cell.resume()["status"] == "complete"
+    assert sum(command[2] == "run" for command in commands) == 1
+    assert sum(command[2] == "observe" for command in commands) == 2
 
 
 def test_init_snapshots_optional_task_and_records_it_with_round_evidence(tmp_path):

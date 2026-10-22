@@ -71,7 +71,8 @@ def aggregate(reports, requested=10, *, running=0):
             if len(keyed) != len(cases):
                 raise ValueError('duplicate case identifiers')
             values = {name: metrics(row) for name, row in keyed.items()}
-            current = dict(sources=report['sources'], cases={name: row['specialization']['sha256']
+            current = dict(sources=report['sources'], execution_modes=report.get('execution_modes',
+                dict(baseline='compiled', candidate='compiled')), cases={name: row['specialization']['sha256']
                            for name, row in keyed.items()})
             if identity is not None and identity != current:
                 raise ValueError('source or case specialization changed between repetitions')
@@ -79,6 +80,7 @@ def aggregate(reports, requested=10, *, running=0):
             if not isinstance(assessment, dict):
                 raise ValueError('comparability assessment must be an object')
             identity = current
+            result['execution_modes'] = current['execution_modes']
             for name, measurement in values.items():
                 target = rows.setdefault(name, {})
                 for key, value in measurement.items():

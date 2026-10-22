@@ -84,13 +84,14 @@ def acquisition():
 
 
 class ControllerTests(unittest.TestCase):
-    def run_fixture(self, root, adapter=None, validator=validate):
+    def run_fixture(self, root, adapter=None, validator=validate, baseline_execution="compiled"):
         hooks = dict(baseline=baseline, candidate=candidate, cases_provider=cases,
                      validator=validator, acquisition=acquisition)
         adapter = adapter or Adapter()
         hooks['acquisition'] = lambda: adapter
         options = Namespace(**{name: name for name in hooks},
-                            output=str(root / 'results'), expected_kernel=['submitted'])
+                            output=str(root / 'results'), expected_kernel=['submitted'],
+                            baseline_execution=baseline_execution)
         with patch.object(controller, 'load', side_effect=hooks.__getitem__), \
                 patch.object(controller, 'prepare_model', side_effect=Prepared):
             return controller.run(options, compiler_factory=lambda: None, clock=lambda: 1000)
@@ -118,6 +119,20 @@ class ControllerTests(unittest.TestCase):
             self.assertTrue(profile['tasks'][-1]['diagnostic_flags'])
             self.assertEqual(profile['iterations'][-1]['device_busy_us'], 10000)
             self.assertTrue(row['latency']['execution_evidence']['candidate']['custom_kernel_identity_verified'])
+
+    def test_explicit_eager_profile_and_timing_retain_compiled_candidate_checks(self):
+        import torch
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(controller, 'benchmark_pair', return_value={'latency_speedup': 1}):
+            report = self.run_fixture(Path(temporary), baseline_execution='eager')
+            self.assertEqual(report['state'], 'complete', report.get('error'))
+            self.assertEqual(report['execution_modes'], dict(baseline='eager', candidate='compiled'))
+            self.assertEqual(len(json.loads((Path(temporary) /
+                'results/case-0000/baseline-busy-time.json').read_text())['iterations']), 50)
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.run_fixture(Path(temporary), Adapter(name='wrong'), baseline_execution='eager')
+            self.assertEqual(report['state'], 'failed')
+            self.assertIn('identity absent', report['error'])
 
     def test_missing_kernel_identity_fails_before_latency(self):
         with tempfile.TemporaryDirectory() as temporary, \

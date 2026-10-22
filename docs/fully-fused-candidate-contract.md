@@ -15,7 +15,7 @@ evidence; they do not assert full fusion.
 ## Trusted runtime boundary
 
 After correctness over the complete case inventory and before timing, the
-trusted controller profiles one isolated candidate forward for every case. It
+trusted host-owned terminal gate profiles one isolated candidate forward for every case. It
 must classify the complete compute-op stream into `triton`, `torch`, or `acl`,
 assign the same `launch_id` to compiler-generated components of one logical
 Triton invocation, identify their entry point, and bind the returned output to

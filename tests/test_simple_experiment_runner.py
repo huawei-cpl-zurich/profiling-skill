@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -130,6 +131,85 @@ def test_init_creates_isolated_repo_and_branch(tmp_path):
     assert copied.read_text() == "test skill\n" and not copied.is_symlink()
     assert (cell.path / "terminal-gate.sh").read_text() == 'python "$CANDIDATE_PATH"\n'
     assert state["billed_checks_used"] == 0
+    assert state["task_sha256"] is None and not (cell.repo / "TASK.md").exists()
+
+
+def test_init_snapshots_optional_task_and_records_it_with_round_evidence(tmp_path):
+    task = tmp_path / "benchmark-task.md"
+    exact_task = b"\xef\xbb\xbfOptimize the supplied benchmark.\r\n"
+    task.write_bytes(exact_task)
+    remote = Remote([success()])
+    cell = initialized(tmp_path, remote, task_path=str(task), rounds=1)
+    expected = hashlib.sha256(task.read_bytes()).hexdigest()
+
+    task.write_text("source changed after init\n")
+    assert (cell.repo / "TASK.md").read_bytes() == exact_task
+    assert cell._state()["task_sha256"] == expected
+    assert cell.run()["status"] == "complete"
+    inputs = json.loads((cell.repo / "rounds/01/inputs.json").read_text())
+    assert inputs["task_sha256"] == expected
+    retained = subprocess.run(
+        ["git", "-C", str(cell.repo), "show", "HEAD:rounds/01/TASK.md"],
+        capture_output=True, check=True,
+    ).stdout
+    assert retained == exact_task
+
+
+@pytest.mark.parametrize("operation", ["run", "resume"])
+def test_task_snapshot_drift_blocks_run_or_resume(tmp_path, operation):
+    task = tmp_path / "benchmark-task.md"
+    task.write_text("immutable task\n")
+    remote = Remote([runner.ObservationLost("observer disconnected")])
+    cell = initialized(tmp_path, remote, task_path=str(task), rounds=1)
+    if operation == "resume":
+        assert cell.run()["status"] == "infrastructure_unknown"
+    (cell.repo / "TASK.md").write_text("agent changed task\n")
+
+    with pytest.raises(runner.RunnerError, match="TASK.md changed"):
+        getattr(cell, operation)()
+
+    if operation == "run":
+        assert not remote.preflights and not remote.submitted
+
+
+@pytest.mark.parametrize("phase", ["prepare", "analyze"])
+def test_agent_cannot_change_task_during_a_phase(tmp_path, phase):
+    task = tmp_path / "benchmark-task.md"
+    task.write_text("immutable task\n")
+
+    class MutatingAgent(Agent):
+        def prepare(self, request):
+            value = super().prepare(request)
+            if phase == "prepare":
+                (Path(request["repo"]) / "TASK.md").write_text("prepare mutation\n")
+            return value
+
+        def analyze(self, request):
+            value = super().analyze(request)
+            if phase == "analyze":
+                (Path(request["repo"]) / "TASK.md").write_text("analyze mutation\n")
+            return value
+
+    remote = Remote([success()])
+    cell = initialized(
+        tmp_path, remote, MutatingAgent(), task_path=str(task), rounds=1
+    )
+    with pytest.raises(runner.RunnerError, match="TASK.md changed"):
+        cell.run()
+
+    if phase == "prepare":
+        assert not remote.submitted and cell._state()["billed_checks_used"] == 0
+    else:
+        assert len(remote.submitted) == 1 and cell._state()["status"] == "analyzing"
+
+
+@pytest.mark.parametrize("task_path", ["", "missing.md"])
+def test_init_rejects_invalid_configured_task_path(tmp_path, task_path):
+    cfg = config(tmp_path, task_path=task_path)
+    cell = runner.ExperimentCell(tmp_path / "runs", cfg, Agent(), Remote([]))
+    with pytest.raises(runner.RunnerError, match="task_path"):
+        cell.init()
+    assert not cell.path.exists()
 
 
 def test_terminal_gate_is_host_owned_and_snapshotted_at_init(tmp_path):
@@ -829,7 +909,9 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
         "{'candidate':'VALUE = 1\\n','commands':['true'],"
         "'hypothesis':'works','retrieved_knowledge':[],'session_id':'cli-session'}))\n"
     )
-    cfg = config(tmp_path, rounds=1, skill_paths=[str(skill)],
+    task = tmp_path / "cli-task.md"
+    task.write_text("CLI task snapshot\n")
+    cfg = config(tmp_path, rounds=1, skill_paths=[str(skill)], task_path=str(task),
                  agent_command=["python", str(agent)])
     config_path = tmp_path / "cell.json"
     config_path.write_text(json.dumps(cfg))
@@ -845,7 +927,15 @@ def test_cli_init_run_resume_report_end_to_end(tmp_path):
         return json.loads(result.stdout)
 
     assert cli("init")["status"] == "ready"
+    task.write_text("source task drift does not alter snapshot\n")
+    cell_repo = runs / "trial/a3-matmul-guarded/repo"
+    assert (cell_repo / "TASK.md").read_text() == "CLI task snapshot\n"
     assert cli("run")["status"] == "infrastructure_unknown"
     assert cli("resume")["status"] == "complete"
+    retained_task = subprocess.run(
+        ["git", "-C", str(cell_repo), "show", "HEAD:rounds/01/TASK.md"],
+        capture_output=True, check=True,
+    ).stdout
+    assert retained_task == b"CLI task snapshot\n"
     assert cli("report")["rounds_completed"] == 1
     assert json.loads(transport_state.read_text()) == {"observe": 2, "run": 1}

@@ -156,7 +156,8 @@ raise SystemExit(subprocess.run(args[index:], env=environment, check=False).retu
 
     run = subprocess.run(
         [*instance.base_command(paths, request), "/bin/sh", "-ceu",
-         'test "$CPL_REMOTE_MODE" = retained-broker'],
+         'test "$CPL_REMOTE_MODE" = retained-broker; '
+         'test -z "${EXPERIMENT_CONTROLLER+x}"'],
         text=True, capture_output=True, check=False,
     )
 

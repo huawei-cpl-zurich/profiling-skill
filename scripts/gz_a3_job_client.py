@@ -144,7 +144,7 @@ def attach_profile_evidence(result: dict, evidence_path: Path) -> None:
                    for capture in captures)):
         raise ClientError("remote response does not match compact profiling selector identity")
     # ``cases`` is the immutable input identity on the internal wire;
-    # ``profile_cases`` contains the rows exposed as ``cases`` by experimentctl.
+    # ``profile_cases`` contains the result rows exposed to the caller.
     if result.get("profile_cases") != evidence.get("cases"):
         raise ClientError("remote response does not match compact profiling evidence")
     captures = evidence.get("captures")

@@ -164,3 +164,39 @@ def test_phase_loop_loads_revisions_and_releases_one_lease(tmp_path, monkeypatch
     assert [value['state'] for value in results] == ['completed', 'failed', 'completed']
     assert {value['worker_pid'] for value in results} == {os.getpid()}
     assert {value['runtime_initializations'] for value in results} == {1}
+
+
+def test_failed_bootstrap_upload_is_retryable_without_a_worker(tmp_path):
+    from model_campaign_service import CampaignService, CampaignTools
+    from model_campaign_tools import export
+    public, bundle = tmp_path / 'public', tmp_path / 'bundle'
+    public.mkdir()
+    bundle.mkdir()
+    (public / 'candidate.py').write_text('version one')
+    (public / 'execution.json').write_text(json.dumps(dict(utc_deadline=
+        (datetime.now(timezone.utc) + timedelta(seconds=600)).isoformat())))
+    tools = CampaignTools.__new__(CampaignTools)
+    tools.state, tools.workspace = tmp_path / 'state', tmp_path / 'private'
+    tools.state.mkdir()
+    tools.cwd, tools.target, tools.runtime = str(tmp_path / 'remote'), 'test', 'runtime'
+    uploads, runs = [], []
+    def remote(*args):
+        if args[0] in ('targets', 'capabilities', 'preflight'):
+            return dict(state='completed')
+        if args[0] == 'upload':
+            uploads.append(args)
+            return dict(state='failed' if len(uploads) == 1 else 'completed')
+        if args[0] == 'run':
+            runs.append(args)
+            return dict(state='running', handle='remote:test:job:worker')
+        if args[0] == 'logs':
+            return dict(state='running', content='')
+        raise AssertionError(args)
+    tools.remote = remote
+    service = CampaignService(tools, bundle, public, export)
+    failed = service.start('check')
+    assert failed['state'] == 'failed' and failed['failure_stage'] == 'infrastructure'
+    assert not runs
+    pending = service.start('check')
+    assert pending['state'] == 'running' and len(runs) == 1
+    assert len(uploads) == 2

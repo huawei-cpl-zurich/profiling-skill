@@ -90,8 +90,14 @@ def start(service, operation):
     else:
         save(statefile, phase)
         receipt['bootstrap'] = True
-        receipt['upload'] = tools.remote('upload', tools.target, bundle,
-                                        phase['remote_folder'] + '.tar.gz')
+        try:
+            receipt['upload'] = tools.remote('upload', tools.target, bundle,
+                                            phase['remote_folder'] + '.tar.gz')
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+            receipt.update(state='failed', failure_stage='infrastructure')
+            statefile.replace(folder / 'phase.json')
+            save(folder / 'receipt.json', receipt)
+            return service.publish(receipt)
         save(folder / 'receipt.json', receipt)
     return service.observe(ident)
 
@@ -104,11 +110,16 @@ def launch(tools, receipt, folder):
     upload = tools.transfer(receipt, 'upload')
     save(folder / 'receipt.json', receipt)
     if upload['state'] != 'completed':
+        if upload['state'] in TERMINAL:
+            receipt.update(state='failed', failure_stage='infrastructure')
+            phasefile.replace(folder / 'phase.json')
+            save(folder / 'receipt.json', receipt)
         return dict(receipt, state='transfer-pending' if upload['state'] not in TERMINAL else 'failed')
     deadline = receipt['request']['utc_deadline']
     remaining = (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()
     if remaining <= 0:
         receipt.update(state='failed', failure_stage='budget')
+        phasefile.replace(folder / 'phase.json')
         save(folder / 'receipt.json', receipt)
         return receipt
     tools._staging_deadline = deadline
@@ -143,7 +154,8 @@ def observe(tools, ident):
     if not receipt.get('handle'):
         receipt = launch(tools, receipt, folder)
         if not receipt.get('handle'):
-            return dict(receipt, next='experiment-tool observe ' + ident)
+            return receipt if receipt.get('state') in TERMINAL else dict(
+                receipt, next='experiment-tool observe ' + ident)
     phase = json.loads((tools.state / 'phase.json').read_text())
     if phase.get('activation_required'):
         from phase_deadline import activate

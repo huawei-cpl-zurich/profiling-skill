@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import runpy
 import shlex
 import shutil
@@ -17,24 +18,57 @@ import uuid
 
 
 REMOTE_PROGRAM = r'''
-import csv, hashlib, json, os, re, shlex, subprocess, sys, tarfile, traceback
+import csv, hashlib, json, os, re, shlex, signal, subprocess, sys, tarfile, time, traceback
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from profile_device import bounded_run, wait_for_device
+from phase_deadline import wait_for_activation
 from a3_memory_batch import execute, capture, duration, summarize, validate_capture
 root = Path(__file__).resolve().parent
 request = json.loads((root / 'request.json').read_text())
 output = root / 'results'
 output.mkdir()
-summary = {'operation': request['verb'], 'implementation': request['implementation']}
+summary = {'operation': request['verb'], 'implementation': request['implementation'],
+           'source_sha256': request.get('source_sha256'),
+           'launch_contract': dict(runner_checked=False, profile_stream_verified=False)}
+started = time.monotonic()
+relative_budget = float(request.get('host_remaining_seconds', 1800))
+relative_budget = min(relative_budget,
+                      float(os.environ.get('CPL_ROLE_REMAINING_SECONDS', relative_budget)))
+summary['budget_evidence'] = dict(original_host_utc_deadline=request.get('utc_deadline'),
+    host_remaining_seconds=request.get('host_remaining_seconds'),
+    dispatch_remaining_seconds=relative_budget,
+    policy='host-owned deadline; remote monotonic elapsed time only')
+def remaining():
+    # The host has already subtracted staging time. Remote UTC may differ by
+    # minutes, so comparing it with a host timestamp rejects healthy work.
+    value = relative_budget - (time.monotonic() - started)
+    if value <= 0:
+        raise TimeoutError('original role deadline expired')
+    return value
+def expire(*unused):
+    raise TimeoutError('original role deadline expired')
+original_execute = execute
+def execute(argv, folder, env, *, timeout=600):
+    return original_execute(argv, folder, env, timeout=min(timeout, remaining()))
 lease = None
 stage = 'environment'
 try:
+    if request.get('activation_required'):
+        relative_budget = wait_for_activation(root / 'activation.json', remaining()) - started
+    signal.signal(signal.SIGALRM, expire)
+    signal.setitimer(signal.ITIMER_REAL, remaining())
+    def query(*arguments):
+        result = bounded_run(['npu-smi', 'info', *arguments], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=min(120, remaining()))
+        if result.returncode:
+            raise RuntimeError('npu-smi query failed: ' + result.stderr[-2000:])
+        return result.stdout
     def probe(env):
         p = bounded_run([sys.executable, '-c', 'import torch,torch_npu; torch.empty(1,device="npu"); torch.npu.synchronize()'],
-                        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
+                        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=min(180, remaining()))
         return p.returncode == 0, p.stderr[-1000:]
-    physical, env, lease = wait_for_device(probe)
+    physical, env, lease = wait_for_device(probe, query=query)
     summary.update(physical_device=physical, logical_device=0)
     command = [sys.executable, str(root / 'runner.py'), '--implementation', request['implementation']]
     check_command = list(command)  # Measurement selection must not narrow supported-input checks.
@@ -51,6 +85,7 @@ try:
     if not any(isinstance(r, dict) and r.get('correctness') is True for r in records):
         raise RuntimeError('trusted runner omitted correctness evidence')
     summary['correctness'] = records
+    summary['launch_contract']['runner_checked'] = True
     if request['verb'] == 'events':
         stage = 'event-timing'
         spec = json.loads((root / 'task.json').read_text())
@@ -66,7 +101,7 @@ try:
         summary['kernel_contract'] = dict(evidence_kind='trusted_host_launch_structure',
             entrypoint='task_kernel', launches_per_iteration=1, exported_selector_available=False,
             limitation='host structure only; exported device stream is not inspected by events')
-    if request['verb'] in ('check', 'timing', 'pipes', 'ir', 'sanitize'):
+    if request['verb'] in ('timing', 'pipes', 'sanitize'):
         stage = 'profiling'
         wrapper = root / 'application.sh'
         wrapper.write_text('#!/bin/sh\nexec ' + shlex.join(command) + '\n')
@@ -88,9 +123,12 @@ try:
             raise RuntimeError('single-kernel contract requires exactly one compute launch in the complete bounded stream; observed ' + str(len(rows)) + ' rows: ' + repr(sorted(names)))
         selector = names.pop()
         summary['selector'] = selector
+        summary['launch_contract']['profile_stream_verified'] = True
         stage = 'profiling'
         if request['verb'] in ('timing', 'pipes'):
-            metric, count = ('BasicInfo', 5) if request['verb'] == 'timing' else ('PipeUtilization', 3)
+            metric, count = (('BasicInfo', request.get('timing_captures', 5)) if request['verb'] == 'timing'
+                             else ('PipeUtilization', request.get('pipe_captures', 3)))
+            summary['capture_count'] = count
             captures = [capture(command, output / ('capture-' + str(i)), env, metric, selector) for i in range(count)]
             summary['captures'] = captures
             if request['verb'] == 'timing':
@@ -124,9 +162,11 @@ try:
             raise RuntimeError('no compiler artifacts returned by this implementation')
     summary['state'] = 'completed'
 except BaseException as error:
-    summary.update(state='failed', failure_stage=stage, error=str(error), traceback=traceback.format_exc())
+    summary.update(state='failed', failure_stage='budget' if isinstance(error, TimeoutError) else stage,
+                   error=str(error), traceback=traceback.format_exc())
     summary['retained_diagnostics'] = [str(p.relative_to(root)) for p in (root / 'build').rglob('build.stderr')]
 finally:
+    signal.setitimer(signal.ITIMER_REAL, 0)
     if lease: lease.close()
     (output / 'summary.json').write_text(json.dumps(summary, indent=2))
     # Compact reports and inventoried compiler outputs, never raw profiler payloads.
@@ -146,6 +186,13 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+def positive_count(value):
+    count = int(value)
+    if count < 1:
+        raise ValueError('capture counts must be positive integers')
+    return count
+
+
 class Tools:
     def __init__(self, bundle, workspace, target='bz-a3-1', runtime='py311-torch'):
         self.bundle, self.workspace = Path(bundle).resolve(), Path(workspace).resolve()
@@ -154,13 +201,52 @@ class Tools:
         registry = module['load_registry'](Path(os.path.expanduser(os.environ.get('CPL_REMOTE_CONFIG', '~/.config/cpl/remotes.yaml'))))
         config = module['get_target'](registry, target)
         self.cwd = config['workspace']
+        self.backend = config['backend']
         self.target, self.runtime = target, runtime
         self.state = self.workspace.parent / 'tool-state'
         self.state.mkdir(exist_ok=True)
 
     def remote(self, *arguments):
-        command = [str(self.client), '--json', *map(str, arguments)]
-        result = subprocess.run(command, text=True, capture_output=True, timeout=240)
+        arguments = list(map(str, arguments))
+        # Listener API paths are workspace-relative; payload shell paths remain
+        # absolute so changing the command cwd never changes archive locations.
+        if getattr(self, 'backend', None) == 'remote-agent' and len(arguments) > 1 and arguments[1] == self.target:
+            operation = arguments[0]
+            index = None
+            if operation == 'run' and '--cwd' in arguments:
+                index = arguments.index('--cwd') + 1
+            elif operation == 'upload':
+                index = 3
+            elif operation == 'download':
+                index = 2
+            if index is not None:
+                path = PurePosixPath(arguments[index])
+                if '..' in path.parts:
+                    raise ValueError('remote path must stay within the configured workspace')
+                if path.is_absolute():
+                    try:
+                        path = path.relative_to(PurePosixPath(self.cwd))
+                    except ValueError as error:
+                        raise ValueError('remote path must stay within the configured workspace') from error
+                if str(path) == '.':
+                    if operation != 'run':
+                        raise ValueError('remote transfer path must name an item in the workspace')
+                    path = PurePosixPath('.cpl-remote')
+                arguments[index] = str(path)
+        command = [str(self.client), '--json', *arguments]
+        timeout = 240
+        deadline = getattr(self, '_staging_deadline', None)
+        if deadline and arguments[0] in ('targets', 'capabilities', 'preflight', 'upload', 'run'):
+            timeout = min(timeout, (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds())
+            if timeout <= 0:
+                raise TimeoutError('original role deadline expired during staging')
+        try:
+            result = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            deadline = getattr(self, '_staging_deadline', None)
+            if deadline and datetime.fromisoformat(deadline) <= datetime.now(timezone.utc):
+                raise TimeoutError('original role deadline expired during transport') from error
+            raise
         with (self.state / 'transport.jsonl').open('a') as stream:
             stream.write(json.dumps(dict(command=command, code=result.returncode,
                                          stdout=result.stdout, stderr=result.stderr)) + '\n')
@@ -172,7 +258,13 @@ class Tools:
             raise RuntimeError('transport operation failed: ' + json.dumps(payload))
         return payload
 
-    def start(self, verb, implementation, sanitizer, variant=None):
+    def start(self, verb, implementation, sanitizer, variant=None, *, timing_captures=5, pipe_captures=3):
+        timing_captures, pipe_captures = positive_count(timing_captures), positive_count(pipe_captures)
+        # A candidate edit never licenses duplicate work while a prior call lives.
+        for path in sorted(self.state.glob('*/receipt.json')):
+            previous = json.loads(path.read_text())
+            if previous.get('state') not in ('completed', 'failed', 'cancelled'):
+                return self.observe(previous.get('call_id', path.parent.name))
         spec = json.loads((self.bundle / 'task.json').read_text())
         if variant is not None and variant not in spec.get('variants', {}):
             raise ValueError('unknown task variant')
@@ -196,12 +288,22 @@ class Tools:
             shutil.copyfile(self.bundle / 'a3_native_build.py', folder / 'a3_native_build.py')
         shutil.copyfile(source, folder / source.name)
         helpers = Path(__file__).resolve().parent
-        for name in ('profile_device.py', 'a3_memory_batch.py'):
+        for name in ('profile_device.py', 'a3_memory_batch.py', 'phase_deadline.py'):
             shutil.copyfile(helpers / name, folder / name)
         request = dict(verb=verb, implementation=implementation, sanitizer=sanitizer,
-                       source_sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+                       timing_captures=timing_captures, pipe_captures=pipe_captures,
+                       source_sha256=hashlib.sha256((folder / source.name).read_bytes()).hexdigest())
         if variant is not None:
             request['variant'] = variant
+        context = self.workspace / 'execution.json'
+        if context.exists():
+            deadline = json.loads(context.read_text())['utc_deadline']
+            budget = (datetime.fromisoformat(deadline) - datetime.now(timezone.utc)).total_seconds()
+            if budget <= 0:
+                return dict(state='failed', failure_stage='budget', error='original role deadline expired',
+                            source_sha256=request['source_sha256'])
+            request.update(utc_deadline=deadline, host_remaining_seconds=budget, activation_required=True)
+            self._staging_deadline = deadline
         save(folder / 'request.json', request)
         (folder / 'execute.py').write_text(REMOTE_PROGRAM)
         archive = folder / (ident + '.tar.gz')
@@ -211,15 +313,22 @@ class Tools:
         remote_archive = self.cwd.rstrip('/') + '/' + archive.name
         remote_folder = self.cwd.rstrip('/') + '/blind-tools-' + ident
         receipt = dict(call_id=ident, target=self.target, runtime=self.runtime, cwd=self.cwd,
-                       remote_archive=remote_archive, remote_folder=remote_folder, request=request, state='prepared')
+                       remote_archive=remote_archive, remote_folder=remote_folder, request=request,
+                       source_sha256=request['source_sha256'], state='prepared')
         save(folder / 'receipt.json', receipt)
-        for command in (('targets',), ('capabilities', self.target), ('preflight', self.target)):
-            self.remote(*command)
         script = folder / 'run.sh'
         script.write_text('#!/bin/bash\nset -eu\nmkdir -p ' + shlex.quote(remote_folder) + '\n' +
                           'tar -xzf ' + shlex.quote(remote_archive) + ' -C ' + shlex.quote(remote_folder) + '\n' +
                           'cd ' + shlex.quote(remote_folder) + '\nexec python execute.py\n')
-        receipt['upload'] = self.remote('upload', self.target, archive, remote_archive)
+        try:
+            for command in (('targets',), ('capabilities', self.target), ('preflight', self.target)):
+                self.remote(*command)
+            receipt['upload'] = self.remote('upload', self.target, archive, remote_archive)
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            receipt.update(state='failed', failure_stage='budget' if isinstance(error, TimeoutError) else 'infrastructure',
+                           error=str(error))
+            save(folder / 'receipt.json', receipt)
+            return receipt
         save(folder / 'receipt.json', receipt)
         if receipt['upload'].get('state') != 'completed':
             return self.observe(ident)
@@ -228,6 +337,20 @@ class Tools:
     def dispatch(self, folder, receipt):
         if receipt.get('dispatch_intent'):
             return self.unconfirmed(receipt)
+        request = receipt.get('request', {})
+        if request.get('utc_deadline'):
+            self._staging_deadline = request['utc_deadline']
+            budget = (datetime.fromisoformat(request['utc_deadline']) - datetime.now(timezone.utc)).total_seconds()
+            if budget <= 0:
+                receipt.update(state='failed', failure_stage='budget', error='original role deadline expired',
+                               source_sha256=request.get('source_sha256'))
+                save(folder / 'receipt.json', receipt)
+                return receipt
+            receipt['dispatch_remaining_seconds'] = min(budget, request['host_remaining_seconds'])
+            script = folder / 'run.sh'
+            text = script.read_text()
+            script.write_text(text.replace('set -eu\n', 'set -eu\nexport CPL_ROLE_REMAINING_SECONDS=' +
+                shlex.quote(str(receipt['dispatch_remaining_seconds'])) + '\n', 1))
         # Commit the per-call intent before crossing the external dispatch boundary.
         # A lost response must never turn an observation into a second run.
         receipt['dispatch_intent'] = True
@@ -278,10 +401,23 @@ class Tools:
                 return dict(receipt, error=str(error), next='experiment-tool observe ' + ident)
             save(folder / 'receipt.json', receipt)
             if transfer['state'] in ('failed', 'cancelled'):
-                return dict(receipt, state='failed', failure_stage='infrastructure', error='upload ' + transfer['state'], transfer=transfer)
+                receipt.update(state='failed', failure_stage='infrastructure',
+                               error='upload ' + transfer['state'], transfer=transfer)
+                save(folder / 'receipt.json', receipt)
+                return receipt
             if transfer['state'] != 'completed':
                 return dict(receipt, state='transfer-pending', next='experiment-tool observe ' + ident)
             return self.dispatch(folder, receipt)
+        try:
+            activate = runpy.run_path(str(Path(__file__).with_name('phase_deadline.py')))['activate']
+            if not activate(self, folder, receipt):
+                return dict(receipt, next='experiment-tool observe ' + ident)
+        except TimeoutError as error:
+            receipt.update(state='failed', failure_stage='budget', error=str(error))
+            save(folder / 'receipt.json', receipt)
+            return receipt
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            return dict(receipt, activation_error=str(error), next='experiment-tool observe ' + ident)
         try:
             result = self.remote('observe', receipt['handle'], '--wait', '--timeout', '120')
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
@@ -334,24 +470,38 @@ def main(argv=None):
     parser.add_argument('--implementation', choices=('baseline', 'candidate'), default='candidate')
     parser.add_argument('--sanitizer', choices=('memcheck', 'racecheck', 'synccheck'), default='racecheck')
     parser.add_argument('--variant', help='task.json variant name (supported native wait tasks only)')
+    parser.add_argument('--timing-captures', type=positive_count, default=5)
+    parser.add_argument('--pipe-captures', type=positive_count, default=3)
     args = parser.parse_args(argv)
+    capture_configuration = dict(timing_captures=args.timing_captures, pipe_captures=args.pipe_captures)
     if args.verb == 'help':
         print('experiment-tool {check,timing,pipes,events,ir,sanitize} [--implementation baseline|candidate] [--variant NAME]\n'
               'sanitize [--sanitizer memcheck|racecheck|synccheck] (Triton only)\n'
               'experiment-tool observe CALL_ID resumes an existing retained job.\n'
-              'All supported execution operations (check, timing, pipes, ir, sanitize) include four correctness checks\n'
-              'and complete bounded single-kernel verification; a separate check call is unnecessary before timing.\n'
-              'Results and diagnostics appear under evidence/CALL_ID. timing returns five msprof op BasicInfo samples;\n'
-              'pipes returns three PipeUtilization captures. ir returns Triton compiler artifacts; native ir is unsupported.\n'
-              'events returns seven ACL stream-event samples after three warmups (native wait tasks only);\n'
-              'events does not require msprof; its launch contract comes from the trusted host, not exported selector discovery.\n'
-              'event brackets can include host-submission gaps and are not intrinsic kernel latency.\n'
+              'All execution operations include four correctness checks and the trusted runner launch contract.\n'
+              'timing/pipes/sanitize additionally verify exactly one exported compute launch in a bounded profiler stream;\n'
+              'check/ir do not verify that stream. launch_contract reports each guarantee separately.\n'
+              'A separate check call is unnecessary before timing.\n'
+              'Results and diagnostics appear under evidence/CALL_ID.\n'
+              f'Effective --timing-captures: {args.timing_captures} BasicInfo samples; '
+              f'--pipe-captures: {args.pipe_captures} PipeUtilization captures.\n'
+              'Overrides must be positive integers; retain configured counts unless a justified change fits the deadline.\n'
+              'ir returns Triton compiler artifacts; native ir is unsupported.\n'
+              'check and ir do not require a profiler. Optional execution.json utc_deadline bounds original role work,\n'
+              'including staging and device waits; observation resumes the same call without resetting its budget.\n'
+              'events returns seven ACL stream-event samples after three warmups (native wait tasks only),\n'
+              'without msprof or exported-selector verification; brackets may include host-submission gaps.\n'
               'Candidate failures are retained; nonterminal infrastructure observations must be resumed, not duplicated.')
+        print(json.dumps(dict(capture_configuration=capture_configuration)))
         return 0
     try:
         tools = Tools(args.bundle, args.workspace, args.target, args.runtime)
         if args.verb == 'observe' and not args.call_id: parser.error('observe requires CALL_ID')
-        result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(args.verb, args.implementation, args.sanitizer, args.variant)
+        if args.variant is not None:
+            capture_configuration['variant'] = args.variant
+        result = tools.observe(args.call_id) if args.verb == 'observe' else tools.start(
+            args.verb, args.implementation, args.sanitizer,
+            **capture_configuration)
         print(json.dumps(result, indent=2))
         return 1 if result.get('state') == 'failed' else 0
     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:

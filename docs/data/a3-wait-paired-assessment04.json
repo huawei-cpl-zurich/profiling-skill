@@ -1,0 +1,5597 @@
+{
+  "campaign": "a3-wait-paired-04",
+  "comparison": "previous skill body versus wait-lesson delta; common applicability metadata",
+  "source_commit": "c6c9af9b34f43604b67172c52f64c96b9fa5a866",
+  "old_skill_body": "b5a3949c5d8fc5e8c28630c1ee9a074081d1253b",
+  "new_skill_body": "affe627be5b83833205a89e8ba39cbfbf546a852",
+  "common_metadata": "ed1145407af02e6b6b99095c0547cdea37d74025",
+  "model": {
+    "name": "gpt-5.6-sol",
+    "reasoning_effort": "low"
+  },
+  "anonymous_scores_sha256": "249aae78c5bee45f4545b728a9eb1302045fa0d814053537618b97596b872544",
+  "dimension_order": [
+    "acquisition_provenance",
+    "interpretation",
+    "controlled_decisions",
+    "calibration"
+  ],
+  "cells": [
+    {
+      "cell": "intercore-r2-new",
+      "anonymous_alias": "intercore/A",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "total": 8,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Seeded arithmetic and producer/consumer route preserved; wait deferred across independent recurrence. Source and compact final summaries bound; causal overlap unproven."
+      },
+      "elapsed_seconds": 1024.4770379066467,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 2,
+      "final_commit": "72c5615b8e4d349de3bd85e1d5b6ff68b0fe9061",
+      "final_source_sha256": "3b64893c674d27d640f9479ce06b9be33ed48da381427a9a85d0aa5c4c0aa9cd",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1260968,
+          "cached_input_tokens": 1226496,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8048,
+          "reasoning_output_tokens": 1406
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "26705f10773f420f",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1",
+            "variant": "imbalanced"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              20.879583,
+              21.47957,
+              21.079578,
+              20.939581,
+              21.679567
+            ],
+            "median_us": 21.079578,
+            "range_over_median": 0.03795066485676318,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "78683184a6e74ce7",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "imbalanced"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              22.839542,
+              22.99954,
+              23.279535,
+              22.959541,
+              22.639547
+            ],
+            "median_us": 22.959541,
+            "range_over_median": 0.027874599061017764,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "b93f59b737e34902",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              14.9797,
+              14.339713,
+              14.699706,
+              14.679707,
+              14.239716
+            ],
+            "median_us": 14.679707,
+            "range_over_median": 0.05040863554020525,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "b9ff1015d04040e9",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              13.899722,
+              13.839724,
+              14.939701,
+              15.299694,
+              14.879703
+            ],
+            "median_us": 14.879703,
+            "range_over_median": 0.0981182218489173,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "db90da74e3e44193",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "3b64893c674d27d640f9479ce06b9be33ed48da381427a9a85d0aa5c4c0aa9cd"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              13.51973,
+              13.239736,
+              13.97972,
+              13.859723,
+              13.799724
+            ],
+            "median_us": 13.799724,
+            "range_over_median": 0.05362310144753618,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "e9e47075d9324e7e",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              15.699686,
+              15.719686,
+              15.759685,
+              15.419692,
+              15.819684
+            ],
+            "median_us": 15.719686,
+            "range_over_median": 0.025445291973389357,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "ecb0dea2ba734d72",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "3b64893c674d27d640f9479ce06b9be33ed48da381427a9a85d0aa5c4c0aa9cd",
+            "variant": "imbalanced"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              21.439571,
+              21.379572,
+              22.539549,
+              21.45957,
+              22.459551
+            ],
+            "median_us": 21.45957,
+            "range_over_median": 0.054054065389008324,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "intercore-r2-old",
+      "anonymous_alias": "intercore/B",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "total": 8,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Independent a/w chains paired without dropping operations; all variants checked by trusted correctness loop, default latency only. No imbalanced speedup established."
+      },
+      "elapsed_seconds": 1033.5405793190002,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 6,
+      "final_commit": "45141c07596c2671156d5857f148cdeae3c5e763",
+      "final_source_sha256": "67fb31e1cf701d57427a560ac3fe0c3d8539ff7df0c02a1a53c2448563aff0bb",
+      "reported_token_usage": [
+        {
+          "input_tokens": 2413423,
+          "cached_input_tokens": 2321920,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 16008,
+          "reasoning_output_tokens": 3983
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "26da91f4afdc46d7",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "67fb31e1cf701d57427a560ac3fe0c3d8539ff7df0c02a1a53c2448563aff0bb",
+            "variant": "imbalanced"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": true
+        },
+        {
+          "call_id": "33b83b76b5c1445f",
+          "request": {
+            "verb": "events",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "b1f62b7615d470b58ea928b2796be7a23ca7accbbf29f4dd6a77bd682428b6a5",
+            "variant": "imbalanced"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "38c70e98c3024afd",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "b1f62b7615d470b58ea928b2796be7a23ca7accbbf29f4dd6a77bd682428b6a5",
+            "variant": "default"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "43aa42020b9d4855",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "default"
+          },
+          "retained_state": "observation-unavailable",
+          "job_admitted": true,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "47403628618543e4",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "imbalanced"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "7d3dc21f45a640d8",
+          "request": {
+            "verb": "check",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "67fb31e1cf701d57427a560ac3fe0c3d8539ff7df0c02a1a53c2448563aff0bb",
+            "variant": "imbalanced"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": true
+        },
+        {
+          "call_id": "7d40e72424d9435d",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "67fb31e1cf701d57427a560ac3fe0c3d8539ff7df0c02a1a53c2448563aff0bb",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              13.51973,
+              14.03972,
+              13.97972,
+              13.639728,
+              14.03972
+            ],
+            "median_us": 13.97972,
+            "range_over_median": 0.037196023954700216,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "ca87e93ef64d4b4c",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "default"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "d7b2904fd27a424c",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              15.619688,
+              15.139697,
+              15.679687,
+              15.659687,
+              14.919702
+            ],
+            "median_us": 15.619688,
+            "range_over_median": 0.04865558134067725,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "eb5124868e56491a",
+          "request": {
+            "verb": "events",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "imbalanced"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        }
+      ]
+    },
+    {
+      "cell": "intercore-r1-old",
+      "anonymous_alias": "intercore/C",
+      "assessment": {
+        "scores": [
+          2,
+          1,
+          0,
+          1
+        ],
+        "total": 4,
+        "numerical": "pass",
+        "work": "violated",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "candidate.asc:20,30-33,42-45 bypass balanced published peer output/rendezvous via direct input reload. Numeric equivalent but violates declared producer/consumer work route."
+      },
+      "elapsed_seconds": 1094.5733587741852,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "c20aa47aca576dfee814d7cacde4a3a66358a218",
+      "final_source_sha256": "b34a5fa1c676416769da6700dadd1c9e01f1ce07bbfc3bc1d9b6de2ea5af21e4",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1396649,
+          "cached_input_tokens": 1340800,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8452,
+          "reasoning_output_tokens": 1952
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "0d76e35452f1478b",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "b34a5fa1c676416769da6700dadd1c9e01f1ce07bbfc3bc1d9b6de2ea5af21e4",
+            "variant": "imbalanced"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              23.399532,
+              22.759544,
+              22.859543,
+              23.439531,
+              23.439531
+            ],
+            "median_us": 23.399532,
+            "range_over_median": 0.029059854701367405,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "221016db674e4b54",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "b34a5fa1c676416769da6700dadd1c9e01f1ce07bbfc3bc1d9b6de2ea5af21e4",
+            "variant": "little-work"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              7.119858,
+              7.299854,
+              7.259855,
+              6.319874,
+              6.579868
+            ],
+            "median_us": 7.119858,
+            "range_over_median": 0.1376403855245427,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "63d877a302e64b89",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "82865310f388b88a83fe430a476e1a94a60c6050c0fe6bd2568dcd9bdc6b22f7",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              16.279675,
+              15.799684,
+              16.919662,
+              16.419672,
+              15.99968
+            ],
+            "median_us": 16.279675,
+            "range_over_median": 0.06879609083105158,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "8f1a73d9e3284604",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "b34a5fa1c676416769da6700dadd1c9e01f1ce07bbfc3bc1d9b6de2ea5af21e4",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              14.159717,
+              13.579728,
+              14.379712,
+              13.679727,
+              14.319714
+            ],
+            "median_us": 14.159717,
+            "range_over_median": 0.056497174343244305,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "9cd46272a8734a7e",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "6956998d73885e41ee9115b2ee6a7658d09a0bc8b98357c7c4b2cabfe87b5c35",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              16.779665,
+              16.379673,
+              16.799664,
+              16.079678,
+              16.01968
+            ],
+            "median_us": 16.379673,
+            "range_over_median": 0.04761902145421333,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "d76b12c3263c4ad2",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              15.859683,
+              15.779684,
+              15.319694,
+              15.719686,
+              15.879683
+            ],
+            "median_us": 15.779684,
+            "range_over_median": 0.03548797301644316,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "intercore-r1-new",
+      "anonymous_alias": "intercore/D",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "total": 8,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Only wait relocation across independent recurrence retained; rejected barrier trial reversed, all variants numerically checked and timed."
+      },
+      "elapsed_seconds": 1015.9409716129303,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "d6670e7a0c0a0a1273926044efcf27014afbdd18",
+      "final_source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1318175,
+          "cached_input_tokens": 1278080,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8798,
+          "reasoning_output_tokens": 918
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "2caf3346ff754b25",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1",
+            "variant": "little-work"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              8.959821,
+              10.399792,
+              9.399812,
+              9.019819,
+              9.319814
+            ],
+            "median_us": 9.319814,
+            "range_over_median": 0.15450640967727466,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "83512d012cc84b10",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              14.379712,
+              15.679687,
+              14.259715,
+              15.0397,
+              14.439712
+            ],
+            "median_us": 14.439712,
+            "range_over_median": 0.0983379723916931,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "83a09f2eee434a8a",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "imbalanced"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              23.059538,
+              23.059538,
+              23.219536,
+              22.959541,
+              23.799524
+            ],
+            "median_us": 23.059538,
+            "range_over_median": 0.036426705513354175,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "8633ceb461b74f76",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "5b92ae344fbad48d5fd1bb05d3b8d2071ef634397aa8f8e8a609a3b6eb04c1d1",
+            "variant": "imbalanced"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              20.97958,
+              22.279554,
+              21.619568,
+              21.199575,
+              21.639566
+            ],
+            "median_us": 21.619568,
+            "range_over_median": 0.06012950860072701,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "c20d7dd6fa0a4609",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "little-work"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              9.299814,
+              9.239815,
+              9.639807,
+              9.839803,
+              9.619807
+            ],
+            "median_us": 9.619807,
+            "range_over_median": 0.06237006626016507,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "c3da35dcd0734076",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "6e48c4aa99d5a0f8f466eefbb7028955a0580818605ef461769773caa22429af",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              16.359673,
+              16.219675,
+              15.959681,
+              17.099657,
+              17.119658
+            ],
+            "median_us": 16.359673,
+            "range_over_median": 0.07090465683513364,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "e2e43228750346da",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "da6d5ec03ec047f7f054d45901c29c3348418344c952c3d13057e48a6937dbbf",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              15.799684,
+              15.799684,
+              15.839684,
+              15.539689,
+              14.879703
+            ],
+            "median_us": 15.799684,
+            "range_over_median": 0.06075950632936715,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "intra-r2-old",
+      "anonymous_alias": "intra/A",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          0,
+          1
+        ],
+        "total": 5,
+        "numerical": "pass",
+        "work": "violated",
+        "pipe_use": true,
+        "critical_claims": [],
+        "audit": "candidate.asc:23-26 replaces required four recurrence operations with three. Actual vector activity falls, but work contract invalid. Same-device pipe claim contradicts raw identities, not device equivalence."
+      },
+      "elapsed_seconds": 875.3446426391602,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 3,
+      "final_commit": "14da43f54894e1aca257d2d70785cfe28f2f6691",
+      "final_source_sha256": "3e26fb21b30448b904131bce5e447b850db0856e5e66ede5fbc5159fcbf7832a",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1098518,
+          "cached_input_tokens": 1039744,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 9096,
+          "reasoning_output_tokens": 1890
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "33cf4d04efb84d7f",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.599748,
+              12.379752,
+              12.019759,
+              12.919742,
+              12.139757
+            ],
+            "median_us": 12.379752,
+            "range_over_median": 0.07269798296444055,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "500f0a05370f4a3b",
+          "request": {
+            "verb": "events",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "3e26fb21b30448b904131bce5e447b850db0856e5e66ede5fbc5159fcbf7832a",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": null,
+          "timing": null,
+          "event_timing": {
+            "samples_us": [
+              24.2399998,
+              13.5799999,
+              10.5600004,
+              13.6599998,
+              15.7999992,
+              23.6200008,
+              11.1599998
+            ],
+            "median_us": 13.6599998,
+            "range_over_median": 1.0014640995821977,
+            "low_confidence": true
+          },
+          "event_scope": "stream-event bracket may include host-submission gaps; not intrinsic kernel latency"
+        },
+        {
+          "call_id": "6becebafc3694b8d",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "e4e9e3b96816f7c8404ca06d26fd8c0ae00e792e691b0610251f343384755949",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.699746,
+              12.119758,
+              12.259755,
+              12.579748,
+              12.119758
+            ],
+            "median_us": 12.259755,
+            "range_over_median": 0.04730828634014302,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "73b6453c61074fb4",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "3e26fb21b30448b904131bce5e447b850db0856e5e66ede5fbc5159fcbf7832a",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              10.299794,
+              10.319794,
+              10.419791,
+              9.939801,
+              9.959801
+            ],
+            "median_us": 10.299794,
+            "range_over_median": 0.04660190291184472,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "a4c44b52b07d4f8e",
+          "request": {
+            "verb": "pipes",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null,
+          "pipe_captures": [
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "11.764444",
+                  "aiv_total_cycles": "21176",
+                  "aiv_vec_time(us)": "7.636667",
+                  "aiv_vec_ratio": "0.649131",
+                  "aiv_mte2_time(us)": "1.791111",
+                  "aiv_mte2_ratio": "0.152248",
+                  "aiv_mte2_active_bw(GB/s)": "25.557526",
+                  "aiv_mte3_time(us)": "0.281111",
+                  "aiv_mte3_ratio": "0.023895",
+                  "aiv_mte3_active_bw(GB/s)": "108.560547",
+                  "aiv_icache_miss_rate": "0.053797",
+                  "aiv_scalar_time(us)": "1.364444",
+                  "aiv_scalar_ratio": "0.115980",
+                  "aiv_scalar_single_time(us)": "0.241111",
+                  "aiv_scalar_dual_time(us)": "0.142778",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "7.537778",
+                  "aiv_scalar_wait_ib_time(us)": "0.864444",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "9.737223",
+                  "aiv_total_cycles": "17527",
+                  "aiv_vec_time(us)": "7.636667",
+                  "aiv_vec_ratio": "0.784276",
+                  "aiv_mte2_time(us)": "0.544444",
+                  "aiv_mte2_ratio": "0.055914",
+                  "aiv_mte2_active_bw(GB/s)": "84.079041",
+                  "aiv_mte3_time(us)": "0.992222",
+                  "aiv_mte3_ratio": "0.101900",
+                  "aiv_mte3_active_bw(GB/s)": "30.756798",
+                  "aiv_icache_miss_rate": "0.050955",
+                  "aiv_scalar_time(us)": "0.976111",
+                  "aiv_scalar_ratio": "0.100245",
+                  "aiv_scalar_single_time(us)": "0.241111",
+                  "aiv_scalar_dual_time(us)": "0.142778",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "5.977778",
+                  "aiv_scalar_wait_ib_time(us)": "0.725000",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "12.041111",
+                  "aiv_total_cycles": "21674",
+                  "aiv_vec_time(us)": "7.636667",
+                  "aiv_vec_ratio": "0.634216",
+                  "aiv_mte2_time(us)": "2.166111",
+                  "aiv_mte2_ratio": "0.179893",
+                  "aiv_mte2_active_bw(GB/s)": "21.132975",
+                  "aiv_mte3_time(us)": "0.296111",
+                  "aiv_mte3_ratio": "0.024592",
+                  "aiv_mte3_active_bw(GB/s)": "103.061241",
+                  "aiv_icache_miss_rate": "0.054839",
+                  "aiv_scalar_time(us)": "1.718333",
+                  "aiv_scalar_ratio": "0.142706",
+                  "aiv_scalar_single_time(us)": "0.240000",
+                  "aiv_scalar_dual_time(us)": "0.143333",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "7.118333",
+                  "aiv_scalar_wait_ib_time(us)": "0.717222",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call_id": "b5f4335a4bed49d1",
+          "request": {
+            "verb": "events",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": null,
+          "timing": null,
+          "event_timing": {
+            "samples_us": [
+              16.7599983,
+              13.3400002,
+              25.5999985,
+              12.9399996,
+              16.4200001,
+              12.7600002,
+              16.4800014
+            ],
+            "median_us": 16.4200001,
+            "range_over_median": 0.7819730951158765,
+            "low_confidence": true
+          },
+          "event_scope": "stream-event bracket may include host-submission gaps; not intrinsic kernel latency"
+        },
+        {
+          "call_id": "d7b47589782e407d",
+          "request": {
+            "verb": "pipes",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "3e26fb21b30448b904131bce5e447b850db0856e5e66ede5fbc5159fcbf7832a",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null,
+          "pipe_captures": [
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "9.833333",
+                  "aiv_total_cycles": "17700",
+                  "aiv_vec_time(us)": "6.107778",
+                  "aiv_vec_ratio": "0.621130",
+                  "aiv_mte2_time(us)": "1.602778",
+                  "aiv_mte2_ratio": "0.162994",
+                  "aiv_mte2_active_bw(GB/s)": "28.560646",
+                  "aiv_mte3_time(us)": "0.291111",
+                  "aiv_mte3_ratio": "0.029605",
+                  "aiv_mte3_active_bw(GB/s)": "104.831375",
+                  "aiv_icache_miss_rate": "0.051360",
+                  "aiv_scalar_time(us)": "1.440000",
+                  "aiv_scalar_ratio": "0.146441",
+                  "aiv_scalar_single_time(us)": "0.260000",
+                  "aiv_scalar_dual_time(us)": "0.115000",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "5.086667",
+                  "aiv_scalar_wait_ib_time(us)": "0.867778",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "8.017222",
+                  "aiv_total_cycles": "14431",
+                  "aiv_vec_time(us)": "6.107778",
+                  "aiv_vec_ratio": "0.761832",
+                  "aiv_mte2_time(us)": "0.645556",
+                  "aiv_mte2_ratio": "0.080521",
+                  "aiv_mte2_active_bw(GB/s)": "70.910034",
+                  "aiv_mte3_time(us)": "1.092778",
+                  "aiv_mte3_ratio": "0.136304",
+                  "aiv_mte3_active_bw(GB/s)": "27.926611",
+                  "aiv_icache_miss_rate": "0.055016",
+                  "aiv_scalar_time(us)": "0.978889",
+                  "aiv_scalar_ratio": "0.122098",
+                  "aiv_scalar_single_time(us)": "0.260000",
+                  "aiv_scalar_dual_time(us)": "0.115000",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "4.511111",
+                  "aiv_scalar_wait_ib_time(us)": "0.790556",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "10.351111",
+                  "aiv_total_cycles": "18632",
+                  "aiv_vec_time(us)": "6.107778",
+                  "aiv_vec_ratio": "0.590060",
+                  "aiv_mte2_time(us)": "1.990000",
+                  "aiv_mte2_ratio": "0.192250",
+                  "aiv_mte2_active_bw(GB/s)": "23.003201",
+                  "aiv_mte3_time(us)": "0.261111",
+                  "aiv_mte3_ratio": "0.025225",
+                  "aiv_mte3_active_bw(GB/s)": "116.875832",
+                  "aiv_icache_miss_rate": "0.054217",
+                  "aiv_scalar_time(us)": "1.430000",
+                  "aiv_scalar_ratio": "0.138149",
+                  "aiv_scalar_single_time(us)": "0.260000",
+                  "aiv_scalar_dual_time(us)": "0.115000",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "5.713889",
+                  "aiv_scalar_wait_ib_time(us)": "0.931667",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell": "intra-r1-old",
+      "anonymous_alias": "intra/B",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "total": 8,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Contiguous complete input transfer preserves four recurrence operations. Terminal barrier removed but no resulting hazard established; native teardown/race proof unknown. Tied latency reported honestly."
+      },
+      "elapsed_seconds": 928.5059382915497,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "f10ce01a2ad861016e5e2340c3431ae93b44e987",
+      "final_source_sha256": "bc2718cec297b6c5526c87171aeb56af05d1c36f41010fda823b6fa10f34a7e7",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1283472,
+          "cached_input_tokens": 1244032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8858,
+          "reasoning_output_tokens": 2065
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "465e27f2fc92414d",
+          "request": {
+            "verb": "events",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": null,
+          "timing": null,
+          "event_timing": {
+            "samples_us": [
+              15.7799997,
+              12.1999998,
+              15.5999994,
+              12.1600008,
+              15.8800001,
+              12.1600008,
+              16.3999996
+            ],
+            "median_us": 15.5999994,
+            "range_over_median": 0.27179480532544126,
+            "low_confidence": true
+          },
+          "event_scope": "stream-event bracket may include host-submission gaps; not intrinsic kernel latency"
+        },
+        {
+          "call_id": "570b2e6cbaca48b1",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "92a4381cb7d48a25aacfd6ce5f0d9e161abd8958b1f03ade7348800866803955",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.339753,
+              12.159757,
+              12.539749,
+              12.459751,
+              11.97976
+            ],
+            "median_us": 12.339753,
+            "range_over_median": 0.045380892145896266,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "580f52e7cdc842b6",
+          "request": {
+            "verb": "events",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "bc2718cec297b6c5526c87171aeb56af05d1c36f41010fda823b6fa10f34a7e7",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": null,
+          "timing": null,
+          "event_timing": {
+            "samples_us": [
+              13.1199999,
+              26.3800011,
+              12.2800007,
+              16.1000004,
+              12.6799994,
+              30.0999985,
+              13.6199999
+            ],
+            "median_us": 13.6199999,
+            "range_over_median": 1.3083698921319378,
+            "low_confidence": true
+          },
+          "event_scope": "stream-event bracket may include host-submission gaps; not intrinsic kernel latency"
+        },
+        {
+          "call_id": "6e34652a9cfb4ab4",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "41c63a501d68764db312adc2e2f28f7c2e9b0c64a208db1a273a6f567c2000bb",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.179756,
+              12.399752,
+              11.659767,
+              12.479751,
+              12.179756
+            ],
+            "median_us": 12.179756,
+            "range_over_median": 0.06732351616896101,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "aceaa50136f34959",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.97974,
+              12.119758,
+              12.03976,
+              11.779764,
+              12.659747
+            ],
+            "median_us": 12.119758,
+            "range_over_median": 0.09900989772238022,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "afc9524ef3634f14",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "bc2718cec297b6c5526c87171aeb56af05d1c36f41010fda823b6fa10f34a7e7",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.019759,
+              12.099758,
+              12.339753,
+              12.119758,
+              12.279755
+            ],
+            "median_us": 12.119758,
+            "range_over_median": 0.026402672396594013,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "ea2740eabb9e4da9",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "4dcf9fd65930c0733ada8501de32817ce9d96312b7e081d4c489a46f875728cd",
+            "variant": "default"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.679747,
+              12.299754,
+              11.919762,
+              11.639768,
+              12.119758
+            ],
+            "median_us": 12.119758,
+            "range_over_median": 0.0858085615240833,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "intra-r2-new",
+      "anonymous_alias": "intra/C",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "total": 8,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Seed wait preserved; only payload wait deferred across disjoint recurrence. No established speedup or observed overlap claimed; recovered original baseline."
+      },
+      "elapsed_seconds": 1179.0869445800781,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "8927e8ea56d0d92fb7e2f70c37e8263aee4693a8",
+      "final_source_sha256": "02f1e3435799651559fd56154e64a0d6cda298e67196ace71b7f4e37c38f0d4c",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1166784,
+          "cached_input_tokens": 1122688,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 7639,
+          "reasoning_output_tokens": 1293
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "0349f9b8fb254859",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "083d29dc17663fcbdec4c2e2cb17274fa3f1f9377124aa43b8459bafbc5b7860"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.099758,
+              12.359753,
+              12.539749,
+              12.319754,
+              12.599748
+            ],
+            "median_us": 12.359753,
+            "range_over_median": 0.04045307377906342,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "1baea06c2a244cdf",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.459751,
+              11.839764,
+              11.919762,
+              12.49975,
+              12.079759
+            ],
+            "median_us": 12.079759,
+            "range_over_median": 0.05463569264916626,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "97ebc634128240d4",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "bdb24d5eb495314fe447c847daaf4bdc275a6fe59668e8f499f103989776a4b6"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.099758,
+              12.619747,
+              12.259755,
+              12.279755,
+              12.279755
+            ],
+            "median_us": 12.279755,
+            "range_over_median": 0.0423452259430258,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "b656c419811f4733",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "02f1e3435799651559fd56154e64a0d6cda298e67196ace71b7f4e37c38f0d4c"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              11.99976,
+              12.019759,
+              12.259755,
+              12.379752,
+              12.599748
+            ],
+            "median_us": 12.259755,
+            "range_over_median": 0.048939640310919734,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "c958bb6ec2fb4a59",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "bdb24d5eb495314fe447c847daaf4bdc275a6fe59668e8f499f103989776a4b6"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "d21c2a1984124343",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "bdb24d5eb495314fe447c847daaf4bdc275a6fe59668e8f499f103989776a4b6"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        }
+      ]
+    },
+    {
+      "cell": "intra-r1-new",
+      "anonymous_alias": "intra/D",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "total": 8,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": true,
+        "critical_claims": [],
+        "audit": "Complete contiguous a/b transfer and four recurrence operations retained. Matched vector activity used cautiously; additional baseline omitted from authored summary but retained raw."
+      },
+      "elapsed_seconds": 1053.0574553012848,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "9c545719b6e7efcbd0b3b8c1c5ce1e35881aa067",
+      "final_source_sha256": "4e5583359dc570f6d11dd81d55cc1db8a63947a9ddf118083ab50ea5c0f19974",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1405039,
+          "cached_input_tokens": 1346048,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 6713,
+          "reasoning_output_tokens": 1174
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "18ab728737734750",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.759745,
+              12.199756,
+              12.239756,
+              12.199756,
+              12.459751
+            ],
+            "median_us": 12.239756,
+            "range_over_median": 0.045751647336760626,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "2f598626284c47c4",
+          "request": {
+            "verb": "pipes",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null,
+          "pipe_captures": [
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "9.937778",
+                  "aiv_total_cycles": "17888",
+                  "aiv_vec_time(us)": "7.636667",
+                  "aiv_vec_ratio": "0.768448",
+                  "aiv_mte2_time(us)": "0.548333",
+                  "aiv_mte2_ratio": "0.055177",
+                  "aiv_mte2_active_bw(GB/s)": "83.482735",
+                  "aiv_mte3_time(us)": "1.024444",
+                  "aiv_mte3_ratio": "0.103086",
+                  "aiv_mte3_active_bw(GB/s)": "29.789394",
+                  "aiv_icache_miss_rate": "0.047904",
+                  "aiv_scalar_time(us)": "0.992222",
+                  "aiv_scalar_ratio": "0.099843",
+                  "aiv_scalar_single_time(us)": "0.241111",
+                  "aiv_scalar_dual_time(us)": "0.142778",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "5.953889",
+                  "aiv_scalar_wait_ib_time(us)": "1.007222",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "11.636111",
+                  "aiv_total_cycles": "20945",
+                  "aiv_vec_time(us)": "7.636667",
+                  "aiv_vec_ratio": "0.656290",
+                  "aiv_mte2_time(us)": "1.828889",
+                  "aiv_mte2_ratio": "0.157174",
+                  "aiv_mte2_active_bw(GB/s)": "25.029606",
+                  "aiv_mte3_time(us)": "0.270556",
+                  "aiv_mte3_ratio": "0.023251",
+                  "aiv_mte3_active_bw(GB/s)": "112.795982",
+                  "aiv_icache_miss_rate": "0.067073",
+                  "aiv_scalar_time(us)": "1.559444",
+                  "aiv_scalar_ratio": "0.134018",
+                  "aiv_scalar_single_time(us)": "0.242222",
+                  "aiv_scalar_dual_time(us)": "0.142222",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "7.347222",
+                  "aiv_scalar_wait_ib_time(us)": "0.683889",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "9.848889",
+                  "aiv_total_cycles": "17728",
+                  "aiv_vec_time(us)": "7.636667",
+                  "aiv_vec_ratio": "0.775384",
+                  "aiv_mte2_time(us)": "0.688333",
+                  "aiv_mte2_ratio": "0.069889",
+                  "aiv_mte2_active_bw(GB/s)": "66.503197",
+                  "aiv_mte3_time(us)": "1.010000",
+                  "aiv_mte3_ratio": "0.102550",
+                  "aiv_mte3_active_bw(GB/s)": "30.215424",
+                  "aiv_icache_miss_rate": "0.055944",
+                  "aiv_scalar_time(us)": "0.917778",
+                  "aiv_scalar_ratio": "0.093186",
+                  "aiv_scalar_single_time(us)": "0.240000",
+                  "aiv_scalar_dual_time(us)": "0.143333",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "6.102222",
+                  "aiv_scalar_wait_ib_time(us)": "0.852222",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call_id": "32e6978ff0d5400a",
+          "request": {
+            "verb": "pipes",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "4e5583359dc570f6d11dd81d55cc1db8a63947a9ddf118083ab50ea5c0f19974"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null,
+          "pipe_captures": [
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "9.629444",
+                  "aiv_total_cycles": "17333",
+                  "aiv_vec_time(us)": "7.643333",
+                  "aiv_vec_ratio": "0.793746",
+                  "aiv_mte2_time(us)": "0.607222",
+                  "aiv_mte2_ratio": "0.063059",
+                  "aiv_mte2_active_bw(GB/s)": "75.386520",
+                  "aiv_mte3_time(us)": "1.231111",
+                  "aiv_mte3_ratio": "0.127849",
+                  "aiv_mte3_active_bw(GB/s)": "24.788647",
+                  "aiv_icache_miss_rate": "0.045317",
+                  "aiv_scalar_time(us)": "0.938333",
+                  "aiv_scalar_ratio": "0.097444",
+                  "aiv_scalar_single_time(us)": "0.236111",
+                  "aiv_scalar_dual_time(us)": "0.147222",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "5.803333",
+                  "aiv_scalar_wait_ib_time(us)": "0.775556",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "11.536111",
+                  "aiv_total_cycles": "20765",
+                  "aiv_vec_time(us)": "7.643333",
+                  "aiv_vec_ratio": "0.662557",
+                  "aiv_mte2_time(us)": "1.835000",
+                  "aiv_mte2_ratio": "0.159066",
+                  "aiv_mte2_active_bw(GB/s)": "24.946249",
+                  "aiv_mte3_time(us)": "0.310000",
+                  "aiv_mte3_ratio": "0.026872",
+                  "aiv_mte3_active_bw(GB/s)": "98.443802",
+                  "aiv_icache_miss_rate": "0.050595",
+                  "aiv_scalar_time(us)": "1.383333",
+                  "aiv_scalar_ratio": "0.119913",
+                  "aiv_scalar_single_time(us)": "0.236111",
+                  "aiv_scalar_dual_time(us)": "0.147222",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "6.975000",
+                  "aiv_scalar_wait_ib_time(us)": "0.717778",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "9.534445",
+                  "aiv_total_cycles": "17162",
+                  "aiv_vec_time(us)": "7.643333",
+                  "aiv_vec_ratio": "0.801655",
+                  "aiv_mte2_time(us)": "0.687222",
+                  "aiv_mte2_ratio": "0.072078",
+                  "aiv_mte2_active_bw(GB/s)": "66.610718",
+                  "aiv_mte3_time(us)": "1.002778",
+                  "aiv_mte3_ratio": "0.105174",
+                  "aiv_mte3_active_bw(GB/s)": "30.433041",
+                  "aiv_icache_miss_rate": "0.055385",
+                  "aiv_scalar_time(us)": "0.991667",
+                  "aiv_scalar_ratio": "0.104009",
+                  "aiv_scalar_single_time(us)": "0.235556",
+                  "aiv_scalar_dual_time(us)": "0.147222",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "5.883333",
+                  "aiv_scalar_wait_ib_time(us)": "0.743889",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call_id": "7933378be3154562",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "2a4a12c273972ac01195024610c04771548474ddb3e76163a596ac5615eeda2f"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.059759,
+              12.319754,
+              12.419751,
+              12.419751,
+              12.319754
+            ],
+            "median_us": 12.319754,
+            "range_over_median": 0.02922071333567213,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "e79eea6a68464ae4",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "193ea0f80aae8046bb5151a1b2c2f3db2866762245d852462c1b6bb317ac0f93"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              12.079759,
+              12.339753,
+              12.359753,
+              12.219755,
+              12.699746
+            ],
+            "median_us": 12.339753,
+            "range_over_median": 0.05024306402243222,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "e89cab7b7f3649bd",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "4e5583359dc570f6d11dd81d55cc1db8a63947a9ddf118083ab50ea5c0f19974"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": true
+        },
+        {
+          "call_id": "f805b49eae844418",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "4e5583359dc570f6d11dd81d55cc1db8a63947a9ddf118083ab50ea5c0f19974"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              11.859763,
+              11.919762,
+              12.079759,
+              11.919762,
+              12.259755
+            ],
+            "median_us": 11.919762,
+            "range_over_median": 0.03355704585376797,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "phase-r1-old",
+      "anonymous_alias": "phase/A",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          2,
+          1
+        ],
+        "total": 7,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Distinct payloads/repetitions/four operations preserved; wait moved before first payload consumer. Interrupted-call account falsely denies retained handle; duplicate attempt preserved."
+      },
+      "elapsed_seconds": 1128.9531648159027,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "96e2f322092420091c162f3f4ad57a4df1ff8899",
+      "final_source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1625168,
+          "cached_input_tokens": 1562240,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 11012,
+          "reasoning_output_tokens": 2999
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "10336fc9136f4d74",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9d6e46d17ad9a5c73c75d6dacc5ddbf1b626b610d14263386a276da433e83a21",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              2.739945,
+              3.079938,
+              2.719946,
+              2.879942,
+              2.959941
+            ],
+            "median_us": 2.879942,
+            "range_over_median": 0.12499973957808862,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "243ad10ef09d4844",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              248.855026,
+              250.194992,
+              248.655029,
+              249.035019,
+              250.194992
+            ],
+            "median_us": 249.035019,
+            "range_over_median": 0.006183720691907993,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "342fe3a98d4b4918",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9d6e46d17ad9a5c73c75d6dacc5ddbf1b626b610d14263386a276da433e83a21",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              249.555008,
+              249.535004,
+              248.735031,
+              249.854996,
+              248.955017
+            ],
+            "median_us": 249.535004,
+            "range_over_median": 0.004488207995059513,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "5515c067e768432c",
+          "request": {
+            "verb": "events",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9d6e46d17ad9a5c73c75d6dacc5ddbf1b626b610d14263386a276da433e83a21",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": null,
+          "timing": null,
+          "event_timing": {
+            "samples_us": [
+              233.919998,
+              250.820007,
+              234.479996,
+              251.02002,
+              235.459991,
+              251.060013,
+              234.380005
+            ],
+            "median_us": 235.459991,
+            "range_over_median": 0.07279374694276619,
+            "low_confidence": true
+          },
+          "event_scope": "stream-event bracket may include host-submission gaps; not intrinsic kernel latency"
+        },
+        {
+          "call_id": "8c2933f3c95b4b59",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              2.959941,
+              2.919942,
+              3.01994,
+              2.699946,
+              2.699946
+            ],
+            "median_us": 2.919942,
+            "range_over_median": 0.10958916307241716,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "c3d4852f45524c55",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9d6e46d17ad9a5c73c75d6dacc5ddbf1b626b610d14263386a276da433e83a21",
+            "variant": "long"
+          },
+          "retained_state": "observation-unavailable",
+          "job_admitted": true,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "cacc893b0f534715",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              3.079938,
+              2.739945,
+              2.679946,
+              2.859943,
+              2.759945
+            ],
+            "median_us": 2.759945,
+            "range_over_median": 0.14492752572967926,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "ff353048c3424e73",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              230.595383,
+              230.315399,
+              229.995407,
+              230.295395,
+              230.495392
+            ],
+            "median_us": 230.315399,
+            "range_over_median": 0.0026050190417358852,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "phase-r2-new",
+      "anonymous_alias": "phase/B",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          0,
+          1
+        ],
+        "total": 5,
+        "numerical": "pass",
+        "work": "violated",
+        "pipe_use": true,
+        "critical_claims": [],
+        "audit": "candidate.asc:26-29 reduces four recurrence operations to three and removes vector barriers. Pipe activity explains fewer passes, but required work is changed. Native race freedom unknown, not a proved hazard."
+      },
+      "elapsed_seconds": 996.8007452487946,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 2,
+      "final_commit": "9eaf5fd859f1a7507c18c7e9b2afb6d1afa9fa0a",
+      "final_source_sha256": "9ee257804ba73f3be6c8e75e5c2bdd1f334d6c8cf5c62bee0a922a2517a30676",
+      "reported_token_usage": [
+        {
+          "input_tokens": 996335,
+          "cached_input_tokens": 958080,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5917,
+          "reasoning_output_tokens": 905
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "2fcd8ab65a104f29",
+          "request": {
+            "verb": "pipes",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9ee257804ba73f3be6c8e75e5c2bdd1f334d6c8cf5c62bee0a922a2517a30676",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null,
+          "pipe_captures": [
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "189.622223",
+                  "aiv_total_cycles": "341320",
+                  "aiv_vec_time(us)": "177.215561",
+                  "aiv_vec_ratio": "0.934572",
+                  "aiv_mte2_time(us)": "7.720000",
+                  "aiv_mte2_ratio": "0.040713",
+                  "aiv_mte2_active_bw(GB/s)": "67.201920",
+                  "aiv_mte3_time(us)": "2.005556",
+                  "aiv_mte3_ratio": "0.010577",
+                  "aiv_mte3_active_bw(GB/s)": "30.433041",
+                  "aiv_icache_miss_rate": "0.005137",
+                  "aiv_scalar_time(us)": "5.596667",
+                  "aiv_scalar_ratio": "0.029515",
+                  "aiv_scalar_single_time(us)": "3.515000",
+                  "aiv_scalar_dual_time(us)": "1.563889",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "181.723892",
+                  "aiv_scalar_wait_ib_time(us)": "0.937222",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "203.104446",
+                  "aiv_total_cycles": "365588",
+                  "aiv_vec_time(us)": "177.215561",
+                  "aiv_vec_ratio": "0.872534",
+                  "aiv_mte2_time(us)": "19.558332",
+                  "aiv_mte2_ratio": "0.096297",
+                  "aiv_mte2_active_bw(GB/s)": "26.525719",
+                  "aiv_mte3_time(us)": "0.435000",
+                  "aiv_mte3_ratio": "0.002142",
+                  "aiv_mte3_active_bw(GB/s)": "140.310699",
+                  "aiv_icache_miss_rate": "0.005124",
+                  "aiv_scalar_time(us)": "6.206666",
+                  "aiv_scalar_ratio": "0.030559",
+                  "aiv_scalar_single_time(us)": "3.515000",
+                  "aiv_scalar_dual_time(us)": "1.563889",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "193.486115",
+                  "aiv_scalar_wait_ib_time(us)": "0.753333",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "189.824997",
+                  "aiv_total_cycles": "341685",
+                  "aiv_vec_time(us)": "177.215561",
+                  "aiv_vec_ratio": "0.933573",
+                  "aiv_mte2_time(us)": "8.013889",
+                  "aiv_mte2_ratio": "0.042217",
+                  "aiv_mte2_active_bw(GB/s)": "64.737465",
+                  "aiv_mte3_time(us)": "2.056667",
+                  "aiv_mte3_ratio": "0.010835",
+                  "aiv_mte3_active_bw(GB/s)": "29.676737",
+                  "aiv_icache_miss_rate": "0.005137",
+                  "aiv_scalar_time(us)": "5.549445",
+                  "aiv_scalar_ratio": "0.029235",
+                  "aiv_scalar_single_time(us)": "3.515000",
+                  "aiv_scalar_dual_time(us)": "1.563889",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "181.796112",
+                  "aiv_scalar_wait_ib_time(us)": "0.928889",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call_id": "58f843108dcf4071",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9ee257804ba73f3be6c8e75e5c2bdd1f334d6c8cf5c62bee0a922a2517a30676",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              204.855896,
+              203.335938,
+              202.475952,
+              203.035934,
+              206.995865
+            ],
+            "median_us": 203.335938,
+            "range_over_median": 0.02222879558064154,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "6d84d0fce3bc4a03",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              248.835022,
+              248.855026,
+              248.315033,
+              250.11499,
+              249.63501
+            ],
+            "median_us": 248.855026,
+            "range_over_median": 0.007232954177907607,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "7f59ca52b50c470f",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9ee257804ba73f3be6c8e75e5c2bdd1f334d6c8cf5c62bee0a922a2517a30676",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              2.719946,
+              2.539949,
+              2.919942,
+              2.779944,
+              2.699946
+            ],
+            "median_us": 2.719946,
+            "range_over_median": 0.13970608240016522,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "9a07004fe1f844fb",
+          "request": {
+            "verb": "pipes",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null,
+          "pipe_captures": [
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "250.253891",
+                  "aiv_total_cycles": "450457",
+                  "aiv_vec_time(us)": "221.126663",
+                  "aiv_vec_ratio": "0.883609",
+                  "aiv_mte2_time(us)": "20.898333",
+                  "aiv_mte2_ratio": "0.083509",
+                  "aiv_mte2_active_bw(GB/s)": "24.824892",
+                  "aiv_mte3_time(us)": "0.475000",
+                  "aiv_mte3_ratio": "0.001898",
+                  "aiv_mte3_active_bw(GB/s)": "128.495071",
+                  "aiv_icache_miss_rate": "0.004478",
+                  "aiv_scalar_time(us)": "6.557222",
+                  "aiv_scalar_ratio": "0.026202",
+                  "aiv_scalar_single_time(us)": "3.528333",
+                  "aiv_scalar_dual_time(us)": "1.988889",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "237.067215",
+                  "aiv_scalar_wait_ib_time(us)": "0.740000",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "234.475555",
+                  "aiv_total_cycles": "422056",
+                  "aiv_vec_time(us)": "221.126663",
+                  "aiv_vec_ratio": "0.943069",
+                  "aiv_mte2_time(us)": "7.605000",
+                  "aiv_mte2_ratio": "0.032434",
+                  "aiv_mte2_active_bw(GB/s)": "68.218117",
+                  "aiv_mte3_time(us)": "2.093889",
+                  "aiv_mte3_ratio": "0.008930",
+                  "aiv_mte3_active_bw(GB/s)": "29.149185",
+                  "aiv_icache_miss_rate": "0.004398",
+                  "aiv_scalar_time(us)": "5.646667",
+                  "aiv_scalar_ratio": "0.024082",
+                  "aiv_scalar_single_time(us)": "3.529444",
+                  "aiv_scalar_dual_time(us)": "1.988333",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "224.719452",
+                  "aiv_scalar_wait_ib_time(us)": "0.905000",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            },
+            {
+              "metric": "PipeUtilization",
+              "rows": [
+                {
+                  "block_id": "0",
+                  "sub_block_id": "vector0",
+                  "aic_time(us)": "NA",
+                  "aic_total_cycles": "NA",
+                  "aic_cube_time(us)": "NA",
+                  "aic_cube_ratio": "NA",
+                  "aic_mte1_time(us)": "NA",
+                  "aic_mte1_ratio": "NA",
+                  "aic_mte2_time(us)": "NA",
+                  "aic_mte2_ratio": "NA",
+                  "aic_mte3_time(us)": "NA",
+                  "aic_mte3_ratio": "NA",
+                  "aic_mte3_active_bw(GB/s)": "NA",
+                  "aic_fixpipe_time(us)": "NA",
+                  "aic_fixpipe_ratio": "NA",
+                  "aic_fixpipe_active_bw(GB/s)": "NA",
+                  "aic_icache_miss_rate": "NA",
+                  "aic_scalar_time(us)": "NA",
+                  "aic_scalar_ratio": "NA",
+                  "aic_scalar_single_time(us)": "NA",
+                  "aic_scalar_dual_time(us)": "NA",
+                  "aic_scalar_mte1_stall_time(us)": "NA",
+                  "aic_scalar_mte2_stall_time(us)": "NA",
+                  "aic_scalar_mte3_stall_time(us)": "NA",
+                  "aic_scalar_cube_stall_time(us)": "NA",
+                  "aic_scalar_wait_ib_time(us)": "NA",
+                  "aic_scalar_wait_time(us)": "NA",
+                  "aiv_time(us)": "248.170563",
+                  "aiv_total_cycles": "446707",
+                  "aiv_vec_time(us)": "221.126663",
+                  "aiv_vec_ratio": "0.891027",
+                  "aiv_mte2_time(us)": "19.299999",
+                  "aiv_mte2_ratio": "0.077769",
+                  "aiv_mte2_active_bw(GB/s)": "26.880770",
+                  "aiv_mte3_time(us)": "0.446111",
+                  "aiv_mte3_ratio": "0.001798",
+                  "aiv_mte3_active_bw(GB/s)": "136.816040",
+                  "aiv_icache_miss_rate": "0.003758",
+                  "aiv_scalar_time(us)": "6.649445",
+                  "aiv_scalar_ratio": "0.026794",
+                  "aiv_scalar_single_time(us)": "3.528333",
+                  "aiv_scalar_dual_time(us)": "1.988889",
+                  "aiv_scalar_mte2_stall_time(us)": "0.000000",
+                  "aiv_scalar_mte3_stall_time(us)": "0.000000",
+                  "aiv_scalar_stall_by_ub_time(us)": "0.000000",
+                  "aiv_scalar_vector_stall_time(us)": "237.242218",
+                  "aiv_scalar_wait_ib_time(us)": "0.610000",
+                  "aiv_scalar_wait_time(us)": "0.000000",
+                  "": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "call_id": "c78e9c20bc8144e5",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "9d6e46d17ad9a5c73c75d6dacc5ddbf1b626b610d14263386a276da433e83a21",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              249.715012,
+              249.515015,
+              250.75499,
+              249.555008,
+              249.13501
+            ],
+            "median_us": 249.555008,
+            "range_over_median": 0.006491474617091228,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "ce403c7bbed8419f",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              3.01994,
+              2.97994,
+              2.97994,
+              2.99994,
+              2.97994
+            ],
+            "median_us": 2.97994,
+            "range_over_median": 0.01342308905548435,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "phase-r2-old",
+      "anonymous_alias": "phase/C",
+      "assessment": {
+        "scores": [
+          1,
+          2,
+          2,
+          1
+        ],
+        "total": 6,
+        "numerical": "pass",
+        "work": "preserved",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "Four operations/distinct payloads/readiness preserved, full-variant correctness but long latency only. Failed event requests described as pipeline captures; tiny original observed rather than duplicated."
+      },
+      "elapsed_seconds": 1091.1013600826263,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 1,
+      "final_commit": "de1526522977ecc101ca319e21907498d5d65975",
+      "final_source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1457741,
+          "cached_input_tokens": 1393536,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 6789,
+          "reasoning_output_tokens": 1321
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "027e686293b646bc",
+          "request": {
+            "verb": "events",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+            "variant": "long"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": true
+        },
+        {
+          "call_id": "0c61031b27384146",
+          "request": {
+            "verb": "check",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": null,
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "5749fa8bdba74157",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "ac3cf761d1fac2320d48173c7b69f9e9e98022fea194bbba15a656d197930c9a",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              230.535385,
+              230.65538,
+              230.475388,
+              230.79538,
+              230.1754
+            ],
+            "median_us": 230.535385,
+            "range_over_median": 0.002689305158078003,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "5f68c236173b414d",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "tiny"
+          },
+          "retained_state": "observation-unavailable",
+          "job_admitted": true,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "b261dcf7916d4647",
+          "request": {
+            "verb": "events",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "long"
+          },
+          "retained_state": "prepared",
+          "job_admitted": false,
+          "result_retrieved": false,
+          "final_candidate_source": false
+        },
+        {
+          "call_id": "f237b8d78f614abb",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              251.074982,
+              248.075043,
+              249.755005,
+              249.854996,
+              248.235031
+            ],
+            "median_us": 249.755005,
+            "range_over_median": 0.012011527056284665,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    },
+    {
+      "cell": "phase-r1-new",
+      "anonymous_alias": "phase/D",
+      "assessment": {
+        "scores": [
+          2,
+          2,
+          0,
+          1
+        ],
+        "total": 5,
+        "numerical": "pass",
+        "work": "violated",
+        "pipe_use": false,
+        "critical_claims": [],
+        "audit": "candidate.asc:26-29 retains three-operation rewrite, while buffer footprint/store coalescing keeps seeded payload outputs. Numeric pass does not satisfy four-operation contract."
+      },
+      "elapsed_seconds": 849.5868499279022,
+      "launcher_exit": 0,
+      "timed_out": false,
+      "candidate_commits": 2,
+      "final_commit": "8fe52bbeaa43d0393d3b6803c846ed3ef4d665ee",
+      "final_source_sha256": "acd318167acf50b09785cb98b8768b8fdbfa6b3e1579719eb9f40e14b52f3961",
+      "reported_token_usage": [
+        {
+          "input_tokens": 1093055,
+          "cached_input_tokens": 1061504,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 7867,
+          "reasoning_output_tokens": 2131
+        }
+      ],
+      "calls": [
+        {
+          "call_id": "0b5fa1fad95a401b",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "acd318167acf50b09785cb98b8768b8fdbfa6b3e1579719eb9f40e14b52f3961",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              195.896088,
+              196.536072,
+              195.436096,
+              196.816071,
+              196.496063
+            ],
+            "median_us": 196.496063,
+            "range_over_median": 0.007022914245360742,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "48313dfc57d24675",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              2.699946,
+              2.839943,
+              2.959941,
+              2.899942,
+              2.819944
+            ],
+            "median_us": 2.839943,
+            "range_over_median": 0.09154937264585944,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "56a92300f2c04dc3",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "8717402697fefc8d52f8a35a0bc0b0f61a5491c6a4b84c2d7b0236bd248da993",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              2.759945,
+              2.819944,
+              2.859943,
+              2.779944,
+              2.939941
+            ],
+            "median_us": 2.819944,
+            "range_over_median": 0.06382963633320379,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "6e7c82533d8d4add",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "8717402697fefc8d52f8a35a0bc0b0f61a5491c6a4b84c2d7b0236bd248da993",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              204.515915,
+              204.515915,
+              201.915955,
+              204.775909,
+              205.775879
+            ],
+            "median_us": 204.515915,
+            "range_over_median": 0.018873465177514457,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "8b781cf9e7af4eeb",
+          "request": {
+            "verb": "timing",
+            "implementation": "baseline",
+            "sanitizer": "racecheck",
+            "source_sha256": "2157d771740a4acc6659e5332941f2fcf5a9e46322cd0479eb401323c8795cca",
+            "variant": "long"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": false,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              248.735031,
+              248.89502,
+              251.054977,
+              251.074982,
+              251.814957
+            ],
+            "median_us": 251.054977,
+            "range_over_median": 0.012267934445290844,
+            "low_confidence": false
+          },
+          "event_timing": null,
+          "event_scope": null
+        },
+        {
+          "call_id": "df4b109f5b5d4c63",
+          "request": {
+            "verb": "timing",
+            "implementation": "candidate",
+            "sanitizer": "racecheck",
+            "source_sha256": "acd318167acf50b09785cb98b8768b8fdbfa6b3e1579719eb9f40e14b52f3961",
+            "variant": "tiny"
+          },
+          "retained_state": "completed",
+          "job_admitted": true,
+          "result_retrieved": true,
+          "final_candidate_source": true,
+          "result_state": "completed",
+          "failure_stage": null,
+          "correctness": [
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            },
+            {
+              "correctness": true,
+              "mismatches": 0,
+              "warmup": 0,
+              "samples_us": []
+            }
+          ],
+          "selector": "task_kernel",
+          "timing": {
+            "samples_us": [
+              2.799944,
+              2.879942,
+              2.759945,
+              2.859943,
+              3.079938
+            ],
+            "median_us": 2.859943,
+            "range_over_median": 0.11188789426922137,
+            "low_confidence": true
+          },
+          "event_timing": null,
+          "event_scope": null
+        }
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "task": "intercore",
+      "repetition": 1,
+      "old_score": 4,
+      "new_score": 8,
+      "result": "new_win"
+    },
+    {
+      "task": "intercore",
+      "repetition": 2,
+      "old_score": 8,
+      "new_score": 8,
+      "result": "tie"
+    },
+    {
+      "task": "intra",
+      "repetition": 1,
+      "old_score": 8,
+      "new_score": 8,
+      "result": "tie"
+    },
+    {
+      "task": "intra",
+      "repetition": 2,
+      "old_score": 5,
+      "new_score": 8,
+      "result": "new_win"
+    },
+    {
+      "task": "phase",
+      "repetition": 1,
+      "old_score": 7,
+      "new_score": 5,
+      "result": "old_win"
+    },
+    {
+      "task": "phase",
+      "repetition": 2,
+      "old_score": 6,
+      "new_score": 5,
+      "result": "old_win"
+    }
+  ],
+  "outcome": {
+    "new_wins": 2,
+    "ties": 2,
+    "old_wins": 2,
+    "demonstrated_benefit": false,
+    "reason": "Two strict new wins; preregistered requirement was at least four of six."
+  },
+  "posthoc_reconciliation": {
+    "method": "One managed observation of each existing retained handle; no dispatch, cancellation or result download.",
+    "calls": [
+      {
+        "cell": "intercore-r2-old",
+        "call_id": "43aa42020b9d4855",
+        "state": "completed",
+        "exit_code": 0,
+        "credited_to_agent": false
+      },
+      {
+        "cell": "phase-r1-old",
+        "call_id": "c3d4852f45524c55",
+        "state": "completed",
+        "exit_code": 0,
+        "credited_to_agent": false
+      },
+      {
+        "cell": "phase-r2-old",
+        "call_id": "5f68c236173b414d",
+        "state": "completed",
+        "exit_code": 0,
+        "credited_to_agent": false
+      }
+    ]
+  }
+}

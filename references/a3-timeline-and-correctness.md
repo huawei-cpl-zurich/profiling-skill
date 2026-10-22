@@ -4,6 +4,13 @@ Use these tools when ordinary correctness and pipe evidence leave an important
 question unresolved. They are diagnostic options, not required steps for every
 optimization. None replaces the benchmark's ordinary device timing.
 
+For synchronization questions, native correctness, hardware timing and scoped
+wait/issue counters remain usable without a simulator. Collect and retain that
+evidence independently; optional simulator failures have their own availability
+and error outcome, not a reason to discard hardware results. Consult the
+[A3 wait-counter guidance](a3-performance-reasoning.md#synchronization-and-small-matrix-work)
+before requesting instruction-level evidence.
+
 ## Compiler evidence
 
 Use `$mlir-triton-dump` to retain compiler invocations, target/options, source

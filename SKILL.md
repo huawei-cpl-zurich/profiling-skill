@@ -1,6 +1,6 @@
 ---
 name: ascend-profiling
-description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascend 950/A5, or AscendC and Catlass kernels on A5, producing compact target-correct msprof evidence without mixing product-specific metrics.
+description: Profile Torch or Triton control workloads on Ascend A2/A3 and Ascend 950/A5, native Ascend C kernels on A3 or A5, or Catlass kernels on A5, producing compact target-correct msprof evidence without mixing product-specific metrics.
 ---
 
 # Ascend kernel profiling
@@ -34,6 +34,11 @@ diagnostics](references/a3-timeline-and-correctness.md) when instruction order,
 attribution or races are in doubt. A3 simulated timelines are not A5 hardware
 timelines; do not transfer newly observed A3 mechanisms to A2 or A5 without
 validation.
+
+For A3 synchronization questions, start with native correctness, matched
+hardware timing and scoped wait/issue counters. Simulator availability is
+separate: its failure must not block that evidence. Read the reasoning guide's
+wait-counter scopes before treating a zero or an ID as a source-level diagnosis.
 
 ## Acquire live control evidence
 

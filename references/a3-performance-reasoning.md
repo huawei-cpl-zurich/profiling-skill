@@ -101,12 +101,48 @@ phase label is not a source map or a common hardware clock.
 
 ## Synchronization and small matrix work
 
-Wait-like metrics have specific scopes. Zero `scalar_wait_time` does not mean
-zero synchronization overhead. Moving a wait can change latency or another
-stall field without changing that counter. Conversely, not every source wait
-change must cause a large stall change. Retain source intent separately from
-verified emitted flags and actual instruction timing; an undecodable binary
-does not establish machine-level placement.
+Start with native numerical correctness, matched hardware timing and supported
+pipe counters; a simulator is optional, not an acquisition gate. Preserve the
+exporter's AIC/AIV, block/sub-block and unit scope. For the A3 fields documented
+in the [profiler's metric definitions](https://raw.githubusercontent.com/Ascend/msopprof/master/docs/en/user_guide/msopprof_performance_data.md):
+
+| Field family | What it measures, not what its name might suggest |
+| --- | --- |
+| `ai*_scalar_wait_time(us)` | Intra-core wait blockage within Scalar; not every destination pipeline's waiting. |
+| `ai*_scalar_wait_id*_time(us)` | Per-ID inter-core Scalar blockage; separate from the intra-core scalar-wait field. |
+| `*_scalar_*_stall_time(us)` for an instruction queue (IQ) | Scalar issue blocked by a full named engine's queue; not the duration of a particular source wait. |
+| `ai*_scalar_wait_ib_time(us)` | Scalar waiting for instruction-cache supply through the instruction buffer (IB); not an inter-core synchronization counter. |
+
+Use the installed product/version definitions and actual available columns,
+not the wildcard alone, to classify a field. Missing or `NA` remains unavailable.
+Zero scalar intra-core wait does not rule out synchronization, per-ID blocking
+or destination-pipeline waits. Moving a wait need not move every wait-like field.
+These aggregates are neither source-PC traces nor a shared clock; do not add
+them into an exact synchronization-cost budget.
+
+Keep a reported ID distinct from a source flag ID. Matching names/numbers alone
+do not prove association. A controlled flag-renumbering experiment, preserving
+useful work, placement and otherwise matched compilation, can test whether the
+exported field follows that flag on the observed build. Even a confirmed
+association does not establish a particular instruction PC or a temporal phase.
+Retain source intent separately from verified emitted flags; an undecodable
+binary does not establish machine-level placement.
+
+Try moving a wait only across genuinely independent work, without moving a
+consumer before its producer is ready or allowing premature buffer reuse.
+Preserve aliases, lifetimes, participant counts and cross-core ordering. Keep
+paired signals/waits and framework event ownership: reserve distinct intra-core
+event IDs for simultaneously outstanding same-type events and release owned IDs
+after their matching waits. Cross-core flags have a separate namespace. A large
+counter is not permission to remove a required dependency.
+
+Tiny timings can be noisy even with complete captures. Keep task duration,
+per-core counter times and ordinary stream-event intervals distinct; the latter
+can include host-submission gaps. Retain dispersion and label an unresolved
+comparison inconclusive rather than ranking tiny differences precisely.
+Standalone load/compute/store controls can expose qualitative costs, but change
+launch, cache and compiler context. Their sums or maxima are not exact bounds
+on a combined kernel's latency or proof of overlap.
 
 Equal Cube-active time can coexist with different whole-kernel durations.
 For small matrix work, compare input movement, output/FIXPIPE, layout and

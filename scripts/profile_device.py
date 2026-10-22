@@ -31,11 +31,21 @@ def bounded_run(argv, *, timeout, **kwargs):
 
 def discover_devices(mapping):
     devices = []
+    short_schema = False
     for line in mapping.splitlines():
         fields = line.split()
+        if fields == 'NPU ID Chip ID Chip Logic ID Chip Name'.split():
+            # Some native releases omit Chip Phy-ID. Their logic ID is the
+            # runtime-visible selector; management MCU rows have no such ID.
+            short_schema = True
+            continue
         if len(fields) >= 5 and all(v.isdigit() for v in fields[:4]):
             card, chip, logical, physical = map(int, fields[:4])
             devices.append((card, chip, physical))
+        elif (short_schema and len(fields) >= 4
+              and all(v.isdigit() for v in fields[:3]) and fields[3] == 'Ascend'):
+            card, chip, logical = map(int, fields[:3])
+            devices.append((card, chip, logical))
     if not devices or len({d[2] for d in devices}) != len(devices):
         raise RuntimeError("npu-smi mapping has no unique device inventory")
     return devices

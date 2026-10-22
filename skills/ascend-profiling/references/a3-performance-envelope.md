@@ -1,8 +1,12 @@
 # A3 performance envelopes: quantify the gap, then choose an action
 
-An envelope is a bound under explicit assumptions, not a utilization score.
-Keep an architectural limit separate from an empirical reference measured on
-the same product, runtime, data type, shape regime and device conditions.
+Use architectural bounds and empirical reference curves under explicit
+assumptions, rather than a utilization score. Keep an architectural limit
+separate from an empirical reference measured on
+the same product, runtime, data type, shape regime, access contract, cache
+regime and device conditions. A contiguous-copy result is not an attainable
+target for arbitrary gathers or a mandatory strided layout unless the workload
+contract permits changing that access path.
 Neither establishes that a particular kernel has saturated a resource.
 
 ## Architectural lower bounds
@@ -44,6 +48,11 @@ sizes `256`, `512`, `1024`. Record allocations, source/compiled identity,
 requested stages, all timing samples and correctness. Reference scripts require
 Torch-NPU and a compatible Triton-Ascend installation; they do not install tools.
 
+A measured reference is a demonstrated attainable target, **not a proven upper
+bound on hardware capacity**. A better implementation may exceed it. Try to
+match or exceed the best comparable reference rather than treating its rate
+as a hardware ceiling.
+
 For each size, retain median and dispersion and calculate:
 
 - Useful copy throughput: `(8N)/(median_us × 1000)` decimal GB/s. Include
@@ -54,6 +63,8 @@ For each size, retain median and dispersion and calculate:
 - Candidate/reference latency ratio: `t_candidate/t_reference`, and the
   descriptive reference gap `1 − t_reference/t_candidate` when the reference
   is faster. This compares implementations; it is not a proven removable time.
+  If the candidate is faster, report that improvement directly; do not force
+  its gap to a positive number or declare an impossible capacity violation.
 
 Example arithmetic only: if a size-matched copy moves `8 MiB` of useful data
 in `20 μs`, useful whole-task throughput is `419.43 GB/s`. If another measured

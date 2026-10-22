@@ -51,8 +51,8 @@ File names such as `ttir`, `ttadapter`, and `npuir` are not a universal guarante
 of pass position. Establish whether memory planning, multi-buffer expansion,
 synchronization insertion and macro lowering have happened at that point.
 
-The current [official auto-sync guide](https://ascendnpu-ir.gitcode.com/en/developer_guide/features/auto_sync.html)
-describes graph solvers and fallback injection passes. Its examples use
+The [official auto-sync guide](https://ascendnpu-ir.gitcode.com/en/developer_guide/features/auto_sync.html)
+(accessed 2026-10-22) describes graph solvers and fallback injection passes. Its examples use
 `hivm.set_flag`, `hivm.wait_flag` and `hivm.pipe_barrier`; pinned older artifacts
 can spell these `hivm.hir.*`. Later LLVM may use `llvm.hivm.WAIT.FLAG.REG` or
 related intrinsics with numeric pipe/event operands. Preserve the observed

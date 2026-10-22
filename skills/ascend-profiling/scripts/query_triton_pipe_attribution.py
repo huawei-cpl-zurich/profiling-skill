@@ -18,11 +18,17 @@ class InvalidInventory(ValueError):
     pass
 
 
-def valid_citation(value: str) -> bool:
+def valid_citation(value: str, revisions: dict[str, str]) -> bool:
     # Retain compatibility with caller-supplied broker inventories while the
     # bundled inventory uses independently readable source coordinates.
-    return value.startswith("ref://") or bool(re.fullmatch(
-        r"[A-Za-z0-9_-]+@[0-9a-f]{40}:[^\s]+:L[0-9]+-L[0-9]+", value))
+    if value.startswith("ref://"):
+        return True
+    match = re.fullmatch(
+        r"(AscendNPU-IR|Triton-Ascend)@([0-9a-f]{40}):[^\s]+:L[0-9]+-L[0-9]+", value)
+    if match is None:
+        return False
+    compiler = {"AscendNPU-IR": "ascendnpuir", "Triton-Ascend": "triton_ascend"}[match[1]]
+    return match[2] == revisions[compiler]
 
 
 def require_string(value: Any, location: str) -> str:
@@ -87,8 +93,8 @@ def validate_inventory(raw: Any) -> dict[str, Any]:
             raise InvalidInventory(f"lowering_path[{index}].status must be direct")
         require_string(step.get("summary"), f"lowering_path[{index}].summary")
         citation = require_string(step.get("citation"), f"lowering_path[{index}].citation")
-        if not valid_citation(citation):
-            raise InvalidInventory(f"lowering_path[{index}].citation must identify a source revision or use ref://")
+        if not valid_citation(citation, revisions):
+            raise InvalidInventory(f"lowering_path[{index}].citation must identify a declared source revision or use ref://")
 
     mappings = raw.get("mappings")
     if not isinstance(mappings, list) or not mappings:
@@ -108,8 +114,8 @@ def validate_inventory(raw: Any) -> dict[str, Any]:
         if any(product not in SUPPORTED_PRODUCTS for product in products):
             raise InvalidInventory(f"mapping {construct!r} has invalid product")
         citations = require_strings(mapping.get("citations"), f"mapping {construct!r}.citations")
-        if any(not valid_citation(citation) for citation in citations):
-            raise InvalidInventory(f"mapping {construct!r} citations must identify a source revision or use ref://")
+        if any(not valid_citation(citation, revisions) for citation in citations):
+            raise InvalidInventory(f"mapping {construct!r} citations must identify a declared source revision or use ref://")
         if status == "unknown":
             if mapping.get("compiler_pipe") is not None or mapping.get("profiler_pipe") is not None:
                 raise InvalidInventory(f"mapping {construct!r}: unknown mapping must not name a pipe")

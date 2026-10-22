@@ -504,6 +504,9 @@ class BzA3JobClient:
             if len(candidates) > 1:
                 raise JobError(
                     "request_error", "conflicting current and legacy request receipts")
+            if operation_mode == "observe" and not candidates:
+                raise JobError("request_error",
+                               "observe-only request has no retained receipt for this identity")
             if candidates:
                 request_sha, provenance = candidates[0]
             else:
@@ -543,6 +546,11 @@ class BzA3JobClient:
                 response = self.transport.observe(
                     placement["target"], handle, self._remaining(deadline, handle))
             else:
+                # Recheck under the request lock: a receipt may have disappeared
+                # after identity lookup. Observation never authorizes submission.
+                if operation_mode == "observe":
+                    raise JobError("request_error",
+                                   "observe-only request has no retained dispatch receipt")
                 self._archive(archive, stage_files, remote_job)
                 # cpl-remote's rsync transport does not create destination
                 # parents. The configured root is therefore a pre-provisioned

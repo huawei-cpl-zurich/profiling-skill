@@ -622,10 +622,43 @@ def test_gz_observer_interruption_retains_and_reuses_handle(tmp_path, monkeypatc
     assert interrupted["handle"] == "remote:gz-a3:job:retained"
     assert interrupted["status"] == "infrastructure_error"
     transport.fail = None
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
     recovered = client.execute(job, args)
     assert recovered["status"] == "ok"
     assert recovered["handle"] == interrupted["handle"]
     assert len(transport.executions) == 1
+
+
+def test_gz_empty_observe_cannot_submit_or_create_state(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
+    result = client.execute(job, args)
+    assert result["status"] == "infrastructure_error"
+    assert result["failure_type"] == "request_error"
+    assert not transport.uploads
+    assert not transport.executions
+    assert not args.state_dir.exists()
+
+
+@pytest.mark.parametrize("drift", ["source", "client_digest"])
+def test_gz_observe_identity_drift_never_resubmits(tmp_path, monkeypatch, drift):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    first = client.execute(job, args)
+    assert first["status"] == "ok"
+    states = set(args.state_dir.iterdir())
+    transport.uploads.clear()
+    transport.executions.clear()
+    if drift == "source":
+        with Path(job["candidate"]).open("a") as stream:
+            stream.write("# changed candidate\n")
+    else:
+        transport.expected_sha256 = "e" * 64
+    monkeypatch.setenv("PROFILING_SKILL_CONTROLLER_MODE", "observe")
+    result = client.execute(job, args)
+    assert result["status"] == "infrastructure_error"
+    assert not transport.uploads
+    assert not transport.executions
+    assert set(args.state_dir.iterdir()) == states
 
 
 def test_gz_cached_completion_and_calibration_identity(tmp_path, monkeypatch):

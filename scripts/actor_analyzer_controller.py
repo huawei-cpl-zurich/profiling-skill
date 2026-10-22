@@ -459,6 +459,17 @@ class Campaign:
                         result = json.loads((phase / 'receipt.json').read_text())
                     else:
                         commit = state['verified']
+                        if role == 'actor' and commit:
+                            verified = subprocess.check_output(['git', '-C', str(self.workspace),
+                                'show', commit + ':candidate.py'])
+                            if candidate_hash(self.workspace) != hashlib.sha256(verified).hexdigest():
+                                candidate = self.workspace / 'candidate.py'
+                                if candidate.is_symlink():
+                                    candidate.unlink()
+                                candidate.write_bytes(verified)
+                                # Keep failed experiments and analysis history; restore
+                                # only the candidate rather than rewinding the branch.
+                                self.commit('Restore verified candidate before ' + name)
                         if role == 'analyzer' and not commit:
                             state['phases'][name] = {'state': 'skipped-no-verified-candidate'}
                             save(self.root / 'state.json', state)

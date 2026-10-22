@@ -82,6 +82,29 @@ def test_interrupted_dispatch_is_not_repeated(tmp_path):
     assert len(calls) == 1
 
 
+def test_next_actor_restores_verified_source_without_erasing_failed_history(tmp_path):
+    observed = []
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            observed.append((campaign.workspace / 'candidate.py').read_text())
+            if len(observed) == 1:
+                (campaign.workspace / 'candidate.py').write_text('verified = 1\n')
+                campaign.qualify(phase, dict(state='completed', correctness=True,
+                    source_sha256=digest(campaign.workspace / 'candidate.py')))
+            elif len(observed) == 2:
+                (campaign.workspace / 'candidate.py').write_text('broken = True\n')
+                (campaign.workspace / 'failed-diagnostics.txt').write_text('compile failed')
+        return {'exit_code': 0}
+    campaign = make_campaign(tmp_path, runner, rounds=3)
+    state = campaign.run()
+    assert observed == ['value = 0\n', 'verified = 1\n', 'verified = 1\n']
+    failed = state['phases']['round-2-actor']['candidate_commit']
+    assert campaign.git('show', failed + ':candidate.py') == 'broken = True\n'
+    assert (campaign.workspace / 'failed-diagnostics.txt').read_text() == 'compile failed'
+    assert 'Restore verified candidate before round-3-actor' in campaign.git('log', '--format=%s')
+    assert campaign.run() == state
+
+
 def test_actor_only_has_no_analyzer_cost(tmp_path):
     roles = []
     campaign = make_campaign(tmp_path, lambda c, p, r, b, v: roles.append(r) or {'exit_code': 0},

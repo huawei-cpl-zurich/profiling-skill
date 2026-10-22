@@ -315,3 +315,60 @@ def test_candidate_import_deadline_is_not_a_compile_failure(tmp_path, monkeypatc
         monkeypatch.setitem(sys.modules, name, SimpleNamespace(probe_candidate=None, make_case=None, validate=None))
     with pytest.raises(TimeoutError, match='original deadline'):
         native.check(tmp_path, {}, lambda: 100)
+
+
+def test_prepared_worker_rejects_expired_activation_without_device_access(tmp_path):
+    import subprocess
+    import time
+    prepared = tools.prepare(tmp_path / 'bundle')
+    root = Path(prepared['private'])
+    (root / 'request.json').write_text(json.dumps(dict(operation='check', activation_required=True,
+        host_remaining_seconds=60, source_sha256='a' * 64)))
+    (root / 'activation.json').write_text(json.dumps(dict(cutoff_monotonic=time.monotonic() - 1)))
+    result = subprocess.run([sys.executable, str(root / 'execute.py')], cwd=root,
+        capture_output=True, text=True, timeout=5)
+    report = json.loads((root / 'results/summary.json').read_text())
+    assert result.returncode == 1 and report['failure_stage'] == 'budget'
+    assert 'PHASE_READY=' in result.stdout and 'physical_device' not in report
+
+
+def test_worker_activation_cutoff_is_applied_before_acquiring_device(tmp_path, monkeypatch):
+    import model_campaign_worker as worker
+    import phase_deadline
+    (tmp_path / 'request.json').write_text(json.dumps(dict(operation='check', activation_required=True,
+        host_remaining_seconds=60, source_sha256='a' * 64)))
+    events = []
+    def activate(path, remaining):
+        assert path == tmp_path / 'activation.json' and remaining == 60
+        events.append('activated')
+        return 110
+    def acquire(probe):
+        assert events == ['activated']
+        events.append('device')
+        return 3, {}, SimpleNamespace(close=lambda: None)
+    def check(root, env, remaining):
+        assert events == ['activated', 'device'] and remaining() == 10
+        return dict(passed=True, variants=[0, 1])
+    monkeypatch.setattr(phase_deadline, 'wait_for_activation', activate)
+    result = worker.execute(tmp_path, SimpleNamespace(check=check), acquire=acquire, monotonic=lambda: 100)
+    assert result['state'] == 'completed'
+
+
+def test_model_service_requests_activation_before_native_dispatch(tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from model_campaign_service import CampaignService
+    public, bundle = tmp_path / 'public', tmp_path / 'bundle'
+    public.mkdir()
+    bundle.mkdir()
+    (public / 'candidate.py').write_text('candidate = 1\n')
+    (public / 'execution.json').write_text(json.dumps(dict(
+        utc_deadline=(datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat())))
+    state = tmp_path / 'state'
+    state.mkdir()
+    client = SimpleNamespace(state=state, workspace=tmp_path / 'private', cwd='/remote',
+        target='test', runtime='test', remote=lambda *args: dict(state='running' if args[0] == 'upload' else 'completed'))
+    client.observe = lambda ident: dict(call_id=ident, state='running')
+    service = CampaignService(client, bundle, public, tools.export)
+    result = service.start('check')
+    request = json.loads((state / result['call_id'] / 'request.json').read_text())
+    assert request['activation_required'] is True

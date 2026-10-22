@@ -53,6 +53,10 @@ def start(service, operation):
             return dict(state='phase-cleanup-required', handle=phase['handle'],
                         diagnostic=dict(kind='previous-phase-not-terminal'))
         if observed['state'] in TERMINAL:
+            stopped = shutdown_phase(tools)
+            if stopped.get('state') != 'terminal' or stopped.get('worker_closed') is not True:
+                return dict(state='phase-cleanup-required', handle=phase['handle'],
+                            worker_shutdown=stopped)
             # Only confirmed terminal workers may be replaced, never live or
             # unavailable ones. The original phase deadline still applies.
             statefile.replace(tools.state / phase['first_call'] / 'phase.json')
@@ -284,7 +288,7 @@ def _shutdown_phase(tools):
         phase['shutdown'] = dict(dispatch_intent=True)
         save(phasefile, phase)
         control = tools.remote('run', tools.target, '--runtime', tools.runtime,
-                               '--cwd', phase['remote_folder'], '--file', script)
+                               '--cwd', tools.cwd, '--file', script)
         phase['shutdown'].update(control)
         save(phasefile, phase)
     else:
@@ -295,9 +299,22 @@ def _shutdown_phase(tools):
         control = tools.remote('observe', control['handle'], '--wait', '--timeout', '15')
         phase['shutdown'].update(control)
         save(phasefile, phase)
-    closed = control.get('state') == 'completed' and control.get('exit') == 0
+    acknowledgment = phase['shutdown'].get('acknowledgment')
+    if control.get('state') == 'completed' and control.get('exit') == 0 and not acknowledgment:
+        logs = tools.remote('logs', phase['shutdown']['handle'], '--tail', '20')
+        for line in reversed(logs.get('content', '').splitlines()):
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, dict) and value.get('state') == 'terminal' and value.get('worker_closed') is True:
+                acknowledgment = value
+                phase['shutdown']['acknowledgment'] = value
+                save(phasefile, phase)
+                break
+    closed = bool(acknowledgment and acknowledgment.get('worker_closed') is True)
     return dict(state='terminal' if closed else 'observation-required', worker_closed=closed,
-                control_handle=phase['shutdown'].get('handle'))
+                control_handle=phase['shutdown'].get('handle'), acknowledgment=acknowledgment)
 
 
 def shutdown_phase(tools):

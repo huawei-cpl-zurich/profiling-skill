@@ -19,7 +19,8 @@ def identity(pid):
 
 
 def shutdown(root, grace=3):
-    root = Path(root).resolve(strict=True)
+    root = Path(root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
     # The owned, unique phase path is supplied only by its trusted receipt.
     (root / 'stop').touch()
     record = root / 'worker.json'
@@ -45,14 +46,14 @@ def shutdown(root, grace=3):
         for path in Path('/proc').iterdir():
             if path.name.isdigit() and int(path.name) not in owned:
                 value = identity(int(path.name))
-                if value and value['ppid'] in owned and value['cwd'] == str(root):
+                if value and value['ppid'] in owned:
                     owned[value['pid']] = value
                     changed = True
     def alive():
         result = []
         for pid, pinned in owned.items():
             now = identity(pid)
-            if now and now['state'] != 'Z' and now['start'] == pinned['start'] and now['cwd'] == str(root):
+            if now and now['state'] != 'Z' and now['start'] == pinned['start']:
                 result.append(pid)
         return result
     for sig in (None, signal.SIGTERM, signal.SIGKILL):

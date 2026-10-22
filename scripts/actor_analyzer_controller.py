@@ -130,6 +130,7 @@ def cleanup_phase(phase, remote=managed_observation):
                 if stopped['state'] != 'terminal':
                     uncertain = True
                     continue
+                receipt = json.loads(path.read_text())  # Preserve shutdown handle and acknowledgment.
             if path != phase_worker and receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
             if receipt.get('dispatch_intent') and not receipt.get('handle'):

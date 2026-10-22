@@ -595,7 +595,7 @@ def transport_fixture(tmp_path, monkeypatch, status="ok", fail=None):
     job = helper.profile_job(tmp_path)
     args = SimpleNamespace(
         state_dir=tmp_path / "state", cpl_remote_sha256="f" * 64,
-        remote_root="/srv/profiling-skill-production", timeout=3600)
+        remote_root="profiling-skill-production", timeout=3600)
     return load_client(), job, args, transport
 
 
@@ -637,6 +637,43 @@ def test_gz_cached_completion_and_calibration_identity(tmp_path, monkeypatch):
     changed = client.execute({**job, "calibration_phase": "after"}, args)
     assert changed["artifacts"]["request_digest"] != first["artifacts"]["request_digest"]
     assert len(transport.executions) == 2
+
+
+def test_gz_worker_resolves_namespace_paths_before_changing_directory(tmp_path, monkeypatch):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    job.update(action="check", scope="development")
+    client.execute(job, args)
+    script = transport.executions[0][4]
+    archive = transport.uploads[0][1]
+    namespace_destination = transport.uploads[0][2]
+    cwd = tmp_path / args.remote_root
+    cwd.mkdir()
+    remote_archive = tmp_path / namespace_destination
+    # Replace the actual device worker with a deterministic host stand-in.
+    # Keep the real generated archive/extraction/cwd/response framing protocol.
+    with tarfile.open(archive) as stream:
+        stream.extractall(tmp_path / "payload", filter="data")
+    worker = tmp_path / "payload/runner.py"
+    worker.write_text('import json, pathlib\n'
+                      'pathlib.Path("response.json").write_text(json.dumps({"status":"ok"}))\n')
+    old_digest = __import__("hashlib").sha256(archive.read_bytes()).hexdigest()
+    with tarfile.open(remote_archive, "w") as stream:
+        for path in (tmp_path / "payload").iterdir():
+            stream.add(path, arcname=path.name)
+    new_digest = __import__("hashlib").sha256(remote_archive.read_bytes()).hexdigest()
+    process = subprocess.run(["bash", "-c", script.replace(old_digest, new_digest)],
+                             cwd=cwd, capture_output=True, text=True)
+    assert process.returncode == 0, process.stderr
+    assert 'BZ_PRODUCTION_RESULT={"status": "ok"}' in process.stdout
+
+
+@pytest.mark.parametrize("root", [".", "/absolute/staging", "../escape", "a//b", "a/./b"])
+def test_gz_rejects_non_namespace_roots(tmp_path, monkeypatch, root):
+    client, job, args, transport = transport_fixture(tmp_path, monkeypatch)
+    args.remote_root = root
+    with pytest.raises(transport.module.JobError, match="workspace-relative"):
+        client.execute(job, args)
+    assert not transport.executions
 
 
 @pytest.mark.parametrize("job", [[], None, "bad", {"device": "bad"},

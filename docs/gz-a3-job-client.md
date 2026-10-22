@@ -14,9 +14,15 @@ Runtime activation scripts, workspace adapters and direct SSH are not supported.
 ```bash
 python scripts/gz_a3_job_client.py \
   --cpl-remote-sha256 <installed-client-sha256> \
-  --remote-root <registry-derived-existing-workspace> \
+  --remote-root <existing-workspace-relative-staging-child> \
   --state-dir <private-local-state-directory> < job.json
 ```
+
+The GZ route requires a non-root, normalized path relative to its registry
+workspace (for example `benchmark-checks`), not an absolute host path or `.`.
+Upload paths stay in that namespace; the worker resolves its payload and run
+paths relative to the selected staging cwd before changing directories. Native
+BZ targets retain their distinct absolute-root policy.
 
 The client pins the installed global transport digest and validates the remote
 root before dispatch. Use the same private state directory and exact request

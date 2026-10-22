@@ -126,9 +126,10 @@ class GlobalCplRemoteTransport:
         if not os.access(self.executable, os.X_OK):
             raise JobError("transport_error", "global cpl-remote is not executable")
         self.expected_sha256 = expected_sha256
-        self.remote_root = validate_remote_root(remote_root)
         self.invoke = invoke
         self.targets = set(TARGETS if targets is None else targets)
+        self.remote_root = validate_remote_root(
+            remote_root, relative=self.targets == {"gz-a3"})
 
     def _call(self, arguments: list[str], timeout: int,
               *, handle: str | None = None) -> dict:
@@ -304,7 +305,13 @@ def validate_placements(value: object, targets: set[str] = TARGETS) -> dict[int,
     return result
 
 
-def validate_remote_root(value: object) -> str:
+def validate_remote_root(value: object, *, relative: bool = False) -> str:
+    if relative:
+        if (not isinstance(value, str) or not 1 <= len(value) <= 240
+                or not re.fullmatch(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*", value)
+                or any(part in {".", ".."} for part in value.split("/"))):
+            raise JobError("request_error", "GZ remote root must be a non-root workspace-relative path")
+        return value
     if (not isinstance(value, str) or len(value) < 2 or len(value) > 240
             or not re.fullmatch(r"/[A-Za-z0-9._/-]+", value)
             or str(PurePosixPath(value)) != value
@@ -436,7 +443,8 @@ class BzA3JobClient:
         self.placements_sha256 = _json_sha(self.placements)
         self.runner, self.profiler = runner, profiler
         self.batch_profiler = batch_profiler
-        self.remote_root = validate_remote_root(remote_root)
+        self.remote_root = validate_remote_root(
+            remote_root, relative=self.TARGETS == {"gz-a3"})
         self.interrupt_after_dispatch = (
             Path(interrupt_after_dispatch).resolve()
             if interrupt_after_dispatch is not None else None

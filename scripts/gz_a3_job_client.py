@@ -155,6 +155,19 @@ def execute(job: dict, args: argparse.Namespace) -> dict:
     class GzA3JobClient(BzA3JobClient):
         TARGETS = {"gz-a3"}
 
+        def _remote_script(self, archive, archive_sha, run_root, timeout, job):
+            # Upload paths use the registry namespace, but run's cwd is already
+            # our staging child. Materialize absolute paths before cd'ing into
+            # the extracted worker directory so its script paths remain valid.
+            prefix = self.remote_root + "/"
+            if not archive.startswith(prefix) or not run_root.startswith(prefix):
+                raise ClientError("GZ worker paths must stay below the staging root")
+            script = super()._remote_script(
+                archive[len(prefix):], archive_sha, run_root[len(prefix):], timeout, job)
+            assignment, rest = script.split("\ntest ", 1)
+            return (assignment + '\narchive="$PWD/$archive"; run_root="$PWD/$run_root"'
+                    + "\ntest " + rest)
+
     if not isinstance(job, dict):
         raise ClientError("job must be a JSON object")
     request = json.loads(json.dumps(job))

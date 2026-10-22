@@ -576,7 +576,7 @@ def test_warm_terminal_missing_report_finishes_without_dispatch(tmp_path, remote
         if verb == 'observe':
             return dict(state=remote_state)
         assert verb == 'download'
-        raise RuntimeError('call evidence does not exist')
+        return dict(state='failed')
     client = SimpleNamespace(state=state, workspace=tmp_path / 'private', target='gz-a3', remote=remote)
     result = warm.observe(client, 'callid')
     assert result['state'] == expected and result['handle'] == receipt['handle']
@@ -585,3 +585,22 @@ def test_warm_terminal_missing_report_finishes_without_dispatch(tmp_path, remote
     if remote_state == 'completed':
         assert result['failure_stage'] == 'infrastructure'
         assert result['diagnostic']['phase_state'] == 'completed'
+
+
+def test_completed_warm_phase_transport_outage_is_retryable(tmp_path):
+    import model_campaign_warm as warm
+    state = tmp_path / 'state'
+    folder = state / 'callid'
+    folder.mkdir(parents=True)
+    receipt = dict(call_id='callid', handle='remote:gz-a3:job:original',
+                   remote_folder='phase/calls/callid')
+    (folder / 'receipt.json').write_text(json.dumps(receipt))
+    (state / 'phase.json').write_text(json.dumps(dict(handle=receipt['handle'])))
+    def remote(verb, *args):
+        if verb == 'observe': return dict(state='completed')
+        raise TimeoutError('transport interrupted')
+    result = warm.observe(SimpleNamespace(state=state, workspace=tmp_path / 'private',
+        target='gz-a3', remote=remote), 'callid')
+    assert result['state'] == 'observation-unavailable'
+    assert result['next'] == 'experiment-tool observe callid'
+    assert result['handle'] == receipt['handle']

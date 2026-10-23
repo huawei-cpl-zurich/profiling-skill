@@ -60,23 +60,25 @@ def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_mod
     result = dict(protocol='single_capture_ten_forwards', forward_calls=0,
                   event_latency=dict(status='incomplete', count=0, samples_ms=[],
                                      instrumentation='torch_npu profiler active'),
-                  profile=dict(status='incomplete'),
+                  profile=dict(status='incomplete', export_trigger='step-after-ten-event-samples',
+                               analysis_max_process_number=1, analysis_calls=0),
                   kernel_identity=dict(status='unavailable', names=[],
                                        expected=list(expected_kernel or []), missing=[]))
     names = [f'model_iteration_{i}' for i in range(10)]
-    # One capture, default lifecycle: export only on context exit. No schedule,
-    # profiler.step(), on_trace_ready callback or pre-capture invocation.
+    # All ten forwards belong to one active profiler step. Complete that step
+    # only after event samples are durable; no model invocation advances it.
     try:
         with torch.inference_mode():
             with npu.profiler.profile(
                     activities=[npu.profiler.ProfilerActivity.CPU,
                                 npu.profiler.ProfilerActivity.NPU],
                     record_shapes=False, with_stack=False,
+                    schedule=npu.profiler.schedule(wait=0, warmup=0, active=1, repeat=1),
                     experimental_config=npu.profiler._ExperimentalConfig(
                         profiler_level=npu.profiler.ProfilerLevel.Level1,
                         data_simplification=False),
                     on_trace_ready=npu.profiler.tensorboard_trace_handler(
-                        str(output / 'vendor'))) as profiler:
+                        str(output / 'vendor'), analyse_flag=False)) as profiler:
                 pairs = []
                 for name in names:
                     start = torch.npu.Event(enable_timing=True)
@@ -102,6 +104,12 @@ def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_mod
                 _save(output / 'forward-count.json', dict(forward_calls=result['forward_calls']))
                 print(json.dumps(dict(event='profiled-event-latencies-ready', output=str(output),
                                       event_latency=result['event_latency'])), flush=True)
+                profiler.step()
+        # Capture/finalization is complete. Analyse retained raw data exactly once,
+        # outside profiling, with an explicit bounded analysis worker count.
+        analyse = importlib.import_module('torch_npu.profiler.profiler').analyse
+        result['profile']['analysis_calls'] += 1
+        analyse(str(output / 'vendor'), max_process_number=1)
         paths = list((output / 'vendor').rglob('trace_view.json'))
         if len(paths) != 1:
             raise capture_module.CaptureError('completed export must produce exactly one trace_view.json')

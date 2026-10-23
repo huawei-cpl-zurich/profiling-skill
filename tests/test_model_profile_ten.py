@@ -14,39 +14,60 @@ class CaptureTests(unittest.TestCase):
     def capture(self, export_error=False, missing=False, expected=True):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'capture'
-            calls, events, syncs, markers = [], [], [], []
+            calls, events, syncs, markers, lifecycle = [], [], [], [], []
+            scheduled = object()
             class Event:
                 def __init__(self, **kwargs): events.append(kwargs)
                 def record(self): pass
                 def elapsed_time(self, end): return .5
             class Profile:
-                def __enter__(self): return self
-                def __exit__(self, *args):
+                def __enter__(self):
+                    lifecycle.append('start')
+                    return self
+                def step(self):
+                    lifecycle.append('step/raw')
                     saved = json.loads((output / 'latency.json').read_text())
                     self_test.assertEqual(saved['samples_ms'], [.5] * 10)
                     self_test.assertEqual(len(calls), 10)
                     self_test.assertEqual(len(events), 20)
                     self_test.assertEqual(syncs, [True])
                     self_test.assertEqual(markers, [f'model_iteration_{i}' for i in range(10)])
-                    if export_error: raise RuntimeError('export failed after samples saved')
-                    path = output / 'vendor/trace_view.json'; path.parent.mkdir(); path.write_text('[]')
+                    (output / 'vendor').mkdir()
+                def __exit__(self, *args):
+                    lifecycle.append('stop')
+                    self_test.assertEqual(lifecycle, ['start', 'step/raw', 'stop'])
             self_test = self
             def begin(**kwargs):
-                self.assertNotIn('schedule', kwargs)
+                self.assertIs(kwargs['schedule'], scheduled)
                 return Profile()
+            def schedule(**kwargs):
+                self.assertEqual(kwargs, dict(wait=0, warmup=0, active=1, repeat=1))
+                return scheduled
+            def handler(path, *, analyse_flag):
+                self.assertFalse(analyse_flag)
+                return None
+            def analyse(path, *, max_process_number):
+                self.assertEqual(lifecycle, ['start', 'step/raw', 'stop'])
+                self.assertEqual(max_process_number, 1)
+                self.assertEqual(json.loads((output / 'latency.json').read_text())['count'], 10)
+                lifecycle.append('analyse/export')
+                if export_error: raise RuntimeError('export failed after samples saved')
+                (Path(path) / 'trace_view.json').write_text('[]')
             torch = N(inference_mode=nullcontext, npu=N(Event=Event, synchronize=lambda: syncs.append(True)),
                 autograd=N(profiler=N(record_function=lambda name: (markers.append(name) or nullcontext()))))
-            npu = N(profiler=N(profile=begin, ProfilerActivity=N(CPU=1, NPU=2),
+            npu = N(profiler=N(profile=begin, schedule=schedule, ProfilerActivity=N(CPU=1, NPU=2),
                 _ExperimentalConfig=lambda **kwargs: kwargs, ProfilerLevel=N(Level1=1),
-                tensorboard_trace_handler=lambda path: None))
+                tensorboard_trace_handler=handler))
             def normalized(*args, **kwargs):
                 return dict(iterations=[dict(iteration_id=str(i)) for i in range(10)],
                     tasks=[dict(name='wrong' if missing and i == 9 else 'kernel', kind='device',
                                 iteration_id=str(i)) for i in range(10)])
-            with patch.dict(sys.modules, dict(profile_capture=N(normalize_trace=normalized, CaptureError=ValueError),
-                    profile_accounting=N(account_profile=lambda *a, **k: dict(iterations=10)))):
+            with patch.dict(sys.modules, {'torch_npu.profiler.profiler': N(analyse=analyse), **dict(profile_capture=N(normalize_trace=normalized, CaptureError=ValueError),
+                    profile_accounting=N(account_profile=lambda *a, **k: dict(iterations=10)))}):
                 result = profile_ten.capture_ten(lambda: calls.append(True), output,
                     expected_kernel=['kernel'] if expected else None, torch_module=torch, npu_module=npu)
+            self.assertEqual(lifecycle, ['start', 'step/raw', 'stop', 'analyse/export'])
+            self.assertEqual(result['profile']['analysis_calls'], 1)
             self.assertEqual(result['event_latency']['count'], 10)
             self.assertEqual(result['event_latency']['sample_sd_ms'], 0)
             return result

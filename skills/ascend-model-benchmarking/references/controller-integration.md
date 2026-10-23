@@ -154,8 +154,12 @@ operator recovery rather than silently regenerating them. Keep cache paths priva
 count; settings are restored on exit. The external supervisor owns physical device
 selection; `--device` selects the exposed logical device for cached tensor loads.
 
-Each capture saves/prints ten event samples, mean and sample standard deviation
-before export. Profile/export failure can coexist with complete event timings.
+Each capture uses one active profiler step (`wait=0,warmup=0,active=1,repeat=1`).
+It saves/prints ten event samples, mean and sample standard deviation before
+calling `profiler.step()` once to complete raw capture; this advances profiler
+state without an additional model forward. The handler uses `analyse_flag=False`.
+After context exit, public `torch_npu.profiler.profiler.analyse` runs exactly once
+with `max_process_number=1` to export the retained raw capture. Profile/export failure can coexist with complete event timings.
 Missing or mismatched kernel identity remains explicit; names resolved from live
 Triton side-table entries require exact per-iteration matches in the same capture.
 Unresolved names are observed-only. The report does not infer a verified speedup

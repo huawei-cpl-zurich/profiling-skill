@@ -379,3 +379,16 @@ def test_retained_short_queue_placeholder_is_audited_not_compute(trace, pid, ts)
     trace[4].update(pid=pid, tid=2, ts=ts)
     with pytest.raises(capture.CaptureError, match='exactly one CPU op and device task'):
         normalize(trace)
+
+
+@pytest.mark.parametrize('endpoint', ['host', 'device'])
+def test_placeholder_collision_with_complete_real_flow_is_ambiguous(trace, endpoint):
+    # A real host/device target remains present, so ignoring the placeholder
+    # would otherwise make this complete flow appear uniquely attributable.
+    target = trace[1 if endpoint == 'host' else 2]
+    record = placeholder()
+    record.update(pid=target['pid'], tid=target['tid'], ts=target['ts'])
+    record['args']['Physic Stream Id'] = target['tid']
+    trace.append(record)
+    with pytest.raises(capture.CaptureError, match='placeholder'):
+        normalize(trace)

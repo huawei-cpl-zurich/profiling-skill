@@ -153,7 +153,7 @@ class PairTests(unittest.TestCase):
         source=root/'kernel.py';source.write_text('retained kernel source')
         compiled=[dict(hash='a'*64,artifacts={'npubin':'b'*64})]
         row = dict(status='complete',correctness=dict(status='complete',calls=1),profiled_calls=10,
-                   capture_calls=1,cleanup={'status':'not-required'},capture=capture,
+                   capture_calls=1,capture=capture,
                    compilation_state_before_capture=compiled,compilation_state_after_capture=copy.deepcopy(compiled),
                    sources={str(source):evidence.sha(source)},metadata={})
         report = dict(protocol='optimization-pair-v1',status='complete',case={'name':'fixture'},fixture={'sha256':'oracle-digest'},

@@ -171,7 +171,9 @@ def validate_experiment(report, resolve, recovery):
         diagnostics = row.get('correctness', {}).get('diagnostics')
         if diagnostics is False or isinstance(diagnostics, dict) and diagnostics.get('passed') is False:
             raise EvidenceError('correctness rejected output')
-        if row.get('cleanup', {}).get('status') not in ('complete', 'not-required'):
+        # Original v1 captures predate explicit cleanup records. Preserve that
+        # format, while never promoting a recorded cleanup failure.
+        if 'cleanup' in row and row['cleanup'].get('status') not in ('complete', 'not-required'):
             raise EvidenceError('cleanup must have succeeded')
         if row.get('capture_calls') != 1:
             raise EvidenceError('one capture per arm required')

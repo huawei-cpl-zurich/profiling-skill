@@ -87,6 +87,12 @@ class NativeBridgeTests(unittest.TestCase):
             arm.run()
         self.assertIn('optimization_native::launch', [item.key for item in profile.key_averages()])
 
+    def test_changed_build_source_is_rejected_before_launch(self):
+        self.source.write_text(SOURCE + '\n// uncompiled edit\n')
+        with self.assertRaisesRegex(ValueError, 'source identity mismatch'):
+            self.arm()
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(), 0)
+
     def test_noncontiguous_input_is_rejected_without_launch(self):
         with self.assertRaisesRegex(ValueError, 'contiguous'):
             self.arm(inputs=[torch.arange(8.).reshape(2, 4).t(), torch.ones(4)])
@@ -101,6 +107,28 @@ class NativeBridgeTests(unittest.TestCase):
                 source_revision='test-pin')
         self.assertTrue((self.root / 'failed/build.log').read_text())
         self.assertNotEqual(json.loads((self.root / 'failed/build.json').read_text())['exit_code'], 0)
+
+
+class TileAdapterTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/tile_adapter.py'
+        spec = importlib.util.spec_from_file_location('native_tile_adapter', path)
+        cls.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.module)
+
+    def test_balance_uses_actual_core_count_and_preserves_problem(self):
+        for cores in (16, 20, 24, 32, 36, 48):
+            m,n,k = self.module.balanced_shape(cores)
+            before = ((m+127)//128)*((n+255)//256)
+            after = ((m+255)//256)*((n+127)//128)
+            self.assertLessEqual(after, cores)
+            self.assertGreater(before, cores)
+            self.assertEqual(k, 6144)
+        with self.assertRaises(ValueError):
+            self.module.balanced_shape(0)
+
 
 
 if __name__ == '__main__':

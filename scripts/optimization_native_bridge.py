@@ -86,6 +86,12 @@ class NativeArm:
             raise ValueError('pinned source identity is required')
         self.metadata = dict(backend='catlass-cabi-v1', source_revision=source_revision,
                              build=build_manifest or {})
+        if build_manifest:
+            if build_manifest.get('binary_sha256') != digest(self.binary):
+                raise ValueError('build manifest binary identity mismatch')
+            for entry in build_manifest.get('sources', []):
+                if digest(entry['path']) != entry['sha256']:
+                    raise ValueError('build manifest source identity mismatch')
         self.inputs, self.output = list(inputs), output
         tensors = [*self.inputs, self.output]
         if any(not tensor.is_contiguous() for tensor in tensors):

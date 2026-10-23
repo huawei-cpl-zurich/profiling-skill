@@ -274,10 +274,14 @@ def run(options, *, compiler_factory=None, clock=None):
             if busy['candidate'] <= 0:
                 raise CapabilityError('candidate device busy-time must be positive')
             row['metric_status']['busy_time_speedup'] = (
-                'complete' if 'baseline' in profiles else 'unavailable')
+                'complete' if 'baseline' in profiles and policy == 'required' else 'unavailable')
+            row['profile_replay_depth_paired'] = policy == 'required'
+            if policy == 'optional':
+                row['busy_time_comparison_unavailable_reason'] = (
+                    'baseline and candidate profiles have different replay depths around paired latency')
             row.update(state='complete',
                 busy_time_metric='per_iteration_sum_of_device_and_aicpu_task_durations')
-            if 'baseline' in profiles:
+            if 'baseline' in profiles and policy == 'required':
                 row['device_busy_time_speedup'] = busy['baseline'] / busy['candidate']
                 row['busy_time_speedup'] = total['baseline'] / total['candidate']
             row['latency_variability_flags'] = [arm for arm in ('baseline', 'candidate')

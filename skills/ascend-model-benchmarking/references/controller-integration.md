@@ -155,3 +155,9 @@ before paired timing to match the candidate identity capture's twenty warmups
 and fifty forwards. Compilation and input immutability remain checked outside
 timing. Baseline trace acquisition follows saved latency. This equal replay depth
 applies only to the explicitly warmed workflow, not the primary 1+10 protocol.
+
+Optional warmed acquisitions retain each arm's busy-time metrics, but omit paired
+busy-time speedups and their geomean: the deferred baseline capture has a different
+replay depth from the candidate capture. `profile_replay_depth_paired` is false
+and the busy-time comparison is explicitly unavailable even when both captures
+succeed. Use the required policy for paired busy-time speedups.

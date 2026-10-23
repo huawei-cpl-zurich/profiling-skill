@@ -55,6 +55,21 @@ def _queue_placeholder(event):
             and args['Physic Stream Id'] == event['tid'])
 
 
+def _event_record(event):
+    """Observed timing-event command; still requires its complete host flow."""
+    args = event['args']
+    return (event.get('name') == 'EVENT_RECORD' and event.get('cat') is None
+            and _decimal(event.get('dur')) == Decimal('0.02')
+            and all(type(args.get(key)) is int and args[key] == value for key, value in
+                    {'Model Id': 2**32 - 1, 'Subtask Id': 2**32 - 1, 'Batch Id': 0}.items())
+            and all(type(args.get(key)) is int and 0 <= args[key] < maximum for key, maximum in
+                    [('Task Id', 2**32 - 1), ('connection_id', 2**64 - 1)])
+            and type(event.get('pid')) is int and event['pid'] >= 0
+            and type(event.get('tid')) is int and event['tid'] >= 0
+            and type(args.get('Physic Stream Id')) is int
+            and args['Physic Stream Id'] == event['tid'])
+
+
 def normalize_trace(events, iteration_names, *, export_completed):
     """Join exact CPU op -> async_npu flow -> device task, then host scopes.
 
@@ -102,7 +117,7 @@ def _normalize(events, names):
                 administrative.append(dict(reason='verified administrative queue placeholder with sentinel linkage',
                                            task=dict(event)))
                 continue
-            if kind not in TASK_KINDS:
+            if kind not in TASK_KINDS and not (kind == 'EVENT_RECORD' and _event_record(event)):
                 raise CaptureError(f'unvalidated device task type: {kind}')
             tasks.append((position, event))
             task_at[_coordinate(event)].append((position, event))
@@ -147,6 +162,12 @@ def _normalize(events, names):
             raise CaptureError('unrepresentable task duration')
         link = dict(flow_id=key, task_id=identity, host_start=str(start['ts']),
                     device_start=str(task['ts']), task_type=kind)
+        if kind == 'EVENT_RECORD':
+            if op.get('name') != 'record_event':
+                raise CaptureError('EVENT_RECORD requires the observed record_event CPU op')
+            administrative.append(dict(reason='explicitly linked timing-event command, not compute',
+                                       task=dict(task), host=dict(op), link=link))
+            continue
         if not owners:
             excluded.append(dict(reason='complete CPU/NPU flow outside active host scopes',
                                  task=dict(task), link=link))
@@ -165,7 +186,8 @@ def _normalize(events, names):
     return dict(iterations=list(index.values()), tasks=normalized, capture_complete=True,
         acquisition_evidence=dict(export_completed=True, schema='torch_npu_trace_async_npu_v1',
             association='explicit CPU/NPU flow + same-thread host scope nesting',
-            observed_tasks=len(tasks), paired_flows=len(endpoints), links=links,
+            observed_tasks=sum(task['args']['Task Type'] != 'EVENT_RECORD' for _, task in tasks),
+            paired_flows=len(endpoints), links=links,
             exclusions=excluded + administrative, silent_vendor_record_loss_detectable=False))
 
 

@@ -379,3 +379,54 @@ def test_retained_short_queue_placeholder_is_audited_not_compute(trace, pid, ts)
     trace[4].update(pid=pid, tid=2, ts=ts)
     with pytest.raises(capture.CaptureError, match='exactly one CPU op and device task'):
         normalize(trace)
+
+
+@pytest.fixture
+def retained_event_record():
+    # Exact timing-event command and CPU/NPU link from the BSA ten-forward baseline.
+    return [event('record_event', 2941004, 2941004, '1792723909142941.690', 49.7,
+                  cat='cpu_op', args={'Sequence number': -1, 'Fwd thread id': 0}),
+            event('EVENT_RECORD', 3011588544, 2, '1792723909143162.440', 0.02,
+                  args={'Model Id': 4294967295, 'Task Type': 'EVENT_RECORD',
+                        'Physic Stream Id': 2, 'Task Id': 1045, 'Batch Id': 0,
+                        'Subtask Id': 4294967295, 'connection_id': 19945}),
+            dict(ph='s', bp='e', name='torch_to_npu', id=1792723909143162440,
+                 pid=2941004, tid=2941004, ts='1792723909142941.690', cat='async_npu'),
+            dict(ph='f', bp='e', name='torch_to_npu', id=1792723909143162440,
+                 pid=3011588544, tid=2, ts='1792723909143162.440', cat='async_npu')]
+
+
+def test_linked_timing_event_is_audited_not_compute(trace, retained_event_record):
+    result = normalize(trace + retained_event_record)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert summary['iterations'][0]['device_busy_us'] == pytest.approx(19.9795)
+    assert len(result['tasks']) == 2
+    evidence = result['acquisition_evidence']
+    assert evidence['observed_tasks'] == 2 and evidence['paired_flows'] == 3
+    audit = evidence['exclusions'][0]
+    assert audit['task'] == retained_event_record[1]
+    assert audit['host'] == retained_event_record[0]
+    assert audit['link']['flow_id'] == '1792723909143162440'
+    assert audit['reason'] == 'explicitly linked timing-event command, not compute'
+    with pytest.raises(capture.CaptureError, match='empty active iteration'):
+        normalize([trace[0]] + retained_event_record)
+
+
+@pytest.mark.parametrize('mutation', ['missing-start', 'missing-finish', 'no-flow', 'duplicate-flow',
+    'wrong-host', 'duration', 'model', 'batch', 'subtask', 'connection', 'task', 'stream', 'name'])
+def test_event_record_requires_observed_schema_and_exact_flow(trace, retained_event_record, mutation):
+    records = retained_event_record
+    if mutation == 'missing-start': records.pop(2)
+    elif mutation == 'missing-finish': records.pop()
+    elif mutation == 'no-flow': records = records[:2]
+    elif mutation == 'duplicate-flow': records.append(copy.deepcopy(records[-1]))
+    elif mutation == 'wrong-host': records[0]['name'] = 'ordinary_kernel_launch'
+    elif mutation == 'duration': records[1]['dur'] = 0.03
+    elif mutation == 'name': records[1]['name'] = 'unknown'
+    else:
+        field, value = {'model': ('Model Id', 0), 'batch': ('Batch Id', 1),
+            'subtask': ('Subtask Id', 0), 'connection': ('connection_id', 18446744073709551615),
+            'task': ('Task Id', False), 'stream': ('Physic Stream Id', 3)}[mutation]
+        records[1]['args'][field] = value
+    with pytest.raises(capture.CaptureError):
+        normalize(trace + records)

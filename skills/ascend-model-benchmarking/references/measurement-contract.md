@@ -86,3 +86,12 @@ links to CPU `aclnnReduceSum` records. They count as device compute under the sa
 complete-flow and explicit-iteration requirements as other validated task types.
 This recognition does not recover missing markers or establish vector/cube
 utilization from the task label.
+
+Timing-event commands exported as `EVENT_RECORD` are administrative, rather
+than compute, only for the observed 0.02 µs schema: matching name, absent
+category, sentinel model/subtask IDs, batch zero, real task/connection IDs and
+matching stream/thread coordinates. Every command still requires a unique,
+complete `torch_to_npu` flow from an exact CPU `record_event` operation. The
+exclusion audit retains its original device record, host operation and link.
+These flows count in `paired_flows`, while `observed_tasks` counts compute
+records. Timing events cannot satisfy an iteration's compute-work requirement.

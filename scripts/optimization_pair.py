@@ -74,11 +74,30 @@ def fingerprint(value, torch):
 
 def fixture(adapter, spec, cache, torch):
     provider = sources(getattr(adapter, 'case_sources', [inspect.getsourcefile(adapter.make_case)]))
-    key = hashlib.sha256(json.dumps(dict(spec=spec, sources=provider), sort_keys=True).encode()).hexdigest()
+    content = sorted(set(provider.values()))
+    key = hashlib.sha256(json.dumps(dict(spec=spec, source_content=content), sort_keys=True).encode()).hexdigest()
     folder = cache / key
+    # Older manifests keyed absolute paths. Search only retained manifests and
+    # validate payload digests before loading; no provider execution for migration.
+    if not folder.exists() and cache.exists():
+        invalid_match = False
+        for candidate in sorted(cache.glob('*/manifest.json')):
+            prior = json.loads(candidate.read_text())
+            prior_content = prior.get('source_content', sorted(set(prior.get('sources', {}).values())))
+            if prior.get('protocol') == PROTOCOL and prior.get('case') == spec and prior_content == content:
+                if not (candidate.parent / 'fixture.pt').is_file() or sha(candidate.parent / 'fixture.pt') != prior.get('sha256'):
+                    invalid_match = True
+                    continue
+                folder = candidate.parent
+                break
+        else:
+            if invalid_match:
+                raise ValueError('oracle cache payload changed')
     if folder.exists():
         manifest = json.loads((folder / 'manifest.json').read_text())
-        if manifest['protocol'] != PROTOCOL or manifest['sources'] != provider or manifest['case'] != spec:
+        cached_content = manifest.get('source_content', sorted(set(manifest.get('sources', {}).values())))
+        if (manifest['protocol'] != PROTOCOL or cached_content != content or manifest['case'] != spec
+                or sorted(set(manifest['sources'].values())) != content):
             raise ValueError('oracle cache identity mismatch')
         if sha(folder / 'fixture.pt') != manifest['sha256']:
             raise ValueError('oracle cache payload changed')
@@ -91,10 +110,11 @@ def fixture(adapter, spec, cache, torch):
             raise ValueError('fixture must contain expected output')
         folder.mkdir(parents=True)
         torch.save(value, folder / 'fixture.pt')
-        manifest = dict(protocol=PROTOCOL, case=spec, sources=provider, sha256=sha(folder / 'fixture.pt'))
+        manifest = dict(protocol=PROTOCOL, case=spec, sources=provider, source_content=content,
+                        sha256=sha(folder / 'fixture.pt'))
         save(folder / 'manifest.json', manifest)
         generated = 1
-    return value, dict(**manifest, cache=str(folder), oracle_calls=generated)
+    return value, dict(**manifest, current_sources=provider, cache=str(folder), oracle_calls=generated)
 
 
 def verify_sources(expected):

@@ -48,3 +48,35 @@ time within variability, a slower fused call, or extra compiler-generated work.
 No runtime/resource tradeoff has yet been verified for this example. Retain
 negative or inconclusive outcomes rather than calling the long-K case a loss
 without measurement.
+
+## Native Catlass C++ format (awaiting A3 validation)
+
+`examples/optimization-library/catlass/mixed.cpp`, FAMILY=2, keeps the same
+FP16 operands and FP32 accumulation/output contract. The before arm launches
+BasicMatmul into an FP32 workspace and a separate AIV add; the after arm
+launches MatmulEpilogue. Construct its public Params with separate Z and output
+pointers: the upstream convenience Arguments aliases the addend and output.
+The addend remains immutable and no reset/copy is hidden outside timing.
+
+This format fuses the launch and cross-core scheduling; it **retains** the
+M*N*4-byte intermediate GM workspace, its store and its AIV read. It therefore
+does not demonstrate the Triton format's removal of that traffic. Both arms
+report that workspace and count the full call, including standalone add or
+mixed-kernel synchronization. Inspect real kernel/task identities and all
+per-forward tasks before attributing a gain to launch fusion. High K or a small
+output may make synchronization/UB residency dominate the saved launch.
+
+Native factory: `mixed_adapter:epilogue_factory`; the oracle is the exact shared
+`gemm_contract.py` provider used by Triton. Source: [MatmulEpilogue public Params
+and workspace](ref://profiling-skill/common/perf-analysis/repos/optimization-wave1-catlass-40aced927fda#include/catlass/gemm/kernel/matmul_epilogue.hpp:L51-L107).
+No correctness or latency claim follows from compilation alone.
+
+The native standalone epilogue uses the same explicit mixed 1:2 execution
+contract as the fused epilogue: 20 logical blocks means 40 AIV subcontexts on
+the observed target. `BlockEpilogue` partitions rows internally by subcontext;
+its siblings must receive the same logical task, using
+`GetBlockIdx()/GetSubBlockNum()` as the starting task owner. Using the raw
+flattened AIV index gives each sibling a different task and leaves half-tiles
+unwritten. A source task-type hint does not establish the compiled execution
+mode: inspect the actual binary and retained output coverage. The standalone
+128x256 tile splits into the same 64x256 AIV subtiles as the fused path.

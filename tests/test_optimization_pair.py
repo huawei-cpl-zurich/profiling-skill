@@ -100,6 +100,37 @@ class PairTests(unittest.TestCase):
             self.assertEqual(self.run_case(adapter, folder, 'reuse')['status'], 'complete')
             self.assertEqual(adapter.oracle_calls, 1)
 
+    def test_provider_cache_survives_relocation_and_legacy_manifest(self):
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                providers = [folder / 'bundle-one' / 'oracle.py', folder / 'bundle-two' / 'renamed.py']
+                for provider in providers:
+                    provider.parent.mkdir()
+                    provider.write_text('def oracle(): return 1\n')
+                first = Adapter()
+                first.case_sources = [providers[0]]
+                original = self.run_case(first, folder)
+                self.assertEqual(first.oracle_calls, 1)
+                if legacy:
+                    cache_folder = Path(original['fixture']['cache'])
+                    manifest_path = cache_folder / 'manifest.json'
+                    manifest = json.loads(manifest_path.read_text())
+                    del manifest['source_content']
+                    pair.save(manifest_path, manifest)
+                    cache_folder.rename(cache_folder.parent / 'legacy-absolute-path-key')
+                second = Adapter()
+                second.case_sources = [providers[1]]
+                reused = self.run_case(second, folder, 'relocated')
+                self.assertEqual(reused['status'], 'complete', reused)
+                self.assertEqual(second.oracle_calls, 0)
+                self.assertEqual(reused['fixture']['sha256'], original['fixture']['sha256'])
+                self.assertEqual(reused['fixture']['current_sources'], pair.sources([providers[1]]))
+                providers[1].write_text('def oracle(): return 2\n')
+                different = self.run_case(second, folder, 'changed-provider')
+                self.assertEqual(different['status'], 'complete', different)
+                self.assertEqual(second.oracle_calls, 1)
+
     def test_no_capture_when_either_correctness_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             adapter = Adapter(bad_arm='after')

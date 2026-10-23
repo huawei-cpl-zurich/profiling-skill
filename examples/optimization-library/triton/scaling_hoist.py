@@ -17,7 +17,7 @@ def kernels():
     import triton.language as tl
 
     @triton.jit
-    def wave001_kkt_scale_before(K, Beta, Out, BT: tl.constexpr, DK: tl.constexpr, BK: tl.constexpr):
+    def wave001_kkt_scale_before(K, KRight, Beta, Out, BT: tl.constexpr, DK: tl.constexpr, BK: tl.constexpr):
         group = tl.program_id(0)
         row = tl.arange(0, BT)
         beta = tl.load(Beta + group * BT + row)
@@ -25,13 +25,14 @@ def kernels():
         for block in range(tl.cdiv(DK, BK)):
             channel = block * BK + tl.arange(0, BK)
             k = tl.load(K + group * BT * DK + row[:, None] * DK + channel[None, :], channel[None, :] < DK, 0)
+            rhs = tl.load(KRight + group * BT * DK + row[None, :] * DK + channel[:, None], channel[:, None] < DK, 0)
             scaled = (k.to(tl.float32) * beta[:, None]).to(k.dtype)
-            product = tl.dot(scaled, tl.trans(k), product)
+            product = tl.dot(scaled, rhs, product)
         value = tl.where(row[:, None] > row[None, :], product, 0.0)
         tl.store(Out + group * BT * BT + row[:, None] * BT + row[None, :], value)
 
     @triton.jit
-    def wave001_kkt_scale_after(K, Beta, Out, BT: tl.constexpr, DK: tl.constexpr, BK: tl.constexpr):
+    def wave001_kkt_scale_after(K, KRight, Beta, Out, BT: tl.constexpr, DK: tl.constexpr, BK: tl.constexpr):
         group = tl.program_id(0)
         row = tl.arange(0, BT)
         beta = tl.load(Beta + group * BT + row)
@@ -39,7 +40,8 @@ def kernels():
         for block in range(tl.cdiv(DK, BK)):
             channel = block * BK + tl.arange(0, BK)
             k = tl.load(K + group * BT * DK + row[:, None] * DK + channel[None, :], channel[None, :] < DK, 0)
-            product = tl.dot(k, tl.trans(k), product)
+            rhs = tl.load(KRight + group * BT * DK + row[None, :] * DK + channel[:, None], channel[:, None] < DK, 0)
+            product = tl.dot(k, rhs, product)
         value = tl.where(row[:, None] > row[None, :], product * beta[:, None], 0.0)
         tl.store(Out + group * BT * BT + row[:, None] * BT + row[None, :], value)
 
@@ -85,7 +87,9 @@ class Adapter:
         compiled = {}
 
         def run():
-            artifact = kernel[(groups,)](device_k, device_beta, out, bt, dk, max(32, min(64, triton.next_power_of_2(dk))))
+            # The two read-only formals alias the same input, without a copy.
+            # Keep RHS's Cube load distinct from the vector-scaled left load.
+            artifact = kernel[(groups,)](device_k, device_k, device_beta, out, bt, dk, max(32, min(64, triton.next_power_of_2(dk))))
             # Only compiler object identities are recorded; tensors are untouched.
             compiled[id(artifact)] = artifact
             return out
@@ -98,6 +102,7 @@ class Adapter:
                                    metadata=dict(language='triton', triton_version=triton.__version__,
                                                  torch_version=torch.__version__, arm=arm,
                                                  groups=groups, bt=bt, dk=dk, num_autotune_trials=0,
+                                                 rhs_input_alias='same K pointer through separate read-only formal',
                                                  compiler_artifacts='compilation_state snapshots'),
                                    compilation_state=compilation_state,
                                    inputs=(device_k, device_beta))

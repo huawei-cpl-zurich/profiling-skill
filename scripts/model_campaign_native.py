@@ -21,7 +21,7 @@ def audited_compiler():
                 elif node.op == 'call_method' and name in ('view', 'reshape', 'size', 'stride', 'numel'):
                     continue
                 elif node.op == 'call_function' and any(token in name for token in
-                        ('empty', 'getitem', 'getattr', 'sym_size', 'sym_numel')):
+                        ('empty', 'getitem', 'getattr', 'sym_size', 'sym_numel', 'sym_int', 'sym_float')):
                     continue
                 else:
                     raise RuntimeError('Model graph contains non-Triton computation: ' + name)
@@ -31,13 +31,13 @@ def audited_compiler():
     return TritonCompiler(backend_name='npu-inductor')
 
 
-def _prepare(root, index=7, variant=0):
+def _prepare(root, index=None, variant=0):
     import torch
     import torch_npu
     import candidate
     from model_execution import prepare_model
-    from private_campaign_cases import make_case, validate
-    case = make_case('matmul', index, variant=variant)
+    from model_campaign_task import case as task_case
+    case, validate = task_case(root, index, variant)
     prepared = prepare_model(candidate.Model, case['args'], {},
         lambda output: validate(case, 'candidate', output),
         compiler=audited_compiler(), synchronize=torch.npu.synchronize)
@@ -48,7 +48,7 @@ def check(root, env, remaining):
     import torch
     import torch_npu
     from candidate_probe import probe_candidate
-    from private_campaign_cases import make_case, validate
+    from model_campaign_task import case as task_case, check_indices, check_variants
     try:
         import candidate
     except TimeoutError:
@@ -68,11 +68,12 @@ def check(root, env, remaining):
                 detail['message'] = (error.msg if isinstance(error, SyntaxError) else str(error))[:4096]
         return dict(passed=False, variants=[], diagnostics=[dict(state='failed',
             category='candidate-compile-or-runtime-error', diagnostic=detail)])
-    # Tiny, independent M/N/K tails, and a real performance shape, two data variants.
+    # Each task owns its runtime-data qualification variants.
     results = []
-    for variant in (0, 1):
-        for index in range(8):
-            case = make_case('matmul', index, variant=variant)
+    variants = check_variants(root)
+    for variant in variants:
+        for index in check_indices(root):
+            case, validate = task_case(root, index, variant)
             # Each proof gets an actual new backend capture. Neither Dynamo's
             # eight-specialization limit nor a warm Python cache substitutes for it.
             torch._dynamo.reset()
@@ -84,8 +85,8 @@ def check(root, env, remaining):
                 reference=lambda args, kwargs: case['expected'], compiler=audited_compiler())
             results.append(result)
             if result['state'] != 'passed':
-                return dict(passed=False, variants=list(range(variant)), diagnostics=results)
-    return dict(passed=True, variants=[0, 1], diagnostics=results)
+                return dict(passed=False, variants=variants[:variants.index(variant)], diagnostics=results)
+    return dict(passed=True, variants=variants, diagnostics=results)
 
 
 def benchmark(root, env, remaining):
@@ -157,7 +158,7 @@ def pipes(root, env, remaining):
     from profile_capture import Acquisition
     output = root / 'measurement'
     output.mkdir(exist_ok=True)
-    prepared, _ = _prepare(root)
+    prepared, case = _prepare(root)
     discovered = Acquisition().profile(prepared, samples=1, output=output / 'discovery')
     names = sorted({row['name'] for row in discovered['tasks'] if row['kind'] == 'device'})
     if not names:
@@ -185,7 +186,7 @@ def pipes(root, env, remaining):
     captures = [dict(selector=name, basic_rows=[],
         pipe_rows=[row for row in rows if row.get('Name') == name]) for name in names]
     validate_pmu_captures(captures)
-    result = dict(state='complete', cases=['matmul-7-variant-0'],
+    result = dict(state='complete', cases=[case['id']],
         collector='Torch-NPU application PMU', granularity='per-task',
         discovered_names=names, captures=captures, warmup=20, samples=5)
     (output / 'pipe-evidence.json').write_text(json.dumps(result, indent=2))

@@ -452,3 +452,47 @@ def test_nondefault_budget_reaches_live_tool_boundary(tmp_path, monkeypatch):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_before_agent_work_consumes_original_model_allowance(tmp_path, monkeypatch):
+    instance = make_launcher(tmp_path)
+    instance.timeout = .4
+    fake_model(instance, "import time\ntime.sleep(20)\n")
+    def before():
+        original = json.loads((instance.workspace / 'execution.json').read_text())
+        assert original['wall_budget_seconds'] == .4
+        time.sleep(.2)
+    instance.before_agent = before
+    real_execute, allowances = module.execute, []
+    def tracked(command, cwd, timeout, output_files=None):
+        allowances.append(timeout)
+        return real_execute(command, cwd, timeout, output_files)
+    monkeypatch.setattr(module, 'execute', tracked)
+    receipt = instance.launch()
+    assert receipt['exit_code'] == 124
+    assert 0 < allowances[-1] < .25
+
+
+def test_preflight_skips_before_agent_acquisition(tmp_path):
+    instance = make_launcher(tmp_path)
+    instance.before_agent = lambda: pytest.fail('preflight acquired profile')
+    assert instance.launch(preflight_only=True)['exit_code'] == 0
+
+
+def test_after_agent_runs_with_original_clock_and_tool_server_still_live(tmp_path):
+    instance = make_launcher(tmp_path)
+    fake_model(instance, "print('finished')\n")
+    seen = []
+    def after(result):
+        assert result['returncode'] == 0 and not result['timed_out']
+        assert instance.deadline_monotonic - time.monotonic() < instance.timeout
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.connect(str(instance.socket_dir / 'tool.sock'))
+            connection.sendall(json.dumps(dict(arguments=['help'])).encode() + b'\n')
+            reply = json.loads(connection.makefile('rb').readline())
+            assert reply['returncode'] == 0
+        seen.append(instance.deadline_monotonic)
+        return result
+    instance.after_agent = after
+    instance.launch()
+    assert len(seen) == 1

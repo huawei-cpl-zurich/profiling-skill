@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-from blind_optimization_launcher import BlindLauncher, LaunchError, write_json
+from blind_optimization_launcher import BlindLauncher, LaunchError, write_json, execute
 from actor_analyzer_contract import build_prompt, validate_analysis
 import analyzer_history
 
@@ -54,11 +54,7 @@ def correct(result):
             isinstance(item, dict) and item.get('correctness') is True for item in records))
 
 
-def validate_citation(evidence, summary, expected_source, artifact):
-    """Bind all claimed identities to the trusted call, never the report itself."""
-    if not isinstance(summary, dict) or summary.get('source_sha256') != expected_source \
-            or summary.get('implementation', 'candidate') != 'candidate' or not correct(summary):
-        raise ValueError('citation lacks successful frozen candidate provenance')
+def citation_identities(summary):
     captures = summary.get('captures', [])
     kernels = {summary.get('selector')}
     kernels.update(summary.get('discovered_names', []))
@@ -72,9 +68,18 @@ def validate_citation(evidence, summary, expected_source, artifact):
     cases = summary.get('cases')
     if cases is None:
         cases = [item['check'] for item in records if 'check' in item] if isinstance(records, list) else []
-    if not set(evidence['kernels']) <= kernels \
-            or not set(evidence['cases']) <= {str(item) for item in cases}:
+    return sorted(kernels), sorted(str(item) for item in cases)
+
+
+def validate_citation(evidence, summary, expected_source, artifact):
+    """Bind all claimed identities to the trusted call, never the report itself."""
+    if not isinstance(summary, dict) or summary.get('source_sha256') != expected_source \
+            or summary.get('implementation', 'candidate') != 'candidate' or not correct(summary):
+        raise ValueError('citation lacks successful frozen candidate provenance')
+    kernels, cases = citation_identities(summary)
+    if not set(evidence['kernels']) <= set(kernels) or not set(evidence['cases']) <= set(cases):
         raise ValueError('citation kernel/case claims are not supported by the trusted call')
+    captures = summary.get('captures', [])
     kind = evidence['kind']
     if kind == 'profile' and not any(item.get('pipe_rows') for item in captures):
         raise ValueError('profile citation lacks acquired candidate pipe evidence')
@@ -123,6 +128,14 @@ def cleanup_phase(phase, remote=managed_observation):
             continue
         try:
             receipt = json.loads(path.read_text())
+            if path == phase_worker and receipt.get('remote_folder') and receipt.get('handle'):
+                from model_campaign_warm import shutdown_owned_phase
+                stopped = shutdown_owned_phase(path)
+                calls.append({'worker_shutdown': stopped})
+                if stopped['state'] != 'terminal':
+                    uncertain = True
+                    continue
+                receipt = json.loads(path.read_text())  # Preserve shutdown handle and acknowledgment.
             if path != phase_worker and receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
             if receipt.get('dispatch_intent') and not receipt.get('handle'):
@@ -143,7 +156,7 @@ def cleanup_phase(phase, remote=managed_observation):
                 save(path, receipt)
             else:
                 uncertain = True
-        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
             uncertain = True
             calls.append({'call_id': path.parent.name, 'error': str(error)})
     result = {'state': 'observation-required' if uncertain else 'terminal', 'calls': calls}
@@ -153,7 +166,13 @@ def cleanup_phase(phase, remote=managed_observation):
 
 def bridge(config_path, arguments):
     """Keep managed Tools receipts and source identity outside the agent mount."""
+    if arguments[:1] == ['stop']:
+        raise ValueError('phase shutdown is a trusted controller operation')
     config = json.loads(config_path.read_text())
+    if config.get('report_repair_only'):
+        print(json.dumps(dict(state='failed', failure_stage='report-repair',
+                             error='All remote/device tools are disabled during report repair')))
+        return 2
     workspace, phase = Path(config['workspace']), config_path.parent
     pending_calls = []
     for candidate in Path(config['campaign']).glob('**/tool-state/*/receipt.json'):
@@ -216,6 +235,34 @@ class RoleLauncher(BlindLauncher):
         self.finish_reserve_seconds = min(120, budget // 5)
 
     def prepare(self):
+        if getattr(self, 'resume_before_agent', False):
+            self.workspace = self.root / 'candidate-snapshot'
+            self.frozen, self.state = self.root / 'frozen', self.root / 'codex-state'
+            self.wrapper, self.journal = self.root / 'experiment-tool', self.root / 'commands.jsonl'
+            self.reports = self.root / 'reports'
+            expected = subprocess.check_output(['git', '-C', str(self.campaign.workspace),
+                                                 'show', self.commit + ':candidate.py'])
+            if candidate_hash(self.workspace) != hashlib.sha256(expected).hexdigest():
+                raise LaunchError('retained analyzer snapshot differs from frozen candidate')
+            for path in (self.frozen / 'prompt.md', self.wrapper, self.state / 'auth.json', self.reports):
+                if not path.exists():
+                    raise LaunchError('incomplete retained analyzer preparation')
+            if digest(self.frozen / 'prompt.md') != digest(self.prompt_source):
+                raise LaunchError('retained analyzer prompt changed')
+            if self.skill_source and skill_manifest(self.frozen / 'skill') != skill_manifest(self.skill_source):
+                raise LaunchError('retained analyzer skill changed')
+            for name, expected in self.campaign.config.get('profiling_skills', {}).items():
+                if name != 'ascend-profiling' and skill_manifest(self.frozen / 'profiling-skills' / name) != expected:
+                    raise LaunchError('retained analyzer profiling inputs changed')
+            config = json.loads((self.root / 'tool-config.json').read_text())
+            if config != dict(workspace=str(self.workspace), command=self.campaign.tool_command,
+                              campaign=str(self.campaign.root)):
+                raise LaunchError('retained analyzer tool configuration changed')
+            self.socket_temporary = tempfile.TemporaryDirectory(prefix='blind-tool-')
+            self.socket_dir = Path(self.socket_temporary.name)
+            self.tool_command = [sys.executable, str(Path(__file__).resolve()), 'tool',
+                                 str(self.root / 'tool-config.json')]
+            return
         super().prepare()
         # Bootstrap is the launcher's own newly-created directory, never a user
         # worktree. Both roles instead see one persistent experiment history.
@@ -261,6 +308,18 @@ class RoleLauncher(BlindLauncher):
         save(self.root / 'owned-tools.json', {'directory': str(directory),
                                               'existing': [p.name for p in directory.glob('*')]})
 
+    def before_agent(self):
+        if self.role == 'analyzer' and self.campaign.analysis_contract == 2:
+            from analyzer_profile_acquisition import acquire
+            acquire(self, execute, save)
+
+    def after_agent(self, result):
+        if self.role == 'analyzer' and self.campaign.analysis_contract == 2:
+            from analyzer_report_repair import repair
+            import blind_optimization_launcher as runtime
+            return repair(self, result, runtime.execute, save)
+        return result
+
     def launch(self, preflight_only=False):
         done, cleanup_lock = threading.Event(), threading.Lock()
         def watchdog():
@@ -273,7 +332,14 @@ class RoleLauncher(BlindLauncher):
         observer = threading.Thread(target=watchdog, daemon=True)
         observer.start()
         try:
-            return super().launch(preflight_only)
+            result = super().launch(preflight_only)
+            # Analyzers write a report, never candidate commits. Their report is
+            # validated independently by finish_phase before any batch gate.
+            if (self.role == 'analyzer' and result.get('returncode') == 0
+                    and result.get('timed_out') is False):
+                result['exit_code'] = 0
+                save(self.root / 'receipt.json', result)
+            return result
         finally:
             done.set()
             observer.join()
@@ -310,6 +376,10 @@ class RoleLauncher(BlindLauncher):
                              '/workspace/.agents/skills/' + name]
         if self.campaign.analysis_contract == 2:
             retained += ['--ro-bind', str(self.campaign.history), '/history']
+        if getattr(self, 'report_repair_only', False):
+            return retained + ['--ro-bind', str(self.root / 'report-repair'), '/report-repair',
+                '--ro-bind', str(self.reports), '/analysis',
+                '--bind', str(self.reports / 'analysis.json'), '/analysis/analysis.json']
         return retained + ['--bind', str(self.reports), '/analysis']
 
 
@@ -446,7 +516,91 @@ class Campaign:
         retain_result(phase, result)
 
     def launch_role(self, campaign, phase, role, budget, commit):
-        return RoleLauncher(self, phase, role, budget, commit).launch()
+        launcher = RoleLauncher(self, phase, role, budget, commit)
+        launcher.resume_before_agent = phase.exists()
+        return launcher.launch()
+
+    def validate_phase_analysis(self, phase, commit, *, require_retained=False):
+        """Read-only authoritative validation shared by repair and publication."""
+        report_path = phase / 'reports/analysis.json'
+        if not report_path.exists() and not report_path.is_symlink():
+            report_path = phase / 'analysis.json'
+        repair_result = phase / 'report-repair/terminal.json'
+        if (phase / 'report-repair/dispatch.json').exists():
+            if not repair_result.is_file():
+                raise ValueError('report repair has no terminal result; observation required')
+            terminal = json.loads(repair_result.read_text())
+            if terminal['returncode'] != 0 or terminal['timed_out']:
+                raise ValueError('report repair did not finish successfully')
+        acquisitions = {}
+        from analyzer_report_repair import read_regular_report
+        report = validate_analysis(json.loads(read_regular_report(report_path)), commit)
+        verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
+                                                   commit + ':candidate.py'])
+        expected_source = hashlib.sha256(verified_source).hexdigest()
+        snapshot_source = phase / 'candidate-snapshot/candidate.py'
+        if snapshot_source.is_file() and digest(snapshot_source) != expected_source:
+            raise ValueError('frozen analyzer candidate source changed')
+        evidence_sha256 = {}
+        errors = []
+        for evidence in report['evidence']:
+            try:
+                original = phase / 'candidate-snapshot' / evidence['path']
+                if any(Path(part).match('*.tar.gz') for part in Path(evidence['path']).parts):
+                    raise ValueError('analysis cites archive excluded from retained evidence: ' + evidence['path'])
+                retained = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
+                path = retained if require_retained or retained.exists() else original
+                if require_retained and not retained.is_file():
+                    raise ValueError('analysis cites missing retained evidence: ' + evidence['path'])
+                if not path.is_file() or path.is_symlink() or not original.is_file() \
+                        or digest(path) != digest(original):
+                    raise ValueError('analysis cites missing evidence: ' + evidence['path'])
+                evidence_sha256[evidence['path']] = digest(path)
+                relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
+                original_summary = phase / 'candidate-snapshot' / relative_summary
+                retained_summary = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
+                summary_path = retained_summary if require_retained or retained_summary.exists() else original_summary
+                if not summary_path.is_file() or summary_path.is_symlink() \
+                        or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
+                    raise ValueError('citation lacks its authoritative call summary')
+                evidence_sha256[str(relative_summary)] = digest(summary_path)
+                summary = json.loads(summary_path.read_text())
+                validate_citation(evidence, summary, expected_source, path)
+                receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
+                receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+                acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
+                    hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
+            except (ValueError, OSError) as error:
+                errors.append(evidence['path'] + ': ' + str(error))
+        if self.analysis_contract == 2:
+            try:
+                ctx = json.loads((self.history / 'context.json').read_text())
+                attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
+                attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
+                                and item.get('request', {}).get('source_sha256') == expected_source
+                                for item in attempts)
+                required_path = phase / 'required-profile.json'
+                required = json.loads(required_path.read_text()) if required_path.is_file() else {}
+                attempted |= (required.get('source_sha256') == expected_source
+                              and required.get('command_dispatched') is True
+                              and required.get('profile_attempt_arguments') == ['pipes'])
+                if ctx['status'] != 'unchanged' and not attempted:
+                    raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
+                if required.get('state') == 'completed' and required.get('evidence'):
+                    acquired_path = phase / 'candidate-snapshot' / required['evidence']
+                    acquired = json.loads(acquired_path.read_text())
+                    if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
+                            item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
+                        raise ValueError('analysis must cite the controller-acquired profile')
+                if ctx['status'] == 'unchanged' and not attempted:
+                    repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
+                    acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
+                report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+            except (ValueError, OSError) as error:
+                errors.append('history/semantics: ' + str(error))
+        if errors:
+            raise ValueError('; '.join(errors))
+        return report, evidence_sha256, acquisitions
 
     def finish_phase(self, phase, role, entry, state):
         if role == 'analyzer' and self.analysis_contract == 2:
@@ -468,7 +622,8 @@ class Campaign:
         archive = self.workspace / 'experiments' / phase.name
         archive.mkdir(parents=True, exist_ok=True)
         for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr',
-                     'qualifications.jsonl', 'cleanup.json'):
+                     'qualifications.jsonl', 'cleanup.json', 'required-profile.json',
+                     'role-execution.json', 'model-dispatch.json'):
             if (phase / name).is_file():
                 shutil.copyfile(phase / name, archive / name)
         if role == 'actor':
@@ -479,16 +634,26 @@ class Campaign:
                        and item.get('source_sha256') == candidate_hash(self.workspace)
                        for item in records):
                     state['verified'] = commit
+            previous = state.get('verified')
+            if previous and previous != commit:
+                verified_source = subprocess.check_output(['git', '-C', str(self.workspace),
+                    'show', previous + ':candidate.py'])
+                if candidate_hash(self.workspace) == hashlib.sha256(verified_source).hexdigest():
+                    state['verified'] = commit
+                    entry['carried_forward_from'] = previous
             entry['candidate_commit'] = commit
+            entry['candidate_verified'] = state.get('verified') == commit
         else:
             report_path = phase / 'reports/analysis.json'
-            if not report_path.exists():
+            if not report_path.exists() and not report_path.is_symlink():
                 report_path = phase / 'analysis.json'
             trusted = phase / 'candidate-snapshot/evidence'
             if trusted.exists():
                 shutil.copytree(trusted, phase / 'trusted-evidence', dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns('*.tar.gz'))
                 shutil.copytree(phase / 'trusted-evidence', archive / 'trusted-evidence', dirs_exist_ok=True)
+            if (phase / 'report-repair').exists():
+                shutil.copytree(phase / 'report-repair', archive / 'report-repair', dirs_exist_ok=True)
             if (phase / 'reports').exists():
                 shutil.copytree(phase / 'reports', archive / 'analysis', dirs_exist_ok=True,
                                 symlinks=True, ignore=shutil.ignore_patterns('*.tar.gz'))
@@ -496,43 +661,7 @@ class Campaign:
                 shutil.copyfile(report_path, archive / 'raw-analysis.json')
             acquisitions = {}
             try:
-                report = validate_analysis(json.loads(report_path.read_text()), entry['candidate_commit'])
-                verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
-                                                           entry['candidate_commit'] + ':candidate.py'])
-                expected_source = hashlib.sha256(verified_source).hexdigest()
-                entry['evidence_sha256'] = {}
-                for evidence in report['evidence']:
-                    path = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
-                    original = phase / 'candidate-snapshot' / evidence['path']
-                    if not path.is_file() or path.is_symlink() or not original.is_file() \
-                            or digest(path) != digest(original):
-                        raise ValueError('analysis cites missing evidence: ' + evidence['path'])
-                    entry['evidence_sha256'][evidence['path']] = digest(path)
-                    relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
-                    summary_path = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
-                    original_summary = phase / 'candidate-snapshot' / relative_summary
-                    if not summary_path.is_file() or summary_path.is_symlink() \
-                            or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
-                        raise ValueError('citation lacks its authoritative call summary')
-                    entry['evidence_sha256'][str(relative_summary)] = digest(summary_path)
-                    summary = json.loads(summary_path.read_text())
-                    validate_citation(evidence, summary, expected_source, path)
-                    receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
-                    receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
-                    acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
-                        hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
-                if self.analysis_contract == 2:
-                    ctx = json.loads((self.history / 'context.json').read_text())
-                    attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
-                    attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
-                                    and item.get('request', {}).get('source_sha256') == expected_source
-                                    for item in attempts)
-                    if ctx['status'] != 'unchanged' and not attempted:
-                        raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
-                    if ctx['status'] == 'unchanged' and not attempted:
-                        repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
-                        acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
-                    report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+                report, entry['evidence_sha256'], acquisitions = self.validate_phase_analysis(phase, entry['candidate_commit'], require_retained=True)
                 save(self.workspace / 'analysis.json', report)
                 entry['analysis_valid'] = True
             except (ValueError, OSError) as error:
@@ -549,6 +678,10 @@ class Campaign:
                               source_sha256=hashlib.sha256(source).hexdigest(),
                               analysis_valid=entry['analysis_valid'],
                               analysis_error=entry.get('analysis_error'),
+                              report_repair=json.loads((phase / 'report-repair/validation.json').read_text())
+                                  if (phase / 'report-repair/validation.json').is_file() else None,
+                              required_profile=json.loads((phase / 'required-profile.json').read_text())
+                                  if (phase / 'required-profile.json').is_file() else None,
                               evidence_sha256=entry.get('evidence_sha256', {}),
                               acquisitions=list(acquisitions.values()) if entry['analysis_valid'] else [],
                               bottlenecks=report['bottlenecks'] if entry['analysis_valid'] else [])
@@ -565,7 +698,9 @@ class Campaign:
                         reason=entry['analysis_error']))
             self.commit(phase.name + ': performance analysis and diagnostics')
 
-    def run(self):
+    def run(self, stop_after_round=None):
+        if stop_after_round is not None and not 1 <= stop_after_round <= self.rounds:
+            raise ValueError("checkpoint round outside configured campaign")
         self.root.parent.mkdir(parents=True, exist_ok=True)
         # The kernel releases this lock on interruption; persistent phase intents
         # distinguish observation from permission to dispatch another agent.
@@ -590,8 +725,15 @@ class Campaign:
                                     return {**state, 'state': 'observation-required', 'pending_phase': name}
                             continue
                         if not (phase / 'receipt.json').exists():
-                            return {**state, 'state': 'observation-required', 'pending_phase': name}
-                        result = json.loads((phase / 'receipt.json').read_text())
+                            recoverable = (role == 'analyzer' and self.analysis_contract == 2
+                                and (phase / 'role-execution.json').is_file()
+                                and not (phase / 'model-dispatch.json').exists())
+                            if not recoverable:
+                                return {**state, 'state': 'observation-required', 'pending_phase': name}
+                            result = self.runner(self, phase, role, self.analyzer_budget, entry['candidate_commit'])
+                            save(phase / 'receipt.json', result)
+                        else:
+                            result = json.loads((phase / 'receipt.json').read_text())
                     else:
                         commit = state['verified']
                         if role == 'actor' and commit:
@@ -631,6 +773,10 @@ class Campaign:
                     save(self.root / 'state.json', state)
                     if entry['cleanup']['state'] != 'terminal':
                         return {**state, 'state': 'observation-required', 'pending_phase': name}
+                if stop_after_round == index and index < self.rounds:
+                    state['state'] = 'checkpoint'
+                    save(self.root / 'state.json', state)
+                    return state
             state['state'] = 'completed'
             save(self.root / 'state.json', state)
             return state
@@ -650,6 +796,7 @@ def main():
     parser.add_argument('--profiling-skill', type=Path, action='append', default=[])
     parser.add_argument('--coding-skill', type=Path, action='append', default=[])
     parser.add_argument('--rounds', type=int, default=4)
+    parser.add_argument('--stop-after-round', type=int)
     parser.add_argument('--actor-budget', type=int, default=1200)
     parser.add_argument('--analyzer-budget', type=int, default=600)
     parser.add_argument('--actor-only', action='store_true')
@@ -658,9 +805,9 @@ def main():
                       json.loads(args.tool_command_json.read_text()), args.instruction.read_text(),
                       skill=args.skill, rounds=args.rounds, actor_budget=args.actor_budget,
                       analyzer_budget=args.analyzer_budget, actor_only=args.actor_only,
-                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run()
+                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run(stop_after_round=args.stop_after_round)
     print(json.dumps(result, indent=2))
-    return 0 if result['state'] == 'completed' else 75
+    return 0 if result['state'] in ('completed', 'checkpoint') else 75
 
 
 if __name__ == '__main__':

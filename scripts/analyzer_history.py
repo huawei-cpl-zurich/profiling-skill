@@ -231,8 +231,16 @@ def pair(current, previous):
 
 def finalize(report, ctx, history, acquisitions):
     """Pure report enrichment, also usable for retrospective retained-evidence checks."""
-    validate_round(report, ctx)
     report = json.loads(json.dumps(report))
+    if (ctx['status'] == 'first' and not ctx['history']
+            and ctx['previous_distinct'] is None and ctx['repeated_round'] is None):
+        comparison = report.get('comparison')
+        if isinstance(comparison, dict) and comparison.get('rounds') != []:
+            report['controller_diagnostics'] = dict(first_round_selection=dict(
+                reported_rounds=comparison.get('rounds'), normalized_rounds=[],
+                reason='No retained historical kernel exists; controller owns the empty selection'))
+            comparison['rounds'] = []
+    validate_round(report, ctx)
     report['comparison']['repeated_round'] = ctx['repeated_round']
     report['comparison']['results'] = []
     for index in report['comparison']['rounds']:

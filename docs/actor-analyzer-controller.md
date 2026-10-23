@@ -241,3 +241,93 @@ seeded correctness IDs identify the validation workload, while a verified
 single-launch profile stays explicitly labeled as a workload aggregate rather
 than being attributed to each seed. Historical comparison selections must
 represent different source hashes, including when a kernel recurs in later rounds.
+
+### Multi-operator batches and checkpoints
+
+`model_campaign_tools.py prepare --task matmul|gdn|bsa --output DIR`
+accepts `--reference-root` for private comparison references. Optional
+`--profile-index` and `--check-indices` select the explicit supplied case and
+bounded per-call correctness subset. Full baseline/case qualification remains
+a prerequisite outside worker calls. Only API, task descriptor and original
+naive starter are released; reference sources and fixtures stay private.
+
+`actor_analyzer_controller.py --stop-after-round 1` checkpoints a configured
+four-round campaign without changing its immutable budgets or round count.
+Resume using the same output and configuration without the checkpoint option.
+The existing phase records prevent replaying completed roles.
+
+The trusted `campaign_batch.reconcile` boundary takes retained controller states
+and device capacity, then returns durable admissions or cancellation requests.
+Persist decisions before acting. Only admitted cells may start role clocks.
+Three successful matmul round-one checkpoints release the remaining cells and
+matmul continuations. Terminal matmul candidate/analyzer failures permanently
+freeze admission. Record batch-owned remote handles in `handles`; invoke
+`cancel_owned` with the installed cpl-remote cancellation boundary and observe
+nonterminal cancellation receipts. Lost observation never permits redispatch.
+
+Use the trusted tool CLI `--devices 2,5` to constrain physical device admission.
+The comma-separated list must contain distinct nonnegative IDs. Inventory is
+filtered before per-device queries, leases, or probes; missing configured IDs
+fail closed. Allowed busy devices wait for isolation. The application still
+uses logical device zero. A retained live phase keeps its original allowance;
+observe/cancel that handle before starting a phase with a different allowance.
+
+Trusted cleanup must invoke the tool CLI `stop` and require `worker_closed:true`
+before releasing a phase. The controller does this automatically. A terminal
+outer transport handle alone does not prove its Python worker has exited.
+Shutdown retains its own control handle, verifies private PID/start-time/cwd
+identity, requests cooperative exit, and escalates only verified owned processes
+when necessary. Repeat `stop` to observe a pending control; do not redispatch it.
+This operation is unavailable through the public actor/analyzer tool bridge.
+
+Within one retained phase, timing and pipe measurements may reuse a passed
+source qualification. Explicit checks always run the full configured case and
+variant subset. Matmul/GDN require variants 0–1; BSA requires 0–4, including
+empty and all-invalid selectors. Reuse requires identical source, trusted bundle fingerprint,
+adapter, physical device and runtime context. Measurement still executes fresh
+profile-case preparation and validation. Exported `correctness_provenance`
+identifies the original call and source hash; reused reports contain no fresh
+backend-check diagnostics. Failed checks or measurements invalidate that proof.
+Final benchmark case coverage, samples, and role deadlines remain unchanged.
+
+For a new distinct contract-2 kernel the controller now acquires the required
+profile before starting the analyzer model. The managed tool performs staging,
+checks, capture and same-handle observation inside an acquisition subdeadline
+that ends at the original reporting reserve. Process termination allowance is
+also reserved. The model receives only the remaining original role allowance;
+its execution context keeps the original role deadline. The warm tool worker may
+expire at the earlier acquisition cutoff, so further device tools are not
+promised during report writing.
+
+`required_profile` in the read-only current context identifies the exact capture
+or retained failure/observation state. A successful capture must be cited in the
+report. `required-profile.json` is retained with experiment diagnostics and the
+immutable round record, including the actual current-source tool attempt. A lost
+observer resumes the original call; dispatch intent without a recoverable call
+requires observation and never permits another dispatch. Unchanged kernels use
+retained evidence, while actors, legacy campaigns and preflight checks skip this
+acquisition. Failed acquisitions remain honest unavailable reports.
+
+If the controller stops during required acquisition, `Campaign.run` can reattach
+that analyzer before model dispatch. It verifies the retained frozen inputs,
+restores the private original execution context, and observes the original call
+without granting a new budget. An expired deadline produces a terminal timeout
+and owned-work cleanup without starting a model. The controller atomically saves
+model-dispatch intent before launching it; an existing intent or missing trusted
+original clock remains observation-required and never authorizes a second model.
+Both clock and dispatch audit files are retained with experiment diagnostics.
+
+A terminal successful analyzer model now passes the same strict report validator
+before phase cleanup and history publication. If its report is invalid and time
+remains, the controller permits one report-only repair within the original
+analyzer deadline, capped at 90 seconds including process termination allowance.
+There is no new role clock, capture, or kernel change. The repair receives the
+exact error and original citation metadata; all device/remote tool commands are
+rejected by the trusted bridge, and only `analysis.json` is writable among report
+artifacts. Missing kernel/case attribution or compiler inventory remains invalid.
+
+The first raw report, error, permitted metadata, repair dispatch intent, output,
+terminal result and validated disposition are retained with the experiment and
+round record. An uncertain repair intent never permits a second model launch.
+Initial failed/timed-out models and exhausted allowances skip repair. A failed
+repair still stops the phase; final publication reuses the identical validator.

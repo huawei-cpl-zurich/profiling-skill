@@ -39,7 +39,9 @@ PROMPT = build_prompt()
 
 
 def write_json(path: Path, value: object) -> None:
-    path.write_text(json.dumps(value, indent=2) + "\n")
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n")
+    os.replace(temporary, path)
 
 
 def execute(command: list[str], cwd: Path, timeout: float,
@@ -258,6 +260,13 @@ class BlindLauncher(ProductionLauncher):
             raise LaunchError("isolation preflight failed: " + result["stderr"])
         return result
 
+    def before_agent(self) -> None:
+        """Optional trusted work charged to the existing execution deadline."""
+
+    def after_agent(self, result: dict) -> dict:
+        """Optional report handling inside the original role clock/server lifetime."""
+        return result
+
     def launch(self, preflight_only: bool = False) -> dict:
         self.prepare()
         self.preflight()
@@ -265,25 +274,43 @@ class BlindLauncher(ProductionLauncher):
         server.owner = self
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        started = time.monotonic()
-        self.deadline_monotonic = started + self.timeout
-        utc_start = datetime.now(timezone.utc)
-        write_json(self.workspace / "execution.json", {
-            "utc_start": utc_start.isoformat(),
-            "utc_deadline": (utc_start + timedelta(seconds=self.timeout)).isoformat(),
-            "wall_budget_seconds": self.timeout,
-            "finish_reserve_seconds": min(self.finish_reserve_seconds, self.timeout),
-        })
+        utc_now = datetime.now(timezone.utc)
+        original_path = self.root / "role-execution.json"
+        if getattr(self, "resume_before_agent", False):
+            original = json.loads(original_path.read_text())
+            utc_start = datetime.fromisoformat(original["utc_start"])
+            remaining = (datetime.fromisoformat(original["utc_deadline"]) - utc_now).total_seconds()
+            started = time.monotonic() - max(0., (utc_now - utc_start).total_seconds())
+            self.deadline_monotonic = time.monotonic() + max(0., remaining)
+        else:
+            started = time.monotonic()
+            self.deadline_monotonic = started + self.timeout
+            original = {"utc_start": utc_now.isoformat(),
+                "utc_deadline": (utc_now + timedelta(seconds=self.timeout)).isoformat(),
+                "wall_budget_seconds": self.timeout,
+                "finish_reserve_seconds": min(self.finish_reserve_seconds, self.timeout)}
+            write_json(original_path, original)
+        write_json(self.workspace / "execution.json", original)
         try:
             if preflight_only:
                 command = [*self.base_command(), "experiment-tool", "help"]
             else:
+                self.before_agent()
                 command = [*self.base_command(), "/runtime/node/bin/codex", "exec", "--json",
                            "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
                            "-m", self.model["name"], "-c", f'model_reasoning_effort="{self.model["reasoning_effort"]}"',
                            (self.frozen / "prompt.md").read_text()]
-            result = execute(command, self.root, self.timeout,
-                             (self.root / "agent.jsonl", self.root / "agent.stderr"))
+            remaining = self.deadline_monotonic - time.monotonic()
+            if remaining <= 0:
+                result = dict(returncode=124, timed_out=True, stdout="", stderr="Original role deadline expired")
+            else:
+                if not preflight_only:
+                    write_json(self.root / "model-dispatch.json", {"dispatch_intent": True,
+                        "utc_deadline": original["utc_deadline"]})
+                result = execute(command, self.root, remaining,
+                                 (self.root / "agent.jsonl", self.root / "agent.stderr"))
+            if not preflight_only:
+                result = self.after_agent(result)
         finally:
             server.shutdown()
             server.server_close()

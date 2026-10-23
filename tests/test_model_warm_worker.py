@@ -80,6 +80,8 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path, capabi
                     stream.extractall(folder, filter='data')
             return dict(state='completed')
         if args[0] == 'run':
+            if Path(args[-1]).name == 'shutdown-phase.sh':
+                return dict(state='completed', exit=0, handle='remote:test:job:shutdown')
             worker_state[0] = 'running'
             return dict(state='running', handle=worker_handle)
         if args[0] == 'observe':
@@ -88,6 +90,8 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path, capabi
             worker_state[0] = 'cancelled'
             return dict(state='cancelled', handle=worker_handle)
         if args[0] == 'logs':
+            if args[1] == 'remote:test:job:shutdown':
+                return dict(state='completed', content=json.dumps(dict(state='terminal', worker_closed=True)))
             return dict(state='running', content='PHASE_READY=' + json.dumps(dict(monotonic=time.monotonic())))
         if args[0] == 'download':
             if pending[0]:
@@ -121,23 +125,23 @@ def test_public_calls_share_worker_and_only_upload_new_requests(tmp_path, capabi
         (public / 'candidate.py').write_text(source)
         assert service.start('check')['worker_pid'] == 42
     assert submitted == [b'version one', b'version two', b'version three']
-    assert len([call for call in calls if call[0] == 'run']) == 1
+    assert len([call for call in calls if call[0] == 'run' and Path(call[-1]).name == 'run.sh']) == 1
     uploads = [Path(call[2]).name for call in calls if call[0] == 'upload']
     assert uploads == ['phase.tar.gz', 'activation.json', 'request.tar.gz', 'request.tar.gz']
     (public / 'execution.json').write_text(json.dumps(dict(utc_deadline=
         (datetime.now(timezone.utc) + timedelta(seconds=1200)).isoformat())))
     assert service.start('check')['state'] == 'phase-cleanup-required'
-    assert len([call for call in calls if call[0] == 'run']) == 1
+    assert len([call for call in calls if call[0] == 'run' and Path(call[-1]).name == 'run.sh']) == 1
     worker_state[0] = 'completed'
     assert service.start('check')['worker_pid'] == 42
-    assert len([call for call in calls if call[0] == 'run']) == 2
+    assert len([call for call in calls if call[0] == 'run' and Path(call[-1]).name == 'run.sh']) == 2
     assert (tools.state / first['call_id'] / 'phase.json').exists()
     fail_request[0] = True
     failed = service.start('check')
     assert failed['state'] == 'failed' and failed['failure_stage'] == 'budget'
     assert worker_state[0] == 'cancelled'
     assert service.start('check')['worker_pid'] == 42
-    assert len([call for call in calls if call[0] == 'run']) == 3
+    assert len([call for call in calls if call[0] == 'run' and Path(call[-1]).name == 'run.sh']) == 3
 
 
 def test_phase_loop_loads_revisions_and_releases_one_lease(tmp_path, monkeypatch):

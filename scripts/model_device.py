@@ -1,6 +1,7 @@
 """Bounded per-chip idle selection; dead aggregate table entries cannot stall it."""
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
+import json
 import os
 from pathlib import Path
 import re
@@ -27,7 +28,19 @@ def eligible(health, usages, processes):
         and processes.strip() == 'No process in device.')
 
 
-def acquire(probe, remaining, *, query=None, sleep=time.sleep, lease_root=None):
+def device_allowlist(value):
+    if not isinstance(value, (list, tuple)) or not value or any(type(i) is not int or i < 0 for i in value):
+        raise ValueError('allowed devices must be a nonempty list of nonnegative physical IDs')
+    if len(set(value)) != len(value):
+        raise ValueError('allowed devices must be distinct')
+    return list(value)
+
+
+def acquire(probe, remaining, *, query=None, sleep=time.sleep, lease_root=None, allowed_devices=None):
+    if allowed_devices is None and 'CAMPAIGN_ALLOWED_DEVICES' in os.environ:
+        allowed_devices = json.loads(os.environ['CAMPAIGN_ALLOWED_DEVICES'])
+    if allowed_devices is not None:
+        allowed_devices = device_allowlist(allowed_devices)
     def native_query(*args):
         result = bounded_run(['npu-smi', 'info', *args], text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=min(8., remaining()))
@@ -47,6 +60,10 @@ def acquire(probe, remaining, *, query=None, sleep=time.sleep, lease_root=None):
             return False
     while remaining() > 0:
         inventory = discover_devices(query('-m'))
+        if allowed_devices is not None:
+            if not set(allowed_devices).issubset({device[2] for device in inventory}):
+                raise RuntimeError('allowed physical devices absent from inventory')
+            inventory = [device for device in inventory if device[2] in allowed_devices]
         with ThreadPoolExecutor(max_workers=min(8, len(inventory))) as pool:
             free = [device for device, ok in zip(inventory, pool.map(inspect, inventory)) if ok]
         for device in free:

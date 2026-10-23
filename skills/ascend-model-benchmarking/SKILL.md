@@ -7,10 +7,11 @@ description: Measure warmed compiled Ascend Model forwards with separate end-to-
 
 Use this for arbitrary Model APIs, not only a particular operator. A Model class
 does **not** imply graph compilation. Establish actual full-graph capture and
-compiled execution for both implementations using the same explicit backend;
+compiled execution for compiled implementations using the same explicit backend;
 TorchAir GE is the default, with `--backend npu-inductor` available when selected
 and validated for the workload. Never switch backends automatically; reject unsupported
-graphs, eager fallback and missing submitted-kernel identity evidence.
+graphs, implicit eager fallback and missing submitted-kernel identity evidence.
+An explicitly selected eager reference is supported as described below.
 
 This skill covers correctness/run status, warm latency, correlated busy-time,
 dispersion, comparison conditions and retained logs only. Report compilation and
@@ -61,3 +62,18 @@ Blind optimization agents receive this guidance, the operator API and a thin too
 client only. They must not receive reference implementations, input providers,
 validators or controller source. Treat access to private acquisition adapters as
 trusted controller access, not as an agent skill dependency.
+
+## Explicit eager reference
+
+The controller accepts `--baseline-execution eager|compiled` (default `compiled`).
+Candidates always require compiled fullgraph execution and submitted-kernel identity.
+Use `eager` explicitly for a slow PyTorch reference; unsupported compiled references
+fail rather than falling back. Measure eager and compiled reference comparisons in
+separate evidence directories and label their execution modes in final tables.
+Eager references use eval/inference mode, correctness validation, the same 20-call
+warmup, three batches of 50 synchronized full-forward samples, and a separate
+50-iteration correlated profile with 20 warmups. They require no graph backend.
+Active compilation detection and input mutation checks still apply to both arms.
+The repeated controller forwards this option unchanged, records execution modes,
+and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
+counts, mean and sample standard deviation are unchanged.

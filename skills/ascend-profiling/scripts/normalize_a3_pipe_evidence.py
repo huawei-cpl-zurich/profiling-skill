@@ -184,7 +184,13 @@ def reported_metrics(row: dict[str, str], prefix: str) -> dict[str, dict[str, An
             unit = "fraction"
         else:
             continue
-        result[column] = {"value": optional_number(raw, column),
+        value = optional_number(raw, column)
+        if value is not None:
+            if unit == "fraction" and not 0 <= value <= 1:
+                raise InvalidEvidence(f"{column} must be a fraction between 0 and 1")
+            if unit in {"us", "cycles", "GB/s"} and value < 0:
+                raise InvalidEvidence(f"{column} must be non-negative")
+        result[column] = {"value": value,
                           "raw_value": "" if raw is None else raw.strip(), "unit": unit}
     return result
 

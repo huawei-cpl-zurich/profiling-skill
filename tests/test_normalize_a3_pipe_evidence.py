@@ -257,3 +257,38 @@ def test_invalid_available_diagnostic_is_rejected(tmp_path, value):
     run = run_normalizer(tmp_path, [aiv_row(**{'aiv_scalar_stall_by_ub_time(us)': value})])
     assert run.returncode != 0
     assert 'aiv_scalar_stall_by_ub_time(us)' in run.stderr
+
+
+@pytest.mark.parametrize(('column', 'value'), [
+    ('aiv_vec_wait_ratio', '1.5'),
+    ('aiv_vec_wait_ratio', '-0.1'),
+    ('aiv_scalar_wait_time(us)', '-2'),
+    ('aiv_scalar_mte2_stall_time(us)', '-0.01'),
+    ('aiv_mte2_active_bw(GB/s)', '-4'),
+    ('aiv_total_cycles', '-1'),
+])
+def test_impossible_finite_diagnostic_fails_without_emitting_evidence(tmp_path, column, value):
+    run = run_normalizer(tmp_path, [aiv_row(**{column: value})])
+    assert run.returncode == 2
+    assert column in run.stderr
+    assert run.stdout == ''
+
+
+@pytest.mark.parametrize('fraction', ['0', '1'])
+def test_diagnostic_domain_boundaries_preserve_raw_values(tmp_path, fraction):
+    values = {
+        'aiv_vec_wait_ratio': fraction,
+        'aiv_scalar_wait_time(us)': '0',
+        'aiv_mte2_active_bw(GB/s)': '0',
+        'aiv_total_cycles': '0',
+        # Its unlabelled scale is unknown, so do not impose a fraction ceiling.
+        'aiv_icache_miss_rate': '12.5',
+    }
+    run = run_normalizer(tmp_path, [aiv_row(**values)])
+    assert run.returncode == 0, run.stderr
+    reported = json.loads(run.stdout)['observations'][0]['reported_metrics']
+    for column, raw in values.items():
+        assert reported[column]['value'] == float(raw)
+        assert reported[column]['raw_value'] == raw
+    assert reported['aiv_vec_wait_ratio']['unit'] == 'fraction'
+    assert reported['aiv_icache_miss_rate']['unit'] is None

@@ -1,63 +1,97 @@
 ---
 name: ascend-optimization-library
-description: Diagnose Ascend kernel optimization opportunities and plan guarded transformations using source-backed paired examples and retained profiler evidence.
+description: Choose and explain Ascend Triton and Catlass C++ kernel optimizations using source patterns, guarded code examples, and paired correctness/profile evidence.
 ---
 
 # Ascend optimization library
 
-Use this library to connect an observed source pattern and bottleneck to a
-specific transformation. Each recipe is a hypothesis until its measurement
-record establishes correctness and a benefit or cost for the stated target.
-The current wave is under validation; do not describe its examples as verified
-until a complete evidence record is linked from the relevant recipe.
+Use this library to choose a transformation, explain why it may help, and state
+when its cost or numerical contract makes it unsuitable. Read only the relevant
+recipe. A gallery result validates its recorded case and implementation; it is
+not a universal dispatch threshold or a claim about every Ascend target.
 
-Select a relevant recipe rather than loading the full collection. Start with
-[scaling hoist](references/scaling-hoist.md) for an invariant row scale applied
-to operands before a dot product. Additional recipes become available after
-their paired examples have been acquired and reviewed.
+## Find a mechanism
 
-## Use an example to make a decision
+| Source or profile symptom | Read | Main competing cost |
+| --- | --- | --- |
+| Row scale repeated inside a dot reduction | [Invariant scaling hoist](references/scaling-hoist.md) | Output-side work and changed rounding |
+| GEMM result immediately consumed by an add | [Epilogue fusion](references/epilogue-fusion.md) | Live resources, synchronization and GM staging |
+| Nearby query programs reload the same K/V tiles | [Query blocking](references/query-blocking.md) | Padded work and live accumulators |
+| Long tokenwise state recurrence with few independent heads | [Chunked recurrence](references/chunk-recurrence.md) | Preparation, workspace and matrix-operand rounding |
+| Output-task count just exceeds the observed core count | [Tile balance](references/tile-balance.md) | Layout-dependent operand movement |
+| Few M/N tiles and a long K reduction | [SplitK](references/split-k.md) | Partial-result writes, reduction and synchronization |
+| Repeated K-stage movement followed by compute | [Multibuffering](references/multibuffering.md) | Additional L1/L0 reservation and fill/drain |
+| Several successive output tasks per core | [Next-task preload](references/preload.md) | Bookkeeping and no useful successor on small grids |
+| The same A rows are reused across a core's output tasks | [L1 operand residency](references/l1-residency.md) | Capacity and reuse bookkeeping |
+| Repeated strided ND movement with inconvenient alignment | [Padding/layout conversion](references/padding-layout.md) | Complete conversion and workspace cost |
+| Many cores begin the same multi-tile K traversal | [ShuffleK](references/shuffle-k.md) | Indexing and changed summation order |
+| Many output tiles have a plausible operand-locality problem | [Output-program ordering](references/program-order.md) | Mapping cost or worse reuse of the other operand |
 
-Match the mathematical contract, shapes, strides, layout, dtypes, target and
-compiler before transferring an observed result. Record the exact source
-pattern and mechanism that make the transformation plausible. A source
-comment or measurement from another target is supporting context, not a
-measurement of the current kernel.
+The recipes contain code formats, preconditions, falsifiers and gallery data.
+[Gallery evidence](references/gallery-evidence.md) defines the timing boundaries;
+its JSON companion retains every ten-sample series and original PMU field names.
+Only gallery examples belong to this skill snapshot. All 33 gallery pairs
+(28 original plus five supplements) have correctness and ten-forward identity
+evidence. Residency remains inconclusive; ShuffleK improves the thin pressure
+case but regresses the square case. Grouped-M output ordering improves the
+large gallery case; the original output rotation remains inconclusive. These
+observations support conditional choices, not universal speedup claims.
 
-Read the complete operation profile: preparation, conversions, GEMM, reduction,
-epilogue and workspace traffic belong to its cost. A faster central kernel
-can leave the complete call slower. Match kernel identities and iteration
-ownership before attributing measurements to the code being considered.
+## Make a conditional decision
 
-Choose apply, avoid or insufficient evidence. Explain the expected gain and
-its competing cost, the dispatch preconditions and numerical guards, and an
-observation that would falsify the diagnosis. Preserve required outputs,
-packed-sequence boundaries and input immutability. Do not relax an error
-contract to keep an optimization.
+Connect an actual source pattern to a bottleneck hypothesis. Then match shapes,
+strides, physical layout, dtypes, required outputs, target capabilities and
+compiled resources. Logical shape does not establish physical storage. A tile
+that compiles is not yet a correct kernel; an admitted small case does not
+prove a larger resource envelope.
 
-For an actor, give a concrete transformation plan and guard/fallback coverage
-before writing code. For an analyzer, distinguish a source-derived hypothesis
-from a supported profiler diagnosis, state confidence, and identify a paired
-comparison that isolates the proposed mechanism.
+Choose **apply**, **avoid**, or **insufficient evidence**. An actor should give
+concrete edits, dispatch predicates, numerical guards and a supported alternate
+path for the task's remaining valid inputs. An analyzer should name the observed
+source/profile evidence, confidence, competing explanation and a falsifying
+comparison. Describe the optimization in one short sentence before the detail.
+Use applicable kernel-authoring instructions for implementation; these recipes
+do not replace the requested public interface or the task's coverage contract.
 
-## Interpret measurements
+Keep the paired change interpretable. Preserve unrelated scheduling, layout and
+precision choices when possible; disclose coupled changes such as replacing
+vector reductions with Cube dots. Preserve packed boundaries, grouped-head
+mapping, nonzero initial state, final-state outputs and input immutability.
+Do not relax an error threshold to keep a candidate. Reject incorrect or
+unbuildable variants separately from correct examples with an unfavorable cost.
 
-Examples retain a single independent CPU oracle per semantic case. Each arm
-gets one correctness call, followed by ten profiled forwards with no tensor
-inspection or hidden warmups. Event durations are instrumented measurements.
-Use all ten samples and their spread; effects within observed variability
-remain inconclusive. Keep export, accounting, kernel identity and PMU
-availability separate from the presence of timing samples.
+## Read the evidence at the right boundary
 
-Pipe activity percentages are time fractions, not achieved bandwidth or
-fraction of peak throughput. Only estimate roofline distance when work, traffic,
-elapsed time and a target-supported capacity denominator are available with
-explicit units and assumptions. Missing counters remain unavailable. A high
-activity fraction alone does not establish saturation or overlap.
+A case has one independent CPU oracle. Each implementation is checked once,
+then executes ten profiled forwards without tensor inspection, discovery calls,
+autotuning or hidden warmups. Failed implementation attempts are retained
+separately; they are not successful tradeoff examples.
 
-The project pair runner is `scripts/optimization_pair.py` at repository root;
-it accepts a language adapter, case JSON, output directory, oracle cache and
-provenance JSON. Read the adapter's source and the recipe's retained evidence
-before using it. Measurement and remote execution follow the available
-`ascend-profiling` and `remote-access` skills; this library does not authorize
-additional launches or remote actions.
+The **device-operation span** is the last proven device task's end minus the
+first task's start within a forward. It includes gaps between that forward's
+kernels. The **instrumented caller event** is a separate NPU-event interval
+around the call while the profiler is active. Neither is unprofiled application
+latency. Device busy time and active union are also distinct from elapsed span.
+Compare all ten samples and sample deviation at each boundary; do not discard
+a slow first sample or turn a small noisy difference into a crossover rule.
+
+Include preparation kernels, conversions, reductions, epilogues and
+synchronization in the measured operation. Workspace allocation policy is
+format-specific and explicit: a preallocated native workspace cannot support
+an allocation-saving claim. Require numerical checks, successful export,
+explicit per-iteration task ownership and expected kernel identities before
+accepting a comparison. Timing availability, accounting and PMU availability
+are separate states.
+
+Preserve PMU column names, units and missing values. Pipe ratios do not measure
+bytes, peak throughput or simultaneous overlap; do not sum them as disjoint
+fractions. `cube_utilization(%)` is an exported field, not a certified fraction
+of theoretical compute peak. Estimate a roofline distance only when operation
+count, traffic, elapsed time and a target-supported capacity denominator are
+available with explicit assumptions. Otherwise state **not estimated**.
+
+The runnable interface is repository-root `scripts/optimization_pair.py`, with
+an adapter, case JSON, output directory, oracle cache and provenance JSON.
+`optimization_profile_evidence.py` binds timing/PMU rows to retained trace and
+source identities. Follow the available `remote-access` and `ascend-profiling`
+workflows for execution and collection; this library grants no extra launches.

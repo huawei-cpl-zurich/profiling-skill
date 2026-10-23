@@ -51,19 +51,29 @@ class MetricsTests(unittest.TestCase):
         self.rows[0]['Context ID'] = 'N/A'
         self.tasks[0]['task_id'] = '9:2:0:0:4294967295'
         self.write()
-        self.assertEqual(evidence.pmu_rows(self.path, self.tasks, 5)['kernels']['kernel']['rows'][0]['trace_context_id'], '4294967295')
+        self.assertEqual(evidence.pmu_rows(self.path, self.tasks, 5)['kernels']['kernel']['rows'][0]['trace_subtask_id'], '4294967295')
         self.tasks.append(dict(self.tasks[0], task_id='10:2:0:1:7'))
         with self.assertRaisesRegex(evidence.EvidenceError, 'unique'):
             evidence.pmu_rows(self.path, self.tasks, 5)
 
-    def test_duplicate_unmatched_missing_context_and_device_fail_closed(self):
-        for change in ('duplicate', 'unmatched', 'missing', 'context', 'device'):
+    def test_context_and_subtask_are_independent_namespaces(self):
+        self.rows[0]['Context ID']='7';self.write()
+        row=evidence.pmu_rows(self.path,self.tasks,5)['kernels']['kernel']['rows'][0]
+        self.assertEqual(row['csv_context_id'],'7')
+        self.assertEqual(row['trace_subtask_id'],'0')
+        self.tasks[0]['context_id']=7
+        self.assertEqual(evidence.pmu_rows(self.path,self.tasks,5)['kernels']['kernel']['task_count'],10)
+        self.tasks[0]['context_id']=8
+        with self.assertRaisesRegex(evidence.EvidenceError,'unique'):
+            evidence.pmu_rows(self.path,self.tasks,5)
+
+    def test_duplicate_unmatched_missing_and_device_fail_closed(self):
+        for change in ('duplicate', 'unmatched', 'missing', 'device'):
             with self.subTest(change=change):
                 rows = copy.deepcopy(self.rows)
                 if change == 'duplicate': rows.append(rows[0])
                 if change == 'unmatched': rows[0]['Task ID'] = '999'
                 if change == 'missing': rows.pop()
-                if change == 'context': rows[0]['Context ID'] = '77'
                 if change == 'device': rows[0]['Device_id'] = '4'
                 self.write(rows)
                 with self.assertRaises(evidence.EvidenceError):
@@ -150,13 +160,31 @@ class PairTests(unittest.TestCase):
                        forward_calls=10,event_latency=dict(count=10,samples_ms=[.1]*10,instrumentation='profiler active'),
                        kernel_identity=evidence.kernel_identity(accounted,['qualified_native_matmul']),
                        artifacts={str(p):evidence.sha(p) for p in (trace,normpath,accpath)})
-        row = dict(correctness=dict(status='complete',calls=1),profiled_calls=10,capture=capture,
-                   sources={'source.py':'source-digest'},metadata={'binary_sha256':'binary-digest'})
-        report = dict(protocol='optimization-pair-v1',case={'name':'fixture'},fixture={'sha256':'oracle-digest'},
+        source=root/'kernel.py';source.write_text('retained kernel source')
+        compiled=[dict(hash='a'*64,artifacts={'npubin':'b'*64})]
+        row = dict(status='complete',correctness=dict(status='complete',calls=1),profiled_calls=10,
+                   capture_calls=1,capture=capture,
+                   compilation_state_before_capture=compiled,compilation_state_after_capture=copy.deepcopy(compiled),
+                   sources={str(source):evidence.sha(source)},metadata={})
+        report = dict(protocol='optimization-pair-v1',status='complete',case={'name':'fixture'},fixture={'sha256':'oracle-digest'},
+                      counts=dict(correctness_calls=2,capture_calls=2,profiled_calls=20),
                       warmup_calls=0,discovery_calls=0,unprofiled_timing_calls=0,
                       provenance={'physical_die':5},arms={'before':row,'after':copy.deepcopy(row)})
         path = root/'result.json';path.write_text(json.dumps(report))
         return path, report
+
+    def proof(self, root, path, report):
+        analysis=root/'analysis';analysis.mkdir(exist_ok=True)
+        proof={'original_pair_sha256':evidence.sha(path),'arms':{}}
+        for arm in ('before','after'):
+            cap=report['arms'][arm]['capture']
+            for name,key in (('normalized','capture_path'),('accounting','accounting_path')):
+                (analysis/f'{arm}-{name}.json').write_text(Path(cap['profile'][key]).read_text())
+            proof['arms'][arm]=dict(status='complete',trace_sha256=cap['profile']['trace_sha256'],capture_forward_calls=10,
+                normalized_sha256=evidence.sha(analysis/f'{arm}-normalized.json'),
+                accounting_sha256=evidence.sha(analysis/f'{arm}-accounting.json'),kernel_identity=cap['kernel_identity'])
+        proofpath=analysis/'reanalysis.json';proofpath.write_text(json.dumps(proof))
+        return proofpath,proof
 
     def test_pair_recomputes_real_flow_proof_and_keeps_missing_pmu_separate(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -191,16 +219,7 @@ class PairTests(unittest.TestCase):
     def test_reanalysis_bound_to_original_and_retained_artifacts(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);path,report=self.fixture(root)
-            analysis=root/'analysis';analysis.mkdir()
-            proof={'original_pair_sha256':evidence.sha(path),'arms':{}}
-            for arm in ('before','after'):
-                cap=report['arms'][arm]['capture']
-                for name,key in (('normalized','capture_path'),('accounting','accounting_path')):
-                    (analysis/f'{arm}-{name}.json').write_text(Path(cap['profile'][key]).read_text())
-                proof['arms'][arm]=dict(status='complete',trace_sha256=cap['profile']['trace_sha256'],capture_forward_calls=10,
-                    normalized_sha256=evidence.sha(analysis/f'{arm}-normalized.json'),
-                    accounting_sha256=evidence.sha(analysis/f'{arm}-accounting.json'),kernel_identity=cap['kernel_identity'])
-            proofpath=analysis/'reanalysis.json';proofpath.write_text(json.dumps(proof))
+            proofpath,proof=self.proof(root,path,report);analysis=proofpath.parent
             self.assertEqual(evidence.collect_pair(path,reanalysis=proofpath)['status'],'complete')
             for arm in ('before','after'):
                 for name in ('normalized','accounting'):
@@ -210,6 +229,61 @@ class PairTests(unittest.TestCase):
             proof['original_pair_sha256']='different';proofpath.write_text(json.dumps(proof))
             with self.assertRaisesRegex(evidence.EvidenceError,'different original'):
                 evidence.collect_pair(path,reanalysis=proofpath)
+
+    def test_compilation_and_source_drift_rejected_even_with_bound_reanalysis(self):
+        for failure in ('changed','missing','invalid','source','compiled-source','binary-metadata'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);path,report=self.fixture(root);row=report['arms']['after']
+                if failure=='changed':row['compilation_state_after_capture'][0]['artifacts']['npubin']='c'*64
+                if failure=='missing':row.pop('compilation_state_before_capture')
+                if failure=='invalid':
+                    row['compilation_state_before_capture']=row['compilation_state_after_capture']=[{'hash':'x','binaries':{}}]
+                if failure=='source':Path(next(iter(row['sources']))).write_text('changed source')
+                if failure in ('compiled-source','binary-metadata'):
+                    state=dict(binary_sha256='b'*64,source_sha256=dict(row['sources']))
+                    row['compilation_state_before_capture']=row['compilation_state_after_capture']=state
+                    if failure=='compiled-source':state['source_sha256']={str(root/'missing.cpp'):'c'*64}
+                    else:row['metadata']['binary_sha256']='c'*64
+                path.write_text(json.dumps(report));proof,_=self.proof(root,path,report)
+                for recovery in (None,proof):
+                    with self.assertRaises(evidence.EvidenceError):evidence.collect_pair(path,reanalysis=recovery)
+
+    def test_supplied_empty_or_malformed_reanalysis_never_falls_back(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);path,report=self.fixture(root);proof=root/'malformed.json'
+            for value in ({},None,[],{'cases':[]},{'cases':{}},{'cases':{'case':None}},
+                          {'original_pair_sha256':evidence.sha(path)},
+                          {'original_pair_sha256':evidence.sha(path),'arms':{'before':{}}}):
+                with self.subTest(value=value):
+                    proof.write_text(json.dumps(value))
+                    with self.assertRaises(evidence.EvidenceError):evidence.collect_pair(path,reanalysis=proof)
+
+    def test_reanalysis_only_recovers_known_parser_failures(self):
+        for message in ('unvalidated device task type: EVENT_RECORD',
+                        'device tasks lack explicit CPU/NPU correlation coverage'):
+            with self.subTest(message=message),tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);path,report=self.fixture(root);row=report['arms']['after']
+                report['status']=row['status']='failed';row['error']=dict(type='CaptureError',message=message)
+                path.write_text(json.dumps(report));proof,_=self.proof(root,path,report)
+                self.assertEqual(evidence.collect_pair(path,reanalysis=proof)['status'],'complete')
+                with self.assertRaises(evidence.EvidenceError):evidence.collect_pair(path)
+
+    def test_reanalysis_preserves_other_experiment_failures(self):
+        for failure in ('compile','source','cleanup','top-error','unexplained','counts','correctness','extra-capture'):
+            with self.subTest(failure=failure),tempfile.TemporaryDirectory() as folder:
+                root=Path(folder);path,report=self.fixture(root);row=report['arms']['after']
+                report['status']=row['status']='failed'
+                row['error']=dict(type='CaptureError',message='unvalidated device task type: EVENT_RECORD')
+                if failure in ('compile','source'):
+                    row['error']['message']='compilation detected during active profiler replay' if failure=='compile' else 'prepared source or binary changed during experiment'
+                if failure=='cleanup':row['cleanup']={'status':'failed','reason':'cleanup failed'}
+                if failure=='top-error':report['error']={'type':'ValueError','message':'source drift'}
+                if failure=='unexplained':row.pop('error')
+                if failure=='counts':report['counts']['profiled_calls']=21
+                if failure=='correctness':row['correctness']['diagnostics']={'passed':False}
+                if failure=='extra-capture':row['capture_calls']=2
+                path.write_text(json.dumps(report));proof,_=self.proof(root,path,report)
+                with self.assertRaises(evidence.EvidenceError):evidence.collect_pair(path,reanalysis=proof)
 
 
 if __name__ == '__main__': unittest.main()

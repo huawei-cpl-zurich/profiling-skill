@@ -1,6 +1,7 @@
 # Balance output tasks against tile movement costs
 
-Status: source-grounded hypothesis; paired A3 evidence pending. Use family `05`
+Status: all four listed Triton/native gallery pairs passed A3 correctness and
+ten-forward profile/identity collection. Use family `05`
 in `examples/optimization-library/triton/gemm.py` with adapter `gemm:Adapter`.
 
 The [pinned layout-sensitive tile example](ref://profiling-skill/common/perf-analysis/repos/optimization-wave1-catlass-v130-design-550bbffa8b36#docs/contents/advanced/catlass_optimize_guidance.md:L114-L150)
@@ -43,4 +44,61 @@ falsified when the tile with fewer tasks is not faster, or layout movement
 overwhelms task balance. Record these outcomes without assigning a saturated
 pipe or roofline distance from activity percentages alone.
 
-No layout-dependent benefit or cost has yet been measured for this pair.
+Treat each physical layout separately when interpreting the paired data below.
+
+## Native format and physical-layout guard
+
+The [native source](../../../examples/optimization-library/catlass/tile_matmul.cpp)
+changes `GemmShape<128,256,256>` to `GemmShape<256,128,256>`, holding its K tile
+fixed at 256. The Triton format above keeps K blocking at 32. Do not present
+cross-format results as a control of K blocking.
+
+Select `tile_adapter:adapter`. The native adapter checks the compiled B-layout
+getter before accepting row-major `[N,1]` or column-major `[1,K]` strides. The
+column path uses a dense ND transpose view prepared outside the call. The
+bridge audits storage span and format; a row binary cannot be reused for a
+column pointer merely because its logical shape matches.
+
+Runnable [Triton source](../../../examples/optimization-library/triton/gemm.py),
+`gemm:Adapter`, family `05`, shares the
+[CPU contract](../../../examples/optimization-library/triton/gemm_contract.py)
+with the native adapter.
+
+
+## What the gallery establishes
+
+The taller/narrower tile improved device span in both tested B layouts and in
+both languages. The alternate layout did not reverse that gain. Caller-event
+comparisons were inconclusive. The results support this target-derived geometry,
+not a rule that fewer tasks always wins; another layout/shape can change operand
+movement and capacity even at the same accumulator area.
+
+## Measured gallery
+
+All ratios are before/after. See the [measurement ledger](gallery-evidence.md) for boundary and uncertainty definitions; raw ten-sample series are in [gallery-evidence.json](gallery-evidence.json).
+
+| Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
+| --- | --- | --- | --- | --- |
+| 05-triton-gallery-benefit (1024×640×6144) | 152.131 ± 0.2516 / 122.294 ± 1.23 | 1.244×; gain | 0.327778 ± 0.1776 / 0.28848 ± 0.1108 | inconclusive |
+| 05-catlass-gallery-benefit (1024×640×6144) | 66.0186 ± 0.9286 / 35.9733 ± 1.551 | 1.835×; gain | 0.13734 ± 0.0787 / 0.127346 ± 0.05163 | inconclusive |
+| 05-triton-gallery-cost (1024×640×6144) | 274.912 ± 2.292 / 153.068 ± 1.746 | 1.796×; gain | 0.332506 ± 0.1254 / 0.282858 ± 0.07292 | inconclusive |
+| 05-catlass-gallery-cost (1024×640×6144) | 64.4647 ± 1.425 / 36.0293 ± 1.882 | 1.789×; gain | 0.199076 ± 0.1978 / 0.121868 ± 0.04899 | inconclusive |
+
+Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
+
+| Format / regime / arm / kernel | `cube_utilization(%)` | `aic_mac_ratio` | `aic_mte2_ratio` |
+| --- | ---: | ---: | ---: |
+| 05-triton-gallery-benefit/before/`gallery_gemm` | 59.007 | 0.4283 | 0.9711 |
+| 05-triton-gallery-benefit/after/`gallery_gemm` | 93.527 | 0.3246 | 0.9805 |
+| 05-catlass-gallery-benefit/before/`wave1_tile_before` | 54.114 | 0.8535 | 0.8653 |
+| 05-catlass-gallery-benefit/after/`wave1_tile_after` | 95.932 | 0.8743 | 0.8546 |
+| 05-triton-gallery-cost/before/`gallery_gemm` | 57.59 | 0.2427 | 0.9851 |
+| 05-triton-gallery-cost/after/`gallery_gemm` | 94.414 | 0.2569 | 0.9836 |
+| 05-catlass-gallery-cost/before/`wave1_tile_before` | 54.31 | 0.8685 | 0.7524 |
+| 05-catlass-gallery-cost/after/`wave1_tile_after` | 95.68 | 0.8783 | 0.7243 |
+
+Observed resource/numerical costs and limits:
+- **05-triton-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **05-catlass-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **05-triton-gallery-cost**: cost recipe did not produce a device-span regression in this capture.
+- **05-catlass-gallery-cost**: cost recipe did not produce a device-span regression in this capture.

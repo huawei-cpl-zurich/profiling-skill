@@ -77,15 +77,17 @@ class MixedTests(unittest.TestCase):
             folder=Path(folder)
             source=folder/'model.cpp'
             source.write_text(r'''#include <stdint.h>
-static uint32_t m_,n_,cores_,family_=2,calls_=0;static bool bad_;
+static uint32_t m_,n_,cores_,family_=2,calls_=0;static bool bad_,after_=true;
 extern "C" uint32_t catlass_mixed_family(){return family_;}
 extern "C" void select_family(uint32_t f){family_=f;}
+extern "C" void select_arm(uint32_t a){after_=a;}
 extern "C" int catlass_bridge_configure(uint32_t m,uint32_t n,uint32_t k,uint32_t c){
  m_=m;n_=n;cores_=c;bad_=k==32;return !c||!m||!n||!k;}
 extern "C" uint32_t configured_cube_cores(){return cores_;}
 extern "C" uint64_t catlass_mixed_workspace(){return bad_?1:uint64_t(m_)*n_*4;}
 extern "C" uint32_t catlass_bridge_abi_version(){return 1;}
-extern "C" const char* catlass_bridge_kernel_names(){return "[\"test_add\"]";}
+extern "C" const char* catlass_bridge_kernel_names(){return after_?
+ "[\"wave1_add_fused\"]":"[\"wave1_add_matmul\",\"wave1_add_vector\"]";}
 extern "C" uint32_t call_count(){return calls_;}
 extern "C" int catlass_bridge_launch(void **p,uint64_t n,void*){
  if(n!=5)return 2;++calls_;auto z=(const float*)p[2];auto out=(float*)p[4];
@@ -98,10 +100,16 @@ extern "C" int catlass_bridge_launch(void **p,uint64_t n,void*){
             record=configure(lib,'02','after',[16,16,16],20)
             self.assertEqual(record['workspace_bytes'],1024)
             self.assertEqual(record['launch_count'],1)
+            with self.assertRaisesRegex(ValueError,'requested arm'):
+                configure(lib,'02','before',[16,16,16],20)
+            lib.select_arm(0)
             before=configure(lib,'02','before',[16,16,16],20)
             self.assertEqual(before['standalone_add_logical_blocks'],lib.configured_cube_cores())
             self.assertEqual(before['standalone_add_vector_blocks'],2*lib.configured_cube_cores())
             self.assertEqual(before['standalone_add_vector_blocks'],topology(20,40,20)['observed_vector_cores'])
+            with self.assertRaisesRegex(ValueError,'requested arm'):
+                configure(lib,'02','after',[16,16,16],20)
+            lib.select_arm(1)
             a=torch.ones(16,16,dtype=torch.float16)
             b=torch.full((16,16),1/16,dtype=torch.float16)
             z=torch.arange(256,dtype=torch.float32).reshape(16,16)

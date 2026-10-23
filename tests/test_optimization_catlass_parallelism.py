@@ -49,13 +49,16 @@ class ParallelismTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             source = folder/'config.cpp'
-            source.write_text("""#include <stdint.h>
-static uint32_t m_,n_; static bool bad_;
-extern "C" uint32_t catlass_parallelism_family(){return 6;}
+            source.write_text(r"""#include <stdint.h>
+static uint32_t m_,n_,family_=6; static bool bad_;
+extern "C" uint32_t catlass_parallelism_family(){return family_;}
+extern "C" void select_family(uint32_t family){family_=family;}
+extern "C" const char* catlass_bridge_kernel_names(){return family_==6?
+ "[\"wave1_splitk_after\"]":"[\"wave1_buffering_after\"]";}
 extern "C" int catlass_bridge_configure(uint32_t m,uint32_t n,uint32_t k,uint32_t c){
  m_=m;n_=n;bad_=k==128;return (m%16||n%16||!c)?1:0;}
-extern "C" uint32_t catlass_parallelism_factor(){return 4;}
-extern "C" uint64_t catlass_parallelism_workspace(){return bad_?1:uint64_t(m_)*n_*4*4;}
+extern "C" uint32_t catlass_parallelism_factor(){return family_==6?4:1;}
+extern "C" uint64_t catlass_parallelism_workspace(){return bad_?1:family_==6?uint64_t(m_)*n_*4*4:0;}
 """)
             binary = folder/'config.so'
             subprocess.run(['c++','-shared','-fPIC',str(source),'-o',str(binary)],check=True,
@@ -70,6 +73,10 @@ extern "C" uint64_t catlass_parallelism_workspace(){return bad_?1:uint64_t(m_)*n
                     ('06','after',[17,64,64],20),('06','after',[64,64,64],0)]:
                 with self.assertRaises(ValueError):
                     configure(library,family,arm,shape,cores)
+            library.select_family(7)
+            self.assertEqual(configure(library,'07','after',[64,64,64],20)['operand_stages'],2)
+            with self.assertRaisesRegex(ValueError, 'requested arm'):
+                configure(library,'07','before',[64,64,64],20)
 
 
 if __name__ == '__main__':

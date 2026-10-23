@@ -23,11 +23,17 @@ def balanced_shape(cube_cores):
     return 256*a, 128*b, 6144
 
 
-def verify_b_layout(binary, column):
+def verify_b_layout(binary, column, arm=None):
     library = ctypes.CDLL(str(binary))
     library.catlass_bridge_b_column.restype = ctypes.c_uint32
     if library.catlass_bridge_b_column() != int(column):
         raise ValueError('compiled B layout does not match case contract')
+    if arm is not None:
+        if arm not in ('before','after'):
+            raise ValueError('arm must be before or after')
+        library.catlass_bridge_kernel_names.restype = ctypes.c_char_p
+        if json.loads(library.catlass_bridge_kernel_names()) != [f'wave1_tile_{arm}']:
+            raise ValueError('compiled kernel arm does not match case contract')
 
 
 class Adapter:
@@ -53,7 +59,7 @@ class Adapter:
         build = json.loads((self.directory / f'build-{variant}/build.json').read_text())
         if build['binary_sha256'] != digest(binary) or build['source_revision'] != PIN:
             raise ValueError('native build identity does not match pinned binary')
-        verify_b_layout(binary, column)
+        verify_b_layout(binary, column, arm)
         b = fixture['inputs']['b']
         device_b = b.T.contiguous().npu().T if column else b.npu()
         native = NativeArm(binary, [fixture['inputs']['a'].npu(), device_b],

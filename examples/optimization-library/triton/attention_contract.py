@@ -13,8 +13,8 @@ def dimensions(spec):
     if any(type(value) is not int for value in values):
         raise ValueError('b, h, q, k, d and seed must be integers')
     b, h, q, k, d, seed = values
-    if b != 1 or h not in (4, 8) or not 1 <= q <= 1536 or not 1 <= k <= 1536 or d not in (64, 128) or seed < 0:
-        raise ValueError('supported envelope: B=1, H=4/8, Q/K=1..1536, D=64/128, seed>=0')
+    if b != 1 or h not in (4, 8) or not 1 <= q <= 1536 or not 1 <= k <= 1536 or d not in (64, 128) or not 0 <= seed < 2**64:
+        raise ValueError('supported envelope: B=1, H=4/8, Q/K=1..1536, D=64/128, 0<=seed<2**64')
     return values
 
 

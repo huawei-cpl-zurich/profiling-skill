@@ -100,6 +100,62 @@ class PairTests(unittest.TestCase):
             self.assertEqual(self.run_case(adapter, folder, 'reuse')['status'], 'complete')
             self.assertEqual(adapter.oracle_calls, 1)
 
+    def test_prepared_arms_close_once_on_success_and_correctness_failure(self):
+        for bad_arm in (None, 'before'):
+            with self.subTest(bad_arm=bad_arm), tempfile.TemporaryDirectory() as directory:
+                adapter, closed = Adapter(bad_arm=bad_arm), []
+                prepare = adapter.prepare
+                def prepare_closable(arm, *args):
+                    item = prepare(arm, *args)
+                    item.close = lambda: closed.append(arm)
+                    return item
+                adapter.prepare = prepare_closable
+                result = self.run_case(adapter, Path(directory))
+                self.assertEqual(closed, ['before'] if bad_arm else ['before', 'after'])
+                self.assertEqual(result['counts'], dict(correctness_calls=1 if bad_arm else 2,
+                    capture_calls=0 if bad_arm else 2, profiled_calls=0 if bad_arm else 20))
+                for row in result['arms'].values():
+                    self.assertEqual(row['cleanup']['status'], 'complete')
+
+    def test_cleanup_errors_do_not_hide_captures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = Adapter()
+            prepare = adapter.prepare
+            def prepare_closable(*args):
+                item = prepare(*args)
+                def close():
+                    raise RuntimeError('release failed')
+                item.close = close
+                return item
+            adapter.prepare = prepare_closable
+            result = self.run_case(adapter, Path(directory))
+            self.assertEqual(result['status'], 'failed')
+            for row in result['arms'].values():
+                self.assertEqual(row['cleanup']['reason'], 'release failed')
+                self.assertEqual(row['capture']['event_latency']['mean_ms'], .25)
+                self.assertEqual(row['profiled_calls'], 10)
+
+    def test_nonfinite_capture_samples_are_durable_json_diagnostics(self):
+        for invalid in (float('nan'), float('inf'), float('-inf')):
+            with self.subTest(invalid=repr(invalid)), tempfile.TemporaryDirectory() as directory:
+                adapter, folder = Adapter(), Path(directory)
+                capture = adapter.capture
+                def invalid_capture(*args):
+                    result = capture(*args)
+                    result['event_latency']['samples_ms'][3] = invalid
+                    return result
+                adapter.capture = invalid_capture
+                result = self.run_case(adapter, folder)
+                retained = json.loads((folder / 'out/result.json').read_text(),
+                                      parse_constant=lambda token: self.fail('invalid JSON ' + token))
+                self.assertEqual(retained, result)
+                self.assertEqual(result['status'], 'failed')
+                for row in result['arms'].values():
+                    self.assertEqual(row['capture']['event_latency']['samples_ms'][3],
+                                     {'nonfinite_float': repr(invalid)})
+                    self.assertIn('invalid event sample at index 3', row['error']['message'])
+                    self.assertEqual(row['capture']['event_latency']['status'], 'failed')
+
     def test_provider_cache_survives_relocation_and_legacy_manifest(self):
         for legacy in (False, True):
             with self.subTest(legacy=legacy), tempfile.TemporaryDirectory() as directory:
@@ -116,20 +172,70 @@ class PairTests(unittest.TestCase):
                     cache_folder = Path(original['fixture']['cache'])
                     manifest_path = cache_folder / 'manifest.json'
                     manifest = json.loads(manifest_path.read_text())
-                    del manifest['source_content']
+                    del manifest['source_identity']
+                    del manifest['fixture_cache_version']
                     pair.save(manifest_path, manifest)
                     cache_folder.rename(cache_folder.parent / 'legacy-absolute-path-key')
                 second = Adapter()
-                second.case_sources = [providers[1]]
+                second.case_sources = [providers[0] if legacy else providers[1]]
                 reused = self.run_case(second, folder, 'relocated')
                 self.assertEqual(reused['status'], 'complete', reused)
                 self.assertEqual(second.oracle_calls, 0)
                 self.assertEqual(reused['fixture']['sha256'], original['fixture']['sha256'])
-                self.assertEqual(reused['fixture']['current_sources'], pair.sources([providers[1]]))
-                providers[1].write_text('def oracle(): return 2\n')
+                self.assertEqual(reused['fixture']['current_sources'], pair.sources(second.case_sources))
+                second.case_sources[0].write_text('def oracle(): return 2\n')
                 different = self.run_case(second, folder, 'changed-provider')
                 self.assertEqual(different['status'], 'complete', different)
                 self.assertEqual(second.oracle_calls, 1)
+
+    def test_source_roles_are_ordered_and_ambiguous_legacy_cache_is_not_reused(self):
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy), tempfile.TemporaryDirectory() as directory:
+                folder, adapter = Path(directory), Adapter()
+                files = [folder / 'oracle.py', folder / 'helper.py']
+                for path, text in zip(files, ('oracle A', 'helper B')):
+                    path.write_text(text)
+                adapter.case_sources = files
+                first = self.run_case(adapter, folder)
+                old_payload = Path(first['fixture']['cache']) / 'fixture.pt'
+                old_digest = pair.sha(old_payload)
+                if legacy:
+                    manifest_path = old_payload.with_name('manifest.json')
+                    manifest = json.loads(manifest_path.read_text())
+                    del manifest['source_identity']
+                    del manifest['fixture_cache_version']
+                    pair.save(manifest_path, manifest)
+                # Exchanging source roles preserves the content set, not semantics.
+                adapter.case_sources = files[::-1]
+                second = self.run_case(adapter, folder, 'exchanged')
+                self.assertEqual(second['status'], 'complete', second)
+                self.assertEqual(second['fixture']['oracle_calls'], 1)
+                self.assertEqual(adapter.oracle_calls, 2)
+                self.assertNotEqual(second['fixture']['cache'], first['fixture']['cache'])
+                self.assertEqual(pair.sha(old_payload), old_digest)
+
+    def test_grad_requirement_survives_clone_and_mutation_is_detected(self):
+        tensor = torch.arange(20.0, requires_grad=True)[2:18:3]
+        copied = pair.clone(tensor, torch)
+        self.assertTrue(copied.requires_grad)
+        self.assertEqual((copied.stride(), copied.storage_offset()), ((3,), 2))
+        original = pair.fingerprint(copied, torch)
+        copied.requires_grad_(False)
+        self.assertNotEqual(original, pair.fingerprint(copied, torch))
+
+    def test_capture_cannot_replace_validated_kernel_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = Adapter(missing=True)
+            capture = adapter.capture
+            def mutate_inventory(run, prepared, output):
+                prepared.expected_kernels.clear()
+                return capture(run, prepared, output)
+            adapter.capture = mutate_inventory
+            result = self.run_case(adapter, Path(directory))
+            self.assertEqual(result['status'], 'incomplete')
+            for row in result['arms'].values():
+                self.assertEqual(row['expected_kernels'], ['kernel'])
+                self.assertEqual(row['capture']['kernel_identity']['missing'], ['kernel'])
 
     def test_no_capture_when_either_correctness_fails(self):
         with tempfile.TemporaryDirectory() as directory:

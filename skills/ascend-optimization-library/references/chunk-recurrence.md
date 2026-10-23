@@ -1,9 +1,7 @@
 # Chunk a gated delta recurrence
 
-Status: CPU algebra checks and A3 compile-only qualification at DK=DV128
-passed for all three kernels after tiling value columns. Correctness and
-profiling on A3 remain pending. The long/short regimes below are measurement
-hypotheses; no runtime benefit is established.
+Status: both listed Triton gallery pairs passed A3 correctness and ten-forward
+profile/identity collection. All preparation and scan kernels are included.
 
 Read this recipe when code updates a large state for every token, there are few
 independent heads/segments, and successive state updates form a long serial
@@ -53,10 +51,10 @@ dimension in each program. DV64/128 therefore uses two/four value tiles. The str
 lower matrix is nilpotent; the example uses a finite doubling factorization.
 The CPU tests verify the blocked equations against the token recurrence and
 verify that value-column partitions produce the same output and final state.
-The original untiled DK=DV128 token kernel exceeded A3 UB capacity
-(2,115,584 bits required versus 1,572,864 available); it was rejected before
-launch. The tiled source passed compile-only probes for all three kernels.
-This resource result does not establish runtime correctness.
+The original untiled state failed its resource probe before launch. Tiling
+independent value columns reduced the live state footprint; all three revised
+kernels passed resource compilation and the gallery runtime checks. This does
+not establish another shape's resource envelope.
 
 Both arms keep state in FP32. The chunk arm casts matrix operands, including
 state operands for dots, to FP16 with FP32 accumulation. This changes rounding
@@ -90,3 +88,37 @@ margin shrinks. A falsifier for the proposed long-sequence gain is a complete
 paired capture whose preparation plus scan costs equal or exceed the token
 scan beyond sample variability. Missing metrics or indistinguishable timings
 remain inconclusive.
+
+
+## What the gallery establishes
+
+The long case improved both measured boundaries, while T17 was substantially
+slower after chunking. The long after arm also added 16,842,752 workspace bytes;
+output and final-state absolute errors increased while staying inside the
+unchanged contract. This is a concrete tradeoff between parallel matrix work,
+preparation/workspace cost and numerical margin. Short segments need a guarded
+choice rather than unconditional chunking.
+
+## Measured gallery
+
+All ratios are before/after. See the [measurement ledger](gallery-evidence.md) for boundary and uncertainty definitions; raw ten-sample series are in [gallery-evidence.json](gallery-evidence.json).
+
+| Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
+| --- | --- | --- | --- | --- |
+| 04-triton-gallery-benefit | 2429.02 ± 1.171 / 2027.27 ± 14.93 | 1.198×; gain | 2.47 ± 0.1283 / 2.10033 ± 0.2294 | gain |
+| 04-triton-gallery-cost | 23.754 ± 1.27 / 186.132 ± 23.56 | 0.1276×; regression | 0.236746 ± 0.1305 / 0.430014 ± 0.1329 | regression |
+
+Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
+
+| Format / regime / arm / kernel | `aic_mac_ratio` | `aiv_vec_ratio` | `aiv_mte2_ratio` |
+| --- | ---: | ---: | ---: |
+| 04-triton-gallery-benefit/before/`wave001_delta_token` | 0 | 0.9405 | 0.1271 |
+| 04-triton-gallery-benefit/after/`wave001_delta_chunk_scan` | 0.023 | 0.0624 | 0.0608 |
+| 04-triton-gallery-benefit/after/`wave001_delta_prepare` | 0.0275 | 0.0381 | 0.2305 |
+| 04-triton-gallery-cost/before/`wave001_delta_token` | 0 | 0.8469 | 0.1221 |
+| 04-triton-gallery-cost/after/`wave001_delta_chunk_scan` | 0.0155 | 0.0523 | 0.138 |
+| 04-triton-gallery-cost/after/`wave001_delta_prepare` | 0.0382 | 0.0723 | 0.2334 |
+
+Observed resource/numerical costs and limits:
+- **04-triton-gallery-benefit**: workspace allocation 0->16842752 bytes; higher maximum absolute error after; both pass unchanged correctness contract.
+- **04-triton-gallery-cost**: workspace allocation 0->131584 bytes; higher maximum absolute error after; both pass unchanged correctness contract.

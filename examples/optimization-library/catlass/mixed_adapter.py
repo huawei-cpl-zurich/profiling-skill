@@ -24,6 +24,12 @@ def configure(library,family,arm,shape,cores):
     library.catlass_mixed_family.restype=ctypes.c_uint32
     if library.catlass_mixed_family()!=int(family):
         raise ValueError('binary family mismatch')
+    library.catlass_bridge_kernel_names.argtypes=[]
+    library.catlass_bridge_kernel_names.restype=ctypes.c_char_p
+    expected_names=([f'wave1_padding_{arm}'] if family=='10' else
+                    ['wave1_add_matmul','wave1_add_vector'] if arm=='before' else ['wave1_add_fused'])
+    if json.loads(library.catlass_bridge_kernel_names().decode())!=expected_names:
+        raise ValueError('binary kernel identities do not match the requested arm')
     library.catlass_bridge_configure.argtypes=[ctypes.c_uint32]*4
     library.catlass_bridge_configure.restype=ctypes.c_int
     if library.catlass_bridge_configure(*shape,cores):

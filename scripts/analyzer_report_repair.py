@@ -1,9 +1,20 @@
 """One report-only semantic repair, bounded by the original analyzer deadline."""
 import hashlib
 import json
+import os
+import stat
 from pathlib import Path
 import shutil
 import time
+
+
+def read_regular_report(path):
+    """Read report bytes without following a host-side symlink."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, 'rb') as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError('analysis.json must be a regular non-symlink file')
+        return stream.read()
 
 
 def permitted_citations(launcher):
@@ -40,6 +51,16 @@ def repair(launcher, result, run, save, *, clock=time.monotonic):
         return result
     directory = launcher.root / 'report-repair'
     directory.mkdir(exist_ok=True)
+    report = launcher.reports / 'analysis.json'
+    try:
+        report_bytes = read_regular_report(report)
+    except FileNotFoundError:
+        report_bytes = None
+    except (OSError, ValueError):
+        save(directory / 'validation.json', dict(status='invalid', attempts=0,
+            error='analysis.json must be a regular non-symlink file'))
+        result['report_repair'] = dict(attempts=0, valid=False)
+        return result
     def validate():
         try:
             launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
@@ -52,9 +73,8 @@ def repair(launcher, result, run, save, *, clock=time.monotonic):
             save(directory / 'validation.json', dict(status='valid', attempts=0))
         return result
     repair_cutoff = min(clock() + 90., launcher.deadline_monotonic - 10.)
-    report = launcher.reports / 'analysis.json'
     initial = directory / 'initial-report.json'
-    if not initial.exists() and report.is_file(): shutil.copyfile(report, initial)
+    if not initial.exists() and report_bytes is not None: initial.write_bytes(report_bytes)
     budget = repair_cutoff - clock() - 6.  # Include execute() termination grace in the 90s cap.
     if (directory / 'dispatch.json').exists():
         if not (directory / 'validation.json').exists():
@@ -77,7 +97,16 @@ def repair(launcher, result, run, save, *, clock=time.monotonic):
     config_path = launcher.root / 'tool-config.json'
     config = json.loads(config_path.read_text());config['report_repair_only'] = True;save(config_path, config)
     launcher.report_repair_only = True
-    if not report.exists(): report.touch()
+    if report_bytes is None:
+        with report.open('xb'):
+            pass
+    try:
+        read_regular_report(report)
+    except (OSError, ValueError):
+        save(directory / 'validation.json', dict(status='invalid', attempts=0,
+            error='analysis.json must be a regular non-symlink file'))
+        result['report_repair'] = dict(attempts=0, valid=False)
+        return result
     prompt = ('Repair only /analysis/analysis.json. Correct ALL reported issues, not just the first citation. Read /report-repair/feedback.json for the exact validator '
         'error and authoritative permitted citation metadata, /report-repair/initial-report.json if present, '
         'and /report-repair/original-instructions.md for the report contract. Preserve supported analysis; '
@@ -98,9 +127,13 @@ def repair(launcher, result, run, save, *, clock=time.monotonic):
     terminal = run(command, launcher.root, budget,
                    (directory / 'model.jsonl', directory / 'model.stderr'))
     save(directory / 'terminal.json', {key: terminal[key] for key in ('returncode', 'timed_out')})
-    if report.is_file(): shutil.copyfile(report, directory / 'repaired-report.json')
+    try:
+        (directory / 'repaired-report.json').write_bytes(read_regular_report(report))
+        report_error = None
+    except (OSError, ValueError):
+        report_error = 'Repaired analysis.json must be a regular non-symlink file'
     unchanged = hashlib.sha256((launcher.workspace / 'candidate.py').read_bytes()).hexdigest() == source
-    final_error = validate() if unchanged else 'Frozen candidate changed during report repair'
+    final_error = (report_error or validate()) if unchanged else 'Frozen candidate changed during report repair'
     save(directory / 'validation.json', dict(status='valid' if final_error is None else 'invalid',
         attempts=1, initial_error=error, error=final_error, candidate_unchanged=unchanged))
     result['report_repair'] = dict(attempts=1, valid=final_error is None)

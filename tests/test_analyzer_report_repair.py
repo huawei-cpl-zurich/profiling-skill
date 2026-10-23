@@ -268,3 +268,41 @@ def test_retained_compiler_artifact_also_requires_its_retained_summary(tmp_path)
     launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
     with pytest.raises(ValueError, match='authoritative call summary'):
         launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit, require_retained=True)
+
+
+@pytest.mark.parametrize('valid_host_report', [False, True])
+def test_symlink_report_is_rejected_before_validation_copy_or_model_dispatch(tmp_path, valid_host_report):
+    launcher, raw, _ = fixture(tmp_path)
+    host_file = tmp_path / 'host-only-report'
+    raw['evidence'].pop()
+    payload = json.dumps(raw) if valid_host_report else 'host-only confidential contents'
+    host_file.write_text(payload)
+    report = launcher.reports / 'analysis.json'
+    report.unlink();report.symlink_to(host_file)
+    launcher.base_command = lambda: pytest.fail('unsafe report was mounted')
+    result = repair(launcher, success(), lambda *a: pytest.fail('repair model dispatched'), save, clock=lambda: 0)
+    assert result['report_repair'] == dict(attempts=0, valid=False)
+    directory = launcher.root / 'report-repair'
+    assert not (directory / 'initial-report.json').exists()
+    assert not (directory / 'dispatch.json').exists()
+    assert all(payload.encode() not in path.read_bytes() for path in directory.iterdir() if path.is_file())
+    assert host_file.read_text() == payload
+    with pytest.raises((OSError, ValueError)):
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)
+
+
+def test_repaired_symlink_is_not_followed_into_retained_report(tmp_path):
+    launcher, _, _ = fixture(tmp_path)
+    host_file = tmp_path / 'host-only-report'
+    host_file.write_text('host-only confidential contents')
+    def run(*args):
+        report = launcher.reports / 'analysis.json'
+        report.unlink();report.symlink_to(host_file)
+        return success()
+    result = repair(launcher, success(), run, save, clock=lambda: 0)
+    assert result['report_repair'] == dict(attempts=1, valid=False)
+    directory = launcher.root / 'report-repair'
+    assert not (directory / 'repaired-report.json').exists()
+    assert all(host_file.read_bytes() not in path.read_bytes() for path in directory.iterdir() if path.is_file())
+    with pytest.raises((OSError, ValueError)):
+        launcher.campaign.validate_phase_analysis(launcher.root, launcher.commit)

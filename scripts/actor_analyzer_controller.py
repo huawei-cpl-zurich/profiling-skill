@@ -523,7 +523,7 @@ class Campaign:
     def validate_phase_analysis(self, phase, commit, *, require_retained=False):
         """Read-only authoritative validation shared by repair and publication."""
         report_path = phase / 'reports/analysis.json'
-        if not report_path.exists():
+        if not report_path.exists() and not report_path.is_symlink():
             report_path = phase / 'analysis.json'
         repair_result = phase / 'report-repair/terminal.json'
         if (phase / 'report-repair/dispatch.json').exists():
@@ -533,7 +533,8 @@ class Campaign:
             if terminal['returncode'] != 0 or terminal['timed_out']:
                 raise ValueError('report repair did not finish successfully')
         acquisitions = {}
-        report = validate_analysis(json.loads(report_path.read_text()), commit)
+        from analyzer_report_repair import read_regular_report
+        report = validate_analysis(json.loads(read_regular_report(report_path)), commit)
         verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
                                                    commit + ':candidate.py'])
         expected_source = hashlib.sha256(verified_source).hexdigest()
@@ -644,7 +645,7 @@ class Campaign:
             entry['candidate_verified'] = state.get('verified') == commit
         else:
             report_path = phase / 'reports/analysis.json'
-            if not report_path.exists():
+            if not report_path.exists() and not report_path.is_symlink():
                 report_path = phase / 'analysis.json'
             trusted = phase / 'candidate-snapshot/evidence'
             if trusted.exists():

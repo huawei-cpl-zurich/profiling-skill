@@ -173,7 +173,8 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
             item, row = prepared[arm], report['arms'][arm]
             verify_sources(row['sources'])
             state = getattr(item, 'compilation_state', lambda: None)
-            compiled = state()
+            compiled = json.dumps(state(), sort_keys=True, allow_nan=False)
+            row['compilation_state_before_capture'] = json.loads(compiled)
             count = 0
             def counted():
                 nonlocal count
@@ -187,7 +188,9 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
                           capture_ten(counted, output / arm / 'capture',
                                       expected_kernel=item.expected_kernels, metric_group='PipeUtilization'))
                 row.update(capture=result, profiled_calls=count)
-                if compiled != state():
+                final_state = json.dumps(state(), sort_keys=True, allow_nan=False)
+                row['compilation_state_after_capture'] = json.loads(final_state)
+                if compiled != final_state:
                     raise ValueError('compilation changed during capture')
                 verify_sources(row['sources'])
                 row['status'] = 'complete' if check_capture(result, item, count) else 'incomplete'

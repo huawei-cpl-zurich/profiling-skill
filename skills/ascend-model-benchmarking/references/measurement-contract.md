@@ -1,8 +1,62 @@
 # Measurement contract
 
-## Two metrics, two acquisitions
+## Primary profile-comparison protocol
 
-Latency is unprofiled, synchronized full Model-forward wall time: synchronize,
+For profile comparisons, including “profile ten”, use
+`scripts/model_benchmark_profiled.py`. For each case:
+
+1. The trusted provider generates inputs and the expected output with one
+   reference forward. Save that private case before compiling the candidate.
+2. Compile the candidate with fullgraph and validate its output exactly once.
+   Correctness and compilation are outside the measured capture.
+3. Capture exactly ten candidate forwards in one active profiler step and ten
+   eager PyTorch baseline forwards in one separate capture. There are no extra
+   warmup, discovery or unprofiled timing calls. Candidate capture comes first.
+4. Reuse the private case and baseline capture for subsequent candidate
+   configurations. Reuse invokes neither the provider nor the baseline; each new
+   candidate still gets its own one correctness call and ten profiled forwards.
+
+Expected outputs and candidate inputs use independent storage restored from the
+CPU cache before correctness validation. Baseline inputs are independently
+restored after candidate capture. All cache transfers/copies occur outside
+profiling. Measured forwards assume read-only inputs: do not add tensor I/O
+inspection, post-profile correctness checks or extra validation forwards during
+or after the ten measured calls. Preparation and capture still check compiled
+execution and reject active compilation. Cache identities bind stable private
+baseline/provider/validator source files, exact case data and baseline results;
+candidate code must live in a separate source file.
+
+These measurements are **profiled device-event timings**, not warmed unprofiled
+wall-clock latency. Retain all ten event samples in milliseconds and report their
+arithmetic mean and sample standard deviation (`ddof=1`). The ten calls share one
+capture; they are not ten independent full acquisitions or ten fresh processes.
+Save and flush the timing evidence before completing the capture/export. A trace
+export or normalization failure does not discard valid event timings. Report
+export, accounting and kernel-identity status separately; timing completeness
+alone does not establish successful profiling or verified submitted-kernel identity.
+
+When trace accounting succeeds, retain each iteration's device and AiCPU task
+sums and their combined all-kernel sum. These task-duration sums are separate
+from elapsed device-event timings: overlapping tasks can make a sum exceed elapsed
+time. Use explicit CPU/NPU correlations and accounted task iteration ownership,
+not repeated names, fixed launch counts or time-window guesses. Expected kernel
+names must match every candidate iteration; unknown selectors remain observed-only.
+
+Compare matching case IDs and retain source/device/runtime/clock/load evidence.
+A cached baseline from another configuration remains qualified until those
+conditions are established. Report incomplete or user-truncated cohorts explicitly,
+with per-arm sample counts and the common paired cohort for comparisons; do not
+silently replace failures or omitted slower cases. Preserve every valid sample.
+
+For explicitly requested warmed, unprofiled latency instead, use the separate
+workflow below. Its twenty warmups, three batches and ten fresh-process repeats
+must not be applied to a profile-comparison request.
+
+## Explicit warmed unprofiled latency workflow
+
+For explicitly requested warmed latency, use `scripts/model_benchmark_repeated.py`.
+The following warmup, batch and fresh-process requirements apply only to that
+workflow. Latency is unprofiled, synchronized full Model-forward wall time: synchronize,
 read a monotonic clock, call the compiled Model, synchronize completion, read the
 clock. Include allocations/host dispatch; exclude input generation/transfers,
 correctness, compilation and 20 warmups. Three batches of 50 calls alternate
@@ -40,7 +94,7 @@ that record contributes no compute time. A different shape or a flow targeting
 this placeholder remains invalid. Unknown task types, missing iteration markers
 and incomplete CPU/NPU links still fail closed.
 
-## Filtering and comparisons
+### Warmed acquisition filtering and comparisons
 
 The reused CANNBot threshold is `duration > max(50 * per-name median, 10 us)`.
 It flags suspicious task rows only. All primary totals retain every valid row,
@@ -49,12 +103,12 @@ only through explicit retained acquisition scope, not a duration heuristic.
 
 Retain physical device identity, versions, requested and observed clocks/load,
 capture order and exact measurement policy. Stable 800 MHz and stable 1800 MHz
-are not comparable clocks. Missing telemetry qualifies results. A reproducibility
-measurement uses ten complete paired repetitions, retaining noise rather than
+are not comparable clocks. Missing telemetry qualifies results. This warmed-latency reproducibility
+workflow uses ten complete paired repetitions, retaining noise rather than
 requiring two stable runs. Greater-than-5% batch-median shifts are informational
 flags to investigate, not an admission gate or permission to retry until favorable.
 
-## Between-repetition statistics
+### Warmed between-repetition statistics
 
 Use ten fresh child processes, each executing the entire correctness, compilation,
 warmup, three latency batches and separate profiler replay protocol above. Hold
@@ -81,6 +135,23 @@ Source and fixture providers must be versioned separately from candidate code.
 Correctness validation covers ordinary runtime input variation as well as shapes;
 passing fixed fixtures is not permission to specialize on their accidental values.
 
+
+
+## Eager reference for the warmed workflow
+
+The warmed controller accepts `--baseline-execution eager|compiled` (default `compiled`).
+Candidates always require compiled fullgraph execution and submitted-kernel identity.
+Use `eager` explicitly for a slow PyTorch reference; unsupported compiled references
+fail rather than falling back. Measure eager and compiled reference comparisons in
+separate evidence directories and label their execution modes in final tables.
+Eager references use eval/inference mode, correctness validation, the same 20-call
+warmup, three batches of 50 synchronized full-forward samples, and a separate
+50-iteration correlated profile with 20 warmups. They require no graph backend.
+Active compilation detection and input mutation checks still apply to both arms.
+The repeated controller forwards this option unchanged, records execution modes,
+and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
+counts, mean and sample standard deviation are unchanged.
+
 Retained GDN `MIX_AIV` ReduceSum events have verified `torch_to_npu` start/finish
 links to CPU `aclnnReduceSum` records. They count as device compute under the same
 complete-flow and explicit-iteration requirements as other validated task types.
@@ -95,18 +166,3 @@ complete `torch_to_npu` flow from an exact CPU `record_event` operation. The
 exclusion audit retains its original device record, host operation and link.
 These flows count in `paired_flows`, while `observed_tasks` counts compute
 records. Timing events cannot satisfy an iteration's compute-work requirement.
-
-## Explicit eager reference
-
-The controller accepts `--baseline-execution eager|compiled` (default `compiled`).
-Candidates always require compiled fullgraph execution and submitted-kernel identity.
-Use `eager` explicitly for a slow PyTorch reference; unsupported compiled references
-fail rather than falling back. Measure eager and compiled reference comparisons in
-separate evidence directories and label their execution modes in final tables.
-Eager references use eval/inference mode, correctness validation, the same 20-call
-warmup, three batches of 50 synchronized full-forward samples, and a separate
-50-iteration correlated profile with 20 warmups. They require no graph backend.
-Active compilation detection and input mutation checks still apply to both arms.
-The repeated controller forwards this option unchanged, records execution modes,
-and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
-counts, mean and sample standard deviation are unchanged.

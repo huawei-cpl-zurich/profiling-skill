@@ -99,6 +99,11 @@ class MetricsTests(unittest.TestCase):
         row=evidence.operation_windows(report)[0]
         self.assertEqual(row['device_operation_span_us'],13.)
         self.assertEqual(row['device_idle_gap_us'],8.)
+        self.assertEqual(row['operation_active_union_us'],5.)
+        cpu=dict(a,task_id='cpu',kind='aicpu',start_us=5.,duration_us=2.)
+        report['tasks'].append(cpu)
+        self.assertEqual(evidence.operation_windows(report)[0]['device_idle_gap_us'],6.)
+        report['tasks'].pop()
         b['start_us']=1.;report['iterations'][0]['device_active_union_us']=4.
         self.assertEqual(evidence.operation_windows(report)[0]['device_idle_gap_us'],0.)
 
@@ -137,6 +142,7 @@ class PairTests(unittest.TestCase):
         row = dict(correctness=dict(status='complete',calls=1),profiled_calls=10,capture=capture,
                    sources={'source.py':'source-digest'},metadata={'binary_sha256':'binary-digest'})
         report = dict(protocol='optimization-pair-v1',case={'name':'fixture'},fixture={'sha256':'oracle-digest'},
+                      warmup_calls=0,discovery_calls=0,unprofiled_timing_calls=0,
                       provenance={'physical_die':5},arms={'before':row,'after':copy.deepcopy(row)})
         path = root/'result.json';path.write_text(json.dumps(report))
         return path, report
@@ -164,6 +170,13 @@ class PairTests(unittest.TestCase):
                 with self.assertRaisesRegex(evidence.EvidenceError,'digest'):
                     evidence.collect_pair(path)
 
+    def test_additional_execution_cannot_be_reported_as_single_check_ten_capture(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path,report=self.fixture(Path(folder))
+            report['discovery_calls']=1;path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(evidence.EvidenceError,'additional execution'):
+                evidence.collect_pair(path)
+
     def test_reanalysis_bound_to_original_and_retained_artifacts(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);path,report=self.fixture(root)
@@ -173,11 +186,16 @@ class PairTests(unittest.TestCase):
                 cap=report['arms'][arm]['capture']
                 for name,key in (('normalized','capture_path'),('accounting','accounting_path')):
                     (analysis/f'{arm}-{name}.json').write_text(Path(cap['profile'][key]).read_text())
-                proof['arms'][arm]=dict(trace_sha256=cap['profile']['trace_sha256'],capture_forward_calls=10,
+                proof['arms'][arm]=dict(status='complete',trace_sha256=cap['profile']['trace_sha256'],capture_forward_calls=10,
                     normalized_sha256=evidence.sha(analysis/f'{arm}-normalized.json'),
                     accounting_sha256=evidence.sha(analysis/f'{arm}-accounting.json'),kernel_identity=cap['kernel_identity'])
             proofpath=analysis/'reanalysis.json';proofpath.write_text(json.dumps(proof))
             self.assertEqual(evidence.collect_pair(path,reanalysis=proofpath)['status'],'complete')
+            for arm in ('before','after'):
+                for name in ('normalized','accounting'):
+                    (analysis/f'case-{arm}-{name}.json').write_text((analysis/f'{arm}-{name}.json').read_text())
+            proofpath.write_text(json.dumps({'cases':{'case':proof}}))
+            self.assertEqual(evidence.collect_pair(path,reanalysis=proofpath)['reanalysis_case'],'case')
             proof['original_pair_sha256']='different';proofpath.write_text(json.dumps(proof))
             with self.assertRaisesRegex(evidence.EvidenceError,'different original'):
                 evidence.collect_pair(path,reanalysis=proofpath)

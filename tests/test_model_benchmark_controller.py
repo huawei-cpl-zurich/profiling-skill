@@ -84,13 +84,14 @@ def acquisition():
 
 
 class ControllerTests(unittest.TestCase):
-    def run_fixture(self, root, adapter=None, validator=validate, policy=None):
+    def run_fixture(self, root, adapter=None, validator=validate, baseline_execution="compiled", policy=None):
         hooks = dict(baseline=baseline, candidate=candidate, cases_provider=cases,
                      validator=validator, acquisition=acquisition)
         adapter = adapter or Adapter()
         hooks['acquisition'] = lambda: adapter
         options = Namespace(**{name: name for name in hooks},
-                            output=str(root / 'results'), expected_kernel=['submitted'])
+                            output=str(root / 'results'), expected_kernel=['submitted'],
+                            baseline_execution=baseline_execution)
         if policy is not None:
             options.profile_policy = policy
         ticks = iter(range(0, 10**8, 1000))
@@ -122,6 +123,20 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(profile['iterations'][-1]['device_busy_us'], 10000)
             self.assertTrue(row['latency']['execution_evidence']['candidate']['custom_kernel_identity_verified'])
 
+    def test_explicit_eager_profile_and_timing_retain_compiled_candidate_checks(self):
+        import torch
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(controller, 'benchmark_pair', return_value={'latency_speedup': 1}):
+            report = self.run_fixture(Path(temporary), baseline_execution='eager')
+            self.assertEqual(report['state'], 'complete', report.get('error'))
+            self.assertEqual(report['execution_modes'], dict(baseline='eager', candidate='compiled'))
+            self.assertEqual(len(json.loads((Path(temporary) /
+                'results/case-0000/baseline-busy-time.json').read_text())['iterations']), 50)
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.run_fixture(Path(temporary), Adapter(name='wrong'), baseline_execution='eager')
+            self.assertEqual(report['state'], 'failed')
+            self.assertIn('identity absent', report['error'])
+
     def test_optional_baseline_failure_retains_real_paired_latency(self):
         class BrokenBaseline(Adapter):
             def profile(self, prepared, **kwargs):
@@ -145,6 +160,23 @@ class ControllerTests(unittest.TestCase):
             self.assertNotIn('busy_time_speedup', row)
             self.assertNotIn('geomean_busy_time_speedup', report)
             self.assertIn('geomean_latency_speedup', report)
+
+    def test_optional_eager_reference_failure_keeps_compiled_candidate_identity(self):
+        class BrokenBaseline(Adapter):
+            def profile(self, prepared, **kwargs):
+                if kwargs['output'].name == 'baseline':
+                    raise controller.CaptureError('eager baseline accounting unavailable')
+                return super().profile(prepared, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.run_fixture(Path(temporary), BrokenBaseline(),
+                                      policy='optional', baseline_execution='eager')
+            self.assertEqual(report['state'], 'complete', report.get('error'))
+            self.assertEqual(report['execution_modes'], dict(baseline='eager', candidate='compiled'))
+            row = report['cases'][0]
+            self.assertEqual(row['candidate_identity']['state'], 'verified')
+            self.assertEqual(row['profile_status']['baseline']['state'], 'unavailable')
+            self.assertEqual(row['metric_status']['candidate_device_busy_us'], 'complete')
+            self.assertNotIn('busy_time_speedup', row)
 
     def test_optional_baseline_unexpected_runtime_failure_is_fatal(self):
         class Broken(Adapter):

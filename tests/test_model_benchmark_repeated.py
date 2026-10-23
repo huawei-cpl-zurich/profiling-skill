@@ -26,6 +26,16 @@ def report(value=2, comparable=True):
 
 
 class RepeatedBenchmarkTests(unittest.TestCase):
+    def test_execution_modes_are_retained_and_cannot_mix(self):
+        eager = report()
+        eager['execution_modes'] = dict(baseline='eager', candidate='compiled')
+        result = repeated.aggregate([eager, eager], 2)
+        self.assertEqual(result['state'], 'complete')
+        self.assertEqual(result['execution_modes']['baseline'], 'eager')
+        mixed = repeated.aggregate([eager, report()], 2)
+        self.assertEqual(mixed['failed_repetitions'], 1)
+        self.assertEqual(mixed['completed_repetitions'], 1)
+
     def test_known_variance_and_constant_mean(self):
         result = repeated.aggregate([report(1), report(2), report(3)], 3)
         row = result['cases'][0]

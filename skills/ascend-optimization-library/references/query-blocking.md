@@ -71,18 +71,18 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| triton / benefit | 4537.93 ± 2.714 / 1455.64 ± 9.375 | 3.117×; gain | 4.57082 ± 0.1008 / 1.50654 ± 0.1576 | gain |
-| triton / cost | 20.184 ± 0.2372 / 10.9 ± 0.2451 | 1.852×; gain | 0.337766 ± 0.2815 / 0.224594 ± 0.08376 | inconclusive |
+| 03-triton-gallery-benefit | 4537.93 ± 2.714 / 1455.64 ± 9.375 | 3.117×; gain | 4.57082 ± 0.1008 / 1.50654 ± 0.1576 | gain |
+| 03-triton-gallery-cost | 20.184 ± 0.2372 / 10.9 ± 0.2451 | 1.852×; gain | 0.337766 ± 0.2815 / 0.224594 ± 0.08376 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mac_ratio` | `aiv_vec_ratio` | `aiv_mte2_ratio` |
 | --- | ---: | ---: | ---: |
-| triton/benefit/before/`wave001_attention_row` | 0 | 0.7379 | 0.1325 |
-| triton/benefit/after/`wave001_attention_query_tile` | 0.028 | 0.1069 | 0.0715 |
-| triton/cost/before/`wave001_attention_row` | 0 | 0.6576 | 0.1508 |
-| triton/cost/after/`wave001_attention_query_tile` | 0.0252 | 0.111 | 0.0602 |
+| 03-triton-gallery-benefit/before/`wave001_attention_row` | 0 | 0.7379 | 0.1325 |
+| 03-triton-gallery-benefit/after/`wave001_attention_query_tile` | 0.028 | 0.1069 | 0.0715 |
+| 03-triton-gallery-cost/before/`wave001_attention_row` | 0 | 0.6576 | 0.1508 |
+| 03-triton-gallery-cost/after/`wave001_attention_query_tile` | 0.0252 | 0.111 | 0.0602 |
 
 Observed resource/numerical costs and limits:
-- **triton/benefit**: no additional resource/numerical cost identified by the retained fields.
-- **triton/cost**: cost recipe did not produce a device-span regression in this capture.
+- **03-triton-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **03-triton-gallery-cost**: cost recipe did not produce a device-span regression in this capture.

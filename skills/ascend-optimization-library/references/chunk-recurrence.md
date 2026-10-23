@@ -105,20 +105,20 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| triton / benefit | 2429.02 ± 1.171 / 2027.27 ± 14.93 | 1.198×; gain | 2.47 ± 0.1283 / 2.10033 ± 0.2294 | gain |
-| triton / cost | 23.754 ± 1.27 / 186.132 ± 23.56 | 0.1276×; regression | 0.236746 ± 0.1305 / 0.430014 ± 0.1329 | regression |
+| 04-triton-gallery-benefit | 2429.02 ± 1.171 / 2027.27 ± 14.93 | 1.198×; gain | 2.47 ± 0.1283 / 2.10033 ± 0.2294 | gain |
+| 04-triton-gallery-cost | 23.754 ± 1.27 / 186.132 ± 23.56 | 0.1276×; regression | 0.236746 ± 0.1305 / 0.430014 ± 0.1329 | regression |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mac_ratio` | `aiv_vec_ratio` | `aiv_mte2_ratio` |
 | --- | ---: | ---: | ---: |
-| triton/benefit/before/`wave001_delta_token` | 0 | 0.9405 | 0.1271 |
-| triton/benefit/after/`wave001_delta_chunk_scan` | 0.023 | 0.0624 | 0.0608 |
-| triton/benefit/after/`wave001_delta_prepare` | 0.0275 | 0.0381 | 0.2305 |
-| triton/cost/before/`wave001_delta_token` | 0 | 0.8469 | 0.1221 |
-| triton/cost/after/`wave001_delta_chunk_scan` | 0.0155 | 0.0523 | 0.138 |
-| triton/cost/after/`wave001_delta_prepare` | 0.0382 | 0.0723 | 0.2334 |
+| 04-triton-gallery-benefit/before/`wave001_delta_token` | 0 | 0.9405 | 0.1271 |
+| 04-triton-gallery-benefit/after/`wave001_delta_chunk_scan` | 0.023 | 0.0624 | 0.0608 |
+| 04-triton-gallery-benefit/after/`wave001_delta_prepare` | 0.0275 | 0.0381 | 0.2305 |
+| 04-triton-gallery-cost/before/`wave001_delta_token` | 0 | 0.8469 | 0.1221 |
+| 04-triton-gallery-cost/after/`wave001_delta_chunk_scan` | 0.0155 | 0.0523 | 0.138 |
+| 04-triton-gallery-cost/after/`wave001_delta_prepare` | 0.0382 | 0.0723 | 0.2334 |
 
 Observed resource/numerical costs and limits:
-- **triton/benefit**: adapter-explicit workspace allocation 0->16842752 bytes; higher maximum absolute error after; both pass unchanged correctness contract.
-- **triton/cost**: adapter-explicit workspace allocation 0->131584 bytes; higher maximum absolute error after; both pass unchanged correctness contract.
+- **04-triton-gallery-benefit**: workspace allocation 0->16842752 bytes; higher maximum absolute error after; both pass unchanged correctness contract.
+- **04-triton-gallery-cost**: workspace allocation 0->131584 bytes; higher maximum absolute error after; both pass unchanged correctness contract.

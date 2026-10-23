@@ -79,26 +79,26 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| triton / benefit | 152.131 ± 0.2516 / 122.294 ± 1.23 | 1.244×; gain | 0.327778 ± 0.1776 / 0.28848 ± 0.1108 | inconclusive |
-| catlass / benefit | 66.0186 ± 0.9286 / 35.9733 ± 1.551 | 1.835×; gain | 0.13734 ± 0.0787 / 0.127346 ± 0.05163 | inconclusive |
-| triton / cost | 274.912 ± 2.292 / 153.068 ± 1.746 | 1.796×; gain | 0.332506 ± 0.1254 / 0.282858 ± 0.07292 | inconclusive |
-| catlass / cost | 64.4647 ± 1.425 / 36.0293 ± 1.882 | 1.789×; gain | 0.199076 ± 0.1978 / 0.121868 ± 0.04899 | inconclusive |
+| 05-triton-gallery-benefit (1024×640×6144) | 152.131 ± 0.2516 / 122.294 ± 1.23 | 1.244×; gain | 0.327778 ± 0.1776 / 0.28848 ± 0.1108 | inconclusive |
+| 05-catlass-gallery-benefit (1024×640×6144) | 66.0186 ± 0.9286 / 35.9733 ± 1.551 | 1.835×; gain | 0.13734 ± 0.0787 / 0.127346 ± 0.05163 | inconclusive |
+| 05-triton-gallery-cost (1024×640×6144) | 274.912 ± 2.292 / 153.068 ± 1.746 | 1.796×; gain | 0.332506 ± 0.1254 / 0.282858 ± 0.07292 | inconclusive |
+| 05-catlass-gallery-cost (1024×640×6144) | 64.4647 ± 1.425 / 36.0293 ± 1.882 | 1.789×; gain | 0.199076 ± 0.1978 / 0.121868 ± 0.04899 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `cube_utilization(%)` | `aic_mac_ratio` | `aic_mte2_ratio` |
 | --- | ---: | ---: | ---: |
-| triton/benefit/before/`gallery_gemm` | 59.007 | 0.4283 | 0.9711 |
-| triton/benefit/after/`gallery_gemm` | 93.527 | 0.3246 | 0.9805 |
-| catlass/benefit/before/`wave1_tile_before` | 54.114 | 0.8535 | 0.8653 |
-| catlass/benefit/after/`wave1_tile_after` | 95.932 | 0.8743 | 0.8546 |
-| triton/cost/before/`gallery_gemm` | 57.59 | 0.2427 | 0.9851 |
-| triton/cost/after/`gallery_gemm` | 94.414 | 0.2569 | 0.9836 |
-| catlass/cost/before/`wave1_tile_before` | 54.31 | 0.8685 | 0.7524 |
-| catlass/cost/after/`wave1_tile_after` | 95.68 | 0.8783 | 0.7243 |
+| 05-triton-gallery-benefit/before/`gallery_gemm` | 59.007 | 0.4283 | 0.9711 |
+| 05-triton-gallery-benefit/after/`gallery_gemm` | 93.527 | 0.3246 | 0.9805 |
+| 05-catlass-gallery-benefit/before/`wave1_tile_before` | 54.114 | 0.8535 | 0.8653 |
+| 05-catlass-gallery-benefit/after/`wave1_tile_after` | 95.932 | 0.8743 | 0.8546 |
+| 05-triton-gallery-cost/before/`gallery_gemm` | 57.59 | 0.2427 | 0.9851 |
+| 05-triton-gallery-cost/after/`gallery_gemm` | 94.414 | 0.2569 | 0.9836 |
+| 05-catlass-gallery-cost/before/`wave1_tile_before` | 54.31 | 0.8685 | 0.7524 |
+| 05-catlass-gallery-cost/after/`wave1_tile_after` | 95.68 | 0.8783 | 0.7243 |
 
 Observed resource/numerical costs and limits:
-- **triton/benefit**: no additional resource/numerical cost identified by the retained fields.
-- **catlass/benefit**: no additional resource/numerical cost identified by the retained fields.
-- **triton/cost**: cost recipe did not produce a device-span regression in this capture.
-- **catlass/cost**: cost recipe did not produce a device-span regression in this capture.
+- **05-triton-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **05-catlass-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **05-triton-gallery-cost**: cost recipe did not produce a device-span regression in this capture.
+- **05-catlass-gallery-cost**: cost recipe did not produce a device-span regression in this capture.

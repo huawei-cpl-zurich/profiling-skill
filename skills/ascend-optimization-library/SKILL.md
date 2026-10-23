@@ -30,10 +30,12 @@ not a universal dispatch threshold or a claim about every Ascend target.
 The recipes contain code formats, preconditions, falsifiers and gallery data.
 [Gallery evidence](references/gallery-evidence.md) defines the timing boundaries;
 its JSON companion retains every ten-sample series and original PMU field names.
-Only gallery examples belong to this skill snapshot. All 28 original gallery
-pairs have correctness and ten-forward identity evidence. Residency, ShuffleK
-and the tested output rotation have not demonstrated a timing gain in these
-regimes; read those cards as conditional hypotheses, not proved speedups.
+Only gallery examples belong to this skill snapshot. All 33 gallery pairs
+(28 original plus five supplements) have correctness and ten-forward identity
+evidence. Residency remains inconclusive; ShuffleK improves the thin pressure
+case but regresses the square case. Grouped-M output ordering improves the
+large gallery case; the original output rotation remains inconclusive. These
+observations support conditional choices, not universal speedup claims.
 
 ## Make a conditional decision
 

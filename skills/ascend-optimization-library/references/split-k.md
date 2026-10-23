@@ -57,18 +57,18 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| catlass / benefit | 42.7411 ± 1.484 / 13.7797 ± 2.504 | 3.102×; gain | 0.14644 ± 0.1125 / 0.141998 ± 0.06016 | inconclusive |
-| catlass / cost | 15.196 ± 3.392 / 27.68 ± 3.898 | 0.549×; regression | 0.137164 ± 0.08454 / 0.20001 ± 0.1609 | inconclusive |
+| 06-catlass-gallery-benefit (64×64×16384) | 42.7411 ± 1.484 / 13.7797 ± 2.504 | 3.102×; gain | 0.14644 ± 0.1125 / 0.141998 ± 0.06016 | inconclusive |
+| 06-catlass-gallery-cost (2048×2048×256) | 15.196 ± 3.392 / 27.68 ± 3.898 | 0.549×; regression | 0.137164 ± 0.08454 / 0.20001 ± 0.1609 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `cube_utilization(%)` | `aic_mac_ratio` | `aiv_vec_ratio` |
 | --- | ---: | ---: | ---: |
-| catlass/benefit/before/`wave1_splitk_before` | 7.9523 | 0.2544 | 0.1209 |
-| catlass/benefit/after/`wave1_splitk_after` | 51.353 | 0.1199 | 0.0188 |
-| catlass/cost/before/`wave1_splitk_before` | 87.74 | 0.6341 | 0.1218 |
-| catlass/cost/after/`wave1_splitk_after` | 60.889 | 0.4889 | 0.0409 |
+| 06-catlass-gallery-benefit/before/`wave1_splitk_before` | 7.9523 | 0.2544 | 0.1209 |
+| 06-catlass-gallery-benefit/after/`wave1_splitk_after` | 51.353 | 0.1199 | 0.0188 |
+| 06-catlass-gallery-cost/before/`wave1_splitk_before` | 87.74 | 0.6341 | 0.1218 |
+| 06-catlass-gallery-cost/after/`wave1_splitk_after` | 60.889 | 0.4889 | 0.0409 |
 
 Observed resource/numerical costs and limits:
-- **catlass/benefit**: adapter-explicit workspace allocation 0->262144 bytes; split_factor: 1 -> 16.
-- **catlass/cost**: adapter-explicit workspace allocation 0->16777216 bytes.
+- **06-catlass-gallery-benefit**: workspace allocation 0->262144 bytes; split_factor: 1 -> 16.
+- **06-catlass-gallery-cost**: workspace allocation 0->16777216 bytes.

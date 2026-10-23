@@ -1,6 +1,6 @@
 # Retain a full A tile in L1
 
-Status: both listed native gallery pairs passed A3 correctness and ten-forward
+Status: all three native gallery pairs passed A3 correctness and ten-forward
 profile/identity collection.
 Native family09 is in `examples/optimization-library/catlass/preload.cpp`.
 
@@ -50,7 +50,10 @@ reuse condition before choosing the resident path.
 
 ## What the gallery establishes
 
-Neither listed case established a timing gain at either boundary. The after
+Neither original case established a timing gain at either boundary. The added
+128×32768×1024 capacity-edge case has a 1.1285× device-span point estimate,
+but 56.298 ± 18.98 µs versus 49.888 ± 16.79 µs remains inconclusive. All ten
+samples, including the slow first samples, remain in the comparison. The after
 assembly reserved 524,288 L1 bytes versus 393,216 before: a confirmed capacity
 cost without a demonstrated speed benefit here. Repeated A offsets make reuse
 possible, but do not prove that the original loads were the limiting cost.
@@ -62,18 +65,22 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| catlass / benefit | 15.7 ± 0.9159 / 15.322 ± 3.357 | 1.025×; inconclusive | 0.270156 ± 0.4029 / 0.172478 ± 0.1913 | inconclusive |
-| catlass / cost | 4.494 ± 0.9108 / 4.492 ± 0.8899 | 1×; inconclusive | 0.239518 ± 0.1523 / 0.21912 ± 0.2523 | inconclusive |
+| 09-catlass-gallery-benefit (128×32768×256) | 15.7 ± 0.9159 / 15.322 ± 3.357 | 1.025×; inconclusive | 0.270156 ± 0.4029 / 0.172478 ± 0.1913 | inconclusive |
+| 09-catlass-gallery-cost (128×256×256) | 4.494 ± 0.9108 / 4.492 ± 0.8899 | 1×; inconclusive | 0.239518 ± 0.1523 / 0.21912 ± 0.2523 | inconclusive |
+| 09-catlass-gallery-capacity-edge (128×32768×1024) | 56.298 ± 18.98 / 49.888 ± 16.79 | 1.128×; inconclusive | 0.293314 ± 0.3312 / 0.140266 ± 0.09981 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mte2_ratio` | `aic_mac_ratio` | `cube_utilization(%)` |
 | --- | ---: | ---: | ---: |
-| catlass/benefit/before/`wave1_resident_before` | 0.6194 | 0.6062 | 86.769 |
-| catlass/benefit/after/`wave1_resident_after` | 0.5147 | 0.6463 | 84.508 |
-| catlass/cost/before/`wave1_resident_before` | 0.0455 | 0.0551 | 30.006 |
-| catlass/cost/after/`wave1_resident_after` | 0.0431 | 0.0539 | 30.145 |
+| 09-catlass-gallery-benefit/before/`wave1_resident_before` | 0.6194 | 0.6062 | 86.769 |
+| 09-catlass-gallery-benefit/after/`wave1_resident_after` | 0.5147 | 0.6463 | 84.508 |
+| 09-catlass-gallery-cost/before/`wave1_resident_before` | 0.0455 | 0.0551 | 30.006 |
+| 09-catlass-gallery-cost/after/`wave1_resident_after` | 0.0431 | 0.0539 | 30.145 |
+| 09-catlass-gallery-capacity-edge/before/`wave1_resident_before` | 0.8206 | 0.7142 | 86.135 |
+| 09-catlass-gallery-capacity-edge/after/`wave1_resident_after` | 0.6479 | 0.7882 | 86.277 |
 
 Observed resource/numerical costs and limits:
-- **catlass/benefit**: l1_reserved_bytes: 393216 -> 524288.
-- **catlass/cost**: l1_reserved_bytes: 393216 -> 524288.
+- **09-catlass-gallery-benefit**: l1_reserved_bytes: 393216 -> 524288.
+- **09-catlass-gallery-cost**: l1_reserved_bytes: 393216 -> 524288.
+- **09-catlass-gallery-capacity-edge**: l1_reserved_bytes: 393216 -> 524288.

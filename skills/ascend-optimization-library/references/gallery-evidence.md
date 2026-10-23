@@ -1,6 +1,6 @@
 # Gallery measurement ledger
 
-Complete pairs: 28/28. Each complete arm passed one correctness call and ten profiled forwards with expected-kernel identity.
+Complete pairs: 33/33. Each complete arm passed one correctness call and ten profiled forwards with expected-kernel identity.
 
 The original pair and full derived-evidence hashes in [gallery-evidence.json](gallery-evidence.json) bind these portable summaries to retained experiment artifacts. Machine routing/runtime configuration and full host metadata remain in those artifacts; these cases establish an A3-profile observation, not a result for every target.
 
@@ -38,7 +38,14 @@ Gain/regression labels describe one capture per arm. They use a mean-difference 
 | 11-catlass-gallery-cost | 6.62587 ± 3.523 / 5.77192 ± 1.537 | 1.148×; inconclusive | 0.230126 ± 0.1676 / 0.170388 ± 0.1953 | inconclusive |
 | 12-triton-gallery-benefit | 1436.3 ± 9.048 / 1436.53 ± 4.622 | 0.9998×; inconclusive | 1.50274 ± 0.2151 / 1.4825 ± 0.1472 | inconclusive |
 | 12-triton-gallery-cost | 3.85 ± 0.2598 / 4.222 ± 0.7394 | 0.9119×; inconclusive | 0.237184 ± 0.146 / 0.192532 ± 0.07155 | inconclusive |
+| 09-catlass-gallery-capacity-edge | 56.298 ± 18.98 / 49.888 ± 16.79 | 1.128×; inconclusive | 0.293314 ± 0.3312 / 0.140266 ± 0.09981 | inconclusive |
+| 11-catlass-gallery-pressure-square | 4670.56 ± 21.98 / 4739.47 ± 20.85 | 0.9855×; regression | 4.72433 ± 0.1825 / 4.77918 ± 0.1373 | inconclusive |
+| 11-catlass-gallery-pressure-thin | 573.3 ± 7.657 / 549.36 ± 25.4 | 1.044×; gain | 0.623124 ± 0.1547 / 0.577552 ± 0.1059 | inconclusive |
+| 12-triton-grouped-gallery-benefit | 19127 ± 178.2 / 15463.4 ± 32.57 | 1.237×; gain | 19.2299 ± 0.3205 / 15.5161 ± 0.1855 | gain |
+| 12-triton-grouped-gallery-cost | 2.796 ± 0.1006 / 2.878 ± 1.275 | 0.9715×; inconclusive | 0.255272 ± 0.1962 / 0.300846 ± 0.3631 | inconclusive |
 
 All ten raw event/span samples, per-kernel raw PMU values, units, missing values, numerical diagnostics, workspace/resource settings and source/binary digests are in the JSON companion. Physical traffic and roofline distance are not inferred from activity percentages.
 
 Resource increases remain costs even when timing improves. Several tested mechanisms have no demonstrated gain in these regimes; their recipes remain conditional hypotheses rather than universal recommendations.
+
+The shared GEMM adapter records an unfused-intermediate allocation description even for family12. Source inspection shows an output-order change with no allocation change; retain this metadata limitation rather than claiming allocation savings.

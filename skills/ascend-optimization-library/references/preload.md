@@ -66,18 +66,18 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| catlass / benefit | 24.468 ± 0.9446 / 22.436 ± 2.191 | 1.091×; gain | 0.132794 ± 0.08124 / 0.177662 ± 0.2231 | inconclusive |
-| catlass / cost | 6.54185 ± 2.791 / 6.01588 ± 0.7692 | 1.087×; inconclusive | 0.152598 ± 0.05258 / 0.177682 ± 0.2005 | inconclusive |
+| 08-catlass-gallery-benefit (2048×2048×512) | 24.468 ± 0.9446 / 22.436 ± 2.191 | 1.091×; gain | 0.132794 ± 0.08124 / 0.177662 ± 0.2231 | inconclusive |
+| 08-catlass-gallery-cost (128×256×512) | 6.54185 ± 2.791 / 6.01588 ± 0.7692 | 1.087×; inconclusive | 0.152598 ± 0.05258 / 0.177682 ± 0.2005 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mte2_ratio` | `aic_mac_ratio` | `cube_utilization(%)` |
 | --- | ---: | ---: | ---: |
-| catlass/benefit/before/`wave1_preload_before` | 0.5811 | 0.751 | 87.967 |
-| catlass/benefit/after/`wave1_preload_after` | 0.6719 | 0.8122 | 88.44 |
-| catlass/cost/before/`wave1_preload_before` | 0.0758 | 0.0955 | 26.214 |
-| catlass/cost/after/`wave1_preload_after` | 0.0582 | 0.0689 | 32.81 |
+| 08-catlass-gallery-benefit/before/`wave1_preload_before` | 0.5811 | 0.751 | 87.967 |
+| 08-catlass-gallery-benefit/after/`wave1_preload_after` | 0.6719 | 0.8122 | 88.44 |
+| 08-catlass-gallery-cost/before/`wave1_preload_before` | 0.0758 | 0.0955 | 26.214 |
+| 08-catlass-gallery-cost/after/`wave1_preload_after` | 0.0582 | 0.0689 | 32.81 |
 
 Observed resource/numerical costs and limits:
-- **catlass/benefit**: no additional resource/numerical cost identified by the retained fields.
-- **catlass/cost**: no additional resource/numerical cost identified by the retained fields.
+- **08-catlass-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **08-catlass-gallery-cost**: no additional resource/numerical cost identified by the retained fields.

@@ -48,18 +48,18 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| catlass / benefit | 315.436 ± 4.883 / 148.115 ± 1.624 | 2.13×; gain | 0.348434 ± 0.1011 / 0.221298 ± 0.0914 | gain |
-| catlass / cost | 5.54 ± 1.25 / 4.646 ± 0.8524 | 1.192×; inconclusive | 0.129332 ± 0.06487 / 0.13597 ± 0.08024 | inconclusive |
+| 07-catlass-gallery-benefit (2048×2048×4096) | 315.436 ± 4.883 / 148.115 ± 1.624 | 2.13×; gain | 0.348434 ± 0.1011 / 0.221298 ± 0.0914 | gain |
+| 07-catlass-gallery-cost (256×256×256) | 5.54 ± 1.25 / 4.646 ± 0.8524 | 1.192×; inconclusive | 0.129332 ± 0.06487 / 0.13597 ± 0.08024 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mac_ratio` | `aic_mte2_ratio` | `aic_mte1_ratio` |
 | --- | ---: | ---: | ---: |
-| catlass/benefit/before/`wave1_buffering_before` | 0.5028 | 0.3638 | 0.3326 |
-| catlass/benefit/after/`wave1_buffering_after` | 0.9528 | 0.7919 | 0.7358 |
-| catlass/cost/before/`wave1_buffering_before` | 0.0924 | 0.0759 | 0.0629 |
-| catlass/cost/after/`wave1_buffering_after` | 0.0954 | 0.0823 | 0.0696 |
+| 07-catlass-gallery-benefit/before/`wave1_buffering_before` | 0.5028 | 0.3638 | 0.3326 |
+| 07-catlass-gallery-benefit/after/`wave1_buffering_after` | 0.9528 | 0.7919 | 0.7358 |
+| 07-catlass-gallery-cost/before/`wave1_buffering_before` | 0.0924 | 0.0759 | 0.0629 |
+| 07-catlass-gallery-cost/after/`wave1_buffering_after` | 0.0954 | 0.0823 | 0.0696 |
 
 Observed resource/numerical costs and limits:
-- **catlass/benefit**: operand_stages: 1 -> 2.
-- **catlass/cost**: operand_stages: 1 -> 2.
+- **07-catlass-gallery-benefit**: operand_stages: 1 -> 2.
+- **07-catlass-gallery-cost**: operand_stages: 1 -> 2.

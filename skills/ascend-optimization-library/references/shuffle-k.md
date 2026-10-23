@@ -1,6 +1,6 @@
 # Stagger the per-core K starting tile
 
-Status: both listed native gallery pairs passed A3 correctness and ten-forward
+Status: all four native gallery pairs passed A3 correctness and ten-forward
 profile/identity collection.
 Native family11 is in `examples/optimization-library/catlass/preload.cpp`.
 
@@ -49,11 +49,18 @@ claiming an indexing penalty that the compiler may remove.
 
 ## What the gallery establishes
 
-Neither the multi-tile nor one-tile case established a timing gain at either
-boundary. Both policies reserve the same L1 capacity. The one-tile operation
-has no useful stagger and may compile away its indexing difference. The
-contention benefit therefore remains unproved for these cases; do not apply it
-solely because a movement ratio is high or label the noisy caller ratio a win.
+The original multi-tile and one-tile cases established no timing gain at either
+boundary. The supplemental 8192³ pressure case regresses on device span:
+4670.565 ± 21.98 µs becomes 4739.465 ± 20.85 µs (0.9855×).
+The thin 128×16384×16384 case improves modestly within this capture:
+573.3 ± 7.657 µs becomes 549.36 ± 25.40 µs (1.0436×), with a descriptive
+mean-difference interval excluding zero. Its caller comparison remains
+inconclusive; this does not establish a robust gain across captures.
+
+Both policies reserve the same L1 capacity. The one-tile operation has no useful
+stagger and may compile away its indexing difference. These opposite pressure
+outcomes reject a rule based on large K or high movement ratios alone. Preserve
+the source contract and compare the candidate at the actual operation boundary.
 
 ## Measured gallery
 
@@ -61,18 +68,26 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| catlass / benefit | 145.947 ± 2.237 / 146.983 ± 4.339 | 0.993×; inconclusive | 0.283208 ± 0.2433 / 0.209842 ± 0.07063 | inconclusive |
-| catlass / cost | 6.62587 ± 3.523 / 5.77192 ± 1.537 | 1.148×; inconclusive | 0.230126 ± 0.1676 / 0.170388 ± 0.1953 | inconclusive |
+| 11-catlass-gallery-benefit (2048×2048×4096) | 145.947 ± 2.237 / 146.983 ± 4.339 | 0.993×; inconclusive | 0.283208 ± 0.2433 / 0.209842 ± 0.07063 | inconclusive |
+| 11-catlass-gallery-cost (512×512×256) | 6.62587 ± 3.523 / 5.77192 ± 1.537 | 1.148×; inconclusive | 0.230126 ± 0.1676 / 0.170388 ± 0.1953 | inconclusive |
+| 11-catlass-gallery-pressure-square (8192×8192×8192) | 4670.56 ± 21.98 / 4739.47 ± 20.85 | 0.9855×; regression | 4.72433 ± 0.1825 / 4.77918 ± 0.1373 | inconclusive |
+| 11-catlass-gallery-pressure-thin (128×16384×16384) | 573.3 ± 7.657 / 549.36 ± 25.4 | 1.044×; gain | 0.623124 ± 0.1547 / 0.577552 ± 0.1059 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mte2_ratio` | `aic_mac_ratio` | `cube_utilization(%)` |
 | --- | ---: | ---: | ---: |
-| catlass/benefit/before/`wave1_shuffle_before` | 0.8067 | 0.9632 | 90.971 |
-| catlass/benefit/after/`wave1_shuffle_after` | 0.788 | 0.9554 | 91.092 |
-| catlass/cost/before/`wave1_shuffle_before` | 0.188 | 0.1695 | 53.048 |
-| catlass/cost/after/`wave1_shuffle_after` | 0.1583 | 0.1892 | 50.191 |
+| 11-catlass-gallery-benefit/before/`wave1_shuffle_before` | 0.8067 | 0.9632 | 90.971 |
+| 11-catlass-gallery-benefit/after/`wave1_shuffle_after` | 0.788 | 0.9554 | 91.092 |
+| 11-catlass-gallery-cost/before/`wave1_shuffle_before` | 0.188 | 0.1695 | 53.048 |
+| 11-catlass-gallery-cost/after/`wave1_shuffle_after` | 0.1583 | 0.1892 | 50.191 |
+| 11-catlass-gallery-pressure-square/before/`wave1_shuffle_before` | 0.9557 | 0.8919 | 99.248 |
+| 11-catlass-gallery-pressure-square/after/`wave1_shuffle_after` | 0.9693 | 0.8788 | 99.401 |
+| 11-catlass-gallery-pressure-thin/before/`wave1_shuffle_before` | 0.9916 | 0.5456 | 83.874 |
+| 11-catlass-gallery-pressure-thin/after/`wave1_shuffle_after` | 0.9914 | 0.5712 | 83.656 |
 
 Observed resource/numerical costs and limits:
-- **catlass/benefit**: no additional resource/numerical cost identified by the retained fields.
-- **catlass/cost**: no additional resource/numerical cost identified by the retained fields.
+- **11-catlass-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **11-catlass-gallery-cost**: no additional resource/numerical cost identified by the retained fields.
+- **11-catlass-gallery-pressure-square**: no additional resource/numerical cost identified by the retained fields.
+- **11-catlass-gallery-pressure-thin**: no additional resource/numerical cost identified by the retained fields.

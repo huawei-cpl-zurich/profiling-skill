@@ -65,18 +65,18 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| catlass / benefit | 40.284 ± 3.049 / 32.502 ± 1.95 | 1.239×; gain | 0.147674 ± 0.1247 / 0.20107 ± 0.2329 | inconclusive |
-| catlass / cost | 5.56 ± 2.385 / 12.484 ± 1.197 | 0.4454×; regression | 0.14381 ± 0.05379 / 0.140672 ± 0.1044 | inconclusive |
+| 10-catlass-gallery-benefit (1024×1000×1000) | 40.284 ± 3.049 / 32.502 ± 1.95 | 1.239×; gain | 0.147674 ± 0.1247 / 0.20107 ± 0.2329 | inconclusive |
+| 10-catlass-gallery-cost (128×128×128) | 5.56 ± 2.385 / 12.484 ± 1.197 | 0.4454×; regression | 0.14381 ± 0.05379 / 0.140672 ± 0.1044 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_mte2_ratio` | `aiv_mte3_ratio` | `cube_utilization(%)` |
 | --- | ---: | ---: | ---: |
-| catlass/benefit/before/`wave1_padding_before` | 0.7442 | 0.0009 | 81.035 |
-| catlass/benefit/after/`wave1_padding_after` | 0.1807 | 0.0843 | 86.201 |
-| catlass/cost/before/`wave1_padding_before` | 0.012 | 0.0008 | 72.385 |
-| catlass/cost/after/`wave1_padding_after` | 0.0029 | 0.0116 | 90.041 |
+| 10-catlass-gallery-benefit/before/`wave1_padding_before` | 0.7442 | 0.0009 | 81.035 |
+| 10-catlass-gallery-benefit/after/`wave1_padding_after` | 0.1807 | 0.0843 | 86.201 |
+| 10-catlass-gallery-cost/before/`wave1_padding_before` | 0.012 | 0.0008 | 72.385 |
+| 10-catlass-gallery-cost/after/`wave1_padding_after` | 0.0029 | 0.0116 | 90.041 |
 
 Observed resource/numerical costs and limits:
-- **catlass/benefit**: adapter-explicit workspace allocation 0->4096512 bytes.
-- **catlass/cost**: adapter-explicit workspace allocation 0->65536 bytes.
+- **10-catlass-gallery-benefit**: workspace allocation 0->4096512 bytes.
+- **10-catlass-gallery-cost**: workspace allocation 0->65536 bytes.

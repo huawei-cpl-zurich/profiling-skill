@@ -116,30 +116,30 @@ All ratios are before/after. See the [measurement ledger](gallery-evidence.md) f
 
 | Format / planned regime | Device span before / after (µs ± SD) | Span ratio; observation | Caller events before / after (ms ± SD) | Caller observation |
 | --- | --- | --- | --- | --- |
-| triton / benefit | 103.472 ± 10.54 / 78.6245 ± 1.257 | 1.316×; gain | 0.316694 ± 0.08611 / 0.246434 ± 0.1198 | inconclusive |
-| catlass / benefit | 36.25 ± 6.975 / 31.242 ± 5.299 | 1.16×; inconclusive | 0.184558 ± 0.2222 / 0.137796 ± 0.07743 | inconclusive |
-| triton / cost | 87.1421 ± 11.85 / 57.5509 ± 1.084 | 1.514×; gain | 0.334488 ± 0.1524 / 0.208334 ± 0.09668 | inconclusive |
-| catlass / cost | 54.44 ± 4.259 / 52.336 ± 1.34 | 1.04×; inconclusive | 0.189488 ± 0.1125 / 0.161666 ± 0.1537 | inconclusive |
+| 02-triton-gallery-benefit (2048×2048×256) | 103.472 ± 10.54 / 78.6245 ± 1.257 | 1.316×; gain | 0.316694 ± 0.08611 / 0.246434 ± 0.1198 | inconclusive |
+| 02-catlass-gallery-benefit (2048×2048×256) | 36.25 ± 6.975 / 31.242 ± 5.299 | 1.16×; inconclusive | 0.184558 ± 0.2222 / 0.137796 ± 0.07743 | inconclusive |
+| 02-triton-gallery-cost (256×256×8192) | 87.1421 ± 11.85 / 57.5509 ± 1.084 | 1.514×; gain | 0.334488 ± 0.1524 / 0.208334 ± 0.09668 | inconclusive |
+| 02-catlass-gallery-cost (256×256×8192) | 54.44 ± 4.259 / 52.336 ± 1.34 | 1.04×; inconclusive | 0.189488 ± 0.1125 / 0.161666 ± 0.1537 | inconclusive |
 
 Selected raw-counter means below retain their exported names. Ratios are per-kernel activity fields; they are not additive or fractions of theoretical peak. Full columns, sample deviations and unavailable values remain in the JSON.
 
 | Format / regime / arm / kernel | `aic_scalar_ratio` | `aiv_vec_ratio` | `aic_mte2_ratio` |
 | --- | ---: | ---: | ---: |
-| triton/benefit/before/`gallery_add` | 0 | 0.1933 | 0 |
-| triton/benefit/before/`gallery_gemm` | 0.1671 | 0 | 0.9383 |
-| triton/benefit/after/`gallery_gemm` | 0.6827 | 0.0338 | 0.9367 |
-| catlass/benefit/before/`wave1_add_matmul` | 0.5214 | 0.1218 | 0.5336 |
-| catlass/benefit/before/`wave1_add_vector` | 0.207 | 0.1427 | 0.021 |
-| catlass/benefit/after/`wave1_add_fused` | 0.8592 | 0.0754 | 0.554 |
-| triton/cost/before/`gallery_add` | 0 | 0.0447 | 0 |
-| triton/cost/before/`gallery_gemm` | 0.1972 | 0 | 0.9729 |
-| triton/cost/after/`gallery_gemm` | 0.2278 | 0.002 | 0.9442 |
-| catlass/cost/before/`wave1_add_matmul` | 0.6236 | 0.1217 | 0.5601 |
-| catlass/cost/before/`wave1_add_vector` | 0.2065 | 0.0123 | 0.021 |
-| catlass/cost/after/`wave1_add_fused` | 0.7103 | 0.0046 | 0.3934 |
+| 02-triton-gallery-benefit/before/`gallery_add` | 0 | 0.1933 | 0 |
+| 02-triton-gallery-benefit/before/`gallery_gemm` | 0.1671 | 0 | 0.9383 |
+| 02-triton-gallery-benefit/after/`gallery_gemm` | 0.6827 | 0.0338 | 0.9367 |
+| 02-catlass-gallery-benefit/before/`wave1_add_matmul` | 0.5214 | 0.1218 | 0.5336 |
+| 02-catlass-gallery-benefit/before/`wave1_add_vector` | 0.207 | 0.1427 | 0.021 |
+| 02-catlass-gallery-benefit/after/`wave1_add_fused` | 0.8592 | 0.0754 | 0.554 |
+| 02-triton-gallery-cost/before/`gallery_add` | 0 | 0.0447 | 0 |
+| 02-triton-gallery-cost/before/`gallery_gemm` | 0.1972 | 0 | 0.9729 |
+| 02-triton-gallery-cost/after/`gallery_gemm` | 0.2278 | 0.002 | 0.9442 |
+| 02-catlass-gallery-cost/before/`wave1_add_matmul` | 0.6236 | 0.1217 | 0.5601 |
+| 02-catlass-gallery-cost/before/`wave1_add_vector` | 0.2065 | 0.0123 | 0.021 |
+| 02-catlass-gallery-cost/after/`wave1_add_fused` | 0.7103 | 0.0046 | 0.3934 |
 
 Observed resource/numerical costs and limits:
-- **triton/benefit**: adapter-explicit workspace allocation 16777216->0 bytes.
-- **catlass/benefit**: no additional resource/numerical cost identified by the retained fields.
-- **triton/cost**: adapter-explicit workspace allocation 262144->0 bytes; cost recipe did not produce a device-span regression in this capture.
-- **catlass/cost**: no additional resource/numerical cost identified by the retained fields.
+- **02-triton-gallery-benefit**: workspace allocation 16777216->0 bytes.
+- **02-catlass-gallery-benefit**: no additional resource/numerical cost identified by the retained fields.
+- **02-triton-gallery-cost**: workspace allocation 262144->0 bytes; cost recipe did not produce a device-span regression in this capture.
+- **02-catlass-gallery-cost**: no additional resource/numerical cost identified by the retained fields.

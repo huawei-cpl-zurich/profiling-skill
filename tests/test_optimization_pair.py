@@ -100,6 +100,62 @@ class PairTests(unittest.TestCase):
             self.assertEqual(self.run_case(adapter, folder, 'reuse')['status'], 'complete')
             self.assertEqual(adapter.oracle_calls, 1)
 
+    def test_prepared_arms_close_once_on_success_and_correctness_failure(self):
+        for bad_arm in (None, 'before'):
+            with self.subTest(bad_arm=bad_arm), tempfile.TemporaryDirectory() as directory:
+                adapter, closed = Adapter(bad_arm=bad_arm), []
+                prepare = adapter.prepare
+                def prepare_closable(arm, *args):
+                    item = prepare(arm, *args)
+                    item.close = lambda: closed.append(arm)
+                    return item
+                adapter.prepare = prepare_closable
+                result = self.run_case(adapter, Path(directory))
+                self.assertEqual(closed, ['before'] if bad_arm else ['before', 'after'])
+                self.assertEqual(result['counts'], dict(correctness_calls=1 if bad_arm else 2,
+                    capture_calls=0 if bad_arm else 2, profiled_calls=0 if bad_arm else 20))
+                for row in result['arms'].values():
+                    self.assertEqual(row['cleanup']['status'], 'complete')
+
+    def test_cleanup_errors_do_not_hide_captures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = Adapter()
+            prepare = adapter.prepare
+            def prepare_closable(*args):
+                item = prepare(*args)
+                def close():
+                    raise RuntimeError('release failed')
+                item.close = close
+                return item
+            adapter.prepare = prepare_closable
+            result = self.run_case(adapter, Path(directory))
+            self.assertEqual(result['status'], 'failed')
+            for row in result['arms'].values():
+                self.assertEqual(row['cleanup']['reason'], 'release failed')
+                self.assertEqual(row['capture']['event_latency']['mean_ms'], .25)
+                self.assertEqual(row['profiled_calls'], 10)
+
+    def test_nonfinite_capture_samples_are_durable_json_diagnostics(self):
+        for invalid in (float('nan'), float('inf'), float('-inf')):
+            with self.subTest(invalid=repr(invalid)), tempfile.TemporaryDirectory() as directory:
+                adapter, folder = Adapter(), Path(directory)
+                capture = adapter.capture
+                def invalid_capture(*args):
+                    result = capture(*args)
+                    result['event_latency']['samples_ms'][3] = invalid
+                    return result
+                adapter.capture = invalid_capture
+                result = self.run_case(adapter, folder)
+                retained = json.loads((folder / 'out/result.json').read_text(),
+                                      parse_constant=lambda token: self.fail('invalid JSON ' + token))
+                self.assertEqual(retained, result)
+                self.assertEqual(result['status'], 'failed')
+                for row in result['arms'].values():
+                    self.assertEqual(row['capture']['event_latency']['samples_ms'][3],
+                                     {'nonfinite_float': repr(invalid)})
+                    self.assertIn('invalid event sample at index 3', row['error']['message'])
+                    self.assertEqual(row['capture']['event_latency']['status'], 'failed')
+
     def test_provider_cache_survives_relocation_and_legacy_manifest(self):
         for legacy in (False, True):
             with self.subTest(legacy=legacy), tempfile.TemporaryDirectory() as directory:

@@ -23,8 +23,19 @@ from profile_capture import normalize_trace
 PROTOCOL = 'optimization-pair-v1'
 
 
+def json_safe(value):
+    """Retain invalid numeric evidence without emitting nonstandard JSON NaN."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return {'nonfinite_float': repr(value)}
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [json_safe(item) for item in value]
+    return value
+
+
 def save(path, value):
-    path.write_text(json.dumps(value, indent=2, allow_nan=False) + '\n')
+    path.write_text(json.dumps(json_safe(value), indent=2, allow_nan=False) + '\n')
 
 
 def sha(path):
@@ -126,10 +137,14 @@ def check_capture(result, prepared, count):
     """Independently recount normalized flows; adapters cannot assert identity."""
     latency = result['event_latency']
     samples = latency.get('samples_ms', [])
-    if count != 10 or latency.get('count') != 10 or len(samples) != 10 or any(
-            isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0
-            for v in samples):
+    if count != 10 or latency.get('count') != 10 or len(samples) != 10:
+        latency['status'] = 'failed'
         raise ValueError('exactly ten successful calls and positive samples required')
+    for index, sample in enumerate(samples):
+        if (isinstance(sample, bool) or not isinstance(sample, (int, float))
+                or not math.isfinite(sample) or sample <= 0):
+            latency['status'] = 'failed'
+            raise ValueError(f'invalid event sample at index {index}: {sample!r}; finite positive value required')
     latency.update(status='complete', mean_ms=statistics.mean(samples), sample_sd_ms=statistics.stdev(samples))
     profile = result['profile']
     # Preserve export failures and valid samples; missing accounting is distinct.
@@ -167,9 +182,9 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
     report = dict(protocol=PROTOCOL, status='failed', case=case_spec, provenance=provenance,
                   order=list(order), timing_kind='profiled-device-events', arms={},
                   warmup_calls=0, discovery_calls=0, unprofiled_timing_calls=0)
+    prepared = {}
     try:
         shared, report['fixture'] = fixture(adapter, case_spec, cache, torch)
-        prepared = {}
         for arm in order:
             folder = output / arm
             folder.mkdir()
@@ -231,10 +246,21 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
         if 'row' in locals() and row['correctness']['status'] == 'incomplete':
             row['correctness'].update(status='failed', reason=str(error), error_type=type(error).__name__)
     finally:
+        for arm, item in prepared.items():
+            cleanup = report['arms'][arm]['cleanup'] = dict(status='not-required')
+            try:
+                close = getattr(item, 'close', None)
+                if close is not None:
+                    close()
+                    cleanup['status'] = 'complete'
+            except Exception as error:
+                cleanup.update(status='failed', error_type=type(error).__name__, reason=str(error))
+                report['status'] = 'failed'
         report['counts'] = {key: sum(row[key] for row in report['arms'].values())
                             for key in ('profiled_calls', 'capture_calls')}
         report['counts']['correctness_calls'] = sum(row['correctness']['calls']
                                                    for row in report['arms'].values())
+        report = json_safe(report)
         save(output / 'result.json', report)
     return report
 

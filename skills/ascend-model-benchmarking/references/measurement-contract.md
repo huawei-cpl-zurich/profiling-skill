@@ -159,10 +159,14 @@ This recognition does not recover missing markers or establish vector/cube
 utilization from the task label.
 
 Timing-event commands exported as `EVENT_RECORD` are administrative, rather
-than compute, only for the observed 0 or 0.02 µs schema: matching name, absent
-category, sentinel model/subtask IDs, real batch/task/connection IDs and
-matching stream/thread coordinates. Every command still requires a unique,
+than compute, when their command schema and exact host flow establish their
+identity: matching name, absent category, sentinel model/subtask IDs, real
+batch/task/connection IDs and matching stream/thread coordinates. Duration
+must be finite and nonnegative, and its original value is retained; it is not
+an identity whitelist. Every command still requires a unique,
 complete `torch_to_npu` flow from an exact CPU `record_event` operation. The
 exclusion audit retains its original device record, host operation and link.
 These flows count in `paired_flows`, while `observed_tasks` counts compute
 records. Timing events cannot satisfy an iteration's compute-work requirement.
+The separate unlinked `PLACE_HOLDER_SQE` queue schema retains its bounded
+0 or 0.02 µs duration rule; it does not inherit the timing-event classifier.

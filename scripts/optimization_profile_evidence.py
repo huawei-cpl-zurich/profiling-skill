@@ -64,9 +64,14 @@ def operation_windows(accounted):
             raise EvidenceError('operation iteration contains no tasks')
         first = min(Decimal(str(task['start_us'])) for task in owned)
         last = max(Decimal(str(task['start_us'])) + Decimal(str(task['duration_us'])) for task in owned)
+        active, end = Decimal(0), first
+        for start, stop in sorted((Decimal(str(t['start_us'])), Decimal(str(t['start_us'])) +
+                                   Decimal(str(t['duration_us']))) for t in owned):
+            active += max(Decimal(0), stop-max(end,start))
+            end = max(end,stop)
         span = float(last-first)
         windows.append(dict(iteration_id=iteration['iteration_id'], device_operation_span_us=span,
-                            device_idle_gap_us=max(0., span-iteration['device_active_union_us'])))
+                            operation_active_union_us=float(active), device_idle_gap_us=float(last-first-active)))
     return windows
 
 
@@ -141,8 +146,17 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
     report = load(result_path)
     if report.get('protocol') != 'optimization-pair-v1':
         raise EvidenceError('unsupported pair protocol')
+    if any(report.get(key) != 0 for key in ('warmup_calls','discovery_calls','unprofiled_timing_calls')):
+        raise EvidenceError('pair must declare zero additional execution calls')
     proof_path = resolve(reanalysis) if reanalysis else None
     proof = load(proof_path) if proof_path else None
+    proof_case = None
+    if proof and 'cases' in proof:
+        matches = [(name, value) for name,value in proof['cases'].items()
+                   if value.get('original_pair_sha256') == sha(result_path)]
+        if len(matches) != 1:
+            raise EvidenceError('reanalysis must uniquely identify the original pair')
+        proof_case, proof = matches[0]
     if proof and proof.get('original_pair_sha256') != sha(result_path):
         raise EvidenceError('reanalysis belongs to a different original pair')
     physical = report['provenance']['physical_die']
@@ -150,6 +164,7 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
         raise EvidenceError('explicit physical device provenance required')
     result = dict(protocol='optimization-profile-evidence-v1', original_pair_sha256=sha(result_path),
                   reanalysis_sha256=sha(proof_path) if proof_path else None,
+                  reanalysis_case=proof_case,
                   case=report['case'], provenance=report['provenance'], fixture=report['fixture'],
                   new_device_forwards=0, new_captures=0, arms={})
     for arm in ('before', 'after'):
@@ -170,13 +185,16 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
                                      [f'model_iteration_{i}' for i in range(10)], export_completed=True)
         accounted = account_profile(normalized['iterations'], normalized['tasks'], capture_complete=True)
         claim = proof['arms'][arm] if proof else capture
+        if proof and claim.get('status') != 'complete':
+            raise EvidenceError('reanalysis is incomplete')
         if claim['kernel_identity']['status'] != 'complete':
             raise EvidenceError('kernel identity proof is incomplete')
         if proof:
             if claim['trace_sha256'] != sha(trace) or claim['capture_forward_calls'] != 10:
                 raise EvidenceError('reanalysis trace or call identity mismatch')
-            normalized_path = proof_path.parent / (arm + '-normalized.json')
-            accounting_path = proof_path.parent / (arm + '-accounting.json')
+            prefix = proof_case+'-' if proof_case else ''
+            normalized_path = proof_path.parent / (prefix + arm + '-normalized.json')
+            accounting_path = proof_path.parent / (prefix + arm + '-accounting.json')
             if (sha(normalized_path) != claim['normalized_sha256'] or
                     sha(accounting_path) != claim['accounting_sha256']):
                 raise EvidenceError('reanalysis artifact digest mismatch')
@@ -202,13 +220,15 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
         windows = operation_windows(accounted)
         detail = dict(status='complete', correctness=row['correctness'], sources=row['sources'],
                       metadata=row['metadata'], trace_sha256=sha(trace),
+                      compilation_before=row.get('compilation_state_before_capture'),
+                      compilation_after=row.get('compilation_state_after_capture'),
                       normalized_sha256=sha(normalized_path), accounting_sha256=sha(accounting_path),
                       kernel_identity=identity, event_latency_ms=latency,
                       event_instrumentation=capture['event_latency'].get('instrumentation'),
                       device_work_us={key: samples([item[key] for item in accounted['iterations']])
                                       for key in ('device_busy_us', 'device_active_union_us', 'device_overlap_us')},
                       device_window_us={key:samples([item[key] for item in windows])
-                                        for key in ('device_operation_span_us','device_idle_gap_us')},
+                                        for key in ('device_operation_span_us','operation_active_union_us','device_idle_gap_us')},
                       device_windows=windows,
                       device_work_semantics='busy is summed task duration; union/overlap are activity. Device span includes inter-task gaps but omits first enqueue and host/profiler overhead; none is unprofiled end-to-end latency',
                       per_iteration=accounted['iterations'], tasks=accounted['tasks'])

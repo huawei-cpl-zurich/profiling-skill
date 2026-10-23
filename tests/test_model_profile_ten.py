@@ -52,24 +52,38 @@ class CaptureTests(unittest.TestCase):
                 self.assertEqual(json.loads((output / 'latency.json').read_text())['count'], 10)
                 lifecycle.append('analyse/export')
                 if export_error: raise RuntimeError('export failed after samples saved')
-                (Path(path) / 'trace_view.json').write_text('[]')
+                events = []
+                for i in range(10):
+                    base = i * 1000
+                    name = 'wrong' if missing and i == 9 else 'kernel'
+                    events.extend([
+                        dict(name=f'model_iteration_{i}', pid=1, tid=1, ts=base, dur=900, ph='X', cat='cpu_op'),
+                        dict(name=name, pid=1, tid=1, ts=base+20, dur=5, ph='X', cat='cpu_op'),
+                        dict(name=name, pid=2, tid=2, ts=base+100, dur=10, ph='X',
+                             args={'Task Type': 'KERNEL_AIVEC', 'Physic Stream Id': 2, 'Task Id': i,
+                                   'Batch Id': 0, 'Subtask Id': 0}),
+                        dict(name='torch_to_npu', pid=1, tid=1, ts=base+20, ph='s', cat='async_npu', id=i),
+                        dict(name='torch_to_npu', pid=2, tid=2, ts=base+100, ph='f', cat='async_npu', id=i)])
+                (Path(path) / 'trace_view.json').write_text(json.dumps(dict(traceEvents=events)))
             torch = N(inference_mode=nullcontext, npu=N(Event=Event, synchronize=lambda: syncs.append(True)),
                 autograd=N(profiler=N(record_function=lambda name: (markers.append(name) or nullcontext()))))
             npu = N(profiler=N(profile=begin, schedule=schedule, ProfilerActivity=N(CPU=1, NPU=2),
                 _ExperimentalConfig=lambda **kwargs: kwargs, ProfilerLevel=N(Level1=1),
                 tensorboard_trace_handler=handler))
-            def normalized(*args, **kwargs):
-                return dict(iterations=[dict(iteration_id=str(i)) for i in range(10)],
-                    tasks=[dict(name='wrong' if missing and i == 9 else 'kernel', kind='device',
-                                iteration_id=str(i)) for i in range(10)])
-            with patch.dict(sys.modules, {'torch_npu.profiler.profiler': N(analyse=analyse), **dict(profile_capture=N(normalize_trace=normalized, CaptureError=ValueError),
-                    profile_accounting=N(account_profile=lambda *a, **k: dict(iterations=10)))}):
+            with patch.dict(sys.modules, {'torch_npu.profiler.profiler': N(analyse=analyse)}):
                 result = profile_ten.capture_ten(lambda: calls.append(True), output,
                     expected_kernel=['kernel'] if expected else None, torch_module=torch, npu_module=npu)
             self.assertEqual(lifecycle, ['start', 'step/raw', 'stop', 'analyse/export'])
             self.assertEqual(result['profile']['analysis_calls'], 1)
             self.assertEqual(result['event_latency']['count'], 10)
             self.assertEqual(result['event_latency']['sample_sd_ms'], 0)
+            if not export_error:
+                normalized = json.loads((output / 'normalized.json').read_text())
+                accounted = json.loads((output / 'accounting.json').read_text())
+                self.assertNotIn('iteration_id', normalized['tasks'][0])
+                self.assertEqual(accounted['tasks'][0]['iteration_id'], 'model_iteration_0')
+                self.assertEqual(result['profile']['export_status'], 'complete')
+                self.assertEqual(result['profile']['accounting_status'], 'complete')
             return result
     def test_exact_ten_save_before_export_and_profile_errors_separate(self):
         for error in (False, True):

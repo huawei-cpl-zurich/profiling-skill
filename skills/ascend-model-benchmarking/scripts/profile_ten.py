@@ -41,6 +41,17 @@ def resolve_triton_names(graphtexts):
         return None
 
 
+def kernel_identity(accounted, expected):
+    """Accounting assigns task iteration IDs from normalized correlation links."""
+    tasks = accounted['tasks']
+    observed = sorted({task['name'] for task in tasks if task['kind'] == 'device'})
+    missing = sorted({name for iteration in accounted['iterations']
+        for name in set(expected or []) - {task['name'] for task in tasks
+            if task['kind'] == 'device' and task['iteration_id'] == iteration['iteration_id']}})
+    return dict(status='observed-only' if expected is None else 'failed' if missing else 'complete',
+                names=observed, missing=missing, source='same ten-forward capture')
+
+
 def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_module=None):
     """Exactly ten forwards, no warmup/discovery; event results precede export.
 
@@ -60,7 +71,8 @@ def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_mod
     result = dict(protocol='single_capture_ten_forwards', forward_calls=0,
                   event_latency=dict(status='incomplete', count=0, samples_ms=[],
                                      instrumentation='torch_npu profiler active'),
-                  profile=dict(status='incomplete', export_trigger='step-after-ten-event-samples',
+                  profile=dict(status='incomplete', export_status='incomplete', accounting_status='incomplete',
+                               export_trigger='step-after-ten-event-samples',
                                analysis_max_process_number=1, analysis_calls=0),
                   kernel_identity=dict(status='unavailable', names=[],
                                        expected=list(expected_kernel or []), missing=[]))
@@ -118,7 +130,8 @@ def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_mod
         with trace_path.open('rb') as stream:
             for chunk in iter(lambda: stream.read(1 << 20), b''):
                 digest.update(chunk)
-        result['profile'].update(vendor_trace=str(trace_path), trace_sha256=digest.hexdigest())
+        result['profile'].update(vendor_trace=str(trace_path), trace_sha256=digest.hexdigest(),
+                                 export_status='complete')
         with trace_path.open() as stream:
             raw = json.load(stream)
         events = raw.get('traceEvents') if isinstance(raw, dict) else raw
@@ -126,14 +139,8 @@ def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_mod
         summary = accounting.account_profile(capture['iterations'], capture['tasks'], capture_complete=True)
         _save(output / 'normalized.json', capture)
         _save(output / 'accounting.json', summary)
-        observed = sorted({task['name'] for task in capture['tasks'] if task['kind'] == 'device'})
-        missing = sorted({name for iteration in capture['iterations']
-            for name in set(expected_kernel or []) - {task['name'] for task in capture['tasks']
-                if task['kind'] == 'device' and task['iteration_id'] == iteration['iteration_id']}})
-        identity_status = ('observed-only' if expected_kernel is None
-                           else 'failed' if missing else 'complete')
-        result['kernel_identity'].update(status=identity_status,
-            names=observed, missing=missing, source='same ten-forward capture')
+        result['profile']['accounting_status'] = 'complete'
+        result['kernel_identity'].update(kernel_identity(summary, expected_kernel))
         result['profile'].update(status='complete', capture_path=str(output / 'normalized.json'),
                                  accounting_path=str(output / 'accounting.json'))
     except Exception as error:

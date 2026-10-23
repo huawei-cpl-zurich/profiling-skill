@@ -1,0 +1,186 @@
+import copy
+import csv
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
+import optimization_profile_evidence as evidence
+
+
+def task(index, name='kernel', context='0'):
+    return dict(task_id=f'9:2:{index}:0:{context}', name=name, kind='device',
+                iteration_id=f'model_iteration_{index}', start_us=index*10., duration_us=2.)
+
+
+class MetricsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / 'kernel_details.csv'
+        self.tasks = [task(i) for i in range(10)]
+        self.rows = [dict(Name='kernel', **{'Task ID': str(i), 'Stream ID': '2',
+                     'Context ID': '0', 'Device_id': '5', 'Duration(us)': '2.000',
+                     'aic_mac_ratio': str(i/10), 'aiv_vec_ratio': 'N/A',
+                     'aic_mte2_time(us)': '3.000\t', 'cube_utilization(%)': '42.50',
+                     'Input Shapes': '"64,64;64,64"'}) for i in range(10)]
+
+    def write(self, rows=None):
+        rows = self.rows if rows is None else rows
+        with self.path.open('w', newline='') as stream:
+            writer = csv.DictWriter(stream, list(self.rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def test_real_csv_codec_identity_raw_columns_and_statistics(self):
+        self.write()
+        result = evidence.pmu_rows(self.path, self.tasks, 5)
+        kernel = result['kernels']['kernel']
+        self.assertEqual(kernel['task_count'], 10)
+        self.assertEqual(kernel['rows'][0]['raw']['Input Shapes'], '"64,64;64,64"')
+        self.assertEqual(kernel['rows'][0]['raw']['aic_mte2_time(us)'], '3.000\t')
+        self.assertAlmostEqual(kernel['numeric_columns']['aic_mac_ratio']['mean'], .45)
+        self.assertEqual(kernel['numeric_columns']['aiv_vec_ratio']['status'], 'unavailable')
+        self.assertEqual(kernel['numeric_columns']['aiv_vec_ratio']['samples'], [None]*10)
+        self.assertEqual(kernel['numeric_columns']['cube_utilization(%)']['mean'], 42.5)
+        self.assertEqual(set(kernel['tasks_per_iteration'].values()), {1})
+
+    def test_unavailable_context_does_not_supply_missing_identity(self):
+        self.rows[0]['Context ID'] = 'N/A'
+        self.tasks[0]['task_id'] = '9:2:0:0:4294967295'
+        self.write()
+        self.assertEqual(evidence.pmu_rows(self.path, self.tasks, 5)['kernels']['kernel']['rows'][0]['trace_context_id'], '4294967295')
+        self.tasks.append(dict(self.tasks[0], task_id='10:2:0:1:7'))
+        with self.assertRaisesRegex(evidence.EvidenceError, 'unique'):
+            evidence.pmu_rows(self.path, self.tasks, 5)
+
+    def test_duplicate_unmatched_missing_context_and_device_fail_closed(self):
+        for change in ('duplicate', 'unmatched', 'missing', 'context', 'device'):
+            with self.subTest(change=change):
+                rows = copy.deepcopy(self.rows)
+                if change == 'duplicate': rows.append(rows[0])
+                if change == 'unmatched': rows[0]['Task ID'] = '999'
+                if change == 'missing': rows.pop()
+                if change == 'context': rows[0]['Context ID'] = '77'
+                if change == 'device': rows[0]['Device_id'] = '4'
+                self.write(rows)
+                with self.assertRaises(evidence.EvidenceError):
+                    evidence.pmu_rows(self.path, self.tasks, 5)
+
+    def test_partial_metric_is_not_zero_or_complete(self):
+        self.rows[1]['aic_mac_ratio'] = 'N/A'
+        self.write()
+        field = evidence.pmu_rows(self.path, self.tasks, 5)['kernels']['kernel']['numeric_columns']['aic_mac_ratio']
+        self.assertEqual(field['status'], 'partial')
+        self.assertEqual(field['available_count'], 9)
+        self.assertIsNone(field['samples'][1])
+        self.rows[1]['aic_mac_ratio'] = 'NaN'
+        self.write()
+        with self.assertRaisesRegex(evidence.EvidenceError, 'nonfinite'):
+            evidence.pmu_rows(self.path, self.tasks, 5)
+
+    def test_timing_samples_and_json_nonfinite_rejected(self):
+        self.assertEqual(evidence.samples([1., 3.])['mean'], 2.)
+        self.assertAlmostEqual(evidence.samples([1., 3.])['sample_sd'], 2**.5)
+        for values in ([True], [float('nan')], [float('inf')], [0.]):
+            with self.assertRaises(evidence.EvidenceError):
+                evidence.samples(values, positive=True)
+        bad = Path(self.temp.name) / 'bad.json'
+        bad.write_text('{"bad":NaN}')
+        with self.assertRaises(evidence.EvidenceError): evidence.load(bad)
+
+    def test_device_span_includes_interkernel_gaps_without_summing_ratios(self):
+        a,b=task(0),task(1)
+        a.update(iteration_id='round',start_us=0.,duration_us=2.)
+        b.update(iteration_id='round',start_us=10.,duration_us=3.)
+        report=dict(tasks=[a,b],iterations=[dict(iteration_id='round',device_active_union_us=5.)])
+        row=evidence.operation_windows(report)[0]
+        self.assertEqual(row['device_operation_span_us'],13.)
+        self.assertEqual(row['device_idle_gap_us'],8.)
+        b['start_us']=1.;report['iterations'][0]['device_active_union_us']=4.
+        self.assertEqual(evidence.operation_windows(report)[0]['device_idle_gap_us'],0.)
+
+
+class PairTests(unittest.TestCase):
+    def fixture(self, root):
+        # The actual captured native event fixture exercises normalization, not
+        # a self-asserted accounting result or a mocked collector boundary.
+        fixture = Path(__file__).parent / 'fixtures/native_flow/after.json'
+        original = json.loads(fixture.read_text())['traceEvents']
+        events=[]
+        for index in range(10):
+            selected=copy.deepcopy(original)
+            for event in selected:
+                event['ts']=str(evidence.Decimal(event['ts'])+index*10000)
+                if event['name']=='model_iteration_0':event['name']=f'model_iteration_{index}'
+                args=event.get('args',{})
+                if 'Task Id' in args:args['Task Id']+=index*100
+                if 'connection_id' in args:args['connection_id']+=index*100
+                if event.get('cat')=='HostToDevice':
+                    event['id']=str(int(event['id'])+(index*100<<32))
+                    event['name']='HostToDevice'+event['id']
+            events.extend(selected)
+        profile = root / 'vendor'; profile.mkdir()
+        trace = profile / 'trace_view.json'
+        trace.write_text(json.dumps(events))
+        normalized = evidence.normalize_trace(events, [f'model_iteration_{i}' for i in range(10)], export_completed=True)
+        accounted = evidence.account_profile(normalized['iterations'], normalized['tasks'], capture_complete=True)
+        normpath, accpath = root/'normalized.json', root/'accounting.json'
+        normpath.write_text(json.dumps(normalized)); accpath.write_text(json.dumps(accounted))
+        capture = dict(profile=dict(export_status='complete',vendor_trace=str(trace),trace_sha256=evidence.sha(trace),
+                                   capture_path=str(normpath),accounting_path=str(accpath)),
+                       forward_calls=10,event_latency=dict(count=10,samples_ms=[.1]*10,instrumentation='profiler active'),
+                       kernel_identity=evidence.kernel_identity(accounted,['qualified_native_matmul']),
+                       artifacts={str(p):evidence.sha(p) for p in (trace,normpath,accpath)})
+        row = dict(correctness=dict(status='complete',calls=1),profiled_calls=10,capture=capture,
+                   sources={'source.py':'source-digest'},metadata={'binary_sha256':'binary-digest'})
+        report = dict(protocol='optimization-pair-v1',case={'name':'fixture'},fixture={'sha256':'oracle-digest'},
+                      provenance={'physical_die':5},arms={'before':row,'after':copy.deepcopy(row)})
+        path = root/'result.json';path.write_text(json.dumps(report))
+        return path, report
+
+    def test_pair_recomputes_real_flow_proof_and_keeps_missing_pmu_separate(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path, report = self.fixture(Path(folder))
+            result = evidence.collect_pair(path)
+            self.assertEqual(result['status'],'complete')
+            self.assertEqual(result['new_device_forwards'],0)
+            arm = result['arms']['before']
+            self.assertEqual(len(arm['tasks']),10)
+            self.assertEqual(arm['metrics']['status'],'unavailable')
+            self.assertEqual(arm['sources'],report['arms']['before']['sources'])
+            self.assertEqual(arm['event_latency_ms']['count'],10)
+            self.assertEqual(arm['device_work_us']['device_busy_us']['count'],10)
+            self.assertEqual(result['event_mean_ratio_before_over_after'],1.)
+
+    def test_changed_trace_or_accounting_rejected(self):
+        for artifact in ('vendor_trace','accounting_path'):
+            with self.subTest(artifact=artifact), tempfile.TemporaryDirectory() as folder:
+                path, report = self.fixture(Path(folder))
+                selected = Path(report['arms']['before']['capture']['profile'][artifact])
+                selected.write_text('{}')
+                with self.assertRaisesRegex(evidence.EvidenceError,'digest'):
+                    evidence.collect_pair(path)
+
+    def test_reanalysis_bound_to_original_and_retained_artifacts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);path,report=self.fixture(root)
+            analysis=root/'analysis';analysis.mkdir()
+            proof={'original_pair_sha256':evidence.sha(path),'arms':{}}
+            for arm in ('before','after'):
+                cap=report['arms'][arm]['capture']
+                for name,key in (('normalized','capture_path'),('accounting','accounting_path')):
+                    (analysis/f'{arm}-{name}.json').write_text(Path(cap['profile'][key]).read_text())
+                proof['arms'][arm]=dict(trace_sha256=cap['profile']['trace_sha256'],capture_forward_calls=10,
+                    normalized_sha256=evidence.sha(analysis/f'{arm}-normalized.json'),
+                    accounting_sha256=evidence.sha(analysis/f'{arm}-accounting.json'),kernel_identity=cap['kernel_identity'])
+            proofpath=analysis/'reanalysis.json';proofpath.write_text(json.dumps(proof))
+            self.assertEqual(evidence.collect_pair(path,reanalysis=proofpath)['status'],'complete')
+            proof['original_pair_sha256']='different';proofpath.write_text(json.dumps(proof))
+            with self.assertRaisesRegex(evidence.EvidenceError,'different original'):
+                evidence.collect_pair(path,reanalysis=proofpath)
+
+
+if __name__ == '__main__': unittest.main()

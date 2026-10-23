@@ -57,10 +57,15 @@ def _queue_placeholder(event):
 
 
 def _event_record(event):
-    """Observed timing-event command; still requires its complete host flow."""
+    """Timing command identity; its duration is retained, not a classifier.
+
+    Complete linkage to the observed record_event CPU op is required below.
+    Vendor clock conversion produces durations such as 0.01975 as well as
+    0.02 us; enumerating those values does not establish command identity.
+    """
     args = event['args']
     return (event.get('name') == 'EVENT_RECORD' and event.get('cat') is None
-            and _decimal(event.get('dur')) in (Decimal('0'), Decimal('0.02'))
+            and _decimal(event.get('dur')) >= 0
             and all(type(args.get(key)) is int and args[key] == value for key, value in
                     {'Model Id': 2**32 - 1, 'Subtask Id': 2**32 - 1}.items())
             and all(type(args.get(key)) is int and 0 <= args[key] < maximum for key, maximum in

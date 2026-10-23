@@ -421,7 +421,7 @@ def test_event_record_requires_observed_schema_and_exact_flow(trace, retained_ev
     elif mutation == 'no-flow': records = records[:2]
     elif mutation == 'duplicate-flow': records.append(copy.deepcopy(records[-1]))
     elif mutation == 'wrong-host': records[0]['name'] = 'ordinary_kernel_launch'
-    elif mutation == 'duration': records[1]['dur'] = 0.03
+    elif mutation == 'duration': records[1]['dur'] = -0.001
     elif mutation == 'name': records[1]['name'] = 'unknown'
     else:
         field, value = {'model': ('Model Id', 0), 'batch': ('Batch Id', -1),
@@ -432,7 +432,8 @@ def test_event_record_requires_observed_schema_and_exact_flow(trace, retained_ev
         normalize(trace + records)
 
 
-@pytest.mark.parametrize('duration,batch', [(0, 0), (0.02, 1), (0, 1), (0.02, 2), (0, 2), (0.02, 3)])
+@pytest.mark.parametrize('duration,batch', [(0, 0), (0.02, 1), (0, 1), (0.02, 2),
+                                         (0, 2), (0.02, 3), (0.01975, 0), (1.0, 1)])
 def test_retained_event_duration_and_batch_variants(trace, retained_event_record, duration, batch):
     # Observed across BSA/GDN captures; batch is a runtime identity, not a sentinel.
     retained_event_record[1]['dur'] = duration

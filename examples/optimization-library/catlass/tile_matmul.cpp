@@ -27,7 +27,15 @@
 #endif
 using namespace Catlass;
 using AType = Gemm::GemmType<half, layout::RowMajor>;
+#ifndef B_COLUMN
+#define B_COLUMN 0
+#endif
+#if B_COLUMN
+using BType = Gemm::GemmType<half, layout::ColumnMajor>;
+#else
 using BType = Gemm::GemmType<half, layout::RowMajor>;
+#endif
+extern "C" uint32_t catlass_bridge_b_column() { return B_COLUMN; }
 using CType = Gemm::GemmType<half, layout::RowMajor>;
 #if AFTER
 using L1TileShape = GemmShape<256,128,256>;

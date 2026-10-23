@@ -56,6 +56,34 @@ def build_shared(command, *, source_paths, binary, output, source_revision):
     return manifest
 
 
+def audit_tensor(tensor, *, column_major=False, physical=None):
+    """Inspect layout/storage outside forwards; only explicit dense 2D columns pass."""
+    shape, stride = list(tensor.shape), list(tensor.stride())
+    if column_major:
+        if (tensor.ndim != 2 or min(shape) <= 0 or stride != [1, shape[0]]
+                or tensor.storage_offset() != 0):
+            raise ValueError('column-major input requires dense 2D stride(1,K) at offset0')
+    elif not tensor.is_contiguous():
+        raise ValueError('native bridge requires dense contiguous tensors')
+    span = tensor.storage_offset() + (sum((n-1)*s for n,s in zip(shape,stride))+1 if tensor.numel() else 0)
+    storage_bytes = tensor.untyped_storage().nbytes()
+    if span*tensor.element_size() > storage_bytes:
+        raise ValueError('tensor span exceeds actual storage')
+    if physical is None and tensor.device.type in ('npu', 'privateuseone'):
+        import torch_npu
+        physical = dict(format=int(torch_npu.get_npu_format(tensor)),
+                        storage_numel=int(torch_npu.get_storage_size(tensor)))
+    if physical is not None:
+        if physical['format'] != 2:
+            raise ValueError('native bridge requires NPU ND format2')
+        if physical['storage_numel'] < span or (column_major and physical['storage_numel'] != tensor.numel()):
+            raise ValueError('native bridge requires sufficient ND storage and unpadded columns')
+    return dict(shape=shape, stride=stride, storage_offset=tensor.storage_offset(),
+                dtype=str(tensor.dtype), storage_bytes=storage_bytes,
+                addressed_bytes=span*tensor.element_size(), column_major=column_major,
+                physical=physical)
+
+
 def _register(torch):
     global _REGISTERED
     if _REGISTERED:
@@ -77,7 +105,7 @@ def _register(torch):
 class NativeArm:
     """PreparedArm-compatible native callable with exact source/binary identity."""
     def __init__(self, binary, inputs, output, *, sources, source_revision,
-                 stream_provider, build_manifest=None, torch_module=None):
+                 stream_provider, build_manifest=None, torch_module=None, column_major_inputs=()):
         import torch
         self.torch = torch_module or torch
         self.binary = Path(binary).resolve()
@@ -94,8 +122,10 @@ class NativeArm:
                     raise ValueError('build manifest source identity mismatch')
         self.inputs, self.output = list(inputs), output
         tensors = [*self.inputs, self.output]
-        if any(not tensor.is_contiguous() for tensor in tensors):
-            raise ValueError('native bridge requires dense contiguous tensors')
+        if any(type(index) is not int or index < 0 or index >= len(self.inputs) for index in column_major_inputs):
+            raise ValueError('column-major override must identify input tensors only')
+        self.metadata['tensor_layouts'] = [audit_tensor(tensor, column_major=index in column_major_inputs)
+            for index,tensor in enumerate(tensors)]
         if any(tensor.device != output.device for tensor in tensors):
             raise ValueError('native bridge tensors must share one device')
         self._pointers = (ctypes.c_void_p * len(tensors))(*(t.data_ptr() for t in tensors))

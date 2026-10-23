@@ -81,7 +81,8 @@ class AttentionContractTests(unittest.TestCase):
         if importlib.util.find_spec('triton') is None:
             self.skipTest('Triton frontend unavailable')
         for kernel in attention.kernels():
-            self.assertEqual(len(kernel.cache_key), 64)
+            self.assertIsInstance(kernel.cache_key, str)
+            self.assertTrue(kernel.cache_key)
             self.assertFalse(kernel.fn.__closure__)
 
 

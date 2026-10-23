@@ -103,6 +103,7 @@ def _normalize(events, names):
             raise CaptureError('overlapping iteration markers')
     host, task_at, endpoints = defaultdict(list), defaultdict(list), defaultdict(dict)
     tasks, administrative = [], []
+    placeholder_coordinates = set()
     for position, event in enumerate(events):
         if event.get('ph') == 'X' and event.get('cat') == 'cpu_op' and event not in markers:
             host[_coordinate(event)].append(event)
@@ -114,7 +115,7 @@ def _normalize(events, names):
                                            task=dict(event)))
                 continue
             if kind == 'PLACE_HOLDER_SQE' and _queue_placeholder(event):
-                _coordinate(event)  # Validate the original timestamp and coordinates.
+                placeholder_coordinates.add(_coordinate(event))
                 administrative.append(dict(reason='verified administrative queue placeholder with sentinel linkage',
                                            task=dict(event)))
                 continue
@@ -136,6 +137,9 @@ def _normalize(events, names):
         if set(phases) != {'s', 'f'}:
             raise CaptureError('incomplete async_npu flow')
         start, finish = phases['s'], phases['f']
+        if any(_coordinate(endpoint) in placeholder_coordinates for endpoint in (start, finish)):
+            raise CaptureError('flow endpoint must identify exactly one CPU op and device task; '
+                               'queue placeholder coordinate is ambiguous')
         matches = host[_coordinate(start)]
         targets = task_at[_coordinate(finish)]
         if len(matches) != 1 or len(targets) != 1:

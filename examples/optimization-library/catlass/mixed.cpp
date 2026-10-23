@@ -10,6 +10,11 @@
 
 // Adapted from Catlass 40aced927fda examples/03_matmul_add and 06_optimized_matmul.
 // Original license is retained in CANN_LICENSE; dependency headers remain pinned.
+// Keep the subcontext ownership rule executable in a CPU ABI regression test.
+#ifdef MIXED_SCHEDULE_UNIT_TEST
+#include <stdint.h>
+#define MIXED_HOST_DEVICE
+#else
 #define K_MAX_SHAPE_DIM 0
 #include "acl/acl.h"
 #include "catlass/gemm/kernel/basic_matmul.hpp"
@@ -25,6 +30,16 @@
 #if CATLASS_ARCH != 2201 || (FAMILY != 2 && FAMILY != 10)
 #error These examples require Atlas A2/A3 and family 2 or 10
 #endif
+#define MIXED_HOST_DEVICE CATLASS_HOST_DEVICE
+#endif
+MIXED_HOST_DEVICE inline uint32_t EpilogueTaskOwner(uint32_t block,uint32_t subblocks) {
+    return block/subblocks;
+}
+#ifdef MIXED_SCHEDULE_UNIT_TEST
+extern "C" uint32_t catlass_epilogue_task_owner(uint32_t block,uint32_t subblocks) {
+    return EpilogueTaskOwner(block,subblocks);
+}
+#else
 using namespace Catlass;
 using InputLayout = layout::RowMajor;
 using L1TileShape = GemmShape<128,256,256>;
@@ -51,16 +66,17 @@ extern "C" CATLASS_GLOBAL void ENTRY(AddKernel::Params params,uint64_t sync) {
 #define ENTRY wave1_add_matmul
 extern "C" CATLASS_GLOBAL void ENTRY(PlainKernel::Params params) { PlainKernel op; op(params); }
 extern "C" CATLASS_GLOBAL void wave1_add_vector(AddKernel::Params params) {
-    KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIV_ONLY);
+    KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_MIX_AIC_1_2);
     if constexpr (g_coreType == AscendC::AIV) {
         Arch::Resource<Arch::AtlasA2> resource;
         BlockAdd add(resource,params.epilogueParams);
-        GemmCoord tile(64,256,256);
+        GemmCoord tile(128,256,256);
         Scheduler scheduler(params.problemShape,MakeCoord(tile.m(),tile.n()));
         AscendC::GlobalTensor<float> intermediate;
         intermediate.SetGlobalBuffer((__gm__ float*)params.ptrWorkspace);
         layout::RowMajor layout(params.problemShape.m(),params.problemShape.n());
-        for (uint32_t task=AscendC::GetBlockIdx();task<scheduler.GetCoreLoops();task+=AscendC::GetBlockNum()) {
+        for (uint32_t task=EpilogueTaskOwner(AscendC::GetBlockIdx(),AscendC::GetSubBlockNum());
+             task<scheduler.GetCoreLoops();task+=AscendC::GetBlockNum()) {
             auto coord=scheduler.GetBlockCoord(task);
             auto actual=scheduler.GetActualBlockShape(coord);
             auto offset=coord.GetCoordMN()*tile.GetCoordMN();
@@ -139,7 +155,8 @@ extern "C" int catlass_bridge_launch(void **p,uint64_t count,void *stream) {
     PlainKernel::Arguments args{shape,(uint8_t*)p[0],(uint8_t*)p[1],(uint8_t*)p[3]};
     auto plain=PlainKernel::ToUnderlyingArguments(args,nullptr);
     ENTRY<<<cores_,nullptr,stream>>>(plain);
-    wave1_add_vector<<<cores_*2,nullptr,stream>>>(params);
+    // A mixed logical block owns two AIV subcontexts, matching the fused epilogue.
+    wave1_add_vector<<<cores_,nullptr,stream>>>(params);
 #endif
 #else
     PaddingKernel::Arguments args{shape,(uint8_t*)p[0],(uint8_t*)p[1],(uint8_t*)p[4]};
@@ -148,3 +165,5 @@ extern "C" int catlass_bridge_launch(void **p,uint64_t count,void *stream) {
 #endif
     return 0;
 }
+
+#endif // MIXED_SCHEDULE_UNIT_TEST

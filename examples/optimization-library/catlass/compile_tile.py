@@ -19,7 +19,8 @@ def compile_pair(catlass, output, *, source=None, variants=None):
         if digest(catlass/entry['file']) != entry['sha256']:
             raise ValueError(f'filtered source checksum mismatch: {entry["file"]}')
     source = Path(source or Path(__file__).parent/'tile_matmul.cpp').resolve()
-    variants = variants or {'before': ['-DAFTER=0'], 'after': ['-DAFTER=1']}
+    variants = variants or {f'{layout}-{arm}': [f'-DAFTER={int(arm=="after")}',
+        f'-DB_COLUMN={int(layout=="column")}'] for layout in ('row','column') for arm in ('before','after')}
     compiler = Path(shutil.which('bisheng')).resolve()
     candidates = [Path(os.environ[k]).resolve() for k in ('ASCEND_HOME_PATH','ASCEND_TOOLKIT_HOME')
                   if os.environ.get(k)] + list(compiler.parents)

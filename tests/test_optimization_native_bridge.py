@@ -11,7 +11,7 @@ import unittest
 import torch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
-from optimization_native_bridge import NativeArm, build_shared
+from optimization_native_bridge import NativeArm, audit_tensor, build_shared
 
 
 SOURCE = r'''
@@ -26,6 +26,7 @@ extern "C" int catlass_bridge_launch(void **p, uint64_t n, void *stream) {
     return 0;
 }
 extern "C" int launch_count() { return calls; }
+extern "C" uint32_t catlass_bridge_b_column() { return 0; }
 '''
 
 
@@ -92,6 +93,40 @@ class NativeBridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'source identity mismatch'):
             self.arm()
         self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(), 0)
+
+    def test_compiled_column_contract_cannot_be_overridden(self):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/tile_adapter.py'
+        spec = importlib.util.spec_from_file_location('native_tile_layout',path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.verify_b_layout(self.binary,False)
+        with self.assertRaisesRegex(ValueError,'compiled B layout'):
+            module.verify_b_layout(self.binary,True)
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(),0)
+
+    def test_explicit_column_input_uses_dense_physical_pointer_order(self):
+        column = torch.tensor([[10.,20.],[30.,40.]]).T.contiguous().T
+        arm = self.arm(inputs=[torch.arange(4.),column], column_major_inputs=(1,))
+        torch.testing.assert_close(arm.run(), torch.tensor([10.,31.,22.,43.]))
+        self.assertEqual(arm.metadata['tensor_layouts'][1]['stride'], [1,2])
+        self.assertEqual(arm.metadata['tensor_layouts'][1]['addressed_bytes'], 16)
+        with self.assertRaisesRegex(ValueError, 'contiguous'):
+            self.arm(inputs=[torch.arange(4.),column])
+        with self.assertRaisesRegex(ValueError, 'stride'):
+            self.arm(inputs=[torch.arange(4.),torch.ones(4,4)[::2, ::2]], column_major_inputs=(1,))
+
+    def test_format_and_physical_padding_guards_execute_before_launch(self):
+        value = torch.ones(2,2)
+        with self.assertRaisesRegex(ValueError, 'ND format2'):
+            audit_tensor(value, physical=dict(format=29,storage_numel=4))
+        with self.assertRaisesRegex(ValueError, 'unpadded columns'):
+            audit_tensor(value.T, column_major=True, physical=dict(format=2,storage_numel=32))
+        row = audit_tensor(value, physical=dict(format=2,storage_numel=4))
+        self.assertEqual(row['physical']['format'],2)
+        view = audit_tensor(torch.ones(8)[2:6], physical=dict(format=2,storage_numel=8))
+        self.assertEqual(view['storage_offset'],2)
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(),0)
 
     def test_noncontiguous_input_is_rejected_without_launch(self):
         with self.assertRaisesRegex(ValueError, 'contiguous'):

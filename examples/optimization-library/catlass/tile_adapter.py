@@ -23,6 +23,13 @@ def balanced_shape(cube_cores):
     return 256*a, 128*b, 6144
 
 
+def verify_b_layout(binary, column):
+    library = ctypes.CDLL(str(binary))
+    library.catlass_bridge_b_column.restype = ctypes.c_uint32
+    if library.catlass_bridge_b_column() != int(column):
+        raise ValueError('compiled B layout does not match case contract')
+
+
 class Adapter:
     def __init__(self, directory=None, cube_cores=None):
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'triton'))
@@ -37,18 +44,24 @@ class Adapter:
         self.prepared = {}
 
     def prepare(self, arm, spec, fixture, output):
-        if spec.get('b_layout', 'row') != 'row' or any(spec[key] % 16 for key in ('m','n','k')):
-            raise ValueError('pilot requires row-major B and aligned dimensions')
+        if spec.get('b_layout', 'row') not in ('row','column') or any(spec[key] % 16 for key in ('m','n','k')):
+            raise ValueError('pilot requires aligned dimensions and row/column B')
         import torch_npu  # Register backend before transferring tensors.
-        binary = self.directory / f'{arm}.so'
-        build = json.loads((self.directory / f'build-{arm}/build.json').read_text())
+        column = spec.get('b_layout', 'row') == 'column'
+        variant = f'{spec.get("b_layout", "row")}-{arm}'
+        binary = self.directory / f'{variant}.so'
+        build = json.loads((self.directory / f'build-{variant}/build.json').read_text())
         if build['binary_sha256'] != digest(binary) or build['source_revision'] != PIN:
             raise ValueError('native build identity does not match pinned binary')
-        native = NativeArm(binary, [fixture['inputs']['a'].npu(), fixture['inputs']['b'].npu()],
+        verify_b_layout(binary, column)
+        b = fixture['inputs']['b']
+        device_b = b.T.contiguous().npu().T if column else b.npu()
+        native = NativeArm(binary, [fixture['inputs']['a'].npu(), device_b],
             torch.empty_like(fixture['expected'], device='npu'),
             sources=[entry['path'] for entry in build['sources']],
             source_revision=PIN, build_manifest=build,
-            stream_provider=lambda: torch.npu.current_stream().npu_stream)
+            stream_provider=lambda: torch.npu.current_stream().npu_stream,
+            column_major_inputs=(1,) if column else ())
         configure = native._library.catlass_bridge_configure
         configure.argtypes = [ctypes.c_uint32]*4
         configure.restype = ctypes.c_int

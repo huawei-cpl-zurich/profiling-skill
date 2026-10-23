@@ -14,13 +14,13 @@ uses BF16 K, FP32 beta and output, with FP32 accumulation. Before:
 
 ```python
 scaled = (k.to(tl.float32) * beta[:, None]).to(k.dtype)
-product = tl.dot(scaled, tl.trans(k))
+product = tl.dot(scaled, rhs)
 ```
 
 After:
 
 ```python
-product = tl.dot(k, tl.trans(k))
+product = tl.dot(k, rhs)
 product = product * beta[:, None]
 ```
 
@@ -32,6 +32,18 @@ accumulates the original BF16 values in FP32, then applies row beta and the
 mask. Both arms must meet rtol=atol=0.01, including near-opposite rows,
 beta zero/one and very small beta. Record numerical margin; never relax the
 contract to retain the candidate.
+
+The example loads the transposed RHS directly from GM through a separate
+read-only kernel formal, `KRight`; the adapter passes the same K pointer twice.
+There is no input clone or additional mathematical operand. Both arms use
+this convention and K tiles of at most 64 columns. In the tested Ascend
+compiler, sharing a loaded K tile between vector scaling and `tl.trans(k)`
+produced invalid before results. The retained post-sync-solver IR consumed an
+uninitialized Cube L1 RHS buffer. A direct transposed load from the same formal
+was canonicalized back to the failing dataflow. A separate formal restored
+the missing GM-to-L1 load in compile-only inspection; runtime qualification of
+the revised pair is still required. Keep this compiler constraint separate
+from the mathematical optimization's benefit.
 
 Recognize a coefficient loaded outside the reduction that is nevertheless
 multiplied into every operand element. Confirm it is independent of the

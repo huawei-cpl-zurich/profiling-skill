@@ -86,6 +86,14 @@ an assumed fixed number of launches. Empty or ambiguous captures are failures.
 The generic accounting helper accepts normalized records; it is not a vendor
 trace parser and does not independently prove that export lost no records.
 
+The torch-npu 2.10 trace adapter recognizes the retained zero- or 0.02-microsecond-duration
+`PLACE_HOLDER_SQE` schema only when its name, sentinel model/subtask/connection
+IDs, task ID 0, positive real batch ID and matching stream/thread coordinates agree. It
+retains the complete original record in the administrative exclusion audit;
+that record contributes no compute time. A different shape or a flow targeting
+this placeholder remains invalid. Unknown task types, missing iteration markers
+and incomplete CPU/NPU links still fail closed.
+
 ### Warmed acquisition filtering and comparisons
 
 The reused CANNBot threshold is `duration > max(50 * per-name median, 10 us)`.
@@ -127,6 +135,8 @@ Source and fixture providers must be versioned separately from candidate code.
 Correctness validation covers ordinary runtime input variation as well as shapes;
 passing fixed fixtures is not permission to specialize on their accidental values.
 
+
+
 ## Eager reference for the warmed workflow
 
 The warmed controller accepts `--baseline-execution eager|compiled` (default `compiled`).
@@ -141,3 +151,18 @@ Active compilation detection and input mutation checks still apply to both arms.
 The repeated controller forwards this option unchanged, records execution modes,
 and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
 counts, mean and sample standard deviation are unchanged.
+
+Retained GDN `MIX_AIV` ReduceSum events have verified `torch_to_npu` start/finish
+links to CPU `aclnnReduceSum` records. They count as device compute under the same
+complete-flow and explicit-iteration requirements as other validated task types.
+This recognition does not recover missing markers or establish vector/cube
+utilization from the task label.
+
+Timing-event commands exported as `EVENT_RECORD` are administrative, rather
+than compute, only for the observed 0 or 0.02 µs schema: matching name, absent
+category, sentinel model/subtask IDs, real batch/task/connection IDs and
+matching stream/thread coordinates. Every command still requires a unique,
+complete `torch_to_npu` flow from an exact CPU `record_event` operation. The
+exclusion audit retains its original device record, host operation and link.
+These flows count in `paired_flows`, while `observed_tasks` counts compute
+records. Timing events cannot satisfy an iteration's compute-work requirement.

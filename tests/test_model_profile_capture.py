@@ -274,11 +274,11 @@ def test_observed_zero_duration_placeholder_retains_audit_without_compute(trace)
     assert result['acquisition_evidence']['observed_tasks'] == 2
     assert result['acquisition_evidence']['paired_flows'] == 2
     assert result['acquisition_evidence']['exclusions'] == [dict(
-        reason='zero-duration queue placeholder with sentinel linkage', task=original)]
+        reason='verified administrative queue placeholder with sentinel linkage', task=original)]
 
 
 @pytest.mark.parametrize('field,value', [
-    ('dur', 1), ('dur', -1), ('name', 'unknown_placeholder'), ('cat', 'cpu_op'),
+    ('dur', 1), ('dur', -1), ('dur', 0.01), ('dur', 0.021), ('dur', 0.03), ('dur', float('inf')), ('dur', float('nan')), ('name', 'unknown_placeholder'), ('cat', 'cpu_op'),
     ('pid', -1), ('tid', 48), ('Model Id', 0), ('Task Id', 1),
     ('Batch Id', 0), ('Batch Id', 2), ('Subtask Id', 0),
     ('connection_id', 0), ('Physic Stream Id', 48), ('Task Id', False)])
@@ -360,4 +360,22 @@ def test_mixed_aiv_still_requires_complete_flow_and_markers(retained_mixed_trace
     elif mutation == 'unclosed-marker': trace[0]['ph'] = 'B'
     else: trace[2]['args']['Task Type'] = 'UNVALIDATED_MIX'
     with pytest.raises(capture.CaptureError):
+        normalize(trace)
+
+@pytest.mark.parametrize('pid,ts', [(2967673280, '1792719785863995.715'),
+                                   (2970402240, '1792719910816995.340')])
+def test_retained_short_queue_placeholder_is_audited_not_compute(trace, pid, ts):
+    # Exact unlinked placeholders from both fresh BSA smoke repetitions.
+    record = event('PLACE_HOLDER_SQE', pid, 2, ts, 0.02,
+        args={'Model Id': 4294967295, 'Task Type': 'PLACE_HOLDER_SQE',
+              'Physic Stream Id': 2, 'Task Id': 0, 'Batch Id': 1,
+              'Subtask Id': 4294967295, 'connection_id': 18446744073709551615})
+    trace.append(record)
+    result = normalize(trace)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert summary['iterations'][0]['device_busy_us'] == pytest.approx(19.9795)
+    assert result['acquisition_evidence']['exclusions'] == [dict(
+        reason='verified administrative queue placeholder with sentinel linkage', task=record)]
+    trace[4].update(pid=pid, tid=2, ts=ts)
+    with pytest.raises(capture.CaptureError, match='exactly one CPU op and device task'):
         normalize(trace)

@@ -32,7 +32,7 @@ an assumed fixed number of launches. Empty or ambiguous captures are failures.
 The generic accounting helper accepts normalized records; it is not a vendor
 trace parser and does not independently prove that export lost no records.
 
-The torch-npu 2.10 trace adapter recognizes the retained zero-duration
+The torch-npu 2.10 trace adapter recognizes the retained zero- or 0.02-microsecond-duration
 `PLACE_HOLDER_SQE` schema only when its name, sentinel model/subtask/connection
 IDs, task ID 0, batch ID 1 and matching stream/thread coordinates agree. It
 retains the complete original record in the administrative exclusion audit;

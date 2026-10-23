@@ -36,17 +36,17 @@ def _coordinate(event):
     return event['pid'], event['tid'], _decimal(event['ts'])
 
 
-def _zero_duration_placeholder(event):
-    """Recognize only the observed unlinked queue placeholder schema.
+def _queue_placeholder(event):
+    """Recognize only observed unlinked queue placeholder schemas.
 
-    This is not a kernel-type exemption: a nonzero duration, real connection,
+    This is not a kernel-type exemption: another duration, real connection,
     different identity or an explicit flow still fails normal validation.
     """
     args = event['args']
     sentinel_identity = {'Model Id': 2**32 - 1, 'Task Id': 0, 'Batch Id': 1,
                          'Subtask Id': 2**32 - 1, 'connection_id': 2**64 - 1}
     return (event.get('name') == 'PLACE_HOLDER_SQE' and event.get('cat') is None
-            and _decimal(event.get('dur')) == 0
+            and _decimal(event.get('dur')) in (Decimal('0'), Decimal('0.02'))
             and all(type(args.get(key)) is int and args[key] == value
                     for key, value in sentinel_identity.items())
             and type(event.get('pid')) is int and event['pid'] >= 0
@@ -97,9 +97,9 @@ def _normalize(events, names):
                 administrative.append(dict(reason='vendor administrative task, not a kernel',
                                            task=dict(event)))
                 continue
-            if kind == 'PLACE_HOLDER_SQE' and _zero_duration_placeholder(event):
+            if kind == 'PLACE_HOLDER_SQE' and _queue_placeholder(event):
                 _coordinate(event)  # Validate the original timestamp and coordinates.
-                administrative.append(dict(reason='zero-duration queue placeholder with sentinel linkage',
+                administrative.append(dict(reason='verified administrative queue placeholder with sentinel linkage',
                                            task=dict(event)))
                 continue
             if kind not in TASK_KINDS:

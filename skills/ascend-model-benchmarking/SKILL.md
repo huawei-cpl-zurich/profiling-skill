@@ -14,17 +14,34 @@ repeated warmed-latency controller. See [controller integration](references/cont
 
 A Model class does not imply graph compilation. Establish actual candidate
 fullgraph capture/execution and report submitted-kernel identity qualification.
-The short protocol profiles the trusted eager PyTorch baseline. For explicitly
-requested warmed, unprofiled latency, use the workflow below: both arms must use
-the same selected fullgraph backend (TorchAir GE by default, or validated
-`--backend npu-inductor`). Never switch backends automatically.
+The profile-comparison protocol profiles the trusted eager PyTorch baseline. For
+explicitly requested warmed, unprofiled latency, use the separate workflow below.
+Candidate execution remains fullgraph; compiled
+comparisons use the same explicitly selected backend (TorchAir GE by default, or
+validated `--backend npu-inductor`). An explicitly selected eager reference is
+not an automatic fallback. Never switch backends automatically.
 
-This skill covers correctness/run status, warm latency, correlated busy-time,
-dispersion, comparison conditions and retained logs only. Report compilation and
+This skill covers correctness/run status, profiled event timings, explicitly
+requested warm latency, correlated busy-time, dispersion, comparison conditions
+and retained logs only. Report compilation and
 runtime errors as run failures; do not turn them into kernel-diagnostic advice.
 Pipe utilization, bottlenecks, timelines, MLIR and optimization recommendations
 belong to the separate `ascend-profiling` skill/workflow and are not benchmarking
 acceptance gates.
+
+## Primary profile comparisons
+
+Use `scripts/model_benchmark_profiled.py` for one compiled candidate
+correctness validation followed by ten profiled forwards per arm, with no extra
+warmup, selector discovery or unprofiled timing. Use its private baseline cache
+across candidate configurations so inputs/expected outputs and the ten baseline
+samples are generated once. These are **profiled device-event timings**: report
+raw ten, mean and sample standard deviation; they are not the warmed unprofiled
+latency statistics described below. Measured forwards assume read-only inputs;
+do not add tensor I/O inspection or
+extra correctness calls during/after the ten. Cache transfers and independent
+input/expected restoration happen outside profiling. Trace accounting and kernel
+identity have separate statuses. See [controller integration](references/controller-integration.md).
 
 ## Explicitly requested warmed latency measurements
 
@@ -56,17 +73,6 @@ reimplement timings with ad hoc clocks or infer iteration boundaries from names.
 The generic controller and private adapter contract are documented in
 [controller integration](references/controller-integration.md). Benchmark operators,
 input generators and correctness tolerances belong in private adapters, not here.
-
-## Explicit short profiled protocol
-
-For profile comparisons, `scripts/model_benchmark_profiled.py` runs one compiled candidate
-correctness validation followed by ten profiled forwards per arm, with no extra
-warmup, selector discovery or unprofiled timing. Use its private baseline cache
-across candidate configurations so inputs/expected outputs and the ten baseline
-samples are generated once. These are **profiled device-event timings**: report
-raw ten, mean and sample standard deviation; they are not the warmed unprofiled
-latency statistics described above. Trace accounting and kernel identity have
-separate statuses. See [controller integration](references/controller-integration.md).
 
 ## Evidence and isolation
 

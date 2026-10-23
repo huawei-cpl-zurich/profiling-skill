@@ -1,5 +1,86 @@
 # Trusted controller integration
 
+The primary profile-comparison workflow is one candidate correctness validation
+and ten profiled forwards per arm with a shared private baseline cache. The
+repeated warmed/unprofiled controller is a separate explicit choice. Both
+workflows use private trusted hooks and retain their own measurement labels.
+
+## Primary profile-comparison controller
+
+For profile comparisons, use the single-validation controller from the repository
+with trusted private hooks importable through Python's normal module search path:
+
+```sh
+python scripts/model_benchmark_profiled.py \
+  --baseline pkg_baseline:Baseline --candidate pkg_candidate:Candidate \
+  --cases-provider pkg_cases:cases --validator pkg_validation:validate \
+  --cache-mode create --cache PRIVATE_NEW_DIRECTORY --output NEW_RESULTS
+```
+
+For another candidate configuration, use the same stable private hooks and cache
+with `--cache-mode reuse`, a separate candidate source file and a new output
+directory. Do not launch the repeated controller or a discovery pass for this
+profile-comparison request. The supervisor owns the device lease and original
+overall deadline; observe the same retained job after a transport interruption.
+
+The trusted provider yields case dictionaries with `id`, `args`, `expected`, and
+optional `kwargs`, `init_args`, `init_kwargs`, `metadata`, `expected_kernel` and
+private validator data. It must generate each expected output with exactly one
+reference invocation. Cases stream one at a time; each expected result is saved
+before candidate compilation. Hooks are private controller code, never candidate
+callbacks. Candidate compilation uses fullgraph and exactly one correctness call.
+Candidate inputs/expected outputs use independent storage restored from the CPU
+cache before validation. Baseline inputs are separately restored from that same
+cache after candidate capture, outside profiling. Measured forwards assume
+read-only inputs; this protocol performs no tensor inspection or additional
+validation during/after those ten calls. Candidate capture precedes the eager
+PyTorch baseline capture; each has exactly ten forwards and zero explicit warmup/discovery calls.
+
+Run subsequent candidates with `--cache-mode reuse` and the same cache, baseline,
+provider and validator hooks. Reuse invokes neither the provider nor the baseline;
+it loads exact CPU tensor/primitive case data and the retained baseline profile.
+Strided tensor storage is moved before reconstructing shape/stride/storage-offset,
+so sliced and broadcast views keep their layouts and requires-grad flags.
+Non-strided tensor layouts are rejected. Providers must not rely on storage aliasing between separate tensor
+fields: cross-field aliases are not preserved by device transfers.
+Cache identities bind those hooks, protocol, payloads and baseline results; candidate
+source can change. The candidate hook must live in a separate Python source file
+from the baseline, provider and validator hooks: cache identities hash each complete
+hook source file. Shared baseline/provider/validator files must remain unchanged;
+this layout is checked before calling the provider or executing any forward.
+Incomplete caches fail closed and retain expected outputs for
+operator recovery rather than silently regenerating them. Keep cache paths private.
+`--max-specializations` (default 256) scopes Dynamo cache limits and bounds the case
+count; settings are restored on exit. The external supervisor owns physical device
+selection; `--device` selects the exposed logical device for cached tensor loads.
+
+Each capture uses one active profiler step (`wait=0,warmup=0,active=1,repeat=1`).
+It saves/prints ten event samples, mean and sample standard deviation before
+calling `profiler.step()` once to complete raw capture; this advances profiler
+state without an additional model forward. The handler uses `analyse_flag=False`.
+After context exit, public `torch_npu.profiler.profiler.analyse` runs exactly once
+with `max_process_number=1` to export the retained raw capture. Profile/export
+failure can coexist with complete event timings.
+Missing or mismatched kernel identity remains explicit; names resolved from live
+Triton side-table entries require exact per-iteration matches in the same capture.
+Unresolved names are observed-only. The report does not infer a verified speedup
+or unqualified ranking from timing completeness, and does not establish matching
+physical devices, runtimes or clock/load conditions across cached measurements.
+
+
+For this protocol `state=complete` means the fixed validation/event-sample protocol
+completed. `profile_state=incomplete` and `candidate_identity_state=qualified`
+remain visible when export, normalization or identity proof is unavailable.
+`EVENT_RECORD` trace compatibility is supplied by the separate parser update
+(PRs #156/#157); missing support remains an explicit profile error and does not
+convert failed accounting into successful profiling.
+
+## Explicit warmed/unprofiled controller
+
+The following command and adapter contract apply only when warmed unprofiled
+latency or a full repeated acquisition is explicitly requested. Its warmups,
+input inspection and fresh-process repeats do not apply to the primary protocol.
+
 Run from the repository, with adapter modules importable through Python's normal
 module search path:
 
@@ -115,61 +196,3 @@ fallback. Hardware support is accepted only after real compiled Model/Triton and
 correlated profiler smokes. Do not export this controller, helpers, private hooks
 or input providers into blind-agent workspaces: export only `SKILL.md`, `agents`
 metadata and the relevant guidance reference, together with a thin service client.
-
-
-## Single-validation profiled protocol
-
-Opt in with `scripts/model_benchmark_profiled.py --baseline pkg_baseline:Baseline
---candidate pkg_candidate:Candidate --cases-provider pkg_cases:cases --validator pkg_validation:validate
---cache-mode create --cache PRIVATE_NEW_DIRECTORY --output NEW_RESULTS`.
-The trusted provider yields case dictionaries with `id`, `args`, `expected`, and
-optional `kwargs`, `init_args`, `init_kwargs`, `metadata`, `expected_kernel` and
-private validator data. It must generate each expected output with exactly one
-reference invocation. Cases stream one at a time; each expected result is saved
-before candidate compilation. Hooks are private controller code, never candidate
-callbacks. Candidate compilation uses fullgraph and exactly one correctness call.
-Candidate inputs/expected outputs use independent storage restored from the CPU
-cache before validation. Baseline inputs are separately restored from that same
-cache after candidate capture, outside profiling. Measured forwards assume
-read-only inputs; this protocol performs no tensor inspection or additional
-validation during/after those ten calls. Candidate capture precedes the eager
-PyTorch baseline capture; each has exactly
-ten forwards and zero explicit warmup/discovery calls.
-
-Run subsequent candidates with `--cache-mode reuse` and the same cache, baseline,
-provider and validator hooks. Reuse invokes neither the provider nor the baseline;
-it loads exact CPU tensor/primitive case data and the retained baseline profile.
-Strided tensor storage is moved before reconstructing shape/stride/storage-offset,
-so sliced and broadcast views keep their layouts and requires-grad flags. Non-strided tensor layouts are
-rejected. Providers must not rely on storage aliasing between separate tensor
-fields: cross-field aliases are not preserved by device transfers.
-Cache identities bind those hooks, protocol, payloads and baseline results; candidate
-source can change. The candidate hook must live in a separate Python source file
-from the baseline, provider and validator hooks: cache identities hash each complete
-hook source file. Shared baseline/provider/validator files must remain unchanged;
-this layout is checked before calling the provider or executing any forward.
-Incomplete caches fail closed and retain expected outputs for
-operator recovery rather than silently regenerating them. Keep cache paths private.
-`--max-specializations` (default 256) scopes Dynamo cache limits and bounds the case
-count; settings are restored on exit. The external supervisor owns physical device
-selection; `--device` selects the exposed logical device for cached tensor loads.
-
-Each capture uses one active profiler step (`wait=0,warmup=0,active=1,repeat=1`).
-It saves/prints ten event samples, mean and sample standard deviation before
-calling `profiler.step()` once to complete raw capture; this advances profiler
-state without an additional model forward. The handler uses `analyse_flag=False`.
-After context exit, public `torch_npu.profiler.profiler.analyse` runs exactly once
-with `max_process_number=1` to export the retained raw capture. Profile/export failure can coexist with complete event timings.
-Missing or mismatched kernel identity remains explicit; names resolved from live
-Triton side-table entries require exact per-iteration matches in the same capture.
-Unresolved names are observed-only. The report does not infer a verified speedup
-or unqualified ranking from timing completeness, and does not establish matching
-physical devices, runtimes or clock/load conditions across cached measurements.
-
-
-For this protocol `state=complete` means the fixed validation/event-sample protocol
-completed. `profile_state=incomplete` and `candidate_identity_state=qualified`
-remain visible when export, normalization or identity proof is unavailable.
-`EVENT_RECORD` trace compatibility is supplied by the separate parser update
-(PRs #156/#157); missing support remains an explicit profile error and does not
-convert failed accounting into successful profiling.

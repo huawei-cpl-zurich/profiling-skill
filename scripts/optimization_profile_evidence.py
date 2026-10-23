@@ -142,6 +142,73 @@ def pmu_rows(path, tasks, physical_die):
                 semantics='exported per-task values; no ratios summed, no denominator or roofline inferred')
 
 
+def validate_experiment(report, resolve, recovery):
+    """Reanalysis repairs interpretation, never an invalid experiment."""
+    recoverable = {
+        'unvalidated device task type: EVENT_RECORD',
+        'device tasks lack explicit CPU/NPU correlation coverage',
+    }
+    def digests(values):
+        return (isinstance(values, dict) and bool(values) and
+                all(isinstance(k, str) and bool(k) and isinstance(v, str) and
+                    len(v) == 64 and all(c in '0123456789abcdef' for c in v)
+                    for k, v in values.items()))
+
+    def sources(values):
+        if not digests(values):
+            raise EvidenceError('valid source identities required')
+        for path, expected in values.items():
+            artifact = resolve(path)
+            if not artifact.is_file() or sha(artifact) != expected:
+                raise EvidenceError('source digest mismatch: ' + path)
+
+    if report.get('error') or report.get('status') not in ('complete', 'failed', 'incomplete'):
+        raise EvidenceError('experiment failure cannot be recovered')
+    if report.get('counts') != dict(correctness_calls=2, capture_calls=2, profiled_calls=20):
+        raise EvidenceError('experiment counts must be two checks and two ten-call captures')
+    recovered = False
+    for row in report['arms'].values():
+        diagnostics = row.get('correctness', {}).get('diagnostics')
+        if diagnostics is False or isinstance(diagnostics, dict) and diagnostics.get('passed') is False:
+            raise EvidenceError('correctness rejected output')
+        if row.get('cleanup', {}).get('status') not in ('complete', 'not-required'):
+            raise EvidenceError('cleanup must have succeeded')
+        if row.get('capture_calls') != 1:
+            raise EvidenceError('one capture per arm required')
+        error = row.get('error')
+        if row.get('status') != 'complete' or error:
+            if not (recovery and row.get('status') == 'failed' and isinstance(error, dict) and
+                    error.get('type') == 'CaptureError' and error.get('message') in recoverable):
+                raise EvidenceError('non-accounting experiment failure cannot be recovered')
+            recovered = True
+        before, after = (row.get('compilation_state_' + phase + '_capture')
+                         for phase in ('before', 'after'))
+        if not before or before != after:
+            raise EvidenceError('compilation identity missing or changed during capture')
+        sources(row.get('sources'))
+        if isinstance(before, dict):
+            if not digests({'binary': before.get('binary_sha256')}):
+                raise EvidenceError('valid compiled binary identity required')
+            sources(before.get('source_sha256'))
+            metadata_binary = row.get('metadata', {}).get('binary_sha256')
+            if metadata_binary is not None and metadata_binary != before['binary_sha256']:
+                raise EvidenceError('compiled binary identity disagrees with metadata')
+            build = row.get('metadata', {}).get('build', {})
+            if build.get('binary'):
+                sources({build['binary']: before['binary_sha256']})
+                if build.get('binary_sha256') != before['binary_sha256']:
+                    raise EvidenceError('compiled binary identity disagrees with build')
+        elif isinstance(before, list):
+            for kernel in before:
+                if not isinstance(kernel, dict) or not digests({'hash': kernel.get('hash')}) or not digests(
+                        kernel.get('binaries', kernel.get('artifacts'))):
+                    raise EvidenceError('valid compiled kernel identities required')
+        else:
+            raise EvidenceError('unsupported compilation identity')
+    if report['status'] != 'complete' and not recovered:
+        raise EvidenceError('unexplained experiment failure cannot be recovered')
+
+
 def collect_pair(result_path, *, root=None, reanalysis=None):
     root = Path(root or Path.cwd()).resolve()
     resolve = lambda value: Path(value) if Path(value).is_absolute() else root / value
@@ -162,10 +229,14 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
         proof_case, proof = matches[0]
     if proof and proof.get('original_pair_sha256') != sha(result_path):
         raise EvidenceError('reanalysis belongs to a different original pair')
+    if set(report.get('arms', {})) != {'before', 'after'}:
+        raise EvidenceError('exactly two experiment arms required')
+    validate_experiment(report, resolve, bool(proof))
     physical = report['provenance']['physical_die']
     if type(physical) is not int or physical < 0:
         raise EvidenceError('explicit physical device provenance required')
     result = dict(protocol='optimization-profile-evidence-v1', original_pair_sha256=sha(result_path),
+                  original_experiment_status=report['status'],
                   reanalysis_sha256=sha(proof_path) if proof_path else None,
                   reanalysis_case=proof_case,
                   case=report['case'], provenance=report['provenance'], fixture=report['fixture'],
@@ -222,6 +293,7 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
             raise EvidenceError('ten positive event samples required')
         windows = operation_windows(accounted)
         detail = dict(status='complete', correctness=row['correctness'], sources=row['sources'],
+                      original_status=row['status'], original_error=row.get('error'),
                       metadata=row['metadata'], trace_sha256=sha(trace),
                       compilation_before=row.get('compilation_state_before_capture'),
                       compilation_after=row.get('compilation_state_after_capture'),

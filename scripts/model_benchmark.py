@@ -233,6 +233,23 @@ def run(options, *, compiler_factory=None, clock=None):
                     raise CapabilityError('submitted kernel identity absent from compiled replay')
             models['candidate'].evidence['custom_kernel_identity_verified'] = True
             row['candidate_identity'] = dict(state='verified', expected_kernel=expected)
+            if policy == 'optional':
+                # Match candidate replay depth without making baseline trace
+                # support a prerequisite for valid paired latency.
+                prepared = models['baseline']
+                before = prepared.compiler.snapshot()
+                executions = prepared.compiler.executions
+                with prepared.compiler.torch.inference_mode(), prepared.compiler.monitor_compilation():
+                    for _ in range(70):
+                        prepared()
+                    adapter.synchronize()
+                guard('baseline:pre-latency-replay')
+                if prepared.compiler.snapshot() != before:
+                    raise CapabilityError('compilation detected during baseline pre-latency replay')
+                if (prepared.evidence.get('execution_mode', 'compiled') == 'compiled'
+                        and prepared.compiler.executions - executions < 70):
+                    raise CapabilityError('baseline pre-latency replay lacks compiled execution evidence')
+                row['pre_latency_replay_calls'] = dict(baseline=70, candidate=70)
             arguments = {'synchronize': adapter.synchronize, 'validate_inputs': guard}
             if clock is not None:
                 arguments['clock'] = clock

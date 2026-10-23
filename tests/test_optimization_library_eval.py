@@ -40,7 +40,8 @@ def response(schema):
     return result
 
 
-def test_full_wave_is_fresh_paired_and_blinded(tmp_path):
+def test_full_wave_is_fresh_paired_and_blinded(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     path = wave_fixture(tmp_path)
     manifest = json.loads(path.read_text())
     (tmp_path / "common.md").write_text("shared_guidance")
@@ -49,10 +50,11 @@ def test_full_wave_is_fresh_paired_and_blinded(tmp_path):
     wave = m.load_wave(path)
     calls = []
     def invoke(session, prompt, schema, model, timeout):
+        assert session.is_absolute()
         assert session.is_dir() and not list(session.glob("input"))
         calls.append((session.name, prompt, schema, model))
         return response(schema)
-    result = m.run_wave(wave, tmp_path / "results", invoke)
+    result = m.run_wave(wave, Path("results"), invoke)
     assert len(calls) == 192
     assert result["review_count"] == 96
     assert not result["failed_reviews"] and not result["failed_grades"]
@@ -129,7 +131,8 @@ def test_inconclusive_gold_is_explicit_and_numeric_schema_is_checked(tmp_path):
 
 
 @pytest.mark.parametrize("tool_attempt", [False, True])
-def test_real_filesystem_boundary(tmp_path, tool_attempt):
+@pytest.mark.parametrize("relative_session", [False, True])
+def test_real_filesystem_boundary(tmp_path, monkeypatch, tool_attempt, relative_session):
     if not shutil.which("bwrap"):
         pytest.skip("Bubblewrap unavailable")
     runtime = tmp_path / "runtime"
@@ -150,7 +153,8 @@ def test_real_filesystem_boundary(tmp_path, tool_attempt):
     probe = subprocess.run([launcher.bwrap, "--ro-bind", "/", "/", "true"], capture_output=True)
     if probe.returncode:
         pytest.skip("Bubblewrap namespace unavailable: " + probe.stderr.decode())
-    session = tmp_path / "session"
+    monkeypatch.chdir(tmp_path)
+    session = Path("session") if relative_session else tmp_path / "session"
     session.mkdir()
     if tool_attempt:
         with pytest.raises(m.LaunchError, match="attempted a tool"):

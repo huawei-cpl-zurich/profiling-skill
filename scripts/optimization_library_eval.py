@@ -163,6 +163,7 @@ class ReportLauncher(ProductionLauncher):
                 'exec "$@" < /input/prompt.txt', "report-only", *command[prefix_length:], "-"]
 
     def __call__(self, session, prompt, schema, model, timeout):
+        session = session.resolve()
         for name in ("input", "output", "state"):
             (session / name).mkdir()
         (session / "state" / "auth.json").touch(mode=0o600)
@@ -186,6 +187,7 @@ def run_wave(wave, output, invoke, *, timeout=600, workers=1):
     """Never overwrite/retry a dispatched session; preserve failures and initial grades."""
     if type(workers) is not int or workers <= 0:
         raise ValueError("workers must be a positive integer")
+    output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     write_json(output / "frozen-private.json", wave)
     jobs = [(i, role, treatment) for i in range(24)

@@ -54,11 +54,7 @@ def correct(result):
             isinstance(item, dict) and item.get('correctness') is True for item in records))
 
 
-def validate_citation(evidence, summary, expected_source, artifact):
-    """Bind all claimed identities to the trusted call, never the report itself."""
-    if not isinstance(summary, dict) or summary.get('source_sha256') != expected_source \
-            or summary.get('implementation', 'candidate') != 'candidate' or not correct(summary):
-        raise ValueError('citation lacks successful frozen candidate provenance')
+def citation_identities(summary):
     captures = summary.get('captures', [])
     kernels = {summary.get('selector')}
     kernels.update(summary.get('discovered_names', []))
@@ -72,9 +68,18 @@ def validate_citation(evidence, summary, expected_source, artifact):
     cases = summary.get('cases')
     if cases is None:
         cases = [item['check'] for item in records if 'check' in item] if isinstance(records, list) else []
-    if not set(evidence['kernels']) <= kernels \
-            or not set(evidence['cases']) <= {str(item) for item in cases}:
+    return sorted(kernels), sorted(str(item) for item in cases)
+
+
+def validate_citation(evidence, summary, expected_source, artifact):
+    """Bind all claimed identities to the trusted call, never the report itself."""
+    if not isinstance(summary, dict) or summary.get('source_sha256') != expected_source \
+            or summary.get('implementation', 'candidate') != 'candidate' or not correct(summary):
+        raise ValueError('citation lacks successful frozen candidate provenance')
+    kernels, cases = citation_identities(summary)
+    if not set(evidence['kernels']) <= set(kernels) or not set(evidence['cases']) <= set(cases):
         raise ValueError('citation kernel/case claims are not supported by the trusted call')
+    captures = summary.get('captures', [])
     kind = evidence['kind']
     if kind == 'profile' and not any(item.get('pipe_rows') for item in captures):
         raise ValueError('profile citation lacks acquired candidate pipe evidence')
@@ -164,6 +169,10 @@ def bridge(config_path, arguments):
     if arguments[:1] == ['stop']:
         raise ValueError('phase shutdown is a trusted controller operation')
     config = json.loads(config_path.read_text())
+    if config.get('report_repair_only'):
+        print(json.dumps(dict(state='failed', failure_stage='report-repair',
+                             error='All remote/device tools are disabled during report repair')))
+        return 2
     workspace, phase = Path(config['workspace']), config_path.parent
     pending_calls = []
     for candidate in Path(config['campaign']).glob('**/tool-state/*/receipt.json'):
@@ -304,6 +313,13 @@ class RoleLauncher(BlindLauncher):
             from analyzer_profile_acquisition import acquire
             acquire(self, execute, save)
 
+    def after_agent(self, result):
+        if self.role == 'analyzer' and self.campaign.analysis_contract == 2:
+            from analyzer_report_repair import repair
+            import blind_optimization_launcher as runtime
+            return repair(self, result, runtime.execute, save)
+        return result
+
     def launch(self, preflight_only=False):
         done, cleanup_lock = threading.Event(), threading.Lock()
         def watchdog():
@@ -360,6 +376,10 @@ class RoleLauncher(BlindLauncher):
                              '/workspace/.agents/skills/' + name]
         if self.campaign.analysis_contract == 2:
             retained += ['--ro-bind', str(self.campaign.history), '/history']
+        if getattr(self, 'report_repair_only', False):
+            return retained + ['--ro-bind', str(self.root / 'report-repair'), '/report-repair',
+                '--ro-bind', str(self.reports), '/analysis',
+                '--bind', str(self.reports / 'analysis.json'), '/analysis/analysis.json']
         return retained + ['--bind', str(self.reports), '/analysis']
 
 
@@ -500,6 +520,88 @@ class Campaign:
         launcher.resume_before_agent = phase.exists()
         return launcher.launch()
 
+    def validate_phase_analysis(self, phase, commit, *, require_retained=False):
+        """Read-only authoritative validation shared by repair and publication."""
+        report_path = phase / 'reports/analysis.json'
+        if not report_path.exists() and not report_path.is_symlink():
+            report_path = phase / 'analysis.json'
+        repair_result = phase / 'report-repair/terminal.json'
+        if (phase / 'report-repair/dispatch.json').exists():
+            if not repair_result.is_file():
+                raise ValueError('report repair has no terminal result; observation required')
+            terminal = json.loads(repair_result.read_text())
+            if terminal['returncode'] != 0 or terminal['timed_out']:
+                raise ValueError('report repair did not finish successfully')
+        acquisitions = {}
+        from analyzer_report_repair import read_regular_report
+        report = validate_analysis(json.loads(read_regular_report(report_path)), commit)
+        verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
+                                                   commit + ':candidate.py'])
+        expected_source = hashlib.sha256(verified_source).hexdigest()
+        snapshot_source = phase / 'candidate-snapshot/candidate.py'
+        if snapshot_source.is_file() and digest(snapshot_source) != expected_source:
+            raise ValueError('frozen analyzer candidate source changed')
+        evidence_sha256 = {}
+        errors = []
+        for evidence in report['evidence']:
+            try:
+                original = phase / 'candidate-snapshot' / evidence['path']
+                if any(Path(part).match('*.tar.gz') for part in Path(evidence['path']).parts):
+                    raise ValueError('analysis cites archive excluded from retained evidence: ' + evidence['path'])
+                retained = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
+                path = retained if require_retained or retained.exists() else original
+                if require_retained and not retained.is_file():
+                    raise ValueError('analysis cites missing retained evidence: ' + evidence['path'])
+                if not path.is_file() or path.is_symlink() or not original.is_file() \
+                        or digest(path) != digest(original):
+                    raise ValueError('analysis cites missing evidence: ' + evidence['path'])
+                evidence_sha256[evidence['path']] = digest(path)
+                relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
+                original_summary = phase / 'candidate-snapshot' / relative_summary
+                retained_summary = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
+                summary_path = retained_summary if require_retained or retained_summary.exists() else original_summary
+                if not summary_path.is_file() or summary_path.is_symlink() \
+                        or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
+                    raise ValueError('citation lacks its authoritative call summary')
+                evidence_sha256[str(relative_summary)] = digest(summary_path)
+                summary = json.loads(summary_path.read_text())
+                validate_citation(evidence, summary, expected_source, path)
+                receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
+                receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+                acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
+                    hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
+            except (ValueError, OSError) as error:
+                errors.append(evidence['path'] + ': ' + str(error))
+        if self.analysis_contract == 2:
+            try:
+                ctx = json.loads((self.history / 'context.json').read_text())
+                attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
+                attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
+                                and item.get('request', {}).get('source_sha256') == expected_source
+                                for item in attempts)
+                required_path = phase / 'required-profile.json'
+                required = json.loads(required_path.read_text()) if required_path.is_file() else {}
+                attempted |= (required.get('source_sha256') == expected_source
+                              and required.get('command_dispatched') is True
+                              and required.get('profile_attempt_arguments') == ['pipes'])
+                if ctx['status'] != 'unchanged' and not attempted:
+                    raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
+                if required.get('state') == 'completed' and required.get('evidence'):
+                    acquired_path = phase / 'candidate-snapshot' / required['evidence']
+                    acquired = json.loads(acquired_path.read_text())
+                    if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
+                            item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
+                        raise ValueError('analysis must cite the controller-acquired profile')
+                if ctx['status'] == 'unchanged' and not attempted:
+                    repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
+                    acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
+                report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+            except (ValueError, OSError) as error:
+                errors.append('history/semantics: ' + str(error))
+        if errors:
+            raise ValueError('; '.join(errors))
+        return report, evidence_sha256, acquisitions
+
     def finish_phase(self, phase, role, entry, state):
         if role == 'analyzer' and self.analysis_contract == 2:
             retained = self.history / ('round-' + phase.name.split('-')[1])
@@ -543,13 +645,15 @@ class Campaign:
             entry['candidate_verified'] = state.get('verified') == commit
         else:
             report_path = phase / 'reports/analysis.json'
-            if not report_path.exists():
+            if not report_path.exists() and not report_path.is_symlink():
                 report_path = phase / 'analysis.json'
             trusted = phase / 'candidate-snapshot/evidence'
             if trusted.exists():
                 shutil.copytree(trusted, phase / 'trusted-evidence', dirs_exist_ok=True,
                                 ignore=shutil.ignore_patterns('*.tar.gz'))
                 shutil.copytree(phase / 'trusted-evidence', archive / 'trusted-evidence', dirs_exist_ok=True)
+            if (phase / 'report-repair').exists():
+                shutil.copytree(phase / 'report-repair', archive / 'report-repair', dirs_exist_ok=True)
             if (phase / 'reports').exists():
                 shutil.copytree(phase / 'reports', archive / 'analysis', dirs_exist_ok=True,
                                 symlinks=True, ignore=shutil.ignore_patterns('*.tar.gz'))
@@ -557,54 +661,7 @@ class Campaign:
                 shutil.copyfile(report_path, archive / 'raw-analysis.json')
             acquisitions = {}
             try:
-                report = validate_analysis(json.loads(report_path.read_text()), entry['candidate_commit'])
-                verified_source = subprocess.check_output(['git', '-C', str(self.workspace), 'show',
-                                                           entry['candidate_commit'] + ':candidate.py'])
-                expected_source = hashlib.sha256(verified_source).hexdigest()
-                entry['evidence_sha256'] = {}
-                for evidence in report['evidence']:
-                    path = phase / 'trusted-evidence' / Path(evidence['path']).relative_to('evidence')
-                    original = phase / 'candidate-snapshot' / evidence['path']
-                    if not path.is_file() or path.is_symlink() or not original.is_file() \
-                            or digest(path) != digest(original):
-                        raise ValueError('analysis cites missing evidence: ' + evidence['path'])
-                    entry['evidence_sha256'][evidence['path']] = digest(path)
-                    relative_summary = Path('evidence') / Path(evidence['path']).parts[1] / 'results/summary.json'
-                    summary_path = phase / 'trusted-evidence' / relative_summary.relative_to('evidence')
-                    original_summary = phase / 'candidate-snapshot' / relative_summary
-                    if not summary_path.is_file() or summary_path.is_symlink() \
-                            or not original_summary.is_file() or digest(summary_path) != digest(original_summary):
-                        raise ValueError('citation lacks its authoritative call summary')
-                    entry['evidence_sha256'][str(relative_summary)] = digest(summary_path)
-                    summary = json.loads(summary_path.read_text())
-                    validate_citation(evidence, summary, expected_source, path)
-                    receipt_path = phase / 'tool-state' / relative_summary.parts[1] / 'receipt.json'
-                    receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
-                    acquisitions[str(relative_summary)] = analyzer_history.measurements(summary, receipt,
-                        hashlib.sha256(json.dumps(self.config['bundle_manifest'], sort_keys=True).encode()).hexdigest())
-                if self.analysis_contract == 2:
-                    ctx = json.loads((self.history / 'context.json').read_text())
-                    attempts = [json.loads(path.read_text()) for path in (phase / 'tool-state').glob('*/receipt.json')]
-                    attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
-                                    and item.get('request', {}).get('source_sha256') == expected_source
-                                    for item in attempts)
-                    required_path = phase / 'required-profile.json'
-                    required = json.loads(required_path.read_text()) if required_path.is_file() else {}
-                    attempted |= (required.get('source_sha256') == expected_source
-                                  and required.get('command_dispatched') is True
-                                  and required.get('profile_attempt_arguments') == ['pipes'])
-                    if ctx['status'] != 'unchanged' and not attempted:
-                        raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
-                    if required.get('state') == 'completed' and required.get('evidence'):
-                        acquired_path = phase / 'candidate-snapshot' / required['evidence']
-                        acquired = json.loads(acquired_path.read_text())
-                        if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
-                                item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
-                            raise ValueError('analysis must cite the controller-acquired profile')
-                    if ctx['status'] == 'unchanged' and not attempted:
-                        repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
-                        acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
-                    report = analyzer_history.finalize(report, ctx, self.history, list(acquisitions.values()))
+                report, entry['evidence_sha256'], acquisitions = self.validate_phase_analysis(phase, entry['candidate_commit'], require_retained=True)
                 save(self.workspace / 'analysis.json', report)
                 entry['analysis_valid'] = True
             except (ValueError, OSError) as error:
@@ -621,6 +678,8 @@ class Campaign:
                               source_sha256=hashlib.sha256(source).hexdigest(),
                               analysis_valid=entry['analysis_valid'],
                               analysis_error=entry.get('analysis_error'),
+                              report_repair=json.loads((phase / 'report-repair/validation.json').read_text())
+                                  if (phase / 'report-repair/validation.json').is_file() else None,
                               required_profile=json.loads((phase / 'required-profile.json').read_text())
                                   if (phase / 'required-profile.json').is_file() else None,
                               evidence_sha256=entry.get('evidence_sha256', {}),

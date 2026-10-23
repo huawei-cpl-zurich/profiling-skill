@@ -316,3 +316,18 @@ and owned-work cleanup without starting a model. The controller atomically saves
 model-dispatch intent before launching it; an existing intent or missing trusted
 original clock remains observation-required and never authorizes a second model.
 Both clock and dispatch audit files are retained with experiment diagnostics.
+
+A terminal successful analyzer model now passes the same strict report validator
+before phase cleanup and history publication. If its report is invalid and time
+remains, the controller permits one report-only repair within the original
+analyzer deadline, capped at 90 seconds including process termination allowance.
+There is no new role clock, capture, or kernel change. The repair receives the
+exact error and original citation metadata; all device/remote tool commands are
+rejected by the trusted bridge, and only `analysis.json` is writable among report
+artifacts. Missing kernel/case attribution or compiler inventory remains invalid.
+
+The first raw report, error, permitted metadata, repair dispatch intent, output,
+terminal result and validated disposition are retained with the experiment and
+round record. An uncertain repair intent never permits a second model launch.
+Initial failed/timed-out models and exhausted allowances skip repair. A failed
+repair still stops the phase; final publication reuses the identical validator.

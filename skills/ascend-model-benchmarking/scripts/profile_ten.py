@@ -52,11 +52,11 @@ def kernel_identity(accounted, expected):
                 names=observed, missing=missing, source='same ten-forward capture')
 
 
-def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_module=None):
+def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_module=None, metric_group=None):
     """Exactly ten forwards, no warmup/discovery; event results precede export.
 
     Event timings are profiler-instrumented, not unprofiled latency measurements.
-    Preparation must already validate correctness and strict fullgraph compilation.
+    Preparation must already validate correctness and finish any required compilation.
     Existing vendor files are retained even when export/normalization fails.
     """
     torch = torch_module or importlib.import_module('torch')
@@ -76,19 +76,23 @@ def capture_ten(run, output, *, expected_kernel=None, torch_module=None, npu_mod
                                analysis_max_process_number=1, analysis_calls=0),
                   kernel_identity=dict(status='unavailable', names=[],
                                        expected=list(expected_kernel or []), missing=[]))
+    result['metrics'] = dict(status='not-requested' if metric_group is None else 'requested',
+                             requested=metric_group, available_status='unverified')
     names = [f'model_iteration_{i}' for i in range(10)]
     # All ten forwards belong to one active profiler step. Complete that step
     # only after event samples are durable; no model invocation advances it.
     try:
+        config = dict(profiler_level=npu.profiler.ProfilerLevel.Level1, data_simplification=False)
+        if metric_group is not None:
+            # Fail explicitly on runtimes lacking the requested PMU group.
+            config['aic_metrics'] = getattr(npu.profiler.AiCMetrics, metric_group)
         with torch.inference_mode():
             with npu.profiler.profile(
                     activities=[npu.profiler.ProfilerActivity.CPU,
                                 npu.profiler.ProfilerActivity.NPU],
                     record_shapes=False, with_stack=False,
                     schedule=npu.profiler.schedule(wait=0, warmup=0, active=1, repeat=1),
-                    experimental_config=npu.profiler._ExperimentalConfig(
-                        profiler_level=npu.profiler.ProfilerLevel.Level1,
-                        data_simplification=False),
+                    experimental_config=npu.profiler._ExperimentalConfig(**config),
                     on_trace_ready=npu.profiler.tensorboard_trace_handler(
                         str(output / 'vendor'), analyse_flag=False)) as profiler:
                 pairs = []

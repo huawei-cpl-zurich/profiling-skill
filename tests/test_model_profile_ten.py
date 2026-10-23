@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'skills/ascend-model-benchmar
 import profile_ten
 
 class CaptureTests(unittest.TestCase):
-    def capture(self, export_error=False, missing=False, expected=True):
+    def capture(self, export_error=False, missing=False, expected=True, metrics=None):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'capture'
             calls, events, syncs, markers, lifecycle = [], [], [], [], []
@@ -39,6 +39,7 @@ class CaptureTests(unittest.TestCase):
             self_test = self
             def begin(**kwargs):
                 self.assertIs(kwargs['schedule'], scheduled)
+                self.assertEqual(kwargs['experimental_config'].get('aic_metrics'), metrics)
                 return Profile()
             def schedule(**kwargs):
                 self.assertEqual(kwargs, dict(wait=0, warmup=0, active=1, repeat=1))
@@ -69,10 +70,12 @@ class CaptureTests(unittest.TestCase):
                 autograd=N(profiler=N(record_function=lambda name: (markers.append(name) or nullcontext()))))
             npu = N(profiler=N(profile=begin, schedule=schedule, ProfilerActivity=N(CPU=1, NPU=2),
                 _ExperimentalConfig=lambda **kwargs: kwargs, ProfilerLevel=N(Level1=1),
+                AiCMetrics=N(PipeUtilization='pipe'),
                 tensorboard_trace_handler=handler))
             with patch.dict(sys.modules, {'torch_npu.profiler.profiler': N(analyse=analyse)}):
                 result = profile_ten.capture_ten(lambda: calls.append(True), output,
-                    expected_kernel=['kernel'] if expected else None, torch_module=torch, npu_module=npu)
+                    expected_kernel=['kernel'] if expected else None, torch_module=torch, npu_module=npu,
+                    metric_group='PipeUtilization' if metrics else None)
             self.assertEqual(lifecycle, ['start', 'step/raw', 'stop', 'analyse/export'])
             self.assertEqual(result['profile']['analysis_calls'], 1)
             self.assertEqual(result['event_latency']['count'], 10)
@@ -93,6 +96,9 @@ class CaptureTests(unittest.TestCase):
     def test_identity_requires_every_iteration_not_union_of_names(self):
         self.assertEqual(self.capture(missing=True)['kernel_identity']['status'], 'failed')
         self.assertEqual(self.capture(expected=False)['kernel_identity']['status'], 'observed-only')
+    def test_requested_metrics_reach_vendor_configuration(self):
+        result = self.capture(metrics='pipe')
+        self.assertEqual(result['metrics'], dict(status='requested', requested='PipeUtilization', available_status='unverified'))
     def test_empty_expected_names_cannot_claim_verified_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             calls = []

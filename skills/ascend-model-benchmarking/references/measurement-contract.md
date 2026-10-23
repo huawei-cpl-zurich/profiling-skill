@@ -95,3 +95,18 @@ complete `torch_to_npu` flow from an exact CPU `record_event` operation. The
 exclusion audit retains its original device record, host operation and link.
 These flows count in `paired_flows`, while `observed_tasks` counts compute
 records. Timing events cannot satisfy an iteration's compute-work requirement.
+
+## Explicit eager reference
+
+The controller accepts `--baseline-execution eager|compiled` (default `compiled`).
+Candidates always require compiled fullgraph execution and submitted-kernel identity.
+Use `eager` explicitly for a slow PyTorch reference; unsupported compiled references
+fail rather than falling back. Measure eager and compiled reference comparisons in
+separate evidence directories and label their execution modes in final tables.
+Eager references use eval/inference mode, correctness validation, the same 20-call
+warmup, three batches of 50 synchronized full-forward samples, and a separate
+50-iteration correlated profile with 20 warmups. They require no graph backend.
+Active compilation detection and input mutation checks still apply to both arms.
+The repeated controller forwards this option unchanged, records execution modes,
+and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
+counts, mean and sample standard deviation are unchanged.

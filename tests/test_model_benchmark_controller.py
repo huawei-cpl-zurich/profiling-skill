@@ -180,6 +180,20 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(report['state'], 'complete', report.get('error'))
         self.assertEqual(report['cases'][0]['pre_latency_replay_calls'], dict(baseline=70, candidate=70))
 
+    def test_optional_success_retains_arm_metrics_without_unpaired_busy_speedups(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.run_fixture(Path(temporary), policy='optional')
+        self.assertEqual(report['state'], 'complete', report.get('error'))
+        row = report['cases'][0]
+        self.assertEqual(row['profile_status'], dict(baseline=dict(state='complete'), candidate=dict(state='complete')))
+        self.assertEqual(set(row['all_kernel_busy_median_us']), {'baseline', 'candidate'})
+        self.assertFalse(row['profile_replay_depth_paired'])
+        self.assertEqual(row['metric_status']['busy_time_speedup'], 'unavailable')
+        self.assertNotIn('busy_time_speedup', row)
+        self.assertNotIn('device_busy_time_speedup', row)
+        self.assertNotIn('geomean_busy_time_speedup', report)
+        self.assertIn('geomean_latency_speedup', report)
+
     def test_optional_eager_reference_failure_keeps_compiled_candidate_identity(self):
         class BrokenBaseline(Adapter):
             def profile(self, prepared, **kwargs):

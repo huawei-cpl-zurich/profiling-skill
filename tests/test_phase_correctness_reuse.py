@@ -55,7 +55,7 @@ def test_changed_identity_forces_full_measurement_check(tmp_path,changed):
     if changed=='source':source=b'changed'
     if changed=='device':runtime['physical']=5
     if changed=='runtime':runtime['torch_module_id']=456
-    if changed=='bundle':(tmp_path/'private-task.json').write_text(json.dumps(dict(task='bsa')))
+    if changed=='bundle':(tmp_path/'private-task.json').write_text(json.dumps(dict(task='matmul',profile_index=3)))
     if changed=='adapter':
         original=adapter.check
         adapter.check=lambda *args:original(*args)
@@ -102,3 +102,19 @@ def test_measurement_fresh_profile_validation_still_runs_and_failure_invalidates
     invalid[0]=False
     assert run('retry','benchmark')['state']=='completed'
     assert checks==['first','retry']
+
+
+def test_bsa_requires_all_selector_variants_before_reuse_and_publication(tmp_path):
+    run, runtime, adapter, checks, measurements = fixture(tmp_path)
+    (tmp_path/'private-task.json').write_text(json.dumps(dict(task='bsa')))
+    assert run('partial','check')['state']=='failed'
+    tools.export(tmp_path/'calls/partial',tmp_path/'partial-public')
+    assert json.loads((tmp_path/'partial-public/results/summary.json').read_text())['correctness'] is False
+    adapter.check=lambda *args:dict(passed=True, variants=list(range(5)))
+    assert run('qualified','check')['state']=='completed'
+    measured=run('timing','benchmark')
+    assert measured['state']=='completed'
+    assert measured['check']['variants']==list(range(5))
+    assert measured['correctness_provenance']['original_call']=='qualified'
+    tools.export(tmp_path/'calls/timing',tmp_path/'public')
+    assert json.loads((tmp_path/'public/results/summary.json').read_text())['correctness'] is True

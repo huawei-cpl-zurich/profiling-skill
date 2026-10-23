@@ -18,7 +18,8 @@ def export(private, public):
               'source_sha256', 'physical_device', 'logical_device', 'diagnostic', 'progress', 'worker_pid',
               'runtime_initializations', 'torch_module_id', 'correctness_provenance') if key in value}
     checked = value.get('check', {})
-    result['correctness'] = checked.get('passed') is True and checked.get('variants') == [0, 1]
+    result['correctness'] = (checked.get('passed') is True
+        and checked.get('variants') == value.get('required_variants', [0, 1]))
     # candidate_probe already authenticates candidate-owned compiler diagnostics.
     result['diagnostics'] = checked.get('diagnostics', [])
     measurement = value.get('result', {})

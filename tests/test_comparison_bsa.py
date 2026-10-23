@@ -71,6 +71,46 @@ def test_rejects_errors_and_mutation(root):
         bsa.validate(case,'candidate',case['expected'])
 
 
+@pytest.mark.parametrize('broken_variant', [None, 3, 4])
+def test_native_qualification_rejects_empty_or_invalid_selector_candidate(root, monkeypatch, broken_variant):
+    import sys
+    from types import SimpleNamespace
+    sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
+    import model_campaign_native as native
+    import model_campaign_task as task
+    (root / 'private-task.json').write_text(json.dumps(dict(task='bsa', check_indices=[0])))
+    reference = bsa.load_reference(root)
+    class Candidate:
+        def __call__(self, *args):
+            result = reference(*args)
+            ids, counts = args[3:5]
+            empty = not bool(counts.any())
+            invalid = bool(counts.any()) and not bool(((ids >= 0) & (ids < 3)).any())
+            broken = empty if broken_variant == 3 else invalid if broken_variant == 4 else False
+            return result + 1 if broken else result
+    seen = []
+    def probe(factory, provider, validate, **kwargs):
+        args, named = next(iter(provider()))
+        seen.append(int(kwargs['evidence_dir'].parent.name))
+        try:
+            validate(factory()(*args, **named), args, named)
+        except AssertionError:
+            return dict(state='failed')
+        return dict(state='passed')
+    monkeypatch.setattr(task, 'case', lambda bundle, index, variant: (
+        bsa.make_case(root, index, variant, device='cpu'), bsa.validate))
+    monkeypatch.setattr(torch, 'npu', SimpleNamespace(synchronize=lambda: None), raising=False)
+    monkeypatch.setattr(torch._dynamo, 'reset', lambda: None)
+    monkeypatch.setitem(sys.modules, 'torch_npu', SimpleNamespace())
+    monkeypatch.setitem(sys.modules, 'candidate', SimpleNamespace(Model=Candidate))
+    monkeypatch.setitem(sys.modules, 'candidate_probe', SimpleNamespace(probe_candidate=probe))
+    monkeypatch.setattr(native, 'audited_compiler', lambda: object())
+    result = native.check(root, {}, lambda: 100)
+    assert result['passed'] is (broken_variant is None)
+    assert seen == list(range(5 if broken_variant is None else broken_variant + 1))
+    assert result['variants'] == list(range(5 if broken_variant is None else broken_variant))
+
+
 def test_prepare_preserves_evidence_and_isolates_public_material(root,tmp_path):
     dest=tmp_path/'private'
     public=bsa.prepare(dest,root)

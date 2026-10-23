@@ -282,7 +282,8 @@ This operation is unavailable through the public actor/analyzer tool bridge.
 
 Within one retained phase, timing and pipe measurements may reuse a passed
 source qualification. Explicit checks always run the full configured case and
-variant subset. Reuse requires identical source, trusted bundle fingerprint,
+variant subset. Matmul/GDN require variants 0–1; BSA requires 0–4, including
+empty and all-invalid selectors. Reuse requires identical source, trusted bundle fingerprint,
 adapter, physical device and runtime context. Measurement still executes fresh
 profile-case preparation and validation. Exported `correctness_provenance`
 identifies the original call and source hash; reused reports contain no fresh

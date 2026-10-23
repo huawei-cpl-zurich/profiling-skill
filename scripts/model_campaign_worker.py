@@ -40,9 +40,9 @@ def qualification_key(root, adapter, runtime, source_sha256):
 
 
 def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=None):
-    """Adapter check(root,env,remaining) must validate variants 0 and 1.
+    """Adapter check(root,env,remaining) must validate the task's required variants.
 
-    It returns {passed: bool, variants: [0,1], ...} with candidate-only safe
+    It returns {passed: bool, variants: [...], ...} with candidate-only safe
     diagnostics from candidate_probe. benchmark/pipes/screen have the same
     signature and may return only private artifacts; export happens on host.
     Every adapter subprocess must use remaining() as its timeout.
@@ -59,6 +59,8 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
         raise TimeoutError('original round deadline expired')
     summary = dict(state='failed', failure_stage='infrastructure', operation=request['operation'],
                    source_sha256=request['source_sha256'], worker_pid=os.getpid())
+    from model_campaign_task import check_variants
+    summary['required_variants'] = check_variants(root)
     lease, proof_key, proof_cache = None, None, {}
     try:
         if runtime is None and request.get('activation_required'):
@@ -108,7 +110,7 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
         proof_cache = runtime.setdefault('correctness_cache', {}) if runtime is not None else {}
         reused = proof_cache.get(proof_key) if request['operation'] in ('benchmark', 'pipes') else None
         if reused:
-            checked = dict(passed=True, variants=[0, 1], diagnostics=[])
+            checked = dict(passed=True, variants=summary['required_variants'], diagnostics=[])
             summary['correctness_provenance'] = dict(reused, kind='phase-local-reuse')
         else:
             if proof_key:
@@ -117,7 +119,7 @@ def execute(root, adapter, *, acquire=None, monotonic=time.monotonic, runtime=No
             summary['correctness_provenance'] = dict(kind='fresh', original_call=root.name,
                 source_sha256=request['source_sha256'])
         summary['check'] = checked
-        if checked.get('passed') is not True or set(checked.get('variants', [])) != {0, 1}:
+        if checked.get('passed') is not True or set(checked.get('variants', [])) != set(summary['required_variants']):
             if runtime:
                 try:
                     torch = sys.modules['torch']

@@ -32,3 +32,8 @@ def case(root, index=None, variant=0):
 
 def check_indices(root):
     return configuration(root)['check_indices']
+
+
+def check_variants(root):
+    # BSA additionally qualifies varied, empty, and all-invalid selectors.
+    return list(range(5)) if configuration(root)['task'] == 'bsa' else [0, 1]

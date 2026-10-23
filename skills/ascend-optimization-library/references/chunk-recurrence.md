@@ -1,9 +1,9 @@
 # Chunk a gated delta recurrence
 
-Status: CPU algebra checks and A3 compile-only qualification at DK=DV128
-passed for all three kernels after tiling value columns. Correctness and
-profiling on A3 remain pending. The long/short regimes below are measurement
-hypotheses; no runtime benefit is established.
+Status: all four A3 pairs passed one correctness check and ten profiled forwards
+per arm after tiling value columns. The long gallery case improved its device
+span; the short case regressed substantially with preparation and scan overhead.
+These paired observations establish no universal crossover or roofline distance.
 
 Read this recipe when code updates a large state for every token, there are few
 independent heads/segments, and successive state updates form a long serial

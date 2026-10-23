@@ -92,27 +92,28 @@ def pmu_rows(path, tasks, physical_die):
         identity = task['task_id'].split(':')
         if len(identity) != 5:
             raise EvidenceError('unsupported device task identity')
-        _, stream, task_id, batch, context = identity
-        candidates[(stream, task_id, task['name'])].append((task, batch, context))
+        _, stream, task_id, batch, subtask = identity
+        candidates[(stream, task_id, task['name'])].append((task, batch, subtask))
     matched, used = [], set()
     for row in rows:
         if row['Device_id'].strip() != str(physical_die):
             raise EvidenceError('CSV physical device differs from capture provenance')
         key = (row['Stream ID'].strip(), row['Task ID'].strip(), row['Name'])
         found = candidates.get(key, [])
-        # N/A is retained verbatim. It supplies no additional identity constraint;
-        # stream/task/name must already have a unique proven trace identity.
+        # CSV Context ID and trace Subtask Id are different namespaces. Only an
+        # explicitly retained trace context can constrain the CSV context.
         context = row['Context ID'].strip()
         if context.upper() not in ('N/A', 'NA', ''):
-            found = [item for item in found if item[2] == context]
+            found = [item for item in found if item[0].get('context_id') is None or
+                     str(item[0]['context_id']) == context]
         if len(found) != 1:
             raise EvidenceError('CSV row lacks a unique trace task identity')
-        task, batch, trace_context = found[0]
+        task, batch, trace_subtask = found[0]
         if task['task_id'] in used:
             raise EvidenceError('duplicate CSV row for a trace task')
         used.add(task['task_id'])
         matched.append(dict(task_id=task['task_id'], iteration_id=task['iteration_id'],
-                            trace_batch_id=batch, trace_context_id=trace_context,
+                            trace_batch_id=batch, trace_subtask_id=trace_subtask,
                             csv_context_id=row['Context ID'], raw=row))
     if used != {task['task_id'] for task in tasks}:
         raise EvidenceError('CSV does not cover every proven device task')
@@ -220,26 +221,36 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
         raise EvidenceError('unsupported pair protocol')
     if any(report.get(key) != 0 for key in ('warmup_calls','discovery_calls','unprofiled_timing_calls')):
         raise EvidenceError('pair must declare zero additional execution calls')
-    proof_path = resolve(reanalysis) if reanalysis else None
-    proof = load(proof_path) if proof_path else None
+    proof_path = resolve(reanalysis) if reanalysis is not None else None
+    proof = load(proof_path) if proof_path is not None else None
     proof_case = None
-    if proof and 'cases' in proof:
+    if proof_path is not None and (not isinstance(proof, dict) or not proof):
+        raise EvidenceError('malformed or empty reanalysis manifest')
+    if proof is not None and 'cases' in proof:
+        if not isinstance(proof['cases'], dict) or not all(isinstance(v, dict) for v in proof['cases'].values()):
+            raise EvidenceError('malformed reanalysis cases')
         matches = [(name, value) for name,value in proof['cases'].items()
                    if value.get('original_pair_sha256') == sha(result_path)]
         if len(matches) != 1:
             raise EvidenceError('reanalysis must uniquely identify the original pair')
         proof_case, proof = matches[0]
-    if proof and proof.get('original_pair_sha256') != sha(result_path):
+    if proof is not None and proof.get('original_pair_sha256') != sha(result_path):
         raise EvidenceError('reanalysis belongs to a different original pair')
+    if proof is not None and (not isinstance(proof.get('arms'), dict) or
+            set(proof['arms']) != {'before', 'after'} or
+            any(not isinstance(v, dict) or not {'status', 'trace_sha256', 'capture_forward_calls',
+                'normalized_sha256', 'accounting_sha256', 'kernel_identity'} <= v.keys()
+                for v in proof['arms'].values())):
+        raise EvidenceError('malformed reanalysis arms')
     if set(report.get('arms', {})) != {'before', 'after'}:
         raise EvidenceError('exactly two experiment arms required')
-    validate_experiment(report, resolve, bool(proof))
+    validate_experiment(report, resolve, proof is not None)
     physical = report['provenance']['physical_die']
     if type(physical) is not int or physical < 0:
         raise EvidenceError('explicit physical device provenance required')
     result = dict(protocol='optimization-profile-evidence-v1', original_pair_sha256=sha(result_path),
                   original_experiment_status=report['status'],
-                  reanalysis_sha256=sha(proof_path) if proof_path else None,
+                  reanalysis_sha256=sha(proof_path) if proof_path is not None else None,
                   reanalysis_case=proof_case,
                   case=report['case'], provenance=report['provenance'], fixture=report['fixture'],
                   new_device_forwards=0, new_captures=0, arms={})
@@ -260,12 +271,12 @@ def collect_pair(result_path, *, root=None, reanalysis=None):
         normalized = normalize_trace(raw['traceEvents'] if isinstance(raw, dict) else raw,
                                      [f'model_iteration_{i}' for i in range(10)], export_completed=True)
         accounted = account_profile(normalized['iterations'], normalized['tasks'], capture_complete=True)
-        claim = proof['arms'][arm] if proof else capture
-        if proof and claim.get('status') != 'complete':
+        claim = proof['arms'][arm] if proof is not None else capture
+        if proof is not None and claim.get('status') != 'complete':
             raise EvidenceError('reanalysis is incomplete')
         if claim['kernel_identity']['status'] != 'complete':
             raise EvidenceError('kernel identity proof is incomplete')
-        if proof:
+        if proof is not None:
             if claim['trace_sha256'] != sha(trace) or claim['capture_forward_calls'] != 10:
                 raise EvidenceError('reanalysis trace or call identity mismatch')
             prefix = proof_case+'-' if proof_case else ''

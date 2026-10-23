@@ -51,19 +51,29 @@ class MetricsTests(unittest.TestCase):
         self.rows[0]['Context ID'] = 'N/A'
         self.tasks[0]['task_id'] = '9:2:0:0:4294967295'
         self.write()
-        self.assertEqual(evidence.pmu_rows(self.path, self.tasks, 5)['kernels']['kernel']['rows'][0]['trace_context_id'], '4294967295')
+        self.assertEqual(evidence.pmu_rows(self.path, self.tasks, 5)['kernels']['kernel']['rows'][0]['trace_subtask_id'], '4294967295')
         self.tasks.append(dict(self.tasks[0], task_id='10:2:0:1:7'))
         with self.assertRaisesRegex(evidence.EvidenceError, 'unique'):
             evidence.pmu_rows(self.path, self.tasks, 5)
 
-    def test_duplicate_unmatched_missing_context_and_device_fail_closed(self):
-        for change in ('duplicate', 'unmatched', 'missing', 'context', 'device'):
+    def test_context_and_subtask_are_independent_namespaces(self):
+        self.rows[0]['Context ID']='7';self.write()
+        row=evidence.pmu_rows(self.path,self.tasks,5)['kernels']['kernel']['rows'][0]
+        self.assertEqual(row['csv_context_id'],'7')
+        self.assertEqual(row['trace_subtask_id'],'0')
+        self.tasks[0]['context_id']=7
+        self.assertEqual(evidence.pmu_rows(self.path,self.tasks,5)['kernels']['kernel']['task_count'],10)
+        self.tasks[0]['context_id']=8
+        with self.assertRaisesRegex(evidence.EvidenceError,'unique'):
+            evidence.pmu_rows(self.path,self.tasks,5)
+
+    def test_duplicate_unmatched_missing_and_device_fail_closed(self):
+        for change in ('duplicate', 'unmatched', 'missing', 'device'):
             with self.subTest(change=change):
                 rows = copy.deepcopy(self.rows)
                 if change == 'duplicate': rows.append(rows[0])
                 if change == 'unmatched': rows[0]['Task ID'] = '999'
                 if change == 'missing': rows.pop()
-                if change == 'context': rows[0]['Context ID'] = '77'
                 if change == 'device': rows[0]['Device_id'] = '4'
                 self.write(rows)
                 with self.assertRaises(evidence.EvidenceError):
@@ -237,6 +247,16 @@ class PairTests(unittest.TestCase):
                 path.write_text(json.dumps(report));proof,_=self.proof(root,path,report)
                 for recovery in (None,proof):
                     with self.assertRaises(evidence.EvidenceError):evidence.collect_pair(path,reanalysis=recovery)
+
+    def test_supplied_empty_or_malformed_reanalysis_never_falls_back(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);path,report=self.fixture(root);proof=root/'malformed.json'
+            for value in ({},None,[],{'cases':[]},{'cases':{}},{'cases':{'case':None}},
+                          {'original_pair_sha256':evidence.sha(path)},
+                          {'original_pair_sha256':evidence.sha(path),'arms':{'before':{}}}):
+                with self.subTest(value=value):
+                    proof.write_text(json.dumps(value))
+                    with self.assertRaises(evidence.EvidenceError):evidence.collect_pair(path,reanalysis=proof)
 
     def test_reanalysis_only_recovers_known_parser_failures(self):
         for message in ('unvalidated device task type: EVENT_RECORD',

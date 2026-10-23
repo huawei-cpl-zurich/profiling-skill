@@ -56,9 +56,7 @@ using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmadType,void,Gemm::Block::G
 #endif
 #if FAMILY == 6 && AFTER
 extern "C" CATLASS_GLOBAL void ENTRY(MatmulKernel::Params params, uint64_t hardwareSyncAddr) {
-    // ACL returns a GM pointer to the FFTS configuration word, not the word itself.
-    const uint64_t config = *reinterpret_cast<__gm__ const uint64_t*>(hardwareSyncAddr);
-    AscendC::SetSyncBaseAddr(config);
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
     MatmulKernel op; op(params);
 }
 #else

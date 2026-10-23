@@ -11,6 +11,13 @@ from mixed_contract import CASE_SOURCES,check_spec,make_padding_case,gemm_contra
 from compile_tile import PIN
 
 
+def topology(cube,vector,configured):
+    """The AIV-only add launch and mixed epilogue must have equal capacity."""
+    if any(type(value) is not int or value<=0 for value in (cube,vector,configured)) or cube!=configured or vector!=2*cube:
+        raise ValueError('native mixed examples require observed Vector=2*Cube and matching configured Cube count')
+    return dict(observed_cube_cores=cube,observed_vector_cores=vector)
+
+
 def configure(library,family,arm,shape,cores):
     if family not in ('02','10') or arm not in ('before','after') or type(cores) is not int or cores<=0:
         raise ValueError('known family/arm and observed positive Cube-core count required')
@@ -28,6 +35,7 @@ def configure(library,family,arm,shape,cores):
         raise ValueError('workspace does not match the declared operation')
     return dict(workspace_bytes=size,conversion_forced=family=='10' and arm=='after',
                 launch_count=2 if family=='02' and arm=='before' else 1,
+                standalone_add_vector_blocks=2*cores if family=='02' and arm=='before' else 0,
                 intermediate_gm_bytes=4*m*n if family=='02' else 0)
 
 
@@ -51,6 +59,9 @@ class Adapter:
         if build['source_revision']!=PIN or build['binary_sha256']!=digest(binary):
             raise ValueError('native build provenance mismatch')
         inputs={key:value.npu() for key,value in fixture['inputs'].items()}
+        properties=torch.npu.get_device_properties(inputs['a'].device.index)
+        observed=topology(getattr(properties,'cube_core_num',None),
+                          getattr(properties,'vector_core_num',None),self.cores)
         library=ctypes.CDLL(str(binary))
         resources=configure(library,self.family,arm,[spec[k] for k in ('m','n','k')],self.cores)
         workspace=torch.empty(resources['workspace_bytes'],dtype=torch.uint8,device='npu')
@@ -62,7 +73,7 @@ class Adapter:
             source_revision=PIN,build_manifest=build,
             stream_provider=lambda:torch.npu.current_stream().npu_stream)
         native.metadata.update(family=self.family,arm=arm,shape=spec,cube_cores=self.cores,
-                               **resources,torch=torch.__version__,torch_npu=torch_npu.__version__)
+                               **observed,**resources,torch=torch.__version__,torch_npu=torch_npu.__version__)
         self.prepared[arm]=(native,inputs)
         return native
 

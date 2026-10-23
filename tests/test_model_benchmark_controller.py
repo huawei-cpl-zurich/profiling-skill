@@ -161,6 +161,25 @@ class ControllerTests(unittest.TestCase):
             self.assertNotIn('geomean_busy_time_speedup', report)
             self.assertIn('geomean_latency_speedup', report)
 
+    def test_optional_matches_stateful_replay_depth_before_paired_timing(self):
+        counts = dict(baseline=0, candidate=0)
+        def factory(arm):
+            def model(value):
+                counts[arm] += 1
+                return value + 1
+            return model
+        original = controller.benchmark_pair
+        def paired(baseline, candidate, **kwargs):
+            self.assertEqual(counts, dict(baseline=71, candidate=71))
+            return original(baseline, candidate, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(globals(), baseline=lambda: factory('baseline'),
+                           candidate=lambda: factory('candidate')), \
+                patch.object(controller, 'benchmark_pair', side_effect=paired):
+            report = self.run_fixture(Path(temporary), policy='optional')
+        self.assertEqual(report['state'], 'complete', report.get('error'))
+        self.assertEqual(report['cases'][0]['pre_latency_replay_calls'], dict(baseline=70, candidate=70))
+
     def test_optional_eager_reference_failure_keeps_compiled_candidate_identity(self):
         class BrokenBaseline(Adapter):
             def profile(self, prepared, **kwargs):

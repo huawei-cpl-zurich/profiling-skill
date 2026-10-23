@@ -149,3 +149,9 @@ and `state` for every metric. Ten valid latency repetitions can therefore coexis
 with fewer profile repetitions; an incomplete profile metric must not be reported
 as a complete ten-run measurement. Failed correctness or candidate identity runs
 are never admitted to repeated statistics or aggregate rankings.
+
+Optional warmed acquisitions perform seventy unprofiled baseline replay calls
+before paired timing to match the candidate identity capture's twenty warmups
+and fifty forwards. Compilation and input immutability remain checked outside
+timing. Baseline trace acquisition follows saved latency. This equal replay depth
+applies only to the explicitly warmed workflow, not the primary 1+10 protocol.

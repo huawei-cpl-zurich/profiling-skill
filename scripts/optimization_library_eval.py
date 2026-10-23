@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import random
@@ -181,16 +182,17 @@ class ReportLauncher(ProductionLauncher):
         return json.loads((session / "output" / "response.json").read_text())
 
 
-def run_wave(wave, output, invoke, *, timeout=600):
+def run_wave(wave, output, invoke, *, timeout=600, workers=1):
     """Never overwrite/retry a dispatched session; preserve failures and initial grades."""
+    if type(workers) is not int or workers <= 0:
+        raise ValueError("workers must be a positive integer")
     output.mkdir(parents=True, exist_ok=False)
     write_json(output / "frozen-private.json", wave)
     jobs = [(i, role, treatment) for i in range(24)
             for role in ("actor", "analyzer") for treatment in (False, True)]
     random.Random(wave["seed"]).shuffle(jobs)
-    receipts = []
-    # All learner responses precede grading, which never receives treatment labels.
-    for index, (case_index, role, treatment) in enumerate(jobs):
+    def review(job):
+        index, (case_index, role, treatment) = job
         session = output / f"review-{index:03d}"
         session.mkdir()
         case = wave["cases"][case_index]
@@ -207,10 +209,12 @@ def run_wave(wave, output, invoke, *, timeout=600):
         except Exception as error:
             receipt.update(status="failed", error=f"{type(error).__name__}: {error}")
         write_json(session / "receipt.json", receipt)
-        receipts.append(receipt)
-    for index, receipt in enumerate(receipts):
+        return receipt
+
+    def assess(job):
+        index, receipt = job
         if receipt["status"] != "completed":
-            continue
+            return receipt
         session = output / f"grade-{index:03d}"
         session.mkdir()
         grade = {"status": "dispatched"}
@@ -225,6 +229,13 @@ def run_wave(wave, output, invoke, *, timeout=600):
             grade.update(status="failed", error=f"{type(error).__name__}: {error}")
         write_json(session / "receipt.json", grade)
         receipt["initial_grade"] = grade
+        return receipt
+
+    # map retains seeded receipt identities regardless of completion order. Materializing
+    # the complete review stage is the barrier: no worker can see gold before it.
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        receipts = list(pool.map(review, enumerate(jobs)))
+        receipts = list(pool.map(assess, enumerate(receipts)))
     result = {"reviews": receipts, "review_count": len(receipts),
               "failed_reviews": sum(r["status"] != "completed" for r in receipts),
               "failed_grades": sum(r.get("initial_grade", {}).get("status") == "failed" for r in receipts)}
@@ -237,11 +248,12 @@ def main():
     parser.add_argument("manifest", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--workers", type=int, default=1)
     args = parser.parse_args()
-    if args.timeout <= 0:
-        parser.error("timeout must be positive")
+    if args.timeout <= 0 or args.workers <= 0:
+        parser.error("timeout and workers must be positive")
     wave = load_wave(args.manifest)
-    result = run_wave(wave, args.output, ReportLauncher(), timeout=args.timeout)
+    result = run_wave(wave, args.output, ReportLauncher(), timeout=args.timeout, workers=args.workers)
     return int(bool(result["failed_reviews"] or result["failed_grades"]))
 
 

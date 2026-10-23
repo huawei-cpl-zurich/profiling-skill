@@ -161,3 +161,32 @@ def test_real_filesystem_boundary(tmp_path, tool_attempt):
                         {"name": "gpt-5.6-sol", "reasoning_effort": "low"}, 20) == {}
     assert (session / "input/prompt.txt").read_text() == "immutable context"
     assert (session / "process.json").is_file()
+
+
+def test_parallel_sessions_overlap_and_all_learners_finish_before_gold(tmp_path):
+    from threading import Barrier, Lock
+    wave = m.load_wave(wave_fixture(tmp_path))
+    barrier, lock = Barrier(2), Lock()
+    active = finished = maximum = 0
+    def invoke(session, prompt, schema, model, timeout):
+        nonlocal active, finished, maximum
+        if schema is m.REPORT_SCHEMA:
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+            barrier.wait(timeout=10)  # Would fail if sessions accidentally ran serially.
+            with lock:
+                active -= 1
+                finished += 1
+        else:
+            with lock:
+                assert finished == 96 and active == 0
+            assert "sealed_answer" in prompt and "allowed_guidance" not in prompt
+        return response(schema)
+    parallel = m.run_wave(wave, tmp_path / "parallel", invoke, workers=2)
+    serial = m.run_wave(wave, tmp_path / "serial", lambda *a: response(a[2]))
+    assert maximum == 2
+    assert parallel == serial  # Seeded receipt/session identities survive scheduling.
+    with pytest.raises(ValueError, match="workers"):
+        m.run_wave(wave, tmp_path / "invalid", invoke, workers=0)
+    assert not (tmp_path / "invalid").exists()

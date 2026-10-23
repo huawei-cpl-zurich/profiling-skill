@@ -34,7 +34,7 @@ trace parser and does not independently prove that export lost no records.
 
 The torch-npu 2.10 trace adapter recognizes the retained zero- or 0.02-microsecond-duration
 `PLACE_HOLDER_SQE` schema only when its name, sentinel model/subtask/connection
-IDs, task ID 0, batch ID 1 and matching stream/thread coordinates agree. It
+IDs, task ID 0, positive real batch ID and matching stream/thread coordinates agree. It
 retains the complete original record in the administrative exclusion audit;
 that record contributes no compute time. A different shape or a flow targeting
 this placeholder remains invalid. Unknown task types, missing iteration markers
@@ -88,8 +88,8 @@ This recognition does not recover missing markers or establish vector/cube
 utilization from the task label.
 
 Timing-event commands exported as `EVENT_RECORD` are administrative, rather
-than compute, only for the observed 0.02 µs schema: matching name, absent
-category, sentinel model/subtask IDs, batch zero, real task/connection IDs and
+than compute, only for the observed 0 or 0.02 µs schema: matching name, absent
+category, sentinel model/subtask IDs, real batch/task/connection IDs and
 matching stream/thread coordinates. Every command still requires a unique,
 complete `torch_to_npu` flow from an exact CPU `record_event` operation. The
 exclusion audit retains its original device record, host operation and link.

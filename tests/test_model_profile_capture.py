@@ -280,7 +280,7 @@ def test_observed_zero_duration_placeholder_retains_audit_without_compute(trace)
 @pytest.mark.parametrize('field,value', [
     ('dur', 1), ('dur', -1), ('dur', 0.01), ('dur', 0.021), ('dur', 0.03), ('dur', float('inf')), ('dur', float('nan')), ('name', 'unknown_placeholder'), ('cat', 'cpu_op'),
     ('pid', -1), ('tid', 48), ('Model Id', 0), ('Task Id', 1),
-    ('Batch Id', 0), ('Batch Id', 2), ('Subtask Id', 0),
+    ('Batch Id', 0), ('Batch Id', 4294967295), ('Subtask Id', 0),
     ('connection_id', 0), ('Physic Stream Id', 48), ('Task Id', False)])
 def test_placeholder_near_matches_remain_unsupported(trace, field, value):
     record = placeholder()
@@ -424,9 +424,43 @@ def test_event_record_requires_observed_schema_and_exact_flow(trace, retained_ev
     elif mutation == 'duration': records[1]['dur'] = 0.03
     elif mutation == 'name': records[1]['name'] = 'unknown'
     else:
-        field, value = {'model': ('Model Id', 0), 'batch': ('Batch Id', 1),
+        field, value = {'model': ('Model Id', 0), 'batch': ('Batch Id', -1),
             'subtask': ('Subtask Id', 0), 'connection': ('connection_id', 18446744073709551615),
             'task': ('Task Id', False), 'stream': ('Physic Stream Id', 3)}[mutation]
         records[1]['args'][field] = value
     with pytest.raises(capture.CaptureError):
         normalize(trace + records)
+
+
+@pytest.mark.parametrize('duration,batch', [(0, 0), (0.02, 1), (0, 1), (0.02, 2), (0, 2), (0.02, 3)])
+def test_retained_event_duration_and_batch_variants(trace, retained_event_record, duration, batch):
+    # Observed across BSA/GDN captures; batch is a runtime identity, not a sentinel.
+    retained_event_record[1]['dur'] = duration
+    retained_event_record[1]['args']['Batch Id'] = batch
+    result = normalize(trace + retained_event_record)
+    assert len(result['tasks']) == 2
+    audit = result['acquisition_evidence']['exclusions'][0]
+    assert audit['task'] == retained_event_record[1]
+    assert audit['host']['name'] == 'record_event'
+
+
+@pytest.mark.parametrize('field,value', [('Batch Id', False), ('Batch Id', 4294967295),
+                                       ('Task Id', -1), ('connection_id', -1)])
+def test_event_identity_fields_require_real_nonnegative_integers(trace, retained_event_record, field, value):
+    retained_event_record[1]['args'][field] = value
+    with pytest.raises(capture.CaptureError):
+        normalize(trace + retained_event_record)
+
+
+@pytest.mark.parametrize('batch', [2, 3])
+def test_retained_gdn_placeholder_batch_identity_variants(trace, batch):
+    record = event('PLACE_HOLDER_SQE', 3011657153, 2, '1792723918825740.220', 0.0,
+        args={'Model Id': 4294967295, 'Task Type': 'PLACE_HOLDER_SQE',
+              'Physic Stream Id': 2, 'Task Id': 0, 'Batch Id': batch,
+              'Subtask Id': 4294967295, 'connection_id': 18446744073709551615})
+    result = normalize(trace + [record])
+    assert len(result['tasks']) == 2
+    assert result['acquisition_evidence']['exclusions'][0]['task'] == record
+    trace[4].update(pid=record['pid'], tid=record['tid'], ts=record['ts'])
+    with pytest.raises(capture.CaptureError, match='exactly one CPU op and device task'):
+        normalize(trace + [record])

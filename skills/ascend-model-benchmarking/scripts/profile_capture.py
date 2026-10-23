@@ -43,12 +43,13 @@ def _queue_placeholder(event):
     different identity or an explicit flow still fails normal validation.
     """
     args = event['args']
-    sentinel_identity = {'Model Id': 2**32 - 1, 'Task Id': 0, 'Batch Id': 1,
+    sentinel_identity = {'Model Id': 2**32 - 1, 'Task Id': 0,
                          'Subtask Id': 2**32 - 1, 'connection_id': 2**64 - 1}
     return (event.get('name') == 'PLACE_HOLDER_SQE' and event.get('cat') is None
             and _decimal(event.get('dur')) in (Decimal('0'), Decimal('0.02'))
             and all(type(args.get(key)) is int and args[key] == value
                     for key, value in sentinel_identity.items())
+            and type(args.get('Batch Id')) is int and 0 < args['Batch Id'] < 2**32 - 1
             and type(event.get('pid')) is int and event['pid'] >= 0
             and type(event.get('tid')) is int and event['tid'] >= 0
             and type(args.get('Physic Stream Id')) is int
@@ -59,11 +60,11 @@ def _event_record(event):
     """Observed timing-event command; still requires its complete host flow."""
     args = event['args']
     return (event.get('name') == 'EVENT_RECORD' and event.get('cat') is None
-            and _decimal(event.get('dur')) == Decimal('0.02')
+            and _decimal(event.get('dur')) in (Decimal('0'), Decimal('0.02'))
             and all(type(args.get(key)) is int and args[key] == value for key, value in
-                    {'Model Id': 2**32 - 1, 'Subtask Id': 2**32 - 1, 'Batch Id': 0}.items())
+                    {'Model Id': 2**32 - 1, 'Subtask Id': 2**32 - 1}.items())
             and all(type(args.get(key)) is int and 0 <= args[key] < maximum for key, maximum in
-                    [('Task Id', 2**32 - 1), ('connection_id', 2**64 - 1)])
+                    [('Task Id', 2**32 - 1), ('Batch Id', 2**32 - 1), ('connection_id', 2**64 - 1)])
             and type(event.get('pid')) is int and event['pid'] >= 0
             and type(event.get('tid')) is int and event['tid'] >= 0
             and type(args.get('Physic Stream Id')) is int

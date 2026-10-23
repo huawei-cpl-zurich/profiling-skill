@@ -11,6 +11,8 @@ from scaling_contract import CASE_SOURCES, diagnostics, dimensions, make_case
 
 
 def kernels():
+    # Older Ascend JIT frontends resolve AST names through fn.__globals__.
+    global triton, tl
     import triton
     import triton.language as tl
 

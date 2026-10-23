@@ -1,0 +1,2 @@
+Op Name,Op Type,Task Duration(us),Block Dim,Mix Block Dim,Current Freq,Rated Freq,
+paired_matmul,cube,38.700001,20,NA,1650,1650,

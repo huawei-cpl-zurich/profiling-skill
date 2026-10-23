@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import sys
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from pathlib import Path
@@ -164,6 +165,36 @@ def memory_values(
     return result
 
 
+def reported_metrics(row: dict[str, str], prefix: str) -> dict[str, dict[str, Any]]:
+    """Retain row-local diagnostics without inventing unavailable counter values."""
+    result = {}
+    for column, raw in row.items():
+        if not column.startswith(prefix + "_"):
+            continue
+        if column.endswith("_time(us)"):
+            unit = "us"
+        elif column.endswith("_active_bw(GB/s)"):
+            unit = "GB/s"
+        elif column == f"{prefix}_total_cycles":
+            unit = "cycles"
+        elif column == f"{prefix}_icache_miss_rate":
+            # The export's unlabelled rate is retained without guessing its scale.
+            unit = None
+        elif re.fullmatch(r"ai[cv]_(?:scalar|cube|vec|mte[123]|fixpipe).*_ratio", column):
+            unit = "fraction"
+        else:
+            continue
+        value = optional_number(raw, column)
+        if value is not None:
+            if unit == "fraction" and not 0 <= value <= 1:
+                raise InvalidEvidence(f"{column} must be a fraction between 0 and 1")
+            if unit in {"us", "cycles", "GB/s"} and value < 0:
+                raise InvalidEvidence(f"{column} must be non-negative")
+        result[column] = {"value": value,
+                          "raw_value": "" if raw is None else raw.strip(), "unit": unit}
+    return result
+
+
 def memory_bound(row: dict[str, str], prefix: str) -> dict[str, object] | None:
     compute_field = "aic_cube_ratio" if prefix == "aic" else "aiv_vec_ratio"
     movement = optional_number(row.get(f"{prefix}_mte2_ratio"), f"{prefix}_mte2_ratio")
@@ -282,6 +313,9 @@ def normalize(args: argparse.Namespace) -> dict[str, Any]:
             "metrics": metrics,
             "saturation": model["saturation"],
         }
+        reported = reported_metrics(row, prefix)
+        if reported:
+            observation["reported_metrics"] = reported
         diagnostic = memory_bound(row, prefix)
         if diagnostic is not None:
             observation["diagnostics"] = {"memory_bound": diagnostic}

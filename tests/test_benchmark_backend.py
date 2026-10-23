@@ -166,7 +166,7 @@ def test_calibration_uses_host_owned_msprof_warmup_and_exact_selector(tmp_path: 
     assert result["job"]["calibration_attempt_id"] == "wave-2-first"
     assert result["job"]["candidate"].endswith("benchmarks/matmul/calibration.py")
     assert result["job"]["profiling"] == {
-        "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
+        "driver": str((ROOT / "skills/ascend-profiling/scripts/profile_a3.py").resolve()),
         "tool": "msprof op",
         "captures": 3,
         "aic_metrics": "BasicInfo",
@@ -374,7 +374,7 @@ def test_profile_job_has_exact_binding_and_msprof_selector(tmp_path: Path):
     }
     assert job["tolerances"] == {"rtol": 1e-2, "atol": 1e-2}
     assert job["profiling"] == {
-        "driver": str((ROOT / "scripts/profile_a3.py").resolve()),
+        "driver": str((ROOT / "skills/ascend-profiling/scripts/profile_a3.py").resolve()),
         "tool": "msprof op", "captures": 15, "aic_metrics": "BasicInfo", "warm_up": 3,
         "launch_count": 1, "replay_mode": "kernel", "kernel_name": "candidate_kernel",
         "driver_arguments": ["--kernel-name", "candidate_kernel", "--replay-mode", "kernel"],

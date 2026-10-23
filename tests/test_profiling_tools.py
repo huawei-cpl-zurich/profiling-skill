@@ -37,7 +37,7 @@ SUCCESS_LINE = "Profiling running finished. All task success."
 
 
 def load(name: str):
-    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(name, ROOT / "skills/ascend-profiling/scripts" / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader
     spec.loader.exec_module(module)
@@ -192,7 +192,7 @@ def test_sample_cli_writes_compact_outputs(tmp_path: Path):
     subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/summarize_sample_pmu.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/summarize_sample_pmu.py"),
             "--input",
             str(tmp_path),
             "--output",
@@ -269,7 +269,7 @@ def test_timeline_overlap_uses_only_common_pipe_capture(tmp_path: Path):
     subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/summarize_timelines.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/summarize_timelines.py"),
             "--pipe-timeline",
             str(common),
             "--instr",
@@ -312,7 +312,7 @@ def test_timeline_rejects_instruction_trace_at_record_cap(tmp_path: Path):
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/summarize_timelines.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/summarize_timelines.py"),
             "--instr",
             f"cube={path}",
             "--output",
@@ -331,7 +331,7 @@ def test_scalar_only_pipe_timeline_is_rejected(tmp_path: Path):
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/summarize_timelines.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/summarize_timelines.py"),
             "--pipe-timeline",
             str(path),
             "--output",
@@ -546,7 +546,7 @@ with (target / 'OpBasicInfo_1.csv').open('w', newline='') as stream:
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--kernel-name",
@@ -601,7 +601,7 @@ with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
 """,
     )
     result = subprocess.run(
-        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+        ["python3", str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
          "--kernel-name", "wanted", "--replay-mode", "application", "--msprof", str(msprof),
          "--", "python3", "case.py"],
         text=True, capture_output=True, check=True,
@@ -620,7 +620,7 @@ with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
 """,
     )
     result = subprocess.run(
-        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+        ["python3", str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
          "--kernel-name", "wanted", "--replay-mode", "application", "--msprof", str(msprof),
          "--", "python3", "case.py"],
         text=True, capture_output=True, check=True,
@@ -639,7 +639,7 @@ with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
 """,
     )
     result = subprocess.run(
-        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+        ["python3", str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
          "--kernel-name", "wanted", "--replay-mode", "application", "--msprof", str(msprof),
          "--", "python3", "case.py"],
         text=True, capture_output=True,
@@ -650,7 +650,7 @@ with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
 
 def test_a3_profile_rejects_unknown_replay_mode_before_launch(tmp_path: Path):
     result = subprocess.run(
-        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
+        ["python3", str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"), "--output", str(tmp_path / "capture"),
          "--replay-mode", "unsafe", "--", "python3", "case.py"],
         text=True, capture_output=True,
     )
@@ -672,7 +672,7 @@ with (target / 'OpBasicInfo.csv').open('w', newline='') as stream:
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--kernel-name",
@@ -701,7 +701,7 @@ def test_a3_profile_clean_success_without_csv_is_selector_miss(tmp_path: Path):
     output = tmp_path / "capture"
     result = subprocess.run(
         [
-            "python3", str(ROOT / "scripts/profile_a3.py"),
+            "python3", str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output", str(output), "--kernel-name", "missing_mix_aiv",
             "--msprof", str(msprof), "--", "python3", "case.py",
         ],
@@ -724,7 +724,7 @@ def test_a3_profile_without_selector_does_not_call_missing_csv_a_selector_miss(t
     msprof = fake_msprof(tmp_path, "pass")
     output = tmp_path / "capture"
     result = subprocess.run(
-        ["python3", str(ROOT / "scripts/profile_a3.py"), "--output", str(output),
+        ["python3", str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"), "--output", str(output),
          "--msprof", str(msprof), "--", "python3", "case.py"],
         text=True,
         capture_output=True,
@@ -740,7 +740,7 @@ def test_a3_profile_preserves_nonzero_profiler_failure(tmp_path: Path):
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--msprof",
@@ -781,7 +781,7 @@ def test_a3_profile_refuses_to_mix_with_existing_evidence(tmp_path: Path):
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--",
@@ -818,7 +818,7 @@ def test_a3_profile_rejects_file_as_output_path(tmp_path: Path):
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--",
@@ -846,7 +846,7 @@ def test_a3_profile_timeout_writes_nonduplicated_failure_evidence(tmp_path: Path
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--timeout",
@@ -877,7 +877,7 @@ def test_a3_profile_missing_msprof_writes_failure_evidence(tmp_path: Path):
     result = subprocess.run(
         [
             "python3",
-            str(ROOT / "scripts/profile_a3.py"),
+            str(ROOT / "skills/ascend-profiling/scripts/profile_a3.py"),
             "--output",
             str(output),
             "--msprof",

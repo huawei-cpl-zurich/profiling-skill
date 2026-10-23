@@ -8,8 +8,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-SCRIPT = ROOT / "scripts" / "query_triton_pipe_attribution.py"
-DATA = ROOT / "references" / "triton-pipe-attribution.json"
+SCRIPT = ROOT / "skills/ascend-profiling/scripts" / "query_triton_pipe_attribution.py"
+DATA = ROOT / "skills/ascend-profiling/references" / "triton-pipe-attribution.json"
 PROBE = ROOT / "benchmarks" / "triton_pipe_probe.py"
 
 
@@ -57,7 +57,8 @@ def test_direct_copy_lookup_preserves_compiler_provenance_and_scope():
         "triton_ascend": "23ac2717c0a38ba962cbd4a0425fc069e7ae104d",
     }
     assert result["citations"]
-    assert all(item.startswith("ref://") for item in result["citations"])
+    assert all(item.startswith("AscendNPU-IR@" + result["compiler_revisions"]["ascendnpuir"] + ":")
+               for item in result["citations"])
 
 
 def test_all_source_proven_direct_mappings_are_queryable():
@@ -149,6 +150,33 @@ def test_validate_binds_exact_inventory_identity():
         "compiler_revisions": inventory["compiler_revisions"],
         "runtime_scope": inventory["runtime_scope"],
     }
+
+
+def test_validator_rejects_conflicting_source_coordinates(tmp_path: Path):
+    for location in ('lowering_path', 'mappings'):
+        for repository, revision in (('AscendNPU-IR', '0' * 40),
+                                     ('Triton-Ascend', '0' * 40),
+                                     ('OtherCompiler', '0' * 40)):
+            inventory = json.loads(DATA.read_text())
+            citation = f'{repository}@{revision}:source.cpp:L1-L2'
+            if location == 'lowering_path':
+                inventory[location][0]['citation'] = citation
+            else:
+                inventory[location][0]['citations'] = [citation]
+            run = run_inventory_cli(tmp_path / location / repository, inventory, '--validate')
+            assert run.returncode == 2
+            assert 'declared source revision' in run.stderr
+
+
+def test_query_accepts_legacy_inventory_citations(tmp_path: Path):
+    inventory = json.loads(DATA.read_text())
+    for step in inventory['lowering_path']:
+        step['citation'] = 'ref://example/compiler/source:L1-L2'
+    for mapping in inventory['mappings']:
+        mapping['citations'] = ['ref://example/compiler/source:L1-L2']
+    run = run_inventory_cli(tmp_path, inventory, '--construct', 'gm_to_l1_copy', '--product', 'a3')
+    assert run.returncode == 0, run.stderr
+    assert json.loads(run.stdout)['status'] == 'direct'
 
 
 def test_unknown_selector_fails_clearly_without_fabricating_a_mapping():

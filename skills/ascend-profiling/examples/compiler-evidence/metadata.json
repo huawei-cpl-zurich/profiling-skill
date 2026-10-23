@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "product": "Ascend910_9382",
+  "capture_date_utc": "2026-10-22",
+  "example_source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+  "config": {
+    "case": "matmul",
+    "matrix_size": 512,
+    "tile": [
+      32,
+      32,
+      64
+    ],
+    "input_dtype": "float16",
+    "output_dtype": "float32"
+  },
+  "versions": {
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "triton": "3.5.0",
+    "triton_ascend": "3.2.2",
+    "CANN": "9.1.0",
+    "bishengir_compile": "1.2.0",
+    "bishengir_revision": "8796a8ac1508",
+    "LLVM": "19.1.7",
+    "LLVM_revision": "2430ab069eb1",
+    "msopprof": "26.1.0-56632dc4a944410c791538451dc2156a151bd105",
+    "msopscommon": "b4ffdb3d6ba7acdb7bbfcf359f6e4dd5b587a4f4"
+  },
+  "extraction": "Keep the GraphSyncSolver dump through the function closing brace; omit trailing compiler diagnostics. IR line numbers are preserved.",
+  "binding": "Debug-enabled diagnostic compilation produced byte-identical npubin to ordinary compilation for each specialization; this validates binary identity, not measured temporal overlap.",
+  "variants": {
+    "baseline": {
+      "requested_num_stages": 1,
+      "display_file": "stages1.mlir",
+      "raw_npuir_sha256": "4970a598f38a0fbf65c4f9ee81819686df216b2a0ace766217a519213fb20afd",
+      "display_sha256": "3675fc47586ceaa91dc10c7c3c06e0ad931f75cff5acef94e15c683550419567",
+      "debug_npubin_sha256": "665f642350eb5f90ddcd9c212c0eab4244248ef8b83a576847ce07fcc3795ac1",
+      "ordinary_npubin_sha256": "665f642350eb5f90ddcd9c212c0eab4244248ef8b83a576847ce07fcc3795ac1",
+      "correctness": true
+    },
+    "candidate": {
+      "requested_num_stages": 2,
+      "display_file": "stages2.mlir",
+      "raw_npuir_sha256": "117de202422d344eabb839bba8bd4d123d2b32742bd0475b0b6949888235fca4",
+      "display_sha256": "f7a385da9b4cf8fd5451b9061ddf6f655e61d1be1327175ac120d993b40e9530",
+      "debug_npubin_sha256": "10316584dab2be6a92547913131aec12efe003d1eb7e7ce3dabfbdb01091160f",
+      "ordinary_npubin_sha256": "10316584dab2be6a92547913131aec12efe003d1eb7e7ce3dabfbdb01091160f",
+      "correctness": true
+    }
+  }
+}

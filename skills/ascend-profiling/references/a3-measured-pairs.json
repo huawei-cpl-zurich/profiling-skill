@@ -1,0 +1,883 @@
+{
+  "schema_version": 1,
+  "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+  "cells": {
+    "direct": {
+      "config": {
+        "id": "direct",
+        "case": "copy",
+        "variant": "baseline"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 20.760416,
+                "median": 20.760416,
+                "min": 20.760416,
+                "p90": 20.760416
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                20.760416
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "e5cd7c86a03288c5d5d77490215c23476e10234e09d81db58f33b33ae064628d",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "99a105eab3c3f813a8d5d6377652b8e1eeafdfe21cfc532d4d0c7dbebe9e5bb6"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": null,
+        "ResourceConflictRatio": null
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "0841c62b2933f22bef77e222b7e7ed550a187f5bd4cd75a1f5aa22147229efd2"
+          },
+          "ttadapter": {
+            "sha256": "4f21b5e08ba428ef455c012714d8683570946b0919c87e7862fdf2518d09dc48"
+          },
+          "ttir": {
+            "sha256": "0557516b47050e7d8f31a0af55795bdef68725f7a597dc57b6b6d8aebd1c8fcc"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 4194304,
+          "block": 256,
+          "case": "copy",
+          "dtype": "float32",
+          "elements": 1048576,
+          "indirect": false,
+          "input_allocation_bytes": 8388608,
+          "logical_index_bytes": 0,
+          "logical_input_bytes": 4194304,
+          "logical_output_bytes": 4194304,
+          "physical_traffic": "unmeasured",
+          "stride": 1,
+          "variant": "baseline"
+        },
+        "correctness": true,
+        "device_name": "Ascend910_9382",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0+cpu",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_memory",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 26.140522,
+              "median": 26.140522,
+              "min": 26.140522,
+              "p90": 26.140522
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              26.140522
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "a6d8772bc3e89c5c2d85c66c269f6e936c2b2a09db698010a41ec0b5f111ce75",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "1c10426d72c903241e7527e98768c6e4a09cee8f410b3662d6a99c1d703ec986"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          20.760416
+        ],
+        "accepted_capture_count": 1,
+        "planned_capture_count": 3,
+        "interpretation": "Partial raw observations; no completed repeat protocol or stable speedup estimate."
+      }
+    },
+    "stride2": {
+      "config": {
+        "id": "stride2",
+        "case": "copy",
+        "variant": "candidate"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 873.217468,
+                "median": 873.217468,
+                "min": 873.217468,
+                "p90": 873.217468
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                873.217468
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "607278845db2ba8d1f4f7c4a253eec2afcce72fd123abfbf0bf1ab9612465d59",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "34ca5e55ebf4659c3b0f1d7133dbe8dee979a6e579137e4753452cfcb4345d61"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 881.017639,
+                "median": 881.017639,
+                "min": 881.017639,
+                "p90": 881.017639
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                881.017639
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "0d55f438f3bc133c57af3923d6fa23a7fdc3a01cadb8a72ed3d75be45ccaab2d",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "f9a0f6f22e118aa0f4387d6f46a74c37ed4586bede32ffa92244ee828b70c3aa"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": null,
+        "ResourceConflictRatio": null
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "0b91e0ee7f261a405d46aad8fbd06acd85a559c5ff5b87abe813e6f60ad99d11"
+          },
+          "ttadapter": {
+            "sha256": "e3e771d6c560c90c207d72a47eefd0bc390800e03ceb85e007919bba98e05f6b"
+          },
+          "ttir": {
+            "sha256": "ec5c14dec3376233b5ef1410e5c4be8f649b4bfe76169a4dbb6c8c3063467aaf"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 8388604,
+          "block": 256,
+          "case": "copy",
+          "dtype": "float32",
+          "elements": 1048576,
+          "indirect": false,
+          "input_allocation_bytes": 8388608,
+          "logical_index_bytes": 0,
+          "logical_input_bytes": 4194304,
+          "logical_output_bytes": 4194304,
+          "physical_traffic": "unmeasured",
+          "stride": 2,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910_9382",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0+cpu",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_memory",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 919.138367,
+              "median": 919.138367,
+              "min": 919.138367,
+              "p90": 919.138367
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              919.138367
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "12103ef4af312ef1ff2f71f37160f1706f6c9e6ec360849a6e4f93e9a2e6ee0f",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "f97ed6ba3d7ec4f12b243448ff89fc1aa2a7c7cc86218133de0f5e1b0d7b6a16"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          873.217468,
+          881.017639
+        ],
+        "accepted_capture_count": 2,
+        "planned_capture_count": 3,
+        "interpretation": "Partial raw observations; no completed repeat protocol or stable speedup estimate."
+      }
+    },
+    "indexed": {
+      "config": {
+        "id": "indexed",
+        "case": "gather",
+        "variant": "candidate"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 476.489532,
+                "median": 476.489532,
+                "min": 476.489532,
+                "p90": 476.489532
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                476.489532
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "e64a8fda904eb6a80d85e517a2fa004c92b8b69e717c4ae474d52a770fdee48a",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "8ff8627fcf73fd047e49cfedc4d79173db4b9582ee403b3e759bed89ab7c9b0d"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        },
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 478.649567,
+                "median": 478.649567,
+                "min": 478.649567,
+                "p90": 478.649567
+              },
+              "name": "paired_memory",
+              "sample_values_us": [
+                478.649567
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "d0cf1c3920bf7b781bb21106d72c79d3d74c2d1c4057091cddf9b6c29a2fdc67",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_memory",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "dd22696cb8172ab1889b2c702ed506d7646e1dbb0afcd90560d03040513c8858"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": null,
+        "ResourceConflictRatio": null
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "df023762718553ef49b763efab7d3c31dd65e0b1aa419b00f62fac78ca326f88"
+          },
+          "ttadapter": {
+            "sha256": "68335b8cacd70499416777fd279ccfdc266ebe55c53eed3562e10d3fba93c9a6"
+          },
+          "ttir": {
+            "sha256": "fc83b926e5a069df5ec4770de7cd291d1b4e609b997d78402db9a52fe6abf5bc"
+          }
+        },
+        "config": {
+          "accessed_input_span_bytes": 4194304,
+          "block": 256,
+          "case": "gather",
+          "dtype": "float32",
+          "elements": 1048576,
+          "indirect": true,
+          "input_allocation_bytes": 8388608,
+          "logical_index_bytes": 4194304,
+          "logical_input_bytes": 4194304,
+          "logical_output_bytes": 4194304,
+          "physical_traffic": "unmeasured",
+          "stride": 1,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910_9382",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0+cpu",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_memory",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 485.309692,
+              "median": 485.309692,
+              "min": 485.309692,
+              "p90": 485.309692
+            },
+            "name": "paired_memory",
+            "sample_values_us": [
+              485.309692
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "726df9b9727ce62f228b2c20d788e24133d0abb615bf903364beeb6e8e0a1bd4",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "8f664e853049783c5e37eb58549f2487298d1ff903506ff0ee40a08fabb63961"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          476.489532,
+          478.649567
+        ],
+        "accepted_capture_count": 2,
+        "planned_capture_count": 3,
+        "interpretation": "Partial raw observations; no completed repeat protocol or stable speedup estimate."
+      }
+    },
+    "stages1": {
+      "config": {
+        "id": "stages1",
+        "case": "matmul",
+        "variant": "baseline"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 36.680733,
+                "median": 36.680733,
+                "min": 36.680733,
+                "p90": 36.680733
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                36.680733
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "f289442f345d46a9200f244684d50c61ef51657cb303734f4ef89ca215f20da1",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "9c53758b07c5170d05fda990240d5ff731d4ce3db589ed64bd2700811a4e15e2"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": null,
+        "ResourceConflictRatio": null
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "665f642350eb5f90ddcd9c212c0eab4244248ef8b83a576847ce07fcc3795ac1"
+          },
+          "ttadapter": {
+            "sha256": "93e7eb02d04d898e1efcf89146b01dba97776b541e688071b52d36a34e2955aa"
+          },
+          "ttir": {
+            "sha256": "3adfab4bd5e8986ac386e63d38e27fefb41a58633009bd08e255a6ba27ca62f5"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 2097152,
+          "output_dtype": "float32",
+          "requested_num_stages": 1,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 268435456,
+          "variant": "baseline"
+        },
+        "correctness": true,
+        "device_name": "Ascend910_9382",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0+cpu",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_matmul",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 35.980721,
+              "median": 35.980721,
+              "min": 35.980721,
+              "p90": 35.980721
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              35.980721
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "3c7f60fa9ce3458d4ff53488a7246931be5e188e68f32ebb462665675629c3ef",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "94ac3d2328acbb4186859078ded417b759ca0dc41206232dd9227645a13b6801"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          36.680733
+        ],
+        "accepted_capture_count": 1,
+        "planned_capture_count": 3,
+        "interpretation": "Partial raw observations; no completed repeat protocol or stable speedup estimate."
+      }
+    },
+    "stages2": {
+      "config": {
+        "id": "stages2",
+        "case": "matmul",
+        "variant": "candidate"
+      },
+      "timings": [
+        {
+          "kernels": [
+            {
+              "duration_us": {
+                "max": 34.240685,
+                "median": 34.240685,
+                "min": 34.240685,
+                "p90": 34.240685
+              },
+              "name": "paired_matmul",
+              "sample_values_us": [
+                34.240685
+              ],
+              "samples": 1
+            }
+          ],
+          "metric": "BasicInfo",
+          "msprof_log_sha256": "08dc61f3f582584f433d30bdb1f0b212c54c788cd0cf9583c568249fa3c2d1d5",
+          "profiler": "msprof-op",
+          "protocol": {
+            "kernel_selector": "paired_matmul",
+            "launch_count": 1,
+            "replay_mode": "kernel",
+            "warm_up": 3
+          },
+          "schema_version": 1,
+          "sources": [
+            {
+              "matched_rows": 1,
+              "sha256": "8f390c89c55da37c2a3cc2499b2edb0ca8715017c3485d8b68db18cefcc3c92d"
+            }
+          ],
+          "status": "success",
+          "target_family": "Ascend-A2-A3",
+          "timing_scope": "device-task",
+          "units": {
+            "duration": "us"
+          }
+        }
+      ],
+      "diagnostics": {
+        "PipeUtilization": null,
+        "ResourceConflictRatio": null
+      },
+      "correctness": {
+        "compiler_artifacts": {
+          "npubin": {
+            "sha256": "10316584dab2be6a92547913131aec12efe003d1eb7e7ce3dabfbdb01091160f"
+          },
+          "ttadapter": {
+            "sha256": "93e7eb02d04d898e1efcf89146b01dba97776b541e688071b52d36a34e2955aa"
+          },
+          "ttir": {
+            "sha256": "3adfab4bd5e8986ac386e63d38e27fefb41a58633009bd08e255a6ba27ca62f5"
+          }
+        },
+        "config": {
+          "actual_buffering": "verify emitted compiler artifacts",
+          "case": "matmul",
+          "dtype": "float16",
+          "logical_minimum_bytes": 2097152,
+          "output_dtype": "float32",
+          "requested_num_stages": 2,
+          "shape": [
+            512,
+            512,
+            512
+          ],
+          "tile": [
+            32,
+            32,
+            64
+          ],
+          "useful_flops": 268435456,
+          "variant": "candidate"
+        },
+        "correctness": true,
+        "device_name": "Ascend910_9382",
+        "iterations": 1,
+        "schema_version": 1,
+        "selector": "discover exact exported name with BasicInfo",
+        "source_sha256": "2e2cc3505031f64961127edbef72af660aad7ac35bb2407d7a0e574f23109d1c",
+        "versions": {
+          "torch": "2.10.0+cpu",
+          "torch-npu": "2.10.0",
+          "triton": "3.5.0",
+          "triton-ascend": "3.2.2"
+        }
+      },
+      "selector": "paired_matmul",
+      "discovery": {
+        "kernels": [
+          {
+            "duration_us": {
+              "max": 40.300804,
+              "median": 40.300804,
+              "min": 40.300804,
+              "p90": 40.300804
+            },
+            "name": "paired_matmul",
+            "sample_values_us": [
+              40.300804
+            ],
+            "samples": 1
+          }
+        ],
+        "metric": "BasicInfo",
+        "msprof_log_sha256": "74ccc5f450257d3783741cc56fff8eb7a8fa44c7a9fe9ed58f9a011e9fbfe4b6",
+        "profiler": "msprof-op",
+        "protocol": {
+          "kernel_selector": null,
+          "launch_count": 5000,
+          "replay_mode": "kernel",
+          "warm_up": 0
+        },
+        "schema_version": 1,
+        "sources": [
+          {
+            "matched_rows": 1,
+            "sha256": "7a476ffcd5073c67e7c2541b13f4c724d968bbaddfea2f8dde010d9e5e8a1482"
+          }
+        ],
+        "status": "success",
+        "target_family": "Ascend-A2-A3",
+        "timing_scope": "device-task",
+        "units": {
+          "duration": "us"
+        }
+      },
+      "summary": {
+        "samples_us": [
+          34.240685
+        ],
+        "accepted_capture_count": 1,
+        "planned_capture_count": 3,
+        "interpretation": "Partial raw observations; no completed repeat protocol or stable speedup estimate."
+      }
+    }
+  },
+  "capture_order": [
+    {
+      "sequence": 0,
+      "cell": "direct",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 1,
+      "cell": "stride2",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 2,
+      "cell": "indexed",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 3,
+      "cell": "stages1",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 4,
+      "cell": "stages2",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 5,
+      "cell": "direct",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 6,
+      "cell": "stride2",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 7,
+      "cell": "indexed",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 8,
+      "cell": "stages1",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 9,
+      "cell": "stages2",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 10,
+      "cell": "stride2",
+      "metric": "BasicInfo"
+    },
+    {
+      "sequence": 11,
+      "cell": "indexed",
+      "metric": "BasicInfo"
+    }
+  ],
+  "measurement_date_utc": "2026-10-22",
+  "device_conditions": "Accepted captures passed healthy/idle pre-dispatch checks on one Ascend910_9382 device. The device later ceased to be idle; the run stopped. These checks do not establish continuous exclusive isolation throughout every capture.",
+  "run_status": "incomplete",
+  "limitation": "Only seven planned timing captures were accepted. The intended three captures per cell, diagnostic groups, and size calibration did not complete. No stable speedup, capacity saturation, or calibrated empirical envelope is established.",
+  "capture_contract": {
+    "paired_timing": "Accepted independent BasicInfo captures: direct1,stride2=2,indexed2,stages1=1,stages2=1; warmup3,launch_count1,kernel replay,one application launch. Raw samples retained; intended three per cell not completed.",
+    "diagnostics": "Not collected for this paired run; unavailable is not zero.",
+    "calibration": "No size-sweep calibration collected.",
+    "cache": "Warmup/replay reuses each capture allocation; physical DRAM traffic and cache residence are unmeasured.",
+    "shared_baseline": "direct is shared by copy and identity-index gather comparisons: gather baseline uses the identical direct specialization, input layout, count and initialization."
+  },
+  "calibration": null,
+  "source_record_sha256": "6069dd306e2151d2351cd5b33451ff979962f3eed5ef4b91ef98c25d9ea4ca88",
+  "diagnostic_compiler_capture_versions": {
+    "CANN": "9.1.0",
+    "msopprof": "26.1.0-56632dc4a944410c791538451dc2156a151bd105",
+    "msopscommon": "b4ffdb3d6ba7acdb7bbfcf359f6e4dd5b587a4f4",
+    "bishengir_compile": "1.2.0",
+    "bishengir_revision": "8796a8ac1508",
+    "LLVM": "19.1.7",
+    "LLVM_revision": "2430ab069eb1",
+    "hivmc": "0.3.0",
+    "hivmc_revision": "4ace068b0b12"
+  },
+  "version_scope": "Timing package versions are retained in each correctness record. Toolkit/compiler versions were queried for the separately binary-matched diagnostic compiler capture; they were not independently queried during each timing capture."
+}

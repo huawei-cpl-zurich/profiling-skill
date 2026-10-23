@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "product": "A3",
+  "capture_date_utc": "2026-10-22",
+  "kernel_selector": "streaming_matmul_add_kernel_mix_aic",
+  "pipe_csv_sha256": "e1cee99c65323908f14e1d8e1ecda60d8da847044a69fa6d24d0ebf3eb024b1d",
+  "basic_csv_sha256": "3b0f4bfabaa9847b28b12433d9f17650df682cff74109baea6338eb3f907a0da",
+  "same_capture_basic_duration_us": 17.399652,
+  "reported_frequency_MHz": 1800,
+  "rows": [
+    {
+      "block_id": "0",
+      "sub_block_id": "cube0",
+      "aic_time(us)": "12.689445",
+      "aic_total_cycles": "22841",
+      "aic_cube_ratio": "0.040000",
+      "aic_cube_time(us)": "0.680000",
+      "aic_mte2_ratio": "0.663235",
+      "aic_mte2_time(us)": "11.275000"
+    },
+    {
+      "block_id": "0",
+      "sub_block_id": "vector0",
+      "aiv_time(us)": "12.597222",
+      "aiv_total_cycles": "22675",
+      "aiv_vec_ratio": "0.006928",
+      "aiv_vec_time(us)": "0.117778",
+      "aiv_mte2_ratio": "0.057680",
+      "aiv_mte2_time(us)": "0.980556"
+    }
+  ],
+  "interpretation": "Reported activity ratios and active times imply approximately 17us, which differs from both per-unit row duration and same-capture BasicInfo duration. No normalization denominator is reconstructed."
+}

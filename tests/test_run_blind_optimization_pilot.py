@@ -67,7 +67,9 @@ class PilotTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.source = self.root / 'source'
         self.source.mkdir()
-        for relative in [*('scripts/' + name for name in pilot.HELPERS), *pilot.GUIDANCE,
+        for relative in [*('scripts/' + name for name in pilot.HELPERS),
+                         *(str(pilot.SKILL_ROOT / name) for name in
+                           ('SKILL.md', 'references/guide.json', 'scripts/helper.py')),
                          'benchmarks/blind_before_tasks.py',
                          'benchmarks/natural_before_tasks.py',
                          'benchmarks/natural_task_support/runner.py',
@@ -83,6 +85,7 @@ class PilotTests(unittest.TestCase):
         (self.source / 'benchmarks/natural_before_tasks.py').write_text(
             EXPORTER.replace('starting kernel', 'natural starting kernel'))
         # These source-only answers must not enter the guidance snapshot.
+        (self.source / 'references').mkdir()
         (self.source / 'references/answers.json').write_text('private')
         self.output = self.root / 'cohort'
         self.model = dict(name='explicit-model', reasoning_effort='high')
@@ -90,6 +93,21 @@ class PilotTests(unittest.TestCase):
 
     def prepare(self, **kwargs):
         return pilot.prepare(self.source, self.output, self.model, self.forbidden, **kwargs)
+
+    def test_freezes_complete_skill_from_selected_source(self):
+        resource = self.source / pilot.SKILL_ROOT / 'references/extra.json'
+        resource.write_text(json.dumps({'selected_source': True}))
+        self.prepare()
+        frozen = self.output / 'skill/references/extra.json'
+        self.assertEqual(frozen.read_bytes(), resource.read_bytes())
+        manifest = json.loads((self.output / 'manifest.json').read_text())
+        self.assertIn('skill/references/extra.json', manifest['files'])
+
+    def test_missing_skill_entrypoint_fails_before_creating_output(self):
+        (self.source / pilot.SKILL_ROOT / 'SKILL.md').unlink()
+        with self.assertRaisesRegex(FileNotFoundError, 'skill entrypoint missing'):
+            self.prepare()
+        self.assertFalse(self.output.exists())
 
     def test_paired_execution_retains_failures_without_retries(self):
         self.prepare(budget_seconds=1200, task_suite='natural')
@@ -147,7 +165,8 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(subprocess.run(command, capture_output=True).returncode, 0)
         self.assertFalse((self.output / 'events.jsonl').exists())
         self.assertEqual({str(p.relative_to(self.output / 'skill')) for p in
-                          (self.output / 'skill').rglob('*') if p.is_file()}, set(pilot.GUIDANCE))
+                          (self.output / 'skill').rglob('*') if p.is_file()},
+                         {'SKILL.md', 'references/guide.json', 'scripts/helper.py'})
         self.assertFalse(any(self.output.rglob('cpl-remote')))
         self.assertEqual(json.loads((self.output / 'model.json').read_text()), self.model)
         manifest = json.loads((self.output / 'manifest.json').read_text())
@@ -162,8 +181,7 @@ class PilotTests(unittest.TestCase):
         self.assertFalse((self.output / 'started.json').exists())
 
     def test_missing_source_can_be_repaired_without_reserving_output(self):
-        for relative in ('scripts/profile_device.py', 'references/a2-a3-msprof-op.md',
-                         'benchmarks/blind_task_support/runner.py'):
+        for relative in ('scripts/profile_device.py', 'benchmarks/blind_task_support/runner.py'):
             with self.subTest(source=relative):
                 original = self.source / relative
                 contents = original.read_bytes()

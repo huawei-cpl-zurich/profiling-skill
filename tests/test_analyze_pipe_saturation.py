@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
-SCRIPT = ROOT / "scripts" / "analyze_pipe_saturation.py"
+SCRIPT = ROOT / "skills/ascend-profiling/scripts" / "analyze_pipe_saturation.py"
 
 
 def model(product: str = "a5") -> dict:

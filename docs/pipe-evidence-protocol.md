@@ -114,6 +114,9 @@ The frozen candidate is reachable through the profiling-skill repository's
 open PR121, branch `codex/profiling-lessons-update`, and its exact
 [commit](https://github.com/huawei-cpl-zurich/profiling-skill/commit/294f76fc602f9d121cb9826bfcdc6c9e524c1bd2).
 It need not be installed globally or vendored into this diagnostic repository.
+This is historical reproduction at the pinned revision below; its root-level
+skill paths are intentionally preserved. Current installations copy
+`skills/ascend-profiling/` instead.
 From a separate local checkout of that repository, fetch the explicit PR ref,
 verify the expected revision, and archive only the frozen pilot allowlist:
 

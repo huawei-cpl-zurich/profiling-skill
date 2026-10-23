@@ -242,7 +242,7 @@ def make_job(request: dict[str, Any], benchmark: str, candidate: Path, root: Pat
             raise ValueError("profile job requires a kernel selector")
         replay_mode = spec["replay_mode"] if product == "a3" else "kernel"
         job["profiling"] = {
-            "driver": str((root / "scripts/profile_a3.py").resolve()),
+            "driver": str((root / "skills/ascend-profiling/scripts/profile_a3.py").resolve()),
             "tool": "msprof op",
             "captures": len(request["cases"]) * request["repeats"],
             "aic_metrics": "BasicInfo",

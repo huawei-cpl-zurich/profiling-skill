@@ -289,3 +289,30 @@ profile-case preparation and validation. Exported `correctness_provenance`
 identifies the original call and source hash; reused reports contain no fresh
 backend-check diagnostics. Failed checks or measurements invalidate that proof.
 Final benchmark case coverage, samples, and role deadlines remain unchanged.
+
+For a new distinct contract-2 kernel the controller now acquires the required
+profile before starting the analyzer model. The managed tool performs staging,
+checks, capture and same-handle observation inside an acquisition subdeadline
+that ends at the original reporting reserve. Process termination allowance is
+also reserved. The model receives only the remaining original role allowance;
+its execution context keeps the original role deadline. The warm tool worker may
+expire at the earlier acquisition cutoff, so further device tools are not
+promised during report writing.
+
+`required_profile` in the read-only current context identifies the exact capture
+or retained failure/observation state. A successful capture must be cited in the
+report. `required-profile.json` is retained with experiment diagnostics and the
+immutable round record, including the actual current-source tool attempt. A lost
+observer resumes the original call; dispatch intent without a recoverable call
+requires observation and never permits another dispatch. Unchanged kernels use
+retained evidence, while actors, legacy campaigns and preflight checks skip this
+acquisition. Failed acquisitions remain honest unavailable reports.
+
+If the controller stops during required acquisition, `Campaign.run` can reattach
+that analyzer before model dispatch. It verifies the retained frozen inputs,
+restores the private original execution context, and observes the original call
+without granting a new budget. An expired deadline produces a terminal timeout
+and owned-work cleanup without starting a model. The controller atomically saves
+model-dispatch intent before launching it; an existing intent or missing trusted
+original clock remains observation-required and never authorizes a second model.
+Both clock and dispatch audit files are retained with experiment diagnostics.

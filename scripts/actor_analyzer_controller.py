@@ -14,7 +14,7 @@ import tempfile
 import threading
 import time
 
-from blind_optimization_launcher import BlindLauncher, LaunchError, write_json
+from blind_optimization_launcher import BlindLauncher, LaunchError, write_json, execute
 from actor_analyzer_contract import build_prompt, validate_analysis
 import analyzer_history
 
@@ -226,6 +226,34 @@ class RoleLauncher(BlindLauncher):
         self.finish_reserve_seconds = min(120, budget // 5)
 
     def prepare(self):
+        if getattr(self, 'resume_before_agent', False):
+            self.workspace = self.root / 'candidate-snapshot'
+            self.frozen, self.state = self.root / 'frozen', self.root / 'codex-state'
+            self.wrapper, self.journal = self.root / 'experiment-tool', self.root / 'commands.jsonl'
+            self.reports = self.root / 'reports'
+            expected = subprocess.check_output(['git', '-C', str(self.campaign.workspace),
+                                                 'show', self.commit + ':candidate.py'])
+            if candidate_hash(self.workspace) != hashlib.sha256(expected).hexdigest():
+                raise LaunchError('retained analyzer snapshot differs from frozen candidate')
+            for path in (self.frozen / 'prompt.md', self.wrapper, self.state / 'auth.json', self.reports):
+                if not path.exists():
+                    raise LaunchError('incomplete retained analyzer preparation')
+            if digest(self.frozen / 'prompt.md') != digest(self.prompt_source):
+                raise LaunchError('retained analyzer prompt changed')
+            if self.skill_source and skill_manifest(self.frozen / 'skill') != skill_manifest(self.skill_source):
+                raise LaunchError('retained analyzer skill changed')
+            for name, expected in self.campaign.config.get('profiling_skills', {}).items():
+                if name != 'ascend-profiling' and skill_manifest(self.frozen / 'profiling-skills' / name) != expected:
+                    raise LaunchError('retained analyzer profiling inputs changed')
+            config = json.loads((self.root / 'tool-config.json').read_text())
+            if config != dict(workspace=str(self.workspace), command=self.campaign.tool_command,
+                              campaign=str(self.campaign.root)):
+                raise LaunchError('retained analyzer tool configuration changed')
+            self.socket_temporary = tempfile.TemporaryDirectory(prefix='blind-tool-')
+            self.socket_dir = Path(self.socket_temporary.name)
+            self.tool_command = [sys.executable, str(Path(__file__).resolve()), 'tool',
+                                 str(self.root / 'tool-config.json')]
+            return
         super().prepare()
         # Bootstrap is the launcher's own newly-created directory, never a user
         # worktree. Both roles instead see one persistent experiment history.
@@ -270,6 +298,11 @@ class RoleLauncher(BlindLauncher):
         directory = self.workspace.parent / 'tool-state'
         save(self.root / 'owned-tools.json', {'directory': str(directory),
                                               'existing': [p.name for p in directory.glob('*')]})
+
+    def before_agent(self):
+        if self.role == 'analyzer' and self.campaign.analysis_contract == 2:
+            from analyzer_profile_acquisition import acquire
+            acquire(self, execute, save)
 
     def launch(self, preflight_only=False):
         done, cleanup_lock = threading.Event(), threading.Lock()
@@ -463,7 +496,9 @@ class Campaign:
         retain_result(phase, result)
 
     def launch_role(self, campaign, phase, role, budget, commit):
-        return RoleLauncher(self, phase, role, budget, commit).launch()
+        launcher = RoleLauncher(self, phase, role, budget, commit)
+        launcher.resume_before_agent = phase.exists()
+        return launcher.launch()
 
     def finish_phase(self, phase, role, entry, state):
         if role == 'analyzer' and self.analysis_contract == 2:
@@ -485,7 +520,8 @@ class Campaign:
         archive = self.workspace / 'experiments' / phase.name
         archive.mkdir(parents=True, exist_ok=True)
         for name in ('commands.jsonl', 'receipt.json', 'agent.jsonl', 'agent.stderr',
-                     'qualifications.jsonl', 'cleanup.json'):
+                     'qualifications.jsonl', 'cleanup.json', 'required-profile.json',
+                     'role-execution.json', 'model-dispatch.json'):
             if (phase / name).is_file():
                 shutil.copyfile(phase / name, archive / name)
         if role == 'actor':
@@ -552,8 +588,19 @@ class Campaign:
                     attempted = any(item.get('request', {}).get('verb', item.get('request', {}).get('operation')) == 'pipes'
                                     and item.get('request', {}).get('source_sha256') == expected_source
                                     for item in attempts)
+                    required_path = phase / 'required-profile.json'
+                    required = json.loads(required_path.read_text()) if required_path.is_file() else {}
+                    attempted |= (required.get('source_sha256') == expected_source
+                                  and required.get('command_dispatched') is True
+                                  and required.get('profile_attempt_arguments') == ['pipes'])
                     if ctx['status'] != 'unchanged' and not attempted:
                         raise ValueError('new verified kernel requires a recorded supplied-tool profile attempt')
+                    if required.get('state') == 'completed' and required.get('evidence'):
+                        acquired_path = phase / 'candidate-snapshot' / required['evidence']
+                        acquired = json.loads(acquired_path.read_text())
+                        if any(item.get('pipe_rows') for item in acquired.get('captures', [])) and not any(
+                                item['kind'] == 'profile' and item['path'] == required['evidence'] for item in report['evidence']):
+                            raise ValueError('analysis must cite the controller-acquired profile')
                     if ctx['status'] == 'unchanged' and not attempted:
                         repeated = json.loads((self.history / f"round-{ctx['repeated_round']}/record.json").read_text())
                         acquisitions = {str(i): item for i, item in enumerate(repeated['acquisitions'])}
@@ -574,6 +621,8 @@ class Campaign:
                               source_sha256=hashlib.sha256(source).hexdigest(),
                               analysis_valid=entry['analysis_valid'],
                               analysis_error=entry.get('analysis_error'),
+                              required_profile=json.loads((phase / 'required-profile.json').read_text())
+                                  if (phase / 'required-profile.json').is_file() else None,
                               evidence_sha256=entry.get('evidence_sha256', {}),
                               acquisitions=list(acquisitions.values()) if entry['analysis_valid'] else [],
                               bottlenecks=report['bottlenecks'] if entry['analysis_valid'] else [])
@@ -617,8 +666,15 @@ class Campaign:
                                     return {**state, 'state': 'observation-required', 'pending_phase': name}
                             continue
                         if not (phase / 'receipt.json').exists():
-                            return {**state, 'state': 'observation-required', 'pending_phase': name}
-                        result = json.loads((phase / 'receipt.json').read_text())
+                            recoverable = (role == 'analyzer' and self.analysis_contract == 2
+                                and (phase / 'role-execution.json').is_file()
+                                and not (phase / 'model-dispatch.json').exists())
+                            if not recoverable:
+                                return {**state, 'state': 'observation-required', 'pending_phase': name}
+                            result = self.runner(self, phase, role, self.analyzer_budget, entry['candidate_commit'])
+                            save(phase / 'receipt.json', result)
+                        else:
+                            result = json.loads((phase / 'receipt.json').read_text())
                     else:
                         commit = state['verified']
                         if role == 'actor' and commit:

@@ -39,17 +39,22 @@ def shutdown(root, grace=3):
             raise RuntimeError('ambiguous phase worker identity')
         worker = matches[0] if matches else None
     owned = {worker['pid']: worker} if worker else {}
-    # Capture attributable descendants before reparenting. Never select peers.
-    changed = True
-    while changed:
-        changed = False
-        for path in Path('/proc').iterdir():
-            if path.name.isdigit() and int(path.name) not in owned:
-                value = identity(int(path.name))
-                if value and value['ppid'] in owned:
-                    owned[value['pid']] = value
-                    changed = True
+    def capture_descendants():
+        # Compiler/profiler work can spawn during cooperative grace. Refresh
+        # attribution before every wait/escalation, while its parent is pinned.
+        changed = True
+        while changed:
+            changed = False
+            parents = {pid for pid, pinned in owned.items()
+                       if (now := identity(pid)) and now['start'] == pinned['start']}
+            for path in Path('/proc').iterdir():
+                if path.name.isdigit() and int(path.name) not in owned:
+                    value = identity(int(path.name))
+                    if value and value['ppid'] in parents:
+                        owned[value['pid']] = value
+                        changed = True
     def alive():
+        capture_descendants()
         result = []
         for pid, pinned in owned.items():
             now = identity(pid)

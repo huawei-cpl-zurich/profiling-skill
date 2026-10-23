@@ -79,6 +79,43 @@ def test_shutdown_refuses_reused_or_unowned_identity(tmp_path):
         peer.wait()
 
 
+def test_shutdown_includes_child_created_during_cooperative_grace(tmp_path):
+    import os
+    import signal
+    from model_phase_shutdown import identity
+    root = tmp_path / 'phase'
+    root.mkdir()
+    script = root / 'execute-phase.py'
+    script.write_text('''import os,json,time,subprocess,sys
+from pathlib import Path
+root=Path.cwd()
+(root/'worker.json').write_text(json.dumps(dict(pid=os.getpid(),start=Path('/proc/self/stat').read_text().rsplit(')',1)[1].split()[19])))
+while not (root/'stop').exists():time.sleep(.005)
+child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(30)'])
+(root/'late-child.json').write_text(json.dumps(dict(pid=child.pid)))
+while True:time.sleep(.05)
+''')
+    owned = subprocess.Popen([sys.executable, str(script)], cwd=root)
+    late = None
+    try:
+        for _ in range(100):
+            if (root / 'worker.json').exists(): break
+            time.sleep(.01)
+        result = shutdown(root, grace=.2)
+        late = json.loads((root / 'late-child.json').read_text())['pid']
+        assert result['worker_closed'] is True
+        assert late in result['owned_pids']
+        assert identity(late) is None or identity(late)['state'] == 'Z'
+    finally:
+        if late is None and (root / 'late-child.json').exists():
+            late = json.loads((root / 'late-child.json').read_text())['pid']
+        for pid in (owned.pid, late):
+            if pid and identity(pid):
+                try: os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+        owned.wait(timeout=2)
+
+
 def test_uncertain_shutdown_dispatch_never_duplicates(tmp_path):
     state = tmp_path / 'state'
     state.mkdir()

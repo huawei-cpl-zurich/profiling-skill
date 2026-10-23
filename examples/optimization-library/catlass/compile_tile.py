@@ -15,6 +15,8 @@ PIN = '40aced927fdaaa0f3eaa9c6f5c5d859e06392f55'
 def compile_pair(catlass, output, *, source=None, variants=None):
     catlass, output = Path(catlass).resolve(), Path(output).resolve()
     manifest = json.loads((catlass/'manifest.json').read_text())
+    if manifest.get('revision') != PIN:
+        raise ValueError('filtered source revision must match the pinned Catlass revision')
     for entry in manifest['files']:
         if digest(catlass/entry['file']) != entry['sha256']:
             raise ValueError(f'filtered source checksum mismatch: {entry["file"]}')

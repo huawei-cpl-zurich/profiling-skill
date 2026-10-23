@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -105,6 +106,28 @@ class NativeBridgeTests(unittest.TestCase):
             module.verify_b_layout(self.binary,True)
         self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(),0)
 
+    def test_swapped_arm_with_matching_manifest_is_rejected_before_transfer(self):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/tile_adapter.py'
+        spec = importlib.util.spec_from_file_location('native_tile_arm',path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        source = self.root/'swapped.cpp'
+        source.write_text(SOURCE.replace('native_add','wave1_tile_after'))
+        binary = self.root/'row-before.so'
+        build_shared(['c++','-shared','-fPIC',str(source),'-o',str(binary)],
+            source_paths=[source],binary=binary,output=self.root/'build-row-before',
+            source_revision=module.PIN)
+        adapter = module.Adapter(self.root,20)
+        case = dict(family='05',m=16,n=16,k=16,seed=71,b_layout='row')
+        fixture = adapter.make_case(case)
+        module.verify_b_layout(binary,False,'after')
+        with patch.dict(sys.modules,{'torch_npu':object()}), patch.object(torch.Tensor,'npu',
+                side_effect=AssertionError('transfer before arm validation'),create=True):
+            with self.assertRaisesRegex(ValueError,'compiled kernel arm'):
+                adapter.prepare('before',case,fixture,self.root)
+        self.assertEqual(ctypes.CDLL(str(binary)).launch_count(),0)
+
     def test_explicit_column_input_uses_dense_physical_pointer_order(self):
         column = torch.tensor([[10.,20.],[30.,40.]]).T.contiguous().T
         arm = self.arm(inputs=[torch.arange(4.),column], column_major_inputs=(1,))
@@ -163,6 +186,25 @@ class TileAdapterTests(unittest.TestCase):
             self.assertEqual(k, 6144)
         with self.assertRaises(ValueError):
             self.module.balanced_shape(0)
+
+    def test_filtered_revision_rejected_before_compiler_discovery(self):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/compile_tile.py'
+        spec = importlib.util.spec_from_file_location('native_tile_compile',path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root/'header.hpp'
+            source.write_text('valid source bytes')
+            manifest = dict(files=[dict(file=source.name,sha256=module.digest(source))])
+            for revision in (None,'a-different-revision'):
+                with self.subTest(revision=revision):
+                    if revision is not None: manifest['revision']=revision
+                    (root/'manifest.json').write_text(json.dumps(manifest))
+                    with patch.object(module.shutil,'which',side_effect=AssertionError('compiler discovery reached')):
+                        with self.assertRaisesRegex(ValueError,'filtered source revision'):
+                            module.compile_pair(root,root/'output')
 
 
 

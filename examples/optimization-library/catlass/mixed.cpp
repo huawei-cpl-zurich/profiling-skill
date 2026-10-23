@@ -60,7 +60,7 @@ using PlainKernel = Gemm::Kernel::BasicMatmul<BlockMmadType,void,Scheduler>;
 #if AFTER
 #define ENTRY wave1_add_fused
 extern "C" CATLASS_GLOBAL void ENTRY(AddKernel::Params params,uint64_t sync) {
-    AscendC::SetSyncBaseAddr(sync); AddKernel op; op(params);
+    AscendC::SetSyncBaseAddr(*(__gm__ uint64_t*)sync); AddKernel op; op(params);
 }
 #else
 #define ENTRY wave1_add_matmul
@@ -108,7 +108,7 @@ using CType = Gemm::GemmType<half,InputLayout>;
 using BlockMmadType = Gemm::Block::BlockMmad<Policy,L1TileShape,L0TileShape,AType,BType,CType>;
 using PaddingKernel = Gemm::Kernel::OptimizedMatmul<PrologueA,PrologueB,BlockMmadType,void,Scheduler>;
 extern "C" CATLASS_GLOBAL void ENTRY(PaddingKernel::Params params,uint64_t sync) {
-    AscendC::SetSyncBaseAddr(sync); PaddingKernel op; op(params);
+    AscendC::SetSyncBaseAddr(*(__gm__ uint64_t*)sync); PaddingKernel op; op(params);
 }
 #endif
 static uint32_t m_,n_,k_,cores_;

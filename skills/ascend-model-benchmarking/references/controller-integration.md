@@ -130,3 +130,34 @@ Active compilation detection and input mutation checks still apply to both arms.
 The repeated controller forwards this option unchanged, records execution modes,
 and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
 counts, mean and sample standard deviation are unchanged.
+
+
+Final latency reports may explicitly select `--profile-policy optional`; the default
+`required` retains strict paired-profile acquisition. Optional runs still require
+validated execution in each explicitly selected mode and an independent candidate capture
+that identifies every submitted kernel in every iteration. They verify candidate
+identity, save unprofiled paired latency, then attempt baseline profiling. Only
+explicit `CaptureError` / `AccountingError` profile failures make baseline profile
+metrics unavailable. Execution failures, recompilation and input mutation remain
+fatal; a saved latency artifact from a subsequently failed run is diagnostic only.
+
+Each case records `profile_status` per arm and `metric_status` per measurement
+(`complete` or `unavailable`). Unavailable busy values and paired busy speedups
+are omitted rather than filled with zero. Repeated summaries retain independent
+`n`, `requested_repetitions`, `completed_repetitions`, `unavailable_repetitions`
+and `state` for every metric. Ten valid latency repetitions can therefore coexist
+with fewer profile repetitions; an incomplete profile metric must not be reported
+as a complete ten-run measurement. Failed correctness or candidate identity runs
+are never admitted to repeated statistics or aggregate rankings.
+
+Optional warmed acquisitions perform seventy unprofiled baseline replay calls
+before paired timing to match the candidate identity capture's twenty warmups
+and fifty forwards. Compilation and input immutability remain checked outside
+timing. Baseline trace acquisition follows saved latency. This equal replay depth
+applies only to the explicitly warmed workflow, not the primary 1+10 protocol.
+
+Optional warmed acquisitions retain each arm's busy-time metrics, but omit paired
+busy-time speedups and their geomean: the deferred baseline capture has a different
+replay depth from the candidate capture. `profile_replay_depth_paired` is false
+and the busy-time comparison is explicitly unavailable even when both captures
+succeed. Use the required policy for paired busy-time speedups.

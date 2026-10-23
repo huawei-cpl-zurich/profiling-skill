@@ -27,19 +27,36 @@ def save(path, value):
             temporary.unlink(missing_ok=True)
 
 
+METRIC_NAMES = tuple(arm + '_latency_ms' for arm in ('baseline', 'candidate')) + tuple(
+    arm + '_' + kind + '_busy_us' for arm in ('baseline', 'candidate')
+    for kind in ('all_kernel', 'device', 'aicpu')) + ('latency_speedup', 'busy_time_speedup')
+
+
 def metrics(case):
     values = {}
-    for arm in ('baseline', 'candidate'):
-        values[arm + '_latency_ms'] = case['latency'][arm]['median_ms']
-        for kind in ('all_kernel', 'device', 'aicpu'):
-            values[arm + '_' + kind + '_busy_us'] = case[kind + '_busy_median_us'][arm]
-    values['latency_speedup'] = case['latency']['latency_speedup']
-    values['busy_time_speedup'] = case['busy_time_speedup']
-    for name, value in values.items():
+    statuses = case.get('metric_status', {})
+    for name in METRIC_NAMES:
+        status = statuses.get(name, 'complete')
+        if status == 'unavailable':
+            if name.endswith('_latency_ms') or name == 'latency_speedup':
+                raise ValueError('complete run requires paired latency')
+            continue
+        if status != 'complete':
+            raise ValueError('unknown metric status: ' + name)
+        if name.endswith('_latency_ms'):
+            value = case['latency'][name.split('_')[0]]['median_ms']
+        elif name == 'latency_speedup':
+            value = case['latency']['latency_speedup']
+        elif name == 'busy_time_speedup':
+            value = case[name]
+        else:
+            arm, kind = name.split('_', 1)
+            value = case[kind.replace('_busy_us', '_busy_median_us')][arm]
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ValueError('non-finite/negative metric: ' + name)
         if value == 0 and 'aicpu' not in name:
             raise ValueError('nonpositive metric: ' + name)
+        values[name] = value
     return values
 
 
@@ -98,8 +115,12 @@ def aggregate(reports, requested=10, *, running=0):
     result['unattempted_repetitions'] = requested - result['attempted_repetitions']
     for name, measurements in rows.items():
         summary = {}
-        for key, values in measurements.items():
-            summary[key] = dict(values=values, n=len(values), mean=statistics.mean(values),
+        for key in METRIC_NAMES:
+            values = measurements.get(key, [])
+            summary[key] = dict(state='complete' if len(values) == requested else 'incomplete',
+                requested_repetitions=requested, completed_repetitions=len(values),
+                unavailable_repetitions=result['completed_repetitions'] - len(values),
+                values=values, n=len(values), mean=statistics.mean(values) if values else None,
                 sample_stddev=statistics.stdev(values) if len(values) > 1 else None,
                 unit='ms' if key.endswith('_ms') else 'us' if key.endswith('_us') else 'ratio')
         result['cases'].append(dict(id=name, metrics=summary))

@@ -54,7 +54,14 @@ using MatmulKernel = Gemm::Kernel::SplitkMatmul<BlockMmadType,void,
 #else
 using MatmulKernel = Gemm::Kernel::BasicMatmul<BlockMmadType,void,Gemm::Block::GemmIdentityBlockSwizzle<3,0>>;
 #endif
+#if FAMILY == 6 && AFTER
+extern "C" CATLASS_GLOBAL void ENTRY(MatmulKernel::Params params, uint64_t hardwareSyncAddr) {
+    AscendC::SetSyncBaseAddr(hardwareSyncAddr);
+    MatmulKernel op; op(params);
+}
+#else
 extern "C" CATLASS_GLOBAL void ENTRY(MatmulKernel::Params params) { MatmulKernel op; op(params); }
+#endif
 static uint32_t m_, n_, k_, cores_;
 static uint64_t sync_;
 extern "C" int catlass_bridge_configure(uint32_t m,uint32_t n,uint32_t k,uint32_t cores) {

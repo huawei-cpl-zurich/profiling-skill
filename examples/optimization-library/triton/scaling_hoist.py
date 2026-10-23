@@ -20,11 +20,13 @@ def kernels():
     def wave001_kkt_scale_before(K, Beta, Out, BT: tl.constexpr, DK: tl.constexpr, BK: tl.constexpr):
         group = tl.program_id(0)
         row = tl.arange(0, BT)
-        channel = tl.arange(0, BK)
-        k = tl.load(K + group * BT * DK + row[:, None] * DK + channel[None, :], channel[None, :] < DK, 0)
         beta = tl.load(Beta + group * BT + row)
-        scaled = (k.to(tl.float32) * beta[:, None]).to(k.dtype)
-        product = tl.dot(scaled, tl.trans(k))
+        product = tl.zeros((BT, BT), tl.float32)
+        for block in range(tl.cdiv(DK, BK)):
+            channel = block * BK + tl.arange(0, BK)
+            k = tl.load(K + group * BT * DK + row[:, None] * DK + channel[None, :], channel[None, :] < DK, 0)
+            scaled = (k.to(tl.float32) * beta[:, None]).to(k.dtype)
+            product = tl.dot(scaled, tl.trans(k), product)
         value = tl.where(row[:, None] > row[None, :], product, 0.0)
         tl.store(Out + group * BT * BT + row[:, None] * BT + row[None, :], value)
 
@@ -32,10 +34,12 @@ def kernels():
     def wave001_kkt_scale_after(K, Beta, Out, BT: tl.constexpr, DK: tl.constexpr, BK: tl.constexpr):
         group = tl.program_id(0)
         row = tl.arange(0, BT)
-        channel = tl.arange(0, BK)
-        k = tl.load(K + group * BT * DK + row[:, None] * DK + channel[None, :], channel[None, :] < DK, 0)
         beta = tl.load(Beta + group * BT + row)
-        product = tl.dot(k, tl.trans(k))
+        product = tl.zeros((BT, BT), tl.float32)
+        for block in range(tl.cdiv(DK, BK)):
+            channel = block * BK + tl.arange(0, BK)
+            k = tl.load(K + group * BT * DK + row[:, None] * DK + channel[None, :], channel[None, :] < DK, 0)
+            product = tl.dot(k, tl.trans(k), product)
         value = tl.where(row[:, None] > row[None, :], product * beta[:, None], 0.0)
         tl.store(Out + group * BT * BT + row[:, None] * BT + row[None, :], value)
 
@@ -81,7 +85,7 @@ class Adapter:
         compiled = {}
 
         def run():
-            artifact = kernel[(groups,)](device_k, device_beta, out, bt, dk, max(32, triton.next_power_of_2(dk)))
+            artifact = kernel[(groups,)](device_k, device_beta, out, bt, dk, max(32, min(64, triton.next_power_of_2(dk))))
             # Only compiler object identities are recorded; tensors are untouched.
             compiled[id(artifact)] = artifact
             return out

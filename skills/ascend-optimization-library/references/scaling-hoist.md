@@ -1,7 +1,8 @@
 # Move invariant scaling across a dot product
 
-Status: source-backed experiment; A3 correctness, timing and PMU qualification
-pending. This card does not yet assert a measured benefit or crossover.
+Status: all four A3 pairs passed one correctness check and ten profiled forwards
+per arm. Gallery device spans improved in both regimes; instrumented caller
+events remained inconclusive. These observations establish no universal crossover.
 
 Consider a scalar coefficient constant across a dot's reduction dimension:
 `dot(beta[row] * K[row, :], K.T)`. Distributing beta over the accumulated
@@ -41,8 +42,8 @@ compiler, sharing a loaded K tile between vector scaling and `tl.trans(k)`
 produced invalid before results. The retained post-sync-solver IR consumed an
 uninitialized Cube L1 RHS buffer. A direct transposed load from the same formal
 was canonicalized back to the failing dataflow. A separate formal restored
-the missing GM-to-L1 load in compile-only inspection; runtime qualification of
-the revised pair is still required. Keep this compiler constraint separate
+the missing GM-to-L1 load in compiler inspection; the revised pair subsequently
+passed the four A3 cases. Keep this compiler constraint separate
 from the mathematical optimization's benefit.
 
 Recognize a coefficient loaded outside the reduction that is nevertheless

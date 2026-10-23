@@ -84,16 +84,19 @@ def acquisition():
 
 
 class ControllerTests(unittest.TestCase):
-    def run_fixture(self, root, adapter=None, validator=validate):
+    def run_fixture(self, root, adapter=None, validator=validate, policy=None):
         hooks = dict(baseline=baseline, candidate=candidate, cases_provider=cases,
                      validator=validator, acquisition=acquisition)
         adapter = adapter or Adapter()
         hooks['acquisition'] = lambda: adapter
         options = Namespace(**{name: name for name in hooks},
                             output=str(root / 'results'), expected_kernel=['submitted'])
+        if policy is not None:
+            options.profile_policy = policy
+        ticks = iter(range(0, 10**8, 1000))
         with patch.object(controller, 'load', side_effect=hooks.__getitem__), \
                 patch.object(controller, 'prepare_model', side_effect=Prepared):
-            return controller.run(options, compiler_factory=lambda: None, clock=lambda: 1000)
+            return controller.run(options, compiler_factory=lambda: None, clock=lambda: next(ticks))
 
     def test_complete_report_retains_flags_and_both_metrics(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -118,6 +121,100 @@ class ControllerTests(unittest.TestCase):
             self.assertTrue(profile['tasks'][-1]['diagnostic_flags'])
             self.assertEqual(profile['iterations'][-1]['device_busy_us'], 10000)
             self.assertTrue(row['latency']['execution_evidence']['candidate']['custom_kernel_identity_verified'])
+
+    def test_optional_baseline_failure_retains_real_paired_latency(self):
+        class BrokenBaseline(Adapter):
+            def profile(self, prepared, **kwargs):
+                if kwargs['output'].name == 'baseline':
+                    self.assert_latency_saved = (kwargs['output'].parent / 'latency.json').exists()
+                    raise controller.CaptureError('unsupported baseline trace')
+                return super().profile(prepared, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            adapter = BrokenBaseline()
+            report = self.run_fixture(root, adapter, policy='optional')
+            self.assertEqual(report['state'], 'complete')
+            self.assertTrue(adapter.assert_latency_saved)
+            row = report['cases'][0]
+            self.assertEqual(row['candidate_identity']['state'], 'verified')
+            self.assertGreater(row['latency']['candidate']['median_ms'], 0)
+            self.assertEqual(row['metric_status']['baseline_device_busy_us'], 'unavailable')
+            self.assertEqual(row['metric_status']['candidate_device_busy_us'], 'complete')
+            self.assertEqual(row['profile_status']['baseline']['error'], 'unsupported baseline trace')
+            self.assertNotIn('baseline', row['device_busy_median_us'])
+            self.assertNotIn('busy_time_speedup', row)
+            self.assertNotIn('geomean_busy_time_speedup', report)
+            self.assertIn('geomean_latency_speedup', report)
+
+    def test_optional_baseline_unexpected_runtime_failure_is_fatal(self):
+        class Broken(Adapter):
+            def profile(self, prepared, **kwargs):
+                if kwargs['output'].name == 'baseline':
+                    raise RuntimeError('device execution failed')
+                return super().profile(prepared, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = self.run_fixture(root, Broken(), policy='optional')
+            self.assertEqual(report['state'], 'failed')
+            self.assertTrue((root / 'results/case-0000/latency.json').exists())
+            self.assertNotIn('geomean_latency_speedup', report)
+
+    def test_optional_capture_failure_cannot_hide_input_mutation(self):
+        import torch
+        class Broken(Adapter):
+            def profile(self, prepared, **kwargs):
+                if kwargs['output'].name == 'baseline':
+                    prepared.args[0].add_(1)
+                    raise controller.CaptureError('unsupported trace')
+                return super().profile(prepared, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(globals(), cases=lambda: [dict(id='scalar', args=(torch.tensor(2.),))]):
+            report = self.run_fixture(Path(temporary), Broken(), policy='optional')
+            self.assertEqual(report['state'], 'failed')
+            self.assertIn('mutated an input', report['error'])
+
+    def test_optional_baseline_recompile_then_capture_failure_is_fatal(self):
+        class Broken(Adapter):
+            def profile(self, prepared, **kwargs):
+                if kwargs['output'].name == 'baseline':
+                    prepared.compiler.compilations += 1
+                    raise controller.CaptureError('unsupported trace after compilation')
+                return super().profile(prepared, **kwargs)
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self.run_fixture(Path(temporary), Broken(), policy='optional')
+            self.assertEqual(report['state'], 'failed')
+            self.assertIn('compilation detected', report['error'])
+
+    def test_optional_still_rejects_identity_and_candidate_capture_failure(self):
+        class BrokenCandidate(Adapter):
+            def profile(self, prepared, **kwargs):
+                raise RuntimeError('candidate trace unavailable')
+        for adapter in (Adapter(name='other'), BrokenCandidate()):
+            with tempfile.TemporaryDirectory() as temporary, \
+                    patch.object(controller, 'benchmark_pair') as timing:
+                report = self.run_fixture(Path(temporary), adapter, policy='optional')
+                self.assertEqual(report['state'], 'failed')
+                self.assertNotIn('geomean_latency_speedup', report)
+                timing.assert_not_called()
+
+    def test_optional_does_not_swallow_wrong_output_or_profile_recompilation(self):
+        def reject(*args):
+            raise AssertionError('independent mismatch')
+        for validator, adapter in ((reject, Adapter()), (validate, Adapter(recompile=True))):
+            with tempfile.TemporaryDirectory() as temporary:
+                report = self.run_fixture(Path(temporary), adapter, validator, policy='optional')
+                self.assertEqual(report['state'], 'failed')
+
+    def test_required_remains_strict_when_baseline_capture_throws(self):
+        class Broken(Adapter):
+            def profile(self, prepared, **kwargs):
+                raise RuntimeError('no baseline profile')
+        for policy in (None, 'required'):
+            with tempfile.TemporaryDirectory() as temporary, \
+                    patch.object(controller, 'benchmark_pair') as timing:
+                report = self.run_fixture(Path(temporary), Broken(), policy=policy)
+                self.assertEqual(report['state'], 'failed')
+                timing.assert_not_called()
 
     def test_missing_kernel_identity_fails_before_latency(self):
         with tempfile.TemporaryDirectory() as temporary, \
@@ -198,6 +295,7 @@ class ControllerTests(unittest.TestCase):
             with patch.object(controller, 'run', return_value={'state': 'complete'}) as run:
                 self.assertEqual(controller.main(args + extra), 0)
                 self.assertEqual(run.call_args.args[0].backend, expected)
+                self.assertEqual(run.call_args.args[0].profile_policy, 'required')
                 self.assertEqual(run.call_args.args[0].acquisition, 'trusted_capture:create')
 
     def test_missing_acquisition_is_rejected_before_runner(self):

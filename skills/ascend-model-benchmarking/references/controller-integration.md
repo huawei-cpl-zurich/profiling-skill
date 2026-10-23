@@ -115,3 +115,22 @@ fallback. Hardware support is accepted only after real compiled Model/Triton and
 correlated profiler smokes. Do not export this controller, helpers, private hooks
 or input providers into blind-agent workspaces: export only `SKILL.md`, `agents`
 metadata and the relevant guidance reference, together with a thin service client.
+
+
+Final latency reports may explicitly select `--profile-policy optional`; the default
+`required` retains strict paired-profile acquisition. Optional runs still require
+validated compiled execution for both arms and an independent candidate capture
+that identifies every submitted kernel in every iteration. They verify candidate
+identity, save unprofiled paired latency, then attempt baseline profiling. Only
+explicit `CaptureError` / `AccountingError` profile failures make baseline profile
+metrics unavailable. Execution failures, recompilation and input mutation remain
+fatal; a saved latency artifact from a subsequently failed run is diagnostic only.
+
+Each case records `profile_status` per arm and `metric_status` per measurement
+(`complete` or `unavailable`). Unavailable busy values and paired busy speedups
+are omitted rather than filled with zero. Repeated summaries retain independent
+`n`, `requested_repetitions`, `completed_repetitions`, `unavailable_repetitions`
+and `state` for every metric. Ten valid latency repetitions can therefore coexist
+with fewer profile repetitions; an incomplete profile metric must not be reported
+as a complete ten-run measurement. Failed correctness or candidate identity runs
+are never admitted to repeated statistics or aggregate rankings.

@@ -17,7 +17,8 @@ import traceback
 HELPERS = Path(__file__).resolve().parents[1] / 'skills/ascend-model-benchmarking/scripts'
 sys.path.insert(0, str(HELPERS))
 from model_execution import CapabilityError, GraphCompiler, MeasurementError, benchmark_pair, prepare_model
-from profile_accounting import account_profile
+from profile_accounting import AccountingError, account_profile
+from profile_capture import CaptureError
 
 
 def load(spec):
@@ -123,6 +124,10 @@ def run(options, *, compiler_factory=None, clock=None):
     report = {'state': 'incomplete', 'configuration': vars(options), 'cases': [],
               'invocation': list(sys.argv), 'python_version': sys.version}
     try:
+        policy = getattr(options, 'profile_policy', 'required')
+        if policy not in ('required', 'optional'):
+            raise ValueError('unknown profile policy')
+        report['profile_policy'] = policy
         hooks = {name: load(getattr(options, name)) for name in (
             'baseline', 'candidate', 'cases_provider', 'validator', 'acquisition')}
         compiler_factory = compiler_factory or (lambda: GraphCompiler(backend_name=options.backend))
@@ -161,60 +166,94 @@ def run(options, *, compiler_factory=None, clock=None):
                     compiler=compiler_factory(),
                     synchronize=adapter.synchronize)
                 guard(arm + ':prepare')
-            # Separate profiling replay proves identity before unprofiled timing.
             profiles = {}
-            for arm, prepared in models.items():
+            row['profile_status'] = {}
+
+            def acquire(arm):
+                """Capture errors may qualify metrics; execution invariants never do."""
+                prepared = models[arm]
                 before = prepared.compiler.snapshot()
                 executions = prepared.compiler.executions
-                with prepared.compiler.torch.inference_mode(), prepared.compiler.monitor_compilation():
-                    capture = adapter.profile(prepared, samples=50, warmup=20,
-                                              output=case_dir / arm)
-                save(case_dir / f'{arm}-normalized-capture.json', capture)
+                capture_error = None
+                try:
+                    with prepared.compiler.torch.inference_mode(), prepared.compiler.monitor_compilation():
+                        capture = adapter.profile(prepared, samples=50, warmup=20,
+                                                  output=case_dir / arm)
+                    save(case_dir / f'{arm}-normalized-capture.json', capture)
+                except Exception as error:
+                    capture_error = error
                 guard(arm + ':profile')
                 if prepared.compiler.snapshot() != before:
                     raise CapabilityError('compilation detected during profiler replay')
-                if prepared.compiler.executions - executions < 70:
+                if capture_error is None and prepared.compiler.executions - executions < 70:
                     raise CapabilityError('profiler replay lacks compiled execution evidence')
-                accounted = account_profile(capture.get('iterations'), capture.get('tasks'),
-                                             capture_complete=capture.get('capture_complete'))
-                if len(accounted['iterations']) != 50:
-                    raise CapabilityError('profile must identify exactly 50 active iterations')
-                if any(not item['task_count'] for item in accounted['iterations']):
-                    raise CapabilityError('profile contains an empty active iteration')
-                for iteration in accounted['iterations']:
-                    iteration['all_kernel_busy_us'] = (iteration['device_busy_us']
-                                                       + iteration['aicpu_busy_us'])
-                profiles[arm] = accounted
-                save(case_dir / f'{arm}-busy-time.json', accounted)
-            # Exact task identities, not graph-text guesses or name-count grouping.
+                try:
+                    if capture_error is not None:
+                        raise capture_error
+                    accounted = account_profile(capture.get('iterations'), capture.get('tasks'),
+                                                 capture_complete=capture.get('capture_complete'))
+                    if len(accounted['iterations']) != 50:
+                        raise AccountingError('profile must identify exactly 50 active iterations')
+                    if any(not item['task_count'] for item in accounted['iterations']):
+                        raise AccountingError('profile contains an empty active iteration')
+                    for iteration in accounted['iterations']:
+                        iteration['all_kernel_busy_us'] = (iteration['device_busy_us']
+                                                           + iteration['aicpu_busy_us'])
+                    profiles[arm] = accounted
+                    save(case_dir / f'{arm}-busy-time.json', accounted)
+                    row['profile_status'][arm] = dict(state='complete')
+                except (CaptureError, AccountingError) as error:
+                    row['profile_status'][arm] = dict(state='unavailable',
+                        error_type=type(error).__name__, error=str(error))
+                    save(case_dir / f'{arm}-profile-status.json', row['profile_status'][arm])
+                    if policy == 'required' or arm == 'candidate':
+                        raise
+
+            # Optional baseline profiling cannot obstruct submitted-kernel identity
+            # or already-validated unprofiled latency. Required retains its order.
+            if policy == 'required':
+                acquire('baseline')
+            acquire('candidate')
+            candidate_profile = profiles['candidate']
             wanted = set(expected)
-            candidate = profiles['candidate']
-            for iteration in candidate['iterations']:
-                observed = {task['name'] for task in candidate['tasks']
+            for iteration in candidate_profile['iterations']:
+                observed = {task['name'] for task in candidate_profile['tasks']
                             if task['iteration_id'] == iteration['iteration_id']
                             and task['kind'] == 'device'}
                 if not wanted.issubset(observed):
                     raise CapabilityError('submitted kernel identity absent from compiled replay')
             models['candidate'].evidence['custom_kernel_identity_verified'] = True
+            row['candidate_identity'] = dict(state='verified', expected_kernel=expected)
             arguments = {'synchronize': adapter.synchronize, 'validate_inputs': guard}
             if clock is not None:
                 arguments['clock'] = clock
             latency = benchmark_pair(models['baseline'], models['candidate'], **arguments)
             save(case_dir / 'latency.json', latency)
-            busy = {arm: statistics.median(item['device_busy_us']
-                    for item in profile['iterations']) for arm, profile in profiles.items()}
-            aicpu = {arm: statistics.median(item['aicpu_busy_us']
-                     for item in profile['iterations']) for arm, profile in profiles.items()}
-            total = {arm: statistics.median(item['all_kernel_busy_us']
-                     for item in profile['iterations']) for arm, profile in profiles.items()}
+            row['latency'] = latency
+            if policy == 'optional':
+                acquire('baseline')
+            row['metric_status'] = {name: 'complete' for name in (
+                'baseline_latency_ms', 'candidate_latency_ms', 'latency_speedup')}
+            for kind, field in (('device', 'device_busy_us'), ('aicpu', 'aicpu_busy_us'),
+                                ('all_kernel', 'all_kernel_busy_us')):
+                row[kind + '_busy_median_us'] = {}
+                for arm in ('baseline', 'candidate'):
+                    status = 'complete' if arm in profiles else 'unavailable'
+                    row['metric_status'][arm + '_' + kind + '_busy_us'] = status
+                    if arm in profiles:
+                        row[kind + '_busy_median_us'][arm] = statistics.median(
+                            item[field] for item in profiles[arm]['iterations'])
+            busy = row['device_busy_median_us']
+            total = row['all_kernel_busy_median_us']
             if busy['candidate'] <= 0:
                 raise CapabilityError('candidate device busy-time must be positive')
-            row.update(state='complete', latency=latency,
-                       device_busy_median_us=busy,
-                       aicpu_busy_median_us=aicpu, all_kernel_busy_median_us=total,
-                       busy_time_metric='per_iteration_sum_of_device_and_aicpu_task_durations',
-                       device_busy_time_speedup=busy['baseline'] / busy['candidate'],
-                       busy_time_speedup=total['baseline'] / total['candidate'])
+            row['metric_status']['busy_time_speedup'] = (
+                'complete' if 'baseline' in profiles else 'unavailable')
+            row.update(state='complete',
+                busy_time_metric='per_iteration_sum_of_device_and_aicpu_task_durations')
+            if 'baseline' in profiles:
+                row['device_busy_time_speedup'] = busy['baseline'] / busy['candidate']
+                row['busy_time_speedup'] = total['baseline'] / total['candidate']
             row['latency_variability_flags'] = [arm for arm in ('baseline', 'candidate')
                 if latency.get(arm, {}).get('between_batch_relative_spread', 0) > .05]
             save(output / 'report.json', report)
@@ -226,8 +265,9 @@ def run(options, *, compiler_factory=None, clock=None):
         if report['comparability'].get('comparable') is True:
             report['geomean_latency_speedup'] = statistics.geometric_mean(
                 row['latency']['latency_speedup'] for row in report['cases'])
-            report['geomean_busy_time_speedup'] = statistics.geometric_mean(
-                row['busy_time_speedup'] for row in report['cases'])
+            if all('busy_time_speedup' in row for row in report['cases']):
+                report['geomean_busy_time_speedup'] = statistics.geometric_mean(
+                    row['busy_time_speedup'] for row in report['cases'])
         report['state'] = 'complete'
         return report
     except Exception as error:
@@ -248,6 +288,8 @@ def main(argv=None):
                         help='explicit graph backend for BOTH arms; never falls back automatically')
     parser.add_argument('--expected-kernel', action='append', default=[],
                         help='exact submitted task name; private per-case expected_kernel overrides')
+    parser.add_argument('--profile-policy', choices=('required', 'optional'), default='required',
+                        help='optional retains latency when baseline profiling is unavailable; candidate identity stays mandatory')
     parser.add_argument('--output', required=True, help='new evidence directory')
     options = parser.parse_args(argv)
     try:

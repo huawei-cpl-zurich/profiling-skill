@@ -64,6 +64,17 @@ class RecurrenceTests(unittest.TestCase):
             torch.testing.assert_close(a,b)
         self.assertFalse(torch.equal(actual[0][:,0],actual[0][:,1]))
 
+    def test_value_column_tiles_are_independent(self):
+        inputs=self.fixture['inputs']
+        outputs,states=[],[]
+        for start in range(0,self.spec['dv'],32):
+            part={key:(value[...,start:start+32] if key in ('v','initial') else value)
+                  for key,value in inputs.items()}
+            out,state=reference(part,self.spec['segments'])
+            outputs.append(out);states.append(state)
+        torch.testing.assert_close(torch.cat(outputs,-1),self.fixture['expected'][0])
+        torch.testing.assert_close(torch.cat(states,-1),self.fixture['expected'][1])
+
     def test_single_token_gate_and_final_state_semantics(self):
         spec=dict(self.spec,t=1,segments=[0,1])
         f=make_case(spec)

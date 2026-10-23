@@ -16,12 +16,12 @@ def kernels():
 
     @triton.jit
     def wave001_delta_token(Q,K,V,Beta,G,Initial,Out,Final,Bounds,
-                            HK:tl.constexpr,HV:tl.constexpr,DK:tl.constexpr,DV:tl.constexpr):
+                            HK:tl.constexpr,HV:tl.constexpr,DK:tl.constexpr,DV:tl.constexpr,BV:tl.constexpr):
         h=tl.program_id(0)%HV
         segment=tl.program_id(0)//HV
         kh=h//(HV//HK)
         d=tl.arange(0,DK)
-        v=tl.arange(0,DV)
+        v=tl.program_id(1)*BV+tl.arange(0,BV)
         state=tl.load(Initial+(segment*HV+h)*DK*DV+d[:,None]*DV+v[None,:])
         start=tl.load(Bounds+segment)
         end=tl.load(Bounds+segment+1)
@@ -40,7 +40,7 @@ def kernels():
         tl.store(Final+(segment*HV+h)*DK*DV+d[:,None]*DV+v[None,:],state)
 
     @triton.jit
-    def wave001_delta_prepare(K,V,Beta,G,U,W,C,Starts,Lengths,
+    def wave001_delta_prepare(K,KRight,V,Beta,G,U,W,C,Starts,Lengths,
                               HK:tl.constexpr,HV:tl.constexpr,DK:tl.constexpr,DV:tl.constexpr,BT:tl.constexpr):
         chunk=tl.program_id(0)//HV
         h=tl.program_id(0)%HV
@@ -57,7 +57,9 @@ def kernels():
         gate=tl.load(G+(start+r)*HV+h,valid,0)
         cumulative=tl.cumsum(gate,0)
         lower=r[:,None]>r[None,:]
-        gram=tl.dot(key,tl.trans(key))
+        # Separate RHS formal preserves direct global-to-Cube loads on Ascend3.2.
+        right=tl.load(KRight+((start+r[None,:])*HK+kh)*DK+d[:,None],valid[None,:],0)
+        gram=tl.dot(key,right)
         decay=tl.exp(cumulative[:,None]-cumulative[None,:])
         a=tl.where(lower,gram*beta[:,None]*decay,0.)
         # Nilpotence of the strict lower BT32 matrix makes five terms enough
@@ -77,14 +79,14 @@ def kernels():
         tl.store(C+base+r,cumulative)
 
     @triton.jit
-    def wave001_delta_chunk_scan(Q,K,Initial,U,W,C,Out,Final,Starts,Lengths,First,Count,
-                                 HK:tl.constexpr,HV:tl.constexpr,DK:tl.constexpr,DV:tl.constexpr,BT:tl.constexpr):
+    def wave001_delta_chunk_scan(Q,K,KRight,Initial,U,W,C,Out,Final,Starts,Lengths,First,Count,
+                                 HK:tl.constexpr,HV:tl.constexpr,DK:tl.constexpr,DV:tl.constexpr,BT:tl.constexpr,BV:tl.constexpr):
         segment=tl.program_id(0)//HV
         h=tl.program_id(0)%HV
         kh=h//(HV//HK)
         r=tl.arange(0,BT)
         d=tl.arange(0,DK)
-        v=tl.arange(0,DV)
+        v=tl.program_id(1)*BV+tl.arange(0,BV)
         state=tl.load(Initial+(segment*HV+h)*DK*DV+d[:,None]*DV+v[None,:])
         first=tl.load(First+segment)
         count=tl.load(Count+segment)
@@ -100,7 +102,8 @@ def kernels():
             u=tl.load(U+(base+r[:,None])*DV+v[None,:])
             w=tl.load(W+(base+r[:,None])*DK+d[None,:])
             delta=u-tl.dot(w.to(tl.float16),state.to(tl.float16))
-            scores=tl.dot(query,tl.trans(key))
+            right=tl.load(KRight+((start+r[None,:])*HK+kh)*DK+d[:,None],valid[None,:],0)
+            scores=tl.dot(query,right)
             scores=tl.where(r[:,None]>=r[None,:],scores*tl.exp(cumulative[:,None]-cumulative[None,:]),0.)
             carry=tl.dot((query.to(tl.float32)*tl.exp(cumulative[:,None])).to(tl.float16),state.to(tl.float16))
             out=carry+tl.dot(scores.to(tl.float16),delta.to(tl.float16))
@@ -146,10 +149,10 @@ class Adapter:
             compiled[id(artifact)]=artifact
         def run():
             if arm=='before':
-                keep(token[((len(bounds)-1)*hv,)](inputs['q'],inputs['k'],inputs['v'],inputs['beta'],inputs['g'],inputs['initial'],out,final,tables[0],hk,hv,dk,dv))
+                keep(token[((len(bounds)-1)*hv,(dv+31)//32)](inputs['q'],inputs['k'],inputs['v'],inputs['beta'],inputs['g'],inputs['initial'],out,final,tables[0],hk,hv,dk,dv,32))
             else:
-                keep(prep[(len(starts)*hv,)](inputs['k'],inputs['v'],inputs['beta'],inputs['g'],u,w,c,tables[1],tables[2],hk,hv,dk,dv,32))
-                keep(scan[((len(bounds)-1)*hv,)](inputs['q'],inputs['k'],inputs['initial'],u,w,c,out,final,tables[1],tables[2],tables[3],tables[4],hk,hv,dk,dv,32))
+                keep(prep[(len(starts)*hv,)](inputs['k'],inputs['k'],inputs['v'],inputs['beta'],inputs['g'],u,w,c,tables[1],tables[2],hk,hv,dk,dv,32))
+                keep(scan[((len(bounds)-1)*hv,(dv+31)//32)](inputs['q'],inputs['k'],inputs['k'],inputs['initial'],u,w,c,out,final,tables[1],tables[2],tables[3],tables[4],hk,hv,dk,dv,32,32))
             return out,final
         def compilation_state():
             rows=[]
@@ -162,7 +165,7 @@ class Adapter:
         item=SimpleNamespace(run=run,expected_kernels=[k.fn.__name__ for k in selected],
             sources=[Path(__file__),*CASE_SOURCES],inputs=inputs,compilation_state=compilation_state,
             metadata=dict(language='triton',triton_version=triton.__version__,torch_version=torch.__version__,
-                          block=32,workspace_bytes=sum(x.numel()*x.element_size() for x in (u,w,c) if x is not None),
+                          block=32,value_tile=32,workspace_bytes=sum(x.numel()*x.element_size() for x in (u,w,c) if x is not None),
                           dot_inputs='FP16; FP32 accumulation/state',arm=arm,shape=spec))
         self.prepared[arm]=item
         return item

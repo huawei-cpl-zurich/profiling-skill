@@ -1,8 +1,9 @@
 # Chunk a gated delta recurrence
 
-Status: source-backed example and CPU algebra checks only. Neither kernel has
-been compiled or executed on A3 for this wave. The long/short regimes below are
-measurement hypotheses; no runtime benefit is established.
+Status: CPU algebra checks and A3 compile-only qualification at DK=DV128
+passed for all three kernels after tiling value columns. Correctness and
+profiling on A3 remain pending. The long/short regimes below are measurement
+hypotheses; no runtime benefit is established.
 
 Read this recipe when code updates a large state for every token, there are few
 independent heads/segments, and successive state updates form a long serial
@@ -46,9 +47,16 @@ out = q @ state
 After, prepare 32-token chunks independently. Let c be the cumulative log gate,
 `A[i,j] = beta[i] * exp(c[i]-c[j]) * dot(k[i],k[j])` for j<i, and M=(I+A)^-1.
 Prepare `u=M@(beta*v)` and `w=M@(beta*exp(c)*k)`. The state scan computes
-`delta=u-w@state`, all chunk outputs, and one boundary-state update. The strict
+`delta=u-w@state`, all chunk outputs, and one boundary-state update. Both arms
+partition independent value columns into tiles of 32, keeping the full key
+dimension in each program. DV64/128 therefore uses two/four value tiles. The strict
 lower matrix is nilpotent; the example uses a finite doubling factorization.
-The CPU tests verify the blocked equations against the token recurrence.
+The CPU tests verify the blocked equations against the token recurrence and
+verify that value-column partitions produce the same output and final state.
+The original untiled DK=DV128 token kernel exceeded A3 UB capacity
+(2,115,584 bits required versus 1,572,864 available); it was rejected before
+launch. The tiled source passed compile-only probes for all three kernels.
+This resource result does not establish runtime correctness.
 
 Both arms keep state in FP32. The chunk arm casts matrix operands, including
 state operands for dots, to FP16 with FP32 accumulation. This changes rounding

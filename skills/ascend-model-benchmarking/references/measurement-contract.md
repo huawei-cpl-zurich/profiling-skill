@@ -32,6 +32,14 @@ an assumed fixed number of launches. Empty or ambiguous captures are failures.
 The generic accounting helper accepts normalized records; it is not a vendor
 trace parser and does not independently prove that export lost no records.
 
+The torch-npu 2.10 trace adapter recognizes the retained zero-duration
+`PLACE_HOLDER_SQE` schema only when its name, sentinel model/subtask/connection
+IDs, task ID 0, batch ID 1 and matching stream/thread coordinates agree. It
+retains the complete original record in the administrative exclusion audit;
+that record contributes no compute time. A different shape or a flow targeting
+this placeholder remains invalid. Unknown task types, missing iteration markers
+and incomplete CPU/NPU links still fail closed.
+
 ## Filtering and comparisons
 
 The reused CANNBot threshold is `duration > max(50 * per-name median, 10 us)`.

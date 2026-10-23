@@ -15,7 +15,7 @@ from pathlib import Path
 import platform
 
 TASK_KINDS = dict(KERNEL_AIVEC='device', KERNEL_AICORE='device', KERNEL_AICPU='aicpu',
-                 MIX_AIC='device', AI_CORE='device', AI_VECTOR_CORE='device')
+                 MIX_AIC='device', MIX_AIV='device', AI_CORE='device', AI_VECTOR_CORE='device')
 
 
 class CaptureError(ValueError):
@@ -34,6 +34,25 @@ def _decimal(value):
 
 def _coordinate(event):
     return event['pid'], event['tid'], _decimal(event['ts'])
+
+
+def _queue_placeholder(event):
+    """Recognize only observed unlinked queue placeholder schemas.
+
+    This is not a kernel-type exemption: another duration, real connection,
+    different identity or an explicit flow still fails normal validation.
+    """
+    args = event['args']
+    sentinel_identity = {'Model Id': 2**32 - 1, 'Task Id': 0, 'Batch Id': 1,
+                         'Subtask Id': 2**32 - 1, 'connection_id': 2**64 - 1}
+    return (event.get('name') == 'PLACE_HOLDER_SQE' and event.get('cat') is None
+            and _decimal(event.get('dur')) in (Decimal('0'), Decimal('0.02'))
+            and all(type(args.get(key)) is int and args[key] == value
+                    for key, value in sentinel_identity.items())
+            and type(event.get('pid')) is int and event['pid'] >= 0
+            and type(event.get('tid')) is int and event['tid'] >= 0
+            and type(args.get('Physic Stream Id')) is int
+            and args['Physic Stream Id'] == event['tid'])
 
 
 def normalize_trace(events, iteration_names, *, export_completed):
@@ -68,6 +87,7 @@ def _normalize(events, names):
             raise CaptureError('overlapping iteration markers')
     host, task_at, endpoints = defaultdict(list), defaultdict(list), defaultdict(dict)
     tasks, administrative = [], []
+    placeholder_coordinates = set()
     for position, event in enumerate(events):
         if event.get('ph') == 'X' and event.get('cat') == 'cpu_op' and event not in markers:
             host[_coordinate(event)].append(event)
@@ -76,6 +96,11 @@ def _normalize(events, names):
             if kind in ('PROFILER_TRACE_EX', 'MODEL_EXECUTE',
                         'PROFILING_ENABLE', 'PROFILING_DISABLE'):
                 administrative.append(dict(reason='vendor administrative task, not a kernel',
+                                           task=dict(event)))
+                continue
+            if kind == 'PLACE_HOLDER_SQE' and _queue_placeholder(event):
+                placeholder_coordinates.add(_coordinate(event))
+                administrative.append(dict(reason='verified administrative queue placeholder with sentinel linkage',
                                            task=dict(event)))
                 continue
             if kind not in TASK_KINDS:
@@ -96,6 +121,9 @@ def _normalize(events, names):
         if set(phases) != {'s', 'f'}:
             raise CaptureError('incomplete async_npu flow')
         start, finish = phases['s'], phases['f']
+        if any(_coordinate(endpoint) in placeholder_coordinates for endpoint in (start, finish)):
+            raise CaptureError('flow endpoint must identify exactly one CPU op and device task; '
+                               'queue placeholder coordinate is ambiguous')
         matches = host[_coordinate(start)]
         targets = task_at[_coordinate(finish)]
         if len(matches) != 1 or len(targets) != 1:

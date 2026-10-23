@@ -32,6 +32,14 @@ an assumed fixed number of launches. Empty or ambiguous captures are failures.
 The generic accounting helper accepts normalized records; it is not a vendor
 trace parser and does not independently prove that export lost no records.
 
+The torch-npu 2.10 trace adapter recognizes the retained zero- or 0.02-microsecond-duration
+`PLACE_HOLDER_SQE` schema only when its name, sentinel model/subtask/connection
+IDs, task ID 0, batch ID 1 and matching stream/thread coordinates agree. It
+retains the complete original record in the administrative exclusion audit;
+that record contributes no compute time. A different shape or a flow targeting
+this placeholder remains invalid. Unknown task types, missing iteration markers
+and incomplete CPU/NPU links still fail closed.
+
 ## Filtering and comparisons
 
 The reused CANNBot threshold is `duration > max(50 * per-name median, 10 us)`.
@@ -72,6 +80,12 @@ retain per-run qualification and verify conditions across repetitions separately
 Source and fixture providers must be versioned separately from candidate code.
 Correctness validation covers ordinary runtime input variation as well as shapes;
 passing fixed fixtures is not permission to specialize on their accidental values.
+
+Retained GDN `MIX_AIV` ReduceSum events have verified `torch_to_npu` start/finish
+links to CPU `aclnnReduceSum` records. They count as device compute under the same
+complete-flow and explicit-iteration requirements as other validated task types.
+This recognition does not recover missing markers or establish vector/cube
+utilization from the task label.
 
 ## Explicit eager reference
 

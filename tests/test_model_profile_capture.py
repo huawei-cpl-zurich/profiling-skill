@@ -252,3 +252,143 @@ def test_failed_normalization_preserves_compressed_raw_trace(trace, tmp_path):
     assert json.load(gzip.open(tmp_path / 'capture/trace_view.json.gz', 'rt')) == trace
     manifest = json.loads((tmp_path / 'capture/acquisition.json').read_text())
     assert manifest['state'] == 'failed' and manifest['trace_sha256']
+
+
+def placeholder():
+    # Exact structural identity from retained BSA baseline case0/repetition2.
+    # Only coordinates are shifted into the small acquired trace above.
+    return event('PLACE_HOLDER_SQE', 3265944001, 47,
+        '1792459730174340.000', 0.0,
+        args={'Model Id': 4294967295, 'Task Type': 'PLACE_HOLDER_SQE',
+              'Physic Stream Id': 47, 'Task Id': 0, 'Batch Id': 1,
+              'Subtask Id': 4294967295, 'connection_id': 18446744073709551615})
+
+
+def test_observed_zero_duration_placeholder_retains_audit_without_compute(trace):
+    original = placeholder()
+    trace.append(original)
+    result = normalize(trace)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert summary['iterations'][0]['device_busy_us'] == pytest.approx(19.9795)
+    assert summary['iterations'][0]['task_count'] == 2
+    assert result['acquisition_evidence']['observed_tasks'] == 2
+    assert result['acquisition_evidence']['paired_flows'] == 2
+    assert result['acquisition_evidence']['exclusions'] == [dict(
+        reason='verified administrative queue placeholder with sentinel linkage', task=original)]
+
+
+@pytest.mark.parametrize('field,value', [
+    ('dur', 1), ('dur', -1), ('dur', 0.01), ('dur', 0.021), ('dur', 0.03), ('dur', float('inf')), ('dur', float('nan')), ('name', 'unknown_placeholder'), ('cat', 'cpu_op'),
+    ('pid', -1), ('tid', 48), ('Model Id', 0), ('Task Id', 1),
+    ('Batch Id', 0), ('Batch Id', 2), ('Subtask Id', 0),
+    ('connection_id', 0), ('Physic Stream Id', 48), ('Task Id', False)])
+def test_placeholder_near_matches_remain_unsupported(trace, field, value):
+    record = placeholder()
+    (record if field in ('dur', 'name', 'cat', 'pid', 'tid') else record['args'])[field] = value
+    trace.append(record)
+    with pytest.raises(capture.CaptureError):
+        normalize(trace)
+
+
+def test_placeholder_missing_sentinel_identity_remains_unsupported(trace):
+    record = placeholder()
+    del record['args']['connection_id']
+    trace.append(record)
+    with pytest.raises(capture.CaptureError, match='unvalidated'):
+        normalize(trace)
+
+
+def test_placeholder_cannot_satisfy_a_flow_or_empty_iteration(trace):
+    record = placeholder()
+    trace.append(record)
+    trace[4].update(pid=record['pid'], tid=record['tid'], ts=record['ts'])
+    with pytest.raises(capture.CaptureError, match='exactly one CPU op and device task'):
+        normalize(trace)
+    with pytest.raises(capture.CaptureError, match='empty active iteration'):
+        normalize([trace[0], record])
+
+
+@pytest.mark.parametrize('mutation', ['missing', 'duplicate', 'unclosed'])
+def test_placeholder_never_relaxes_explicit_markers(trace, mutation):
+    trace.append(placeholder())
+    if mutation == 'missing':trace.pop(0)
+    elif mutation == 'duplicate':trace.append(copy.deepcopy(trace[0]))
+    else:trace[0]['ph'] = 'B'
+    with pytest.raises(capture.CaptureError, match='explicit iteration marker'):
+        normalize(trace)
+
+
+@pytest.fixture
+def retained_mixed_trace():
+    # Compact actual GDN repetition1 ReduceSum record and exact vendor links.
+    return [event('model_iteration_0', 2702806, 2702806,
+                  '1792701342689803.470', 1099392.9, cat='cpu_op'),
+            event('aclnnReduceSum', 2702806, 2702806,
+                  '1792701342690412.980', 2.17, cat='cpu_op',
+                  args={'Sequence number': -1, 'Fwd thread id': 0}),
+            event('aclnnReduceSum_ReduceSumOpAiCore_ReduceSum', 2767673793, 2,
+                  '1792701342690522.310', 19.9,
+                  args={'Model Id': 4294967295, 'Task Type': 'MIX_AIV',
+                        'Physic Stream Id': 2, 'Task Id': 14337, 'Batch Id': 0,
+                        'Subtask Id': 0, 'connection_id': 1852220}),
+            dict(ph='s', bp='e', name='torch_to_npu', id=1792701342690522310,
+                 pid=2702806, tid=2702806, ts='1792701342690412.980', cat='async_npu'),
+            dict(ph='f', bp='e', name='torch_to_npu', id=1792701342690522310,
+                 pid=2767673793, tid=2, ts='1792701342690522.310', cat='async_npu')]
+
+
+def test_retained_mixed_aiv_is_correlated_device_compute(retained_mixed_trace):
+    result = normalize(retained_mixed_trace)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert result['tasks'][0]['kind'] == 'device'
+    assert result['tasks'][0]['duration_us'] == 19.9
+    assert result['tasks'][0]['start_us'] == pytest.approx(718.84)
+    assert summary['iterations'][0]['device_busy_us'] == 19.9
+    assert summary['iterations'][0]['aicpu_busy_us'] == 0
+    assert result['acquisition_evidence']['paired_flows'] == 1
+    assert result['acquisition_evidence']['exclusions'] == []
+
+
+@pytest.mark.parametrize('mutation', ['missing-flow', 'duplicate-flow', 'missing-marker',
+                                    'duplicate-marker', 'unclosed-marker', 'unknown-kind'])
+def test_mixed_aiv_still_requires_complete_flow_and_markers(retained_mixed_trace, mutation):
+    trace = retained_mixed_trace
+    if mutation == 'missing-flow': trace.pop()
+    elif mutation == 'duplicate-flow': trace.append(copy.deepcopy(trace[-1]))
+    elif mutation == 'missing-marker': trace.pop(0)
+    elif mutation == 'duplicate-marker': trace.append(copy.deepcopy(trace[0]))
+    elif mutation == 'unclosed-marker': trace[0]['ph'] = 'B'
+    else: trace[2]['args']['Task Type'] = 'UNVALIDATED_MIX'
+    with pytest.raises(capture.CaptureError):
+        normalize(trace)
+
+@pytest.mark.parametrize('pid,ts', [(2967673280, '1792719785863995.715'),
+                                   (2970402240, '1792719910816995.340')])
+def test_retained_short_queue_placeholder_is_audited_not_compute(trace, pid, ts):
+    # Exact unlinked placeholders from both fresh BSA smoke repetitions.
+    record = event('PLACE_HOLDER_SQE', pid, 2, ts, 0.02,
+        args={'Model Id': 4294967295, 'Task Type': 'PLACE_HOLDER_SQE',
+              'Physic Stream Id': 2, 'Task Id': 0, 'Batch Id': 1,
+              'Subtask Id': 4294967295, 'connection_id': 18446744073709551615})
+    trace.append(record)
+    result = normalize(trace)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert summary['iterations'][0]['device_busy_us'] == pytest.approx(19.9795)
+    assert result['acquisition_evidence']['exclusions'] == [dict(
+        reason='verified administrative queue placeholder with sentinel linkage', task=record)]
+    trace[4].update(pid=pid, tid=2, ts=ts)
+    with pytest.raises(capture.CaptureError, match='exactly one CPU op and device task'):
+        normalize(trace)
+
+
+@pytest.mark.parametrize('endpoint', ['host', 'device'])
+def test_placeholder_collision_with_complete_real_flow_is_ambiguous(trace, endpoint):
+    # A real host/device target remains present, so ignoring the placeholder
+    # would otherwise make this complete flow appear uniquely attributable.
+    target = trace[1 if endpoint == 'host' else 2]
+    record = placeholder()
+    record.update(pid=target['pid'], tid=target['tid'], ts=target['ts'])
+    record['args']['Physic Stream Id'] = target['tid']
+    trace.append(record)
+    with pytest.raises(capture.CaptureError, match='placeholder'):
+        normalize(trace)

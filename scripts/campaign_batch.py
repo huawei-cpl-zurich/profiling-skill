@@ -16,7 +16,9 @@ def gate(state, round_number=1):
     analyzer = state.get('phases', {}).get(f'round-{round_number}-analyzer', {})
     return (actor.get('state') == analyzer.get('state') == 'terminal'
             and actor.get('candidate_commit') == analyzer.get('candidate_commit')
-            and bool(actor.get('candidate_commit')) and analyzer.get('analysis_valid') is True)
+            and bool(actor.get('candidate_commit')) and analyzer.get('analysis_valid') is True
+            and all(entry.get('cleanup', {}).get('state') == 'terminal'
+                    for entry in (actor, analyzer)))
 
 
 def failure(state):

@@ -7,8 +7,8 @@ from campaign_batch import CELLS, reconcile, cancel_owned
 
 def ready(round_number=1):
     return dict(state='checkpoint', phases={
-        f'round-{round_number}-actor': dict(state='terminal', candidate_commit='abc'),
-        f'round-{round_number}-analyzer': dict(state='terminal', candidate_commit='abc', analysis_valid=True)})
+        f'round-{round_number}-actor': dict(state='terminal', candidate_commit='abc', cleanup=dict(state='terminal')),
+        f'round-{round_number}-analyzer': dict(state='terminal', candidate_commit='abc', analysis_valid=True, cleanup=dict(state='terminal'))})
 
 
 def test_capacity_and_gate_release():
@@ -62,3 +62,21 @@ def test_failed_candidate_is_terminal_even_when_older_candidate_exists():
     bad = ready()
     bad['phases']['round-1-actor']['candidate_verified'] = False
     assert reconcile(None, {CELLS[0]: bad}, 9)['stopped']
+
+
+@pytest.mark.parametrize('role', ['actor', 'analyzer'])
+@pytest.mark.parametrize('cleanup', [None, 'observation-required'])
+def test_first_round_gate_waits_for_each_worker_cleanup(role, cleanup):
+    observations = {cell: ready() for cell in CELLS[:3]}
+    pending = observations[CELLS[0]]
+    pending['state'] = 'observation-required'
+    entry = pending['phases']['round-1-' + role]
+    entry['cleanup'] = {} if cleanup is None else dict(state=cleanup)
+    state = reconcile(None, observations, 9)
+    assert not state['released'] and not state['stopped']
+    assert all(row['cell'].startswith('matmul/') for row in state['admit'])
+    entry['cleanup'] = dict(state='terminal')
+    pending['state'] = 'checkpoint'
+    state = reconcile(state, observations, 9)
+    assert state['released']
+    assert any(row['cell'].startswith('gdn/') for row in state['admit'])

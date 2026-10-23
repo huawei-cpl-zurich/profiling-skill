@@ -144,11 +144,11 @@ class PairTests(unittest.TestCase):
                 source = folder / 'kernel.bin'
                 source.write_bytes(b'original')
                 prepare = adapter.prepare
-                counter = [0]
+                counter = {'compiles': 0}
                 def prepare_checked(*args):
                     item = prepare(*args)
                     item.sources = [source]
-                    item.compilation_state = lambda: counter[0]
+                    item.compilation_state = lambda: counter
                     return item
                 adapter.prepare = prepare_checked
                 capture = adapter.capture
@@ -157,7 +157,7 @@ class PairTests(unittest.TestCase):
                     if mode == 'source':
                         source.write_bytes(b'changed')
                     else:
-                        counter[0] += 1
+                        counter['compiles'] += 1
                     return result
                 adapter.capture = capture_changed
                 result = self.run_case(adapter, folder)

@@ -26,6 +26,16 @@ def report(value=2, comparable=True):
 
 
 class RepeatedBenchmarkTests(unittest.TestCase):
+    def test_execution_modes_are_retained_and_cannot_mix(self):
+        eager = report()
+        eager['execution_modes'] = dict(baseline='eager', candidate='compiled')
+        result = repeated.aggregate([eager, eager], 2)
+        self.assertEqual(result['state'], 'complete')
+        self.assertEqual(result['execution_modes']['baseline'], 'eager')
+        mixed = repeated.aggregate([eager, report()], 2)
+        self.assertEqual(mixed['failed_repetitions'], 1)
+        self.assertEqual(mixed['completed_repetitions'], 1)
+
     def test_known_variance_and_constant_mean(self):
         result = repeated.aggregate([report(1), report(2), report(3)], 3)
         row = result['cases'][0]
@@ -38,6 +48,45 @@ class RepeatedBenchmarkTests(unittest.TestCase):
         self.assertEqual(result['state'], 'complete')
         self.assertTrue(result['within_repetition_comparable'])
         self.assertFalse(result['comparability']['comparable'])
+
+    def test_ten_latency_repetitions_with_independent_profile_counts(self):
+        reports = [report() for _ in range(10)]
+        for index, item in enumerate(reports):
+            row = item['cases'][0]
+            row['metric_status'] = {}
+            if index < 7:
+                for kind in ('all_kernel', 'device', 'aicpu'):
+                    row[kind + '_busy_median_us'].pop('baseline')
+                    row['metric_status']['baseline_' + kind + '_busy_us'] = 'unavailable'
+                row.pop('busy_time_speedup')
+                row['metric_status']['busy_time_speedup'] = 'unavailable'
+        result = repeated.aggregate(reports, 10)
+        self.assertEqual(result['state'], 'complete')
+        metrics = result['cases'][0]['metrics']
+        self.assertEqual(metrics['latency_speedup']['n'], 10)
+        self.assertEqual(metrics['candidate_device_busy_us']['n'], 10)
+        self.assertEqual(metrics['baseline_device_busy_us']['n'], 3)
+        self.assertEqual(metrics['busy_time_speedup']['unavailable_repetitions'], 7)
+        self.assertEqual(metrics['busy_time_speedup']['state'], 'incomplete')
+        self.assertEqual(metrics['baseline_latency_ms']['state'], 'complete')
+
+    def test_all_profiles_unavailable_retains_latency_but_not_fabricated_statistics(self):
+        reports = [report() for _ in range(10)]
+        for item in reports:
+            row = item['cases'][0]
+            row['metric_status'] = {'busy_time_speedup': 'unavailable'}
+            row.pop('busy_time_speedup')
+        result = repeated.aggregate(reports)
+        metric = result['cases'][0]['metrics']['busy_time_speedup']
+        self.assertEqual(metric['n'], 0)
+        self.assertIsNone(metric['mean'])
+        self.assertIsNone(metric['sample_stddev'])
+        self.assertEqual(result['completed_repetitions'], 10)
+
+    def test_unavailable_latency_is_not_a_complete_repetition(self):
+        item = report()
+        item['cases'][0]['metric_status'] = {'candidate_latency_ms': 'unavailable'}
+        self.assertEqual(repeated.aggregate([item], 1)['failed_repetitions'], 1)
 
     def test_failure_and_partial_cases_not_silently_replaced(self):
         failed = report(9)

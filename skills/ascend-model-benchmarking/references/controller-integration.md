@@ -196,3 +196,37 @@ fallback. Hardware support is accepted only after real compiled Model/Triton and
 correlated profiler smokes. Do not export this controller, helpers, private hooks
 or input providers into blind-agent workspaces: export only `SKILL.md`, `agents`
 metadata and the relevant guidance reference, together with a thin service client.
+
+## Eager reference for the warmed workflow
+
+The warmed controller accepts `--baseline-execution eager|compiled` (default `compiled`).
+Candidates always require compiled fullgraph execution and submitted-kernel identity.
+Use `eager` explicitly for a slow PyTorch reference; unsupported compiled references
+fail rather than falling back. Measure eager and compiled reference comparisons in
+separate evidence directories and label their execution modes in final tables.
+Eager references use eval/inference mode, correctness validation, the same 20-call
+warmup, three batches of 50 synchronized full-forward samples, and a separate
+50-iteration correlated profile with 20 warmups. They require no graph backend.
+Active compilation detection and input mutation checks still apply to both arms.
+The repeated controller forwards this option unchanged, records execution modes,
+and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
+counts, mean and sample standard deviation are unchanged.
+
+
+Warmed, unprofiled latency reports may explicitly select `--profile-policy optional`; the default
+`required` retains strict paired-profile acquisition. Optional runs still require
+validated execution in each explicitly selected mode and an independent candidate capture
+that identifies every submitted kernel in every iteration. They verify candidate
+identity, save unprofiled paired latency, then attempt baseline profiling. Only
+explicit `CaptureError` / `AccountingError` profile failures make baseline profile
+metrics unavailable. Execution failures, recompilation and input mutation remain
+fatal; a saved latency artifact from a subsequently failed run is diagnostic only.
+
+Each case records `profile_status` per arm and `metric_status` per measurement
+(`complete` or `unavailable`). Unavailable busy values and paired busy speedups
+are omitted rather than filled with zero. Repeated summaries retain independent
+`n`, `requested_repetitions`, `completed_repetitions`, `unavailable_repetitions`
+and `state` for every metric. Ten valid latency repetitions can therefore coexist
+with fewer profile repetitions; an incomplete profile metric must not be reported
+as a complete ten-run measurement. Failed correctness or candidate identity runs
+are never admitted to repeated statistics or aggregate rankings.

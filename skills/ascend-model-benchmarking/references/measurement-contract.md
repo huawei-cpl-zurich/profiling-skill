@@ -126,3 +126,18 @@ retain per-run qualification and verify conditions across repetitions separately
 Source and fixture providers must be versioned separately from candidate code.
 Correctness validation covers ordinary runtime input variation as well as shapes;
 passing fixed fixtures is not permission to specialize on their accidental values.
+
+## Eager reference for the warmed workflow
+
+The warmed controller accepts `--baseline-execution eager|compiled` (default `compiled`).
+Candidates always require compiled fullgraph execution and submitted-kernel identity.
+Use `eager` explicitly for a slow PyTorch reference; unsupported compiled references
+fail rather than falling back. Measure eager and compiled reference comparisons in
+separate evidence directories and label their execution modes in final tables.
+Eager references use eval/inference mode, correctness validation, the same 20-call
+warmup, three batches of 50 synchronized full-forward samples, and a separate
+50-iteration correlated profile with 20 warmups. They require no graph backend.
+Active compilation detection and input mutation checks still apply to both arms.
+The repeated controller forwards this option unchanged, records execution modes,
+and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
+counts, mean and sample standard deviation are unchanged.

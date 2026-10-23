@@ -1,0 +1,167 @@
+{
+  "traceEvents": [
+    {
+      "ph": "X",
+      "name": "model_iteration_0",
+      "pid": 110,
+      "tid": 110,
+      "ts": "0.000",
+      "dur": 1397.13,
+      "cat": "cpu_op",
+      "args": {
+        "Sequence number": -1,
+        "Fwd thread id": 0
+      }
+    },
+    {
+      "ph": "X",
+      "name": "optimization_native::launch",
+      "pid": 110,
+      "tid": 110,
+      "ts": "1165.660",
+      "dur": 125.38,
+      "cat": "cpu_op",
+      "args": {
+        "Sequence number": -1,
+        "Fwd thread id": 0
+      }
+    },
+    {
+      "ph": "X",
+      "name": "record_event",
+      "pid": 110,
+      "tid": 110,
+      "ts": "374.980",
+      "dur": 651.61,
+      "cat": "cpu_op",
+      "args": {
+        "Sequence number": -1,
+        "Fwd thread id": 0
+      }
+    },
+    {
+      "ph": "s",
+      "bp": "e",
+      "name": "torch_to_npu",
+      "id": 1792739817176880975,
+      "pid": 110,
+      "tid": 110,
+      "ts": "374.980",
+      "cat": "async_npu"
+    },
+    {
+      "ph": "f",
+      "bp": "e",
+      "name": "torch_to_npu",
+      "id": 1792739817176880975,
+      "pid": 310,
+      "tid": 2,
+      "ts": "1012.185",
+      "cat": "async_npu"
+    },
+    {
+      "name": "EVENT_RECORD",
+      "pid": 310,
+      "tid": 2,
+      "ts": "1012.185",
+      "dur": 0.02,
+      "ph": "X",
+      "args": {
+        "Model Id": 4294967295,
+        "Task Type": "EVENT_RECORD",
+        "Physic Stream Id": 2,
+        "Task Id": 2,
+        "Batch Id": 0,
+        "Subtask Id": 4294967295,
+        "connection_id": 13
+      }
+    },
+    {
+      "name": "HostToDevice55834574848",
+      "pid": 310,
+      "tid": 2,
+      "ph": "f",
+      "cat": "HostToDevice",
+      "id": "55834574848",
+      "ts": "1012.185",
+      "bp": "e"
+    },
+    {
+      "name": "qualified_native_matmul",
+      "pid": 310,
+      "tid": 2,
+      "ts": "1279.459",
+      "dur": 68.51875,
+      "ph": "X",
+      "args": {
+        "Model Id": 4294967295,
+        "Task Type": "MIX_AIC",
+        "Physic Stream Id": 2,
+        "Task Id": 3,
+        "Batch Id": 0,
+        "Subtask Id": 0,
+        "connection_id": 14
+      }
+    },
+    {
+      "name": "HostToDevice60129542144",
+      "pid": 310,
+      "tid": 2,
+      "ph": "f",
+      "cat": "HostToDevice",
+      "id": "60129542144",
+      "ts": "1279.459",
+      "bp": "e"
+    },
+    {
+      "name": "AscendCL@aclrtRecordEvent",
+      "pid": 210,
+      "tid": 120,
+      "ts": "879.650",
+      "dur": 130.74,
+      "ph": "X",
+      "args": {
+        "Thread Id": 120,
+        "Mode": "ACL_RTS",
+        "level": "acl",
+        "id": "aclrtRecordEvent",
+        "item_id": "0",
+        "connection_id": 13
+      }
+    },
+    {
+      "name": "Node@launch",
+      "pid": 210,
+      "tid": 110,
+      "ts": "1239.760",
+      "dur": 41.66,
+      "ph": "X",
+      "args": {
+        "Thread Id": 110,
+        "Mode": "launch",
+        "level": "node",
+        "id": "0",
+        "item_id": "qualified_native_matmul",
+        "connection_id": 14
+      }
+    },
+    {
+      "name": "HostToDevice55834574848",
+      "pid": 210,
+      "tid": 120,
+      "ph": "s",
+      "cat": "HostToDevice",
+      "id": "55834574848",
+      "ts": "879.650"
+    },
+    {
+      "name": "HostToDevice60129542144",
+      "pid": 210,
+      "tid": 110,
+      "ph": "s",
+      "cat": "HostToDevice",
+      "id": "60129542144",
+      "ts": "1239.760"
+    }
+  ]
+}

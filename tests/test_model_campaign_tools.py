@@ -83,8 +83,10 @@ def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, 
             self.workspace = workspace
     class FakeService:
         def __init__(self, client, bundle, public, exporter):
+            self.client = client
             assert client.state == public.parent / 'tool-state'
         def start(self, operation):
+            assert self.client.devices == [2, 5]
             called.append(operation)
             return dict(state='completed', correctness=True)
         def observe(self, call_id):
@@ -92,7 +94,7 @@ def test_cli_uses_owned_tool_state_and_operation_mapping(tmp_path, monkeypatch, 
             return dict(state='running', call_id=call_id)
     monkeypatch.setattr(tools, 'CampaignTools', FakeTools)
     monkeypatch.setattr(tools, 'CampaignService', FakeService)
-    prefix = ['--bundle', str(tmp_path / 'bundle'), '--workspace', str(workspace)]
+    prefix = ['--bundle', str(tmp_path / 'bundle'), '--workspace', str(workspace), '--devices', '2,5']
     assert tools.main(prefix + ['timing']) == 0
     assert json.loads(capsys.readouterr().out)['correctness'] is True
     assert tools.main(prefix + ['observe', 'abc123']) == 0
@@ -113,7 +115,7 @@ def test_application_pmu_lifecycle_exports_five_tasks_per_kernel(tmp_path, monke
             self.compiler = compiler
         def __call__(self):
             calls.append('forward')
-    monkeypatch.setattr(native, '_prepare', lambda root: (Prepared(), {}))
+    monkeypatch.setattr(native, '_prepare', lambda root: (Prepared(), {'id': 'operator-case'}))
     class Acquisition:
         def profile(self, prepared, **kwargs):
             assert kwargs['samples'] == 1
@@ -457,3 +459,222 @@ def test_model_service_requests_activation_before_native_dispatch(tmp_path):
     result = service.start('check')
     request = json.loads((state / result['call_id'] / 'request.json').read_text())
     assert request['activation_required'] is True
+
+
+def test_task_router_selects_private_cases_and_variants(tmp_path, monkeypatch):
+    import model_campaign_task as router
+    config = dict(task='gdn', profile_index=3, check_indices=[0, 3])
+    (tmp_path / 'private-task.json').write_text(json.dumps(config))
+    calls = []
+    validator = object()
+    def make(root, index, variant=0):
+        calls.append((root, index, variant))
+        return dict(id=f'gdn-{index}-v{variant}')
+    monkeypatch.setitem(sys.modules, 'comparison_gdn', SimpleNamespace(make_case=make, validate=validator))
+    case, validate = router.case(tmp_path, variant=1)
+    assert case['id'] == 'gdn-3-v1' and validate is validator
+    assert calls == [(tmp_path / 'reference', 3, 1)]
+    assert router.check_indices(tmp_path) == [0, 3]
+
+
+def test_prepare_comparison_releases_no_private_material(tmp_path, monkeypatch):
+    def prepare(private, root):
+        private.mkdir()
+        (private / 'secret').write_text('PRIVATE ORACLE')
+        return dict(public=dict(arguments=['x'], outputs=['y'], starter='class Model: pass\n'))
+    monkeypatch.setitem(sys.modules, 'comparison_gdn', SimpleNamespace(prepare=prepare,
+        specifications=lambda root: [None] * 7))
+    # Copy sources through the actual preparation boundary without changing source tree.
+    original = tools.shutil.copyfile
+    def copy(source, dest):
+        if Path(source).name in ('comparison_gdn.py', 'comparison_gdn_starter.py'):
+            Path(dest).write_text('# private adapter placeholder\n')
+        else:
+            original(source, dest)
+    monkeypatch.setattr(tools.shutil, 'copyfile', copy)
+    result = tools.prepare(tmp_path / 'bundle', 'gdn', tmp_path / 'references')
+    public, private = Path(result['public']), Path(result['private'])
+    assert 'PRIVATE ORACLE' not in ''.join(p.read_text() for p in public.iterdir())
+    assert (private / 'reference/secret').read_text() == 'PRIVATE ORACLE'
+    assert json.loads((private / 'private-task.json').read_text())['check_indices'] == [0, 6]
+    assert json.loads((public / 'task.json').read_text())['task'] == 'gdn'
+
+
+def test_prepare_wraps_bsa_function_without_changing_public_call(tmp_path, monkeypatch):
+    def prepare(private, root):
+        private.mkdir()
+        return dict(api='forward(value)', starter='import torch\ndef forward(value): return value\n')
+    monkeypatch.setitem(sys.modules, 'comparison_bsa', SimpleNamespace(prepare=prepare,
+        specifications=lambda root: [None] * 50))
+    monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(nn=SimpleNamespace(Module=object)))
+    original = tools.shutil.copyfile
+    def copy(source, dest):
+        if Path(source).name in ('comparison_bsa.py', 'comparison_bsa_starter.py'):
+            Path(dest).write_text('# private adapter\n')
+        else:
+            original(source, dest)
+    monkeypatch.setattr(tools.shutil, 'copyfile', copy)
+    bundle = tools.prepare(tmp_path / 'bundle', 'bsa', tmp_path / 'references')
+    namespace = {}
+    exec((Path(bundle['public']) / 'candidate.py').read_text(), namespace)
+    marker = object()
+    assert namespace['Model']().forward(marker) is marker
+
+
+@pytest.mark.parametrize('task,arity', [('gdn', 9), ('bsa', 12)])
+def test_warm_calls_route_profile_and_variants_to_private_phase_bundle(tmp_path, monkeypatch, task, arity):
+    import model_campaign_task as router
+    phase = tmp_path / 'phase'
+    call = phase / 'calls/call-id'
+    call.mkdir(parents=True)
+    (call / 'candidate.py').write_text('class Model: pass\n')
+    reference = phase / 'reference'
+    reference.mkdir()
+    (reference / 'oracle-marker').write_text(task)
+    (phase / 'private-task.json').write_text(json.dumps(dict(task=task,
+        profile_index=3, check_indices=[1, 3])))
+    seen = []
+    def make_case(root, index, variant=0):
+        assert (root / 'oracle-marker').read_text() == task
+        seen.append((index, variant))
+        return dict(id=f'{task}-{index}-v{variant}', args=[task] * arity)
+    monkeypatch.setitem(sys.modules, 'comparison_' + task,
+        SimpleNamespace(make_case=make_case, validate=lambda *args: None))
+    assert router.trusted_bundle_root(call) == phase
+    profile, _ = router.case(call)
+    assert profile['id'] == f'{task}-3-v0' and len(profile['args']) == arity
+    for variant in (0, 1):
+        for index in router.check_indices(call):
+            case, _ = router.case(call, index, variant)
+            assert case['args'] == [task] * arity
+            assert case['id'] == f'{task}-{index}-v{variant}'
+    assert seen == [(3, 0), (1, 0), (3, 0), (1, 1), (3, 1)]
+    assert not (call / 'private-task.json').exists()
+    assert not (call / 'reference').exists()
+    assert router.configuration(phase)['task'] == task
+
+
+def test_legacy_unconfigured_warm_layout_preserves_matmul_defaults(tmp_path):
+    import model_campaign_task as router
+    call = tmp_path / 'phase/calls/id'
+    call.mkdir(parents=True)
+    assert router.configuration(call) == dict(task='matmul', profile_index=7, check_indices=list(range(8)))
+
+
+@pytest.mark.parametrize('remote_state,expected', [('completed', 'failed'), ('failed', 'failed'),
+                                                 ('cancelled', 'cancelled'), ('running', 'running')])
+def test_warm_terminal_missing_report_finishes_without_dispatch(tmp_path, remote_state, expected):
+    import model_campaign_warm as warm
+    state = tmp_path / 'state'
+    folder = state / 'callid'
+    folder.mkdir(parents=True)
+    receipt = dict(call_id='callid', handle='remote:gz-a3:job:original',
+                   remote_folder='phase/calls/callid', request=dict(source_sha256='a' * 64))
+    (folder / 'receipt.json').write_text(json.dumps(receipt))
+    (state / 'phase.json').write_text(json.dumps(dict(handle=receipt['handle'])))
+    calls = []
+    def remote(verb, *args):
+        calls.append(verb)
+        if verb == 'observe':
+            return dict(state=remote_state)
+        assert verb == 'download'
+        return dict(state='failed')
+    client = SimpleNamespace(state=state, workspace=tmp_path / 'private', target='gz-a3', remote=remote)
+    result = warm.observe(client, 'callid')
+    assert result['state'] == expected and result['handle'] == receipt['handle']
+    assert calls == ['observe', 'download']
+    assert ('next' in result) is (remote_state == 'running')
+    if remote_state == 'completed':
+        assert result['failure_stage'] == 'infrastructure'
+        assert result['diagnostic']['phase_state'] == 'completed'
+
+
+def test_completed_warm_phase_transport_outage_is_retryable(tmp_path):
+    import model_campaign_warm as warm
+    state = tmp_path / 'state'
+    folder = state / 'callid'
+    folder.mkdir(parents=True)
+    receipt = dict(call_id='callid', handle='remote:gz-a3:job:original',
+                   remote_folder='phase/calls/callid')
+    (folder / 'receipt.json').write_text(json.dumps(receipt))
+    (state / 'phase.json').write_text(json.dumps(dict(handle=receipt['handle'])))
+    def remote(verb, *args):
+        if verb == 'observe': return dict(state='completed')
+        raise TimeoutError('transport interrupted')
+    result = warm.observe(SimpleNamespace(state=state, workspace=tmp_path / 'private',
+        target='gz-a3', remote=remote), 'callid')
+    assert result['state'] == 'observation-unavailable'
+    assert result['next'] == 'experiment-tool observe callid'
+    assert result['handle'] == receipt['handle']
+
+
+@pytest.mark.parametrize('child_exit', ['sigterm', 'systemexit'])
+def test_forked_runtime_child_cannot_publish_parent_report(tmp_path, child_exit):
+    import subprocess
+    script = r'''
+import hashlib,io,json,os,signal,sys,tarfile,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import model_campaign_worker as worker
+root=Path(sys.argv[2]);(root/'inbox').mkdir(parents=True)
+candidate=b'class Model: pass\n'
+request=dict(operation='check',host_remaining_seconds=10,source_sha256=hashlib.sha256(candidate).hexdigest())
+with tarfile.open(root/'inbox/call.tar.gz','w:gz') as archive:
+ for name,data in [('candidate.py',candidate),('request.json',json.dumps(request).encode())]:
+  info=tarfile.TarInfo(name);info.size=len(data);archive.addfile(info,io.BytesIO(data))
+class Lease:
+ def close(self):
+  with (root/'lease-closed').open('a') as output: output.write(str(os.getpid())+'\n')
+sys.modules['model_device']=types.SimpleNamespace(acquire=lambda probe,remaining:(0,{},Lease()))
+def check(call,env,remaining):
+ child=os.fork()
+ if child==0:
+  if sys.argv[3]=='sigterm': os.kill(os.getpid(),signal.SIGTERM)
+  raise SystemExit(0)
+ os.waitpid(child,0)
+ assert not (call/'results/summary.json').exists(), 'child published parent report'
+ assert not (call/'evidence.tar.gz').exists(), 'child published parent evidence'
+ assert not (root/'lease-closed').exists(), 'child closed parent lease'
+ (root/'stop').touch()
+ return dict(passed=True,variants=[0,1])
+os.environ['CAMPAIGN_REMAINING_SECONDS']='10'
+worker.phase(root,types.SimpleNamespace(check=check))
+report=json.loads((root/'calls/call/results/summary.json').read_text())
+assert report['state']=='completed' and report['worker_pid']==os.getpid()
+assert (root/'lease-closed').read_text().splitlines()==[str(os.getpid())]
+'''
+    result = subprocess.run([sys.executable, '-c', script,
+        str(Path(__file__).resolve().parents[1] / 'scripts'), str(tmp_path / 'phase'), child_exit],
+        capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    summary = json.loads((tmp_path / 'phase/calls/call/results/summary.json').read_text())
+    assert summary['check'] == dict(passed=True, variants=[0, 1])
+
+
+def test_warm_launch_propagates_physical_allowance_to_actual_payload(tmp_path):
+    import subprocess, tarfile
+    from datetime import datetime, timedelta, timezone
+    import model_campaign_warm as warm
+    state = tmp_path / 'state'
+    folder = state / 'call'
+    folder.mkdir(parents=True)
+    remote = tmp_path / 'phase'
+    payload = tmp_path / 'execute-phase.py'
+    payload.write_text('import os,json\nprint(json.dumps(json.loads(os.environ["CAMPAIGN_ALLOWED_DEVICES"])))\n')
+    with tarfile.open(str(remote) + '.tar.gz', 'w:gz') as archive:
+        archive.add(payload, arcname='execute-phase.py')
+    (state / 'phase.json').write_text(json.dumps(dict(remote_folder=str(remote), devices=[2, 5])))
+    receipt = dict(call_id='call', request=dict(utc_deadline=(datetime.now(timezone.utc)
+        + timedelta(seconds=60)).isoformat()), upload=dict(state='completed'))
+    captured = []
+    def run(verb, *args):
+        assert verb == 'run'
+        script = Path(args[args.index('--file') + 1])
+        result = subprocess.run(['bash', str(script)], capture_output=True, text=True, check=True)
+        captured.append(json.loads(result.stdout))
+        return dict(state='running', handle='remote:fake:job:owned')
+    client = SimpleNamespace(state=state, target='fake', runtime='fake', cwd=str(tmp_path),
+        transfer=lambda receipt, kind: receipt[kind], remote=run)
+    result = warm.launch(client, receipt, folder)
+    assert captured == [[2, 5]]
+    assert result['handle'] == 'remote:fake:job:owned'

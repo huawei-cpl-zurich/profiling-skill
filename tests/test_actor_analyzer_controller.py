@@ -751,3 +751,120 @@ def test_analysis_binds_all_citations_to_authoritative_candidate_call(tmp_path, 
     campaign = make_campaign(tmp_path, runner, rounds=1)
     state = campaign.run()
     assert state['phases']['round-1-analyzer']['analysis_valid'] == (defect == 'none')
+
+
+def test_checkpoint_resumes_original_four_rounds(tmp_path):
+    seen = []
+    def runner(campaign, phase, role, budget, commit):
+        seen.append((phase.name, budget))
+        if role == 'actor':
+            (campaign.workspace / 'candidate.py').write_text('value = ' + str(len(seen)))
+            campaign.qualify(phase, dict(state='completed', correctness=True,
+                source_sha256=digest(campaign.workspace / 'candidate.py')))
+        else:
+            (phase / 'analysis.json').write_text(json.dumps(dict(candidate_commit=commit,
+                profiling=dict(status='unavailable', reason='fixture'), evidence=[],
+                observations=[], bottlenecks=[], ceilings=[], unknowns=[])))
+        return dict(exit_code=0)
+    campaign = make_campaign(tmp_path, runner)
+    assert campaign.run(stop_after_round=1)['state'] == 'checkpoint'
+    assert len(seen) == 2 and campaign.rounds == 4
+    assert campaign.run()['state'] == 'completed'
+    assert len(seen) == 8
+    assert len({name for name, budget in seen}) == 8
+
+
+@pytest.mark.parametrize('role,returncode,timed_out,expected', [
+    ('analyzer', 0, False, 0), ('actor', 0, False, 3),
+    ('analyzer', 2, False, 2), ('analyzer', 0, True, 124)])
+def test_role_launcher_analyzer_completion_requires_process_success_not_commits(
+        tmp_path, monkeypatch, role, returncode, timed_out, expected):
+    import actor_analyzer_controller as controller
+    from blind_optimization_launcher import completion_exit_code
+    campaign = make_campaign(tmp_path, None, rounds=1)
+    campaign.prepare()
+    auth = tmp_path / 'auth'
+    auth.mkdir()
+    (auth / 'auth.json').write_text('{}')
+    campaign.auth_home = auth
+    phase = campaign.root / ('round-1-' + role)
+    launcher = RoleLauncher(campaign, phase, role, 60,
+                            campaign.git('rev-parse', 'HEAD').strip() if role == 'analyzer' else None)
+    def launch(self, preflight_only=False):
+        self.root.mkdir()
+        result = dict(returncode=returncode, timed_out=timed_out,
+                      preflight_only=False, candidate_commits=0)
+        result['exit_code'] = completion_exit_code(result)
+        controller.save(self.root / 'receipt.json', result)
+        return result
+    monkeypatch.setattr(controller.BlindLauncher, 'launch', launch)
+    monkeypatch.setattr(controller, 'cleanup_phase', lambda path: dict(state='terminal'))
+    result = launcher.launch()
+    assert result['exit_code'] == expected
+    assert json.loads((phase / 'receipt.json').read_text()) == result
+    if role == 'analyzer' and expected == 0:
+        from campaign_batch import reconcile, CELLS
+        observed = dict(state='checkpoint', phases={
+            'round-1-actor': dict(state='terminal', candidate_commit='abc', candidate_verified=True),
+            'round-1-analyzer': dict(state='terminal', candidate_commit='abc',
+                                    analysis_valid=True, result=result)})
+        assert not reconcile(None, {CELLS[0]: observed}, 1)['stopped']
+
+
+@pytest.mark.parametrize('changed', [False, True])
+def test_actor_carry_forward_qualification_tracks_source_not_phase_commit(tmp_path, changed):
+    actors = []
+    def runner(campaign, phase, role, budget, commit):
+        if role == 'actor':
+            actors.append(phase.name)
+            if len(actors) == 1:
+                (campaign.workspace / 'candidate.py').write_text('value = 1\n')
+                campaign.qualify(phase, dict(state='completed', correctness=True,
+                    source_sha256=digest(campaign.workspace / 'candidate.py')))
+            elif changed:
+                (campaign.workspace / 'candidate.py').write_text('value = 2\n')
+        else:
+            (phase / 'analysis.json').write_text(json.dumps(dict(candidate_commit=commit,
+                profiling=dict(status='unavailable', reason='fixture'), evidence=[],
+                observations=[], bottlenecks=[], ceilings=[], unknowns=[])))
+        return dict(exit_code=0)
+    campaign = make_campaign(tmp_path, runner, rounds=2)
+    result = campaign.run()
+    actor = result['phases']['round-2-actor']
+    analyzer = result['phases']['round-2-analyzer']
+    assert actor['candidate_verified'] is (not changed)
+    if not changed:
+        assert actor['candidate_commit'] == analyzer['candidate_commit'] == result['verified']
+        assert actor['carried_forward_from'] == result['phases']['round-1-actor']['candidate_commit']
+    else:
+        assert actor['candidate_commit'] != analyzer['candidate_commit']
+        from campaign_batch import failure
+        assert failure(result) == 'unverified candidate'
+
+
+def test_public_bridge_cannot_request_trusted_phase_shutdown(tmp_path):
+    with pytest.raises(ValueError, match='trusted controller'):
+        bridge(tmp_path / 'absent-config.json', ['stop'])
+
+
+def test_cleanup_preserves_shutdown_handle_and_worker_acknowledgment(tmp_path, monkeypatch):
+    import model_campaign_warm as warm
+    phase = tmp_path / 'role'
+    phase.mkdir()
+    state = tmp_path / 'tool-state'
+    state.mkdir()
+    receipt = dict(handle='remote:fake:job:worker', remote_folder='/owned/phase')
+    (state/'phase.json').write_text(json.dumps(receipt))
+    (phase/'owned-tools.json').write_text(json.dumps(dict(directory=str(state), existing=[])))
+    def stop(path):
+        value = json.loads(path.read_text())
+        value['shutdown'] = dict(handle='remote:fake:job:control',
+            acknowledgment=dict(state='terminal', worker_closed=True))
+        path.write_text(json.dumps(value))
+        return dict(state='terminal', worker_closed=True)
+    monkeypatch.setattr(warm, 'shutdown_owned_phase', stop)
+    result = cleanup_phase(phase, lambda *args: dict(state='completed'))
+    assert result['state'] == 'terminal'
+    saved = json.loads((state/'phase.json').read_text())
+    assert saved['shutdown']['handle'] == 'remote:fake:job:control'
+    assert saved['shutdown']['acknowledgment']['worker_closed'] is True

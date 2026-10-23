@@ -43,6 +43,8 @@ class CampaignTools(Tools):
             save(output / 'summary.json', dict(state='failed', failure_stage='budget'))
             return receipt
         script = '#!/bin/bash\nset -eu\nexport CAMPAIGN_REMAINING_SECONDS=' + shlex.quote(str(remaining))
+        if getattr(self, 'devices', None) is not None:
+            script += '\nexport CAMPAIGN_ALLOWED_DEVICES=' + shlex.quote(json.dumps(self.devices))
         script += '\nmkdir -p ' + shlex.quote(receipt['remote_folder'])
         script += '\ntar -xzf ' + shlex.quote(receipt['remote_archive']) + ' -C ' + shlex.quote(receipt['remote_folder'])
         script += '\ncd ' + shlex.quote(receipt['remote_folder']) + '\nexec python execute.py\n'

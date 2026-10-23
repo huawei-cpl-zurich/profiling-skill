@@ -123,6 +123,14 @@ def cleanup_phase(phase, remote=managed_observation):
             continue
         try:
             receipt = json.loads(path.read_text())
+            if path == phase_worker and receipt.get('remote_folder') and receipt.get('handle'):
+                from model_campaign_warm import shutdown_owned_phase
+                stopped = shutdown_owned_phase(path)
+                calls.append({'worker_shutdown': stopped})
+                if stopped['state'] != 'terminal':
+                    uncertain = True
+                    continue
+                receipt = json.loads(path.read_text())  # Preserve shutdown handle and acknowledgment.
             if path != phase_worker and receipt.get('state') in ('completed', 'failed', 'cancelled'):
                 continue
             if receipt.get('dispatch_intent') and not receipt.get('handle'):
@@ -143,7 +151,7 @@ def cleanup_phase(phase, remote=managed_observation):
                 save(path, receipt)
             else:
                 uncertain = True
-        except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
             uncertain = True
             calls.append({'call_id': path.parent.name, 'error': str(error)})
     result = {'state': 'observation-required' if uncertain else 'terminal', 'calls': calls}
@@ -153,6 +161,8 @@ def cleanup_phase(phase, remote=managed_observation):
 
 def bridge(config_path, arguments):
     """Keep managed Tools receipts and source identity outside the agent mount."""
+    if arguments[:1] == ['stop']:
+        raise ValueError('phase shutdown is a trusted controller operation')
     config = json.loads(config_path.read_text())
     workspace, phase = Path(config['workspace']), config_path.parent
     pending_calls = []
@@ -273,7 +283,14 @@ class RoleLauncher(BlindLauncher):
         observer = threading.Thread(target=watchdog, daemon=True)
         observer.start()
         try:
-            return super().launch(preflight_only)
+            result = super().launch(preflight_only)
+            # Analyzers write a report, never candidate commits. Their report is
+            # validated independently by finish_phase before any batch gate.
+            if (self.role == 'analyzer' and result.get('returncode') == 0
+                    and result.get('timed_out') is False):
+                result['exit_code'] = 0
+                save(self.root / 'receipt.json', result)
+            return result
         finally:
             done.set()
             observer.join()
@@ -479,7 +496,15 @@ class Campaign:
                        and item.get('source_sha256') == candidate_hash(self.workspace)
                        for item in records):
                     state['verified'] = commit
+            previous = state.get('verified')
+            if previous and previous != commit:
+                verified_source = subprocess.check_output(['git', '-C', str(self.workspace),
+                    'show', previous + ':candidate.py'])
+                if candidate_hash(self.workspace) == hashlib.sha256(verified_source).hexdigest():
+                    state['verified'] = commit
+                    entry['carried_forward_from'] = previous
             entry['candidate_commit'] = commit
+            entry['candidate_verified'] = state.get('verified') == commit
         else:
             report_path = phase / 'reports/analysis.json'
             if not report_path.exists():
@@ -565,7 +590,9 @@ class Campaign:
                         reason=entry['analysis_error']))
             self.commit(phase.name + ': performance analysis and diagnostics')
 
-    def run(self):
+    def run(self, stop_after_round=None):
+        if stop_after_round is not None and not 1 <= stop_after_round <= self.rounds:
+            raise ValueError("checkpoint round outside configured campaign")
         self.root.parent.mkdir(parents=True, exist_ok=True)
         # The kernel releases this lock on interruption; persistent phase intents
         # distinguish observation from permission to dispatch another agent.
@@ -631,6 +658,10 @@ class Campaign:
                     save(self.root / 'state.json', state)
                     if entry['cleanup']['state'] != 'terminal':
                         return {**state, 'state': 'observation-required', 'pending_phase': name}
+                if stop_after_round == index and index < self.rounds:
+                    state['state'] = 'checkpoint'
+                    save(self.root / 'state.json', state)
+                    return state
             state['state'] = 'completed'
             save(self.root / 'state.json', state)
             return state
@@ -650,6 +681,7 @@ def main():
     parser.add_argument('--profiling-skill', type=Path, action='append', default=[])
     parser.add_argument('--coding-skill', type=Path, action='append', default=[])
     parser.add_argument('--rounds', type=int, default=4)
+    parser.add_argument('--stop-after-round', type=int)
     parser.add_argument('--actor-budget', type=int, default=1200)
     parser.add_argument('--analyzer-budget', type=int, default=600)
     parser.add_argument('--actor-only', action='store_true')
@@ -658,9 +690,9 @@ def main():
                       json.loads(args.tool_command_json.read_text()), args.instruction.read_text(),
                       skill=args.skill, rounds=args.rounds, actor_budget=args.actor_budget,
                       analyzer_budget=args.analyzer_budget, actor_only=args.actor_only,
-                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run()
+                      coding_skills=args.coding_skill, profiling_skills=args.profiling_skill).run(stop_after_round=args.stop_after_round)
     print(json.dumps(result, indent=2))
-    return 0 if result['state'] == 'completed' else 75
+    return 0 if result['state'] in ('completed', 'checkpoint') else 75
 
 
 if __name__ == '__main__':

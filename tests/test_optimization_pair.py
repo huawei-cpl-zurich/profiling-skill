@@ -108,6 +108,21 @@ class PairTests(unittest.TestCase):
             self.assertNotIn(('capture', None), adapter.log)
             self.assertEqual(len(adapter.log), 4)
 
+    def test_failed_correctness_diagnostics_and_counts_survive_process_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder, adapter = Path(directory), Adapter()
+            diagnostics = dict(passed=False, max_abs_error=0.125, mismatches=3,
+                               reason='numeric tolerance exceeded')
+            adapter.validate = lambda *args: diagnostics
+            result = self.run_case(adapter, folder)
+            retained = json.loads((folder / 'out/result.json').read_text())
+            self.assertEqual(result, retained)
+            self.assertEqual(retained['status'], 'failed')
+            self.assertEqual(retained['arms']['before']['correctness'], dict(
+                status='failed', calls=1, diagnostics=diagnostics, reason='validator rejected output'))
+            self.assertEqual(retained['counts'], dict(correctness_calls=1, profiled_calls=0, capture_calls=0))
+            self.assertEqual(adapter.log, [('run', 'before')])
+
     def test_capture_counts_and_identity_cannot_be_self_asserted(self):
         for kwargs, status in ((dict(calls=9), 'failed'), (dict(calls=11), 'failed'),
                                (dict(missing=True), 'incomplete')):

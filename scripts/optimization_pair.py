@@ -155,7 +155,8 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
             folder.mkdir()
             private = clone(shared, torch)
             before = fingerprint(private, torch)
-            row = report['arms'][arm] = dict(correctness=dict(status='incomplete', calls=0))
+            row = report['arms'][arm] = dict(correctness=dict(status='incomplete', calls=0),
+                                                profiled_calls=0, capture_calls=0)
             item = prepared[arm] = adapter.prepare(arm, case_spec, private, folder)
             if not item.expected_kernels or not all(isinstance(n, str) and n for n in item.expected_kernels):
                 raise ValueError('each arm requires exact expected kernel names')
@@ -163,7 +164,9 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
             row['correctness']['calls'] += 1
             actual = item.run()
             diagnostics = adapter.validate(arm, actual, private, case_spec)
+            row['correctness']['diagnostics'] = diagnostics
             if diagnostics is False or isinstance(diagnostics, dict) and diagnostics.get('passed') is False:
+                row['correctness'].update(status='failed', reason='validator rejected output')
                 raise ValueError('correctness rejected: ' + arm)
             if fingerprint(private, torch) != before:
                 raise ValueError('correctness mutated fixture: ' + arm)
@@ -183,6 +186,7 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
                 count += 1
                 return item.run()
             try:
+                row['capture_calls'] += 1
                 capture = getattr(adapter, 'capture', None)
                 result = (capture(counted, item, output / arm / 'capture') if capture else
                           capture_ten(counted, output / arm / 'capture',
@@ -204,7 +208,13 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
                                                    report['arms']['after']['capture']['event_latency']['mean_ms'])
     except Exception as error:
         report['error'] = dict(type=type(error).__name__, message=str(error))
+        if 'row' in locals() and row['correctness']['status'] == 'incomplete':
+            row['correctness'].update(status='failed', reason=str(error), error_type=type(error).__name__)
     finally:
+        report['counts'] = {key: sum(row[key] for row in report['arms'].values())
+                            for key in ('profiled_calls', 'capture_calls')}
+        report['counts']['correctness_calls'] = sum(row['correctness']['calls']
+                                                   for row in report['arms'].values())
         save(output / 'result.json', report)
     return report
 

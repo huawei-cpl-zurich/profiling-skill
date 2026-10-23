@@ -8,13 +8,19 @@ import unittest
 import torch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'examples/optimization-library/catlass'),str(ROOT/'scripts')]
-from mixed_adapter import Adapter,configure
+from mixed_adapter import Adapter,configure,topology
 from mixed_contract import check_spec,make_padding_case,gemm_contract
 from optimization_native_bridge import NativeArm
 from optimization_pair import fixture
 
 
 class MixedTests(unittest.TestCase):
+    def test_actual_topology_required_for_equal_vector_capacity(self):
+        observed=topology(20,40,20)
+        self.assertEqual(observed,dict(observed_cube_cores=20,observed_vector_cores=40))
+        for values in ((20,20,20),(24,40,24),(20,40,24),(0,0,0),(True,2,1)):
+            with self.assertRaises(ValueError): topology(*values)
+
     def test_epilogue_reuses_exact_cross_language_oracle(self):
         with tempfile.TemporaryDirectory() as folder:
             spec=dict(family='02',m=16,n=16,k=16,seed=9201,b_layout='row')
@@ -52,11 +58,12 @@ class MixedTests(unittest.TestCase):
             folder=Path(folder)
             source=folder/'model.cpp'
             source.write_text(r'''#include <stdint.h>
-static uint32_t m_,n_,family_=2,calls_=0;static bool bad_;
+static uint32_t m_,n_,cores_,family_=2,calls_=0;static bool bad_;
 extern "C" uint32_t catlass_mixed_family(){return family_;}
 extern "C" void select_family(uint32_t f){family_=f;}
 extern "C" int catlass_bridge_configure(uint32_t m,uint32_t n,uint32_t k,uint32_t c){
- m_=m;n_=n;bad_=k==32;return !c||!m||!n||!k;}
+ m_=m;n_=n;cores_=c;bad_=k==32;return !c||!m||!n||!k;}
+extern "C" uint32_t configured_cube_cores(){return cores_;}
 extern "C" uint64_t catlass_mixed_workspace(){return bad_?1:uint64_t(m_)*n_*4;}
 extern "C" uint32_t catlass_bridge_abi_version(){return 1;}
 extern "C" const char* catlass_bridge_kernel_names(){return "[\"test_add\"]";}
@@ -72,6 +79,9 @@ extern "C" int catlass_bridge_launch(void **p,uint64_t n,void*){
             record=configure(lib,'02','after',[16,16,16],20)
             self.assertEqual(record['workspace_bytes'],1024)
             self.assertEqual(record['launch_count'],1)
+            before=configure(lib,'02','before',[16,16,16],20)
+            self.assertEqual(before['standalone_add_vector_blocks'],2*lib.configured_cube_cores())
+            self.assertEqual(before['standalone_add_vector_blocks'],topology(20,40,20)['observed_vector_cores'])
             a=torch.ones(16,16,dtype=torch.float16)
             b=torch.full((16,16),1/16,dtype=torch.float16)
             z=torch.arange(256,dtype=torch.float32).reshape(16,16)

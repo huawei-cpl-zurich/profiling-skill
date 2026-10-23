@@ -102,6 +102,49 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(reused['cases'][0]['candidate']['event_latency']['count'], 10)
         self.assertFalse(reused['comparability']['comparable'])
         self.assertNotIn('speedup', reused['cases'][0])
+    def test_retained_baseline_evidence_is_verified_before_candidate_execution(self):
+        def files_capture(call, output, **kwargs):
+            result = capture(call, output, **kwargs)
+            output.mkdir(parents=True)
+            for name in ('latency.json', 'forward-count.json', 'result.json',
+                         'trace.json', 'normalized.json', 'accounting.json'):
+                (output / name).write_text('{"evidence": true}')
+            result['profile'].update(vendor_trace=str(output / 'trace.json'),
+                capture_path=str(output / 'normalized.json'), accounting_path=str(output / 'accounting.json'))
+            return result
+        self.assertEqual(self.run_protocol('create', 'files', capture=files_capture)['state'], 'complete')
+        self.assertEqual(self.run_protocol('reuse', 'untouched')['state'], 'complete')
+        for index, name in enumerate(('trace.json', 'normalized.json', 'accounting.json', 'latency.json')):
+            path = self.root / 'cache/baseline-0000' / name
+            original = path.read_bytes()
+            for operation in ('modify', 'delete'):
+                with self.subTest(name=name, operation=operation):
+                    before = COUNTS.copy()
+                    if operation == 'modify':
+                        path.write_text('changed')
+                    else:
+                        path.unlink()
+                    result = self.run_protocol('reuse', f'bad-{index}-{operation}')
+                    self.assertEqual(result['state'], 'failed')
+                    self.assertIn('baseline evidence', result['error'])
+                    self.assertEqual(COUNTS, before)
+                    path.write_bytes(original)
+        before = COUNTS.copy()
+        manifest_path = self.root / 'cache/manifest.json'
+        manifest = json.loads(manifest_path.read_text())
+        manifest['cases'][0]['baseline_evidence']['../outside.json'] = 'unused'
+        manifest_path.write_text(json.dumps(manifest))
+        self.assertEqual(self.run_protocol('reuse', 'escape')['state'], 'failed')
+        self.assertEqual(COUNTS, before)
+        del manifest['cases'][0]['baseline_evidence']['../outside.json']
+        manifest_path.write_text(json.dumps(manifest))
+        manifest = json.loads(manifest_path.read_text())
+        del manifest['cases'][0]['baseline_evidence']
+        manifest_path.write_text(json.dumps(manifest))
+        before = COUNTS.copy()
+        self.assertEqual(self.run_protocol('reuse', 'old-manifest')['state'], 'failed')
+        self.assertEqual(COUNTS, before)
+
     def test_shared_candidate_source_is_rejected_before_provider_or_forwards(self):
         self.hooks['candidate'] = candidate
         result = self.run_protocol('create', 'same-source')

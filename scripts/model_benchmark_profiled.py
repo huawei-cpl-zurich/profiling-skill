@@ -15,7 +15,7 @@ sys.path.insert(0, str(HELPERS))
 from model_execution import GraphCompiler, prepare_model
 from profile_ten import capture_ten, resolve_triton_names
 
-PROTOCOL = 'single-validation-ten-profile-v1'
+PROTOCOL = 'single-validation-ten-profile-v2'
 
 
 def save(path, value):
@@ -25,7 +25,37 @@ def save(path, value):
 
 
 def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def baseline_evidence(cache, folder, result):
+    """Bind referenced reports, not unreferenced vendor raw-data trees."""
+    paths = [folder / name for name in ('latency.json', 'forward-count.json', 'result.json')
+             if (folder / name).exists()]
+    profile = result['profile']
+    paths += [Path(profile[key]) for key in ('vendor_trace', 'capture_path', 'accounting_path')
+              if profile.get(key)]
+    evidence = {}
+    for path in paths:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(cache.resolve()) or not resolved.is_file():
+            raise ValueError('baseline evidence must be an existing file within private cache')
+        evidence[str(resolved.relative_to(cache.resolve()))] = sha(resolved)
+    return evidence
+
+
+def verify_baseline_evidence(cache, item):
+    evidence = item.get('baseline_evidence')
+    if not isinstance(evidence, dict):
+        raise ValueError('baseline evidence manifest missing')
+    for relative, digest in evidence.items():
+        path = (cache / relative).resolve()
+        if not path.is_relative_to(cache.resolve()) or not path.is_file() or sha(path) != digest:
+            raise ValueError('baseline evidence missing or changed: ' + relative)
 
 
 def move_tree(value, torch, device):
@@ -102,6 +132,9 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
             manifest = json.loads((cache / 'manifest.json').read_text())
             if manifest['protocol'] != PROTOCOL or manifest['sources'] != shared or manifest['state'] != 'complete':
                 raise ValueError('baseline cache protocol/source identity mismatch or incomplete cache')
+            # Verify all retained baseline evidence before any candidate execution.
+            for item in manifest['cases']:
+                verify_baseline_evidence(cache, item)
             def cached_cases():
                 for item in manifest['cases']:
                     path = cache / item['file']
@@ -172,6 +205,8 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
                                                baseline_folder, capture)
                 save(cache / f'baseline-{index:04d}.json', baseline_result)
                 manifest['cases'][index]['baseline_sha256'] = sha(cache / f'baseline-{index:04d}.json')
+                manifest['cases'][index]['baseline_evidence'] = baseline_evidence(
+                    cache, baseline_folder, baseline_result)
                 save(cache / 'manifest.json', manifest)
             row.update(state='complete', candidate=candidate, baseline=baseline_result,
                 baseline_reused=options.cache_mode == 'reuse', execution=prepared.evidence,

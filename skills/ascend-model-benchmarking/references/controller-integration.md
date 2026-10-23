@@ -48,7 +48,11 @@ source can change. The candidate hook must live in a separate Python source file
 from the baseline, provider and validator hooks: cache identities hash each complete
 hook source file. Shared baseline/provider/validator files must remain unchanged;
 this layout is checked before calling the provider or executing any forward.
-Incomplete caches fail closed and retain expected outputs for
+Protocol v2 also hashes referenced baseline traces, normalized/accounted reports and
+existing timing/count/result evidence files with cache-relative paths. Reuse verifies
+all retained baseline evidence before candidate execution; missing/changed evidence
+or older caches without this manifest fail closed. Unreferenced vendor raw trees
+are not hashed. Incomplete caches retain expected outputs for
 operator recovery rather than silently regenerating them. Keep cache paths private.
 `--max-specializations` (default 256) scopes Dynamo cache limits and bounds the case
 count; settings are restored on exit. The external supervisor owns physical device

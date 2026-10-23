@@ -80,3 +80,9 @@ retain per-run qualification and verify conditions across repetitions separately
 Source and fixture providers must be versioned separately from candidate code.
 Correctness validation covers ordinary runtime input variation as well as shapes;
 passing fixed fixtures is not permission to specialize on their accidental values.
+
+Retained GDN `MIX_AIV` ReduceSum events have verified `torch_to_npu` start/finish
+links to CPU `aclnnReduceSum` records. They count as device compute under the same
+complete-flow and explicit-iteration requirements as other validated task types.
+This recognition does not recover missing markers or establish vector/cube
+utilization from the task label.

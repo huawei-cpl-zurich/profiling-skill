@@ -318,7 +318,46 @@ def test_placeholder_never_relaxes_explicit_markers(trace, mutation):
         normalize(trace)
 
 
-def test_unproven_mixed_aiv_remains_unsupported(trace):
-    trace[2]['args']['Task Type'] = 'MIX_AIV'
-    with pytest.raises(capture.CaptureError, match='unvalidated device task type: MIX_AIV'):
+@pytest.fixture
+def retained_mixed_trace():
+    # Compact actual GDN repetition1 ReduceSum record and exact vendor links.
+    return [event('model_iteration_0', 2702806, 2702806,
+                  '1792701342689803.470', 1099392.9, cat='cpu_op'),
+            event('aclnnReduceSum', 2702806, 2702806,
+                  '1792701342690412.980', 2.17, cat='cpu_op',
+                  args={'Sequence number': -1, 'Fwd thread id': 0}),
+            event('aclnnReduceSum_ReduceSumOpAiCore_ReduceSum', 2767673793, 2,
+                  '1792701342690522.310', 19.9,
+                  args={'Model Id': 4294967295, 'Task Type': 'MIX_AIV',
+                        'Physic Stream Id': 2, 'Task Id': 14337, 'Batch Id': 0,
+                        'Subtask Id': 0, 'connection_id': 1852220}),
+            dict(ph='s', bp='e', name='torch_to_npu', id=1792701342690522310,
+                 pid=2702806, tid=2702806, ts='1792701342690412.980', cat='async_npu'),
+            dict(ph='f', bp='e', name='torch_to_npu', id=1792701342690522310,
+                 pid=2767673793, tid=2, ts='1792701342690522.310', cat='async_npu')]
+
+
+def test_retained_mixed_aiv_is_correlated_device_compute(retained_mixed_trace):
+    result = normalize(retained_mixed_trace)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert result['tasks'][0]['kind'] == 'device'
+    assert result['tasks'][0]['duration_us'] == 19.9
+    assert result['tasks'][0]['start_us'] == pytest.approx(718.84)
+    assert summary['iterations'][0]['device_busy_us'] == 19.9
+    assert summary['iterations'][0]['aicpu_busy_us'] == 0
+    assert result['acquisition_evidence']['paired_flows'] == 1
+    assert result['acquisition_evidence']['exclusions'] == []
+
+
+@pytest.mark.parametrize('mutation', ['missing-flow', 'duplicate-flow', 'missing-marker',
+                                    'duplicate-marker', 'unclosed-marker', 'unknown-kind'])
+def test_mixed_aiv_still_requires_complete_flow_and_markers(retained_mixed_trace, mutation):
+    trace = retained_mixed_trace
+    if mutation == 'missing-flow': trace.pop()
+    elif mutation == 'duplicate-flow': trace.append(copy.deepcopy(trace[-1]))
+    elif mutation == 'missing-marker': trace.pop(0)
+    elif mutation == 'duplicate-marker': trace.append(copy.deepcopy(trace[0]))
+    elif mutation == 'unclosed-marker': trace[0]['ph'] = 'B'
+    else: trace[2]['args']['Task Type'] = 'UNVALIDATED_MIX'
+    with pytest.raises(capture.CaptureError):
         normalize(trace)

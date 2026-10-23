@@ -15,7 +15,7 @@ from pathlib import Path
 import platform
 
 TASK_KINDS = dict(KERNEL_AIVEC='device', KERNEL_AICORE='device', KERNEL_AICPU='aicpu',
-                 MIX_AIC='device', AI_CORE='device', AI_VECTOR_CORE='device')
+                 MIX_AIC='device', MIX_AIV='device', AI_CORE='device', AI_VECTOR_CORE='device')
 
 
 class CaptureError(ValueError):

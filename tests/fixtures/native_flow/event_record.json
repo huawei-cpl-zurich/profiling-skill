@@ -1,0 +1,54 @@
+{
+  "traceEvents": [
+    {
+      "ph": "X",
+      "name": "record_event",
+      "pid": 110,
+      "tid": 110,
+      "ts": "0.000",
+      "dur": 8.02,
+      "cat": "cpu_op",
+      "args": {
+        "Sequence number": -1,
+        "Fwd thread id": 0
+      }
+    },
+    {
+      "name": "EVENT_RECORD",
+      "pid": 310,
+      "tid": 2,
+      "ts": "1346.498",
+      "dur": 0.01975,
+      "ph": "X",
+      "args": {
+        "Model Id": 4294967295,
+        "Task Type": "EVENT_RECORD",
+        "Physic Stream Id": 2,
+        "Task Id": 35,
+        "Batch Id": 0,
+        "Subtask Id": 4294967295,
+        "connection_id": 32
+      }
+    },
+    {
+      "ph": "s",
+      "bp": "e",
+      "name": "torch_to_npu",
+      "id": 1792741363020073508,
+      "pid": 110,
+      "tid": 110,
+      "ts": "0.000",
+      "cat": "async_npu"
+    },
+    {
+      "ph": "f",
+      "bp": "e",
+      "name": "torch_to_npu",
+      "id": 1792741363020073508,
+      "pid": 310,
+      "tid": 2,
+      "ts": "1346.498",
+      "cat": "async_npu"
+    }
+  ]
+}

@@ -108,3 +108,27 @@ def test_native_task_outside_host_iteration_is_audited_without_reassignment():
     events[0]['ts'], events[0]['dur'] = '10000', 100
     with pytest.raises(capture.CaptureError, match='empty active iteration'):
         normalize(events)
+
+
+def test_retained_fractional_timing_command_is_audited_without_compute_time():
+    # Actual attention capture duration is 0.01975us after vendor clock
+    # conversion. Identity is established by command schema + exact host flow.
+    timing = fixture('event_record')
+    result = normalize(fixture('after') + timing)
+    summary = accounting.account_profile(result['iterations'], result['tasks'], capture_complete=True)
+    assert summary['iterations'][0]['device_busy_us'] == 35.5995
+    assert summary['iterations'][0]['task_count'] == 1
+    exclusion = result['acquisition_evidence']['exclusions'][0]
+    assert exclusion['task']['dur'] == 0.01975
+    assert exclusion['host']['name'] == 'record_event'
+    assert exclusion['link']['flow_id'] == str(timing[-1]['id'])
+
+
+@pytest.mark.parametrize('mutation', ['missing-flow', 'host', 'negative', 'nan', 'infinite'])
+def test_fractional_timing_duration_does_not_relax_identity_or_flow(mutation):
+    timing = fixture('event_record')
+    if mutation == 'missing-flow': timing.pop()
+    elif mutation == 'host': timing[0]['name'] = 'ordinary_compute'
+    else: timing[1]['dur'] = {'negative': -0.01975, 'nan': float('nan'), 'infinite': float('inf')}[mutation]
+    with pytest.raises(capture.CaptureError):
+        normalize(fixture('after') + timing)

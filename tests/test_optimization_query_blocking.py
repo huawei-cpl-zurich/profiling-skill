@@ -70,11 +70,15 @@ class AttentionContractTests(unittest.TestCase):
                 self.assertFalse(diagnostics(actual, fixture)['passed'])
 
     def test_explicit_envelope_rejects_unsupported_inputs(self):
-        for key, value in [('b', 2), ('h', 1), ('q', 0), ('k', 1537), ('d', 32), ('seed', -1), ('q', True)]:
+        for key, value in [('b', 2), ('h', 1), ('q', 0), ('k', 1537), ('d', 32), ('seed', -1), ('seed', 2**64), ('q', True)]:
             spec = self.spec()
             spec[key] = value
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 dimensions(spec)
+
+    def test_largest_supported_seed_generates_a_valid_fixture(self):
+        fixture = make_case(dict(self.spec(), q=1, k=1, seed=2**64-1))
+        self.assertTrue(diagnostics(fixture['expected'], fixture)['passed'])
 
     def test_cpu_import_and_frontend_hashes_need_no_device(self):
         self.assertIs(attention.Adapter.make_case, make_case)

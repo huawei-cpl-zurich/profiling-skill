@@ -70,3 +70,13 @@ Native factory: `mixed_adapter:epilogue_factory`; the oracle is the exact shared
 `gemm_contract.py` provider used by Triton. Source: [MatmulEpilogue public Params
 and workspace](ref://profiling-skill/common/perf-analysis/repos/optimization-wave1-catlass-40aced927fda#include/catlass/gemm/kernel/matmul_epilogue.hpp:L51-L107).
 No correctness or latency claim follows from compilation alone.
+
+The native standalone epilogue uses the same explicit mixed 1:2 execution
+contract as the fused epilogue: 20 logical blocks means 40 AIV subcontexts on
+the observed target. `BlockEpilogue` partitions rows internally by subcontext;
+its siblings must receive the same logical task, using
+`GetBlockIdx()/GetSubBlockNum()` as the starting task owner. Using the raw
+flattened AIV index gives each sibling a different task and leaves half-tiles
+unwritten. A source task-type hint does not establish the compiled execution
+mode: inspect the actual binary and retained output coverage. The standalone
+128x256 tile splits into the same 64x256 AIV subtiles as the fused path.

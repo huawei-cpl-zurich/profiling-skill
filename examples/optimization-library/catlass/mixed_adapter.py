@@ -36,6 +36,7 @@ def configure(library,family,arm,shape,cores):
     return dict(workspace_bytes=size,conversion_forced=family=='10' and arm=='after',
                 launch_count=2 if family=='02' and arm=='before' else 1,
                 standalone_add_vector_blocks=2*cores if family=='02' and arm=='before' else 0,
+                standalone_add_logical_blocks=cores if family=='02' and arm=='before' else 0,
                 intermediate_gm_bytes=4*m*n if family=='02' else 0)
 
 

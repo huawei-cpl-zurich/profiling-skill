@@ -53,6 +53,25 @@ class MixedTests(unittest.TestCase):
             with self.assertRaises(ValueError): check_spec(spec,family)
 
     @unittest.skipUnless(shutil.which('c++'),'C++ compiler required for actual ABI boundary')
+    def test_production_subcontext_owner_covers_every_epilogue_half_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            binary=Path(folder)/'schedule.so'
+            source=ROOT/'examples/optimization-library/catlass/mixed.cpp'
+            subprocess.run(['c++','-shared','-fPIC','-DMIXED_SCHEDULE_UNIT_TEST',str(source),'-o',str(binary)],
+                           capture_output=True,text=True,check=True)
+            library=ctypes.CDLL(str(binary))
+            owner=library.catlass_epilogue_task_owner
+            owner.argtypes=[ctypes.c_uint32,ctypes.c_uint32]
+            owner.restype=ctypes.c_uint32
+            for cores,subblocks,tasks in ((20,2,128),(20,2,2),(24,2,73),(20,1,128)):
+                visits={}
+                for block in range(cores*subblocks):
+                    for task in range(owner(block,subblocks),tasks,cores):
+                        key=(task,block%subblocks)
+                        visits[key]=visits.get(key,0)+1
+                self.assertEqual(visits,{(task,sub):1 for task in range(tasks) for sub in range(subblocks)})
+
+    @unittest.skipUnless(shutil.which('c++'),'C++ compiler required for actual ABI boundary')
     def test_real_abi_workspace_pointer_launch_and_immutable_addend(self):
         with tempfile.TemporaryDirectory() as folder:
             folder=Path(folder)
@@ -80,6 +99,7 @@ extern "C" int catlass_bridge_launch(void **p,uint64_t n,void*){
             self.assertEqual(record['workspace_bytes'],1024)
             self.assertEqual(record['launch_count'],1)
             before=configure(lib,'02','before',[16,16,16],20)
+            self.assertEqual(before['standalone_add_logical_blocks'],lib.configured_cube_cores())
             self.assertEqual(before['standalone_add_vector_blocks'],2*lib.configured_cube_cores())
             self.assertEqual(before['standalone_add_vector_blocks'],topology(20,40,20)['observed_vector_cores'])
             a=torch.ones(16,16,dtype=torch.float16)

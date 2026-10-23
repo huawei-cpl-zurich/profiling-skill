@@ -115,3 +115,44 @@ fallback. Hardware support is accepted only after real compiled Model/Triton and
 correlated profiler smokes. Do not export this controller, helpers, private hooks
 or input providers into blind-agent workspaces: export only `SKILL.md`, `agents`
 metadata and the relevant guidance reference, together with a thin service client.
+
+
+## Single-validation profiled protocol
+
+Opt in with `scripts/model_benchmark_profiled.py --baseline pkg:Baseline
+--candidate pkg:Candidate --cases-provider pkg:cases --validator pkg:validate
+--cache-mode create --cache PRIVATE_NEW_DIRECTORY --output NEW_RESULTS`.
+The trusted provider yields case dictionaries with `id`, `args`, `expected`, and
+optional `kwargs`, `init_args`, `init_kwargs`, `metadata`, `expected_kernel` and
+private validator data. It must generate each expected output with exactly one
+reference invocation. Cases stream one at a time; each expected result is saved
+before candidate compilation. Hooks are private controller code, never candidate
+callbacks. Candidate compilation uses fullgraph and exactly one correctness call.
+Candidate capture precedes the eager PyTorch baseline capture; each has exactly
+ten forwards and zero explicit warmup/discovery calls.
+
+Run subsequent candidates with `--cache-mode reuse` and the same cache, baseline,
+provider and validator hooks. Reuse invokes neither the provider nor the baseline;
+it loads exact CPU tensor/primitive case data and the retained baseline profile.
+Cache identities bind those hooks, protocol, payloads and baseline results; candidate
+source can change. Incomplete caches fail closed and retain expected outputs for
+operator recovery rather than silently regenerating them. Keep cache paths private.
+`--max-specializations` (default 256) scopes Dynamo cache limits and bounds the case
+count; settings are restored on exit. The external supervisor owns physical device
+selection; `--device` selects the exposed logical device for cached tensor loads.
+
+Each capture saves/prints ten event samples, mean and sample standard deviation
+before export. Profile/export failure can coexist with complete event timings.
+Missing or mismatched kernel identity remains explicit; names resolved from live
+Triton side-table entries require exact per-iteration matches in the same capture.
+Unresolved names are observed-only. The report does not infer a verified speedup
+or unqualified ranking from timing completeness, and does not establish matching
+physical devices, runtimes or clock/load conditions across cached measurements.
+
+
+For this protocol `state=complete` means the fixed validation/event-sample protocol
+completed. `profile_state=incomplete` and `candidate_identity_state=qualified`
+remain visible when export, normalization or identity proof is unavailable.
+`EVENT_RECORD` trace compatibility is supplied by the separate parser update
+(PRs #156/#157); missing support remains an explicit profile error and does not
+convert failed accounting into successful profiling.

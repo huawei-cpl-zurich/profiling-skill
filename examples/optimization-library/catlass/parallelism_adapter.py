@@ -14,11 +14,17 @@ from compile_tile import PIN
 
 def configure(library, family, arm, shape, cores):
     """Read the actual compiled heuristic and workspace size through the C ABI."""
-    if arm not in ('before', 'after') or type(cores) is not int or cores <= 0:
+    if family not in ('06', '07') or arm not in ('before', 'after') or type(cores) is not int or cores <= 0:
         raise ValueError('an arm and actual positive Cube-core count are required')
     library.catlass_parallelism_family.restype = ctypes.c_uint32
     if library.catlass_parallelism_family() != int(family):
         raise ValueError('binary family does not match case')
+    library.catlass_bridge_kernel_names.argtypes = []
+    library.catlass_bridge_kernel_names.restype = ctypes.c_char_p
+    mechanism = 'splitk' if family == '06' else 'buffering'
+    expected_names = [f'wave1_{mechanism}_{arm}']
+    if json.loads(library.catlass_bridge_kernel_names().decode()) != expected_names:
+        raise ValueError('binary kernel identities do not match the requested arm')
     function = library.catlass_bridge_configure
     function.argtypes, function.restype = [ctypes.c_uint32]*4, ctypes.c_int
     if function(*shape, cores):

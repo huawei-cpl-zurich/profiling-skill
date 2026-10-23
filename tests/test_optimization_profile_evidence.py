@@ -81,6 +81,17 @@ class MetricsTests(unittest.TestCase):
         with self.assertRaisesRegex(evidence.EvidenceError, 'nonfinite'):
             evidence.pmu_rows(self.path, self.tasks, 5)
 
+    def test_present_pmu_headers_with_all_na_values_are_unavailable(self):
+        for row in self.rows:
+            for column in row:
+                if column.startswith(('aic_','aiv_')) or column=='cube_utilization(%)':
+                    row[column]='N/A'
+        self.write()
+        result=evidence.pmu_rows(self.path,self.tasks,5)
+        self.assertEqual(result['status'],'unavailable')
+        self.assertEqual(result['kernels']['kernel']['task_count'],10)
+        self.assertEqual(result['kernels']['kernel']['numeric_columns']['Duration(us)']['mean'],2.)
+
     def test_timing_samples_and_json_nonfinite_rejected(self):
         self.assertEqual(evidence.samples([1., 3.])['mean'], 2.)
         self.assertAlmostEqual(evidence.samples([1., 3.])['sample_sd'], 2**.5)

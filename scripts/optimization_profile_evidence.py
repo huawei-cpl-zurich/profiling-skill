@@ -134,8 +134,11 @@ def pmu_rows(path, tasks, physical_die):
         kernels[name] = dict(task_count=len(selected),
                              tasks_per_iteration=dict(Counter(item['iteration_id'] for item in selected)),
                              rows=selected, numeric_columns=fields)
-    return dict(status='available' if any(c.startswith(('aic_', 'aiv_')) for c in columns)
-                else 'unavailable', csv_sha256=sha(path), columns=columns, kernels=kernels,
+    pmu = [value for kernel in kernels.values() for name,value in kernel['numeric_columns'].items()
+           if name.startswith(('aic_', 'aiv_')) or name in ('aicore_time(us)','cube_utilization(%)')]
+    availability = ('unavailable' if not any(value['available_count'] for value in pmu) else
+                    'partial' if any(value['unavailable_count'] for value in pmu) else 'available')
+    return dict(status=availability, csv_sha256=sha(path), columns=columns, kernels=kernels,
                 semantics='exported per-task values; no ratios summed, no denominator or roofline inferred')
 
 

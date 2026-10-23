@@ -27,9 +27,6 @@ def candidate():
         return value + 1
     return forward
 
-def changed_candidate():
-    return candidate()
-
 def changed_baseline():
     return baseline()
 
@@ -65,8 +62,21 @@ class ProtocolTests(unittest.TestCase):
     def setUp(self):
         COUNTS.update(provider=0, baseline=0, candidate=0, validate=0, capture=0)
         self.temporary = tempfile.TemporaryDirectory(); self.root = Path(self.temporary.name)
-        self.hooks = dict(baseline=baseline, candidate=candidate, cases_provider=cases, validator=validator)
+        self.hooks = dict(baseline=baseline, candidate=self.write_candidate(), cases_provider=cases, validator=validator)
+    def write_candidate(self, edited=False, mutating=False):
+        path = self.root / 'candidate_source.py'
+        expression = '1 + value' if edited else 'value + 1'
+        if mutating:
+            expression = 'value.add_(1)'
+        path.write_text('def candidate():\n    def forward(value):\n        COUNTS[\"candidate\"] += 1\n        return ' + expression + '\n    return forward\n')
+        name = 'separate_candidate_' + str(id(self))
+        module = importlib.util.module_from_spec(importlib.util.spec_from_file_location(name, path))
+        sys.modules[name] = module
+        exec(compile(path.read_text(), str(path), 'exec'), module.__dict__)
+        module.COUNTS = COUNTS
+        return module.candidate
     def tearDown(self):
+        sys.modules.pop('separate_candidate_' + str(id(self)), None)
         self.temporary.cleanup()
     def run_protocol(self, mode, name, **overrides):
         options = Namespace(**{key: key for key in self.hooks}, output=str(self.root / name),
@@ -82,14 +92,83 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(first['profile_state'], 'incomplete')
         self.assertEqual(first['candidate_identity_state'], 'qualified')
         self.assertEqual(COUNTS, dict(provider=1, baseline=11, candidate=11, validate=1, capture=2))
-        self.hooks['candidate'] = changed_candidate
+        self.hooks['candidate'] = self.write_candidate(edited=True)
         reused = self.run_protocol('reuse', 'second')
         self.assertEqual(reused['state'], 'complete')
+        self.assertNotEqual(first['sources']['candidate']['source_sha256'],
+                            reused['sources']['candidate']['source_sha256'])
         self.assertEqual(COUNTS, dict(provider=1, baseline=11, candidate=22, validate=2, capture=3))
         self.assertTrue(reused['cases'][0]['baseline_reused'])
         self.assertEqual(reused['cases'][0]['candidate']['event_latency']['count'], 10)
         self.assertFalse(reused['comparability']['comparable'])
         self.assertNotIn('speedup', reused['cases'][0])
+    def test_shared_candidate_source_is_rejected_before_provider_or_forwards(self):
+        self.hooks['candidate'] = candidate
+        result = self.run_protocol('create', 'same-source')
+        self.assertEqual(result['state'], 'failed')
+        self.assertIn('separate source file', result['error'])
+        self.assertEqual(COUNTS, dict(provider=0, baseline=0, candidate=0, validate=0, capture=0))
+    def test_nondense_and_broadcast_cache_layout_survives_transfer(self):
+        value = torch.arange(12.).reshape(3, 4)[:, 1::2].requires_grad_(True)
+        meta = controller.move_tree(value, torch, 'meta')
+        self.assertTrue(meta.requires_grad)
+        self.assertEqual((meta.shape, meta.stride(), meta.storage_offset()),
+                         (value.shape, value.stride(), value.storage_offset()))
+        broadcast = torch.ones(1).expand(4)
+        meta = controller.move_tree(broadcast, torch, 'meta')
+        self.assertEqual(meta.stride(), (0,))
+        def sliced_cases():
+            COUNTS['provider'] += 1
+            return [dict(id='slice', args=(value,), expected=baseline()(value))]
+        self.hooks['cases_provider'] = sliced_cases
+        original_to = torch.Tensor.to
+        def copied(tensor, device, **kwargs):
+            return original_to(tensor, device, copy=True)
+        with patch.object(torch.Tensor, 'to', copied):
+            first = self.run_protocol('create', 'sliced')
+            reused = self.run_protocol('reuse', 'sliced-reused')
+        self.assertEqual(first['state'], 'complete', first.get('error'))
+        self.assertEqual(reused['state'], 'complete', reused.get('error'))
+        payload = torch.load(self.root / 'cache/case-0000.pt', weights_only=True)
+        restored = payload['args'][0]
+        torch.testing.assert_close(restored, value)
+        self.assertTrue(restored.requires_grad)
+        self.assertEqual((restored.stride(), restored.storage_offset()),
+                         (value.stride(), value.storage_offset()))
+        self.assertEqual((COUNTS['provider'], COUNTS['baseline']), (1, 11))
+    def test_aliased_expected_is_frozen_before_candidate_validation(self):
+        def identity_baseline():
+            def forward(value):
+                COUNTS['baseline'] += 1
+                return value
+            return forward
+        def aliased_cases():
+            COUNTS['provider'] += 1
+            value = torch.tensor(2.)
+            return [dict(id='alias', args=(value,), expected=identity_baseline()(value))]
+        self.hooks.update(baseline=identity_baseline, cases_provider=aliased_cases,
+                          candidate=self.write_candidate(mutating=True))
+        result = self.run_protocol('create', 'aliased')
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(COUNTS, dict(provider=1, baseline=1, candidate=1, validate=1, capture=0))
+    def test_baseline_uses_original_inputs_after_candidate_mutations(self):
+        seen = []
+        def recording_baseline():
+            def forward(value):
+                COUNTS['baseline'] += 1
+                seen.append(float(value))
+                return value + 1
+            return forward
+        def recorded_cases():
+            COUNTS['provider'] += 1
+            value = torch.tensor(2.)
+            return [dict(id='mutating', args=(value,), expected=recording_baseline()(value))]
+        self.hooks.update(baseline=recording_baseline, cases_provider=recorded_cases,
+                          candidate=self.write_candidate(mutating=True))
+        result = self.run_protocol('create', 'restored')
+        self.assertEqual(result['state'], 'complete', result.get('error'))
+        self.assertEqual(seen, [2.] * 11)
+        self.assertEqual(COUNTS, dict(provider=1, baseline=11, candidate=11, validate=1, capture=2))
     def test_cli_selects_explicit_cache_mode_and_fixed_protocol(self):
         args = ['--baseline', 'x:baseline', '--candidate', 'x:candidate',
             '--cases-provider', 'x:cases', '--validator', 'x:validator',

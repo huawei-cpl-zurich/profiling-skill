@@ -3,6 +3,7 @@
 import argparse
 from contextlib import ExitStack
 import hashlib
+import inspect
 import json
 import os
 from pathlib import Path
@@ -30,7 +31,14 @@ def sha(path):
 def move_tree(value, torch, device):
     """Private data cache preserves nested validator state, never arbitrary objects."""
     if isinstance(value, torch.Tensor):
-        return value.detach().to(device)
+        if value.layout != torch.strided:
+            raise ValueError('private case cache supports strided tensors only')
+        # Moving a sliced tensor directly can compact its stride/offset. Move
+        # its storage instead, then reconstruct the original logical view.
+        elements = value.untyped_storage().nbytes() // value.element_size()
+        storage = value.detach().as_strided((elements,), (1,), storage_offset=0)
+        return storage.to(device, copy=True).as_strided(
+            value.shape, value.stride(), value.storage_offset()).requires_grad_(value.requires_grad)
     if isinstance(value, (tuple, list)):
         return type(value)(move_tree(item, torch, device) for item in value)
     if isinstance(value, dict) and all(isinstance(key, str) for key in value):
@@ -81,6 +89,9 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
         report['comparability'] = dict(comparable=False,
             reason='verify physical device, runtime and clock/load conditions across retained cache and candidate')
         shared = {name: value for name, value in sources.items() if name != 'candidate'}
+        candidate_file = Path(inspect.getsourcefile(hooks['candidate'])).resolve()
+        if any(Path(inspect.getsourcefile(hooks[name])).resolve() == candidate_file for name in shared):
+            raise ValueError('candidate must use a separate source file from baseline, cases-provider and validator')
         compiler_factory = compiler_factory or (lambda: GraphCompiler(backend_name=options.backend))
         if options.cache_mode == 'create':
             cache.mkdir(parents=True, exist_ok=False)
@@ -126,6 +137,10 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
                 manifest['cases'].append(dict(id=case['id'], file=payload.name, sha256=sha(payload),
                     specialization_sha256=specialization['sha256']))
                 save(cache / 'manifest.json', manifest)
+                # Separate expected/argument storage before the sole validation;
+                # a candidate cannot mutate an aliased expected result.
+                case = move_tree(torch.load(payload, map_location='cpu', weights_only=True),
+                                 torch, options.device)
             validations = 0
             def validate(result):
                 nonlocal validations
@@ -147,11 +162,13 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
                 raise RuntimeError('compilation or missing compiled execution during measurement')
             baseline_folder = cache / f'baseline-{index:04d}'
             if options.cache_mode == 'create':
-                baseline = hooks['baseline'](*case.get('init_args', ()), **case.get('init_kwargs', {}))
+                baseline_case = move_tree(torch.load(payload, map_location='cpu', weights_only=True),
+                                          torch, options.device)
+                baseline = hooks['baseline'](*baseline_case.get('init_args', ()), **baseline_case.get('init_kwargs', {}))
                 if hasattr(baseline, 'eval'):
                     baseline.eval()
                 with torch.inference_mode():
-                    baseline_result = measured(lambda: baseline(*case['args'], **case.get('kwargs', {})),
+                    baseline_result = measured(lambda: baseline(*baseline_case['args'], **baseline_case.get('kwargs', {})),
                                                baseline_folder, capture)
                 save(cache / f'baseline-{index:04d}.json', baseline_result)
                 manifest['cases'][index]['baseline_sha256'] = sha(cache / f'baseline-{index:04d}.json')

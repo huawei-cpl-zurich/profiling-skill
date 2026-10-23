@@ -16,7 +16,7 @@ import traceback
 
 HELPERS = Path(__file__).resolve().parents[1] / 'skills/ascend-model-benchmarking/scripts'
 sys.path.insert(0, str(HELPERS))
-from model_execution import CapabilityError, GraphCompiler, MeasurementError, benchmark_pair, prepare_model
+from model_execution import CapabilityError, GraphCompiler, MeasurementError, benchmark_pair, prepare_model, prepare_eager_model
 from profile_accounting import account_profile
 
 
@@ -126,6 +126,10 @@ def run(options, *, compiler_factory=None, clock=None):
         hooks = {name: load(getattr(options, name)) for name in (
             'baseline', 'candidate', 'cases_provider', 'validator', 'acquisition')}
         compiler_factory = compiler_factory or (lambda: GraphCompiler(backend_name=options.backend))
+        mode = getattr(options, 'baseline_execution', 'compiled')
+        if mode not in ('eager', 'compiled'):
+            raise ValueError('baseline_execution must be eager or compiled')
+        report['execution_modes'] = dict(baseline=mode, candidate='compiled')
         report['sources'] = {name: identity(hook) for name, hook in hooks.items()}
         adapter = hooks['acquisition']()
         report['environment_before'] = adapter.provenance()
@@ -153,12 +157,15 @@ def run(options, *, compiler_factory=None, clock=None):
             models = {}
             for arm in ('baseline', 'candidate'):
                 factory = hooks[arm]
-                models[arm] = prepare_model(
+                eager = arm == 'baseline' and getattr(options, 'baseline_execution', 'compiled') == 'eager'
+                prepare = prepare_eager_model if eager else prepare_model
+                preparation = {} if eager else {'compiler': compiler_factory()}
+                models[arm] = prepare(
                     lambda factory=factory: factory(*case.get('init_args', ()),
                                                     **case.get('init_kwargs', {})),
                     case['args'], case.get('kwargs', {}),
                     lambda result, arm=arm: hooks['validator'](case, arm, result),
-                    compiler=compiler_factory(),
+                    **preparation,
                     synchronize=adapter.synchronize)
                 guard(arm + ':prepare')
             # Separate profiling replay proves identity before unprofiled timing.
@@ -173,7 +180,8 @@ def run(options, *, compiler_factory=None, clock=None):
                 guard(arm + ':profile')
                 if prepared.compiler.snapshot() != before:
                     raise CapabilityError('compilation detected during profiler replay')
-                if prepared.compiler.executions - executions < 70:
+                if (prepared.evidence.get('execution_mode', 'compiled') == 'compiled'
+                        and prepared.compiler.executions - executions < 70):
                     raise CapabilityError('profiler replay lacks compiled execution evidence')
                 accounted = account_profile(capture.get('iterations'), capture.get('tasks'),
                                              capture_complete=capture.get('capture_complete'))
@@ -245,7 +253,9 @@ def main(argv=None):
     for name in ('baseline', 'candidate', 'cases-provider', 'validator', 'acquisition'):
         parser.add_argument('--' + name, required=True)
     parser.add_argument('--backend', choices=('torchair-ge', 'npu-inductor'), default='torchair-ge',
-                        help='explicit graph backend for BOTH arms; never falls back automatically')
+                        help='explicit backend for compiled arms; never falls back automatically')
+    parser.add_argument('--baseline-execution', choices=('eager', 'compiled'), default='compiled',
+                        help='explicit reference mode; candidate always compiled; no fallback')
     parser.add_argument('--expected-kernel', action='append', default=[],
                         help='exact submitted task name; private per-case expected_kernel overrides')
     parser.add_argument('--output', required=True, help='new evidence directory')

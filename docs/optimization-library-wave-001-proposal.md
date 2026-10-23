@@ -1,6 +1,6 @@
-# Ascend optimization library — wave 001 approval proposal
+# Ascend optimization library — wave 001
 
-Status: source research and experiment design. No example below has been
+Status: approved for implementation on 2026-10-23. No example below has been
 compiled, correctness-checked or profiled for this wave. Source comments and
 historical upstream measurements are hypotheses for our experiments, not our
 performance results.
@@ -8,8 +8,8 @@ performance results.
 ## Approved project boundaries
 
 - Implement the project-owned skill, examples and runners in profiling-skill.
-- Work in waves of twelve optimization families, with user approval before
-  each wave. This document proposes the first wave.
+- Complete this approved wave of twelve optimization families. User approval
+  is required before starting the next wave, not before beginning wave 001.
 - Validate Triton and Catlass C++ where applicable. Python Catlass DSL and
   TileLang material may inform research but establishes no A3 execution claim.
 - Use gz-a3-2 physical die IDs 0–7. Its inventory also contains 8–15; those IDs
@@ -50,6 +50,13 @@ contain their declared relevant UTF-8 source/test/documentation selection,
 not byte-complete Git repositories. Per-file licenses and attribution remain
 part of the source evidence. Development worktrees do not contain upstream
 checkouts or a copy of the broker store.
+
+All source ingestion and query/retrieval postconditions are complete. The
+[verified source inventory](ref://profiling-skill/triton-ascend/perf-analysis/guides/ascend-source-inventory-20261023-triton-ascend-perf-analysis)
+contains all 17 operator repositories and six primary-source revisions from
+21 actual clones. Operator snapshots contain 67,676 selected UTF-8 files /
+802,313,762 bytes. Original access miss `b4224ef2f87e80e33f052ee0962cb8b1`
+is resolved; source availability is not runtime qualification.
 
 ## Twelve proposed mechanisms
 
@@ -210,15 +217,16 @@ guards and avoid unsupported counter/roofline claims. Keep failed attempts and
 initial scores; use fresh held-outs after a skill revision. Control ties are
 reported as ties rather than an invented skill improvement.
 
-## Approval and implementation sequence
+## Implementation sequence and next-wave approval
 
-This proposal requests approval of these twelve families, formats, semantic
-case recipes, measurement accounting and 96-evaluation design. The case
+The user approved these twelve families, formats, semantic case recipes,
+measurement accounting and 96-evaluation design, and clarified that approval
+is required before the next wave. The case
 ledger will retain any resource-compatible refinement needed within an
 approved family, with every attempted source/case/result preserved. A family
 replacement or additional replay is an explicit matrix amendment.
 
-After approval, implement the project-owned skill and symmetric pair/evaluation
+Implement the project-owned skill and symmetric pair/evaluation
 runners, qualify the two language pilots, then implement the twelve entries
 in independent PR-sized streams. Source and test changes target approximately
 500 lines per PR where a cohesive split is possible. Every runnable example

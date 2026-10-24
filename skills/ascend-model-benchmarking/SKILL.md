@@ -100,3 +100,22 @@ Active compilation detection and input mutation checks still apply to both arms.
 The repeated controller forwards this option unchanged, records execution modes,
 and rejects mixing modes across repetitions. Ten full repeats, raw samples, failure
 counts, mean and sample standard deviation are unchanged.
+
+## Correctness policy
+
+Both Model benchmark controllers run the pinned cann bot numerical verifier
+before any timing or profiling. The exact upstream implementation and license
+are retained under `third_party/cannbot_verifier`; reports record its revision
+and dependency hashes. The profiled workflow compares against the case provider's
+cached `expected`; the warmed workflow freezes the existing baseline preparation
+output and checks the candidate against it. Neither adds a Model forward.
+
+The adapter checks nested output structure and original tensor shapes, then calls
+upstream `verify.compare` with the input dtype classification. This preserves its
+ecosystem precision default and NaN/Inf rules. The authored adapter translates
+comparison failures to English while retaining upstream metrics and the original
+exception as the cause (private traceback evidence remains unchanged). Set
+`non_compute=True` on a private case for the upstream binary equality mode.
+Private validators still run as additional semantic checks. A failure retains
+`cases[].correctness.error_msg` and upstream `metrics`, and prevents measurement.
+Profile cache reuse requires the same verifier identity; regenerate older caches.

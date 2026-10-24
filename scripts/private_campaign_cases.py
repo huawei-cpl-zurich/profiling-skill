@@ -105,21 +105,10 @@ def make_case(task, index, *, device='npu', variant=0, workspace_budget_bytes=No
 
 
 def validate(case, arm, result):
-    """Use untouched reference values, explicit structure/dtype/finite checks."""
-    def compare(expected, actual):
-        if expected is None:
-            assert actual is None, f'{arm}: unexpected final state'
-        elif isinstance(expected, tuple):
-            assert isinstance(actual, tuple) and len(actual) == len(expected)
-            for left, right in zip(expected, actual):
-                compare(left, right)
-        else:
-            assert isinstance(actual, torch.Tensor)
-            assert actual.shape == expected.shape and actual.dtype == expected.dtype
-            assert torch.isfinite(actual).all(), f'{arm}: nonfinite output'
-            tolerance = .01 if expected.dtype in (torch.float16, torch.bfloat16) else .002
-            torch.testing.assert_close(actual, expected, rtol=tolerance, atol=tolerance)
-    compare(case['expected'], result)
+    """Use the pinned upstream precision policy against untouched references."""
+    from benchmark_correctness import verify_outputs
+    verify_outputs(case['expected'], result, case['args'],
+                   non_compute=case.get('non_compute', False))
 
 
 def matmul_cases():

@@ -1,0 +1,102 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E01, extension/mindspeed-bodies.json, api-dispatch.json, operator-docs.json; exact MindSpeedOps arch32 source/API mapsA2A3, Apache2+perfile notices. PortableTritonadaptation actual910B4-1 gate required.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "E01",
+  "task": "optimization-w007-mhc-pre-exclusive",
+  "title": "Replace exclusive MHC pre-gradient atomics with stores",
+  "source_file": "extension/source__mindspeed_ops__arch32__triton__mhc__pre_bmm.py",
+  "cases": [
+    {
+      "case_id": "W007-E01-01",
+      "role": "gallery",
+      "seed": 75101,
+      "parameters": {
+        "BS": 128,
+        "D": 512,
+        "tile_D": 512
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective only; preserve slower/equal/uncertain results. Sourcezero-initavoided maydominatefulldevice-span; notordinarylatency."
+    },
+    {
+      "case_id": "W007-E01-02",
+      "role": "gallery",
+      "seed": 75102,
+      "parameters": {
+        "BS": 1,
+        "D": 32,
+        "tile_D": 32
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective only; preserve slower/equal/uncertain results. Sourcezero-initavoided maydominatefulldevice-span; notordinarylatency."
+    },
+    {
+      "case_id": "W007-E01-03",
+      "role": "heldout",
+      "seed": 75103,
+      "parameters": {
+        "BS": 257,
+        "D": 2048,
+        "tile_D": 2048
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective only; preserve slower/equal/uncertain results. Sourcezero-initavoided maydominatefulldevice-span; notordinarylatency."
+    },
+    {
+      "case_id": "W007-E01-04",
+      "role": "heldout",
+      "seed": 75104,
+      "parameters": {
+        "BS": 2,
+        "D": 4096,
+        "tile_D": 4096
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective only; preserve slower/equal/uncertain results. Sourcezero-initavoided maydominatefulldevice-span; notordinarylatency."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E01-GA",
+      "role": "guard",
+      "seed": 75191,
+      "parameters": {
+        "BS": 3,
+        "D": 64,
+        "tile_D": 64,
+        "zero_cancelled_and_signedzero": true
+      },
+      "expected": "Allzero dY row, balanced cancellingdotproducts,\u00b10 inputs; inspectactualsignedzerobitsread-only. Primarynumericalgate notpairedbitwise; sourceatomicadd+0 andexclusivestore maydiffer -0 signs, explicitlyreporttradeoff. dX/dH/canaries/inputimmutable."
+    },
+    {
+      "case_id": "W007-E01-GB",
+      "role": "guard",
+      "seed": 75192,
+      "parameters": {
+        "BS": 5,
+        "D": 2048,
+        "tile_D": 1024
+      },
+      "expected": "MultipleDprogramswouldaliasgradH; AFTERdispatches EXACTsameatomic+zeroinit baselinefallback beforeanysource-specificgradientwork. Both2Dtiles+oddBS,0captures; nofalseexclusivepath."
+    }
+  ],
+  "contract": {
+    "interface": "Sourceflattenedadaptation: contiguous FP32 H[BS,4],X[BS,4,D],dY[BS,D], outputs dH[BS,4],dX[BS,4,D], newlyallocatedprivate andnonalias, inputsimmutable. BS>0,Dpower2<=4096,tile_Dpower2<=D. No dtypeconversion/copycontiguityneededbecauseinputsalreadyfloat32contiguous. GROUP1, grid(BS,ceil(D/tile_D)), staticstridesH(4,1),X(4D,D,1),dY(D,1). Allmainfloat32randomfinite[-1,1]; verifyboundsbeforecache.",
+    "oracle": "IndependentCPUFP64 dX=dY[:,None,:]*H[:,:,None], dH=sum_D(X*dY[:,None,:]); castFP32 once percase. Fixedatol2e-5rtol2e-5BOTHoutputs, no posthoctuning. Shape/dtype/tuplearity exact,GMcanaries/nonalias/immutable. Numericnotbitwise signedzero/differentatomicordermultitile; recordpairedbitswithoutforcingundocumentedguarantee.",
+    "before": "Sourcebackwardkernel same4x dXstores, 4dotreductions and4atomicAdds to newdH initialized+0 EVERYAPI. Includeallzero-initializationdevicework insideEVERYprofiledAPI, notprepare-onlyoroutsidecapture. For deterministickernelidentity a smallonepassTritonzero-initkernel is a faithfulPORTABLEsource-styleimplementation ofsource torch.zeros; disclose notunmodifiedvendorpipeline orclaimvendorslow. No artificialbarriers/autotune/disabledbaselineoptimizer; exactsamegroup/tile/flags/allmathboth.",
+    "after": "ONLYifcompleteownershipproof GROUP1+gridD1+BSprogramswriteunique4pid+0..3 privatecontiguousdH, omitinit andreplace4atomicAdds by4tl.store. Allothermath/copies/grid/compilerflagsunchanged. DoNOTaddcanonicalzeroarithmeticunlesspartofcommonjustifiedsourcecontract; numeric signedzerosqualifierexplicit. Multitilefallsbackexactatomiczero baseline.",
+    "ownership": "Hostprove BS>0,D>0, tileD==D,contiguous/stride/noalias/newdH andnootherprogramaxis. Inspectresources actualcompileallcasesbeforemath. EveryAPIafter mustwriteALLdH/dX, allocationoutstoragecanaries notpreinitializedasfreeinput-dependentsetup. Zero-initrequiredonlybefore/fallback."
+  },
+  "source_sha256": "2c231ad92773b9fb803c3aac8c257b72108934f348d383766b4ec2fc881325d6"
+}

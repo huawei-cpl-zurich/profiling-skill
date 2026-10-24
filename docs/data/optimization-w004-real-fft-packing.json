@@ -30166,5 +30166,18 @@
         }
       }
     }
-  ]
+  ],
+  "host_allocation_fix": {
+    "validation_handle": "remote:gz-a3:job:983c381e-a610-4303-b85c-41aa1e3b0127",
+    "tests_passed": 35,
+    "validation_kind": "CPU-only functional tests on A3; compile-only all twelve arms with ambient float64",
+    "unchanged_compiled_arms": 12,
+    "new_scientific_oracles": 0,
+    "new_device_forwards": 0,
+    "new_profiles": 0,
+    "measured_v1_source_sha256": "adcf600331386185fe07ad4e97a5094727666bfc94d3c0caa95085d6dd50d5f6",
+    "final_v2_source_sha256": "ea975ce4609ae95ec41fdde7410b5a197b5adc5a1776114b0a68f0cb44d54e9f",
+    "validation_receipt_sha256": "58ce065052ae6cd7fd5eb6798db76a65b2e6a498d7937db2d237f3036148f723",
+    "note": "Only output and packed-real allocation dtype became explicit FP32. Triton kernel definitions and run body unchanged; all original compiled identities match. Original measurement source hashes and samples above remain immutable."
+  }
 }

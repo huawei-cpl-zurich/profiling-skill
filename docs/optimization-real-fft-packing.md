@@ -47,7 +47,8 @@ The source lead is ops-fft revision
 `1878ff9c940d7bbdb592acfff008a1cc98494345`, under CANN Open Software License
 Agreement 2.0. The bounded native host source provides the N/2 plan and A/B
 coefficient formula; the reconstruction above is independently derived.
-The native device helper was not retrieved, copied or compiled. Parent complex
+The included `fft_r2c_common.h` helper body was not retrieved, copied or
+compiled. Parent complex
 kernels are the project's independent Triton adaptation. Native 910B source
 excludes 910_93; A3 evidence establishes no A5 or 910_93 support.
 
@@ -98,3 +99,14 @@ removed. The retained compact archive contains 206 files, SHA256
 The single scientific job completed without a workload or profiler failure;
 there were six scientific CPU oracles, twelve correctness calls, eighty
 profiled forwards, no warmups and no extra timing calls.
+
+A final host allocation correction explicitly sets output and packed-real
+storage to the FP32 input dtype, including when the caller selects an ambient
+float64 default. The scientific measurement sources above remain immutable.
+The final source changes two allocation calls; Triton kernels and `run()` are
+unchanged. A3 passed 35 functional host tests, including an ambient-float64
+constructor regression, then compile-only preparation verified all twelve arms
+produce exactly the original compiler/NPUBIN identities under ambient float64.
+That audit loaded retained fixtures, generated no new scientific oracle and
+executed no forward or profile. The compact JSON records both source versions
+and the audit receipt digest.

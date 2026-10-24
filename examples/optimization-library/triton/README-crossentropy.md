@@ -56,16 +56,37 @@ filtered citations:
 - `ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/loss/cross_entropy.py:L210-L249`
 
 CPU functional/interpreter qualification and four-case A3 correctness/capture
-qualification passed at source revision `e39d04b`. Neither large-vocabulary
-benefit hypothesis established a speed win: before/after ratios were0.99804×
-and0.99791×. All-case geometric mean was0.98171×; small-case means worsened
-but variability and inter-kernel gaps preclude a strong regression claim.
+qualification passed for both retained source versions. Original `e39d04b`
+used an implicitly INT64 comparison; `7649e59` applies the same exact local
+index narrowing in both arms. The public labels remain INT64:
 
-The measured gradient tasks were scalar-heavy (about0.976 AIV scalar ratio).
-Retained intermediate compiler artifacts show the column mask promoted to
-INT64 by comparison with INT64 targets. This is a likely bottleneck requiring
-further compiler evidence, not proof that materialization removal saves time.
-The author's initial implementation missed the pinned mask-INT32 constraint;
-a common, contract-safe target cast in both arms is a possible future repair.
-The original negative version and all attempts remain retained. Scratch
-capacity savings are source facts, not measured physical traffic or peak memory.
+```python
+# Only when the contract guarantees 0 <= target < vocabulary <= 8192.
+target = tl.load(Targets + row).to(tl.int32)
+gradient = tl.exp(log_probability) - (column == target).to(tl.float32)
+```
+
+The original large-case gradient was scalar-heavy (AIV scalar ratio0.976).
+Its intermediate compiler artifacts extend the column mask to INT64. After
+the common repair, actual compiled comparisons are INT32 and the gallery
+before/after gradient task durations fall1720.660→20.986µs and
+1719.602→21.220µs. This supports a compiler-sensitive integer-mask bottleneck;
+it is not an independent final-instruction disassembly proof. The initial
+implementation missed the pinned mask-INT32 constraint, and its complete
+negative source/profile evidence remains retained.
+
+That common repair must not be confused with a materialization speed win.
+Original before/after ratios for the two benefit cases were0.99804×/0.99791×;
+repaired ratios were1.02183×/0.98143×. All-case geometric means were0.98171×
+and0.97074× respectively. Large-case active work rises after materialization
+removal, and small-case spans are dominated by gaps and variability. No robust
+speed improvement is established for this particular two-stage realization.
+Logical scratch capacity is lower; physical traffic and peak-memory savings
+were not measured.
+
+Both versions together passed16 correctness checks and16captures/160profiled
+forwards using the same4cached CPU oracles (zero regenerated for the repair).
+Every captured forward contains exactly the two declared kernels. Original
+and repaired evidence retain separate source hashes, all ten timing samples,
+matched PMU rows and16verified NPUBIN snapshots per version. New source/data
+remain quarantined from the first frozen-library coding study.

@@ -1,0 +1,147 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "proposal.md, triton-candidates.json, triton-tests.json; prior filtered wave005 triton/inventory.json for full commit pin; preserve per-file attribution and MIT LICENSE.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T03",
+  "task": "optimization-w007-sampler-register-exclusion",
+  "title": "Apply recovered-token draft exclusion in registers",
+  "source_file": "src__triton_ascend_kernels__postprocess__reject_sample_recovered_tokens.py",
+  "cases": [
+    {
+      "case_id": "W007-T03-01",
+      "role": "gallery",
+      "seed": 73001,
+      "parameters": {
+        "lengths": [
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4
+        ],
+        "vocab": 1024,
+        "draft_probs_present": false
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T03-02",
+      "role": "gallery",
+      "seed": 73002,
+      "parameters": {
+        "lengths": [
+          1
+        ],
+        "vocab": 32769,
+        "draft_probs_present": false
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T03-03",
+      "role": "heldout",
+      "seed": 73003,
+      "parameters": {
+        "lengths": [
+          3,
+          1,
+          0,
+          2,
+          3,
+          1,
+          2,
+          3,
+          1
+        ],
+        "vocab": 4097,
+        "draft_probs_present": false
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T03-04",
+      "role": "heldout",
+      "seed": 73004,
+      "parameters": {
+        "lengths": [
+          1
+        ],
+        "vocab": 31,
+        "draft_probs_present": false
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-T03-GA",
+      "role": "guard",
+      "seed": 73091,
+      "parameters": {
+        "lengths": [
+          1,
+          1,
+          1,
+          0
+        ],
+        "vocab": 4097,
+        "draft_probs_present": false,
+        "tie_and_allzero": true,
+        "draft_ids": [
+          0,
+          4096,
+          4095
+        ]
+      },
+      "expected": "qall1. row0equalmax4095/4096,draft0=>4095; row1equalmax0/4095,draft4096=>0; row2allzero,draft4095=>0 including zeroed draft remains score0. Terminalemptyrequest nooutputaccess. Targetbitsrestoredatboundary, validIDs/canaries. OneAPI/arm."
+    },
+    {
+      "case_id": "W007-T03-GB",
+      "role": "guard",
+      "seed": 73092,
+      "parameters": {
+        "lengths": [
+          2,
+          0,
+          1
+        ],
+        "vocab": 1023,
+        "draft_probs_present": true
+      },
+      "expected": "Both dispatch identical unchanged source draft-probs branch max(target-draft,0)/q. Exactargmax output, inputsimmutable,0captures."
+    }
+  ],
+  "contract": {
+    "interface": "FP32 target[sum(lengths),V] contiguous, perrequestFP32q[B,V] finitepositive, int32draftIds valid, int32cumulativeendpoints nondecreasing bounded storage. Main target generated positiveintegerweights1..255 normalizedfloat64 thencastFP32; q exactpowers2 from{.5,1,2,4} independent perrequest/vocab. Optionaldraft-probs independentlysimilarlynormalized. CPUFP64scoreoracle exactlowestidxargmax; fixedintegeroutputexactgate. Source/pair expected inputrestoration bitwise atAPIboundary, exclusive nonalias target rows; aliasesunsupported.",
+    "before": "Exact NO_DRAFT sourceorig_prob scalarload, zeroGMtarget[draftid], sameSUB_BLOCK4096 chunkload/divide/argmax strict>merge, restoreoriginalGMvalue. Temporaryin-callmutationallowed, atboundarybitwiserestored; no blanket no-kernelwritesclaim.",
+    "after": "Removeorigload/zeroGM/restoreGM and replace loadedprob with tl.where(vocab_offset==draft_id,0,prob) INsamechunkloop. Source strict> earliestchunk, same argmaxlowestindex withinchunk. Retain source unchanged draft-probs-present branch. No normalization-removal, no barriers/optimizerdisabling onlybefore, no grid/tile/qreductionchange.",
+    "padding": "Maskedvocab targetother0/qother-Inf; ensure invalidpadding cannotwin overvalidnonnegatives and lowest-index tie matchesfirstvalid. Allzerocase sourceiszeroing-notcategorical-IDexclusion: draftID maywin at0 tie andmustmatchsource.",
+    "compile": "Compile original dynamicargmax/get_element beforemath; unsupported retained not replaced onlyonearm. Ifcommon loweringneeds faithful tl.max/tl.min tie equivalent, change bothcommon sourcebody with explicit beforetimingjustification and fixedsemantics, report adaptation. Samecompilerflags andnoextra warmup."
+  },
+  "source_sha256": "cf797e209d0d1f23db7cd61588a63fcc3c99b5cf2970e9c0dd17492bcae3c6c1"
+}

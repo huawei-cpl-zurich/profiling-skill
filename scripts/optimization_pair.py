@@ -187,7 +187,8 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
     """
     if set(order) != {'before', 'after'} or len(order) != 2:
         raise ValueError('order must contain before and after exactly once')
-    correctness_only = correctness_only or case_spec.get('role') == 'guard'
+    correctness_only = (correctness_only or case_spec.get('role') == 'guard'
+                        or getattr(adapter, 'correctness_only', lambda spec: False)(case_spec))
     torch = torch or importlib.import_module('torch')
     output, cache = Path(output), Path(cache)
     output.mkdir(parents=True, exist_ok=False)

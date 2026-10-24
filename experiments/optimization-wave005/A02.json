@@ -1,0 +1,93 @@
+{
+  "wave": 5,
+  "study_id": "A02",
+  "title": "Explicitly budgeted tanh GELU approximation",
+  "study_kind": "source-backed-implementation-study",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "error-budgeted-transcendental-approximation",
+  "approval": "Standing user approval waves003\u2013022, collect data before synthesis.",
+  "source": "ascendc/proposal.md A02; ops-nn7ed342d28b44b6291aceaf747796028c48d7304c CANNOpenSoftware2.0; arch35 approximationbody+README; independentexact-erfbaseline capabilitypending. Independent910B adaptation; upstream910Bbody unseen/currentregistrationsnewer.",
+  "cases": [
+    {
+      "case_id": "W005-A02-01",
+      "role": "gallery",
+      "seed": 6201,
+      "parameters": {
+        "elements": 262144,
+        "low": -6,
+        "high": 6
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-A02-02",
+      "role": "gallery",
+      "seed": 6202,
+      "parameters": {
+        "elements": 128,
+        "low": -1,
+        "high": 1
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-A02-03",
+      "role": "heldout",
+      "seed": 6203,
+      "parameters": {
+        "elements": 196608,
+        "low": -5,
+        "high": 5
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-A02-04",
+      "role": "heldout",
+      "seed": 6204,
+      "parameters": {
+        "elements": 512,
+        "low": -2,
+        "high": 2
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    }
+  ],
+  "contract": {
+    "interface": "FP32 contiguous finitex[-8,8], immutable, publicmodeallow_approx=True/False, exactrequestalwaysusesBEFORE. Out-of-rangehostrejectatvalidationorbaselinefallbackwithdeclaredcontract, no silentapprox.",
+    "before": "0.5*x*(1+erf(x/sqrt(2)))",
+    "after": "0.5*x*(1+tanh(sqrt(2/pi)*(x+0.044715*x*x*x))) inFP32. Approximationpermittedonlyinpublicdeclaredbudget, notalgebraicequivalence.",
+    "oracle": "IndependentCPUFP64erf. Fixedabsoluteapproximationbudget6e-4 plusseparateFP32arithmeticallowance2e-5 =>totalatol6.2e-4rtol0. Pre-deviceCPUgrid160001pointson[-8,8] confirmapproxmath fits6e-4; gridempiricalnotglobalproof. Neverrelaxafterdevice.",
+    "capability": "Compileerf/tanhloweringactual910Bfirst; ifunavailable retaincompile-onlyscreen0science. No pretendingarch35sourcecompiletargets910B."
+  },
+  "guards": [
+    {
+      "case_id": "W005-A02-GA",
+      "role": "guard",
+      "seed": 6291,
+      "parameters": {
+        "elements": 16,
+        "low": -4,
+        "high": 4,
+        "allow_approx": false
+      },
+      "expected": "Exact-erfmodeAFTERdispatchesbaseline, exactsamekernel; checktightFP32referencegateatol2e-5rtol2e-4."
+    },
+    {
+      "case_id": "W005-A02-GB",
+      "role": "guard",
+      "seed": 6292,
+      "parameters": {
+        "elements": 16,
+        "distribution": "endpoints-nearzero",
+        "allow_approx": true
+      },
+      "expected": "Include\u00b18,\u00b16,\u00b14,\u00b12,\u00b11,\u00b12^-10,\u00b12^-20,\u00b10, meetfixedbudget."
+    }
+  ],
+  "protocol": "Six CPU scientific oracle payloads once; once-per-side correctness per source version; exactly10 profiled full API forwards per arm of4maincases. Guards correctness-only0captures. No warmups/autotuning/extra timing/profiled tensor inspection. Preserve negative/failed/partial outcomes. Complete device-operation spans diagnostic, not ordinary application latency."
+}

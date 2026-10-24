@@ -45,7 +45,8 @@ These functional CPU tests supplement, and do not establish, A3 correctness or
 performance. No performance gain is required for this controlled comparison.
 
 The frozen source passed the GZ-A3 gate on Ascend910B4-1 (20 Cube/40 Vector),
-Torch/Torch-NPU 2.10.0 and imported Triton-Ascend 3.2.2. All four prescribed
+Torch/Torch-NPU 2.10.0 and Triton-Ascend distribution 3.2.2; the imported
+`triton.__version__` reports 3.2.0. All four prescribed
 pairs passed their frozen oracle gates, with exactly eight captures and eighty
 profile forwards. Constant guards returned exact zero; both empty-population
 interfaces rejected before a device call. The eighteen functional CPU tests

@@ -101,7 +101,7 @@ class Adapter:
 
         item = SimpleNamespace(run=run, inputs=inputs, expected_kernels=[kernel.fn.__name__],
             sources=[Path(__file__), *CASE_SOURCES, *artifacts],
-            compilation_state=lambda: identity(compiled),
+            compilation_state=lambda: [identity(compiled)],
             metadata=dict(arm=arm, rows=rows, V=width, block=min(2048, width),
                 language='triton', torch_version=torch.__version__, triton_version=triton.__version__,
                 preallocation='three input device copies and output outside forward; no residual workspace',

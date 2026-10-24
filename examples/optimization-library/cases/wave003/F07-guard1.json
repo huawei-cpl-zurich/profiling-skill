@@ -1,0 +1,17 @@
+{
+  "case_id": "F07-guard1",
+  "role": "guard",
+  "seed": 7191,
+  "parameters": {
+    "B": 1,
+    "Hq": 8,
+    "Hkv": 2,
+    "Q": 1,
+    "KV": 0,
+    "D": 64,
+    "Dv": 32,
+    "split": 4,
+    "blockN": 64
+  },
+  "purpose": "Empty zero output"
+}

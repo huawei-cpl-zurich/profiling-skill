@@ -1,0 +1,21 @@
+{
+  "case_id": "F07-03",
+  "role": "heldout",
+  "seed": 7103,
+  "parameters": {
+    "B": 2,
+    "Hq": 8,
+    "Hkv": 2,
+    "Q": 1,
+    "KV": 6144,
+    "D": 32,
+    "Dv": 64,
+    "split": 4,
+    "blockN": 64
+  },
+  "purpose": "Long KV with unseen batch and D/Dv may benefit from shorter per-program dependency chains.",
+  "mathematical_work": 18874368,
+  "hypothesis_role": "benefit",
+  "scenario_designation": "heldout-benefit",
+  "hypothesis": "Long KV with unseen batch and D/Dv may benefit from shorter per-program dependency chains."
+}

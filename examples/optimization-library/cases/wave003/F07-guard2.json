@@ -1,0 +1,17 @@
+{
+  "case_id": "F07-guard2",
+  "role": "guard",
+  "seed": 7192,
+  "parameters": {
+    "B": 1,
+    "Hq": 8,
+    "Hkv": 2,
+    "Q": 1,
+    "KV": 65,
+    "D": 64,
+    "Dv": 32,
+    "split": 4,
+    "blockN": 64
+  },
+  "purpose": "Insufficient occupied split ranges routes unsplit"
+}

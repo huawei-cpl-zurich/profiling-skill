@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W06-GB",
+  "role": "guard",
+  "seed": 4692,
+  "parameters": {
+    "E": 257,
+    "N": 17,
+    "D": 8,
+    "distribution": "seededpermuted-edge-order"
+  },
+  "expected": "partialedgeblock/multiplicity/orderchangednumericbound"
+}

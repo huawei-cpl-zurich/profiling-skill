@@ -17,6 +17,7 @@ not a universal dispatch threshold or a claim about every Ascend target.
 | Row scale repeated inside a dot reduction | [Invariant scaling hoist](references/scaling-hoist.md) | Output-side work and changed rounding |
 | GEMM result immediately consumed by an add | [Epilogue fusion](references/epilogue-fusion.md) | Live resources, synchronization and GM staging |
 | Nearby query programs reload the same K/V tiles | [Query blocking](references/query-blocking.md) | Padded work and live accumulators |
+| Full NxN complex DFT with composite transform length | [Staged complex DFT](references/staged-complex-fft.md) | Extra launches, twiddle work, scratch and frequency permutation |
 | Long tokenwise state recurrence with few independent heads | [Chunked recurrence](references/chunk-recurrence.md) | Preparation, workspace and matrix-operand rounding |
 | Output-task count just exceeds the observed core count | [Tile balance](references/tile-balance.md) | Layout-dependent operand movement |
 | Few M/N tiles and a long K reduction | [SplitK](references/split-k.md) | Partial-result writes, reduction and synchronization |
@@ -30,7 +31,8 @@ not a universal dispatch threshold or a claim about every Ascend target.
 The recipes contain code formats, preconditions, falsifiers and gallery data.
 [Gallery evidence](references/gallery-evidence.md) defines the timing boundaries;
 its JSON companion retains every ten-sample series and original PMU field names.
-Only gallery examples belong to this skill snapshot. All 33 gallery pairs
+The staged complex DFT recipe separately records four wave004 pairs and two
+correctness-only guards. The original gallery snapshot contains 33 gallery pairs
 (28 original plus five supplements) have correctness and ten-forward identity
 evidence. Residency remains inconclusive; ShuffleK improves the thin pressure
 case but regresses the square case. Grouped-M output ordering improves the

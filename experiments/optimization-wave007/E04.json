@@ -1,0 +1,104 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E04; exactmindspeed-bodies.json+test_sinkhorn.py+operator-docs/API. MindSpeedOpsfullpin4efe2b675c2d51517c3fdd14c721020b8d41e241 Apache2/perfiletestsMIT retained. ExposedsourceGROUP48 changed tosupportedGROUP32 BOTH beforemath, bounded source-style adaptation.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "E04",
+  "task": "optimization-w007-sinkhorn-width",
+  "title": "Compute four Sinkhorn columns while retaining padded output layout",
+  "source_file": "extension/mindspeed_ops__arch32__triton__sinkhorn.py",
+  "cases": [
+    {
+      "case_id": "W007-E04-01",
+      "role": "gallery",
+      "seed": 75401,
+      "parameters": {
+        "BS": 1024,
+        "iters": 20,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectivebenefit/costonly; sourcepaddedmaxmaybefasterthannarrow4, retainregressions/resources/uncertainresults."
+    },
+    {
+      "case_id": "W007-E04-02",
+      "role": "gallery",
+      "seed": 75402,
+      "parameters": {
+        "BS": 1,
+        "iters": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectivebenefit/costonly; sourcepaddedmaxmaybefasterthannarrow4, retainregressions/resources/uncertainresults."
+    },
+    {
+      "case_id": "W007-E04-03",
+      "role": "heldout",
+      "seed": 75403,
+      "parameters": {
+        "BS": 4097,
+        "iters": 20,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectivebenefit/costonly; sourcepaddedmaxmaybefasterthannarrow4, retainregressions/resources/uncertainresults."
+    },
+    {
+      "case_id": "W007-E04-04",
+      "role": "heldout",
+      "seed": 75404,
+      "parameters": {
+        "BS": 33,
+        "iters": 4,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectivebenefit/costonly; sourcepaddedmaxmaybefasterthannarrow4, retainregressions/resources/uncertainresults."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E04-GA",
+      "role": "guard",
+      "seed": 75491,
+      "parameters": {
+        "BS": 31,
+        "iters": 1,
+        "eps": 0.001,
+        "zero_scale_equal_logits": true
+      },
+      "expected": "Exactsourceinitialsoftmax+ENTRYeps smoothing+initialcolumnnormalization eveniters1, visibleeps1e-3, allscales0/base0 soequalcomb logits; pre=.5+eps,post1. Paddedlanes+0, sourcecombviewstrides32,8,1 retained.0captures."
+    },
+    {
+      "case_id": "W007-E04-GB",
+      "role": "guard",
+      "seed": 75492,
+      "parameters": {
+        "BS": 33,
+        "iters": 4,
+        "eps": 1e-06,
+        "nontrivial_scales": true
+      },
+      "expected": "Group32 lastpartialprogram, mixedsignscales(-.75,.5,.25)/nonsymmetricbase, all3outputs/canaries/inputimmutable/nonalias, paddedstorage[BS,4,8] everypad+0 andcomb4x4viewstridespreserved.0captures."
+    }
+  ],
+  "contract": {
+    "interface": "FP32contiguousmixes[BS,24],scale[3],base[24], BS>0, GROUP32both, hc_mult4, itersinteger1..20,epsfinitepositive1e-6..1e-3. Mainmixes[-3,3],scale/base[-1,1]. Outputpre[BS,4],post[BS,4], combVIEW[BS,4,4] ofbacking[BS,4,8] strides(32,8,1), everypad+0, GMcanaries/privateoutputs/inputimmutable. ScopepositiveBS only; emptyrejectbeforecache (notprofilenoop). Allformats/sourceflagsfloat32 nohiddenconversions/prep.",
+    "oracle": "IndependentCPUFP64SOURCEtest-aligned: pre=sigmoid(mix[:4]*scale0+base[:4])+eps; post=2sigmoid(mix[4:8]*scale1+base[4:8]); logits=mix[8:].reshape4x4*scale2+base[8:].reshape4x4; stabilizedrowsoftmax; comb+=epsENTRYWISE; comb/=column_sum+epsONCE; repeat iters-1 rownorm/(rowsum+eps) THENcolnorm/(colsum+eps). Source docs olderpseudocodenotreference. Fixedatol3e-6rtol3e-6ALL3outputs, no baselinecalibration/relaxation. Validatepre/postexpectedbitsfromoncebefore/after ifsamecompiledsource, recordnotextraNPUchecks; comb onlynumericcrosspath(sumtreesmaydiffer).",
+    "before": "Exactsource-styleprepostkernelthencombkernelcomputingGROUP32x4x8 maskedcolumns4..7. Sourceinitialsoftmax/stabilizedmax,epssmoothing,initialcolnormalize andstaticiters-1 pairnorms unchanged, outputstorage32floats/BS. FullpreparedAPI2kernels EVERYcall, allnecessarydeviceworkincluded.",
+    "after": "SAMEprepostkernel/flags/grid/group/iterations/epsilon, combONLYlivewidth4 (GROUP32x4x4). Samevalid4x4arithmetic/sourceorder exceptnarrowreductiontree; storevalid4columns toUNCHANGEDstride8 andexplicit+0other4columns SAMEbackinglayout, no removingoutputpaddingtraffic. Nofusion withprepost, no runtime-loopchange, no group/gridretuning.",
+    "precision_resource": "Sourcecommentclaims4-lanemaxpoorthroughput\u2014treatashypothesis, notguaranteedbenefit. Actualcompiledresources/textretain, outputpadstorecostincluded. APIabsence tl.sigmoid? Probeselectedinstallednamespaceextension; faithfulCOMMON1/(1+exp(-x)) expansionifneededbeforemath withsourcejustification, fixedtolerance unchanged. No unsupportedAPIpartialrun/retune.",
+    "dependency_plan": "ThisPR suppliesqualifiedsource-forwardkernels+CPUcontract, narrowlycohesivewidthpair only. E05launchfusion/E06static-v-runtime willDEPENDonactualqualifiedE04headanduse8laneparentbaseline unchanged; doNOTimplementfutureoptimizationshere. Publichelpersmaybereusedas-isbychildJITs, no speculativeconfigurationframework."
+  },
+  "source_sha256": "eb3cfd9b0a411154bffd6fb1a347c83920eaec28e55ee491c6d2399140c2e83f"
+}

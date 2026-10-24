@@ -1,0 +1,59 @@
+{
+  "proposal_sha256": "66a1aa6d957727edd8172939a4decd74cabfe8591b3cba83f7c6e3eb9dee6890",
+  "cases": [
+    {
+      "case_id": "F03-01",
+      "scenario": "gallery-benefit",
+      "seed": 3101,
+      "rows": 4,
+      "V": 32768,
+      "K": 32,
+      "distribution": "first-tile-dominant-fp16"
+    },
+    {
+      "case_id": "F03-02",
+      "scenario": "gallery-cost",
+      "seed": 3102,
+      "rows": 4,
+      "V": 16384,
+      "K": 1024,
+      "distribution": "ascending-tiles"
+    },
+    {
+      "case_id": "F03-03",
+      "scenario": "heldout-benefit",
+      "seed": 3103,
+      "rows": 3,
+      "V": 49152,
+      "K": 64,
+      "distribution": "first-tile-dominant-fp16"
+    },
+    {
+      "case_id": "F03-04",
+      "scenario": "heldout-cost",
+      "seed": 3104,
+      "rows": 5,
+      "V": 24576,
+      "K": 512,
+      "distribution": "ascending-quantized-levels"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F03-guard-equal",
+      "rows": 2,
+      "V": 16401,
+      "K": 32,
+      "seed": 3105,
+      "distribution": "equal"
+    },
+    {
+      "case_id": "F03-guard-K",
+      "rows": 1,
+      "V": 16384,
+      "K": 1025,
+      "seed": 3106,
+      "distribution": "equal"
+    }
+  ]
+}

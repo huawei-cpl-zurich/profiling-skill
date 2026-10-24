@@ -1,0 +1,460 @@
+{
+  "study": "W006-L04",
+  "status": "complete",
+  "measurement_kind": "instrumented diagnostic spans and profiled events; ordinary latency unavailable",
+  "product": "Ascend 910B4-1",
+  "sdk": "CANN 9.1.0",
+  "kernel_type": "K_TYPE_AIV=3, verified for all ten compiled variants",
+  "matrix_sha256": "5a4918233bb66b2ab36b06bd39faa0c835f8a9a2fc1516e6a47eaa57313be948",
+  "sources": {
+    "row_dma.py": "bebfab871c732725d83d0388182f03810e1966e0ca6be20ea85e8e51bb57a381",
+    "row_dma.cpp": "f8288a5007ec478abce0eb0481f94baf9a5a1737ac11cef017f4c5f1a6ac779d"
+  },
+  "collection_handle": "remote:gz-a3:job:4d05a3dd-7d68-449a-9460-0d5920f7c59d",
+  "compact_archive_sha256": "0aaeaf13e6c84e996f2b81af75709a86b4d9c76a1705affdd22d29f9db629af7",
+  "counts": {
+    "numerical_checks": 10,
+    "host_checks": 2,
+    "captures": 8,
+    "profiled_calls": 80,
+    "scientific_payloads": 5,
+    "oracle_regeneration_in_conforming_rerun": 0,
+    "warmup": 0,
+    "ordinary_latency_calls": 0
+  },
+  "cases": [
+    {
+      "case_id": "W006-L04-01",
+      "status": "complete",
+      "numerical_checks": 2,
+      "host_checks": 0,
+      "captures": 2,
+      "profiled_calls": 20,
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            6.34,
+            5.48,
+            5.88,
+            6.24,
+            5.86,
+            5.26,
+            6.2,
+            5.08,
+            6.4,
+            5.18
+          ],
+          "count": 10,
+          "mean": 5.792,
+          "sample_sd": 0.5067719188922941
+        },
+        "after": {
+          "samples": [
+            6.16,
+            5.28,
+            5.84,
+            5.06,
+            6.02,
+            5.8,
+            6.22,
+            5.26,
+            5.96,
+            5.1
+          ],
+          "count": 10,
+          "mean": 5.67,
+          "sample_sd": 0.44872659332332376
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.5580999851226807,
+            0.38940000534057617,
+            0.3641200065612793,
+            0.3687399923801422,
+            0.3909800052642822,
+            0.3706800043582916,
+            0.37185999751091003,
+            0.36173999309539795,
+            0.35618001222610474,
+            0.45392000675201416
+          ],
+          "count": 10,
+          "mean": 0.3985720008611679,
+          "sample_sd": 0.06269538716617813
+        },
+        "after": {
+          "samples": [
+            0.7741400003433228,
+            0.37483999133110046,
+            0.33691999316215515,
+            0.3653799891471863,
+            0.34995999932289124,
+            0.3831399977207184,
+            0.3675599992275238,
+            0.36517998576164246,
+            0.36316001415252686,
+            0.3573000133037567
+          ],
+          "count": 10,
+          "mean": 0.40375799834728243,
+          "sample_sd": 0.13076004087167195
+        }
+      },
+      "raw_pmu_csv_sha256": {
+        "before": "09a9776cb859bbadd94f1de3d54e1e599d2ba313cfbf3be3ac19e938ef93c564",
+        "after": "ed00eaf19377cbcd4df54e03cd0c94787096e51fad2ea56bf4574b1796435aba"
+      }
+    },
+    {
+      "case_id": "W006-L04-02",
+      "status": "complete",
+      "numerical_checks": 2,
+      "host_checks": 0,
+      "captures": 2,
+      "profiled_calls": 20,
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            2.44,
+            1.64,
+            2.54,
+            1.78,
+            2.54,
+            1.7,
+            2.82,
+            1.78,
+            2.34,
+            1.44
+          ],
+          "count": 10,
+          "mean": 2.102,
+          "sample_sd": 0.48198201902837273
+        },
+        "after": {
+          "samples": [
+            2.46,
+            1.54,
+            2.42,
+            1.58,
+            2.52,
+            1.76,
+            2.56,
+            2.28,
+            2.5,
+            1.68
+          ],
+          "count": 10,
+          "mean": 2.13,
+          "sample_sd": 0.4319722213291035
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.6723200082778931,
+            0.3563399910926819,
+            0.3469400107860565,
+            0.34929999709129333,
+            0.3746199905872345,
+            0.3450399935245514,
+            0.3620400130748749,
+            0.3510200083255768,
+            0.3546200096607208,
+            0.3453800082206726
+          ],
+          "count": 10,
+          "mean": 0.3857620030641556,
+          "sample_sd": 0.10108877554773157
+        },
+        "after": {
+          "samples": [
+            0.64683997631073,
+            0.4178600013256073,
+            0.35378000140190125,
+            0.36039999127388,
+            0.3549000024795532,
+            0.3778199851512909,
+            0.3430800139904022,
+            0.3535600006580353,
+            0.34341999888420105,
+            0.3390600085258484
+          ],
+          "count": 10,
+          "mean": 0.38907199800014497,
+          "sample_sd": 0.09345033767565313
+        }
+      },
+      "raw_pmu_csv_sha256": {
+        "before": "eeadb89b778b83562ddc25311dd63620ef4b423dc8855c91147339b12613087f",
+        "after": "9a0127aac1340886a62d96c6f775652d29d75e61c27b85cb2a1ff7c0d5c2099a"
+      }
+    },
+    {
+      "case_id": "W006-L04-03",
+      "status": "complete",
+      "numerical_checks": 2,
+      "host_checks": 0,
+      "captures": 2,
+      "profiled_calls": 20,
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            4.14,
+            4.44,
+            4.26,
+            4.92,
+            4.68,
+            4.32,
+            4.2,
+            4.46,
+            4.16,
+            4.48
+          ],
+          "count": 10,
+          "mean": 4.406,
+          "sample_sd": 0.24748512862167876
+        },
+        "after": {
+          "samples": [
+            4.24,
+            4.28,
+            4.32,
+            4.32,
+            4.26,
+            4.32,
+            4.24,
+            4.32,
+            4.22,
+            4.24
+          ],
+          "count": 10,
+          "mean": 4.276,
+          "sample_sd": 0.04087922591134917
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.5921599864959717,
+            0.39570000767707825,
+            0.43661999702453613,
+            0.3548400104045868,
+            0.3522999882698059,
+            0.35387998819351196,
+            0.3555600047111511,
+            0.3475799858570099,
+            0.3464600145816803,
+            0.3522599935531616
+          ],
+          "count": 10,
+          "mean": 0.38873599767684935,
+          "sample_sd": 0.07697501588130047
+        },
+        "after": {
+          "samples": [
+            0.6046199798583984,
+            0.3795599937438965,
+            0.325439989566803,
+            0.3486799895763397,
+            0.3610999882221222,
+            0.362419992685318,
+            0.35133999586105347,
+            0.36059999465942383,
+            0.3754799962043762,
+            0.3365800082683563
+          ],
+          "count": 10,
+          "mean": 0.38058199286460875,
+          "sample_sd": 0.08040068328530299
+        }
+      },
+      "raw_pmu_csv_sha256": {
+        "before": "6d51d076c283a988d5f7ddc15047f4f8b3be60c669325899d0f3ef137b64020a",
+        "after": "dad24e7ae7b2ae831aaa2e952bc71954f5cd31d38a086ed9f5a2113a9b01788a"
+      }
+    },
+    {
+      "case_id": "W006-L04-04",
+      "status": "complete",
+      "numerical_checks": 2,
+      "host_checks": 0,
+      "captures": 2,
+      "profiled_calls": 20,
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            1.42,
+            1.46,
+            1.52,
+            1.52,
+            1.46,
+            1.44,
+            1.44,
+            1.4,
+            1.44,
+            1.5
+          ],
+          "count": 10,
+          "mean": 1.46,
+          "sample_sd": 0.04109609335312655
+        },
+        "after": {
+          "samples": [
+            1.44,
+            1.44,
+            1.48,
+            1.44,
+            1.62,
+            1.52,
+            1.28,
+            1.32,
+            1.3,
+            1.66
+          ],
+          "count": 10,
+          "mean": 1.45,
+          "sample_sd": 0.12797569213634977
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.6152399778366089,
+            0.35943999886512756,
+            0.35853999853134155,
+            0.3688400089740753,
+            0.3616200089454651,
+            0.34536001086235046,
+            0.35194000601768494,
+            0.3693999946117401,
+            0.35684001445770264,
+            0.3598000109195709
+          ],
+          "count": 10,
+          "mean": 0.3847020030021667,
+          "sample_sd": 0.08131314663690459
+        },
+        "after": {
+          "samples": [
+            0.7097799777984619,
+            0.41269999742507935,
+            0.37237998843193054,
+            0.3869599997997284,
+            0.3814600110054016,
+            0.3412800133228302,
+            0.3800399899482727,
+            0.35662001371383667,
+            0.3490999937057495,
+            0.3632600009441376
+          ],
+          "count": 10,
+          "mean": 0.40535799860954286,
+          "sample_sd": 0.10892575511317404
+        }
+      },
+      "raw_pmu_csv_sha256": {
+        "before": "747063775befe4fd728d3a04673c23b6a33e8f9e0918844fcbca697345332770",
+        "after": "4e356f18bb1d45e5002383746575ccd0716d80ed21ea5b694b10071c59494678"
+      }
+    },
+    {
+      "case_id": "W006-L04-GA",
+      "status": "complete",
+      "numerical_checks": 2,
+      "host_checks": 0,
+      "captures": 0,
+      "profiled_calls": 0
+    },
+    {
+      "case_id": "W006-L04-GB",
+      "status": "complete",
+      "numerical_checks": 0,
+      "host_checks": 2,
+      "captures": 0,
+      "profiled_calls": 0
+    }
+  ],
+  "fixtures": [
+    {
+      "case_id": "W006-L04-GA",
+      "sha256": "16e68b89d99900a3ec329785a3ee3618434411cb02790e5acfaf4a9d1d4c25fe"
+    },
+    {
+      "case_id": "W006-L04-03",
+      "sha256": "e479fd32a27fee9d487a0bbddd0d314db4784021860bb73a06bc3dbb95ce2230"
+    },
+    {
+      "case_id": "W006-L04-04",
+      "sha256": "da3f29281e7a2f14b9b1381fb79899a14fac68787dddae42b723a63cc9871a2d"
+    },
+    {
+      "case_id": "W006-L04-02",
+      "sha256": "81621c93f985141acee457d7ee39f6a9e1866ff9832a6a69d588c938af2d0057"
+    },
+    {
+      "case_id": "W006-L04-01",
+      "sha256": "055738c43177057cae7ad6ada1b446bcf4644d4a6e6775dfd810f09f2505a256"
+    }
+  ],
+  "binaries": [
+    {
+      "variant": "1-65-after",
+      "binary_sha256": "3c43e318ad24a6e06517a3a2d817f0c5bdfb86f6b7e5128fed08ee5f5ec5c53f",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "1-65-before",
+      "binary_sha256": "06eed12588cdfff8b7737e0caf952bfacebb906c4b7d7999aebea5338b7c55d0",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "128-65-after",
+      "binary_sha256": "361aa6b8e203232428e5d16a4eff3bc150133669636e3ff91bee743121e32cb0",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "128-65-before",
+      "binary_sha256": "be50f57df6d2fb44e91d1e65214d42585deac2dbc3bd04096d7e6b88b7bd774d",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "129-65-after",
+      "binary_sha256": "d706fcc9d75e87a1bca3b69309a6a25dcedd6f633cf656b2982b7007bea6b27d",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "129-65-before",
+      "binary_sha256": "5f66ec6e14536a68348de74d7c92ac84848a65485682c3dca6f7ff38e9ccbc92",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "2-9-after",
+      "binary_sha256": "b9c051cf94fa50d256ebc0db43595841eb92905c404402a7e6b0da2ab1659665",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "2-9-before",
+      "binary_sha256": "3972318f6c778c2ed6856eaed37479899a710ab9ae6ef73fb6283146f1f9d47e",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "96-97-after",
+      "binary_sha256": "522379696d55af13a4615ffe20a5da1a055d2c6b7e4219bdf34af6981c47783a",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "96-97-before",
+      "binary_sha256": "a8ac761f1a8b8c7eefd87e23683e9c5385c2ce2c23df0de29bcd2e39efed8b19",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    }
+  ],
+  "qualification_notes": [
+    "The earlier v3 run was nonconforming MIX_AIC placement: all original 8 captures/80 forwards retained separately; no timing reused here.",
+    "v3 compiler intermediate basenames collided; all ten original libraries retained, but only final-variant intermediates survive. v4 uses unique per-variant translation units and retains all intermediates.",
+    "Original five scientific payloads reused with their original provider identities; only execution placement/build artifact retention changed.",
+    "Source input-command counts rows versus one are expected source behavior, not measured PMU counts.",
+    "Small observed differences overlap sample variation; this study establishes no general performance win, physical bandwidth or roofline claim."
+  ]
+}

@@ -50,9 +50,9 @@ not support it.
 
 ## Retained A3 runtime status
 
-This pair remains experimental and the PR remains a draft. The retained study
-used Ascend910B4-1 with CANN 9.1.0 and Triton 3.2.0. The complete cost pair was
-slower after the change; the study does not establish a profiling gain.
+This pair remains experimental and the PR remains a draft. The complete cost
+pair was slower after the change; the retained A3 study does not establish a
+profiling gain.
 
 | Case | Once-per-arm correctness | Retained profiling outcome |
 |---|---|---|

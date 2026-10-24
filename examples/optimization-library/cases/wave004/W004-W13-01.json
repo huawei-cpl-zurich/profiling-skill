@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W13-01",
+  "role": "gallery",
+  "seed": 5301,
+  "parameters": {
+    "m": 128,
+    "R": 1,
+    "ldb": 136,
+    "regime": "moderate-cancellation"
+  },
+  "scenario_designation": "gallery-benefit",
+  "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+}

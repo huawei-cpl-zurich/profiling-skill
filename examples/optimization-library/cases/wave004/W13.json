@@ -1,0 +1,96 @@
+{
+  "wave": 4,
+  "family_id": "W13",
+  "title": "Two residual corrections reusing direct factors",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W13 andboundedfinal-two-test-contract/gtsvguardreceipts",
+  "cases": [
+    {
+      "case_id": "W004-W13-01",
+      "role": "gallery",
+      "seed": 5301,
+      "parameters": {
+        "m": 128,
+        "R": 1,
+        "ldb": 136,
+        "regime": "moderate-cancellation"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+    },
+    {
+      "case_id": "W004-W13-02",
+      "role": "gallery",
+      "seed": 5302,
+      "parameters": {
+        "m": 32,
+        "R": 1,
+        "ldb": 40,
+        "regime": "easy"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+    },
+    {
+      "case_id": "W004-W13-03",
+      "role": "heldout",
+      "seed": 5303,
+      "parameters": {
+        "m": 192,
+        "R": 1,
+        "ldb": 200,
+        "regime": "moderate-cancellation"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+    },
+    {
+      "case_id": "W004-W13-04",
+      "role": "heldout",
+      "seed": 5304,
+      "parameters": {
+        "m": 64,
+        "R": 1,
+        "ldb": 72,
+        "regime": "easy"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+    }
+  ],
+  "contract": {
+    "source_kind": "SOURCE-DOCUMENTEDalgorithm+actualcodeinterface/architecturelayout/numericaltests; upstreamdevicebodyUNSEEN, independentprojectimplementation. Notclaimextended-exponentnativebehavior. Rootacceptedprovenanceexplicitly understandingapproval; sourcepathmissremainsopen.",
+    "input": "FP32dl,d,du[m],dl0=duLast=0; logicalsingleRHScolumnmajorstorage[1,ldb],activeb uniform[-.125,.125],padding98765.25bitwiseunchanged;coefficients/originalbimmutable. Sameequations/initialThomasprimitivefromparentPR206.",
+    "oracle": "CPUFP64dense solve ofrepresentedcoefficients/b, outputactiveatol1e-5rtol1e-4; storeforwardmaxabserror,relativeL2error,FP64residualinf/componentwisebackwarderror independently. Neveracceptsolelysmallresidual. Everyoutputfinite, padding/inputunchanged.",
+    "measurement": "Allcopies/resets/certification/factors/solves/iterationpasses/finitechecksinsideAPI; no cross-forwardfactor/inputcaching. Algorithmiccertificate/finiteguard isrequiredoperationworknotextra correctnessvalidation; includeanymandatoryhostsync/dispatchinwholefirst-to-lastdeviceopspananddeclareit.",
+    "data_recipe": "Moderatecases:dl=du=-1(internal),d=2+1/64;easycasesseededuniformdl/du[-.25,.25],d=4. bseededuniform[-.125,.125]. Bothno-pivot-safe andboundedcondition; no truth-filteringforaccuracygain.",
+    "before": "FactorcurrentAonce,initialFP32Thomas solve,returnx0.",
+    "after": "SAMEfactors+initialsolve,EXACTLYtwo(r=b-Ax;solveA*delta=rusingretainedfactors;proposex+delta)steps,commitWHOLEvectoronlyifALLproposedelementsfiniteotherwisewholerollback. No per-elementpartialcommit/refactorization/newprecision/quantization. FP32onlyresidualassociationfixed/fusiondisabled,notupstream2mantissaextendedexponent.",
+    "zero_policy": "Signedzero numericalequal, exactnonzeroresultunchangedforzeroresidual. No claimrefinementalwaysimprovesaccuracy; negativeaccuracy/runtimechangesretained.",
+    "guards": [
+      {
+        "case_id": "W004-W13-GA",
+        "role": "guard",
+        "seed": 5391,
+        "parameters": {
+          "m": 16,
+          "R": 1,
+          "ldb": 24,
+          "regime": "diagonal-power-two-exact"
+        },
+        "expected": "twozeroresidualcorrectionsleavenumericexactsolutionunchanged,allow+0/-0"
+      },
+      {
+        "case_id": "W004-W13-GB",
+        "role": "guard",
+        "seed": 5392,
+        "parameters": {
+          "m": 8,
+          "component": "whole-finite-update-rollback"
+        },
+        "expected": "explicitCOMPONENTguard:finiteoriginalx/finitecorrectionbutoneproposedelementoverflows;BEFOREcopyoriginal,AFTERupdatekernelrollbackENTIREvectorincludingfiniteproposedelements. No dense-solveaccuracyclaimforthiscomponentguard."
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce(GBcomponentexpectedoriginalcopyforW13),oncecheckside/case/sourceversionthen10profiles4pairs,2guards0capture,no warmup/autotune/extratiming/discretionaryprofilevalidationIO."
+}

@@ -12,7 +12,7 @@ from optimization_native_bridge import build_shared, digest
 PIN = '40aced927fdaaa0f3eaa9c6f5c5d859e06392f55'
 
 
-def compile_pair(catlass, output, *, source=None, variants=None):
+def compile_pair(catlass, output, *, source=None, variants=None, extra_sources=()):
     catlass, output = Path(catlass).resolve(), Path(output).resolve()
     manifest = json.loads((catlass/'manifest.json').read_text())
     if manifest.get('revision') != PIN:
@@ -44,7 +44,7 @@ def compile_pair(catlass, output, *, source=None, variants=None):
             *defines,*[f'-I{p}' for p in includes],str(source),'-o',str(binary)]
         try:
             result = build_shared(command, source_paths=[source,
-                source.parent/'catlass_bridge.h',catlass/'manifest.json',
+                source.parent/'catlass_bridge.h',*extra_sources,catlass/'manifest.json',
                 *[catlass/entry['file'] for entry in manifest['files']]],
                 binary=binary, output=output/f'build-{arm}', source_revision=PIN)
         except Exception:

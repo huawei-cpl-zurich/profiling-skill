@@ -60,3 +60,30 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Retained A3 observation
+
+On a healthy idle 910B4-1, all six cases passed exact correctness, with ten
+profiled forwards per arm for four cases and zero profiles for both guards.
+Mean device operation spans (BEFORE / AFTER, microseconds) were:
+
+| rows × V | BEFORE | AFTER |
+| --- | ---: | ---: |
+| 64 × 16384 | 38.486 | 26.274 |
+| 1 × 64 | 3.636 | 3.410 |
+| 96 × 8192 | 29.390 | 20.684 |
+| 2 × 128 | 2.576 | 2.384 |
+
+The tiny cases vary substantially; retain the individual samples rather than
+interpreting these means as reliable application speedups. Backend adapter IR
+retains the normalization division (two `arith.divf` versus one), and NPUBIN
+hashes differ. This is no machine-instruction count claim. Exported AIV vector
+time for the largest case averaged 16.9325 / 11.188 microseconds, supporting
+less vector work; PMU ratios do not establish physical traffic or roofline.
+
+The initial collection stopped after the first complete pair because a Triton
+identity dictionary used the native-binary metadata shape. A lossless copy
+wrapped those unchanged dictionaries in lists and passed retained-trace
+extraction before the other five cases ran. The first pair was never replayed.
+[Public samples and digests](../../../docs/data/optimization-w004-normalize-argmax.json)
+retain that failure and the archive identity; raw profiler trees remain remote.

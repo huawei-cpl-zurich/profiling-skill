@@ -25,12 +25,14 @@ not a universal dispatch threshold or a claim about every Ascend target.
 | The same A rows are reused across a core's output tasks | [L1 operand residency](references/l1-residency.md) | Capacity and reuse bookkeeping |
 | Repeated strided ND movement with inconvenient alignment | [Padding/layout conversion](references/padding-layout.md) | Complete conversion and workspace cost |
 | Many cores begin the same multi-tile K traversal | [ShuffleK](references/shuffle-k.md) | Indexing and changed summation order |
+| Dynamic A16W8 activation quantization needs precision compensation | [Two-component MSD](references/two-component-msd.md) | Row amax, second integer dot and complete launch gaps |
 | Many output tiles have a plausible operand-locality problem | [Output-program ordering](references/program-order.md) | Mapping cost or worse reuse of the other operand |
 
 The recipes contain code formats, preconditions, falsifiers and gallery data.
 [Gallery evidence](references/gallery-evidence.md) defines the timing boundaries;
 its JSON companion retains every ten-sample series and original PMU field names.
-Only gallery examples belong to this skill snapshot. All 33 gallery pairs
+The F11 supplement retains four negative paired cases and two correctness-only guards in its own evidence file.
+Only gallery examples belong to the original snapshot. The original 33 gallery pairs
 (28 original plus five supplements) have correctness and ten-forward identity
 evidence. Residency remains inconclusive; ShuffleK improves the thin pressure
 case but regresses the square case. Grouped-M output ordering improves the

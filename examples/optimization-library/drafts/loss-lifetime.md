@@ -72,7 +72,7 @@ in the orchestration artifacts before A3 execution; results retain the tradeoffs
 ## Four-case A3 qualification
 
 Frozen source `82e9d4` passed eight complete loss/dX/dW checks, eight captures and
-80 forwards on healthy isolated gz-a3 physical device 3, with four cached CPU oracles.
+80 forwards on a healthy isolated A3 target, with four cached CPU oracles.
 No warmups, unprofiled forwards or runtime/compile/correctness failures occurred.
 Outputs/workspaces are **preallocated in prepare**; spans cover every required
 device operation and inter-kernel gap, not host allocations or application latency.
@@ -97,8 +97,7 @@ MTE2 ratio is 0.9819→0.991994. Exported cube_utilization rises 87.149→97.297
 this does not imply more useful MAC work or greater distance to/from roofline.
 Task-local ratios have different task counts/denominators and are diagnostic.
 
-First job `remote:gz-a3:job:b0458d34-0343-4f0d-949a-ce5a23668da1`; remaining
-`remote:gz-a3:job:e57e1b7c-6ca8-42be-9b7f-bdf5e6ce8483`, both exit 0. Compact
-archive SHA256 `ab463b48a44771a53fae8ee5c7e831e1975d8c7c5f5047eecd9c9e7d1669348a`.
+Exact target configuration, commands and retained job handles belong in the
+private orchestration task record. Compact archive SHA256 `ab463b48a44771a53fae8ee5c7e831e1975d8c7c5f5047eecd9c9e7d1669348a`.
 Raw ten samples, SD, active/gap/caller distributions, matched PMU rows, original
 result hashes and binary snapshots are retained in orchestration evidence.

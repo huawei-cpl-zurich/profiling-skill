@@ -1,0 +1,417 @@
+{
+  "study": "W005-T04",
+  "study_kind": "new operator application of sufficient statistics",
+  "new_unique_mechanism_claim": false,
+  "full_evidence": "grpo-statistics-evidence.json.gz",
+  "full_evidence_sha256": "1731ba8c0a2c71350f3f7e9ed81ed1c533091f0af7abd83cdab436c3e4b0afc9",
+  "full_evidence_bytes": 64924,
+  "retained_archive_sha256": "cfa33b802429f4b6b4ab0bbe8048c08796ed7bfb09c725e126e9f2b2c5b98232",
+  "product": "Ascend910B4-1",
+  "physical_die": 6,
+  "gate_job_handle": "remote:gz-a3:job:055a6bef-8c45-47af-9ae2-34470285c8d8",
+  "gate_exit": 0,
+  "counts": {
+    "cpu_scientific_oracles": 6,
+    "correctness_calls": 12,
+    "profiled_forwards": 80,
+    "complete_captures": 8,
+    "guard_captures": 0,
+    "failed_attempts": 0,
+    "warmups": 0,
+    "unprofiled_timing_calls": 0
+  },
+  "matrix_sha256": "7ac50712b597de16718dccb07ddb2598e2990d4cea564c75c1ebf2557e5a4483",
+  "summary": [
+    {
+      "case_id": "W005-T04-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.1901372887201944e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.1901372887201944e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            317.02,
+            312.4,
+            284.26,
+            281.4,
+            281.58,
+            287.28,
+            280.36,
+            282.84,
+            255.22,
+            285.04
+          ],
+          "count": 10,
+          "mean": 286.74,
+          "sample_sd": 17.285870916252183
+        },
+        "after": {
+          "samples": [
+            177.98,
+            145.24,
+            146.18,
+            146.66,
+            144.8,
+            159.34,
+            149.48,
+            159.44,
+            152.36,
+            156.86
+          ],
+          "count": 10,
+          "mean": 153.834,
+          "sample_sd": 10.222954780514504
+        }
+      }
+    },
+    {
+      "case_id": "W005-T04-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.347387567131932e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.347387567131932e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            302.62,
+            296.58,
+            275.1,
+            277.04,
+            273.88,
+            288.12,
+            275.22,
+            275.4,
+            301.8,
+            283.36
+          ],
+          "count": 10,
+          "mean": 284.91200000000003,
+          "sample_sd": 11.604509468305842
+        },
+        "after": {
+          "samples": [
+            173.4,
+            184.58,
+            145.18,
+            161.22,
+            158.24,
+            155.32,
+            176.78,
+            150.84,
+            154.76,
+            147.76
+          ],
+          "count": 10,
+          "mean": 160.808,
+          "sample_sd": 13.191233452562352
+        }
+      }
+    },
+    {
+      "case_id": "W005-T04-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 8.802646472849673e-09,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 8.802646472849673e-09,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            331.7,
+            298.58,
+            296.96,
+            293.06,
+            311.04,
+            302.4,
+            298.0,
+            302.46,
+            300.78,
+            290.0
+          ],
+          "count": 10,
+          "mean": 302.498,
+          "sample_sd": 11.738886753956793
+        },
+        "after": {
+          "samples": [
+            148.06,
+            168.92,
+            155.54,
+            158.44,
+            151.86,
+            157.3,
+            149.68,
+            159.38,
+            160.82,
+            168.14
+          ],
+          "count": 10,
+          "mean": 157.814,
+          "sample_sd": 7.024066881483651
+        }
+      }
+    },
+    {
+      "case_id": "W005-T04-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.7617783199263002e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.7617783199263002e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            336.82,
+            324.9,
+            301.14,
+            283.02,
+            287.3,
+            293.14,
+            292.18,
+            286.04,
+            284.8,
+            291.68
+          ],
+          "count": 10,
+          "mean": 298.102,
+          "sample_sd": 18.239043469071134
+        },
+        "after": {
+          "samples": [
+            182.66,
+            165.54,
+            164.56,
+            155.06,
+            162.74,
+            164.84,
+            162.08,
+            159.94,
+            160.9,
+            162.44
+          ],
+          "count": 10,
+          "mean": 164.076,
+          "sample_sd": 7.189911450544202
+        }
+      }
+    },
+    {
+      "case_id": "W005-T04-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.090633122319723e-09,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.090633122319723e-09,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-T04-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.4465419213036697e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.4465419213036697e-08,
+              "finite": true,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "inputs_immutable": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W005-T04-01": {
+      "before": 30,
+      "after": 20
+    },
+    "W005-T04-02": {
+      "before": 30,
+      "after": 20
+    },
+    "W005-T04-03": {
+      "before": 30,
+      "after": 20
+    },
+    "W005-T04-04": {
+      "before": 30,
+      "after": 20
+    }
+  }
+}

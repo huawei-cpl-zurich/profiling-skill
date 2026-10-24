@@ -31,6 +31,17 @@ def invalid(request, cases, reason):
                                         status='not-run') for c in cases])
 
 
+def cache_key(config, phase, source_sha256):
+    """Stable private key also permits seeding already-qualified baseline proofs."""
+    helpers = [Path(__file__), ROOT/'scripts/optimization_demo_worker.py',
+               ROOT/'scripts/optimization_pair.py', ROOT/'scripts/optimization_profile_evidence.py',
+               *(ROOT/'skills/ascend-model-benchmarking/scripts').glob('*.py')]
+    context = {k:v for k,v in config.items() if k not in ('cache_directory','observation_seconds')}
+    identity = dict(config=context, phase=phase, source=source_sha256,
+                    helpers={str(p.relative_to(ROOT)):sha(p) for p in helpers})
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
 def evaluate(config, request, *, remote=None):
     """A cache intent is never redispatched; an existing handle is only observed."""
     remote = remote or CplRemote()
@@ -45,12 +56,7 @@ def evaluate(config, request, *, remote=None):
         values = case['baseline_samples_us']
         if len(values) != 10 or any(type(v) not in (float, int) or not math.isfinite(v) or v <= 0 for v in values):
             raise ValueError('ten trusted baseline samples required per case')
-    worker = ROOT / 'scripts/optimization_demo_worker.py'
-    helpers = [worker, ROOT/'scripts/optimization_pair.py', ROOT/'scripts/optimization_profile_evidence.py',
-               *(ROOT/'skills/ascend-model-benchmarking/scripts').glob('*.py')]
-    identity = dict(config=config, phase=request['phase'], source=request['candidate_sha256'],
-                    helpers={str(p.relative_to(ROOT)):sha(p) for p in helpers})
-    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+    key = cache_key(config, request['phase'], request['candidate_sha256'])
     cache = Path(config['cache_directory']).resolve() / key
     cache.mkdir(parents=True, exist_ok=True)
     with (cache/'lock').open('a') as lock:

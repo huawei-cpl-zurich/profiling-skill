@@ -34,3 +34,36 @@ ten forwards per arm. Its original parser rejected native CANN flow accounting;
 strict replay subsequently qualified the existing trace through genuine
 HostToDevice flow IDs and Node launch thread identities, with no extra forwards. No kernel identity is inferred from task
 ordering or device execution time.
+
+Wave006 L01 provides a controlled educational scheduler specialization, rather
+than a comparison against the best vendor GEMM. Compile both artifacts with
+`single_stage_compile.py --catlass FILTERED_BUNDLE --output NEW_DIRECTORY`, then
+set `CATLASS_SINGLE_STAGE_DIRECTORY` and use `single_stage_adapter:factory` with
+`optimization_pair.py`. The immutable matrix is `experiments/optimization-wave006/L01.json`;
+the runner takes lowercase `m`, `n`, `k`, `seed`, `case_id`, and `role` fields.
+
+`single_stage_block.hpp` inherits the pinned small-block resource allocation and
+event initialization/drain. Its adapted operator shares all copies, buffering,
+L0 math, completion events and FP16 output between both variants, with unit flags
+false. The general variant wraps that body in the outer-K loop, adjusts the GM
+K offsets, and initializes the accumulator only for the first K fragment.
+`single_stage_kernel.hpp` preserves the pinned row-major task mapping while
+wrapping task execution in a block-count-strided loop. The direct variant
+specializes these two loops only. Both use L1 128×256×256 and L0 128×256×64.
+These local header adaptations retain the upstream CANN 2.0 notices and pin.
+
+The after arm chooses direct control only when the output-task count fits the
+queried runtime Cube count and K≤256. The before arm always uses general control;
+both guard cases load the identical general binary. Cases require aligned
+positive dimensions; M=64 and K=32 validate partial tiles, while K=272 validates
+multiple outer stages and a final K=16 fragment. Dense ND FP16 A/B/C use strides
+(K,1), (N,1), (N,1). CPU fixtures represent values bounded by ±0.25 in FP16;
+the independent FP64 GEMM is rounded to the FP16 output contract. Correctness
+uses atol=rtol=0.002, checks every output is finite (overwriting its NaN sentinel),
+and checks input immutability. Native preparation records actual physical
+storage. Each prepared shape has a distinct loader path, so C ABI configuration
+globals cannot cross cases; binary hashes still identify the common fallback.
+
+Compilation may erase some general control, and a shorter profiler-active span
+would be diagnostic rather than ordinary latency. Neither pipe percentages nor
+this contrast establish physical traffic, roofline, or saved instruction counts.

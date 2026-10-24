@@ -1,0 +1,91 @@
+{
+  "wave": 6,
+  "study_id": "L01",
+  "title": "Single-wave single-K-stage scalar control specialization",
+  "study_kind": "source-backed-control-or-synchronization-candidate",
+  "new_unique_mechanism_claim": false,
+  "standing_approval": "waves003\u2013022 data first",
+  "source": "lowlevel/proposal.md exact bounded bodies/host numerical comparison, CATLASS40aced927fdaaa0f3eaa9c6f5c5d859e06392f55 CANNOpenSoftware2.0; actual native AtlasA2/arch2201 code. Selected910B4-1/CANN9.1 support must be own-qualified. No PythonDSL/A5/950 support claim.",
+  "cases": [
+    {
+      "case_id": "W006-L01-01",
+      "role": "gallery",
+      "seed": 7101,
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 64
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    },
+    {
+      "case_id": "W006-L01-02",
+      "role": "gallery",
+      "seed": 7102,
+      "parameters": {
+        "M": 512,
+        "N": 1024,
+        "K": 256
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    },
+    {
+      "case_id": "W006-L01-03",
+      "role": "heldout",
+      "seed": 7103,
+      "parameters": {
+        "M": 64,
+        "N": 256,
+        "K": 32
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    },
+    {
+      "case_id": "W006-L01-04",
+      "role": "heldout",
+      "seed": 7104,
+      "parameters": {
+        "M": 384,
+        "N": 1024,
+        "K": 256
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-L01-GA",
+      "role": "guard",
+      "seed": 7191,
+      "parameters": {
+        "M": 1024,
+        "N": 1024,
+        "K": 64
+      },
+      "expected": "32outputtasks exceedactual20Cube count: AFTER routesgeneralpath, samebaselinekernel; qualifyactualcorecount ratherthan assume."
+    },
+    {
+      "case_id": "W006-L01-GB",
+      "role": "guard",
+      "seed": 7192,
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 272
+      },
+      "expected": "K>256 routesgeneralpath bothsides, correctsecondouterKtile/final16tail. No smallbodyunsafeKcall."
+    }
+  ],
+  "contract": {
+    "interface": "PositiveM,N,K; FP16 A[M,K],B[K,N] represented bounded[-.25,.25], immutable, FP32accumulation and FP16C[M,N]. Exact physical A/B/C layouts/strides/padding must be declared/audited, not guessed from logical shapes. No preconversion free to one arm. Independent CPU FP64 represented-input GEMM oracle atol2e-3rtol2e-3, finitealloutputs, separateoutput sentinel fullyoverwritten.",
+    "common": "SameM128N256L1K256L0K64, SAMErowmajoroutputtaskorder/grid/movement/buffering/precision/terminalbarrier botharms. Actual Cube count queried once; tests up to16tasks must pass measured coreeligibility, not assumed20. Exact source/binary/compiler/nativebridge and dependency revisions retained. Any materially coupled kernel change requires explicit evidence/qualification, not silentbaseline change.",
+    "before": "Controlled general scheduler/task and outerK loops with same row-major mapping and SAMEdata/math/body/events as candidate for eligible cases. Source small-vs-general bodies can differ beyond control: isolate explicitly, do not silently comparedifferentbuffering/copy algorithms. Disclose project educational contrast, not bestvendorbaseline.",
+    "after": "Directone-task/core, singleouterK-stage control ONLYifceil(M/128)*ceil(N/256)<=actualCube count andK<=256. SAMEunitflagFALSEbotharms. Unsupportedscope uses identical qualifiedgeneralpath. TailM/N/K copies actuallyvalidated; CanImplementtrue alone insufficient.",
+    "compiler": "Inspect actualgeneratedcontrol/resources. If compiler alreadyfolds general control, retain no-effect, no invented scalarsaved orspeedup."
+  },
+  "protocol": "Six cached fixture/oracle payloads once (guard composite expectedtuple once), correctness once/side/case/source then10fullAPIprofileforwards4pairs,guards0captures. No warmup/autotune/extratiming/profiledvalidation. Compile/resourcequalifyallresources first. Deviceoperation span diagnostic inclrequiredstages/gaps, no ordinarylatency/physicaltraffic/rooflineclaim. Preservefailed/partial/slower/no-effect outcomes and all10samples/taskPMU/bindings."
+}

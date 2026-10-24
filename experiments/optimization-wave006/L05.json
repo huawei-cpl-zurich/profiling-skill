@@ -1,0 +1,108 @@
+{
+  "wave": 6,
+  "study_id": "L05",
+  "title": "Stock conditional Cube barrier versus conservative unconditional barrier",
+  "study_kind": "source-backed-conservative-adaptation",
+  "new_unique_mechanism_claim": false,
+  "standing_approval": "waves003\u2013022, data first",
+  "source": "lowlevel/refinements.md L05, CATLASS40aced927fdaaa0f3eaa9c6f5c5d859e06392f55 tile_mmad.hpp21\u201375, native SmallMatmul wrapper/body and realhostgolden; CANNOpenSoftware2.0. BEFORE independently conservative, AFTER exact stock helper.",
+  "dependency": {
+    "base": "1cdc26188f0cf42415c1c6240990d5f590a3da52",
+    "target_branch": "codex/optimization-w006-unit-completion-flags"
+  },
+  "cases": [
+    {
+      "case_id": "W006-L05-01",
+      "role": "gallery",
+      "seed": 7501,
+      "parameters": {
+        "M": 64,
+        "N": 64,
+        "K": 256,
+        "tile_M": 64,
+        "tile_N": 64
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-L05-02",
+      "role": "gallery",
+      "seed": 7502,
+      "parameters": {
+        "M": 32,
+        "N": 64,
+        "K": 256,
+        "tile_M": 32,
+        "tile_N": 64
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-L05-03",
+      "role": "heldout",
+      "seed": 7503,
+      "parameters": {
+        "M": 64,
+        "N": 80,
+        "K": 192,
+        "tile_M": 64,
+        "tile_N": 80
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-L05-04",
+      "role": "heldout",
+      "seed": 7504,
+      "parameters": {
+        "M": 32,
+        "N": 48,
+        "K": 192,
+        "tile_M": 32,
+        "tile_N": 48
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-L05-GA",
+      "role": "guard",
+      "seed": 7591,
+      "parameters": {
+        "M": 32,
+        "N": 80,
+        "K": 128,
+        "tile_M": 32,
+        "tile_N": 80
+      },
+      "expected": "Exact10-fragment boundary, stock predicate unchanged and independent FP64 output gate."
+    },
+    {
+      "case_id": "W006-L05-GB",
+      "role": "guard",
+      "seed": 7592,
+      "parameters": {
+        "M": 64,
+        "N": 64,
+        "K": 192,
+        "tile_M": 64,
+        "tile_N": 64,
+        "consecutive_distinct_calls": 2
+      },
+      "expected": "One compositeguardAPI performs TWO distinct-input GEMMs with separate outputs; multiple Kupdates preserve initC=false/event reuse; cached expected tuple once,0profiles."
+    }
+  ],
+  "contract": {
+    "interface": "Bounded FP16 inputs[-.25,.25], FP32 accumulation/FP16 output, audited row-major physical layouts, immutable inputs/output sentinel/canaries. Independent represented-input FP64 GEMM atol2e-3rtol2e-3. AIC-only exact annotation and actual metadata2/__CCE1; actual Cube count queried. K<=256 and grid within Cube count.",
+    "common": "Same native SmallMatmul and buffers/STAGES2/UNIT_FLAGSfalse/copies/producer events/final barriers, per-case identical tile_M/tile_N and L1K256/L0K64. Record actual m/n passed to helper, not full128x256 hiding predicate regimes.",
+    "before": "Clone only pinned no-bias TileMmad helper body, change its ONE final PIPE_M predicate to unconditional. Do NOT invoke stock helper then add barrier, which duplicates small-case barriers. Preserve all other code and native2201 float branches even if FP16 unused. Minimal patch/custom helper provenance retained.",
+    "after": "EXACT stock pinned TileMmad helper, including native `(m/C0)*(n/C0)<10` predicate and C0 from header. Do not alter/tune/explain hardware threshold without evidence. AFTER stock behavior makes narrow comparison safe; no general barrier-elision recommendation.",
+    "compiler": "Preserve actual code/resource comparison; identical code and statistically uncertain timing remain no-effect/uncertain. No scalar instruction count from unsupported objdump."
+  },
+  "protocol": "Cache six scientific payloads once (unless host guard explicitly has no numerical oracle). Correct each side once per case/source version, then exactly10 fullAPI profiled forwards per arm/four mainpairs. Guards0captures; no warmup/autotune/extra timing/profiled tensor inspection. Compile and verify engine/resource/ABI before any math; preserve all failures/nonconforming versions/ten samples/taskPMU/source/binary/fixture identities. Device-operation span diagnostic, not ordinary latency or physical traffic/roofline evidence."
+}

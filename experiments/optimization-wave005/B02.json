@@ -1,0 +1,88 @@
+{
+  "wave": 5,
+  "study_id": "B02",
+  "title": "External-gate LayerNorm fusion",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "producer-consumer-fusion",
+  "approval": "Standing waves003\u2013022 data first.",
+  "source": "ascendc/proposal.md, ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 Apache2.0; exactdevicebody/interface/NPUexample+A2/A3whitelist. Preserveattribution. Standalone910Bimplementation notnativeperformanceclaim.",
+  "cases": [
+    {
+      "case_id": "W005-B02-01",
+      "role": "gallery",
+      "seed": 6401,
+      "parameters": {
+        "A": 1024,
+        "R": 256
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B02-02",
+      "role": "gallery",
+      "seed": 6402,
+      "parameters": {
+        "A": 1,
+        "R": 32
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B02-03",
+      "role": "heldout",
+      "seed": 6403,
+      "parameters": {
+        "A": 768,
+        "R": 384
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B02-04",
+      "role": "heldout",
+      "seed": 6404,
+      "parameters": {
+        "A": 2,
+        "R": 64
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32 x,U[A,R],gamma,beta[R],eps1e-5; x,Uuniform[-1,1],gamma[.5,1.5],beta[-.25,.25],immutable,sameshapey. Standaloneepsilon,no nativeepsilonassumption.",
+    "before": "Compute ytemp=LNcenteredvariance(x)*gamma+beta, materialize, separatey=ytemp*U.",
+    "after": "SameLN/arithmetic/grid, multiplyU AFTERaffine beforestore. U neverinstatistics. No savedstatsreuse/rowbatching.",
+    "oracle": "IndependentCPUFP64 truth atol1e-4rtol1e-4. Allrequiredworktimed, logicalintermediatebytesnotpeakmemory.",
+    "dependency": "Mayreusea shared normalizationprimitiveonlyvia explicitparentPRbranchwithstableidentity; otherwiseindependentsmallstandaloneimplementation, avoidpullingunrelatedbranches."
+  },
+  "guards": [
+    {
+      "case_id": "W005-B02-GA",
+      "role": "guard",
+      "seed": 6491,
+      "parameters": {
+        "A": 3,
+        "R": 17,
+        "distribution": "zero-negative-nonuniform-U"
+      },
+      "expected": "Nonzerobeta,Umixed0/negative/nonuniform catchesmovebeforestats; masktail."
+    },
+    {
+      "case_id": "W005-B02-GB",
+      "role": "guard",
+      "seed": 6492,
+      "parameters": {
+        "A": 2,
+        "R": 16,
+        "malformed_U_shape": true
+      },
+      "expected": "Bothrejectshape mismatchhost, no implicitbroadcast."
+    }
+  ],
+  "protocol": "Six CPU payloads once, once-per-side correctness per source version then exactly10 profiled fullAPI forwards/arm/fourmaincases. Guards0captures. No warmup/autotuning/extratiming/profiledIOchecks. Complete operation span diagnostic, preserve all failures/negatives. Independent910Bqualification mandatory."
+}

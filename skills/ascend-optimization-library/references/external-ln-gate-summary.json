@@ -1,0 +1,405 @@
+{
+  "study": "W005-B02",
+  "kind": "New operator application of producer/consumer fusion; no new unique mechanism claim",
+  "full_evidence": "external-ln-gate-evidence.json.gz",
+  "full_evidence_sha256": "6cfac63915c71acfc26d50d3c9c2c32b84f38093fe127dc4aab20a329b708c95",
+  "full_evidence_bytes": 39813,
+  "retained_archive_sha256": "895ea7b552ca648dc907a988fb08cffa53d0aba9baf893f2450feebc008f5d27",
+  "product": "Ascend910B4-1",
+  "physical_die": 6,
+  "numerical_device_correctness_checks": 10,
+  "host_shape_rejection_checks": 2,
+  "scientific_CPU_oracle_payloads": 5,
+  "summary": [
+    {
+      "case_id": "W005-B02-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 6.229474274199731e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 6.229474274199731e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            148.42,
+            146.42,
+            152.98,
+            150.74,
+            155.86,
+            150.78,
+            152.14,
+            152.62,
+            152.94,
+            150.32
+          ],
+          "count": 10,
+          "mean": 151.322,
+          "sample_sd": 2.6331637076169687
+        },
+        "after": {
+          "samples": [
+            43.18,
+            43.24,
+            42.66,
+            42.62,
+            42.88,
+            42.34,
+            43.06,
+            42.9,
+            43.42,
+            42.76
+          ],
+          "count": 10,
+          "mean": 42.906,
+          "sample_sd": 0.3264693281492499
+        }
+      }
+    },
+    {
+      "case_id": "W005-B02-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.1971174296299125e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.1971174296299125e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            141.94,
+            165.56,
+            144.28,
+            145.3,
+            149.92,
+            147.64,
+            215.38,
+            149.38,
+            152.74,
+            151.42
+          ],
+          "count": 10,
+          "mean": 156.356,
+          "sample_sd": 21.725374411810105
+        },
+        "after": {
+          "samples": [
+            2.06,
+            2.04,
+            1.76,
+            2.14,
+            1.78,
+            2.08,
+            1.78,
+            2.08,
+            1.8,
+            2.04
+          ],
+          "count": 10,
+          "mean": 1.956,
+          "sample_sd": 0.15428689006018773
+        }
+      }
+    },
+    {
+      "case_id": "W005-B02-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.715325994692932e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.715325994692932e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            188.18,
+            167.38,
+            151.94,
+            160.18,
+            148.0,
+            161.32,
+            162.46,
+            161.66,
+            147.74,
+            156.68
+          ],
+          "count": 10,
+          "mean": 160.554,
+          "sample_sd": 11.67325166542915
+        },
+        "after": {
+          "samples": [
+            37.5,
+            36.8,
+            37.24,
+            37.58,
+            37.0,
+            37.3,
+            37.48,
+            37.8,
+            37.34,
+            37.52
+          ],
+          "count": 10,
+          "mean": 37.356,
+          "sample_sd": 0.2911738694014664
+        }
+      }
+    },
+    {
+      "case_id": "W005-B02-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.3513220570592352e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.3513220570592352e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            119.28,
+            158.2,
+            140.54,
+            143.88,
+            159.72,
+            113.74,
+            140.74,
+            141.4,
+            141.18,
+            142.92
+          ],
+          "count": 10,
+          "mean": 140.16,
+          "sample_sd": 14.401160447068916
+        },
+        "after": {
+          "samples": [
+            1.74,
+            1.68,
+            1.68,
+            1.7,
+            1.8,
+            1.78,
+            1.72,
+            1.62,
+            1.62,
+            1.76
+          ],
+          "count": 10,
+          "mean": 1.71,
+          "sample_sd": 0.06200358412579423
+        }
+      }
+    },
+    {
+      "case_id": "W005-B02-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.8939482049340484e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.8939482049340484e-07,
+              "atol": 0.0001,
+              "rtol": 0.0001,
+              "oracle": "CPU FP64"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-B02-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "host_rejected": true,
+              "error": "U shape must equal x shape; broadcasting is unsupported",
+              "npu_calls": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "host_rejected": true,
+              "error": "U shape must equal x shape; broadcasting is unsupported",
+              "npu_calls": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "publication_comment_followup": {
+    "kind": "Comment-only upstream copyright-year correction",
+    "measured_source_sha256": "c79efe7b65c5222e828705c9d24e7082c68ffe0df657accbf3dc51f630568d77",
+    "publication_source_sha256": "0c0ba1c8294743e0c7dadd1bd877a5258796a42cccb1805c5eb4430351fd80e7",
+    "module_AST_sha256": "7f0ec6960b99bcc9d1ea655790092bbe5f61d358e40c5607ea9827b1b43bdce4",
+    "AST_identical": true,
+    "fixture_provider_unchanged": true,
+    "new_scientific_oracles": 0,
+    "new_NPU_forwards": 0,
+    "new_captures": 0,
+    "upstream_notice": "Huawei Technologies Co., Ltd. 2026, Apache-2.0",
+    "source_citation": "ref://profiling-skill/ascendc/perf-analysis/repos/gitcode-ascend-ops-rec#ascendc/activation/ln_mul/op_kernel/ln_mul_kernel.h:L1-L14"
+  },
+  "pmu_task_counts": {
+    "W005-B02-01": {
+      "before": 20,
+      "after": 10
+    },
+    "W005-B02-02": {
+      "before": 20,
+      "after": 10
+    },
+    "W005-B02-03": {
+      "before": 20,
+      "after": 10
+    },
+    "W005-B02-04": {
+      "before": 20,
+      "after": 10
+    }
+  }
+}

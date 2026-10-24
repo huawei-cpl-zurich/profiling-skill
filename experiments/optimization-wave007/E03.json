@@ -1,0 +1,131 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E03, exactmindspeed-bodies.json/api-dispatch.json/operator-docs.json; per-fileApache2/Huawei/NVIDIA notices/fullpin4efe2b675c2d51517c3fdd14c721020b8d41e241.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "E03",
+  "task": "optimization-w007-moe-row-tile",
+  "title": "Vectorize MoE row movement with a supplied permutation",
+  "source_files": [
+    "extension/source__mindspeed_ops__arch32__triton__sort_chunks_by_idx.py",
+    "extension/api__mindspeed_ops__api__triton__sort_chunks_by_idx.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W007-E03-01",
+      "role": "gallery",
+      "seed": 75301,
+      "parameters": {
+        "N": 1024,
+        "D": 64,
+        "with_probs": true,
+        "forward": true,
+        "map_kind": "shuffled_chunks",
+        "chunks": 16
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E03-02",
+      "role": "gallery",
+      "seed": 75302,
+      "parameters": {
+        "N": 32,
+        "D": 4096,
+        "with_probs": true,
+        "forward": false,
+        "map_kind": "identity",
+        "chunks": 4
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E03-03",
+      "role": "heldout",
+      "seed": 75303,
+      "parameters": {
+        "N": 4096,
+        "D": 256,
+        "with_probs": false,
+        "forward": true,
+        "map_kind": "skew_zero_chunks",
+        "chunks": 17
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E03-04",
+      "role": "heldout",
+      "seed": 75304,
+      "parameters": {
+        "N": 16,
+        "D": 1024,
+        "with_probs": false,
+        "forward": false,
+        "map_kind": "reverse_chunks",
+        "chunks": 4
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E03-GA",
+      "role": "guard",
+      "seed": 75391,
+      "parameters": {
+        "N": 17,
+        "D": 8,
+        "with_probs": true,
+        "forward": true,
+        "map_kind": "shuffled_chunks",
+        "chunks": 7,
+        "ieee_payloads": true
+      },
+      "expected": "PreserveFP32bits \u00b10/\u00b1Inf/quietNaNpayloads inXandprobs viaINT32viewcomparison, oddNremainder anduneven/zero-sizedchunks, bijective rowmap validated; oneAPI/arm,0captures."
+    },
+    {
+      "case_id": "W007-E03-GB",
+      "role": "guard",
+      "seed": 75392,
+      "parameters": {
+        "N": 0,
+        "D": 8,
+        "with_probs": true,
+        "forward": true,
+        "map_kind": "empty",
+        "chunks": 3
+      },
+      "expected": "ZeroN fullAPIallocatescorrectemptyshapes withoutkernellaunch/inputload,0captures. PublicordinaryN0CLI auto correctness-only; unsupportednonbijection/negativeindices rejectbeforecache/NPU onNONFROZENcases."
+    }
+  ],
+  "contract": {
+    "interface": "Exactprovided-mapprimitive sort_chunks_by_map scope: contiguousFP32 X[N,D], suppliedcontiguousint32row_map[N] BIJECTION[0,N), optionalFP32probs[N], outputsprivatecontiguousYandoptionalout_probs. N>=0,<2^24,Dpositivepower2<=4096, alloffsetsfitint32, noalias. row_map is anINPUT tothissourceAPI, notfreehiddeninput-dependentprep: CPUfixture mayderive structuredpermutation fromchunkmetadata asinputgeneration; mapconstruction/cumsums/scatter AREOUTOFSCOPE andNOTcountedfullendtoendMoE/wholechunk-sortperformance. CorrectnessCPUindependentmovementreference expectedonce.",
+    "oracle": "FORWARD Y[row_map[i],d]=X[i,d], p_out[row_map[i]]=p[i]; inverse Y[i,d]=X[row_map[i],d], p_out[i]=p[row_map[i]]. ExactFP32bitwise usingint32views inclNaNpayloads, inputimmutable/nonalias/canaries/exacttuplearity. Normalmainrandomfinite+signedzeros; GAquietNaNcanonicalpayloads explicit. HostbijectioncheckoncebeforeCPUexpectedcachecreation ordeviceprepare, noinputcheckingprofiled. Validatebothdirectionsfrozenmaincases, NONFROZENCPUroundtriptests; noextrascientificGPUroundtrip.",
+    "before": "PortableSOURCE-style scalarrowmovement: sourcegrid num_blocks=min(actualqueriedAIVcores,N),block_size=ceil(N/num_blocks),BLOCK_TOKENS=nextpower2(block_size), contiguousrowpartition. Preloadmap andsourceget_element scalarindex exactlyif installedextensionworks; noautotune. Ifextensionget_elementunsupported (probe actualtriton.language.extra.cann.extension, notTLnamespaceonly), common scalar tl.load(row_map_ptr+i) loop isfaithfulindexbutchangedmaptraffic: namehonestlyportable-source-style scalarloadbaseline notunmodifiedvendorperformance. No artificialslowdisabledCSE/barriers.",
+    "after": "SAMEgrid/rowpartition andFORWARDdirection. ProcessBT4rowtile\u00d7D usingbroadcastmapaddresses+2Dload/store, tailmasks restrictedassignedprogramrange, optionalprobsonecopyPERTOKEN notperfeature. No block/rowpartitionretuning, batchingacrossprogramownership, ormapconstructionoptimization. Sourcepresuppliedint32bijectionensuresdisjointscatter. D4096BT4resource64KBlogicalXtile plusoutputs/masks actualcompilequalify, failuresretainednotshrinkBT/cases. Ifportablebaselineusesdirectscalarmapload, afterusesrowvectormapload; exposecountdifferenceaspartofmovementvectorization."
+  },
+  "source_files_manifest": [
+    {
+      "path": "extension/source__mindspeed_ops__arch32__triton__sort_chunks_by_idx.py",
+      "sha256": "34285784c0aaaa0154aa05908c4aa4e1416fd253c8b4e4d73bdec490b1dbde71"
+    },
+    {
+      "path": "extension/api__mindspeed_ops__api__triton__sort_chunks_by_idx.py",
+      "sha256": "4c0204598b67e442a86f666dbde8268ba9f62263b8216a23702ec9527fe9e815"
+    }
+  ]
+}

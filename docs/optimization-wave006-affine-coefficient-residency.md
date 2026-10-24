@@ -92,3 +92,12 @@ native API forwards: 94; warmups and scientific replays: zero. Two failed
 controller qualification stages preceded all science (enum spelling and missing
 assembly); their source, logs and artifacts remain retained and their scientific
 forward count is zero. Controller corrections reused the original binaries.
+
+The publication adapter subsequently received a CPU-only validation-state fix:
+reusing one Adapter across public `run_pair` calls now compares output bits only
+within the current output/case pair, including reversed arm order. Completed
+comparison snapshots are released. Ten functional tests cover reuse across
+seeds/shapes and rejection of a genuine current-pair mismatch. The measured
+adapter source remains archived separately at SHA256
+`4be9c5d381c1bdf8d5d8a1da94493a414648f7e668e761c51060545fbc4cd245`;
+the kernel, original measurements and cached scientific payloads were unchanged.

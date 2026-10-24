@@ -11,7 +11,7 @@ import torch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'examples/optimization-library/ascendc'),str(ROOT/'scripts')]
 from affine import Adapter,dimensions,make_case,verify_binary
-from optimization_pair import fixture
+from optimization_pair import fixture, run_pair
 from optimization_native_bridge import digest
 
 
@@ -50,8 +50,22 @@ def test_cli_rejection(tmp_path):
     assert not (tmp_path/'cache').exists()
 
 
+@pytest.fixture
+def cpu_native(monkeypatch):
+    original_to=torch.Tensor.to;original_full=torch.full
+    def to(t,*args,**kw):
+        if kw.get('device')=='npu:0':kw['device']='cpu'
+        return original_to(t,*args,**kw)
+    def full(*args,**kw):
+        if kw.get('device')=='npu:0':kw['device']='cpu'
+        return original_full(*args,**kw)
+    monkeypatch.setattr(torch.Tensor,'to',to);monkeypatch.setattr(torch,'full',full)
+    monkeypatch.setitem(sys.modules,'torch_npu',SimpleNamespace())
+    monkeypatch.setattr(torch,'npu',SimpleNamespace(synchronize=lambda:None,current_stream=lambda:SimpleNamespace(npu_stream=0)),raising=False)
+
+
 @pytest.mark.skipif(not shutil.which('c++'),reason='host compiler required')
-def test_compound_native_abi_and_validation(tmp_path,monkeypatch):
+def test_compound_native_abi_and_validation(tmp_path,cpu_native):
     source=tmp_path/'stub.cpp'
     source.write_text('''#include <stdint.h>
 extern "C" uint32_t affine_rows(){return 5;}
@@ -71,16 +85,6 @@ extern "C" int catlass_bridge_launch(void**p,uint64_t c,void*){
     build=tmp_path/'build-5-17-after';build.mkdir()
     (build/'build.json').write_text(json.dumps(dict(binary_sha256=digest(binary))))
     (tmp_path/'sdk-declarations.json').write_text('[]')
-    original_to=torch.Tensor.to;original_full=torch.full
-    def to(t,*args,**kw):
-        if kw.get('device')=='npu:0':kw['device']='cpu'
-        return original_to(t,*args,**kw)
-    def full(*args,**kw):
-        if kw.get('device')=='npu:0':kw['device']='cpu'
-        return original_full(*args,**kw)
-    monkeypatch.setattr(torch.Tensor,'to',to);monkeypatch.setattr(torch,'full',full)
-    monkeypatch.setitem(sys.modules,'torch_npu',SimpleNamespace())
-    monkeypatch.setattr(torch,'npu',SimpleNamespace(synchronize=lambda:None,current_stream=lambda:SimpleNamespace(npu_stream=0)),raising=False)
     spec=dict(seed=19205,parameters=dict(rows=5,width=17,two_calls_same_coefficient_pointer=True))
     v=make_case(spec);a=Adapter(tmp_path);item=a.prepare('after',spec,v,tmp_path/'out')
     pointers=[t.data_ptr() for t in item.inputs]
@@ -95,3 +99,53 @@ extern "C" int catlass_bridge_launch(void**p,uint64_t c,void*){
         item.inputs[0][0,0]=99
         assert not a.validate('after',result,v,spec)['immutable_input']
     finally:item.close()
+
+
+@pytest.mark.skipif(not shutil.which('c++'),reason='host compiler required')
+def test_public_run_pair_reuses_adapter_without_stale_bits(tmp_path,cpu_native):
+    for rows,width in ((5,17),(4,9)):
+        for arm in ('before','after'):
+            source=tmp_path/f'{rows}-{width}-{arm}.cpp'
+            source.write_text(f'''#include <stdint.h>
+extern "C" uint32_t affine_rows(){{return {rows};}}
+extern "C" uint32_t affine_width(){{return {width};}}
+extern "C" uint32_t affine_grid(){{return 2;}}
+extern "C" uint32_t affine_after(){{return {int(arm=='after')};}}
+extern "C" uint32_t catlass_bridge_abi_version(){{return 1;}}
+extern "C" const char* catlass_bridge_kernel_names(){{return "[\\\"host_affine\\\"]";}}
+extern "C" int catlass_bridge_launch(void**p,uint64_t c,void*){{
+ if(c!=4)return 1;
+ for(int i=0;i<{rows*width};i++){{volatile float v=((float*)p[0])[i]*((float*)p[1])[i%{width}];((float*)p[3])[i]=v+((float*)p[2])[i%{width}];}}return 0;}}
+''')
+            binary=source.with_suffix('.so')
+            subprocess.run(['c++','-shared','-fPIC',str(source),'-o',str(binary)],check=True)
+            build=tmp_path/f'build-{rows}-{width}-{arm}';build.mkdir()
+            (build/'build.json').write_text(json.dumps(dict(binary_sha256=digest(binary))))
+    (tmp_path/'sdk-declarations.json').write_text('[]')
+    adapter=Adapter(tmp_path)
+    for i,(seed,rows,width,order) in enumerate(((19401,5,17,('before','after')),
+            (19402,5,17,('before','after')),(19403,4,9,('after','before')))):
+        spec=dict(seed=seed,parameters=dict(rows=rows,width=width))
+        report=run_pair(adapter,spec,tmp_path/f'pair-{i}',tmp_path/'cache',{},order=order,correctness_only=True)
+        assert report['status']=='complete', report
+        assert report['arms'][order[0]]['correctness']['diagnostics']['paired_bitwise'] is None
+        assert report['arms'][order[1]]['correctness']['diagnostics']['paired_bitwise'] is True
+        assert report['counts']==dict(profiled_calls=0,capture_calls=0,correctness_calls=2)
+        assert not adapter.output_bits  # Completed pairs release their CPU snapshots.
+
+    class Mismatch(Adapter):
+        def prepare(self,arm,*args):
+            item=super().prepare(arm,*args)
+            if arm=='after':
+                original=item.run
+                def run():
+                    output=original()
+                    output[0,0]=torch.nextafter(output[0,0],torch.full((),float('inf')))
+                    return output
+                item.run=run
+            return item
+    report=run_pair(Mismatch(tmp_path),dict(seed=19404,parameters=dict(rows=5,width=17)),
+        tmp_path/'mismatch',tmp_path/'cache',{},correctness_only=True)
+    assert report['status']=='failed'
+    diagnostics=report['arms']['after']['correctness']['diagnostics']
+    assert diagnostics['primary_accuracy'] and diagnostics['paired_bitwise'] is False

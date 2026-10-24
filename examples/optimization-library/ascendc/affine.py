@@ -155,12 +155,13 @@ class Adapter:
             def close():
                 original_close(); items[1].close()
             item.close = close
-        self.prepared[arm] = (items, storages, inputs, results)
+        pair_key = (Path(output).resolve().parent, json.dumps(spec, sort_keys=True))
+        self.prepared[arm] = (items, storages, inputs, results, pair_key)
         return item
 
     def validate(self, arm, actual, fixture, spec):
         torch.npu.synchronize()
-        items, storages, inputs, results = self.prepared[arm]
+        items, storages, inputs, results, pair_key = self.prepared[arm]
         expected = fixture['expected'] if isinstance(fixture['expected'],tuple) else (fixture['expected'],)
         outputs = ((self.first_outputs[arm], results[1].cpu()) if len(results)==2
                    else (results[0].cpu(),))
@@ -170,9 +171,13 @@ class Adapter:
         immutable = all(torch.equal(x.cpu().view(torch.int32),fixture[k].view(torch.int32)) for x,k in zip(inputs,final_keys))
         canaries = all(bool((s[:32].cpu()==-8191).all() and (s[-32:].cpu()==-8191).all()) for s in storages)
         nonalias = all(y.untyped_storage().data_ptr()!=x.untyped_storage().data_ptr() for y in results for x in inputs)
-        self.output_bits[arm] = tuple(y.view(torch.int32) for y in outputs)
-        pair_equal = None if 'before' not in self.output_bits or 'after' not in self.output_bits else all(torch.equal(a,b) for a,b in zip(self.output_bits['before'],self.output_bits['after']))
-        hashes = [hashlib.sha256(y.numpy().tobytes()).hexdigest() for y in self.output_bits[arm]]
+        pair_bits = self.output_bits.setdefault(pair_key, {})
+        pair_bits[arm] = tuple(y.view(torch.int32) for y in outputs)
+        pair_equal = None if len(pair_bits) < 2 else all(
+            torch.equal(a,b) for a,b in zip(pair_bits['before'], pair_bits['after']))
+        hashes = [hashlib.sha256(y.numpy().tobytes()).hexdigest() for y in pair_bits[arm]]
+        if len(pair_bits) == 2:
+            del self.output_bits[pair_key]
         return dict(passed=accurate and immutable and canaries and nonalias and pair_equal is not False,
                     primary_accuracy=accurate, exact_oracle=exact_oracle, paired_bitwise=pair_equal,
                     output_bits_sha256=hashes, immutable_input=immutable, gm_canaries=canaries,

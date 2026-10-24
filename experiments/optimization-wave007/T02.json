@@ -1,0 +1,101 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "proposal.md, triton-candidates.json, triton-tests.json; prior filtered wave005 triton/inventory.json for full commit pin; preserve per-file attribution and MIT LICENSE.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T02",
+  "task": "optimization-w007-logsoftmax-residency",
+  "title": "Retain bounded log-softmax rows instead of streaming three passes",
+  "source_file": "src__triton_ascend_kernels__deterministic__log_softmax_batch_invariant.py",
+  "cases": [
+    {
+      "case_id": "W007-T02-01",
+      "role": "gallery",
+      "seed": 72001,
+      "parameters": {
+        "rows": 32,
+        "width": 4096
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T02-02",
+      "role": "gallery",
+      "seed": 72002,
+      "parameters": {
+        "rows": 1,
+        "width": 31
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T02-03",
+      "role": "heldout",
+      "seed": 72003,
+      "parameters": {
+        "rows": 80,
+        "width": 2049
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T02-04",
+      "role": "heldout",
+      "seed": 72004,
+      "parameters": {
+        "rows": 2,
+        "width": 65
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-T02-GA",
+      "role": "guard",
+      "seed": 72091,
+      "parameters": {
+        "rows": 1,
+        "width": 129,
+        "batch_contexts": [
+          1,
+          7,
+          32
+        ],
+        "same_row_across_contexts": true
+      },
+      "expected": "Compoundguard3distinct APIs/arm, same selectedrow bytes in contexts1/7/32, exact selectedrow outputbits acrosscontexts within EACHarm. Entirecontext outputs independentlyFP64validated once; neighbors vary, near-equal target withoffset15 finitein[-20,20]. Onecached tuple expected/contextinputs; no extra rerun for bitcomparison."
+    },
+    {
+      "case_id": "W007-T02-GB",
+      "role": "guard",
+      "seed": 72092,
+      "parameters": {
+        "rows": 2,
+        "width": 4097
+      },
+      "expected": "Width>4096 bothdispatch exact same streamingbody withBLOCK2048, tailsbounded, sameartifact expected; correctness-only0captures."
+    }
+  ],
+  "contract": {
+    "interface": "Contiguous FP32 x[rows,width], rows>0,width>0, finite[-20,20], lastdimensiononly; independentCPUFP64 stablelogsoftmax x-max-log(sum(exp(x-max))) castFP32 once/case. Fixedatol3e-5rtol3e-5 established beforetiming, no posthoc relaxation. Inputimmutable/outputnonalias/canaries.",
+    "before": "Exact source3streamingpasses, BLOCK2048, same sequential per-core contiguous rowrange ownership based on actual queriedAIVcorecount. No artificial CSE/loop-disable flags.",
+    "after": "Widths<=4096 useone maskedresidentpower2row, one max/expsum andoutput; largerwidth EXACTsource streamingfallback. Samegrid/coreownership/sequentialrowloop/FP32exp+log andload/storeflags. Resident sumtree differs forwidth>2048, explicitly numericallyqualified notpairedbitwise.",
+    "invariance": "Perselectedpath same row givesbitwiseoutput independent ofbatchcontext. Different pairedpaths onlyfixednumericalgate, no stronger unsupportedbitwiseclaim. Actual compile/resourcequalify4096 threshold BEFORE math; ifunsupported retainunqualified case ratherthanshrinkingcase orsilent fallback changedcontract.",
+    "claims": "Newoperatorapplication ofexistingresidency/reductionfusion, notnewmechanism. ActualPMU and compilerresourceevidence only, no physicalGMbytes/roofline/occupancy inferred fromlogical3loads\u21921."
+  },
+  "source_sha256": "1245243b76b193df6eb4b2fdd9d6efc991bd2fc36ce1bce51149db33bbb8a096"
+}

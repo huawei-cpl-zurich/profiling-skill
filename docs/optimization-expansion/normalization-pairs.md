@@ -84,9 +84,9 @@ calibrated roofline claim follows from a profile.
 ## A3 gallery evidence
 
 Ascend910B4-1, Triton3.2.0, Torch-NPU2.10.0; implementation39d5e168.
-The first pair completed in retained job644ef19e-daad-4ec6-8118-e9197d730eac;
-the remaining seven completed in18236bc0-34a1-4ff8-9f86-eec6f7d0c66e.
-Both ran on the same healthy idle physical device. The compact receipt digest is
+All eight pairs ran on the same healthy idle physical device. Durable job
+handles and retained report locations belong to the ignored central task record.
+The compact receipt digest is
 `49966fca11c190586dd8aad3733b5185235c5741b712e0e18ffb21cf09248f9f`.
 It retains all samples, original report and trace digests, compiled identities,
 correctness diagnostics, PMU rows and the private holdout results.

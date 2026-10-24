@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W04-GB",
+  "role": "guard",
+  "seed": 4492,
+  "parameters": {
+    "B": 1,
+    "T": 70,
+    "H": 2,
+    "chunk": 64,
+    "distribution": "dyadic-random"
+  },
+  "expected": "explicit serial safe fallback for nondivisibleT, completepartialchunkoutput"
+}

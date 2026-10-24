@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W04-01",
+  "role": "gallery",
+  "scenario_designation": "gallery-benefit",
+  "seed": 4401,
+  "parameters": {
+    "B": 8,
+    "T": 1024,
+    "H": 8,
+    "chunk": 128
+  },
+  "hypothesis": "Reduced scan dependency may help; tiny chunks may expose scan-resource overhead."
+}

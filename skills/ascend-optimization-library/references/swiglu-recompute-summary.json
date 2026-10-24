@@ -1,0 +1,547 @@
+{
+  "study": "W005-T01",
+  "kind": "new operator application; zero unique mechanism claim",
+  "full_evidence": "swiglu-recompute-evidence.json.gz",
+  "full_evidence_sha256": "fbca53daea5a1d3f1531ea687cac6f8909410dcd84eb03a82fa1ce7265b15800",
+  "full_evidence_bytes": 53213,
+  "retained_archive_sha256": "cbb5405572eb1cec53f0075b97008d6331c8280d954a560e8f7595ed6e5df52d",
+  "product": "Ascend 910B4-1",
+  "physical_die": 4,
+  "summary": [
+    {
+      "case_id": "W005-T01-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.8893991242663333e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 4.995681251784845e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 2.1064699975426038e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.8893991242663333e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 4.995681251784845e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.928128943617935e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            388.66,
+            344.8,
+            349.54,
+            349.0,
+            354.64,
+            325.06,
+            349.42,
+            339.56,
+            345.24,
+            347.98
+          ],
+          "count": 10,
+          "mean": 349.39,
+          "sample_sd": 15.981681875057948
+        },
+        "after": {
+          "samples": [
+            381.76,
+            362.74,
+            359.74,
+            353.68,
+            360.4,
+            347.92,
+            351.72,
+            351.84,
+            350.92,
+            371.94
+          ],
+          "count": 10,
+          "mean": 359.266,
+          "sample_sd": 10.655556922720333
+        }
+      }
+    },
+    {
+      "case_id": "W005-T01-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 6.66933198445463e-07,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.129754204853839e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.6951266310627489e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 6.66933198445463e-07,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.129754204853839e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 8.065464349726881e-07,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            231.48,
+            177.82,
+            178.14,
+            197.18,
+            177.48,
+            181.26,
+            170.0,
+            178.26,
+            166.6,
+            175.6
+          ],
+          "count": 10,
+          "mean": 183.382,
+          "sample_sd": 18.7054987756126
+        },
+        "after": {
+          "samples": [
+            213.46,
+            204.94,
+            174.2,
+            181.2,
+            173.54,
+            175.78,
+            191.88,
+            193.84,
+            169.1,
+            173.0
+          ],
+          "count": 10,
+          "mean": 185.094,
+          "sample_sd": 15.192091656150874
+        }
+      }
+    },
+    {
+      "case_id": "W005-T01-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.8862431083732645e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 4.634261667746387e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 2.1442601259025196e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.8862431083732645e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 4.916854285497152e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.8329855606680212e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            314.72,
+            304.48,
+            258.24,
+            269.96,
+            273.82,
+            258.1,
+            274.0,
+            257.08,
+            264.96,
+            261.16
+          ],
+          "count": 10,
+          "mean": 273.652,
+          "sample_sd": 20.100726797252335
+        },
+        "after": {
+          "samples": [
+            327.02,
+            279.16,
+            264.28,
+            263.3,
+            262.92,
+            261.58,
+            265.18,
+            266.68,
+            282.24,
+            256.62
+          ],
+          "count": 10,
+          "mean": 272.898,
+          "sample_sd": 20.582975597431105
+        }
+      }
+    },
+    {
+      "case_id": "W005-T01-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.5432083451116796e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.443241037790699e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.2636459771897535e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.5432083451116796e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.443241037790699e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.2636459771897535e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            207.78,
+            191.4,
+            191.2,
+            172.34,
+            168.62,
+            176.1,
+            166.52,
+            176.52,
+            175.3,
+            177.24
+          ],
+          "count": 10,
+          "mean": 180.302,
+          "sample_sd": 12.70666824064348
+        },
+        "after": {
+          "samples": [
+            225.02,
+            169.36,
+            176.68,
+            170.74,
+            363.82,
+            183.56,
+            166.7,
+            171.42,
+            173.28,
+            171.32
+          ],
+          "count": 10,
+          "mean": 197.19,
+          "sample_sd": 60.9692929997461
+        }
+      }
+    },
+    {
+      "case_id": "W005-T01-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 5.78936557360521e-07,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.4796707290543054e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 7.190560555869752e-07,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 5.78936557360521e-07,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.4796707290543054e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 7.190560555869752e-07,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": false
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-T01-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.158914109566922e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 2.4756429901628962e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.403356721496607e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "outputs": [
+                {
+                  "max_abs": 1.158914109566922e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 2.4756429901628962e-06,
+                  "passed": true
+                },
+                {
+                  "max_abs": 1.2597526009017201e-06,
+                  "passed": true
+                }
+              ],
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "actual_ab_alias": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W005-T01-01": {
+      "before": 20,
+      "after": 20
+    },
+    "W005-T01-02": {
+      "before": 20,
+      "after": 20
+    },
+    "W005-T01-03": {
+      "before": 20,
+      "after": 20
+    },
+    "W005-T01-04": {
+      "before": 20,
+      "after": 20
+    }
+  }
+}

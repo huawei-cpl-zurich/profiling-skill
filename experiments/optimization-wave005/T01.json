@@ -1,0 +1,88 @@
+{
+  "wave": 5,
+  "study_id": "T01",
+  "title": "SwiGLU activation rematerialization",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "saved/recomputed-intermediates",
+  "approval": "standingwaves003\u2013022,datafirst",
+  "source": "triton/proposal.md T01 exactfilteredbody/interface/tests pinned7acb9c40a6ca;implementationactual910Bqualificationpending",
+  "cases": [
+    {
+      "case_id": "W005-T01-01",
+      "role": "gallery",
+      "seed": 6101,
+      "parameters": {
+        "R": 4096,
+        "D": 1024
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T01-02",
+      "role": "gallery",
+      "seed": 6102,
+      "parameters": {
+        "R": 1,
+        "D": 128
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T01-03",
+      "role": "heldout",
+      "seed": 6103,
+      "parameters": {
+        "R": 3072,
+        "D": 768
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T01-04",
+      "role": "heldout",
+      "seed": 6104,
+      "parameters": {
+        "R": 2,
+        "D": 256
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32a,b,dc[R,D], finiteuniform[-4,4], immutable. Return(y,da,db)separateFP32outputs with y=(a*s)*b,s=sigmoid(a),da=dc*b*(s+a*s*(1-s)),db=dc*a*s.",
+    "before": "ForwardWRITESsavedFP32s[R,D];backwardREADSsavedS, samefused/grid/associationasafter. Wholeforward+backwardtimed.",
+    "after": "Sameforwardy butDOESNOTsaveS;backwardRECOMPUTEsigmoidfroma. No secretSreuse/mutation/MLPGEMM. Sameexp/rounding andfusiondisabled; inputdependentstateonlyinsideAPI.",
+    "oracle": "IndependentCPUFP64formulaonrepresentedFP32inputs;all3outputs atol2e-5rtol2e-4, everyoutputfinite/inputunchanged/outputnonalias. LogicalSsaved4RDbytesvs0, NOTmeasuredallocation/peakmemory(benchbothpreparedalive).",
+    "guards": [
+      {
+        "case_id": "W005-T01-GA",
+        "role": "guard",
+        "seed": 6191,
+        "parameters": {
+          "R": 2,
+          "D": 16,
+          "distribution": "zero-and-symmetric-a"
+        },
+        "expected": "a=0derivative andpositive/negativesymmetry"
+      },
+      {
+        "case_id": "W005-T01-GB",
+        "role": "guard",
+        "seed": 6192,
+        "parameters": {
+          "R": 3,
+          "D": 129,
+          "distribution": "bounded-uniform",
+          "share_ab_storage": true
+        },
+        "expected": "oddmask; a/bnumericidenticalandACTUALpreparedGPUstoragealiased, formalpartialsreturnedseparately(no chainrulemerge),inputsunchanged/outputnotalias"
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce,correctoncepercase/side/source+10profiles4pairs,guards0caps,no warmup/autotune/extratiming/discretionaryprofileIOvalidation."
+}

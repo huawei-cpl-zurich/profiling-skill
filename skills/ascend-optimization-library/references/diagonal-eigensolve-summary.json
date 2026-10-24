@@ -405,5 +405,63 @@
       "before": 0,
       "after": 30
     }
+  },
+  "generator_followup": {
+    "reason": "Fix repeated-diagonal even N not divisible by four (N6/N10)",
+    "generator_before_sha256": "2d57234caaa1b1aee94f0d15a3cbf9ef65de4652fe162d4bcbff1c42cfedeb70",
+    "generator_after_sha256": "9195af55302987b1c421d7d498293bf1e6a13c7ca5e059a3e3ebdab4eb485623",
+    "cpu_gate_handle": "remote:gz-a3:job:cf5fbd47-9cb4-4f2d-bff5-08d1e51423ca",
+    "cpu_gate_status": "complete",
+    "cpu_gate_exit": 0,
+    "npu_forwards": 0,
+    "captures": 0,
+    "scientific_oracle_regenerations": 0,
+    "frozen_input_byte_proof": [
+      {
+        "case_id": "W004-W10-02",
+        "input_bytes_sha256": "8f8494d537eb222ef6708935d47414ae97a948166f17bdfc5a17347b47c6b489",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-04",
+        "input_bytes_sha256": "d892dd7845451f2d105464bbeda9cb155ffad54acf4ca662a1a6bd89edd6ff1c",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-01",
+        "input_bytes_sha256": "55c5d22937da1527a7f2b42731cb5a63c857bf091253579167390b8433b3da68",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-GB",
+        "input_bytes_sha256": "34934e7d8d7679bc19c3a13d58ab18f7064783be8bb436ae4e67daeaa850ac4c",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-GA",
+        "input_bytes_sha256": "bebc80b92adfe6dd34d1cc4b77452090a37b6c095cb81eda424f2c03ef441253",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-03",
+        "input_bytes_sha256": "1057bf401975059cac03afc3004f63b80f9156e9778029cb3cf36cab6fd21bd6",
+        "byte_identical": true
+      }
+    ],
+    "unchanged_device_sources": [
+      {
+        "file": "diagonal_eigensolve.py",
+        "sha256": "258d3e757b32f5517b0b95a00aa4f084ed556b9b6764bee976f56ff94957ad05"
+      },
+      {
+        "file": "eigenvalues_only.py",
+        "sha256": "16ea398c2f3ef938b5495ca6a4798c2d6d474ce49bfd9c1ea280f7851cf9972e"
+      },
+      {
+        "file": "jacobi_round.py",
+        "sha256": "f77197b120bb969eda3a8da58a49010d9bef826725f423e7f1d72d29e4e86e33"
+      }
+    ],
+    "original_profile_evidence": "Unchanged; original generator version remains bound to retained timing evidence. All six represented matrices are byte-identical with the fixed generator."
   }
 }

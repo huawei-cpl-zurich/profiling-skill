@@ -77,3 +77,13 @@ compiler cache artifacts and NPUBIN, source/harness snapshot, phase/watchdog
 records, and health evidence, bound by its SHA256 in the summary.
 The frozen matrix is `experiments/optimization-wave004/W10.json` and the
 runnable adapter is `diagonal_eigensolve:Adapter` beside the parent adapter.
+
+A review follow-up corrected the CPU repeated-diagonal fixture for accepted even
+sizes not divisible by four: repeat the four-value pattern enough times, then
+truncate to N. Direct N6/N10 shape/value tests and real CPU-only CLI regressions
+passed locally and on the same A3 runtime. That gate executed zero NPU forwards
+and zero captures. All six retained scientific input matrices were verified
+byte-identical without regenerating their scientific oracles; device kernel and
+run sources were unchanged. The summary records both generator source hashes,
+the CPU gate, and the input byte hashes. Original profiling evidence remains
+bound to its original source version and was not regenerated.

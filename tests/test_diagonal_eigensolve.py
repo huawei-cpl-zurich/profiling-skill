@@ -31,6 +31,22 @@ class Tests(unittest.TestCase):
             self.assertEqual(tiny[0,0,1].item(),2**-20)
         finally:torch.set_default_dtype(old)
 
+    def repeated_nonmultiple_specs(self):
+        return [dict(case_id=f'W10-regression-N{n}',role='guard',seed=5092,
+                     parameters=dict(batch=1,N=n,sweeps=5,want_vectors=False,
+                                     structure='unsorted-repeated-diagonal')) for n in (6,10)]
+
+    def test_repeated_diagonal_nonmultiple_of_four(self):
+        for spec in self.repeated_nonmultiple_specs():
+            n=spec['parameters']['N']
+            fixture=make_case(spec)
+            validate_input(spec,fixture)
+            self.assertEqual(fixture['a'].shape,(1,n,n))
+            pattern=torch.tensor([2.,-1.,1.,0.],dtype=torch.float32)
+            expected=pattern[torch.arange(n)%4]
+            self.assertTrue(torch.equal(fixture['a'][0].diagonal(),expected))
+            self.assertTrue(torch.equal(fixture['expected'].float(),expected.sort().values.unsqueeze(0)))
+
     def test_actual_flag_controls_each_call(self):
         calls=[]
         class Kernel:
@@ -75,7 +91,7 @@ class Adapter:
             import os
             env=dict(os.environ,PYTHONPATH=str(p)+':'+str(ROOT/'examples/optimization-library/triton'))
             (p/'provenance.json').write_text('{}')
-            for spec in self.specs:
+            for spec in self.specs+self.repeated_nonmultiple_specs():
                 (p/'case.json').write_text(json.dumps(spec))
                 out=p/spec['case_id']
                 run=subprocess.run([sys.executable,str(ROOT/'scripts/optimization_pair.py'),

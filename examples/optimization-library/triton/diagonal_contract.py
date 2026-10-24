@@ -24,7 +24,7 @@ def make_case(spec):
         d = torch.rand(n,generator=g,dtype=torch.float32,device='cpu')*4-2
         a = torch.diag(d).unsqueeze(0)
     elif structure == 'unsorted-repeated-diagonal':
-        d = torch.tensor([2.,-1.,1.,0.],dtype=torch.float32,device='cpu').repeat(n//4)
+        d = torch.tensor([2.,-1.,1.,0.],dtype=torch.float32,device='cpu').repeat((n+3)//4)[:n]
         a = torch.diag(d).unsqueeze(0)
     else:
         raw = torch.rand((batch,n,n),generator=g,dtype=torch.float32,device='cpu')*2-1

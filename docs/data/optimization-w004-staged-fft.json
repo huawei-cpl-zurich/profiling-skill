@@ -14668,5 +14668,21 @@
         }
       }
     }
-  ]
+  ],
+  "host_schema_fix": {
+    "validation_handle": "remote:gz-a3:job:d7825af8-2c7c-48d8-b780-04ae6712aac1",
+    "tests_passed": 20,
+    "validation_kind": "CPU-only functional tests on A3 environment; retained scientific guard read-only inspection",
+    "scientific_oracles_generated": 0,
+    "device_forwards": 0,
+    "profiles": 0,
+    "retained_guard_fixture_sha256": "162cac96914156bf17d00fc157bb9da245dcba0a10de8e78a3da3f2049c27a5b",
+    "retained_guard_manifest_sha256": "d821a4138027d483f892579e023e223d6e9e6d6f9ab81253d19a74146f200449",
+    "validation_receipt_sha256": "710c4a3acc44c6649c166eb1b855ceb41589f61264a6080fc105a4bec608e22f",
+    "host_source_sha256": {
+      "examples/optimization-library/triton/fft_contract.py": "3205e3fa6e2c6ed5e76a084b95cd525d38cb5f8b3af5296ba70996bfb6da469f",
+      "tests/test_optimization_staged_fft.py": "4a58fb00f008911a109a88ab88ef00733e78391531b6d072c607a1128af19476"
+    },
+    "note": "Original measurement sources and identities above remain immutable; later fix accepts nested cases and explicit guard distribution aliases. Device kernels and run body unchanged."
+  }
 }

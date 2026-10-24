@@ -18,6 +18,16 @@ there is no cached input-dependent permutation or transform.
 `ComplexFFT` helper and paired-experiment adapter. Powers of two from 32 through
 512 use the staged path; other positive sizes through 512 use the same full
 DFT kernel as the baseline. Zero and larger sizes are rejected on the host.
+Case input may be a flat object containing `batch`, `N`, `seed` and optional
+`distribution`, or one entry selected from the committed matrix, with shape and
+distribution under `parameters`. `fft_contract.normalize_case()` accepts both
+without modifying the caller object and rejects conflicting duplicate fields.
+The default distribution is `bounded-uniform`. The frozen guard description
+`oneimpulse andone exactsingle-frequency complexwave` and the short `ordering`
+name select the same two-row impulse/frequency recipe; unknown explicit
+distributions are rejected. Pass an individual matrix entry to the paired CLI's
+`--case` argument, rather than the whole matrix document.
+
 The four frozen cases are N256/B16, N32/B1, N512/B12, and N64/B1 with seeds
 4201–4204. Two guards cover impulse/frequency ordering at N64 and identical
 prime-N17 fallback. Guard cases collect no profiles.
@@ -86,3 +96,17 @@ NPUBIN/IR, trace/PMU exports and continuation are retained in a 193-file compact
 archive, SHA256 `f08689078603dc0e3c7d4f3cbc6f70d60e882761cde01a160bdff6f8049e08cb`.
 There were six scientific CPU oracles, twelve correctness forwards, eighty
 profiled forwards, and no warmups or extra timing calls across both jobs.
+
+
+A review found that the public adapter originally accepted only the flat
+controller schema. A host-only normalization fix now accepts committed nested
+entries and maps the guard's descriptive distribution explicitly. The retained
+scientific GA fixture was already generated with the ordering recipe: its
+manifest records `distribution: ordering`, and read-only inspection confirms
+the impulse at input index3 and the rounded single-frequency wave at bin7.
+Its fixture SHA256 is
+`162cac96914156bf17d00fc157bb9da245dcba0a10de8e78a3da3f2049c27a5b`.
+The original experiment sources/hashes remain in the evidence; this later
+schema fix changes neither the device kernels nor their run body. Validation
+uses CPU-only functional tests on A3, including a distinct N16 ordering fixture;
+no scientific oracle, device forward or profile was repeated.

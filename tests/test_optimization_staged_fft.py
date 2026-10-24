@@ -1,6 +1,6 @@
 """Functional contract checks; actual device kernels are verified on A3."""
 import hashlib
-import importlib.util
+import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -9,18 +9,19 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'examples/optimization-library/triton'))
-from fft_contract import coefficients, diagnostics, dimensions, factors, make_case, validate_inputs
+from fft_contract import coefficients, diagnostics, dimensions, factors, make_case, normalize_case, validate_inputs
 from staged_fft import ComplexFFT
 
 
 def test_ordering_oracle():
-    fixture = make_case(dict(batch=2, N=64, seed=4291, distribution='ordering'))
+    fixture = make_case(dict(seed=9491, parameters=dict(batch=2, N=16,
+                            distribution='oneimpulse andone exactsingle-frequency complexwave')))
     expected = fixture['expected']
-    k = torch.arange(64, dtype=torch.float64)
-    analytic = .125 * torch.exp(-2j * torch.pi * 3 * k / 64)
+    k = torch.arange(16, dtype=torch.float64)
+    analytic = .125 * torch.exp(-2j * torch.pi * 3 * k / 16)
     torch.testing.assert_close(expected[0], analytic, atol=1e-14, rtol=1e-14)
     assert expected[1].abs().argmax().item() == 7
-    assert abs(expected[1, 7].real - 8) < 1e-6
+    assert abs(expected[1, 7].real - 2) < 1e-6
     assert diagnostics((expected.real.float(), expected.imag.float()), fixture)['passed']
     assert not diagnostics((expected.real.flip(1).float(), expected.imag.flip(1).float()), fixture)['passed']
 
@@ -75,3 +76,26 @@ def test_compile_only_and_triton_identity():
     state = op.compile()
     assert len(launches) == 1 and launches[0][1]['enable_fp_fusion'] is False
     assert state == [dict(hash='a'*64, binaries={'npubin': hashlib.sha256(binary).hexdigest()})]
+
+
+def test_committed_cases_normalize_without_generating_oracles():
+    matrix = json.loads((ROOT / 'examples/optimization-library/triton/staged_fft_cases.json').read_text())
+    cases = matrix['cases'] + matrix['contract']['guards']
+    assert [dimensions(case) for case in cases] == [(16,256),(1,32),(12,512),(1,64),(2,64),(1,17)]
+    assert [normalize_case(case)['distribution'] for case in cases] == ['bounded-uniform']*4 + ['ordering','bounded-uniform']
+    assert all('batch' not in case for case in cases)  # Caller entries remain nested.
+
+
+@pytest.mark.parametrize('distribution', ['uniform-typo', '', None, []])
+def test_unknown_explicit_distribution_rejected(distribution):
+    spec = dict(batch=2, N=16, seed=9492, distribution=distribution)
+    with pytest.raises(ValueError, match='unknown distribution'): make_case(spec)
+
+
+def test_conflicting_parameters_rejected():
+    with pytest.raises(ValueError, match='conflicting'):
+        dimensions(dict(batch=1, parameters=dict(batch=2, N=16)))
+    with pytest.raises(ValueError, match='parameters must'):
+        dimensions(dict(parameters=[]))
+    with pytest.raises(ValueError, match='ordering requires'):
+        dimensions(dict(batch=1, N=16, distribution='ordering'))

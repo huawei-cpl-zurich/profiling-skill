@@ -4,10 +4,33 @@ import math
 import torch
 
 
+def normalize_case(spec):
+    """Accept a frozen matrix entry or a flat API case without mutating it."""
+    if not isinstance(spec, dict):
+        raise ValueError('case must be an object')
+    parameters = spec.get('parameters', {})
+    if not isinstance(parameters, dict):
+        raise ValueError('parameters must be an object')
+    if any(key in spec and spec[key] != value for key, value in parameters.items()):
+        raise ValueError('conflicting flat and nested case parameters')
+    normalized = {key: value for key, value in spec.items() if key != 'parameters'}
+    normalized.update(parameters)
+    distribution = normalized.get('distribution', 'bounded-uniform')
+    aliases = {'bounded-uniform': 'bounded-uniform', 'ordering': 'ordering',
+               'oneimpulse andone exactsingle-frequency complexwave': 'ordering'}
+    if not isinstance(distribution, str) or distribution not in aliases:
+        raise ValueError('unknown distribution')
+    normalized['distribution'] = aliases[distribution]
+    return normalized
+
+
 def dimensions(spec):
+    spec = normalize_case(spec)
     b, n = spec.get('batch'), spec.get('N')
     if type(b) is not int or type(n) is not int or not 1 <= b <= 64 or not 1 <= n <= 512:
         raise ValueError('batch must be 1..64 and N must be 1..512')
+    if spec['distribution'] == 'ordering' and (b != 2 or n < 8):
+        raise ValueError('ordering requires batch=2 and N>=8')
     return b, n
 
 
@@ -24,6 +47,7 @@ def coefficients(n):
 
 
 def make_case(spec):
+    spec = normalize_case(spec)
     b, n = dimensions(spec)
     gen = torch.Generator().manual_seed(spec['seed'])
     real, imag = [torch.rand((b, n), generator=gen) * .25 - .125 for _ in range(2)]

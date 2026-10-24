@@ -83,7 +83,39 @@ task union and noncompute gap are separate fields; a gap can include caller
 scheduling and is not proof of all-device idle. Instrumented caller events are
 reported separately. Neither boundary is ordinary unprofiled application latency.
 
-Collection is in progress; no device performance result is claimed yet.
+All four pairs and both guards passed on gz-a3, physical6 / logical0,
+Ascend910B4-1, CANN9.1.0, Torch2.10.0+cpu, Torch-NPU2.10.0 and Triton3.2.0.
+The retained gate exited0. All12 logicalarm compilation identities were stable
+across correctness and profiling. No failed or discarded attempt occurred.
+
+| Case | T × V | KL | BEFORE span µs ± SD | AFTER span µs ± SD | Before / after |
+|---|---:|---|---:|---:|---:|
+| W005-T04-01 | 128 × 4096 | unbias | 286.740 ± 17.286 | 153.834 ± 10.223 | 1.864× |
+| W005-T04-02 | 4 × 32 | kl | 284.912 ± 11.605 | 160.808 ± 13.191 | 1.772× |
+| W005-T04-03 | 96 × 3072 | mse | 302.498 ± 11.739 | 157.814 ± 7.024 | 1.917× |
+| W005-T04-04 | 8 × 64 | unbias | 298.102 ± 18.239 | 164.076 ± 7.190 | 1.817× |
+
+The geometric mean of these four profiled span ratios is **1.842×**.
+All four prospective benefit/cost cases improved, so these captures do not
+establish a measured reversal. Most recorded span reduction lies outside attributed compute-task union;
+this can include caller and dispatch gaps. These traces do not prove physical
+traffic reduction or ordinary application latency gains. The per-task active union
+and noncompute gap are retained separately for all ten forwards.
+
+BEFORE has three compute tasks and AFTER two per API:200 task rows across80
+profiled forwards. All ten span/event samples, sample deviations, task ownership,
+original PMU fields, source/binary identities, guard results and oracle manifests
+are in `skills/ascend-optimization-library/references/grpo-statistics-evidence.json.gz`.
+`grpo-statistics-summary.json` gives the readable index and evidence digest.
+All six cached scientific CPU payloads, exact source snapshots and compiled
+binary cache are in the verified compact archive. Full vendor profiler trees
+remain retained remotely.
+
+Gate: `remote:gz-a3:job:055a6bef-8c45-47af-9ae2-34470285c8d8`, exit0.
+Read-only compact job `remote:gz-a3:job:6f038962-5701-428f-8030-ca9a6afe3b54`,
+exit0, zero new NPU forwards. Compact SHA256
+`cfa33b802429f4b6b4ab0bbe8048c08796ed7bfb09c725e126e9f2b2c5b98232`.
+
 
 ## Provenance
 

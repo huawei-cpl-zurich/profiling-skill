@@ -1,0 +1,102 @@
+{
+  "family_id": "F10",
+  "name": "Integer Cube compute format",
+  "work_unit": "integer MACs (not floating FLOPs); baseline float MAC count identical",
+  "cases": [
+    {
+      "case_id": "F10-01",
+      "role": "gallery",
+      "seed": 10101,
+      "parameters": {
+        "M": 64,
+        "N": 256,
+        "K": 512,
+        "code_max": 16,
+        "output": "fp32"
+      },
+      "purpose": "A substantial bounded integer dot may benefit from integer Cube arithmetic and less conversion.",
+      "mathematical_work": 8388608,
+      "hypothesis_role": "benefit",
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "A substantial bounded integer dot may benefit from integer Cube arithmetic and less conversion."
+    },
+    {
+      "case_id": "F10-02",
+      "role": "gallery",
+      "seed": 10102,
+      "parameters": {
+        "M": 16,
+        "N": 64,
+        "K": 128,
+        "code_max": 16,
+        "output": "fp32"
+      },
+      "purpose": "A tiny matrix may be launch/conversion dominated and expose integer accumulator overhead.",
+      "mathematical_work": 131072,
+      "hypothesis_role": "cost",
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "A tiny matrix may be launch/conversion dominated and expose integer accumulator overhead."
+    },
+    {
+      "case_id": "F10-03",
+      "role": "heldout",
+      "seed": 10103,
+      "parameters": {
+        "M": 96,
+        "N": 320,
+        "K": 2048,
+        "code_max": 16,
+        "output": "fp32"
+      },
+      "purpose": "Longer K may benefit from the integer compute format while remaining exactly representable.",
+      "mathematical_work": 62914560,
+      "hypothesis_role": "benefit",
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Longer K may benefit from the integer compute format while remaining exactly representable."
+    },
+    {
+      "case_id": "F10-04",
+      "role": "heldout",
+      "seed": 10104,
+      "parameters": {
+        "M": 16,
+        "N": 128,
+        "K": 128,
+        "code_max": 16,
+        "output": "fp32"
+      },
+      "purpose": "A second tiny geometry may show no throughput benefit and retain format/conversion costs.",
+      "mathematical_work": 262144,
+      "hypothesis_role": "cost",
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "A second tiny geometry may show no throughput benefit and retain format/conversion costs."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F10-guard-bound",
+      "role": "guard",
+      "seed": 10105,
+      "parameters": {
+        "M": 16,
+        "N": 64,
+        "K": 2048,
+        "code_max": 127,
+        "output": "fp32"
+      },
+      "distribution": "positive-bound"
+    },
+    {
+      "case_id": "F10-guard-tail",
+      "role": "guard",
+      "seed": 10106,
+      "parameters": {
+        "M": 17,
+        "N": 65,
+        "K": 133,
+        "code_max": 16,
+        "output": "fp32"
+      }
+    }
+  ]
+}

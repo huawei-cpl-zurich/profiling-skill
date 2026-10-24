@@ -84,6 +84,9 @@ def fingerprint(value, torch):
 
 
 def fixture(adapter, spec, cache, torch):
+    admission = getattr(adapter, 'validate_case', None)
+    if admission is not None:
+        admission(spec)
     paths = list(getattr(adapter, 'case_sources', [inspect.getsourcefile(adapter.make_case)]))
     provider = sources(paths)
     identity = [dict(position=index, sha256=sha(path)) for index, path in enumerate(paths)]

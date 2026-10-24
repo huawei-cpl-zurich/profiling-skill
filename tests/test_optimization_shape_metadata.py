@@ -1,4 +1,5 @@
 import ctypes
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -28,17 +29,47 @@ class ShapeMetadataTests(unittest.TestCase):
 
     def test_noop_and_conditional_admission(self):
         before = {'.text': {'sha256': 'a'}, '.ascend.stack.size.record': {'size': 8}}
-        self.assertEqual(classify(8, 0, before, before)['outcome'], 'compile-noop')
+        same = {'before': 'a'*64, 'after': 'a'*64}
+        different = {'before': 'a'*64, 'after': 'b'*64}
+        self.assertEqual(classify(8, 0, before, before, device_object_sha256=same)['outcome'], 'compile-noop')
         changed = {'.text': {'sha256': 'b'}}
-        result = classify(8, 0, before, changed)
+        result = classify(8, 0, before, changed, device_object_sha256=different)
         self.assertEqual(result['outcome'], 'physical-change-requires-runtime')
         self.assertEqual(list(result['cases'].values()), ['unattempted']*4)
         self.assertEqual((result['scientific_oracles'], result['npu_api_forwards'], result['profiles']), (0,0,0))
-        self.assertEqual(classify(0, 0, before, changed)['outcome'], 'compile-noop')
+        self.assertEqual(classify(0, 0, before, changed, device_object_sha256=different)['outcome'],
+                         'inconclusive-device-equivalence')
         with self.assertRaises(ValueError):
-            classify(8, 1, before, changed)
+            classify(8, 1, before, changed, device_object_sha256=different)
         with self.assertRaises(ValueError):
-            classify(8, 0, {}, {})
+            classify(8, 0, {}, {}, device_object_sha256=different)
+        with self.assertRaises(ValueError):
+            classify(8, 0, before, before, device_object_sha256={})
+        with self.assertRaises(ValueError):
+            classify(8, 0, before, changed, device_object_sha256=same)
+
+    @unittest.skipUnless(shutil.which('cc'), 'host C compiler needed')
+    def test_equal_raw_relocations_with_different_targets_are_inconclusive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root/'kernel.c'  # Keep the ELF source-name symbol identical.
+            evidence, identities = {}, {}
+            for arm, external in (('before','first'),('after','second')):
+                source.write_text('extern int '+external+'; int kernel(void) { return '+external+'; }\n'
+                    '__attribute__((section(".ascend.stack.size.record"))) const long stack = 32;\n')
+                binary = root/(arm+'.o')
+                subprocess.run(['cc','-O2','-c',str(source),'-o',str(binary)],check=True,capture_output=True)
+                evidence[arm] = device_sections(binary)
+                identities[arm] = hashlib.sha256(binary.read_bytes()).hexdigest()
+            self.assertIn('.rela.text',evidence['before'])
+            self.assertEqual(evidence['before'],evidence['after'])
+            self.assertNotEqual(identities['before'],identities['after'])
+            result = classify(8,0,evidence['before'],evidence['after'],device_object_sha256=identities)
+            self.assertEqual(result['outcome'],'inconclusive-device-equivalence')
+            self.assertFalse(result['device_elf_equal'])
+            self.assertEqual(result['scientific_oracles'],0)
+            self.assertEqual(result['npu_api_forwards'],0)
+            self.assertEqual(result['profiles'],0)
 
     @unittest.skipUnless(shutil.which('cc'), 'host C compiler needed')
     def test_actual_elf_code_and_resource_changes(self):

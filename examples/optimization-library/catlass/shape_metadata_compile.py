@@ -21,8 +21,9 @@ def select_metadata(request_shape_info=False):
 def device_sections(path):
     """Read executable/data and allocation notes from a native little-endian ELF64.
 
-    Symbol/name tables and comments cannot establish a physical change. Include
-    relocations conservatively: an unexplained difference must not become a no-op.
+    These sections diagnose changes but cannot prove equivalence: raw relocation
+    symbol indices must be resolved through tables outside this selection. A no-op
+    additionally requires full extracted device ELF identity.
     Stack records are raw compiler records, never certified physical peak usage.
     """
     blob = Path(path).read_bytes()
@@ -49,14 +50,29 @@ def device_sections(path):
     return result
 
 
-def classify(default, zero, before, after):
+def classify(default, zero, before, after, *, device_object_sha256):
     if type(default) is not int or default < 0 or zero != 0:
         raise ValueError('actual SDK dimension evidence required')
     if not before or not after:
         raise ValueError('device code/resource evidence required')
-    noop = default == 0 or before == after
-    return dict(outcome='compile-noop' if noop else 'physical-change-requires-runtime',
-                sdk_default=default, override=zero, device_sections_equal=before == after,
+    if (set(device_object_sha256) != {'before', 'after'} or any(
+            not isinstance(value, str) or not re.fullmatch(r'[0-9a-f]{64}', value)
+            for value in device_object_sha256.values())):
+        raise ValueError('full extracted device ELF SHA256 identities required')
+    same_elf = device_object_sha256['before'] == device_object_sha256['after']
+    same_sections = before == after
+    if same_elf and not same_sections:
+        raise ValueError('section evidence contradicts full device ELF identity')
+    # Relocation/name/metadata differences alone establish neither equivalence
+    # nor a physical change. Stop admission until those targets are resolved.
+    physical_change = any(before.get(name) != after.get(name)
+                          for name in ('.text', '.data', '.ascend.stack.size.record'))
+    outcome = ('compile-noop' if same_elf else
+               'physical-change-requires-runtime' if physical_change and default != 0 else
+               'inconclusive-device-equivalence')
+    return dict(outcome=outcome, sdk_default=default, override=zero,
+                device_sections_equal=same_sections, device_elf_equal=same_elf,
+                device_object_sha256=device_object_sha256,
                 scientific_oracles=0, npu_api_forwards=0, profiles=0,
                 cases={f'W006-L03-{i:02}': 'unattempted' for i in range(1, 5)},
                 latency_claim=None, physical_stack_peak_claim=None)
@@ -68,7 +84,7 @@ def compile_screen(catlass, output, *, request_shape_info=False):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     source = Path(__file__).with_name('shape_metadata.cpp')
-    evidence, dimensions = {}, {}
+    evidence, dimensions, objects = {}, {}, {}
     entry = Path.cwd()
     try:
         for arm, flags in variants.items():
@@ -86,9 +102,11 @@ def compile_screen(catlass, output, *, request_shape_info=False):
             if len(values) != 1:
                 raise ValueError('cannot establish actual expanded SDK shape dimension')
             dimensions[arm] = int(values[0])
+            objects[arm] = hashlib.sha256(cube[0].read_bytes()).hexdigest()
             evidence[arm] = device_sections(cube[0])
             (destination/'device-sections.json').write_text(json.dumps(evidence[arm], indent=2)+'\n')
-        result = classify(dimensions['before'], dimensions['after'], evidence['before'], evidence['after'])
+        result = classify(dimensions['before'], dimensions['after'], evidence['before'], evidence['after'],
+                          device_object_sha256=objects)
         result['source_bindings'] = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                                    for p in (source, source.with_name('shape_metadata_abi.h'))}
         (output/'screen.json').write_text(json.dumps(result, indent=2)+'\n')

@@ -24,8 +24,12 @@ python examples/optimization-library/catlass/shape_metadata_compile.py \
 The compiler screen retains expanded sources, device objects, shared libraries,
 compiler commands/identity, dependency/source hashes, extracted sections and
 `screen.json`. It checks actual expanded dimensions and compares executable,
-data, relocation and allocation-note records. Host library hashes and metadata
-strings alone do not establish a device change. Raw stack allocation records
+data, relocation and allocation-note records. A no-op additionally requires
+identical complete extracted device ELF hashes, including symbol tables: equal
+raw relocation bytes can otherwise reference different targets. Unequal ELF
+hashes with equal selected records report `inconclusive-device-equivalence`
+and stop admission. Host library hashes and metadata strings alone do not
+establish a device change. Raw stack allocation records
 are compiler evidence, not certified physical peak usage.
 
 `--request-shape-info` rejects before dependency or output access. Applications
@@ -42,7 +46,8 @@ creates fixtures or launches a device.
 
 Functional tests cover metadata selection and public CLI rejection, host pointer
 ABI and independent state, actual ELF code/resource changes, evidence retention,
-relative dependency paths and working-directory recovery:
+relative dependency paths, working-directory recovery, and real ELF objects
+with equal relocation bytes but different external targets:
 
 ```bash
 python -m unittest discover -s tests -p test_optimization_shape_metadata.py -v

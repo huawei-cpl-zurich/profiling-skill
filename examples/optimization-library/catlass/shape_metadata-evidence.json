@@ -110,5 +110,64 @@
     "No numerical runtime correctness claim: screen stopped before scientific fixtures and all NPU APIs.",
     "Raw stack allocation note is not certified physical peak usage.",
     "No latency or stack reduction claim."
-  ]
+  ],
+  "review_followup": {
+    "job_handle": "remote:gz-a3:job:ca784f14-360b-46e5-ac24-e6569f1c97e1",
+    "terminal_exit": 0,
+    "reason": "Require full extracted device ELF identity to establish no-op; raw relocation indices alone cannot resolve target symbols.",
+    "retained_namespace": "optimization-w006-shape-metadata-0edf30239bc0-3741a7c3-review-fix",
+    "source_archive_sha256": "5366398b08f2a68119bcb369918ec5c72019cf86c40082cb5d3d37323d5ce6e7",
+    "retained_evidence_archive_sha256": "9fcd6020d03b5942fc98dbd168a8a90ee3bd1120c8800fd54582f5f9812e7c6a",
+    "report": {
+      "retained_classification": {
+        "outcome": "compile-noop",
+        "sdk_default": 8,
+        "override": 0,
+        "device_sections_equal": true,
+        "device_elf_equal": true,
+        "device_object_sha256": {
+          "before": "457a45ca009f847bc80780aad742440bd345981b8026b0dbcaba817428b75fdd",
+          "after": "457a45ca009f847bc80780aad742440bd345981b8026b0dbcaba817428b75fdd"
+        },
+        "scientific_oracles": 0,
+        "npu_api_forwards": 0,
+        "profiles": 0,
+        "cases": {
+          "W006-L03-01": "unattempted",
+          "W006-L03-02": "unattempted",
+          "W006-L03-03": "unattempted",
+          "W006-L03-04": "unattempted"
+        },
+        "latency_claim": null,
+        "physical_stack_peak_claim": null
+      },
+      "regression_classification": {
+        "outcome": "inconclusive-device-equivalence",
+        "sdk_default": 8,
+        "override": 0,
+        "device_sections_equal": true,
+        "device_elf_equal": false,
+        "device_object_sha256": {
+          "before": "1612575f051a36cf0732215d22f169616b75fcbae51fed34c3f88a4432d015b5",
+          "after": "cbc89c597f636a39b1a5eb48a35eaefddf266a364e518ec3cae206ccfc5e8687"
+        },
+        "scientific_oracles": 0,
+        "npu_api_forwards": 0,
+        "profiles": 0,
+        "cases": {
+          "W006-L03-01": "unattempted",
+          "W006-L03-02": "unattempted",
+          "W006-L03-03": "unattempted",
+          "W006-L03-04": "unattempted"
+        },
+        "latency_claim": null,
+        "physical_stack_peak_claim": null
+      },
+      "functional_tests": 7,
+      "native_recompiles": 0,
+      "scientific_oracles": 0,
+      "npu_api_forwards": 0,
+      "profiles": 0
+    }
+  }
 }

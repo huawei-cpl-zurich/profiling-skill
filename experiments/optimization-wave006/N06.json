@@ -1,0 +1,92 @@
+{
+  "wave": 6,
+  "study_id": "N06",
+  "title": "Retain immutable affine coefficients within each native call",
+  "study_kind": "new-operator-application-of-existing-residency",
+  "new_unique_mechanism_claim": false,
+  "approval": "Standing waves003\u2013022 data first",
+  "source": "frontier/extension.md, query207c5923eed845cf8a9cc1d498401f5f and originalb339eb85c773462fbfc45ecb8dbc2587. Actual native ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 Apache2 and ops-nn7ed342d28b44b6291aceaf747796028c48d7304c CANNOpen2.0 LN4 non310P FP32transpose/AIV source with A2/A3 docs. Isolated standalone adaptation, not fullLN speed claim.",
+  "dependency": {
+    "base": "298b44a9b579f3c0b0b2ed04c23a250393aa6644",
+    "target_branch": "codex/optimization-w006-row-dma-aggregation"
+  },
+  "cases": [
+    {
+      "case_id": "W006-N06-01",
+      "role": "gallery",
+      "seed": 8601,
+      "parameters": {
+        "rows": 4096,
+        "width": 256
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-N06-02",
+      "role": "gallery",
+      "seed": 8602,
+      "parameters": {
+        "rows": 1,
+        "width": 64
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-N06-03",
+      "role": "heldout",
+      "seed": 8603,
+      "parameters": {
+        "rows": 3072,
+        "width": 512
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-N06-04",
+      "role": "heldout",
+      "seed": 8604,
+      "parameters": {
+        "rows": 2,
+        "width": 128
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-N06-GA",
+      "role": "guard",
+      "seed": 8691,
+      "parameters": {
+        "rows": 3,
+        "width": 64,
+        "two_calls_same_coefficient_pointer": true
+      },
+      "expected": "Onecompoundguard performs2distinct affine APIcalls, same GM gamma/beta POINTER but callerupdatescontents between calls; separate y0/y1buffers, expectedtupleonce. Updates arecaller boundaryactions notkernelmutation; no cross-launch cache allowed, component/copycounts explicit."
+    },
+    {
+      "case_id": "W006-N06-GB",
+      "role": "guard",
+      "seed": 8692,
+      "parameters": {
+        "rows": 3,
+        "width": 129
+      },
+      "expected": "Oddwidth exact-tail transfers/canaries identicalbotharms, nontrivial unequal gamma/beta and coefficients stayvaliduntil lastconsumer; nofree-before-use."
+    }
+  ],
+  "contract": {
+    "interface": "Contiguous immutable-within-call FP32 x[rows,width]in[-2,2],gamma[width]in[-1.5,1.5],beta[width]in[-.5,.5]. FP32y withTWOseparate roundedstages y=fl(fl(x*gamma)+beta), noFMA/reassociationdifference; explicitPIPE_Vstagecompletionboth. IndependentCPUFP64mul\u2192FP32round thenFP64add\u2192FP32round, fixedatol2e-6rtol2e-6.",
+    "before": "Everyassigned rowiteration copiesgamma/beta GM\u2192dedicatedUBbuffers thenSAMEvectorMul/Add andinput/outputcopies. AllocatebuffersONCEbothsides, notInitBufferinsideeachrowleakinglocalspace.",
+    "after": "At eachactivecoreentrycopygamma/beta ONCEinsideEVERYfullAPIcall andretainexactdedicatedbuffersuntilALLitsrowsconsumed. Sameone-rowtile, SAMEgrid/rowownership, arithmetic,bufferreservations,crosspipereadiness/terminalbarriers. No cross-core or cross-launch UBsharing, no CPUprep/freecoefficientstaging.",
+    "grid": "QueryactualavailableAIVcores; sameblockDim=min(rows,AIVcount)botharms, contiguousceil(rows/blockDim)rowranges, idlecoresifanymustnotreadinvalidcoefficients. Eachactivecoreownsitsowncoeffcopy; logicaltrafficafter=2*width*4*activeCores notonlyonecopyglobally. Width<=1024, allnativecapacity/byte/tailboundsqualified.",
+    "lifetime": "TBufownershipsimplerthanTQue; ifqueuesusedpreservenativeallocate/enqueue/dequeue/read-through-loop/complete/freeorder. X/Y separatefromcoeff, consumerdoesnotmutategamma/beta. Compoundguard usesprivate caller-owned mutablecopies withoriginalsourceG0/G1unchanged; capturefirstcallresultbeforechangingcoeffs, secondfreshstagingmandatory.",
+    "equality": "Record numericoutputbits fromoncecorrectnessandpairedagreementread-only, no extraNPUruns solelycompare. Do not claimbitwiseguarantee withoutactualagreement; ifgeneratedMul/Add loweringidentical, exactpairpropertyrequired. Ifloweringunavailable, reportadditionalbitwisepropertyunverified; fixedprimaryaccuracygateunchanged.",
+    "claims": "ExplicitAPPLICATION ofexistingresidency/coefficientreuse, notnewunique mechanism or fullLN benchmark. SameUBcapacity; longercoefficientlifetimecost/one-rowno-benefitpossible. Logicalcoefficientrequestbytes differ, physicalDRAMtraffic/occupancy/bandwidthnotinferredfromPMUpercent."
+  },
+  "protocol": "Six runtime scientific payloads cached once, once-per-side correctness per case/source then exactly10fullAPIprofileforwards/arm/four mainpairs. Guards0captures, component/caller-action counts explicit; no warmup/autotune/extra timing/profiled IOchecking. Compile/resource/actualAIVengineaudit before math. Preserveall failures/ten samples/PMU/source/compiler/dependency/binary/fixture bindings."
+}

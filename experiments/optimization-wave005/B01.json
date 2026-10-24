@@ -1,0 +1,88 @@
+{
+  "wave": 5,
+  "study_id": "B01",
+  "title": "Residual token mixing LayerNorm fusion",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "producer-consumer-fusion",
+  "approval": "Standing waves003\u2013022 data first.",
+  "source": "ascendc/proposal.md, ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 Apache2.0; exactdevicebody/interface/NPUexample+A2/A3whitelist. Preserveattribution. Standalone910Bimplementation notnativeperformanceclaim.",
+  "cases": [
+    {
+      "case_id": "W005-B01-01",
+      "role": "gallery",
+      "seed": 6301,
+      "parameters": {
+        "B": 4,
+        "S": 256
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B01-02",
+      "role": "gallery",
+      "seed": 6302,
+      "parameters": {
+        "B": 1,
+        "S": 16
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B01-03",
+      "role": "heldout",
+      "seed": 6303,
+      "parameters": {
+        "B": 3,
+        "S": 192
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B01-04",
+      "role": "heldout",
+      "seed": 6304,
+      "parameters": {
+        "B": 1,
+        "S": 32
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    }
+  ],
+  "contract": {
+    "interface": "FP32contiguous x[B,S,S]uniform[-1,1],gamma[S][.5,1.5],beta[S][-.25,.25],immutable,y[B,S,S],eps1e-5. Standalonepair epsilondeclared,nounverifiednativeepsilonclaim.",
+    "before": "Fullx_t=transpose(x)materialized EACH API thenz=FP32(x+x_t)global thenLayerNormcenteredvarianceaffine.",
+    "after": "SAME materializedtransposeeachAPI, addloadedx/x_t inLNkernel eliminatingz. SAMErowgrid/reduction/masking/rounding andaffine. NOtranspose-elimination/Welford/rowbatching.",
+    "oracle": "IndependentFP64residual/LN onrepresentedFP32 inputs atol1e-4rtol1e-4. FP32residualroundingholdsamebotharms, CPUtruthdisclosed. Allstagesincludingtranspose insideAPI.",
+    "allocation": "Logicalzbytes4BSSeliminated, no measuredpeakclaim whenbothpreparedalive."
+  },
+  "guards": [
+    {
+      "case_id": "W005-B01-GA",
+      "role": "guard",
+      "seed": 6391,
+      "parameters": {
+        "B": 1,
+        "S": 16,
+        "malformed_nonsquare": true
+      },
+      "expected": "Both hostreject nonsquareinput beforelaunch; noCPUfallbackperformanceclaim."
+    },
+    {
+      "case_id": "W005-B01-GB",
+      "role": "guard",
+      "seed": 6392,
+      "parameters": {
+        "B": 2,
+        "S": 17,
+        "distribution": "constant-and-symmetric"
+      },
+      "expected": "Constant/symmetricinput,nontrivialbeta verifiestranspose/zerovariance/tail."
+    }
+  ],
+  "protocol": "Six CPU payloads once, once-per-side correctness per source version then exactly10 profiled fullAPI forwards/arm/fourmaincases. Guards0captures. No warmup/autotuning/extratiming/profiledIOchecks. Complete operation span diagnostic, preserve all failures/negatives. Independent910Bqualification mandatory."
+}

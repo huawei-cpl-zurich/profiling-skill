@@ -42,9 +42,26 @@ and gaps; do not present profiled duration as unprofiled application latency.
 The CPU gate exercises the actual configuration header through a host shared
 library, arm mismatch rejection, M tails, N/K alignment, the independent oracle
 and mutation/error handling. It **does not compile or execute Ascend code**.
-The four frozen A3 case hypotheses remain unqualified until device compilation,
-one correctness call and ten profiled forwards per arm/case succeed. Numerical
-tolerances remain `atol=rtol=1e-3`. No warmup or measured I/O inspection is used.
+Both arms also compiled for `dav-c220` and passed the four frozen A3 cases:
+one correctness call and ten profiled forwards per arm/case, eight checks and
+eighty forwards overall. Numerical tolerances stayed `atol=rtol=1e-3`; there
+were no warmups, numerical reruns or measured I/O inspection.
+
+| Case M×N×K | Before µs ± SD | After µs ± SD | Speedup |
+| --- | ---: | ---: | ---: |
+| 1×5120×8192 | 33.438 ± 12.930 | 32.868 ± 15.038 | 1.01734× |
+| 128×5120×256 | 6.474 ± 1.829 | 6.616 ± 0.635 | 0.97854× |
+| 4×7680×4096, heldout | 31.500 ± 6.858 | 30.232 ± 7.843 | 1.04194× |
+| 257×4608×272, heldout | 12.552 ± 1.121 | 14.368 ± 1.154 | 0.87361× |
+
+These are complete profiled device-operation spans with all ten samples
+retained, including large first samples. Small-M mean gains are unresolved
+relative to variability. The heldout M/K-tail case took 14.47% longer after
+replacement; its exported per-task scalar time rose 4.2698→7.5860µs while MAC
+time stayed 2.6862µs. This is consistent with row-loop issue overhead, not a
+physical traffic or roofline measurement. The equal-case geometric mean is
+0.97567×. Keep this candidate on experimental hold for speed benefits; a
+reliable benefit and a production crossover have not been demonstrated.
 
 Build prerequisite: a filtered dependency closure pinned to Catlass
 `40aced927fdaaa0f3eaa9c6f5c5d859e06392f55`, CANN Ascend C headers, `bisheng` for

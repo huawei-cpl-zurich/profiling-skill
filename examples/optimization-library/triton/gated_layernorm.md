@@ -50,3 +50,34 @@ four pairs. The two guards have no captures. There are no warmups, extra timing
 runs or input/output inspection in those profiled forwards. Profiled device
 operation spans include interkernel gaps and are diagnostic instrumentation,
 not ordinary application latency. All samples and compiler artifacts are retained.
+
+## Retained 910B4-1 results
+
+`gz-a3` physical5, logical0, CANN9.1.0, Torch/Torch-NPU2.10.0,
+imported Triton3.2.0. Job completed without failures or retries. All12
+correctness checks passed, including the two guards. The table gives mean ±
+sample SD over ten **profiled complete device-operation spans**, in microseconds.
+The active-union columns separate kernel work from the span's noncompute gaps.
+Every pair executes three tasks per baseline forward versus one fused task.
+
+| Case | R×N; gate first | Before span µs | After span µs | Span ratio | Before/after active union µs |
+|---|---|---:|---:|---:|---:|
+| W005-T03-01 | 1024×1024; False | 353.286 ± 42.936 | 44.794 ± 0.593 | 7.887 | 71.820 / 44.794 |
+| W005-T03-02 | 1×64; True | 348.512 ± 37.984 | 1.988 ± 0.319 | 175.308 | 5.098 / 1.988 |
+| W005-T03-03 | 768×768; True | 409.320 ± 32.560 | 36.778 ± 0.621 | 11.129 | 57.274 / 36.778 |
+| W005-T03-04 | 2×128; False | 376.674 ± 25.111 | 1.810 ± 0.071 | 208.107 | 4.226 / 1.810 |
+
+All four designated benefit/cost cases favored fusion in these instrumented spans;
+the cost labels were prospective hypotheses and are not observed regressions.
+The very large tiny-case ratios primarily reflect removal of interkernel/caller
+dispatch gaps in this profiler-active execution. They are not established ordinary
+application speedups. The single fused task's span ends with the task, while the
+three-task baseline includes dispatch gaps between them. These data do not isolate
+memory-traffic savings from launch aggregation or establish causality from PMU.
+
+[Compact result data](../../../docs/data/optimization-w005-gated-layernorm.json)
+retains all80 span samples, event samples, correctness diagnostics and binary/source
+bindings. Its sibling `optimization-w005-gated-layernorm-rows.json.gz` preserves all
+160 task-level PMU rows and operation tasks. The digest-bound private archive
+retains original reports, all compiler/NPUBIN artifacts and scientific fixture
+payloads. Collection handle: `remote:gz-a3:job:a2dda394-613d-4552-97f2-b010f366e0f6`.

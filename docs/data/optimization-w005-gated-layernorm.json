@@ -1,0 +1,1557 @@
+{
+  "study": "W005-T03",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "status": "complete",
+  "date": "2026-10-24",
+  "product": "Ascend910B4-1",
+  "physical_device": 5,
+  "logical_device": 0,
+  "collection_handle": "remote:gz-a3:job:a2dda394-613d-4552-97f2-b010f366e0f6",
+  "frozen_matrix_sha256": "b72f70e78eec630a5db6ded4bd50cf45c041f0cfed76067581596c44e83080a9",
+  "protocol": {
+    "cpu_scientific_payloads": 6,
+    "correctness_calls": 12,
+    "profiled_forwards": 80,
+    "captures": 8,
+    "warmups": 0,
+    "extra_timings": 0,
+    "guards_profiled_forwards": 0,
+    "all_variants_compile_before_first_forward": true
+  },
+  "source_sha256": {
+    "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+    "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74"
+  },
+  "cases": [
+    {
+      "spec": {
+        "case_id": "W005-T03-01",
+        "role": "gallery",
+        "seed": 6301,
+        "parameters": {
+          "R": 1024,
+          "N": 1024,
+          "gate_first": false,
+          "eps": 1e-05
+        },
+        "scenario_designation": "gallery-benefit",
+        "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "result_sha256": "b466556d12f8315d079a18a501800eb13e9923e773ac79080d75770c58f1649f",
+      "fixture_sha256": "b345e426f645f9eebc27c1998c459e292d37772714636a7794bf50d342c1d8bd",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 1.0497185165547762e-06,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 1.1408701539039612e-08,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 9.76009231212771e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 1.0497185165547762e-06,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 1.1408701539039612e-08,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 9.76009231212771e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                462.32,
+                395.18,
+                336.1,
+                334.06,
+                336.26,
+                335.36,
+                340.12,
+                332.62,
+                326.86,
+                333.98
+              ],
+              "count": 10,
+              "mean": 353.286,
+              "sample_sd": 42.935644917066796
+            },
+            "operation_active_union_us": {
+              "samples": [
+                75.78,
+                71.22,
+                75.5,
+                70.36,
+                70.82,
+                70.56,
+                70.52,
+                71.68,
+                71.12,
+                70.64
+              ],
+              "count": 10,
+              "mean": 71.82,
+              "sample_sd": 2.0519692438674073
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                386.54,
+                323.96,
+                260.6,
+                263.7,
+                265.44,
+                264.8,
+                269.6,
+                260.94,
+                255.74,
+                263.34
+              ],
+              "count": 10,
+              "mean": 281.466,
+              "sample_sd": 41.74578094450584
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0244799852371216,
+              0.7915599942207336,
+              0.6988199949264526,
+              0.6344799995422363,
+              0.6471800208091736,
+              0.6239200234413147,
+              0.6301000118255615,
+              0.6314600110054016,
+              0.6095200181007385,
+              0.631380021572113
+            ],
+            "count": 10,
+            "mean": 0.6922900080680847,
+            "sample_sd": 0.12842096424313562
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gate",
+              "wave005_gate_multiply",
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "before",
+            "R": 1024,
+            "N": 1024,
+            "block": 1024,
+            "gate_first": false,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 8388608,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "d8fb938b1214da2c26a18d5bd201b70c40947963003598dbc42d79fc4fc2696c",
+                "ttadapter": "c45f1d9baf92141d16f816cfdbb78484cad5176f1d5168343996393a2ca075e0",
+                "ttir": "8eb34ac751c23cb34b59445065aba51ad3ec2eacad0884816fe7a34727fec6da"
+              },
+              "hash": "28fc155dab0d34f06ca56e4778526de89bb4484fc3b5348532dc97757a68d2ed"
+            },
+            {
+              "binaries": {
+                "npubin": "f21a1d617a1bfb5de7f9e1e59357aeaea569876c9aa1ee1598bc5b15a72f5dcf",
+                "ttadapter": "37f9046b91725774a1a88d1687596105943bb04c17cd3460c3b20b561754ad05",
+                "ttir": "5f4ff8f5edb5a3f7071c8195797ffad185444bc581df3e494ac2eae49af5e7dc"
+              },
+              "hash": "1c5b355826ebe9a09e8061b31f0e8cfe29092da5c522731e871826bad5de9224"
+            },
+            {
+              "binaries": {
+                "npubin": "902aa12596af21cfa26d1d8e8b6aa41cb32e579d8db83dd7d8be97114f35d589",
+                "ttadapter": "fbb1b3be1225d3b0e4c0be72f50cccbb839e24707f1682fc3750ef56c7c85a4c",
+                "ttir": "7b23d82cb05ab01e28c933b27032c4f4338ded28eef4cc1928ec38674041d463"
+              },
+              "hash": "1d78ef646ce1c9d1bc4a2f45152bc81c6927428b216ff94ce81d9f7ab2e21e03"
+            }
+          ],
+          "trace_sha256": "9531d11481e7c498d5880cf19e9b90a2b2eba41aaf81ef4376e59592214ccffd",
+          "normalized_sha256": "e7bf63ac3db0863752290833379c3d04e6e3033a820bfb6f2b6530a57980171d",
+          "accounting_sha256": "7e6e80f4102373c0f7df05beba0f6623ae01ab3ec70c4662cec3bfa01bdb32b5",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "8eb34ac751c23cb34b59445065aba51ad3ec2eacad0884816fe7a34727fec6da",
+            "0.ttadapter": "c45f1d9baf92141d16f816cfdbb78484cad5176f1d5168343996393a2ca075e0",
+            "0.npubin": "d8fb938b1214da2c26a18d5bd201b70c40947963003598dbc42d79fc4fc2696c",
+            "1.ttir": "5f4ff8f5edb5a3f7071c8195797ffad185444bc581df3e494ac2eae49af5e7dc",
+            "1.ttadapter": "37f9046b91725774a1a88d1687596105943bb04c17cd3460c3b20b561754ad05",
+            "1.npubin": "f21a1d617a1bfb5de7f9e1e59357aeaea569876c9aa1ee1598bc5b15a72f5dcf",
+            "2.ttir": "7b23d82cb05ab01e28c933b27032c4f4338ded28eef4cc1928ec38674041d463",
+            "2.ttadapter": "fbb1b3be1225d3b0e4c0be72f50cccbb839e24707f1682fc3750ef56c7c85a4c",
+            "2.npubin": "902aa12596af21cfa26d1d8e8b6aa41cb32e579d8db83dd7d8be97114f35d589"
+          },
+          "pmu_csv_sha256": "b75cfe7d535e021e704ee00e058830dbcf2608feac8cede2a3e69fab9320076a"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                46.22,
+                44.72,
+                44.12,
+                44.14,
+                44.84,
+                44.66,
+                45.04,
+                44.48,
+                45.02,
+                44.7
+              ],
+              "count": 10,
+              "mean": 44.794,
+              "sample_sd": 0.5925500447688413
+            },
+            "operation_active_union_us": {
+              "samples": [
+                46.22,
+                44.72,
+                44.12,
+                44.14,
+                44.84,
+                44.66,
+                45.04,
+                44.48,
+                45.02,
+                44.7
+              ],
+              "count": 10,
+              "mean": 44.794,
+              "sample_sd": 0.5925500447688413
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9198399782180786,
+              0.3794200122356415,
+              0.34775999188423157,
+              0.3544999957084656,
+              0.331820011138916,
+              0.3541199862957001,
+              0.3949199914932251,
+              0.3158800005912781,
+              0.3454599976539612,
+              0.3506999909877777
+            ],
+            "count": 10,
+            "mean": 0.40944199562072753,
+            "sample_sd": 0.18068556633791202
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "after",
+            "R": 1024,
+            "N": 1024,
+            "block": 1024,
+            "gate_first": false,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 0,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "5f1026f8b5f72e6a882f5a000b721f1e0e0aeec28a8ac8ccd81ac34de270230f",
+                "ttadapter": "59e5a67e1020e36dd5b7304d26059fbe683cdc2a00836c5bb48dc0e97defaa8e",
+                "ttir": "01ed24a373f25485920c91da5ff833d169b976f746e81e5bd88ca727650375fa"
+              },
+              "hash": "0da8315cda60bdd2602757b0a5d93a2b5b1e6b2f11c00fa1f38933f3030b48e0"
+            }
+          ],
+          "trace_sha256": "15de31280d94b9a0113dff746d4ebcd4c711a53ae6ba58873381de8c3ca68c63",
+          "normalized_sha256": "df0a27c1430b72314a427909b9f6e378934b1e51fabdeb3da47b106bc480fb51",
+          "accounting_sha256": "1595aabc59e6962aa5b927e8210955ca838b17806a0304b92ac1317c3f18186e",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "01ed24a373f25485920c91da5ff833d169b976f746e81e5bd88ca727650375fa",
+            "0.ttadapter": "59e5a67e1020e36dd5b7304d26059fbe683cdc2a00836c5bb48dc0e97defaa8e",
+            "0.npubin": "5f1026f8b5f72e6a882f5a000b721f1e0e0aeec28a8ac8ccd81ac34de270230f"
+          },
+          "pmu_csv_sha256": "a5f7ccf3fd6def0144a3d5e5e726ddfe4568ecf77291b3880f77034d0be06e90"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 7.886904496137876
+    },
+    {
+      "spec": {
+        "case_id": "W005-T03-02",
+        "role": "gallery",
+        "seed": 6302,
+        "parameters": {
+          "R": 1,
+          "N": 64,
+          "gate_first": true,
+          "eps": 1e-05
+        },
+        "scenario_designation": "gallery-cost",
+        "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "result_sha256": "a088587341a37f1b83e14b23a06357fbd413a4341943810f07e10c287f870e20",
+      "fixture_sha256": "debc19ebe37e1608b272f48580200b7103f06c3e69f9f8686ec97f528a016ee0",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 3.286987815265263e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 4.096343625414889e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 7.36720020544368e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 3.286987815265263e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 4.096343625414889e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 7.36720020544368e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                443.5,
+                297.82,
+                334.92,
+                336.72,
+                370.86,
+                351.92,
+                336.16,
+                340.6,
+                331.58,
+                341.04
+              ],
+              "count": 10,
+              "mean": 348.512,
+              "sample_sd": 37.98382018117129
+            },
+            "operation_active_union_us": {
+              "samples": [
+                5.44,
+                5.02,
+                5.08,
+                4.78,
+                5.18,
+                5.2,
+                5.28,
+                4.94,
+                5.32,
+                4.74
+              ],
+              "count": 10,
+              "mean": 5.098,
+              "sample_sd": 0.2302558962931846
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                438.06,
+                292.8,
+                329.84,
+                331.94,
+                365.68,
+                346.72,
+                330.88,
+                335.66,
+                326.26,
+                336.3
+              ],
+              "count": 10,
+              "mean": 343.414,
+              "sample_sd": 37.865767653647275
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.1014599800109863,
+              0.7376000285148621,
+              0.6675400137901306,
+              0.6444799900054932,
+              0.6985399723052979,
+              0.6651399731636047,
+              0.612060010433197,
+              0.6456000208854675,
+              0.6312800049781799,
+              0.6891999840736389
+            ],
+            "count": 10,
+            "mean": 0.7092899978160858,
+            "sample_sd": 0.14244148506957333
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gate",
+              "wave005_gate_multiply",
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "before",
+            "R": 1,
+            "N": 64,
+            "block": 64,
+            "gate_first": true,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 512,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "bf64092e091f4ec8b5448ec77c8b308946c2abb4e95596f6368a727697cd83e2",
+                "ttadapter": "328b75279a08ddb3f9e1600595a776962d4f13689265e7f7e30a52c790355f5e",
+                "ttir": "4f551c48ee12f5fedeebc1cdd3d4925ab706f4a74057c6178c3ec1c6380fb933"
+              },
+              "hash": "c2ca0128cc960dd192667552717a750d2383451b39720c50856364368caa11f1"
+            },
+            {
+              "binaries": {
+                "npubin": "dfc3d7ca2ff1d8b501641515ff77d0067a804d747d1b8264e1a1c88c3042fd88",
+                "ttadapter": "24c5af9c89ead9c034cbef7b27e14cac06f8eed3ea57f8898701acb9ff5d3315",
+                "ttir": "ee9b367770a1e46e461a2e945be58dbf18ae8caccc404aecf8c42af6fd535a37"
+              },
+              "hash": "ce2741c43deccb5f167a76836f979ceed692271f7e09799dc5893d0965f83e4a"
+            },
+            {
+              "binaries": {
+                "npubin": "5b7db9f28f778057e6e79b3a692122e135bfb6b768da2d5ec95084c654d4b377",
+                "ttadapter": "dfcba1eb13b09bc64fe251b2287a14bf68d9856ba4fdf201904b72b93e7fdb64",
+                "ttir": "f6b1a81e5e5b092c4fc210affa5ed4add33f254fb1de7505bf1f42cd7e04e290"
+              },
+              "hash": "ae68d4fcecc3228e03ff25ae2f2a485c6b0948254b3efbe893137418ccdd61c9"
+            }
+          ],
+          "trace_sha256": "acf4e127c1c5c9eff85ab2e73da834d294255b33af40141d6d1c6333f93257ef",
+          "normalized_sha256": "6d2c12f16c714cd7b69dc50bf310b8dc48a4c60648d92f570c0b930a6d3e4ee6",
+          "accounting_sha256": "5f5fb20b9e6ac51475801b28f8da76d17dab3381af3cb84f6ada71cd3e5d01bc",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "4f551c48ee12f5fedeebc1cdd3d4925ab706f4a74057c6178c3ec1c6380fb933",
+            "0.ttadapter": "328b75279a08ddb3f9e1600595a776962d4f13689265e7f7e30a52c790355f5e",
+            "0.npubin": "bf64092e091f4ec8b5448ec77c8b308946c2abb4e95596f6368a727697cd83e2",
+            "1.ttir": "ee9b367770a1e46e461a2e945be58dbf18ae8caccc404aecf8c42af6fd535a37",
+            "1.ttadapter": "24c5af9c89ead9c034cbef7b27e14cac06f8eed3ea57f8898701acb9ff5d3315",
+            "1.npubin": "dfc3d7ca2ff1d8b501641515ff77d0067a804d747d1b8264e1a1c88c3042fd88",
+            "2.ttir": "f6b1a81e5e5b092c4fc210affa5ed4add33f254fb1de7505bf1f42cd7e04e290",
+            "2.ttadapter": "dfcba1eb13b09bc64fe251b2287a14bf68d9856ba4fdf201904b72b93e7fdb64",
+            "2.npubin": "5b7db9f28f778057e6e79b3a692122e135bfb6b768da2d5ec95084c654d4b377"
+          },
+          "pmu_csv_sha256": "40d9238f96e63a37fca28ff64ef89e59d87ac771c117f1db1b5f113b52c4bebf"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                2.3,
+                1.92,
+                2.26,
+                2.38,
+                2.4,
+                1.92,
+                1.74,
+                1.72,
+                1.68,
+                1.56
+              ],
+              "count": 10,
+              "mean": 1.988,
+              "sample_sd": 0.31891482666484267
+            },
+            "operation_active_union_us": {
+              "samples": [
+                2.3,
+                1.92,
+                2.26,
+                2.38,
+                2.4,
+                1.92,
+                1.74,
+                1.72,
+                1.68,
+                1.56
+              ],
+              "count": 10,
+              "mean": 1.988,
+              "sample_sd": 0.31891482666484267
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9544199705123901,
+              0.3884600102901459,
+              0.43083998560905457,
+              0.39146000146865845,
+              0.39809998869895935,
+              0.3527199923992157,
+              0.3873000144958496,
+              0.36353999376296997,
+              0.3853200078010559,
+              0.375900000333786
+            ],
+            "count": 10,
+            "mean": 0.44280599653720853,
+            "sample_sd": 0.1809668849266403
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "after",
+            "R": 1,
+            "N": 64,
+            "block": 64,
+            "gate_first": true,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 0,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "68fca0b42441032bed8f28a17dc7103eae83edb6b0db91acfdc679a76f7c6739",
+                "ttadapter": "b1e77fe62e2384eaccc5af184b08ee9b5de0dff6212c30cd71fc422f7915f633",
+                "ttir": "e9969dc9fa826caec93ca14846c66bcfc7dab780632fe37d9c536d38a237941e"
+              },
+              "hash": "86629a2dafdcaa5e558aa7416b9e4266a264f26357571daaa25c659433e124fd"
+            }
+          ],
+          "trace_sha256": "25188c4b121b50a50433986e96302ff3743a60059036b82ce0920ab6bc93381d",
+          "normalized_sha256": "e209b28687d38adb2192e3b2482e38c22d272bd983cc9171a5a0e6e3b1833c96",
+          "accounting_sha256": "ae17e64ce79a8ce2c8cbebf167e3343f7104e4164fa51521b72d9b31d959c033",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "e9969dc9fa826caec93ca14846c66bcfc7dab780632fe37d9c536d38a237941e",
+            "0.ttadapter": "b1e77fe62e2384eaccc5af184b08ee9b5de0dff6212c30cd71fc422f7915f633",
+            "0.npubin": "68fca0b42441032bed8f28a17dc7103eae83edb6b0db91acfdc679a76f7c6739"
+          },
+          "pmu_csv_sha256": "91d88d8350fa78fb8a1f13c445cc3eb79e543fe9d995b617288d03d435ff22bb"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 175.30784708249496
+    },
+    {
+      "spec": {
+        "case_id": "W005-T03-03",
+        "role": "heldout",
+        "seed": 6303,
+        "parameters": {
+          "R": 768,
+          "N": 768,
+          "gate_first": true,
+          "eps": 1e-05
+        },
+        "scenario_designation": "heldout-benefit",
+        "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "result_sha256": "12898ceea94fa5eb9b37ed2d9a49702f85fac6d2afb44e778530a9c3ebfdef10",
+      "fixture_sha256": "e66ffa37f8d02a2acbe4e2e0dc0e46346ca2392df9af8ab131c1cb1b7417f716",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 1.5228824441493316e-06,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 9.438503534298093e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 1.6336784236514745e-07,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 1.5228824441493316e-06,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 9.438503534298093e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 1.6336784236514745e-07,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                492.3,
+                426.72,
+                399.42,
+                413.24,
+                386.1,
+                416.16,
+                391.6,
+                381.78,
+                388.22,
+                397.66
+              ],
+              "count": 10,
+              "mean": 409.32,
+              "sample_sd": 32.56000682500611
+            },
+            "operation_active_union_us": {
+              "samples": [
+                57.02,
+                58.02,
+                57.78,
+                57.66,
+                56.92,
+                56.76,
+                56.92,
+                57.06,
+                57.32,
+                57.28
+              ],
+              "count": 10,
+              "mean": 57.274,
+              "sample_sd": 0.42016398914921044
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                435.28,
+                368.7,
+                341.64,
+                355.58,
+                329.18,
+                359.4,
+                334.68,
+                324.72,
+                330.9,
+                340.38
+              ],
+              "count": 10,
+              "mean": 352.046,
+              "sample_sd": 32.54825620862386
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0947799682617188,
+              0.7129799723625183,
+              0.7082800269126892,
+              0.6909999847412109,
+              0.6596199870109558,
+              0.7095400094985962,
+              0.6860399842262268,
+              0.6635400056838989,
+              0.6707199811935425,
+              0.661899983882904
+            ],
+            "count": 10,
+            "mean": 0.7258399903774262,
+            "sample_sd": 0.13125332262551012
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gate",
+              "wave005_gate_multiply",
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "before",
+            "R": 768,
+            "N": 768,
+            "block": 1024,
+            "gate_first": true,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 4718592,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "7a3ee96a221a20b2cd227cf5f1bc801de5b3fec83454f99471b8a4709c07be38",
+                "ttadapter": "995e853683be6fb84ec4e80b466429c2ca42e6fda22cf21db6a29fe8b1cf00de",
+                "ttir": "103a66f90616ec6ef52a8040ca8978eab1559473c7fe62c92f1cd7ad37c43311"
+              },
+              "hash": "57d2053650dcfa12be2476ea423baa87ec75b6901f4720dbdd46bf2c3f7ad05a"
+            },
+            {
+              "binaries": {
+                "npubin": "1bbb2ab86830919b7e7c578cb1deda5e45edefa6828289b21c5ce29fb81c3b06",
+                "ttadapter": "f715a9326e66e7533f999b9f3809f562a8d2010ec9b985c46b3fd2bb2ada54d6",
+                "ttir": "08cdc11f34b2089301c97eeca9118e5e5470048bfebe946b46a872326bfc41c4"
+              },
+              "hash": "907e6dca918dc28cb2a67f51a2a7d14244b0f6468d1949c7393ab963e58e6702"
+            },
+            {
+              "binaries": {
+                "npubin": "56fd2cc189e989b6dcd60f1d80288eca7a93f8fb30416c4a80c99d8bfe05ed85",
+                "ttadapter": "fdc62d8d307cee03d3cabb5cb6b8a07979e8b6359d22fcd7a0102c66156764d2",
+                "ttir": "40c73f58692048f9afa1f0b146e0ab7feff7703e13e95352de36af430491cf84"
+              },
+              "hash": "4058fc7091c29604dc1682c4a477851f3928528573bff38a0f59777277f74b30"
+            }
+          ],
+          "trace_sha256": "9b2c588f36c24792a81a7ac7b89f3ac31c477c0d111b1729ac0614e9cb45be6c",
+          "normalized_sha256": "681fa3ee8910f0fdcf4c0e474f37321b4eb014254d3aa5bceab718e2e15ab1d4",
+          "accounting_sha256": "41882ae1e40b9bbb79e3fd7fe640145a47f825b455380f327676d83aba12fe89",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "103a66f90616ec6ef52a8040ca8978eab1559473c7fe62c92f1cd7ad37c43311",
+            "0.ttadapter": "995e853683be6fb84ec4e80b466429c2ca42e6fda22cf21db6a29fe8b1cf00de",
+            "0.npubin": "7a3ee96a221a20b2cd227cf5f1bc801de5b3fec83454f99471b8a4709c07be38",
+            "1.ttir": "08cdc11f34b2089301c97eeca9118e5e5470048bfebe946b46a872326bfc41c4",
+            "1.ttadapter": "f715a9326e66e7533f999b9f3809f562a8d2010ec9b985c46b3fd2bb2ada54d6",
+            "1.npubin": "1bbb2ab86830919b7e7c578cb1deda5e45edefa6828289b21c5ce29fb81c3b06",
+            "2.ttir": "40c73f58692048f9afa1f0b146e0ab7feff7703e13e95352de36af430491cf84",
+            "2.ttadapter": "fdc62d8d307cee03d3cabb5cb6b8a07979e8b6359d22fcd7a0102c66156764d2",
+            "2.npubin": "56fd2cc189e989b6dcd60f1d80288eca7a93f8fb30416c4a80c99d8bfe05ed85"
+          },
+          "pmu_csv_sha256": "c98811a65c3ee489300240813a07305e27c1afcb33f071a6a5f7f4325f66bcb7"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                36.38,
+                38.04,
+                36.58,
+                36.22,
+                37.04,
+                36.8,
+                36.28,
+                35.98,
+                37.2,
+                37.26
+              ],
+              "count": 10,
+              "mean": 36.778,
+              "sample_sd": 0.6205696307963087
+            },
+            "operation_active_union_us": {
+              "samples": [
+                36.38,
+                38.04,
+                36.58,
+                36.22,
+                37.04,
+                36.8,
+                36.28,
+                35.98,
+                37.2,
+                37.26
+              ],
+              "count": 10,
+              "mean": 36.778,
+              "sample_sd": 0.6205696307963087
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9899200201034546,
+              0.38999998569488525,
+              0.36715999245643616,
+              0.3914799988269806,
+              0.36489999294281006,
+              0.38148000836372375,
+              0.38675999641418457,
+              0.3777399957180023,
+              0.3662799894809723,
+              0.36809998750686646
+            ],
+            "count": 10,
+            "mean": 0.4383819967508316,
+            "sample_sd": 0.19405765642437267
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "after",
+            "R": 768,
+            "N": 768,
+            "block": 1024,
+            "gate_first": true,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 0,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "f76ecbf43ce10d36c29128658128f7977b42ab4f3b28031371879cf8806dabbd",
+                "ttadapter": "5918dc661e2afcd8bf4bf62f62d683ee58f65817534d139f449d3dcd4d1d2c3d",
+                "ttir": "ac8c1da903b88c4c4068e047f7b5b89f3e25a3f179895f83ad1484623e876207"
+              },
+              "hash": "f08607273142ae72f25f7fd7815c0fe48c059db66959abb10d59090f269af23b"
+            }
+          ],
+          "trace_sha256": "091a2857c2017152bd71646222493c8e36ad9daa8a220855975fd65b245e2634",
+          "normalized_sha256": "1429d3a56318fa192dacea3a5f6a9cd4006fd7f8c7a7b934d2e59c6927862d29",
+          "accounting_sha256": "c9bd7f41613073cba2f926805b9e69e9f348efb51eff00d37fad96dcefa43dc8",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "ac8c1da903b88c4c4068e047f7b5b89f3e25a3f179895f83ad1484623e876207",
+            "0.ttadapter": "5918dc661e2afcd8bf4bf62f62d683ee58f65817534d139f449d3dcd4d1d2c3d",
+            "0.npubin": "f76ecbf43ce10d36c29128658128f7977b42ab4f3b28031371879cf8806dabbd"
+          },
+          "pmu_csv_sha256": "38d2750626f42ad3a5d0b3270f31c1951a3b05dfcbc2f13e41c56f54534276ef"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 11.129479580183805
+    },
+    {
+      "spec": {
+        "case_id": "W005-T03-04",
+        "role": "heldout",
+        "seed": 6304,
+        "parameters": {
+          "R": 2,
+          "N": 128,
+          "gate_first": false,
+          "eps": 1e-05
+        },
+        "scenario_designation": "heldout-cost",
+        "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "result_sha256": "a2d0692361823571f4b67ff1ad0704f88965030e5438253756e7c6d695ec8194",
+      "fixture_sha256": "67be76116c60ecd5be40478121eccae4f804dc89215ecca4fb7ef3ee6dd65a73",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 3.123651244330006e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 7.450580596923828e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 3.374336232653263e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 3.123651244330006e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 7.450580596923828e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 3.374336232653263e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                438.3,
+                393.9,
+                369.22,
+                359.3,
+                380.98,
+                384.52,
+                358.68,
+                360.84,
+                355.74,
+                365.26
+              ],
+              "count": 10,
+              "mean": 376.674,
+              "sample_sd": 25.11093086464317
+            },
+            "operation_active_union_us": {
+              "samples": [
+                4.22,
+                4.28,
+                4.12,
+                4.28,
+                4.16,
+                4.32,
+                4.3,
+                4.28,
+                4.12,
+                4.18
+              ],
+              "count": 10,
+              "mean": 4.226,
+              "sample_sd": 0.07604092465391403
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                434.08,
+                389.62,
+                365.1,
+                355.02,
+                376.82,
+                380.2,
+                354.38,
+                356.56,
+                351.62,
+                361.08
+              ],
+              "count": 10,
+              "mean": 372.448,
+              "sample_sd": 25.104748023697294
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.051740050315857,
+              0.7129600048065186,
+              0.6844599843025208,
+              0.713699996471405,
+              0.6965199708938599,
+              0.7083200216293335,
+              0.679099977016449,
+              0.6733599901199341,
+              0.6710399985313416,
+              0.6746399998664856
+            ],
+            "count": 10,
+            "mean": 0.7265839993953704,
+            "sample_sd": 0.1154511740063026
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gate",
+              "wave005_gate_multiply",
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "before",
+            "R": 2,
+            "N": 128,
+            "block": 128,
+            "gate_first": false,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 2048,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "c3181ee2767437e76dece6bc378e3496736626ffc81824ff368f624ac51250a6",
+                "ttadapter": "2124396982d06a3bd90c11b9fa0023901485f5e5afafdf7534adadaba2955c15",
+                "ttir": "9d96836d908da48cc43436f9871555cedfad172c33e4d47177f9da625562cff6"
+              },
+              "hash": "61082686ab446fd3e455ce5d69f4be68c2095069a59bce0e45f5006ec08a9d6e"
+            },
+            {
+              "binaries": {
+                "npubin": "45d1c53a75c36fb01b29fde3a778db2fb8eb92aca670cb3d34c71b2017f4d406",
+                "ttadapter": "78a701f076b93875e169d48afa33e94a50d4b1c66944a182c7d305a914fa966c",
+                "ttir": "493d2fa2aef90d4fd09a970efb53ca74001c4123f189aa4844c637990082a013"
+              },
+              "hash": "cb9b83d09ed826dc5d04d75b54c10e95b0cb4908fd5de86132212155a9a079a3"
+            },
+            {
+              "binaries": {
+                "npubin": "95785d845b889f3625c450eea964e25118b8dc4fe75f6585b40645e7c69d8dcf",
+                "ttadapter": "d798f43164636e6f2991206f03f7c93e652324362871186944cc474249f71325",
+                "ttir": "211889c36974feaea0bdd991390dfeacef8cdca59b08a98104186635471ab14e"
+              },
+              "hash": "3f5d14c9f4f232566e8acc859682e3ebd9ba7adb71599299ede7cce762f04a6a"
+            }
+          ],
+          "trace_sha256": "a50d7aa85b5e8c7afdd7e3a927b2ce209424ba755ebf143131e88ee4e28eca54",
+          "normalized_sha256": "f95720bb265d43444ae3ea7add0bf25d6bc7030e3a9a236169e83b5bbcf9f15b",
+          "accounting_sha256": "62840d1b2dcd0b035fd304c39fb4c98db6f51f4e8385d8a254a5ba0e9fc43a41",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "9d96836d908da48cc43436f9871555cedfad172c33e4d47177f9da625562cff6",
+            "0.ttadapter": "2124396982d06a3bd90c11b9fa0023901485f5e5afafdf7534adadaba2955c15",
+            "0.npubin": "c3181ee2767437e76dece6bc378e3496736626ffc81824ff368f624ac51250a6",
+            "1.ttir": "493d2fa2aef90d4fd09a970efb53ca74001c4123f189aa4844c637990082a013",
+            "1.ttadapter": "78a701f076b93875e169d48afa33e94a50d4b1c66944a182c7d305a914fa966c",
+            "1.npubin": "45d1c53a75c36fb01b29fde3a778db2fb8eb92aca670cb3d34c71b2017f4d406",
+            "2.ttir": "211889c36974feaea0bdd991390dfeacef8cdca59b08a98104186635471ab14e",
+            "2.ttadapter": "d798f43164636e6f2991206f03f7c93e652324362871186944cc474249f71325",
+            "2.npubin": "95785d845b889f3625c450eea964e25118b8dc4fe75f6585b40645e7c69d8dcf"
+          },
+          "pmu_csv_sha256": "9a32a7832d8916607f6a87e83cf915513cecfab095f4ec8532e6b071a5253d85"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1.78,
+                1.84,
+                1.8,
+                1.78,
+                1.84,
+                1.84,
+                1.84,
+                1.94,
+                1.78,
+                1.66
+              ],
+              "count": 10,
+              "mean": 1.81,
+              "sample_sd": 0.07133644853010901
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1.78,
+                1.84,
+                1.8,
+                1.78,
+                1.84,
+                1.84,
+                1.84,
+                1.94,
+                1.78,
+                1.66
+              ],
+              "count": 10,
+              "mean": 1.81,
+              "sample_sd": 0.07133644853010901
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9753000140190125,
+              0.4000999927520752,
+              0.3884600102901459,
+              0.3865799903869629,
+              0.3700999915599823,
+              0.3635599911212921,
+              0.38284000754356384,
+              0.3598400056362152,
+              0.3709000051021576,
+              0.37220001220703125
+            ],
+            "count": 10,
+            "mean": 0.43698800206184385,
+            "sample_sd": 0.1895465599349656
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_gated_layernorm"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "metadata": {
+            "arm": "after",
+            "R": 2,
+            "N": 128,
+            "block": 128,
+            "gate_first": false,
+            "eps": 1e-05,
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 0,
+            "compile_only": true,
+            "full_row": true,
+            "arithmetic": "FP32 centered variance; FMA disabled",
+            "scope": "preallocated input/output/workspace; every gate and intermediate write is inside forward"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "d6d0d8cb6783426a43ec2168a55bce32da27aaf5a52f70ebb11c700b113968f0",
+                "ttadapter": "14f435f4df75c26ded74921bb1c57c9bfedb9fd2d7e99a309ee1dab66b39d3cf",
+                "ttir": "5ed715f317e369dd5b803aa146abadf0b67409ca04f56b89e86d42635bf29391"
+              },
+              "hash": "4961f0c6e115c2e57705195146c9f77fa65cf2da8e765564f3b8e455479da028"
+            }
+          ],
+          "trace_sha256": "f11ec576d0a597f11c3dd8883acf87727bf78d728a0959dba7449c46a722de96",
+          "normalized_sha256": "b3fee17f2f644fb0790c98111729250f697c49950b6486216b565aab0b4fcd72",
+          "accounting_sha256": "ed986904a4e88a49ac30074a1b43b2dece3ef7113c321a36e124d7f686badea4",
+          "source_sha256": {
+            "gated_layernorm.py": "2fd5281fd8f267d5554fb8c36277b87bf9bb61c34b63205c91582b43dc32ba27",
+            "gated_layernorm_contract.py": "a1c1a0e06bacda9c572ccf354460f756ea36f443d3c3b762ad01688d5a044b74",
+            "0.ttir": "5ed715f317e369dd5b803aa146abadf0b67409ca04f56b89e86d42635bf29391",
+            "0.ttadapter": "14f435f4df75c26ded74921bb1c57c9bfedb9fd2d7e99a309ee1dab66b39d3cf",
+            "0.npubin": "d6d0d8cb6783426a43ec2168a55bce32da27aaf5a52f70ebb11c700b113968f0"
+          },
+          "pmu_csv_sha256": "4948096978ee31416cc64f10563ea25544bfc39f7f36f293ed7ec844d5b71f79"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 208.10718232044198
+    },
+    {
+      "spec": {
+        "case_id": "W005-T03-GA",
+        "role": "guard",
+        "seed": 6391,
+        "parameters": {
+          "R": 2,
+          "N": 64,
+          "eps": 1e-05,
+          "gate_first": true,
+          "distribution": "constant-x-one-nonconstant-z"
+        },
+        "expected": "statisticsdistinguishgateorder,nonzerobeta"
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 0,
+        "capture_calls": 0,
+        "correctness_calls": 2
+      },
+      "result_sha256": "4e2ac60439ccad25ef28748c97f61a3ecf7112a75623fbc9523ef326809345f9",
+      "fixture_sha256": "ebfbb926208206902b6bfefc50c3a729e75fd012f830468b4b325a7410f5d30f",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 4.416772574344918e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 1.1635892083194932e-08,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 3.999201614313108e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 4.416772574344918e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 1.1635892083194932e-08,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 3.999201614313108e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        }
+      }
+    },
+    {
+      "spec": {
+        "case_id": "W005-T03-GB",
+        "role": "guard",
+        "seed": 6392,
+        "parameters": {
+          "R": 3,
+          "N": 129,
+          "eps": 1e-05,
+          "gate_first": false,
+          "distribution": "bounded-uniform"
+        },
+        "expected": "odd/paddedtailsandally/mean/rstdcorrect"
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 0,
+        "capture_calls": 0,
+        "correctness_calls": 2
+      },
+      "result_sha256": "33d65d7928ccca9f29624ebb220db7edf78c8081f2308218aaaf6936988860b9",
+      "fixture_sha256": "e09bdf21d034142f5b5c91e319c06074736fabe7b09b1eda32bcddf91ff84515",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 5.316050311066078e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 6.526477580592882e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 4.2351137041762854e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "metrics": {
+              "y": {
+                "max_abs_error": 5.316050311066078e-07,
+                "passed": true
+              },
+              "mean": {
+                "max_abs_error": 6.526477580592882e-09,
+                "passed": true
+              },
+              "rstd": {
+                "max_abs_error": 4.2351137041762854e-08,
+                "passed": true
+              }
+            },
+            "tolerance": {
+              "atol": 5e-05,
+              "rtol": 0.0003
+            },
+            "oracle": "CPU FP64"
+          }
+        }
+      }
+    }
+  ],
+  "interpretation": [
+    "Instrumented device operation spans include interkernel/caller dispatch gaps; not ordinary latency.",
+    "Per-task exported pipe composition is not measured traffic, whole-device utilization, or distance to roofline.",
+    "Logical full-tensor temporary payload is 8*R*N bytes before and zero after; no peak allocation claim."
+  ],
+  "retained_archive": {
+    "name": "optimization-w005-gated-layernorm-compact.tgz",
+    "sha256": "5b3f629c659d8d475565189e37ec319528c21c0b3b7179bec7b3ff0f16fe9ece",
+    "bytes": 24894829
+  },
+  "all_task_pmu_rows": {
+    "file": "optimization-w005-gated-layernorm-rows.json.gz",
+    "sha256": "b02ee74c164862f7be44f95aa313723175375b1bbcec3119660566083c2eb341",
+    "rows": 160
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E08, exactMindSpeedOpssource/tests/API, fullpin4efe2b675c2d51517c3fdd14c721020b8d41e241 Apache2/perfilenotices, admission-corrections.md forrange/scope.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "E08",
+  "task": "optimization-w007-moe-map-integer",
+  "title": "Use integer arithmetic for a bounded MoE chunk-sort map",
+  "source_file": "extension/source__mindspeed_ops__arch32__triton__sort_chunks_by_idx.py",
+  "cases": [
+    {
+      "case_id": "W007-E08-01",
+      "role": "gallery",
+      "seed": 75801,
+      "parameters": {
+        "N": 8192,
+        "num_splits": 96,
+        "map_kind": "uneven_zero_shuffle"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E08-02",
+      "role": "gallery",
+      "seed": 75802,
+      "parameters": {
+        "N": 128,
+        "num_splits": 4,
+        "map_kind": "identity"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E08-03",
+      "role": "heldout",
+      "seed": 75803,
+      "parameters": {
+        "N": 4096,
+        "num_splits": 32,
+        "map_kind": "uneven_zero_shuffle"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E08-04",
+      "role": "heldout",
+      "seed": 75804,
+      "parameters": {
+        "N": 1024,
+        "num_splits": 4,
+        "map_kind": "reverse"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly; retainallslower/equal/uncertain/unsupported/compile-noopdata, no posthoctuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E08-GA",
+      "role": "guard",
+      "seed": 75891,
+      "parameters": {
+        "N": 129,
+        "num_splits": 5,
+        "split_sizes": [
+          0,
+          1,
+          64,
+          0,
+          64
+        ],
+        "sorted_indices": [
+          4,
+          0,
+          2,
+          1,
+          3
+        ]
+      },
+      "expected": "Boundariesandzerolengthchunks, exactint32source+afterrowmapCPUrefbijection/inversemapping, allprovidedcumsummetadata validated,0captures."
+    },
+    {
+      "case_id": "W007-E08-GB",
+      "role": "guard",
+      "seed": 75892,
+      "parameters": {
+        "N": 8388480,
+        "num_splits": 4,
+        "split_sizes": [
+          8388477,
+          1,
+          1,
+          1
+        ],
+        "sorted_indices": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "precision_boundary": true
+      },
+      "expected": "Sourceoutprefix+tokenintermediatenear2^24,butCOMMONdomainvalid; fullidentitymapcorrectnessONLYoneforward/arm,0captures. Expected~32MBint32oraclepayloadoncevectorizedCPUarange/chunkref\u2014notPythonper-tokenloop; compactmanifestretainhashnotwholepayloadJSON. No hugeprofilingmatrix. AbovecommonMAXNrejectbeforecache in NONFROZENhosttest."
+    }
+  ],
+  "contract": {
+    "interface": "Provided-metadataMAPkernelprimitive ONLY: contiguousint32 split_sizes[S],input_cumsum[S+1] starts0, inverse_sorted_indices[S],output_cumsum[S+1], N/S. NonnegativeintegerlengthssumN, sortedpermutationbijection, providedmetadataEXACTconsistent; N>0<=2^23-128,Spositive<=128. Mapoutputint32[N], newlyallocatedprivate,canaries/inputimmutable/nonalias. Pipelineprefixcumsums/inversepermutationgeneration/rowmovement/freshallocatorOUTscope; metadataCPUfixturegenerationisINPUTdelivery nothiddenexcludeddevicework. Nameboundedsource-style mapcomponent, notwholemake_chunk_sort_mapAPIperformance.",
+    "range_proof": "Sourceexpression outprefix+FLOATtoken BEFOREsubtractinputprefix canroundevenN<2^24. Admissioncorrections.md+verifiedcounterexample9,000,000+9,000,001-9,000,000 ->wrong9,000,000. FREEZEstrongcommonN<=2^23-128, actualqueriedAIVcores<=64,SUB_BLOCK64; maxvirtualtailtoken<N+128,outprefix<=N =>ALLfloataddintermediates<2^24, allintegercumsumexact andint32safe. AssertactualAIVcap<=64beforemath, nohardcodedcoreguess; gridmin(actualAIV,N),block_sizeceil(N/grid) BOTH. No claimbroaderint-onlydomainextension.",
+    "oracle": "IndependentCPUINT64chunkstarts/outputpositions +permutedchunkassignment thenint32NmapexpectedONCE/case. Exactint32allvalues/bijection/canaries, notfloatnumericgate. Computevectorizedperchunk aranges/concat; precisionguard8mN memory~32MBpayload+expected only, no redundantCPUrefs/JSONarrays.",
+    "before": "Source_make_chunk_sort_map_kernel: FP32castsplit_sizesbeforecumsum, FP32tokencomparison/offsetaddition/subtraction andstoreint32. SAMEprovidedmetadata loads/byteoffsets/masks/grid/loop sourcefrozenSUB_BLOCK_SIZE64,IDX_LOAD_WIDTHnextpow2S, sourceautotunerdisabledbychoosingoneREALsourcecandidatecommon64beforetiming, noautotune/warmup.",
+    "after": "ONLYkeepthosecumsum/token/compare/dst additionsINT32, same sourceprovidedcumsum/inverse/outputcumsumloads, ownership/mask/loop/staticconfig/flags. Sourceanymaskedtailmetadataout-of-range access MUSTremainmasked exactlysameboth. Pre-math actualcodegennoop screen fullELFidentitystrongnoop or.text+relocproof; diffmetadatasonlyinconclusive, no manufacturedoptimizerflags.",
+    "guards": "MainNpositive, emptyhostunsupportedrejectbeforecache (scope), invalidmetadata/permutation/negative/aboveMAXNhostrejectbeforeoracle/device; originalsourceNfloatprecisionbug demonstrated CPUonlynotprofilinginvalidbaseline."
+  },
+  "source_sha256": "34285784c0aaaa0154aa05908c4aa4e1416fd253c8b4e4d73bdec490b1dbde71"
+}

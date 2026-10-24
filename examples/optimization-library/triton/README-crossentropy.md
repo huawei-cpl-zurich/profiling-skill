@@ -105,3 +105,26 @@ evidence; their timing results do not qualify this revised source. The public
 contract and INT64 labels remain unchanged, with bounded local INT32 indices.
 CPU interpreter regressions cover positive/negative offsets, tied logits, and
 unequal representable logits against independent FP64 expectations.
+
+Version three (`2316786`) passed all four frozen A3 cases using the same four
+cached CPU fixtures: eight correctness checks, eight captures and eighty
+profiled forwards, with zero regenerated oracles. A distinct four-row offset
+fixture also passed one correctness call per arm on A3, with zero loss error
+and maximum gradient error `2.98e-08` against FP64. These two regression calls
+were not profiled. All twenty version-three binary snapshots were independently
+SHA-verified, including the regression binaries; all eight capture PMU joins
+and exact two-kernel inventories passed with stable compiled identities.
+
+| Case rows×width | Before span µs ± SD | After span µs ± SD | Speedup |
+| --- | ---: | ---: | ---: |
+| 512×8192 | 190.264 ± 9.531 | 185.676 ± 17.005 | 1.02471× |
+| 1×1 | 180.158 ± 15.172 | 180.118 ± 15.344 | 1.00022× |
+| 768×4093, heldout | 185.142 ± 5.501 | 199.738 ± 18.954 | 0.92692× |
+| 3×17, heldout | 168.430 ± 7.922 | 169.822 ± 6.531 | 0.99180× |
+
+All ten samples remain retained, including first samples. Version-three
+all-case geometric mean is `0.98524×`; no robust materialization speed benefit
+is established. Its large gallery case active work is `42.402→43.688µs`,
+with internal gaps `147.862→141.988µs`. After scratch is now two FP32 scalars
+per row, so the one-class case uses eight scratch bytes instead of four.
+Physical traffic and peak-memory savings remain unmeasured.

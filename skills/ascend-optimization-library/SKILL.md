@@ -17,6 +17,7 @@ not a universal dispatch threshold or a claim about every Ascend target.
 | Row scale repeated inside a dot reduction | [Invariant scaling hoist](references/scaling-hoist.md) | Output-side work and changed rounding |
 | GEMM result immediately consumed by an add | [Epilogue fusion](references/epilogue-fusion.md) | Live resources, synchronization and GM staging |
 | Nearby query programs reload the same K/V tiles | [Query blocking](references/query-blocking.md) | Padded work and live accumulators |
+| Serial disjoint Jacobi pivot updates | [One conflict-free round](references/jacobi-round.md) | Scratch traffic and launch barriers |
 | Long tokenwise state recurrence with few independent heads | [Chunked recurrence](references/chunk-recurrence.md) | Preparation, workspace and matrix-operand rounding |
 | Output-task count just exceeds the observed core count | [Tile balance](references/tile-balance.md) | Layout-dependent operand movement |
 | Few M/N tiles and a long K reduction | [SplitK](references/split-k.md) | Partial-result writes, reduction and synchronization |

@@ -1,0 +1,95 @@
+{
+  "wave": 4,
+  "family_id": "W09",
+  "title": "Conflict-free Jacobi rotation round",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W09 exactfilteredreceipts; scopeadaptationexplicit",
+  "cases": [
+    {
+      "case_id": "W004-W09-01",
+      "role": "gallery",
+      "seed": 4901,
+      "parameters": {
+        "N": 128,
+        "block_size": 1,
+        "round_index": 0,
+        "operation": "one-prescribed-round-not-full-eigensolver"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    },
+    {
+      "case_id": "W004-W09-02",
+      "role": "gallery",
+      "seed": 4902,
+      "parameters": {
+        "N": 4,
+        "block_size": 1,
+        "round_index": 0,
+        "operation": "one-prescribed-round-not-full-eigensolver"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    },
+    {
+      "case_id": "W004-W09-03",
+      "role": "heldout",
+      "seed": 4903,
+      "parameters": {
+        "N": 96,
+        "block_size": 1,
+        "round_index": 0,
+        "operation": "one-prescribed-round-not-full-eigensolver"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    },
+    {
+      "case_id": "W004-W09-04",
+      "role": "heldout",
+      "seed": 4904,
+      "parameters": {
+        "N": 6,
+        "block_size": 1,
+        "round_index": 0,
+        "operation": "one-prescribed-round-not-full-eigensolver"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    }
+  ],
+  "contract": {
+    "source_scope": "Projectblocksize1pedagogicaladaptation ofsource16/32blockround-robin scheduler. EXACTLYONEconflict-freeround perAPI, notfullsweep/eigendecomposition/convergenceclaim. Roundchosenbeforetiming; generalroundgeneratorfunctionalguardtested.",
+    "input": "Finite symmetricFP32[N,N]: seeduniform[-.125,.125], A=(raw+raw.T)/2, boundeddiag1+sameuniform. Pairmap derivedfromN/roundindex metadata, validatedinvolution/disjointcoverage; no input-dependentanglesprecomputed.",
+    "before": "Necessaryinputworkingcopy, serialtwo-sidedJacobiupdates perdisjointpair, anglescomputedfromsameoriginalstagepivotblocks (otherdisjointupdatesleavepivotblocksuntouched). Allkernels/barriersincluded.",
+    "after": "Computeangleseveryforwardfromstageinput; disjointleftpassA->scratch thenrightpassscratch->Out withlaunchbarrier. No racycombinedinplacetwo-sidedupdates. Holdsangleformula/pairorder/precisionfixed. Singletonoddindexidentitytransformation.",
+    "angle": "tau=(aqq-app)/(2*apq); t=sign_nonnegative(tau)/(abs(tau)+sqrt(1+tau*tau)); c=1/sqrt(1+t*t);s=t*c. Ifapq==0,c=1,s=0. Jblock[[c,s],[-s,c]], outputJ.T@A@J forproductofdisjointblocks.",
+    "oracle": "IndependentCPUFP64prescribedtransforms ofrepresentedA. Compareatol2e-5rtol2e-4, relativeFrobnorminvariance<=2e-5, symmetrymaxabs<=2e-5, traceabserror<=2e-5*N. Everyoutputfinite, originalinputimmutable. NaNoutputpreparefullyoverwrite.",
+    "guards": [
+      {
+        "case_id": "W004-W09-GA",
+        "role": "guard",
+        "seed": 4991,
+        "parameters": {
+          "N": 5,
+          "block_size": 1,
+          "round_index": 1
+        },
+        "expected": "oddNdummy/singletonhandled andfulltransformCPUoracle"
+      },
+      {
+        "case_id": "W004-W09-GB",
+        "role": "guard",
+        "seed": 4992,
+        "parameters": {
+          "N": 8,
+          "block_size": 1,
+          "round_index": 0,
+          "invalid_duplicate_pair_map": true
+        },
+        "expected": "duplicate/missing/overlappingmetadata rejects beforelaunch botharms; hostnegativecheck0NPU"
+      }
+    ]
+  },
+  "protocol": "6CPUoraclesonce;oncecheckpercase/side/sourceversion then10fullprofileforwards4pairs;guards0captures,negativehostguards0NPU. No warmup/autotune/extratiming/profileIOinspection."
+}

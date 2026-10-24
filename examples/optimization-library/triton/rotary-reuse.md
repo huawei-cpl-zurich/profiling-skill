@@ -1,4 +1,4 @@
-# Rotary coefficient reuse across heads — draft, CPU verified only
+# Rotary coefficient reuse across heads — four A3 cases qualified
 
 `rotary_pairs:factory` provides E09. Both paths rotate every split-half Q and K
 head, preserve all inputs, and return contiguous FP16 Q/K tensors. Inputs are
@@ -45,8 +45,9 @@ movement and arithmetic are otherwise the same. The after path removes
 source-level duplicate coefficient work, while losing head-level scheduling
 parallelism and keeping coefficients live through two loops. Many heads and
 enough token tiles are a plausible benefit case. Very short sequences and
-few heads are plausible cost cases. These are hypotheses, not measured wins
-or regressions. There is no extra coefficient GM tensor or preparation kernel.
+few heads are plausible cost cases. These were the predeclared selection
+hypotheses; the actual results below retain the case that did not show a cost.
+There is no extra coefficient GM tensor or preparation kernel.
 
 Look for identical position/frequency sin/cos calculations inside independently
 scheduled Q/K head work. Confirm every head actually shares those coefficients;
@@ -61,11 +62,38 @@ The independent CPU oracle computes coefficients once, rounds them to FP16,
 then applies FP32 formulas to each Q and K half. Functional tests execute both
 actual Triton kernels in the CPU interpreter, test asymmetric head counts and
 token tails, and reject missing K outputs, wrong shapes/dtypes, nonfinite data,
-input mutation and unsupported physical layouts. This establishes CPU semantics
-only. A3 compilation, exact compiled inventory, resource evidence, one numerical
-check and ten captured forwards per arm/case remain required. Retain failed
-hypotheses; do not promote this entry as an A3 speed improvement before that gate.
+input mutation and unsupported physical layouts. A3 qualification used the same
+four fixed cases, one check and ten captured forwards per arm, with exact owned
+kernel inventories and stable compiled identities. All checks passed; maximum
+absolute error was 0.00048828125. Eight distinct NPUBIN snapshots are hash-verified.
+
+| Case | Before µs ± sample SD | After µs ± sample SD | Speedup |
+| --- | ---: | ---: | ---: |
+| Gallery many heads | 837.372 ±1.244 | 173.932 ±.917 | 4.814364× |
+| Gallery single token | 6.080 ±.115 | 5.614 ±.969 | 1.083007× |
+| Heldout many heads | 449.614 ±.580 | 108.710 ±.359 | 4.135903× |
+| Heldout few heads | 4.148 ±.115 | 4.990 ±.113 | .831263× |
+
+These are complete profiled device-operation spans on Ascend910B4-1 with
+Torch-NPU 2.10.0/Triton 3.2.0, not uninstrumented application latency. The heldout
+few-head case demonstrates 20.3% more device time; the noisy gallery cost case
+does not demonstrate a regression. Geomean across these four fixed cases is
+2.057641×. Each forward has one task, so internal operation gaps are zero.
+Raw PipeUtilization joins are available for all eight captures. The large
+benefit cases show lower AIV time and a shift toward MTE3 activity, consistent
+with less coefficient work and output-store pressure. Retained frontend TTIR
+places sin/cos before both head loops; no backend instruction count is claimed.
+
+The initially frozen adapter rejected Torch-NPU's default four-dimensional
+format 0 before any candidate/check/profile calls. The trusted ND2 preparation
+fix preserves input data and reuses the existing CPU oracle. Total acquisition
+was four oracles, eight checks, eight captures and 80 forwards, no warmups.
+Qualified kernel/adapter source is `e0c80b7f785641852cda5fbd8afe9b907d939d66`.
+Compact archive SHA256 is
+`11075b14baa8f1a61c6cbf053d9ef8f384ee04c50adc06864ad4137ee9914a37`.
+Its receipt retains every sample, source/binary/trace hash and exact task join.
+Resource limits outside these four points remain unqualified.
 
 No measured physical traffic or distance to roofline is currently available.
-This draft and its after code are excluded from the first coding-demonstration
+This entry and its after code are excluded from the first coding-demonstration
 guidance snapshot.

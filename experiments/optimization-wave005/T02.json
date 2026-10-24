@@ -1,0 +1,99 @@
+{
+  "wave": 5,
+  "study_id": "T02",
+  "title": "Batch-context-invariant row mean",
+  "study_kind": "source-backed-implementation-study",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "fixed-numerical-decomposition",
+  "approval": "Standing user approval waves003\u2013022, collect data before synthesis.",
+  "source": "triton/proposal.md; filtered exact bodies/tests/interfaces pinned7acb9c40a6ca827e885d902b7eaee5d45457b230; per-file licenses/notices preserved. Actual910B support requires own gate.",
+  "cases": [
+    {
+      "case_id": "W005-T02-01",
+      "role": "gallery",
+      "seed": 6201,
+      "parameters": {
+        "R": 128,
+        "N": 512
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T02-02",
+      "role": "gallery",
+      "seed": 6202,
+      "parameters": {
+        "R": 1,
+        "N": 16384
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T02-03",
+      "role": "heldout",
+      "seed": 6203,
+      "parameters": {
+        "R": 96,
+        "N": 768
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T02-04",
+      "role": "heldout",
+      "seed": 6204,
+      "parameters": {
+        "R": 2,
+        "N": 12288
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    }
+  ],
+  "contract": {
+    "interface": "FP32 contiguous[R,N], N>0, finite uniform[-1,1], reductionlastdim, dim=-1 or1 accepted, keepdimTrue/False supported. Immutable input, outputFP32.",
+    "before": "Explicit controlled educational2stage split-row reduction; partitionwidth512 ifR<=2 else1024, fixed deterministic within-call sum. Not retrieved optimized vendor baseline.",
+    "after": "One program per output, source fixed1024segment sums and fixed serial blockorder independent ofR/context. Same approximate mean contract, no promised exact equality with BEFORE.",
+    "oracle": "Independent FP64 mean representedFP32 inputs atol2e-5rtol2e-4. Supplement designatedrow AFTER bitwise invariance across contexts; BEFORE may also match. No batch-axis reduction claim.",
+    "guard_execution": "GA guard fullAPI returns designatedrow outputs from3contexts generated/cached once and executes required3means within guard call, not additional full measurement repeats; GB dim/keepdim semantics functionaltests+actualmaskedNPUtail."
+  },
+  "guards": [
+    {
+      "case_id": "W005-T02-GA",
+      "role": "guard",
+      "seed": 6291,
+      "parameters": {
+        "R": 3,
+        "N": 1024,
+        "distribution": "bounded-cancellation",
+        "context_rows": [
+          1,
+          3,
+          129
+        ],
+        "context_positions": [
+          0,
+          1,
+          128
+        ]
+      },
+      "expected": "Fixed designatedrow repeats bounded[1,2^-24,-1,2^-24]; embed identical row in fixed contexts. AFTER designatedrowbitpatterns match; alloutputs meetFP64gate."
+    },
+    {
+      "case_id": "W005-T02-GB",
+      "role": "guard",
+      "seed": 6292,
+      "parameters": {
+        "R": 3,
+        "N": 1025,
+        "dim": -1,
+        "keepdim": true
+      },
+      "expected": "Tail masks, output[R,1], dim1 equivalence validated; invaliddimhostreject."
+    }
+  ],
+  "protocol": "Six CPU scientific oracle payloads once; once-per-side correctness per source version; exactly10 profiled full API forwards per arm of4maincases. Guards correctness-only0captures. No warmups/autotuning/extra timing/profiled tensor inspection. Preserve negative/failed/partial outcomes. Complete device-operation spans diagnostic, not ordinary application latency."
+}

@@ -79,3 +79,28 @@ def factory():return Adapter()
         report = json.loads((output/'result.json').read_text())
         assert report['fixture']['oracle_calls'] == 1
         assert report['counts'] == dict(profiled_calls=0,capture_calls=0,correctness_calls=2)
+
+
+def test_constructor_preserves_fp32_under_ambient_float64(monkeypatch):
+    # Host-only constructor boundary: allocate actual CPU tensors in place of NPU
+    # storage, without compiling or invoking any scientific forward.
+    from types import SimpleNamespace as NS
+    import real_fft
+    allocation = torch.empty
+    monkeypatch.setattr(torch, 'empty', lambda *args, **kw: allocation(*args, **{**kw, 'device':'cpu'}))
+    monkeypatch.setattr(real_fft, 'coefficients', lambda n: (NS(to=lambda device: torch.zeros(n)),)*2)
+    monkeypatch.setattr(real_fft.staged_fft, 'kernels', lambda: ('direct','first','second'))
+    def movement():
+        real_fft.triton = NS(cdiv=lambda a,b:(a+b-1)//b)
+        return 'pack','extract','reconstruct'
+    monkeypatch.setattr(real_fft, 'kernels', movement)
+    source = NS(dtype=torch.float32,ndim=2,is_contiguous=lambda:True,
+                device=NS(type='npu'),shape=(1,64))
+    previous = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(torch.float64)
+        op = real_fft.RealFFT(source,packed=True)
+        assert all(x.dtype == torch.float32 for x in (*op.output,*op.complex_output,*op.workspace))
+        assert all(x.dtype == torch.float32 for x in op.calls[0][2][1:3])
+    finally:
+        torch.set_default_dtype(previous)

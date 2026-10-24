@@ -69,9 +69,9 @@ class RealFFT(staged_fft.ComplexFFT):
         self.packed = packed and n >= 32 and n & (n-1) == 0
         m = n//2 if self.packed else n
         h = n//2+1
-        self.output = tuple(torch.empty((b,h), device=real.device) for _ in range(2))
+        self.output = tuple(torch.empty((b,h), device=real.device, dtype=real.dtype) for _ in range(2))
         self.tables = tuple(x.to(real.device) for x in coefficients(m))
-        r = torch.empty((b,m), device=real.device) if self.packed else real
+        r = torch.empty((b,m), device=real.device, dtype=real.dtype) if self.packed else real
         i = torch.empty_like(r) if self.packed else torch.zeros_like(r)
         self.complex_output = tuple(torch.empty_like(r) for _ in range(2))
         direct, first, second = staged_fft.kernels()

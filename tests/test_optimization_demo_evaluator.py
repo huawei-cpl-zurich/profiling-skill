@@ -15,10 +15,12 @@ from test_optimization_pair import Adapter
 
 class Jit:
     calls = 0
-    def __init__(self, fn): self.fn = fn
+    def __init__(self, fn):
+        self.fn = fn
+        self.compiled = SimpleNamespace(name='kernel', hash='stable', asm={'binary': b'ELF'})
     def run(self, *args, **kwargs):
         Jit.calls += 1
-        return SimpleNamespace(name='kernel', hash='stable', asm={'binary': b'ELF'})
+        return self.compiled
 
 
 def fixture_request(tmp_path, monkeypatch, *, wrong=False, import_launch=False):
@@ -54,7 +56,7 @@ def test_one_check_then_ten_trace_proven_calls_per_case(tmp_path, monkeypatch):
         assert row['compiled'][0]['name']=='kernel'
 
 
-@pytest.mark.parametrize('failure',['wrong','import_launch','provider_digest','source_change'])
+@pytest.mark.parametrize('failure',['wrong','import_launch','provider_digest','source_change','binary_change'])
 def test_failure_stops_all_later_device_calls(tmp_path,monkeypatch,failure):
     request=fixture_request(tmp_path,monkeypatch,wrong=failure=='wrong',import_launch=failure=='import_launch')
     if failure=='provider_digest':
@@ -63,6 +65,8 @@ def test_failure_stops_all_later_device_calls(tmp_path,monkeypatch,failure):
     def capture(run,path,**kwargs):
         result=Adapter().capture(run,None,path)
         if failure=='source_change': Path(request['candidate_path']).write_text('# changed\n')
+        if failure=='binary_change':
+            sys.modules['submitted_' + request['candidate_sha256']].launch.compiled.asm['binary'] = b'changed'
         return result
     if failure=='provider_digest':
         with pytest.raises(worker.InfrastructureError):
@@ -118,3 +122,37 @@ def test_cached_result_and_uncertain_dispatch_never_duplicate(tmp_path,recovery)
     assert host.evaluate(config,request,remote=lost)['outcome']=='infrastructure_failure'
     assert host.evaluate(config,request,remote=lost)['outcome']=='infrastructure_failure'
     assert (lost.submits,lost.uploads)==(1,1)
+
+
+@pytest.mark.parametrize('change', [None, 'kernel', 'compiled'])
+def test_measured_hook_uses_only_frozen_object_identities(tmp_path, monkeypatch, change):
+    request = fixture_request(tmp_path, monkeypatch)
+    def capture(run, path, **kwargs):
+        module = sys.modules['submitted_' + request['candidate_sha256']]
+        if change == 'kernel': module.launch = Jit(module.kernel)
+        if change == 'compiled':
+            module.launch.compiled = SimpleNamespace(name='kernel', hash='stable', asm={'binary': b'ELF'})
+        def forbidden(*args, **kwargs):
+            raise AssertionError('measured launch inspected source or hashed binary')
+        # Limit sentinels to forward execution; the exporter and post-capture
+        # evidence validation legitimately inspect files and compute digests.
+        def measured():
+            with monkeypatch.context() as patch:
+                patch.setattr(worker, 'sha', forbidden)
+                patch.setattr(worker.hashlib, 'sha256', forbidden)
+                patch.setattr(Path, 'resolve', forbidden)
+                patch.setattr(Path, 'read_bytes', forbidden)
+                patch.setattr(Jit, 'fn', property(forbidden), raising=False)
+                return run()
+        return Adapter().capture(measured, None, path)
+    result = worker.evaluate_cases(request, tmp_path/'out', torch=torch, jit_class=Jit,
+        capture=capture, synchronize=lambda:None, device='cpu')
+    assert result['measurement_version'] == 2
+    if change is None:
+        assert result['outcome'] == 'success'
+        assert all(row['profiled_calls'] == 10 for row in result['cases'])
+    else:
+        assert result['outcome'] == 'candidate_failure'
+        assert result['cases'][0]['profiled_calls'] == 1
+        assert result['cases'][1]['status'] == 'not-run'
+        assert ('unqualified kernel' if change == 'kernel' else 'specialization changed') in result['cases'][0]['error']

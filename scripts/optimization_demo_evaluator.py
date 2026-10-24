@@ -17,6 +17,7 @@ from simple_experiment_runner import CplRemote, ObservationLost, _write_json
 
 ROOT = Path(__file__).resolve().parents[1]
 TERMINAL = {'completed', 'failed', 'cancelled', 'missing'}
+MEASUREMENT_VERSION = 2
 
 
 def sha(path):
@@ -37,7 +38,7 @@ def cache_key(config, phase, source_sha256):
                ROOT/'scripts/optimization_pair.py', ROOT/'scripts/optimization_profile_evidence.py',
                *(ROOT/'skills/ascend-model-benchmarking/scripts').glob('*.py')]
     context = {k:v for k,v in config.items() if k not in ('cache_directory','observation_seconds')}
-    identity = dict(config=context, phase=phase, source=source_sha256,
+    identity = dict(measurement_version=MEASUREMENT_VERSION, config=context, phase=phase, source=source_sha256,
                     helpers={str(p.relative_to(ROOT)):sha(p) for p in helpers})
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 

@@ -27,6 +27,9 @@ def save(path, value):
     Path(path).write_text(json.dumps(value, indent=2, allow_nan=False) + '\n')
 
 
+MEASUREMENT_VERSION = 2
+
+
 class InfrastructureError(RuntimeError):
     pass
 
@@ -38,10 +41,22 @@ class LaunchAudit:
         self.source, self.jit_class = Path(source).resolve(), jit_class
         self.allow_launch = allow_launch
         self.seen = {}
+        self.profiling = False
+        self.allowed = {}
 
     def __enter__(self):
         original = self.original = self.jit_class.run
         def run(kernel, *args, **kwargs):
+            if self.profiling:
+                # Measured hook: object membership only. No source, function,
+                # binary, filesystem or digest inspection between launches.
+                permitted = self.allowed.get(id(kernel))
+                if permitted is None or kwargs.get('warmup', False):
+                    raise ValueError('unqualified kernel or warmup during capture')
+                compiled = original(kernel, *args, **kwargs)
+                if id(compiled) not in permitted:
+                    raise ValueError('compiled specialization changed during capture')
+                return compiled
             function = kernel.fn
             if Path(function.__code__.co_filename).resolve() != self.source:
                 raise ValueError('device arithmetic must use submitted candidate-owned kernels')
@@ -49,12 +64,9 @@ class LaunchAudit:
                 raise ValueError('candidate import cannot launch a kernel')
             compiled = original(kernel, *args, **kwargs)
             if not kwargs.get('warmup', False):
-                artifacts = {key: hashlib.sha256(value).hexdigest()
-                             for key, value in compiled.asm.items() if isinstance(value, bytes)}
-                if not artifacts:
-                    raise ValueError('compiled candidate binary identity is unavailable')
-                identity = dict(name=compiled.name, hash=str(compiled.hash), artifacts=artifacts)
-                self.seen[(function.__name__, str(compiled.hash))] = identity
+                # Keep strong references; hash binary artifacts only in snapshot,
+                # outside both correctness and measured candidate forwards.
+                self.seen[(id(kernel), id(compiled))] = (kernel, compiled)
             return compiled
         self.jit_class.run = run
         try:
@@ -68,10 +80,23 @@ class LaunchAudit:
         return self
 
     def snapshot(self):
-        return [self.seen[key] for key in sorted(self.seen)]
+        identities = []
+        for kernel, compiled in self.seen.values():
+            artifacts = {key: hashlib.sha256(value).hexdigest()
+                         for key, value in compiled.asm.items() if isinstance(value, bytes)}
+            if not artifacts:
+                raise ValueError('compiled candidate binary identity is unavailable')
+            identities.append(dict(name=compiled.name, hash=str(compiled.hash), artifacts=artifacts))
+        return sorted(identities, key=lambda item: (item['name'], item['hash']))
 
     def names(self):
-        return tuple(sorted({key[0] for key in self.seen}))
+        return tuple(sorted({kernel.fn.__name__ for kernel, _ in self.seen.values()}))
+
+    def profile_mode(self):
+        """Freeze qualified object identities before starting measured forwards."""
+        for kernel, compiled in self.seen.values():
+            self.allowed.setdefault(id(kernel), set()).add(id(compiled))
+        self.profiling = True
 
     def __exit__(self, *args):
         self.jit_class.run = self.original
@@ -103,6 +128,7 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
         raise InfrastructureError('fixture provider changed')
     validator = load_module(request['provider_path'], 'trusted_fixture_provider')
     report = dict(schema='optimization-coding-evaluation-v1',
+                  measurement_version=MEASUREMENT_VERSION,
                   candidate_sha256=sha(source), measurement_kind='profiled_device_operation_span_us',
                   outcome='success', cases=[dict(id=c['id'], correct=False, identity_verified=False,
                   correctness_calls=0, profiled_calls=0, status='not-run') for c in request['cases']],
@@ -144,6 +170,7 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
                 expected, compiled = audit.names(), audit.snapshot()
                 if not expected:
                     raise ValueError('no candidate-owned compiled kernel was executed')
+                audit.profile_mode()
                 calls = 0
                 def forward():
                     nonlocal calls

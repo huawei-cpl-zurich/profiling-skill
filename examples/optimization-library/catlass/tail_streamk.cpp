@@ -36,8 +36,8 @@ struct OrdinaryScheduler : TailScheduler {
 };
 using Scheduler = std::conditional_t<bool(AFTER),TailScheduler,OrdinaryScheduler>;
 using Policy = Gemm::MmadAtlasA2Streamk<true,true>;
-using Tile = GemmShape<128,256,256>;
-using Block = Gemm::Block::BlockMmad<Policy,Tile,GemmShape<128,256,64>,
+using OutputTile = GemmShape<128,256,256>;
+using Block = Gemm::Block::BlockMmad<Policy,OutputTile,GemmShape<128,256,64>,
     Gemm::GemmType<half,layout::RowMajor>,Gemm::GemmType<half,layout::RowMajor>,
     Gemm::GemmType<half,layout::RowMajor>>;
 using Reduce = Gemm::Kernel::StreamkReduceAdd<Arch::AtlasA2,Scheduler,float,half,49152>;

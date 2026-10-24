@@ -1,0 +1,64 @@
+{
+  "profile_cases": [
+    {
+      "case_id": "F06-01",
+      "role": "gallery",
+      "seed": 6101,
+      "m": 128,
+      "n": 10496,
+      "k": 4096,
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "41 tiles on 20 cores leave one tail tile whose long K may benefit from tail-only splitting."
+    },
+    {
+      "case_id": "F06-02",
+      "role": "gallery",
+      "seed": 6102,
+      "m": 384,
+      "n": 6656,
+      "k": 512,
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "78 tiles nearly occupy the last wave; K512 may expose reduction/synchronization cost."
+    },
+    {
+      "case_id": "F06-03",
+      "role": "heldout",
+      "seed": 6103,
+      "m": 128,
+      "n": 15616,
+      "k": 6144,
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "61 tiles leave one tail tile and may benefit despite additional full waves."
+    },
+    {
+      "case_id": "F06-04",
+      "role": "heldout",
+      "seed": 6104,
+      "m": 384,
+      "n": 6656,
+      "k": 1024,
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "78 tiles with K1024 may offer little tail-utilization gain relative to merge cost."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F06-G01",
+      "role": "guard",
+      "seed": 6105,
+      "m": 128,
+      "n": 5120,
+      "k": 256,
+      "meaning": "20 exact output tiles; no split tail"
+    },
+    {
+      "case_id": "F06-G02",
+      "role": "guard",
+      "seed": 6106,
+      "m": 144,
+      "n": 272,
+      "k": 512,
+      "meaning": "16-aligned M/N tails relative to128x256 tile; initiallyNaNoutputfullywritten"
+    }
+  ]
+}

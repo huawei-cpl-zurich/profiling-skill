@@ -1,0 +1,393 @@
+{
+  "study": "W005-T06",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "full_evidence": "slot-mapping-evidence.json.gz",
+  "full_evidence_sha256": "0eaca8ac14b5bef64863f6b58f72865d7c32099af139ba94b7e5b99beabf036e",
+  "full_evidence_bytes": 49989,
+  "retained_archive_sha256": "5b19f717ae7e7256555a626984b55dddfe461e9636cf556231406eab4052da74",
+  "product": "Ascend910B4-1",
+  "physical_die": 6,
+  "gate_job_handle": "remote:gz-a3:job:f4cdd5ba-1565-41a6-a8ea-9ae9b44a31f1",
+  "gate_exit": 0,
+  "counts": {
+    "cpu_scientific_oracles": 6,
+    "correctness_calls": 12,
+    "profiled_forwards": 80,
+    "complete_captures": 8,
+    "guard_captures": 0,
+    "failed_attempts": 0,
+    "warmups": 0,
+    "unprofiled_timing_calls": 0
+  },
+  "matrix_sha256": "a525d2a48759c271d5a8b16131c52edb91e99ea20625a01c7bdcf413cc943e54",
+  "summary": [
+    {
+      "case_id": "W005-T06-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            1308.74,
+            1308.06,
+            1308.22,
+            1309.72,
+            1309.46,
+            1309.3,
+            1308.18,
+            1308.38,
+            1308.02,
+            1308.16
+          ],
+          "count": 10,
+          "mean": 1308.624,
+          "sample_sd": 0.6401944149154083
+        },
+        "after": {
+          "samples": [
+            1209.9,
+            1210.3,
+            1210.7,
+            1210.84,
+            1209.92,
+            1210.18,
+            1210.08,
+            1210.64,
+            1209.56,
+            1209.98
+          ],
+          "count": 10,
+          "mean": 1210.21,
+          "sample_sd": 0.4087107099703215
+        }
+      }
+    },
+    {
+      "case_id": "W005-T06-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            395.28,
+            385.0,
+            369.42,
+            425.06,
+            373.02,
+            355.66,
+            370.16,
+            347.32,
+            366.54,
+            361.76
+          ],
+          "count": 10,
+          "mean": 374.922,
+          "sample_sd": 22.2680407759641
+        },
+        "after": {
+          "samples": [
+            12.16,
+            11.72,
+            12.14,
+            11.82,
+            12.16,
+            11.62,
+            11.42,
+            11.4,
+            11.58,
+            11.04
+          ],
+          "count": 10,
+          "mean": 11.706,
+          "sample_sd": 0.3735773012376424
+        }
+      }
+    },
+    {
+      "case_id": "W005-T06-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            737.62,
+            737.24,
+            737.34,
+            736.98,
+            741.96,
+            738.22,
+            738.52,
+            738.44,
+            736.54,
+            736.88
+          ],
+          "count": 10,
+          "mean": 737.974,
+          "sample_sd": 1.5553220459656276
+        },
+        "after": {
+          "samples": [
+            679.22,
+            678.98,
+            679.1,
+            679.32,
+            679.52,
+            679.38,
+            679.84,
+            679.42,
+            679.06,
+            678.88
+          ],
+          "count": 10,
+          "mean": 679.272,
+          "sample_sd": 0.28599922299817226
+        }
+      }
+    },
+    {
+      "case_id": "W005-T06-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            379.16,
+            376.1,
+            381.82,
+            361.3,
+            372.16,
+            371.5,
+            357.9,
+            395.22,
+            373.12,
+            355.94
+          ],
+          "count": 10,
+          "mean": 372.422,
+          "sample_sd": 11.900743020687603
+        },
+        "after": {
+          "samples": [
+            18.16,
+            18.12,
+            17.92,
+            17.92,
+            18.3,
+            18.32,
+            18.3,
+            18.3,
+            18.16,
+            17.6
+          ],
+          "count": 10,
+          "mean": 18.11,
+          "sample_sd": 0.23328570942563548
+        }
+      }
+    },
+    {
+      "case_id": "W005-T06-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-T06-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "exact_int32": true,
+              "inputs_immutable": true,
+              "sentinel_remaining": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W005-T06-01": {
+      "before": 30,
+      "after": 10
+    },
+    "W005-T06-02": {
+      "before": 30,
+      "after": 10
+    },
+    "W005-T06-03": {
+      "before": 30,
+      "after": 10
+    },
+    "W005-T06-04": {
+      "before": 30,
+      "after": 10
+    }
+  }
+}

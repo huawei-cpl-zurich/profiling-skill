@@ -1,0 +1,113 @@
+{
+  "wave": 5,
+  "study_id": "T06",
+  "title": "Fused request-local to global slot mapping",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "integer-address-pipeline-fusion",
+  "approval": "standingwaves003\u2013022,datafirst",
+  "source": "triton/proposal.md T06 exactfilteredbody/interface/tests pinned7acb9c40a6ca;implementationactual910Bqualificationpending",
+  "cases": [
+    {
+      "case_id": "W005-T06-01",
+      "role": "gallery",
+      "seed": 6601,
+      "parameters": {
+        "T": 1024,
+        "K": 512,
+        "requests": 16,
+        "block_size": 64,
+        "mode": "decode",
+        "block_table_width": 128
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T06-02",
+      "role": "gallery",
+      "seed": 6602,
+      "parameters": {
+        "T": 1,
+        "K": 32,
+        "requests": 1,
+        "block_size": 16,
+        "mode": "decode",
+        "block_table_width": 128
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T06-03",
+      "role": "heldout",
+      "seed": 6603,
+      "parameters": {
+        "T": 768,
+        "K": 384,
+        "requests": 12,
+        "block_size": 32,
+        "mode": "mixed",
+        "block_table_width": 128
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T06-04",
+      "role": "heldout",
+      "seed": 6604,
+      "parameters": {
+        "T": 2,
+        "K": 64,
+        "requests": 2,
+        "block_size": 64,
+        "mode": "mixed",
+        "block_table_width": 128
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    }
+  ],
+  "contract": {
+    "interface": "Int32tok[T,K],request_id[T],prefill_req_id[T],prefill_mask[T],block_table[requests,128],workspace_starts[num_prefill]. Contiguous,requestIDsvalid,outputsint32[T,K],allarithmeticfitsint32.",
+    "mathematics": "tok<0 OR floor(tok/B)>=128 =>-1 (ALLnegativeinvalid). Otherwise decode=block_table[req,bid]*B+tok%B. Prefill=workspace_starts[prefill_req]+tok BUTSTILLsame derivedblockvaliditygate(sourcebodysemantics). Nonnegativeblockbases; no floatconversionanywhereinbotharms.",
+    "data_recipe": "Seededtokin[0,128B)withfixed -1 andupper-bound128B sentinel eachrow, requestIDsseedvalid;mainblockbases[0,4096),mixedmaskalternaterows withnonzeroworkspacestarts. Decodeallfalsemask;sourceK/Rshapeintegerfieldsfixed.",
+    "before": "Separatedecomposeblock/offset/valid, gatherbase/prefillbase, finalslotkernel; REALintermediatebufferswritten/readeveryAPI.",
+    "after": "FuseSAMEintegerpipeline/maskedgathers/layout/grid, no compaction/consumerattentionfusion. Clampunsafeindicesbeforegatheraswellasmasksforrobustness.",
+    "oracle": "IndependentCPUint64equationthenverifiedint32, exactequality. Inputsimmutable/outputINT_MINsentinelfullyoverwritten. Rejectunsupportednoncontiguouslayout/invalidhostrequestmetadata, no overflowwrapclaim.",
+    "guards": [
+      {
+        "case_id": "W005-T06-GA",
+        "role": "guard",
+        "seed": 6691,
+        "parameters": {
+          "T": 2,
+          "K": 8,
+          "requests": 2,
+          "block_size": 64,
+          "mode": "decode",
+          "block_table_width": 128,
+          "distribution": "boundaries-and-large-exact-base"
+        },
+        "expected": "tok[-2,-1,0,B-1,B,128B-1,128B,1],table[0,0]=524289 createsoutputs>2^24,int32EXACTnotfloatround"
+      },
+      {
+        "case_id": "W005-T06-GB",
+        "role": "guard",
+        "seed": 6692,
+        "parameters": {
+          "T": 3,
+          "K": 33,
+          "requests": 3,
+          "block_size": 32,
+          "mode": "mixed",
+          "block_table_width": 128,
+          "distribution": "mixed-nonzero-starts"
+        },
+        "expected": "oddK,prefill/decode/nonzerooffset/invalidblockgate"
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce,correctoncepercase/side/source+10profiles4pairs,guards0caps,no warmup/autotune/extratiming/discretionaryprofileIOvalidation."
+}

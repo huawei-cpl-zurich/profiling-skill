@@ -165,14 +165,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--workspace', type=Path)
-    parser.add_argument('action', nargs='?', choices=['evaluate'])
+    parser.add_argument('action', nargs='?', choices=['evaluate', 'help'])
     args = parser.parse_args()
+    def help_action():
+        parser.print_help()
+        print('evaluate: one correctness check then ten profiled forwards per case. '
+              'Identical candidates reuse cached evidence; interrupted jobs retain their handle.')
+        return 0
+    if args.action == 'help':
+        return help_action()
     if args.workspace:
         candidate = args.workspace.resolve()/'candidate.py'
         request = dict(action='evaluate', phase='development', candidate_path=str(candidate),
                        candidate_sha256=sha(candidate))
     else:
         request = json.load(sys.stdin)
+    if request.get('action') == 'help':
+        return help_action()
     if request.get('action') != 'evaluate' or request.get('phase') not in ('development','terminal'):
         parser.error('evaluate with a development or terminal phase required')
     config = json.loads(args.config.read_text())

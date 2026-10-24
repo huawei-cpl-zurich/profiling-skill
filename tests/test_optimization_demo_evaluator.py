@@ -200,3 +200,17 @@ def test_correct_values_in_strided_output_fail_before_any_capture(tmp_path, monk
     assert report['cases'][0]['correctness_calls'] == 1 and report['cases'][0]['profiled_calls'] == 0
     assert report['cases'][0]['output_metadata'] == [dict(shape=[6],strides=[2],dtype='torch.int64',contiguous=False)]
     assert report['cases'][1]['status'] == 'not-run'
+
+
+@pytest.mark.parametrize('stdin_action', [False, True])
+def test_cli_help_never_reads_private_config_or_candidate(tmp_path, stdin_action):
+    import subprocess
+    secret_config = tmp_path/'private-task-secret.json'
+    secret_config.write_text('invalid private JSON: help must not read this')
+    command = [sys.executable, str(Path(host.__file__)), '--config', str(secret_config)]
+    if not stdin_action: command += ['--workspace', str(tmp_path/'absent-workspace'), 'help']
+    result = subprocess.run(command, input=json.dumps(dict(action='help')) if stdin_action else '',
+        capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0 and result.stderr == ''
+    assert 'ten profiled forwards' in result.stdout and 'cached evidence' in result.stdout
+    assert 'private-task-secret' not in result.stdout and str(tmp_path) not in result.stdout

@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "family": "F12",
+  "outcome": "runtime_contract_unqualified",
+  "source_sha256": "71d2782be41977ed02c37eeb5a5a7544a66388275b509ce8588c646f808ffb00",
+  "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+  "architecture": "dav-c220",
+  "builds": [
+    {
+      "name": "default-0",
+      "exit_code": 0,
+      "binary_sha256": "1a6fc80d6b860199127eb98f695e69fd2fb359a8d990d1769e4035ae14933176",
+      "device_sections": {
+        "__aicore_rel_binary": {
+          "bytes": 69105,
+          "sha256": "49302b21ccec92d75f72f4539d26e9a0431d726b9b2e4db8ba39c757e9e8b5cb"
+        },
+        ".aicore_binary": {
+          "bytes": 72360,
+          "sha256": "90da921f21bf2ce8cb22d92d1fb2647f900e5a95e821ac808d53be9dd79a6390"
+        }
+      }
+    },
+    {
+      "name": "default-1",
+      "exit_code": 0,
+      "binary_sha256": "1a6fc80d6b860199127eb98f695e69fd2fb359a8d990d1769e4035ae14933176",
+      "device_sections": {
+        "__aicore_rel_binary": {
+          "bytes": 69105,
+          "sha256": "49302b21ccec92d75f72f4539d26e9a0431d726b9b2e4db8ba39c757e9e8b5cb"
+        },
+        ".aicore_binary": {
+          "bytes": 72360,
+          "sha256": "90da921f21bf2ce8cb22d92d1fb2647f900e5a95e821ac808d53be9dd79a6390"
+        }
+      }
+    },
+    {
+      "name": "macro-0",
+      "exit_code": 0,
+      "binary_sha256": "1a6fc80d6b860199127eb98f695e69fd2fb359a8d990d1769e4035ae14933176",
+      "device_sections": {
+        "__aicore_rel_binary": {
+          "bytes": 69105,
+          "sha256": "49302b21ccec92d75f72f4539d26e9a0431d726b9b2e4db8ba39c757e9e8b5cb"
+        },
+        ".aicore_binary": {
+          "bytes": 72360,
+          "sha256": "90da921f21bf2ce8cb22d92d1fb2647f900e5a95e821ac808d53be9dd79a6390"
+        }
+      }
+    },
+    {
+      "name": "macro-1",
+      "exit_code": 0,
+      "binary_sha256": "1a6fc80d6b860199127eb98f695e69fd2fb359a8d990d1769e4035ae14933176",
+      "device_sections": {
+        "__aicore_rel_binary": {
+          "bytes": 69105,
+          "sha256": "49302b21ccec92d75f72f4539d26e9a0431d726b9b2e4db8ba39c757e9e8b5cb"
+        },
+        ".aicore_binary": {
+          "bytes": 72360,
+          "sha256": "90da921f21bf2ce8cb22d92d1fb2647f900e5a95e821ac808d53be9dd79a6390"
+        }
+      }
+    }
+  ],
+  "comparisons": {
+    "default": "identical_device_artifacts",
+    "macro": "identical_device_artifacts"
+  },
+  "scientific_forwards": 0,
+  "cpu_oracles": 0,
+  "performance_cases": {
+    "F12-01": "unattempted",
+    "F12-02": "unattempted",
+    "F12-03": "unattempted",
+    "F12-04": "unattempted"
+  },
+  "device_preprocessing": {
+    "exit_code": 0,
+    "macros": [
+      "#define __CCE_AICORE__ 220",
+      "#define __NPU_ARCH__ 2201"
+    ]
+  },
+  "target": "gz-a3",
+  "runtime": "py311-torch",
+  "cann_version": "9.1.0",
+  "validation_handle": "remote:gz-a3:job:8305ac84-02b9-49e5-97d8-27d65fa11865",
+  "validation_exit": 0,
+  "behavioral_tests_passed": 5,
+  "device_execution": false,
+  "notes": [
+    "Device-less compiler gate only; native numerical correctness was not tested.",
+    "Both device sections and whole shared libraries are identical across all four builds.",
+    "No supported standalone cache-offset initialization/launch contract was established.",
+    "No physical cache intervention or performance claim is qualified."
+  ],
+  "research_query": "6b3db3ba5a6a4693b4a9fff339734ef3",
+  "bounded_research_miss": "58c446d63c6a796ae5f435fb458b8668"
+}

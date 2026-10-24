@@ -1,0 +1,119 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E02, exactmindspeed-bodies.json/api-dispatch.json/operator-docs.json; per-fileApache2/Huawei/NVIDIA notices/fullpin4efe2b675c2d51517c3fdd14c721020b8d41e241.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "E02",
+  "task": "optimization-w007-mhc-post-epilogue",
+  "title": "Fuse MHC post mixing output with final addition",
+  "source_files": [
+    "extension/source__mindspeed_ops__arch32__triton__mhc__post_bmm1.py",
+    "extension/source__mindspeed_ops__arch32__triton__mhc__post_bmm2.py",
+    "extension/source__mindspeed_ops__arch32__triton__mhc__post_add.py",
+    "extension/api__mindspeed_ops__api__triton__mhc_post.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W007-E02-01",
+      "role": "gallery",
+      "seed": 75201,
+      "parameters": {
+        "BS": 64,
+        "D": 256
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E02-02",
+      "role": "gallery",
+      "seed": 75202,
+      "parameters": {
+        "BS": 1,
+        "D": 64
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E02-03",
+      "role": "heldout",
+      "seed": 75203,
+      "parameters": {
+        "BS": 129,
+        "D": 1024
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    },
+    {
+      "case_id": "W007-E02-04",
+      "role": "heldout",
+      "seed": 75204,
+      "parameters": {
+        "BS": 1,
+        "D": 4096
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly, retain slower/equal/uncertain/unsupported results, no posthoctuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E02-GA",
+      "role": "guard",
+      "seed": 75291,
+      "parameters": {
+        "BS": 3,
+        "D": 32,
+        "cancellation_and_rounding": true
+      },
+      "expected": "Nonsymmetricweights+sign/cancellation/near-halfULP FP32inputs (include dyadic1\u00b12^-12 coefficients, mixedmagnitudes) ensurebmm2roundedF32 boundary retainedbeforefinalAdd. Inputvaluesremainfinite[-1,1]. Pairedoutputbitscheckedfromonce validation before ANYcapture, fixedindependentF64numericgate unchanged."
+    },
+    {
+      "case_id": "W007-E02-GB",
+      "role": "guard",
+      "seed": 75292,
+      "parameters": {
+        "BS": 2,
+        "D": 128,
+        "nonsymmetric_transpose": true
+      },
+      "expected": "Distinctnonsymmetric4x4 userH_res bothrows andeachcoefficient used, independentCPUtranspose proof, sameinputimmutable/GMcanaries/nonalias andpairedexactbits. UnsupportedD65 rejectedin NONFROZENhosttests, notextraguardcase."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32 x[BS,D],residualR[BS,4,D],h_post[BS,4], USERh_res[BS,4,4], finite[-1,1],BS>0,Dpower2<=4096. OutputFP32[BS,4,D]. Includes sourcepublicAPItranspose h_res[j,i] to internalH[i,j] INSIDEEVERYAPI botharms usingcommononepassGPUptranspose, notfreeCPUprecomputedtranspose. GROUP1, sameperBS/Dblocks sourcebmm1/bmm2, sameflagsall. Primaryscopeforwardinference only, noautograd/recompute/arch35claim.",
+    "oracle": "IndependentCPUFP64 y[b,i,d]=h_post[b,i]*x[b,d]+sum_j(h_res[b,j,i]*R[b,j,d]), castFP32once/case. Fixedatol3e-6rtol3e-6. InadditionexactpairedoutputFP32bits required for6declaredcases usingoncecorrectnesscallbacks, compareonlycurrentexperiment key(outputparent+spec) andBEFOREprofiling, neverposthocaftercapture. Ifcompilerdoesnotpreservepairbits stopandretainunqualified; no arithmetic/threshold/flagsretuning. Validatearity/shape/dtype/inputsimmutable/canaries/nonalias.",
+    "before": "CommonGPUtranspose, source-stylebmm1mul storingF32 hp*x, bmm2exactnested tl.fma(x0,h00,tl.fma(x1,h01,tl.fma(x2,h02,x3*h03))) peroutputi storingF32, thenseparatefinalF32Add(bmm1,bmm2). FullAPI4kernels includingexplicitcommontranspose faithfulportableAPI .permute().contiguous materialization; labelsource-style notunmodifiedvendorpipeline.",
+    "after": "Samecommontranspose andSAMEbmm1, onlybmm2epilogueloads matchingF32bmm1 andaddsroundedF32 bmm2valuebeforefinalstore, removebmm2intermediatestore/read+Addkernel. FullAPI3kernels. PreserveALLnestedFMAorder, x3*h_i3separateF32product, bmm2resultF32roundBEFOREadd. Commonenable_fp_fusion=False preservesexplicitFMA(no baseline-onlyflagdisabling). Nofusionofbmm1ortranspose, no changingcoefficientlayout/index.",
+    "portability": "Sourceextract_slice availablevia triton.language.extra.cann.extension probeFIRST; ifnotportable, faithfullyload SAME sixteen scalarcoefficients directly BOTHarms withdocumentedCOMMONadaptation beforemath. No get_element assumptionjustbecauseTLnamespaceabsent; extensionmayexport. SourceF32vectorpath no TLdotreducedprecision. Actualcode/resourcesallcasecomponentsbeforemath; unavailableinstructiondecoding NOTuniversalroundingproof, pairedsamplingcontractnarrow."
+  },
+  "source_files_manifest": [
+    {
+      "path": "extension/source__mindspeed_ops__arch32__triton__mhc__post_bmm1.py",
+      "sha256": "a1764cda71554da8d23d15a5540e2bfc625ed252d7452915994940f120e60de1"
+    },
+    {
+      "path": "extension/source__mindspeed_ops__arch32__triton__mhc__post_bmm2.py",
+      "sha256": "aefbf0c9463ac06d25e2a7546d17ac46224cc191d2078b9a68d82132125ca39d"
+    },
+    {
+      "path": "extension/source__mindspeed_ops__arch32__triton__mhc__post_add.py",
+      "sha256": "6d0bf7f82447782d26ea6b51167d8591c90e2d9448ebd9e7a97f9d1fe66efa7f"
+    },
+    {
+      "path": "extension/api__mindspeed_ops__api__triton__mhc_post.py",
+      "sha256": "d19c1aa6d56cbfbc5186d269f2bbe2de5850a8b58c44642ef0b4a99ac7ed020e"
+    }
+  ]
+}

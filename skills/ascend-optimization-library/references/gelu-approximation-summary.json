@@ -1,0 +1,460 @@
+{
+  "study": "W005-A02",
+  "kind": "source-backed explicitly permitted approximation study; no automatic unique mechanism count",
+  "full_evidence": "gelu-approximation-evidence.json.gz",
+  "full_evidence_sha256": "d6f0ae3f3771d9c90e0b48557c6884b149ce9a34e9b27b98d15e0c63de776dfe",
+  "full_evidence_bytes": 25431,
+  "retained_archive_sha256": "a9c33995cb36ac17fd63d26d327653ebf91da3b3c0cd5e0db8d4af3e9304144a",
+  "product": "Ascend 910B4-1",
+  "physical_die": 4,
+  "summary": [
+    {
+      "case_id": "W005-A02-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.5150839800526228e-06,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0004734479784982426,
+              "atol": 0.00062,
+              "rtol": 0,
+              "dispatch": "permitted-tanh-approximation",
+              "approximation_budget": 0.0006,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            21.12,
+            18.74,
+            18.54,
+            18.66,
+            18.86,
+            18.82,
+            18.38,
+            18.22,
+            18.94,
+            18.2
+          ],
+          "count": 10,
+          "mean": 18.848,
+          "sample_sd": 0.839745993341638
+        },
+        "after": {
+          "samples": [
+            13.7,
+            12.14,
+            12.24,
+            12.42,
+            12.14,
+            12.36,
+            12.14,
+            12.12,
+            12.0,
+            12.18
+          ],
+          "count": 10,
+          "mean": 12.344,
+          "sample_sd": 0.4916909598518156
+        }
+      }
+    },
+    {
+      "case_id": "W005-A02-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.6062959830072145e-08,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.00015046973770907468,
+              "atol": 0.00062,
+              "rtol": 0,
+              "dispatch": "permitted-tanh-approximation",
+              "approximation_budget": 0.0006,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            2.7,
+            1.86,
+            2.9,
+            1.96,
+            2.86,
+            1.96,
+            2.76,
+            1.86,
+            2.88,
+            1.86
+          ],
+          "count": 10,
+          "mean": 2.36,
+          "sample_sd": 0.48962570738609434
+        },
+        "after": {
+          "samples": [
+            2.58,
+            1.7,
+            2.62,
+            1.78,
+            2.66,
+            2.08,
+            2.74,
+            1.82,
+            2.56,
+            1.56
+          ],
+          "count": 10,
+          "mean": 2.21,
+          "sample_sd": 0.46516424817238244
+        }
+      }
+    },
+    {
+      "case_id": "W005-A02-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.007542549835705e-06,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.00047346242548451656,
+              "atol": 0.00062,
+              "rtol": 0,
+              "dispatch": "permitted-tanh-approximation",
+              "approximation_budget": 0.0006,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            14.96,
+            14.78,
+            14.44,
+            14.58,
+            14.64,
+            14.76,
+            14.44,
+            14.56,
+            14.9,
+            14.96
+          ],
+          "count": 10,
+          "mean": 14.702,
+          "sample_sd": 0.19943252827293112
+        },
+        "after": {
+          "samples": [
+            9.92,
+            9.82,
+            9.84,
+            9.82,
+            9.7,
+            9.66,
+            9.7,
+            10.22,
+            10.1,
+            9.92
+          ],
+          "count": 10,
+          "mean": 9.87,
+          "sample_sd": 0.17894754041959418
+        }
+      }
+    },
+    {
+      "case_id": "W005-A02-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.7169255417393003e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.00023368485858998866,
+              "atol": 0.00062,
+              "rtol": 0,
+              "dispatch": "permitted-tanh-approximation",
+              "approximation_budget": 0.0006,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            1.88,
+            1.92,
+            1.9,
+            1.92,
+            1.92,
+            1.96,
+            1.98,
+            1.86,
+            1.94,
+            2.14
+          ],
+          "count": 10,
+          "mean": 1.942,
+          "sample_sd": 0.07800284895082006
+        },
+        "after": {
+          "samples": [
+            1.7,
+            1.7,
+            1.74,
+            1.72,
+            1.7,
+            1.72,
+            1.78,
+            1.64,
+            1.62,
+            1.34
+          ],
+          "count": 10,
+          "mean": 1.666,
+          "sample_sd": 0.12330630334433207
+        }
+      }
+    },
+    {
+      "case_id": "W005-A02-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.5834027333738732e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.5834027333738732e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-A02-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 8.470182955022665e-08,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "dispatch": "erf",
+              "approximation_budget": 0,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.00015273900372358984,
+              "atol": 0.00062,
+              "rtol": 0,
+              "dispatch": "permitted-tanh-approximation",
+              "approximation_budget": 0.0006,
+              "arithmetic_allowance": 2e-05
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "cpu_grid_check": {
+    "passed": true,
+    "points": 160001,
+    "low": -8,
+    "high": 8,
+    "maximum_absolute_error": 0.000473235519323335,
+    "maximum_at_x": -2.6988999999999996,
+    "budget": 0.0006,
+    "interpretation": "Empirical finite grid, not a global proof."
+  },
+  "capability_screen": {
+    "status": "compile-complete",
+    "rows": [
+      {
+        "arm": "before",
+        "compilation": [
+          {
+            "hash": "8f3f74c676b5f83413a49acf1c3f5962101f8646beb3f16bd61b249cce1f9dca",
+            "binaries": {
+              "ttir": "ab5e5a6716e195eb152a47e2d9a714c9883ee8c4e414a9dae8cad4f99203cce2",
+              "ttadapter": "3eb51cd3157a665ac4cee4c28d30ab2b3cd58215f3d458901033d80b84784148",
+              "npubin": "7541d14046af625e8079bacaca47b0313fa47150342c76740fa53f519d723612"
+            }
+          }
+        ],
+        "api_calls": 0
+      },
+      {
+        "arm": "after",
+        "compilation": [
+          {
+            "hash": "0522269b3b2ab220141d3a1439f8fb279036b4d628e42e98705d48ac134a3086",
+            "binaries": {
+              "ttir": "e63477eeccf7813d357ac068a3e905d6be7845a7bcd64304b294c054f717e832",
+              "ttadapter": "5333c9b0ab10cee780e1163e6bb174632ad510506c006439af781f628fc41974",
+              "npubin": "55e734bb09c35a6d34cbf7183d4edd9014cb5f00703545608b9e550545d37719"
+            }
+          }
+        ],
+        "api_calls": 0
+      }
+    ],
+    "scientific_oracles": 0,
+    "api_calls": 0
+  },
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W005-A02-01": {
+      "before": 10,
+      "after": 10
+    },
+    "W005-A02-02": {
+      "before": 10,
+      "after": 10
+    },
+    "W005-A02-03": {
+      "before": 10,
+      "after": 10
+    },
+    "W005-A02-04": {
+      "before": 10,
+      "after": 10
+    }
+  }
+}

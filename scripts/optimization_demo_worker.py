@@ -28,6 +28,7 @@ def save(path, value):
 
 
 MEASUREMENT_VERSION = 2
+PREPARATION_VERSION = 2
 
 
 class InfrastructureError(RuntimeError):
@@ -111,6 +112,26 @@ def load_module(path, name):
     return module
 
 
+def prepare_nd_inputs(inputs, references, backend, torch):
+    """Normalize backend defaults before candidate execution, preserving ABI data."""
+    prepared, converted = dict(inputs), []
+    for name, value in inputs.items():
+        if backend.get_npu_format(value) == 2:
+            continue
+        try:
+            normalized = backend.npu_format_cast(value, 2)
+            if (normalized.shape != value.shape or normalized.dtype != value.dtype
+                    or normalized.stride() != value.stride()
+                    or backend.get_npu_format(normalized) != 2
+                    or not torch.equal(normalized.detach().cpu(), references[name])):
+                raise ValueError('format conversion changed input ABI or values')
+        except Exception as error:
+            raise InfrastructureError('trusted ND preparation failed for ' + name + ': ' + str(error)) from error
+        prepared[name] = normalized
+        converted.append(name)
+    return prepared, converted
+
+
 def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=capture_ten,
                    synchronize=None, device='npu:0'):
     """Private fixtures are trusted hash-bound CPU payloads, never actor files."""
@@ -128,7 +149,7 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
         raise InfrastructureError('fixture provider changed')
     validator = load_module(request['provider_path'], 'trusted_fixture_provider')
     report = dict(schema='optimization-coding-evaluation-v1',
-                  measurement_version=MEASUREMENT_VERSION,
+                  measurement_version=MEASUREMENT_VERSION, preparation_version=PREPARATION_VERSION,
                   candidate_sha256=sha(source), measurement_kind='profiled_device_operation_span_us',
                   outcome='success', cases=[dict(id=c['id'], correct=False, identity_verified=False,
                   correctness_calls=0, profiled_calls=0, status='not-run') for c in request['cases']],
@@ -153,6 +174,8 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
                 raise InfrastructureError('device transfer changed a required input stride')
             if str(device).startswith('npu'):
                 import torch_npu
+                inputs, converted = prepare_nd_inputs(inputs, fixture['inputs'], torch_npu, torch)
+                row['input_preparation'] = dict(version=PREPARATION_VERSION, converted_to_nd=converted)
                 row['input_metadata'] = {key:dict(shape=list(value.shape),strides=list(value.stride()),
                     format=torch_npu.get_npu_format(value),storage_bytes=value.untyped_storage().nbytes())
                     for key,value in inputs.items()}

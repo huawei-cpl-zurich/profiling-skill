@@ -156,3 +156,30 @@ def test_measured_hook_uses_only_frozen_object_identities(tmp_path, monkeypatch,
         assert result['cases'][0]['profiled_calls'] == 1
         assert result['cases'][1]['status'] == 'not-run'
         assert ('unqualified kernel' if change == 'kernel' else 'specialization changed') in result['cases'][0]['error']
+
+
+@pytest.mark.parametrize('fault', [None, 'stride', 'dtype', 'values'])
+def test_trusted_nd_preparation_preserves_input_contract_before_capture(fault):
+    source = torch.arange(24, dtype=torch.float32).reshape(1, 1, 4, 6)
+    untouched = torch.arange(4, dtype=torch.int32)
+    formats = {id(source): 0, id(untouched): 2}
+    casts = []
+    def cast(value, target):
+        casts.append((value, target))
+        result = value.clone()
+        if fault == 'stride': result = result.transpose(-1, -2).contiguous().transpose(-1, -2)
+        if fault == 'dtype': result = result.half()
+        if fault == 'values': result = result + 1
+        formats[id(result)] = target
+        return result
+    backend = SimpleNamespace(get_npu_format=lambda value: formats[id(value)], npu_format_cast=cast)
+    inputs = dict(initial=source, offsets=untouched)
+    if fault:
+        with pytest.raises(worker.InfrastructureError, match='trusted ND preparation failed'):
+            worker.prepare_nd_inputs(inputs, inputs, backend, torch)
+    else:
+        prepared, converted = worker.prepare_nd_inputs(inputs, inputs, backend, torch)
+        assert converted == ['initial'] and len(casts) == 1
+        assert prepared['offsets'] is untouched
+        assert prepared['initial'].dtype == source.dtype and prepared['initial'].stride() == source.stride()
+        assert torch.equal(prepared['initial'], source) and backend.get_npu_format(prepared['initial']) == 2

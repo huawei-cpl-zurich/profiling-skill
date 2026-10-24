@@ -1,0 +1,14 @@
+{
+  "B": 2,
+  "Hq": 8,
+  "Hkv": 2,
+  "Q": 128,
+  "KV": 128,
+  "D": 64,
+  "Dv": 64,
+  "page": 16,
+  "seed": 1102,
+  "case_id": "F01-02",
+  "role": "gallery",
+  "scenario_designation": "gallery-cost"
+}

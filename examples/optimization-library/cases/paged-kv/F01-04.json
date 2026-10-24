@@ -1,0 +1,14 @@
+{
+  "B": 3,
+  "Hq": 4,
+  "Hkv": 2,
+  "Q": 64,
+  "KV": 128,
+  "D": 64,
+  "Dv": 32,
+  "page": 16,
+  "seed": 1104,
+  "case_id": "F01-04",
+  "role": "heldout",
+  "scenario_designation": "heldout-cost"
+}

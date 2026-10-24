@@ -1,0 +1,2026 @@
+{
+  "status": "complete",
+  "family": "F02",
+  "matrix_sha256": "66a1aa6d957727edd8172939a4decd74cabfe8591b3cba83f7c6e3eb9dee6890",
+  "target": "gz-a3",
+  "runtime": "py311-torch",
+  "product": "Ascend910B4-1",
+  "physical_device": 3,
+  "logical_device": 0,
+  "cube_cores": 20,
+  "vector_cores": 40,
+  "torch_version": "2.10.0+cpu",
+  "torch_npu_version": "2.10.0",
+  "triton_import_version": "3.2.0",
+  "collection_handle": "remote:gz-a3:job:a23ad291-a831-4bb9-97f7-0b899c229480",
+  "compile_handle": "remote:gz-a3:job:26bf98a6-552b-46d4-9b60-e6cf5edf1704",
+  "evidence_handle": "remote:gz-a3:job:25f1fc2d-d7fc-4738-a728-bc7d02ee524b",
+  "compact_archive_sha256": "95e80f9c753162c4e4888ff79725675a49bde27f3e8caa38d6176f40cd7052b8",
+  "retained_evidence": "optimization-study/wave003/triangular-inverse-run-v1",
+  "protocol": {
+    "profiled_forwards": 80,
+    "captures": 8,
+    "case_correctness_forwards": 8,
+    "guard_correctness_forwards": 2,
+    "guard_rejections": 2,
+    "guard_captures": 0,
+    "compile_probe_forwards": 0,
+    "warmups": 0,
+    "unprofiled_timing": 0,
+    "planned_cpu_oracle_generations": 6
+  },
+  "compatibility": "insert_slice absent; direct-pointer two-product FP32 IEEE merge implements identical block equation",
+  "caveats": [
+    "Profiled event latency and full operation span differ; both retained.",
+    "F02-04 after span has a retained 3048.26us sample and SD657.514us; no replay.",
+    "No physical bandwidth, traffic or roofline inference from task PMU ratios."
+  ],
+  "actual_binary_sha256": [
+    "0c439408875f6f89ac7ac910ce535bcedc053784982db044befadb5f9fd46adf",
+    "137b1b502ab7b042b9386f191ea9224ec3550569c97f0bcf16a64b980bfd3197",
+    "2061b1b2bdc57997289e3d21af5935966321da7400eded42f1a52b7bc89261f2",
+    "20dd182f1b68d7a01da1eda5cd6fa0bff8f84f0bf1eafb4ace1178d77fa3a6ca",
+    "21a07a6f404739d42cb33f90702507cae43e766148fad20b73499a5ee3eae0c5",
+    "2ac529974dd84af520a971214c64be63ab5b3104c7abb08749af0aebac0da2d9",
+    "2e6153ac55c6dc4cb4725ebc65580ca3e07b79ccb22d567d0e11b4c834ab3814",
+    "363e450779dec11fcc2d31def641fbe0622747f578679e6b76faf0ff9998ee5f",
+    "38f6408eb0fbf03111e52bd337b4692ff7d07f71d0c7b2bf8ce4c0409b8af536",
+    "46258e000b8fd9c525c49c8763687bd73c1a257f112c41801340d23c484d5a20",
+    "47a2167a6abe8dd0758d553e94b940076c88d0efb6a9dadd63924306594c700c",
+    "4922f870361ee275ccaa5588cb050e2b7699c9779b3f9b0cf4f77b0484140f49",
+    "4a7541877619b18ddfeb3d568bb1c403e83823c5cb74ab6e7ba4075e1a1c3ba6",
+    "4f176cbc2e5d1d052f1b84a1d63dc690789fb7613108077b767479ac95b54d6e",
+    "6188e4adcc015cc810c2b3495da5949b7ff7132c11aa0d84050ee71f24ef5ce1",
+    "789f0ae215ef689079ed1807186707f1b396ac28c46ce42f518488e9aee55b91",
+    "912aaae4be96294fde69b4f23660ec9569ea89f0db3bf56692c1e270a7ceb918",
+    "9666a48cf8b35a4a8325bb67f7aff4665c834530c04c4449ca17eea2ad10e702",
+    "a6a586cc4334d372f6e6af2634e867fbcf71354aff3d8aacd5fdfd72f4d1d154",
+    "b206d665793366321d9c036688130265e9e48d1df3165b9f97d39637222511c2",
+    "b777d12e5b9a31719dad24af2c9b76cc7c16643183010f9d90452c64e71cb7b8",
+    "c99c83f2fcfbbac89152240c25eb7ca8500c2f69cb68c0fd7bf590ac0a856371",
+    "ca3cc33b5c28dab3d1f1e1becb24b7e680ef94b40bdad3b180d94cdab281065a",
+    "dafa16805ff71df82bf49ee63384ad513c03f23f6a04d23142c886276b806f03",
+    "e17f26bd646b0d0a36002ddcd8b2b026b2199439742acdacd0b6507303a3c9e0",
+    "e3ce6e911f77ceb68c79e20e300d15a0b207df8dfbb7bf747b1598a8f440146a",
+    "e4e6a1d09a324aa0015757b98b090620fea3078bf91a4ac93112e4917e788fa4",
+    "ea66c2565386e30b6b2aaa267ba472c55bc33919afb8aac81da3e793aa18df6f",
+    "eb6f1b3880dafe7387e8c741b3d7d276a169254415abaa503600fdea009ab76c",
+    "f0146c660cded14330182ae51e2fc24ae3d1cab0669cbb75fb242c140c229c52"
+  ],
+  "cases": [
+    {
+      "case": {
+        "B": 1,
+        "T": 256,
+        "H": 2,
+        "BT": 64,
+        "seed": 2101,
+        "case_id": "F02-01",
+        "scenario_designation": "gallery-benefit"
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.450580596923828e-09,
+              "residual_infinity": 1.626725043557542e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "before",
+            "leaf": 64,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 256,
+              "H": 2,
+              "BT": 64,
+              "seed": 2101,
+              "case_id": "F02-01",
+              "scenario_designation": "gallery-benefit"
+            },
+            "workspace_bytes": 131072,
+            "launches_per_forward": 2,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "912aaae4be96294fde69b4f23660ec9569ea89f0db3bf56692c1e270a7ceb918",
+                "ttadapter": "e53177f445a60d7c34be6c30da13120529d6d31b0ac4472bd11f038be4aba9a7",
+                "ttir": "e7b2b0b71ba2d4157323ea4238479d7259b62880a68861c477b2763b684c3012"
+              },
+              "hash": "44ec4d8d028530e70da508b64b837846fd64f12e69c8ff92f4d164fd3ef20f90",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "2e6153ac55c6dc4cb4725ebc65580ca3e07b79ccb22d567d0e11b4c834ab3814",
+                "ttadapter": "e27e7bb1be4f84429b4fb6dda845fc1d1c63ae06d276e8a8978a285aede18700",
+                "ttir": "0acc0ccfd79b770bea0159bace664b034b5f513a8825433a3019c51a4f104d1a"
+              },
+              "hash": "76198770e2fa3fb3fd24697288cff2e513f80b45591dbba9a46fc0f2732f5a7d",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              4.255360126495361,
+              3.761699914932251,
+              3.813040018081665,
+              3.8036599159240723,
+              3.7825400829315186,
+              3.789799928665161,
+              3.735599994659424,
+              3.8274600505828857,
+              3.791379928588867,
+              3.7358999252319336
+            ],
+            "count": 10,
+            "mean": 3.829643988609314,
+            "sample_sd": 0.15264663194926087
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                3827.16,
+                3761.48,
+                3812.86,
+                3803.48,
+                3782.36,
+                3789.6,
+                3735.42,
+                3827.28,
+                3791.18,
+                3735.7
+              ],
+              "count": 10,
+              "mean": 3786.652,
+              "sample_sd": 33.60496286099556
+            },
+            "operation_active_union_us": {
+              "samples": [
+                3827.12,
+                3761.46,
+                3812.84,
+                3803.46,
+                3782.34,
+                3789.56,
+                3735.4,
+                3827.26,
+                3791.16,
+                3735.66
+              ],
+              "count": 10,
+              "mean": 3786.626,
+              "sample_sd": 33.605459939982666
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.04,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.04,
+                0.02,
+                0.02,
+                0.02,
+                0.04
+              ],
+              "count": 10,
+              "mean": 0.026000000000000002,
+              "sample_sd": 0.009660917830792959
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                3827.12,
+                3761.46,
+                3812.84,
+                3803.46,
+                3782.34,
+                3789.56,
+                3735.4,
+                3827.26,
+                3791.1600000000003,
+                3735.66
+              ],
+              "count": 10,
+              "mean": 3786.626,
+              "sample_sd": 33.60545993998267
+            },
+            "device_active_union_us": {
+              "samples": [
+                3827.12,
+                3761.46,
+                3812.84,
+                3803.46,
+                3782.34,
+                3789.56,
+                3735.4,
+                3827.26,
+                3791.16,
+                3735.66
+              ],
+              "count": 10,
+              "mean": 3786.626,
+              "sample_sd": 33.605459939982666
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                4.547473508864641e-13,
+                0.0
+              ],
+              "count": 10,
+              "mean": 4.5474735088646414e-14,
+              "sample_sd": 1.4380373887290168e-13
+            }
+          },
+          "task_count": 20,
+          "metric_status": "available",
+          "metrics_csv_sha256": "4d9efef06620298fe0abb1995b29a334dee3edc17c17d0db7f626698947e8f78",
+          "trace_sha256": "b58c86ec02f1d3917fa9713e795becf6ae06956491fa793aebdf111c53554eb5",
+          "normalized_sha256": "91581cd60f78c64fe62926d068925727b9fc87b5fe423f14c9183a6a9ff007af",
+          "accounting_sha256": "536d09de27f86d93e4e77b3cde4b99459c0e4e2b6ac5893131128e9214d88c8f"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.450580596923828e-09,
+              "residual_infinity": 1.5173257900125137e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "after",
+            "leaf": 16,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 256,
+              "H": 2,
+              "BT": 64,
+              "seed": 2101,
+              "case_id": "F02-01",
+              "scenario_designation": "gallery-benefit"
+            },
+            "workspace_bytes": 393216,
+            "launches_per_forward": 6,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "46258e000b8fd9c525c49c8763687bd73c1a257f112c41801340d23c484d5a20",
+                "ttadapter": "78c7d5be48f67e0713a89a886b4f1ab346bf9fd9c31497d6861c2a8eecec5a98",
+                "ttir": "3f97f164030564910aba8f2fe176f1e55e5bfb17df904ae9eace7d4affd8da66"
+              },
+              "hash": "e2e1d043dbd14cbae9e8403fbb5591de36072264b2260d2ffb75ce52692e7acb",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "ca3cc33b5c28dab3d1f1e1becb24b7e680ef94b40bdad3b180d94cdab281065a",
+                "ttadapter": "fc727e7c99ff67a77ae7f392db1acc62f8b14f694dd2714d7005bc0c412322c5",
+                "ttir": "befc2eddbb680c3bd5e92e31013b8fd0f235433626d89478b6555b1c480f6d76"
+              },
+              "hash": "f8ff33cc489d4b0e4c6ccf146c5381267d6d8de289a20c02b47ea9597b960dfa",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "c99c83f2fcfbbac89152240c25eb7ca8500c2f69cb68c0fd7bf590ac0a856371",
+                "ttadapter": "184e1cc1fbc438db865f5095770ce8b2024f913321098918c0fbda0ec7069830",
+                "ttir": "cac2d902b07a9598e46f0227370938a7a66c215fc2d71e5fd63350e25ee18b3d"
+              },
+              "hash": "c3343baec5352698fd127c8dbcd7a432b7c9348c717ed0fe8ba87d6602e3e8c5",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "e4e6a1d09a324aa0015757b98b090620fea3078bf91a4ac93112e4917e788fa4",
+                "ttadapter": "adde6a221d4b18fb00eb8cc8968446d6ac895e8365b54eb1ff569da269ab65d9",
+                "ttir": "af5cffe0c8440158b44de25c5218a2656d4215bb5a69b8fbf8c91d156a4bf83c"
+              },
+              "hash": "231587bb30744832c192faeaeb76d2d31e7e69471c145796920af1c1da10be57",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "a6a586cc4334d372f6e6af2634e867fbcf71354aff3d8aacd5fdfd72f4d1d154",
+                "ttadapter": "6f79474dd4fa36d7750975b6c2906420e01890d25c3cabeea3f94afc1ed70ffd",
+                "ttir": "371fac95b3f92777a96ac535e2b8b0a8ca7fb48abcc8b5873aa85532401bcca5"
+              },
+              "hash": "21cfd60e8bc31174fadfa2e8d437061def213269a6e843e65b3a7a749f00c593",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "2e6153ac55c6dc4cb4725ebc65580ca3e07b79ccb22d567d0e11b4c834ab3814",
+                "ttadapter": "e27e7bb1be4f84429b4fb6dda845fc1d1c63ae06d276e8a8978a285aede18700",
+                "ttir": "0acc0ccfd79b770bea0159bace664b034b5f513a8825433a3019c51a4f104d1a"
+              },
+              "hash": "76198770e2fa3fb3fd24697288cff2e513f80b45591dbba9a46fc0f2732f5a7d",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_merge_left",
+              "triangular_merge_right",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              2.029279947280884,
+              1.309399962425232,
+              1.2927600145339966,
+              1.329800009727478,
+              1.32614004611969,
+              1.2784199714660645,
+              1.3117400407791138,
+              1.2664999961853027,
+              1.2848800420761108,
+              1.2923400402069092
+            ],
+            "count": 10,
+            "mean": 1.372126007080078,
+            "sample_sd": 0.2317932067749547
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1231.72,
+                1118.84,
+                1102.98,
+                1105.12,
+                1122.82,
+                1076.48,
+                1097.46,
+                1079.58,
+                1086.98,
+                1097.2
+              ],
+              "count": 10,
+              "mean": 1111.918,
+              "sample_sd": 44.71457972518584
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1073.82,
+                1108.38,
+                1092.62,
+                1094.92,
+                1111.66,
+                1066.2,
+                1086.18,
+                1068.72,
+                1076.42,
+                1086.26
+              ],
+              "count": 10,
+              "mean": 1086.518,
+              "sample_sd": 15.673313341827624
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                157.9,
+                10.46,
+                10.36,
+                10.2,
+                11.16,
+                10.28,
+                11.28,
+                10.86,
+                10.56,
+                10.94
+              ],
+              "count": 10,
+              "mean": 25.4,
+              "sample_sd": 46.557241231747305
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1073.82,
+                1108.38,
+                1092.6200000000001,
+                1094.9199999999998,
+                1111.66,
+                1066.2,
+                1086.18,
+                1068.72,
+                1076.42,
+                1086.26
+              ],
+              "count": 10,
+              "mean": 1086.518,
+              "sample_sd": 15.673313341827619
+            },
+            "device_active_union_us": {
+              "samples": [
+                1073.82,
+                1108.38,
+                1092.62,
+                1094.92,
+                1111.66,
+                1066.2,
+                1086.18,
+                1068.72,
+                1076.42,
+                1086.26
+              ],
+              "count": 10,
+              "mean": 1086.518,
+              "sample_sd": 15.673313341827624
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                2.2737367544323206e-13,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 2.2737367544323207e-14,
+              "sample_sd": 7.190186943645084e-14
+            }
+          },
+          "task_count": 60,
+          "metric_status": "available",
+          "metrics_csv_sha256": "c82972bf9ecb94b0f13fd302979be6979476f1b024946747f7139a7e9212fffc",
+          "trace_sha256": "5bd2dec0654f8cbd71c8a50616668cfed087da50aab47d6109ca81988a89a322",
+          "normalized_sha256": "0b39c09062d6e950fd959ca9ea534d7fba86f878970e25c8945af00c259f262b",
+          "accounting_sha256": "80af571ed37160dd2ea4ec2069cb9cdc941e7fb54d0649bfbcd7ff5da25b3ca3"
+        }
+      },
+      "span_ratio_before_over_after": 3.405513715939485,
+      "original_pair_sha256": "152073d27ad6ea5eaa3adbca2e51508667c106a7fd94e94f6496da06d6e04d8e"
+    },
+    {
+      "case": {
+        "B": 1,
+        "T": 32,
+        "H": 1,
+        "BT": 32,
+        "seed": 2102,
+        "case_id": "F02-02",
+        "scenario_designation": "gallery-cost"
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.725290298461914e-09,
+              "residual_infinity": 1.3139724863719948e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "before",
+            "leaf": 32,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 32,
+              "H": 1,
+              "BT": 32,
+              "seed": 2102,
+              "case_id": "F02-02",
+              "scenario_designation": "gallery-cost"
+            },
+            "workspace_bytes": 4096,
+            "launches_per_forward": 2,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "b777d12e5b9a31719dad24af2c9b76cc7c16643183010f9d90452c64e71cb7b8",
+                "ttadapter": "13774bcf390394d3f49cfe9ccc7bfa04ecedf29f55533f7e4632cdc0898490e3",
+                "ttir": "75fb52d0d26fab6d446ff95ca449d262aaedfa539165888d41abcf0595214927"
+              },
+              "hash": "77b722d06ef93a34a9b1b0d7fd153793b3c407df32d9fb99bad96f728a33f0fa",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "47a2167a6abe8dd0758d553e94b940076c88d0efb6a9dadd63924306594c700c",
+                "ttadapter": "6fcf2b680854d11a7f11f50448a7d5ebb9bbdd4f5c50176cc1f3e5dec5155332",
+                "ttir": "872c19fc56229a814715b6af9f68d66ba50acbcb0c10f5912acffd0d9c247b25"
+              },
+              "hash": "da4fe787ca682e21156fc6d927659b42cb6709298b60514dd214888c52f94b73",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8771799802780151,
+              0.6571800112724304,
+              0.5944200158119202,
+              0.5618399977684021,
+              0.5857200026512146,
+              0.5760400295257568,
+              0.5744799971580505,
+              0.5825799703598022,
+              0.5624600052833557,
+              0.5789600014686584
+            ],
+            "count": 10,
+            "mean": 0.6150860011577606,
+            "sample_sd": 0.09597129320167816
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                374.06,
+                396.98,
+                402.98,
+                370.3,
+                384.6,
+                378.38,
+                381.32,
+                394.74,
+                373.3,
+                390.28
+              ],
+              "count": 10,
+              "mean": 384.694,
+              "sample_sd": 11.149493461339151
+            },
+            "operation_active_union_us": {
+              "samples": [
+                374.04,
+                396.96,
+                402.94,
+                370.28,
+                384.58,
+                378.36,
+                381.3,
+                394.72,
+                373.28,
+                390.26
+              ],
+              "count": 10,
+              "mean": 384.672,
+              "sample_sd": 11.145850049831704
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.02,
+                0.02,
+                0.04,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02
+              ],
+              "count": 10,
+              "mean": 0.022,
+              "sample_sd": 0.006324555320336759
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                374.03999999999996,
+                396.96,
+                402.94,
+                370.28000000000003,
+                384.58,
+                378.36,
+                381.29999999999995,
+                394.72,
+                373.28000000000003,
+                390.26
+              ],
+              "count": 10,
+              "mean": 384.672,
+              "sample_sd": 11.145850049831697
+            },
+            "device_active_union_us": {
+              "samples": [
+                374.04,
+                396.96,
+                402.94,
+                370.28,
+                384.58,
+                378.36,
+                381.3,
+                394.72,
+                373.28,
+                390.26
+              ],
+              "count": 10,
+              "mean": 384.672,
+              "sample_sd": 11.145850049831704
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                5.684341886080802e-14,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                5.684341886080802e-14,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.1368683772161604e-14,
+              "sample_sd": 2.396728981215028e-14
+            }
+          },
+          "task_count": 20,
+          "metric_status": "available",
+          "metrics_csv_sha256": "2093e84d52d027b3d3d8a1fec738b081f326320885a37e9ebcb598b6a54a6cd9",
+          "trace_sha256": "321e74855dab4651153f50b1a6a623f46cd233190e39a8ea41865ea42ef0bee0",
+          "normalized_sha256": "218be77bd866ba3030242383e82e8d33d9bc375a6c54a51a59daf044b4fb7ae7",
+          "accounting_sha256": "7106eb2dea2c51af63c33bc59d73d9a716ba623a5913c8651a365f6eb5bbd0ee"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.725290298461914e-09,
+              "residual_infinity": 1.2108554985068576e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "after",
+            "leaf": 16,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 32,
+              "H": 1,
+              "BT": 32,
+              "seed": 2102,
+              "case_id": "F02-02",
+              "scenario_designation": "gallery-cost"
+            },
+            "workspace_bytes": 12288,
+            "launches_per_forward": 4,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "0c439408875f6f89ac7ac910ce535bcedc053784982db044befadb5f9fd46adf",
+                "ttadapter": "736a7cd684b9652533b8ae7df55ae939ffacb0eecdd1dda8cc562cad69b66df6",
+                "ttir": "d02f669593cc5378dcb93289c9da292a6611c5ffd78e1f51b55c15eb5a387f34"
+              },
+              "hash": "66173aae319a64125319f68030046e7184348dcbf017926200a1140452fe78ff",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "b206d665793366321d9c036688130265e9e48d1df3165b9f97d39637222511c2",
+                "ttadapter": "f009c3b0679880991004d5b62fd84e2fa41ed9c7e3a5c6cc2372f41f62ba4d30",
+                "ttir": "df907b6e45b4f575a8fe728fdc82b57e91c92fd931cfb15b155f8c69bca01f71"
+              },
+              "hash": "cc7a0980203e0004175295ad14c9bcd4873aef8aad21bdad98a8c5439e8f8d25",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "21a07a6f404739d42cb33f90702507cae43e766148fad20b73499a5ee3eae0c5",
+                "ttadapter": "f10060d2bea3dea003c9ef93d98dbf7f91c4886bfe7210a71b95432de732e3bd",
+                "ttir": "8bd275e0be648adbf771f27df5b48f0d004ee3e0557312c2d5df5dd01816b1dc"
+              },
+              "hash": "1a89e1e69ee78da1b9db469e6d274701aefa8828d8530ecca026c0db8f55fdd5",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "47a2167a6abe8dd0758d553e94b940076c88d0efb6a9dadd63924306594c700c",
+                "ttadapter": "6fcf2b680854d11a7f11f50448a7d5ebb9bbdd4f5c50176cc1f3e5dec5155332",
+                "ttir": "872c19fc56229a814715b6af9f68d66ba50acbcb0c10f5912acffd0d9c247b25"
+              },
+              "hash": "da4fe787ca682e21156fc6d927659b42cb6709298b60514dd214888c52f94b73",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_merge_left",
+              "triangular_merge_right",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.472000002861023,
+              0.9161400198936462,
+              0.8774799704551697,
+              0.8746799826622009,
+              0.8687199950218201,
+              0.8216400146484375,
+              0.8944200277328491,
+              0.8471199870109558,
+              0.8580800294876099,
+              0.8528000116348267
+            ],
+            "count": 10,
+            "mean": 0.9283080041408539,
+            "sample_sd": 0.19278964018065156
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                676.24,
+                544.96,
+                571.56,
+                557.96,
+                561.24,
+                571.96,
+                584.86,
+                545.0,
+                549.04,
+                548.78
+              ],
+              "count": 10,
+              "mean": 571.16,
+              "sample_sd": 39.24833641202021
+            },
+            "operation_active_union_us": {
+              "samples": [
+                233.6,
+                233.88,
+                232.88,
+                232.7,
+                233.0,
+                233.14,
+                232.64,
+                233.7,
+                232.96,
+                232.42
+              ],
+              "count": 10,
+              "mean": 233.09199999999998,
+              "sample_sd": 0.48663926863517587
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                442.64,
+                311.08,
+                338.68,
+                325.26,
+                328.24,
+                338.82,
+                352.22,
+                311.3,
+                316.08,
+                316.36
+              ],
+              "count": 10,
+              "mean": 338.068,
+              "sample_sd": 39.153180883975864
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                233.6,
+                233.88,
+                232.88,
+                232.7,
+                233.00000000000003,
+                233.14,
+                232.64000000000001,
+                233.70000000000002,
+                232.95999999999998,
+                232.42
+              ],
+              "count": 10,
+              "mean": 233.09199999999998,
+              "sample_sd": 0.48663926863517715
+            },
+            "device_active_union_us": {
+              "samples": [
+                233.6,
+                233.88,
+                232.88,
+                232.7,
+                233.0,
+                233.14,
+                232.64,
+                233.7,
+                232.96,
+                232.42
+              ],
+              "count": 10,
+              "mean": 233.09199999999998,
+              "sample_sd": 0.48663926863517587
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                2.842170943040401e-14,
+                0.0,
+                2.842170943040401e-14,
+                2.842170943040401e-14,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 8.526512829121202e-15,
+              "sample_sd": 1.3728989970890323e-14
+            }
+          },
+          "task_count": 40,
+          "metric_status": "available",
+          "metrics_csv_sha256": "6acec180a77c6114cbbcca2567d888bba3404cfc8182f2085e0047ba3d324cb1",
+          "trace_sha256": "034757a38ed614ce09629c62558ec5c5846a1d66705d25eab4790bc5cc85c902",
+          "normalized_sha256": "da75a5c83ac5c56d600f3e90d1f4bfc4ed0815352de0a5d5523729d108c3a3d5",
+          "accounting_sha256": "f0aa8ae05128ef9e826f0f85e9d469ac253b681ae9738f358c403f2004345f7d"
+        }
+      },
+      "span_ratio_before_over_after": 0.6735310595980112,
+      "original_pair_sha256": "4134f2ed518aaf3e703c7d7c750d21a7271947a1fe956d0e635577914dd3e332"
+    },
+    {
+      "case": {
+        "B": 1,
+        "T": 256,
+        "H": 2,
+        "BT": 128,
+        "seed": 2103,
+        "case_id": "F02-03",
+        "scenario_designation": "heldout-benefit"
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.450580596923828e-09,
+              "residual_infinity": 1.5770252194836215e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "before",
+            "leaf": 128,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 256,
+              "H": 2,
+              "BT": 128,
+              "seed": 2103,
+              "case_id": "F02-03",
+              "scenario_designation": "heldout-benefit"
+            },
+            "workspace_bytes": 262144,
+            "launches_per_forward": 2,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "f0146c660cded14330182ae51e2fc24ae3d1cab0669cbb75fb242c140c229c52",
+                "ttadapter": "61566b0843128831e15c7d7fb6436a2da4bc0fa8735ac84542f07867a5eb532c",
+                "ttir": "3517ee4aee4c7df1beedcfbd267ba98fb48d9baa01c3d64492998a404fb45a28"
+              },
+              "hash": "c5fa9ebd0f0961ac5375f169fe5ee80bc76647beb4bb1dd54d797531297e1f53",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "9666a48cf8b35a4a8325bb67f7aff4665c834530c04c4449ca17eea2ad10e702",
+                "ttadapter": "2801f537b336f4ea631c9834566db4c01136030f8a2718254c0d99d0b90b3d25",
+                "ttir": "0ea9257a86316d3a5be59c05b24bfcdb7f2f71c14f0ac706a7c072b8000c6c8e"
+              },
+              "hash": "2241ae94bf42c90cd207174663a171e3d9b34935f95ffa9a249ae911da97fbf6",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              12.372540473937988,
+              11.756119728088379,
+              11.927539825439453,
+              11.96288013458252,
+              11.895139694213867,
+              11.852959632873535,
+              11.844779968261719,
+              11.882920265197754,
+              12.001279830932617,
+              11.798219680786133
+            ],
+            "count": 10,
+            "mean": 11.929437923431397,
+            "sample_sd": 0.17199376526056587
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                11886.06,
+                11755.92,
+                11927.34,
+                11962.68,
+                11894.94,
+                11852.76,
+                11844.58,
+                11882.72,
+                12001.08,
+                11798.02
+              ],
+              "count": 10,
+              "mean": 11880.61,
+              "sample_sd": 73.11648985618008
+            },
+            "operation_active_union_us": {
+              "samples": [
+                11886.04,
+                11755.9,
+                11927.32,
+                11962.66,
+                11894.92,
+                11852.74,
+                11844.54,
+                11882.7,
+                12001.06,
+                11798.0
+              ],
+              "count": 10,
+              "mean": 11880.588,
+              "sample_sd": 73.1175851777273
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.04,
+                0.02,
+                0.02,
+                0.02
+              ],
+              "count": 10,
+              "mean": 0.022,
+              "sample_sd": 0.006324555320336759
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                11886.039999999999,
+                11755.9,
+                11927.32,
+                11962.66,
+                11894.92,
+                11852.74,
+                11844.539999999999,
+                11882.699999999999,
+                12001.06,
+                11798.0
+              ],
+              "count": 10,
+              "mean": 11880.588,
+              "sample_sd": 73.11758517772739
+            },
+            "device_active_union_us": {
+              "samples": [
+                11886.04,
+                11755.9,
+                11927.32,
+                11962.66,
+                11894.92,
+                11852.74,
+                11844.54,
+                11882.7,
+                12001.06,
+                11798.0
+              ],
+              "count": 10,
+              "mean": 11880.588,
+              "sample_sd": 73.1175851777273
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "task_count": 20,
+          "metric_status": "available",
+          "metrics_csv_sha256": "b57fe67496fab5546e58e59f37bd67e5501de73f6c2397a0654b874a3da9d7e5",
+          "trace_sha256": "949511807d5fbf11f431ab49502114ec2bb25977eede6d72d897c07406611d0c",
+          "normalized_sha256": "ab2d3f486d1efd076625475598727aec1edb37d5ed108726c6c2c2c2310711f1",
+          "accounting_sha256": "0016a6072fde12b20315d44d28e1f926195c37173ed3f1d1427aa13bf650b9cb"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.450580596923828e-09,
+              "residual_infinity": 1.694586131541307e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "after",
+            "leaf": 16,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 256,
+              "H": 2,
+              "BT": 128,
+              "seed": 2103,
+              "case_id": "F02-03",
+              "scenario_designation": "heldout-benefit"
+            },
+            "workspace_bytes": 786432,
+            "launches_per_forward": 8,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "6188e4adcc015cc810c2b3495da5949b7ff7132c11aa0d84050ee71f24ef5ce1",
+                "ttadapter": "204f5f9fc440bdaf4a80d1789651dfd4ad6790a44c8f95e1dd3bb77b34aa7631",
+                "ttir": "e281b6d26cb2f74ece3178ef96857234f778c30ab984cba848ff75a972b7554d"
+              },
+              "hash": "302f0e7709384a725b37bb8fefbeb69533e0f07e75dd8977c487ef9ab2cf5508",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "dafa16805ff71df82bf49ee63384ad513c03f23f6a04d23142c886276b806f03",
+                "ttadapter": "70ccd7298d6320408217f72c4f9d0652c51e4220fab8d9169ea31e016c2e7c44",
+                "ttir": "ec3b012d77efac95bb24714e2f4869376cd84970143ef614e8c739735b947925"
+              },
+              "hash": "8e0fefe0a04dea78b98bbc6ee5d5160550eda3a748b3102f984d451944f0c152",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "38f6408eb0fbf03111e52bd337b4692ff7d07f71d0c7b2bf8ce4c0409b8af536",
+                "ttadapter": "da1dc1e9302872775ea436426ae8cf70fc35408ca813ea6e20548e2456efb7f4",
+                "ttir": "79fae0b74f0daab2e1462732100065e1f5ad2435ddb9deebc3f9dcdd5b907109"
+              },
+              "hash": "df35b13272355bc61cdbbc84900a771e1133589bc89dcf5a2f8109327ecf7ad5",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "eb6f1b3880dafe7387e8c741b3d7d276a169254415abaa503600fdea009ab76c",
+                "ttadapter": "ace61420f5b5d3729b17dac9dd65e567c23e7ee39e23a3e18df728f9b759bbed",
+                "ttir": "ac347b6cb3c5ebe306d310ae165ca52640a5bb57fce235d57398ffdbe0681794"
+              },
+              "hash": "927f342ddbb426cde2542957fd010a02f5fae701e23c6bf6e0e460277a884c23",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "363e450779dec11fcc2d31def641fbe0622747f578679e6b76faf0ff9998ee5f",
+                "ttadapter": "ece373276a3f2785abf3b06bfb885e85cc98744815297ec4af6f07624bd916f1",
+                "ttir": "55ae1e5f4c1edb07b4fb43fa3888547cf991a603e5f3052b4bad0da1d6c0100d"
+              },
+              "hash": "a6ec7294c6b1390172d0e4dec8be4b752e0959ea89810aa51d66cca3fe2afb67",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "20dd182f1b68d7a01da1eda5cd6fa0bff8f84f0bf1eafb4ace1178d77fa3a6ca",
+                "ttadapter": "07358b8ca87de148eff976762453cd6ebffcf0e49e6cd95237a62190635330af",
+                "ttir": "a20a8c1c53097ede4b14783fc5daa97ce74bc1f6a33dc537613068cfc106a5f1"
+              },
+              "hash": "e98fe05b902bc6cbc6fba46606c05755a2f805402317600d2e728120e89213fd",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "2ac529974dd84af520a971214c64be63ab5b3104c7abb08749af0aebac0da2d9",
+                "ttadapter": "b8896627c90d99f2aa9e4e678d835d29e4982092227abd0ed0cf34ef20c5fccc",
+                "ttir": "f692426ed3fb8e79f3631e4b398b8e473dde9c9d3813a7bf6b6fcdf0e62d71b6"
+              },
+              "hash": "a95ccc916099afd800895998222b7524b55580997d2d5d0b15d678e9215cd284",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "9666a48cf8b35a4a8325bb67f7aff4665c834530c04c4449ca17eea2ad10e702",
+                "ttadapter": "2801f537b336f4ea631c9834566db4c01136030f8a2718254c0d99d0b90b3d25",
+                "ttir": "0ea9257a86316d3a5be59c05b24bfcdb7f2f71c14f0ac706a7c072b8000c6c8e"
+              },
+              "hash": "2241ae94bf42c90cd207174663a171e3d9b34935f95ffa9a249ae911da97fbf6",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_merge_left",
+              "triangular_merge_right",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              2.3652799129486084,
+              1.872380018234253,
+              1.9206600189208984,
+              1.7928400039672852,
+              1.7171399593353271,
+              1.8552800416946411,
+              1.7546199560165405,
+              1.7751599550247192,
+              1.8203599452972412,
+              1.7910399436950684
+            ],
+            "count": 10,
+            "mean": 1.8664759755134583,
+            "sample_sd": 0.185080359448964
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1724.42,
+                1671.46,
+                1727.52,
+                1706.48,
+                1659.3,
+                1729.16,
+                1691.5,
+                1677.78,
+                1710.0,
+                1713.88
+              ],
+              "count": 10,
+              "mean": 1701.15,
+              "sample_sd": 24.860526945340506
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1708.02,
+                1655.82,
+                1711.44,
+                1690.46,
+                1643.32,
+                1712.64,
+                1675.24,
+                1661.26,
+                1693.84,
+                1696.88
+              ],
+              "count": 10,
+              "mean": 1684.892,
+              "sample_sd": 24.697005126578087
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                16.4,
+                15.64,
+                16.08,
+                16.02,
+                15.98,
+                16.52,
+                16.26,
+                16.52,
+                16.16,
+                17.0
+              ],
+              "count": 10,
+              "mean": 16.258,
+              "sample_sd": 0.3749311047823763
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1708.0200000000002,
+                1655.82,
+                1711.44,
+                1690.46,
+                1643.3200000000002,
+                1712.64,
+                1675.24,
+                1661.26,
+                1693.8400000000001,
+                1696.88
+              ],
+              "count": 10,
+              "mean": 1684.892,
+              "sample_sd": 24.697005126578077
+            },
+            "device_active_union_us": {
+              "samples": [
+                1708.02,
+                1655.82,
+                1711.44,
+                1690.46,
+                1643.32,
+                1712.64,
+                1675.24,
+                1661.26,
+                1693.84,
+                1696.88
+              ],
+              "count": 10,
+              "mean": 1684.892,
+              "sample_sd": 24.697005126578087
+            },
+            "device_overlap_us": {
+              "samples": [
+                2.2737367544323206e-13,
+                0.0,
+                0.0,
+                0.0,
+                2.2737367544323206e-13,
+                0.0,
+                0.0,
+                0.0,
+                2.2737367544323206e-13,
+                0.0
+              ],
+              "count": 10,
+              "mean": 6.821210263296962e-14,
+              "sample_sd": 1.0983191976712259e-13
+            }
+          },
+          "task_count": 80,
+          "metric_status": "available",
+          "metrics_csv_sha256": "95d5b7b1ff2d71a572803d21f5af4ba9696474814a7459da9ebb52bf22e7d287",
+          "trace_sha256": "8bbe8336ce28a780b155e3b291a1ae980bc796daa692c7460a8a114a8cd5c786",
+          "normalized_sha256": "070410a1f73c5db44ac9341ec21d1e40dff0646571f82d5dd5e3537660eca727",
+          "accounting_sha256": "e5509cc444c87cf5d5c0a676efb7728065f15797174443fe496b13a85f4e9cff"
+        }
+      },
+      "span_ratio_before_over_after": 6.983869735179144,
+      "original_pair_sha256": "a7a8896ee359f5afb7ff94c19cd581cd961a6c25d7d40e897269c7f06b781729"
+    },
+    {
+      "case": {
+        "B": 1,
+        "T": 70,
+        "H": 1,
+        "BT": 64,
+        "seed": 2104,
+        "case_id": "F02-04",
+        "scenario_designation": "heldout-cost"
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.450580596923828e-09,
+              "residual_infinity": 1.3917994090562047e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "before",
+            "leaf": 64,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 70,
+              "H": 1,
+              "BT": 64,
+              "seed": 2104,
+              "case_id": "F02-04",
+              "scenario_designation": "heldout-cost"
+            },
+            "workspace_bytes": 32768,
+            "launches_per_forward": 2,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "137b1b502ab7b042b9386f191ea9224ec3550569c97f0bcf16a64b980bfd3197",
+                "ttadapter": "0d91ff3dbd515d23df25b031406e7801a04c7de8faac7ee94a0b9fade01a17c0",
+                "ttir": "52a81a242a6935382eb395d5a72efeb75d7e5e1a1d23f64aa1ba9211cdce79c8"
+              },
+              "hash": "219daf45bf773a5536e95bf5c8fb5f8d4bef2698d88dab081a5903a4b10c23f4",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "4922f870361ee275ccaa5588cb050e2b7699c9779b3f9b0cf4f77b0484140f49",
+                "ttadapter": "85f078eed30a8db1a3156a9c6e4aac25c81304a55b25352171976bccde4269ba",
+                "ttir": "343153addc0f0d39e92ff247bb9a4e6cb9488b0580f4f915776b17072131916d"
+              },
+              "hash": "dffc47d8f44625c3b52cd5dbcbefa7c036391c6706b61ad41263a40898033e7b",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.6605199575424194,
+              1.3158600330352783,
+              1.3361400365829468,
+              1.323740005493164,
+              1.296779990196228,
+              1.295240044593811,
+              1.275480031967163,
+              1.3137799501419067,
+              1.3489999771118164,
+              1.2960599660873413
+            ],
+            "count": 10,
+            "mean": 1.3462599992752076,
+            "sample_sd": 0.11251501545765136
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1210.16,
+                1315.66,
+                1335.94,
+                1323.54,
+                1296.58,
+                1295.04,
+                1275.28,
+                1313.56,
+                1348.78,
+                1295.84
+              ],
+              "count": 10,
+              "mean": 1301.038,
+              "sample_sd": 38.55666243047726
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1210.12,
+                1315.64,
+                1335.92,
+                1323.52,
+                1296.56,
+                1295.02,
+                1275.24,
+                1313.52,
+                1348.76,
+                1295.82
+              ],
+              "count": 10,
+              "mean": 1301.012,
+              "sample_sd": 38.562663808404146
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.04,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.04,
+                0.04,
+                0.02,
+                0.02
+              ],
+              "count": 10,
+              "mean": 0.026000000000000002,
+              "sample_sd": 0.009660917830792959
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1210.12,
+                1315.6399999999999,
+                1335.92,
+                1323.5200000000002,
+                1296.56,
+                1295.02,
+                1275.24,
+                1313.52,
+                1348.76,
+                1295.82
+              ],
+              "count": 10,
+              "mean": 1301.012,
+              "sample_sd": 38.56266380840415
+            },
+            "device_active_union_us": {
+              "samples": [
+                1210.12,
+                1315.64,
+                1335.92,
+                1323.52,
+                1296.56,
+                1295.02,
+                1275.24,
+                1313.52,
+                1348.76,
+                1295.82
+              ],
+              "count": 10,
+              "mean": 1301.012,
+              "sample_sd": 38.562663808404146
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                2.2737367544323206e-13,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 2.2737367544323207e-14,
+              "sample_sd": 7.190186943645084e-14
+            }
+          },
+          "task_count": 20,
+          "metric_status": "available",
+          "metrics_csv_sha256": "f0e4666b43e1ed4134e99926048a94dccd00df882f6d72bcf6dcd2adb1204aa0",
+          "trace_sha256": "effbf96668a05eec91cb77970606efc33c3c455f5eb898d3f9c6f091edf0bd32",
+          "normalized_sha256": "abe0fa018887a96a6b373ab39ff990b2bbc47c3aa3320e9b3a4ebc4598831be8",
+          "accounting_sha256": "c07751ffefd9259e8b205d66dc8e8b284b83b2cde5d8de73ce24914397607c86"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 7.450580596923828e-09,
+              "residual_infinity": 1.3429501066752891e-08,
+              "exact_structure": true,
+              "atol": 0.001,
+              "rtol": 0.001,
+              "residual_limit": 0.002
+            }
+          },
+          "sources": {
+            "triangular_inverse.py": "efe4128244ec8251bc75c07ac86bcef656e90da60bc398110f8bcbcb05ab4e17",
+            "triangular_inverse_contract.py": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          },
+          "metadata": {
+            "language": "triton",
+            "arm": "after",
+            "leaf": 16,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "shape": {
+              "B": 1,
+              "T": 70,
+              "H": 1,
+              "BT": 64,
+              "seed": 2104,
+              "case_id": "F02-04",
+              "scenario_designation": "heldout-cost"
+            },
+            "workspace_bytes": 98304,
+            "launches_per_forward": 6,
+            "precision": "FP16 input; FP32 solve/state/IEEE dot and output",
+            "compatibility": "independent pointer-based hierarchy; no insert_slice extension"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "4f176cbc2e5d1d052f1b84a1d63dc690789fb7613108077b767479ac95b54d6e",
+                "ttadapter": "f9d42741a87be2e870bcaf0ee9319ae42c80711e7176f112f78072a52552eb5d",
+                "ttir": "73c7033a4c8b085c33875b32199bb3b712815b14850b672d8235ec2b82f4e3ac"
+              },
+              "hash": "16c7ed12802eab0945ed645f6c8dec85676741e068c88d421448e70239495a37",
+              "name": "triangular_forward"
+            },
+            {
+              "artifacts": {
+                "npubin": "2061b1b2bdc57997289e3d21af5935966321da7400eded42f1a52b7bc89261f2",
+                "ttadapter": "99f145b068dca8c65ec38828e4c1aae091ea2bf526d7283fb8a5a88b60925386",
+                "ttir": "18a873e08afaad3d088f77c62b878d5e108e9223a9392d03d03d174e0ea6693b"
+              },
+              "hash": "e43c269135b548d80ad7b24676ae03eda0976b377d539f2ed8a299fed105ae9b",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "c99c83f2fcfbbac89152240c25eb7ca8500c2f69cb68c0fd7bf590ac0a856371",
+                "ttadapter": "184e1cc1fbc438db865f5095770ce8b2024f913321098918c0fbda0ec7069830",
+                "ttir": "cac2d902b07a9598e46f0227370938a7a66c215fc2d71e5fd63350e25ee18b3d"
+              },
+              "hash": "c3343baec5352698fd127c8dbcd7a432b7c9348c717ed0fe8ba87d6602e3e8c5",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "4a7541877619b18ddfeb3d568bb1c403e83823c5cb74ab6e7ba4075e1a1c3ba6",
+                "ttadapter": "d766c06f63823ee00ef2a41bb4d08695e4116663504f3af7612388a2cbf849e0",
+                "ttir": "6e46fae55b764c48ced6e2fc7c6aaa9e17090b9323161517809371c259690626"
+              },
+              "hash": "d2f547f2e723c7143438d7da7159f93daec72808d7f883eecf0483708fc0ac72",
+              "name": "triangular_merge_left"
+            },
+            {
+              "artifacts": {
+                "npubin": "a6a586cc4334d372f6e6af2634e867fbcf71354aff3d8aacd5fdfd72f4d1d154",
+                "ttadapter": "6f79474dd4fa36d7750975b6c2906420e01890d25c3cabeea3f94afc1ed70ffd",
+                "ttir": "371fac95b3f92777a96ac535e2b8b0a8ca7fb48abcc8b5873aa85532401bcca5"
+              },
+              "hash": "21cfd60e8bc31174fadfa2e8d437061def213269a6e843e65b3a7a749f00c593",
+              "name": "triangular_merge_right"
+            },
+            {
+              "artifacts": {
+                "npubin": "4922f870361ee275ccaa5588cb050e2b7699c9779b3f9b0cf4f77b0484140f49",
+                "ttadapter": "85f078eed30a8db1a3156a9c6e4aac25c81304a55b25352171976bccde4269ba",
+                "ttir": "343153addc0f0d39e92ff247bb9a4e6cb9488b0580f4f915776b17072131916d"
+              },
+              "hash": "dffc47d8f44625c3b52cd5dbcbefa7c036391c6706b61ad41263a40898033e7b",
+              "name": "triangular_unpack"
+            }
+          ],
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "triangular_forward",
+              "triangular_merge_left",
+              "triangular_merge_right",
+              "triangular_unpack"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "event_latency_ms": {
+            "samples": [
+              2.133039951324463,
+              1.3468400239944458,
+              1.2411799430847168,
+              1.224120020866394,
+              1.2459800243377686,
+              3.379240036010742,
+              1.3114999532699585,
+              1.3092600107192993,
+              1.2755800485610962,
+              1.2857600450515747
+            ],
+            "count": 10,
+            "mean": 1.575250005722046,
+            "sample_sd": 0.6891956547203639
+          },
+          "operation_windows_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1278.52,
+                1016.2,
+                935.28,
+                917.8,
+                954.34,
+                3048.26,
+                976.66,
+                969.96,
+                950.08,
+                955.9
+              ],
+              "count": 10,
+              "mean": 1200.3,
+              "sample_sd": 657.5136910784106
+            },
+            "operation_active_union_us": {
+              "samples": [
+                357.22,
+                353.54,
+                354.48,
+                369.54,
+                361.32,
+                358.6,
+                348.94,
+                407.72,
+                355.44,
+                365.6
+              ],
+              "count": 10,
+              "mean": 363.24,
+              "sample_sd": 16.73766212269006
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                921.3,
+                662.66,
+                580.8,
+                548.26,
+                593.02,
+                2689.66,
+                627.72,
+                562.24,
+                594.64,
+                590.3
+              ],
+              "count": 10,
+              "mean": 837.06,
+              "sample_sd": 659.7369735819807
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                357.22,
+                353.54,
+                354.48,
+                369.54,
+                361.32,
+                358.59999999999997,
+                348.94,
+                407.72,
+                355.44,
+                365.59999999999997
+              ],
+              "count": 10,
+              "mean": 363.24,
+              "sample_sd": 16.73766212269006
+            },
+            "device_active_union_us": {
+              "samples": [
+                357.22,
+                353.54,
+                354.48,
+                369.54,
+                361.32,
+                358.6,
+                348.94,
+                407.72,
+                355.44,
+                365.6
+              ],
+              "count": 10,
+              "mean": 363.24,
+              "sample_sd": 16.73766212269006
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "task_count": 60,
+          "metric_status": "available",
+          "metrics_csv_sha256": "a4c58338eb77a1652186f1754d2c131ecd8725ad849c83c22e9f52d88c4bfded",
+          "trace_sha256": "9661217c36006d9e37a6f03ca39c5c91c3fd6f55ad88a706efdb4b45ed8d2c90",
+          "normalized_sha256": "06c901a7bc6bda39b80232d3e8f9042313f812f190ddf1e95e7e17f69cad6702",
+          "accounting_sha256": "1fc03a841afbc19d987d6f85d5a8ebd46b1d49e31cc2291bd7c2c6da6eef6d78"
+        }
+      },
+      "span_ratio_before_over_after": 1.0839273514954595,
+      "original_pair_sha256": "2cfed193806d0cc8bda4009f747a801f7b5c155e6e012f5f3832d55886fff004"
+    }
+  ],
+  "guards": [
+    {
+      "case": {
+        "B": 1,
+        "T": 35,
+        "H": 1,
+        "BT": 32,
+        "seed": 2191,
+        "case_id": "F02-guard-tail"
+      },
+      "fixture": {
+        "case": {
+          "B": 1,
+          "T": 35,
+          "H": 1,
+          "BT": 32,
+          "seed": 2191,
+          "case_id": "F02-guard-tail"
+        },
+        "source_identity": [
+          {
+            "position": 0,
+            "sha256": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          }
+        ],
+        "sha256": "ebb16889b81b4f0dbaf1d32b805046414b5aa1e77b8ee6aca5ddde400fd2829c",
+        "oracle_calls": 0
+      },
+      "rows": [
+        {
+          "arm": "before",
+          "passed": true,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "residual_infinity": 1.253348135693555e-08,
+            "exact_structure": true,
+            "atol": 0.001,
+            "rtol": 0.001,
+            "residual_limit": 0.002
+          },
+          "device_forwards": 1,
+          "profile_calls": 0,
+          "compilation_state": [
+            {
+              "name": "triangular_forward",
+              "hash": "a8e59178a3b9fd947b805e5808bebeee16f1ca746db3b089731449af0720c903",
+              "artifacts": {
+                "ttir": "cf0b6f69d5ab8efe71de6e31e7c79f52f77f7df88f26a7cefd278b96467d3d59",
+                "ttadapter": "a66f54b43f58b954da31db7fa7dbe1ef8f82efece5bede30255a37c9a69bb8a8",
+                "npubin": "e3ce6e911f77ceb68c79e20e300d15a0b207df8dfbb7bf747b1598a8f440146a"
+              }
+            },
+            {
+              "name": "triangular_unpack",
+              "hash": "e02a6294c97c3be294771be9e1042aa462402f056b5eb0dc19634f6233ca682f",
+              "artifacts": {
+                "ttir": "48bcc937aacd8d164c6ccc44610232c8413ecafa2af6f1334afd0f5083a7230f",
+                "ttadapter": "2f6abcd68f6db5b19e202f91920bdf345b14d2edcd094e2d3e62e871c6b1d696",
+                "npubin": "ea66c2565386e30b6b2aaa267ba472c55bc33919afb8aac81da3e793aa18df6f"
+              }
+            }
+          ]
+        },
+        {
+          "arm": "after",
+          "passed": true,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "residual_infinity": 1.2857192477344626e-08,
+            "exact_structure": true,
+            "atol": 0.001,
+            "rtol": 0.001,
+            "residual_limit": 0.002
+          },
+          "device_forwards": 1,
+          "profile_calls": 0,
+          "compilation_state": [
+            {
+              "name": "triangular_forward",
+              "hash": "2bfd2dea907bd65ab49d8000886253ef8a2ca08a7ca416609585f8258b18b1fd",
+              "artifacts": {
+                "ttir": "a4689ffdf9bb4d9959bb227020f0a88baa9845a91e23a5ef5898514b4f60d858",
+                "ttadapter": "232add1825c7afd8b05622b3e55043cc4f6bf93aa0a002e9aed659909169dd25",
+                "npubin": "789f0ae215ef689079ed1807186707f1b396ac28c46ce42f518488e9aee55b91"
+              }
+            },
+            {
+              "name": "triangular_merge_left",
+              "hash": "7b18f60875848ccda3e51a2614e8bdbcabd3630834457c3b832fcd8971343796",
+              "artifacts": {
+                "ttir": "08687987a0cf6c4d6b80487c33811a9c07ac6ba6a6cf6c4998c46a231d4be491",
+                "ttadapter": "7120677d35ddd4946fc8eabcd4503f5935efc71f43126155d6c74d370d0150e8",
+                "npubin": "e17f26bd646b0d0a36002ddcd8b2b026b2199439742acdacd0b6507303a3c9e0"
+              }
+            },
+            {
+              "name": "triangular_merge_right",
+              "hash": "1a89e1e69ee78da1b9db469e6d274701aefa8828d8530ecca026c0db8f55fdd5",
+              "artifacts": {
+                "ttir": "8bd275e0be648adbf771f27df5b48f0d004ee3e0557312c2d5df5dd01816b1dc",
+                "ttadapter": "f10060d2bea3dea003c9ef93d98dbf7f91c4886bfe7210a71b95432de732e3bd",
+                "npubin": "21a07a6f404739d42cb33f90702507cae43e766148fad20b73499a5ee3eae0c5"
+              }
+            },
+            {
+              "name": "triangular_unpack",
+              "hash": "e02a6294c97c3be294771be9e1042aa462402f056b5eb0dc19634f6233ca682f",
+              "artifacts": {
+                "ttir": "48bcc937aacd8d164c6ccc44610232c8413ecafa2af6f1334afd0f5083a7230f",
+                "ttadapter": "2f6abcd68f6db5b19e202f91920bdf345b14d2edcd094e2d3e62e871c6b1d696",
+                "npubin": "ea66c2565386e30b6b2aaa267ba472c55bc33919afb8aac81da3e793aa18df6f"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "B": 1,
+        "T": 17,
+        "H": 1,
+        "BT": 24,
+        "seed": 2192,
+        "expect_rejection": true,
+        "case_id": "F02-guard-unsupported"
+      },
+      "fixture": {
+        "case": {
+          "B": 1,
+          "T": 17,
+          "H": 1,
+          "BT": 24,
+          "seed": 2192,
+          "expect_rejection": true,
+          "case_id": "F02-guard-unsupported"
+        },
+        "source_identity": [
+          {
+            "position": 0,
+            "sha256": "e3680c51bbddbd71dd0fc8a2e5e82ad3729004468183d7424cb0d89ed6baac00"
+          }
+        ],
+        "sha256": "e2b982662294868f45860508dcb12c185ada1c1ccacf29544341955b7aa97ce6",
+        "oracle_calls": 0
+      },
+      "rows": [
+        {
+          "arm": "before",
+          "passed": true,
+          "rejection": "unsupported BT; expected 16/32/64/128",
+          "device_forwards": 0,
+          "profile_calls": 0
+        },
+        {
+          "arm": "after",
+          "passed": true,
+          "rejection": "unsupported BT; expected 16/32/64/128",
+          "device_forwards": 0,
+          "profile_calls": 0
+        }
+      ]
+    }
+  ]
+}

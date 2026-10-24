@@ -1,0 +1,9 @@
+{
+  "B": 1,
+  "T": 17,
+  "H": 1,
+  "BT": 24,
+  "seed": 2192,
+  "expect_rejection": true,
+  "case_id": "F02-guard-unsupported"
+}

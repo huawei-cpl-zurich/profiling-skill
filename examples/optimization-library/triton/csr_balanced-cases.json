@@ -1,0 +1,71 @@
+{
+  "family": "F05",
+  "profile_cases": [
+    {
+      "rows": 4096,
+      "cols": 8192,
+      "nnz": 262144,
+      "max_row": 1024,
+      "distribution": "long-tail",
+      "seed": 5101,
+      "case_id": "F05-01",
+      "role": "gallery",
+      "scenario_designation": "gallery-benefit"
+    },
+    {
+      "rows": 4096,
+      "cols": 8192,
+      "nnz": 262144,
+      "max_row": 64,
+      "distribution": "uniform",
+      "seed": 5102,
+      "case_id": "F05-02",
+      "role": "gallery",
+      "scenario_designation": "gallery-cost"
+    },
+    {
+      "rows": 2048,
+      "cols": 4096,
+      "nnz": 131072,
+      "max_row": 512,
+      "distribution": "long-tail-with-empty-rows",
+      "seed": 5103,
+      "case_id": "F05-03",
+      "role": "heldout",
+      "scenario_designation": "heldout-benefit"
+    },
+    {
+      "rows": 8192,
+      "cols": 8192,
+      "nnz": 524288,
+      "max_row": 64,
+      "distribution": "uniform",
+      "seed": 5104,
+      "case_id": "F05-04",
+      "role": "heldout",
+      "scenario_designation": "heldout-cost"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F05-G01",
+      "role": "guard",
+      "rows": 32,
+      "cols": 64,
+      "nnz": 0,
+      "max_row": 0,
+      "distribution": "empty",
+      "seed": 5191
+    },
+    {
+      "case_id": "F05-G02",
+      "role": "guard",
+      "rows": 8,
+      "cols": 64,
+      "nnz": 2048,
+      "max_row": 2048,
+      "distribution": "long-row-guard",
+      "seed": 5192
+    }
+  ]
+}

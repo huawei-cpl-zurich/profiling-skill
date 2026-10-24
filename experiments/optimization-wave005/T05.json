@@ -1,0 +1,88 @@
+{
+  "wave": 5,
+  "study_id": "T05",
+  "title": "Dual-output GDN gate fusion",
+  "study_kind": "source-backed-implementation-study",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "producer-consumer-fusion",
+  "approval": "Standing user approval waves003\u2013022, collect data before synthesis.",
+  "source": "triton/proposal.md; filtered exact bodies/tests/interfaces pinned7acb9c40a6ca827e885d902b7eaee5d45457b230; per-file licenses/notices preserved. Actual910B support requires own gate.",
+  "cases": [
+    {
+      "case_id": "W005-T05-01",
+      "role": "gallery",
+      "seed": 6501,
+      "parameters": {
+        "R": 8192,
+        "H": 128
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T05-02",
+      "role": "gallery",
+      "seed": 6502,
+      "parameters": {
+        "R": 1,
+        "H": 8
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T05-03",
+      "role": "heldout",
+      "seed": 6503,
+      "parameters": {
+        "R": 6144,
+        "H": 64
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T05-04",
+      "role": "heldout",
+      "seed": 6504,
+      "parameters": {
+        "R": 2,
+        "H": 16
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    }
+  ],
+  "contract": {
+    "interface": "FP32 a,b[R,H],A_log,dt_bias[H]; A_log[-2,2],a,b[-4,4],dt_bias[-1,1]. Returng,beta[1,R,H],allinputsimmutable.",
+    "objective": "x=a+dt_bias;softplus=where(x>20,x,log(1+exp(x)));g=-exp(A_log)*softplus;beta=sigmoid(b), fixedFP32association/threshold20/beta1. No recurrenceorBF16claim.",
+    "before": "Separatebias,softplus,scale,betasigmoidkernels withrealintermediates.",
+    "after": "Onekernel producesbothoutputs. SAME Aexp reusepolicybotharms: peroutputexpA notprecomputedoncebyonearm. Samegrid/association, no coupledhoisting.",
+    "oracle": "IndependentCPUFP64 SAMEthresholdbranch onrepresentedinputs, atol2e-5rtol2e-4. All outputsfinite andcorrectshapes. where isnotlazyoverflowproof."
+  },
+  "guards": [
+    {
+      "case_id": "W005-T05-GA",
+      "role": "guard",
+      "seed": 6591,
+      "parameters": {
+        "R": 2,
+        "H": 3,
+        "distribution": "threshold20"
+      },
+      "expected": "a+dt_bias exactly20\u00b11/1024and20, fixedthresholdsemantics; finiteexpbothbranches."
+    },
+    {
+      "case_id": "W005-T05-GB",
+      "role": "guard",
+      "seed": 6592,
+      "parameters": {
+        "R": 3,
+        "H": 17,
+        "distribution": "symmetric-b"
+      },
+      "expected": "Oddtailmasks andsigmoidsymmetry,shapes."
+    }
+  ],
+  "protocol": "Six CPU scientific oracle payloads once; once-per-side correctness per source version; exactly10 profiled full API forwards per arm of4maincases. Guards correctness-only0captures. No warmups/autotuning/extra timing/profiled tensor inspection. Preserve negative/failed/partial outcomes. Complete device-operation spans diagnostic, not ordinary application latency."
+}

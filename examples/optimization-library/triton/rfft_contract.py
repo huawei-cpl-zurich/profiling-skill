@@ -30,15 +30,23 @@ def dimensions(spec):
     return b, n
 
 
-def make_case(spec):
+def case_inputs(spec):
+    """Build only CPU FP32 inputs, independently of ambient Torch defaults."""
     spec = normalize_case(spec)
     b, n = dimensions(spec)
-    x = torch.rand((b, n), generator=torch.Generator().manual_seed(spec['seed'])) * .25 - .125
+    x = torch.rand((b, n), dtype=torch.float32, device='cpu',
+                   generator=torch.Generator(device='cpu').manual_seed(spec['seed'])) * .25 - .125
     if spec['distribution'] != 'bounded-uniform':
         x[0].fill_(.125)
         x[1, ::2] = .125
         x[1, 1::2] = -.125
-    return dict(inputs=dict(real=x), expected=torch.fft.rfft(x.double()), row_l1=x.double().abs().sum(1), N=n)
+    return dict(real=x)
+
+
+def make_case(spec):
+    inputs = case_inputs(spec)
+    x = inputs['real']
+    return dict(inputs=inputs, expected=torch.fft.rfft(x.double()), row_l1=x.double().abs().sum(1), N=x.shape[1])
 
 
 def validate_inputs(inputs, spec):

@@ -104,3 +104,32 @@ def test_constructor_preserves_fp32_under_ambient_float64(monkeypatch):
         assert all(x.dtype == torch.float32 for x in op.calls[0][2][1:3])
     finally:
         torch.set_default_dtype(previous)
+
+
+def test_fixture_fresh_and_cache_hit_under_ambient_float64(tmp_path):
+    from types import SimpleNamespace
+    sys.path.insert(0, str(ROOT/'scripts'))
+    from optimization_pair import fixture
+    from rfft_contract import CASE_SOURCES
+    calls = []
+    def generate(spec):
+        calls.append(spec)
+        return make_case(spec)
+    adapter = SimpleNamespace(case_sources=CASE_SOURCES, make_case=generate)
+    spec = dict(batch=1,N=8,seed=9307)  # Distinct host-only regression fixture.
+    previous = torch.get_default_dtype()
+    try:
+        torch.set_default_dtype(torch.float64)
+        fresh, first = fixture(adapter,spec,tmp_path/'cache',torch)
+        cached, second = fixture(adapter,spec,tmp_path/'cache',torch)
+        assert first['oracle_calls'] == 1 and second['oracle_calls'] == 0
+        assert len(calls) == 1
+        for item in (fresh,cached):
+            validate_inputs(item['inputs'],spec)
+            assert item['inputs']['real'].dtype == torch.float32
+            assert item['inputs']['real'].device.type == 'cpu'
+            assert item['expected'].dtype == torch.complex128
+        assert torch.equal(fresh['inputs']['real'],cached['inputs']['real'])
+        assert torch.equal(fresh['expected'],cached['expected'])
+    finally:
+        torch.set_default_dtype(previous)

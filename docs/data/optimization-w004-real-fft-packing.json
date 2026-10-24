@@ -30179,5 +30179,49 @@
     "final_v2_source_sha256": "ea975ce4609ae95ec41fdde7410b5a197b5adc5a1776114b0a68f0cb44d54e9f",
     "validation_receipt_sha256": "58ce065052ae6cd7fd5eb6798db76a65b2e6a498d7937db2d237f3036148f723",
     "note": "Only output and packed-real allocation dtype became explicit FP32. Triton kernel definitions and run body unchanged; all original compiled identities match. Original measurement source hashes and samples above remain immutable."
+  },
+  "host_fixture_dtype_fix": {
+    "validation_handle": "remote:gz-a3:job:4bf69920-ed12-4d06-8dc0-7d0e300df7e1",
+    "tests_passed": 2,
+    "validation_kind": "CPU-only ambient-float64 allocation and fresh/cache-hit fixture regressions; input-only comparison with six retained scientific fixtures",
+    "new_scientific_oracles": 0,
+    "new_device_forwards": 0,
+    "new_profiles": 0,
+    "measured_v1_fixture_source_sha256": "e5058e2cb59af29bec82c8765e91891d0b56286dd7db79d04e7f8be01049d83d",
+    "final_v3_fixture_source_sha256": "542a9712f69a23dbac02a13cf2b071aa0c5708f6e079f6614415a34928546acd",
+    "validation_receipt_sha256": "55b413dc32e3d3804984e86243d8584b847baaa4ac24f0940763292068deade1",
+    "retained_inputs_equal": [
+      {
+        "case_id": "W004-W03-GB",
+        "fixture_sha256": "58715ec299ee26c52ea4e672e1ed1e83e1d3e5d8be86bef94b6a08b31a5f0560",
+        "input_sha256": "2522a3ebbe4d484c0e5f2864fadbb7428e949b315adf1dda3ddc70aa516bf79b"
+      },
+      {
+        "case_id": "W004-W03-04",
+        "fixture_sha256": "0a0723fccbf69058a5822f1f47eee35be75f36e50312b2bb696b4b8afe40d9cb",
+        "input_sha256": "b24e40ed1b9506b295bb0ef9d8ba4bea2916542c7ead1341f0a62ff94a1f0e1e"
+      },
+      {
+        "case_id": "W004-W03-03",
+        "fixture_sha256": "4613564ea44a26116da781b0d95e3d6d44825233f42ef88b702da693ff982118",
+        "input_sha256": "5126d8dc9bc85745f55583ee829abc65786aa67b6d135c0cc39fa853355ebcb2"
+      },
+      {
+        "case_id": "W004-W03-01",
+        "fixture_sha256": "6d65330daea1c12e839a9e83b9bec899e82056ea4358adda8a50372f8fc44fdb",
+        "input_sha256": "fc81380b70c18a73281bf4d987abbbf28b2d7ddb712e0eef9da75909963025d7"
+      },
+      {
+        "case_id": "W004-W03-02",
+        "fixture_sha256": "6ae836871f56d7d503b450bac845124a86794c70ec851ceff3579e2bc3152214",
+        "input_sha256": "5fc0b83138d04e693a6ac9fcbeec6a39464609cf87c3476f38c77bedba8c7b28"
+      },
+      {
+        "case_id": "W004-W03-GA",
+        "fixture_sha256": "392eba25467f929293fb077bbc9ea6cf25fe1db3c46ab2a1b340d1a5b8d36f48",
+        "input_sha256": "0cd23eca9e357ba9bdeecb0364ebd78541b2fe71955764ffd73be794ca5038ad"
+      }
+    ],
+    "note": "Fixture provider now explicitly allocates CPU FP32 with CPU generator; source identity separates old invalid caches. Input-only helper matches all six original inputs with FFT oracle forbidden. Original scientific fixtures/manifests, kernel/run body, references and samples remain unchanged."
   }
 }

@@ -110,3 +110,13 @@ produce exactly the original compiler/NPUBIN identities under ambient float64.
 That audit loaded retained fixtures, generated no new scientific oracle and
 executed no forward or profile. The compact JSON records both source versions
 and the audit receipt digest.
+
+The same review wave also found that fixture creation inherited the ambient
+floating dtype. The fixture provider now builds its inputs explicitly on CPU
+in FP32 with a CPU generator. A small, separate N8 host regression covers fresh
+and cached fixtures under ambient float64; the fixture provider's source hash
+changes the cache identity, so older invalid fixtures cannot be reused.
+An input-only helper permits comparison with all six retained scientific input
+arrays without invoking an FFT oracle. Original scientific references, kernels,
+forwards and profiles remain unchanged; the fixture-only source revision and
+CPU validation receipt are recorded separately in the compact JSON.

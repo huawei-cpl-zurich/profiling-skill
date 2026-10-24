@@ -106,7 +106,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(report['state'], 'failed')
         self.assertEqual(COUNTS['capture'], 0)
         self.assertEqual(COUNTS['candidate'], 1)
-        self.assertIn('验证失败', report['cases'][0]['correctness']['error_msg'])
+        self.assertIn('verification failed', report['cases'][0]['correctness']['error_msg'])
         self.assertIsInstance(report['cases'][0]['correctness']['metrics'], dict)
 
     def test_create_reuse_exact_counts_and_export_failure_separation(self):

@@ -112,7 +112,9 @@ output and checks the candidate against it. Neither adds a Model forward.
 
 The adapter checks nested output structure and original tensor shapes, then calls
 upstream `verify.compare` with the input dtype classification. This preserves its
-ecosystem precision default, NaN/Inf rules and Chinese failure messages. Set
+ecosystem precision default and NaN/Inf rules. The authored adapter translates
+comparison failures to English while retaining upstream metrics and the original
+exception as the cause (private traceback evidence remains unchanged). Set
 `non_compute=True` on a private case for the upstream binary equality mode.
 Private validators still run as additional semantic checks. A failure retains
 `cases[].correctness.error_msg` and upstream `metrics`, and prevents measurement.

@@ -449,7 +449,7 @@ class ControllerTests(unittest.TestCase):
                 patch.object(controller, 'benchmark_pair') as timing:
             report = self.run_fixture(Path(temporary), validator=lambda *args: None)
             self.assertEqual(report['state'], 'failed')
-            self.assertIn('验证失败', report['cases'][0]['correctness']['error_msg'])
+            self.assertIn('verification failed', report['cases'][0]['correctness']['error_msg'])
             timing.assert_not_called()
 
     def test_mutating_baseline_and_candidate_fail_before_timing(self):

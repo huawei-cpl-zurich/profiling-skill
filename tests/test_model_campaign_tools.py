@@ -697,7 +697,7 @@ validate(case, 'candidate', (value.clone(), None))
 try:
     validate(case, 'candidate', (value + 9, None))
 except AssertionError as error:
-    assert '验证失败' in str(error)
+    assert 'verification failed' in str(error)
 else:
     raise AssertionError('incorrect output accepted')
 """

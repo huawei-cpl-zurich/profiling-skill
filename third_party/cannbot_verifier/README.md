@@ -10,7 +10,9 @@ The benchmark adapter calls `verify.compare` and its input-dtype inference.
 It preserves the upstream default: ecosystem precision criteria first, with
 NPU Benchmark criteria for dtypes outside that table. NaN/Inf checks, integer
 and quantization handling, non-compute binary equality, Chinese diagnostics and
-structured accuracy metrics are upstream behavior. The other copied modules
+structured accuracy metrics are upstream behavior. The authored benchmark adapter
+translates comparison exception messages to English; numerical policy and these
+vendor files remain unchanged, and the original exception stays chained. The other copied modules
 are the verifier's import dependency closure; the benchmark does not invoke the
 standalone verifier's CLI, hidden-state probe, or remote/device preflight.
 

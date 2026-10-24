@@ -1,0 +1,85 @@
+{
+  "wave": 6,
+  "study_id": "N01",
+  "title": "Exact INT8 widening through two vector casts",
+  "study_kind": "source-backed-independent-format",
+  "new_unique_mechanism_claim": false,
+  "approval": "Standing waves003\u2013022, data first",
+  "source": "frontier/proposal.md, exact broker-filtered bodies/tests, query b339eb85c773462fbfc45ecb8dbc2587. Ops-sparse bfc7c19d83ce246b03c65dc916ed4753e5467cf3 arch22/DAV2201 A2/A3 sources CANNOpenSoftware2.0; own CANN9.1/910B gate still required.",
+  "dependency": {
+    "base": "298b44a9b579f3c0b0b2ed04c23a250393aa6644",
+    "target_branch": "codex/optimization-w006-row-dma-aggregation"
+  },
+  "cases": [
+    {
+      "case_id": "W006-N01-01",
+      "role": "gallery",
+      "seed": 8101,
+      "parameters": {
+        "N": 65536
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N01-02",
+      "role": "gallery",
+      "seed": 8102,
+      "parameters": {
+        "N": 8
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N01-03",
+      "role": "heldout",
+      "seed": 8103,
+      "parameters": {
+        "N": 49152
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N01-04",
+      "role": "heldout",
+      "seed": 8104,
+      "parameters": {
+        "N": 17
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-N01-GA",
+      "role": "guard",
+      "seed": 8191,
+      "parameters": {
+        "N": 256,
+        "distribution": "exhaustive-all-int8"
+      },
+      "expected": "All256 signed values, exact FP32 bit patterns, output/input GM canaries."
+    },
+    {
+      "case_id": "W006-N01-GB",
+      "role": "guard",
+      "seed": 8192,
+      "parameters": {
+        "N": 4097,
+        "also_empty": true
+      },
+      "expected": "One compositeguardAPI widens4097 tail and returns a distinct empty result forN0 with NO native launch; cached expectedtuple once, no empty alias assumption from null pointers."
+    }
+  ],
+  "contract": {
+    "interface": "Contiguous immutable signed INT8 x[N], FP32 y[N], no scale/saturation/dequantization. Large inputs repeat a seeded permutation of all256values; small cases prefix[-128,-1,0,1,127] then fixed seeded values. Exact independent CPU signed-integer widening toFP32; compare actual/expected FP32 bits.",
+    "before": "Stage one input tile inUB, scalar rawUB pointer loop static_cast<float>(int8), write stagedFP32output. Same GM copies/grid/tile and half scratch reservation asAFTER, no baseline-only disabled vectorizer.",
+    "after": "Native source Cast<half,int8_t> then Cast<float,half>, proper interstage completion. INT8 is exactly representable in both types. Same mandatory cross-pipe readiness/input/output barriers, extra internal cast dependency included.",
+    "resources": "Tile4096 logical elements, aligned/padded buffers forINT8/half/FP32; reserve SAME half scratch before/after to isolate instruction selection. No claim production scalar baseline needs half scratch or memory saving. All GM staging repeated everyAPI, no persistent/free UB preload.",
+    "guards": "N4097 tail legal DataCopyPad/canaries; N0returns empty with0kernel launches. Unsupporteddtype/layout rejects beforecache; no profilecaseempty. SelectedCANN Cast signatures/count/UB scalar-V-MTE coherence verified before math, explicitAIVkind3."
+  },
+  "protocol": "Six cached scientific payloads once, once-per-side correctness per case/source then exactly10 fullAPI profiled forwards/arm/four mainpairs =>8captures/80forwards. Guards0captures. Explicit component operations/host rejection tests counted separately. No warmup/autotune/extra timing/profiled IO checking. Compile/resource/engine audit all before any forwards; preserve all failures/nonconforming/equal/slower outcomes,10samples/taskPMU/source/compiler/binary/fixture identities."
+}

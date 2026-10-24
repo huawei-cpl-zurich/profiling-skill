@@ -68,3 +68,28 @@ forwards per arm with no warmup or profile-time inspection. Guard objects have
 explicit `--correctness-only` flag provides the same behavior. Guard execution
 produces no captures or performance claims. Cache each CPU oracle once and keep
 failed or partially captured source versions rather than replaying them.
+
+## Retained A3 results
+
+All four fixed pairs and both guards passed on Ascend910B4-1 physical die5.
+The table shows mean ± sample SD of all ten profiled complete-operation spans
+in microseconds, with no samples dropped. Each launch is one `MIX_AIC` task,
+with reported Block Num20 and Mix Block Num40. Active-union equals span and
+inter-task gap is zero for these single-task operations.
+
+| Case | M×N×K | Before µs | After µs | Before/after |
+|---|---|---:|---:|---:|
+| F06-01 | 128×10496×4096 | 77.882 ± 19.545 | 59.138 ± 15.743 | 1.317× |
+| F06-02 | 384×6656×512 | 17.588 ± 2.414 | 21.736 ± 3.632 | 0.809× |
+| F06-03 | 128×15616×6144 | 211.084 ± 8.908 | 183.384 ± 4.600 | 1.151× |
+| F06-04 | 384×6656×1024 | 27.686 ± 2.404 | 30.572 ± 3.695 | 0.906× |
+
+The four-case geomean is 1.027×. First-launch variation is
+visible, especially in case01, and is retained. These data support the stated
+benefit/cost hypotheses for this matrix; they do not establish a universal
+speedup. [Structured evidence](../../../experiments/optimization-library/w003-tail-streamk/evidence.json)
+retains every span/event sample, exact task identity, PMU values, correctness
+diagnostics and source/binary/report hashes. The initial version failed only
+at compile time because its C++ `Tile` alias collided with `tla::Tile`; it made
+zero device calls. That source and failure log are retained alongside the
+corrected version rather than removed from the experiment history.

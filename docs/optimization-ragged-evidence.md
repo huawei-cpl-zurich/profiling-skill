@@ -134,7 +134,7 @@ samples nor first samples are filtered.
 
 ## Validation and limits
 
-Kernel/test revision: `c75871dc5c91f9bd3d41d084b10fa099f0a036f9`.
+Captured kernel/contract revision: `c75871dc5c91f9bd3d41d084b10fa099f0a036f9`.
 Observed product: Ascend910B4-1, 20 Cube cores and 40 Vector cores, on a healthy
 idle isolated device. Evidence applies to that observed product/runtime rather
 than an inferred machine generation.
@@ -146,6 +146,15 @@ There are no warmups, discovery launches, unprofiled timing calls or recaptures.
 CPU functional validation passed eight tests plus 15 subtests, covering oracle
 partitioning, input guards, immutability, independent controls and the adapter
 launch boundary. CPU fake kernels are not used as device correctness evidence.
+
+A subsequent contract compatibility fix treats an explicit JSON `lengths: null`
+as an omitted override, consistently with validation. Functional regressions
+compare identical seeds, inputs and oracle outputs across both families, all
+three patterns and both dtypes; explicit length lists and malformed types are
+also checked. The updated suite passes nine tests plus 31 subtests locally and
+the same nine tests on the selected A3 target using CPU only. Kernel arithmetic
+and the eight captured ordinary case specifications are unchanged. No retained
+benchmark fixture, profile or original capture provenance was regenerated.
 
 The strict collector validates the same captured task/context identities,
 source hashes, compiled binary hashes, ten owned iterations and unchanged

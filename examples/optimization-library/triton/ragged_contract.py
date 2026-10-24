@@ -60,7 +60,7 @@ def make_case(spec):
     else:
         lengths[0] = 0
         lengths[-1] = maximum
-    if 'lengths' in spec:
+    if spec.get('lengths') is not None:
         lengths = torch.tensor(spec['lengths'], dtype=torch.int32)
     dtype = getattr(torch, spec.get('dtype', 'float32'))
     x = torch.randn((int(lengths.sum()), width), generator=rng).to(dtype)

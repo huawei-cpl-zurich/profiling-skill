@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -46,12 +47,28 @@ class RaggedTests(unittest.TestCase):
         self.assertEqual(case['padding'], float(torch.tensor(1.2345).half()))
         self.assertTrue(torch.equal(case['expected'], torch.full((4, 7, 3), case['padding']).half()))
 
+    def test_json_null_lengths_matches_omitted_override(self):
+        for family in ('prefix-offsets', 'padding-store'):
+            for pattern in ('empty', 'mixed', 'full'):
+                for dtype in ('float16', 'float32'):
+                    with self.subTest(family=family, pattern=pattern, dtype=dtype):
+                        spec = self.spec(family=family, pattern=pattern, dtype=dtype)
+                        omitted = make_case(spec)
+                        nullable = make_case(json.loads(json.dumps(dict(spec, lengths=None))))
+                        self.assertEqual(nullable['padding'], omitted['padding'])
+                        self.assertTrue(torch.equal(nullable['expected'], omitted['expected']))
+                        for name in ('x', 'lengths'):
+                            self.assertTrue(torch.equal(nullable['inputs'][name], omitted['inputs'][name]))
+            explicit = make_case(self.spec(family=family, lengths=[0, 1, 3, 2]))
+            self.assertEqual(explicit['inputs']['lengths'].tolist(), [0, 1, 3, 2])
+
     def test_invalid_domains_rejected_before_device(self):
         for update in [dict(batch=0), dict(batch=True), dict(length=2049), dict(width=0),
                 dict(batch=1024, length=2048, width=1024), dict(dtype='bfloat16'),
                 dict(seed=-1), dict(seed=2**64), dict(pad=float('inf')), dict(pad=True),
                 dict(dtype='float16', pad=1e20), dict(pattern='unknown'),
-                dict(lengths=[1]), dict(lengths=[0, 1, 2, 8]), dict(lengths=[False, 0, 0, 0])]:
+                dict(lengths=[1]), dict(lengths=[0, 1, 2, 8]), dict(lengths=[False, 0, 0, 0]),
+                dict(lengths=''), dict(lengths={}), dict(lengths=(0, 1, 2, 3)), dict(lengths=0)]:
             with self.subTest(update=update), self.assertRaises(ValueError):
                 check_spec(self.spec(**update))
         with self.assertRaises(ValueError):

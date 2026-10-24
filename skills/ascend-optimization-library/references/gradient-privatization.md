@@ -1,4 +1,4 @@
-# Private weight-gradient accumulation (E08, qualification pending)
+# Private weight-gradient accumulation (E08)
 
 Recognize this pattern when many independent normalization rows contribute to
 the same weight-gradient vector. The before implementation performs one FP32
@@ -60,12 +60,48 @@ support the contention explanation when the target provides them. Busy ratios
 alone establish neither useful occupancy nor physical traffic or roofline
 distance.
 
-Two benefit hypotheses (8192x128, 6144x96) and two cost hypotheses (1x2048,
-3x4096) are frozen before A3 acquisition, with gallery/heldout separation. CPU
-interpreter checks cover width tails, fewer rows than private programs, more
-rows than private programs, zero-input rows, immutable inputs and poisoned
-workspace reuse. They do not prove A3 atomics support, UB fit or speed. Record
-negative or unsupported outcomes without substituting friendlier shapes.
+Four predeclared pairs passed on Ascend910B4-1, with Torch2.10.0+cpu,
+Torch-NPU2.10.0 and Triton3.2.0. Each arm received one complete correctness
+check followed by ten captured forwards, with no warmups or measured
+input/output inspection. The two benefit hypotheses and two cost hypotheses
+remain labeled as declared; no cases were substituted after measurement.
+
+| Case | R×D | Before, µs ± SD | After, µs ± SD | Span speedup |
+| --- | ---: | ---: | ---: | ---: |
+| Gallery benefit | 8192×128 | 698.486 ± 95.602 | 150.860 ± 18.196 | 4.6300× |
+| Gallery cost | 1×2048 | 167.918 ± 11.861 | 145.802 ± 6.850 | 1.1517× |
+| Heldout benefit | 6144×96 | 673.334 ± 60.882 | 149.176 ± 21.809 | 4.5137× |
+| Heldout cost | 3×4096 | 168.398 ± 14.675 | 148.558 ± 14.048 | 1.1336× |
+
+All-case span geometric mean is 2.2855×. These are complete profiled spans,
+not unprofiled application timings; SDs describe ten samples within each
+capture, not independent experiment replication. Both cost cases improved in
+complete span, so a full-operation regression is **not demonstrated**.
+
+Active kernel work tells a useful additional story. The benefit cases reduce
+active union from 582.904→104.238µs and 621.964→101.274µs. The cost cases
+increase active union from 5.188→6.976µs (+34.5%) and 4.816→7.668µs (+59.2%).
+Their inter-kernel gaps fall from 162.730→138.826µs and
+163.582→140.890µs, dominating the complete span. Consequently, their small
+span gains do not establish less device work or an application-level win.
+The after workspace is 16,384B, 262,144B, 12,288B and 524,288B respectively.
+
+All 160 measured tasks join same-capture PMU records. Gallery-benefit
+backward scalar ratio falls 0.7220→0.3623 and vector ratio rises
+0.0783→0.5874. Heldout-benefit backward MTE3 ratio falls 0.8142→0.3416.
+These observations are consistent with the intended transformation, but
+these counters do not directly measure contention stalls or physical bytes.
+Every retained before backward TTIR contains `tt.atomic_rmw fadd`, lowered
+to a ttadapter store with `atomic = <add>`; every after specialization lacks
+those IR operations. This establishes an observed IR change, not a final
+disassembly instruction count. All 16 distinct NPUBIN snapshots were
+independently hash-verified and compiled identities stayed stable.
+
+CPU interpreter checks additionally cover width tails, fewer/more rows than
+private programs, zero-input rows, immutable inputs and poisoned workspace
+reuse. The device evidence qualifies the four concrete cases, including
+4096-wide input; it does not establish all resources across the full bounded
+contract. Keep negative or unsupported outcomes when extending the matrix.
 
 Source provenance: pinned Triton-Ascend snapshot `7acb9c40a6ca`,
 `norm/rms_norm.py:135-191,295-359,440-488` (original broker query
@@ -79,4 +115,10 @@ filtered reference collection; this example is independently written.
 
 Implementation: [gradient_pairs.py](../../../examples/optimization-library/triton/gradient_pairs.py)
 and [gradient_contract.py](../../../examples/optimization-library/triton/gradient_contract.py).
-This draft is not in the skill router and has no A3 performance claim yet.
+All raw ten-sample span/active/gap series, correctness diagnostics, compiler
+identities, IR hashes and compact PMU means are in
+[gradient-evidence.json](gradient-evidence.json). Measured source is
+`6e00b92054f8dacc161483d95e28e11976a1a5d4`; evidence archive SHA256 is
+`2c82ac0e7d08f3780c5fef6e926c00a4d6884d3fab45907d24950921f8e32c27`.
+This entry is not added to the skill router during the frozen first coding
+study; its training data remains separate from that study's guidance.

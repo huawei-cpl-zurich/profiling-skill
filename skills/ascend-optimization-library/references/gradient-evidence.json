@@ -1,0 +1,994 @@
+{
+  "schema": "gradient-privatization-evidence-v1",
+  "status": "four frozen pairs passed on A3",
+  "product": "Ascend910B4-1",
+  "runtime": {
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "triton": "3.2.0"
+  },
+  "source_commit": "6e00b92054f8dacc161483d95e28e11976a1a5d4",
+  "measurement": "profiled complete device-operation span, including inter-kernel gaps; not unprofiled application latency",
+  "protocol": {
+    "correctness_per_arm_case": 1,
+    "profiled_forwards_per_arm_case": 10,
+    "warmups": 0,
+    "cpu_oracles": 4
+  },
+  "source_sha256": {
+    "examples/optimization-library/triton/gradient_pairs.py": "76217f3c3b52333d0b91849412f2845561106b36cdb48de5e86fdcc2dd2638ce",
+    "examples/optimization-library/triton/gradient_contract.py": "c7aec8d6ebfd7e5ef4c8223238085cbaaf26a83e0cdaa62113459f77582275d9",
+    "tests/test_optimization_gradient.py": "754774d1aeede26215a31647a1bb8fec55a702de3ce6baaf6133e664f2cc4013"
+  },
+  "receipt_sha256": "b579f55c06cbd4c6043b173a672d8328de89e44b74eb09f78c1658113b95acf6",
+  "archive_sha256": "2c82ac0e7d08f3780c5fef6e926c00a4d6884d3fab45907d24950921f8e32c27",
+  "cases": [
+    {
+      "id": "e08-gradient-gallery-benefit",
+      "hypothesis": "benefit",
+      "case": {
+        "family": "E08",
+        "rows": 8192,
+        "width": 128,
+        "seed": 18081,
+        "eps": 1e-05
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.00048828125,
+                "max_tolerance_fraction": 0.0009413594380021095
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 0.000499725341796875,
+                "max_tolerance_fraction": 0.05740375816822052
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              843.7,
+              785.96,
+              692.62,
+              598.28,
+              739.44,
+              589.64,
+              697.04,
+              812.72,
+              579.88,
+              645.58
+            ],
+            "mean": 698.486,
+            "sample_sd": 95.60164250099939
+          },
+          "active_union_us": {
+            "samples": [
+              581.24,
+              611.3,
+              611.4,
+              513.22,
+              603.96,
+              529.0,
+              527.9,
+              660.38,
+              579.84,
+              610.8
+            ],
+            "mean": 582.904,
+            "sample_sd": 46.716075558158295
+          },
+          "idle_gap_us": {
+            "samples": [
+              262.46,
+              174.66,
+              81.22,
+              85.06,
+              135.48,
+              60.64,
+              169.14,
+              152.34,
+              0.04,
+              34.78
+            ],
+            "mean": 115.582,
+            "sample_sd": 77.95210578012345
+          },
+          "workspace_bytes": 0,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "bcbe4c3cd2f9fe8a2dc2cc8bada59d185247109ca0c086a2dfd44d4f0dc9b32a"
+              },
+              "hash": "2489bcad1a07d8a7799af8a04102c25323053b8def17354a0925c4d057c38661",
+              "name": "gradient_zero"
+            },
+            {
+              "binaries": {
+                "npubin": "b3fc5151b55bfa914391fcda45964c6edf8236edad4144532fb13a2d7fdea679"
+              },
+              "hash": "4a4728b252f8815adcad2fc98691c349b3a2fecad1ab6953eaa018ea2bc741db",
+              "name": "weighted_vjp"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_zero": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 1.546,
+                "aiv_vec_ratio": 0.025,
+                "aiv_scalar_ratio": 0.3615,
+                "aiv_mte2_ratio": 0.0029000000000000002,
+                "aiv_mte3_ratio": 0.18780000000000002
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 581.358,
+                "aiv_vec_ratio": 0.0783,
+                "aiv_scalar_ratio": 0.722,
+                "aiv_mte2_ratio": 0.0798,
+                "aiv_mte3_ratio": 0.136
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "d7b04c976ad3568441763692ccdfaf176a7a7e380d5cc3046c18b6083b5726bc",
+            "ttadapter_sha256": "3b407e232802681c8100f8bba20d44229b193d173fe6b6f49a7ad454ed903c6f",
+            "tt_atomic_rmw_occurrences": 1,
+            "ttadapter_atomic_add_occurrences": 1
+          }
+        },
+        "after": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.00048828125,
+                "max_tolerance_fraction": 0.0009413594380021095
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 7.43865966796875e-05,
+                "max_tolerance_fraction": 0.016725702211260796
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              183.46,
+              181.2,
+              139.44,
+              144.18,
+              138.94,
+              134.74,
+              140.24,
+              162.44,
+              139.24,
+              144.72
+            ],
+            "mean": 150.86,
+            "sample_sd": 18.196031313326415
+          },
+          "active_union_us": {
+            "samples": [
+              105.38,
+              103.24,
+              104.16,
+              104.02,
+              104.22,
+              104.18,
+              104.76,
+              104.24,
+              104.62,
+              103.56
+            ],
+            "mean": 104.238,
+            "sample_sd": 0.5995887479486814
+          },
+          "idle_gap_us": {
+            "samples": [
+              78.08,
+              77.96,
+              35.28,
+              40.16,
+              34.72,
+              30.56,
+              35.48,
+              58.2,
+              34.62,
+              41.16
+            ],
+            "mean": 46.622,
+            "sample_sd": 18.17750612402287
+          },
+          "workspace_bytes": 16384,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "92b614ab6e842a90421eb967f5691a3cae52eeaccc9289dc336ffb17576fc785"
+              },
+              "hash": "2bb1d79b3a812a07506f0e10197548a526a82114b8561cceed21f868d7000d07",
+              "name": "weighted_vjp"
+            },
+            {
+              "binaries": {
+                "npubin": "b0cb41a7b59752e8c9fb3eea3465c775a522938041d7123fffb8b28dbd85910f"
+              },
+              "hash": "07655850cb325f118cc6f95e2713bce8fb5f4b57a883c56588375f41954cbccc",
+              "name": "gradient_reduce"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_reduce": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 1.994,
+                "aiv_vec_ratio": 0.0973,
+                "aiv_scalar_ratio": 0.376,
+                "aiv_mte2_ratio": 0.1179,
+                "aiv_mte3_ratio": 0.0976
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 102.244,
+                "aiv_vec_ratio": 0.5873999999999999,
+                "aiv_scalar_ratio": 0.3623,
+                "aiv_mte2_ratio": 0.3161,
+                "aiv_mte3_ratio": 0.32680000000000003
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "8de0599902a24aa2f5ca0399aec2896058908fe426f637e4785e99491f38e6d4",
+            "ttadapter_sha256": "8d1151140d38ea3f194a1c9bbef6f8ddf772ddc73beb22530e468f590b09940a",
+            "tt_atomic_rmw_occurrences": 0,
+            "ttadapter_atomic_add_occurrences": 0
+          }
+        }
+      },
+      "span_speedup": 4.6300278403818105
+    },
+    {
+      "id": "e08-gradient-gallery-cost",
+      "hypothesis": "cost",
+      "case": {
+        "family": "E08",
+        "rows": 1,
+        "width": 2048,
+        "seed": 18082,
+        "eps": 1e-05
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.000244140625,
+                "max_tolerance_fraction": 0.0009055894333869219
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 0.0,
+                "max_tolerance_fraction": 0.0
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              192.22,
+              173.3,
+              160.38,
+              157.24,
+              175.7,
+              155.16,
+              179.62,
+              163.52,
+              161.72,
+              160.32
+            ],
+            "mean": 167.918,
+            "sample_sd": 11.860974102773628
+          },
+          "active_union_us": {
+            "samples": [
+              6.82,
+              6.36,
+              6.46,
+              7.16,
+              5.04,
+              4.32,
+              3.84,
+              3.82,
+              3.84,
+              4.22
+            ],
+            "mean": 5.188,
+            "sample_sd": 1.3647042821717013
+          },
+          "idle_gap_us": {
+            "samples": [
+              185.4,
+              166.94,
+              153.92,
+              150.08,
+              170.66,
+              150.84,
+              175.78,
+              159.7,
+              157.88,
+              156.1
+            ],
+            "mean": 162.73,
+            "sample_sd": 11.645272765280245
+          },
+          "workspace_bytes": 0,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "c643aac2ece7dca138d282a180efe6f9f3f9022403e69ffc8cafc1facd8f20e3"
+              },
+              "hash": "422377986791fbb735e7ab5272c42f540a54e10633e9717c885129b2c3977fca",
+              "name": "gradient_zero"
+            },
+            {
+              "binaries": {
+                "npubin": "bc4b49adf3e7bf79aa65a89a549f6096d8ae23cc0a6b0d9570f8c4ace4f26abe"
+              },
+              "hash": "dae20abebf0003de6922069b2d47ba4d48da6788eb13e6510edc05066f9673bc",
+              "name": "weighted_vjp"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_zero": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 2.158,
+                "aiv_vec_ratio": 0.0255,
+                "aiv_scalar_ratio": 0.5079,
+                "aiv_mte2_ratio": 0.0031,
+                "aiv_mte3_ratio": 0.2572
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 3.03,
+                "aiv_vec_ratio": 0.3096,
+                "aiv_scalar_ratio": 0.3976,
+                "aiv_mte2_ratio": 0.1157,
+                "aiv_mte3_ratio": 0.163
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "3f629f0c194128bbbd5f8b10901e589a1e5a2b8e6501e6b7b4ed57fbc4f843e6",
+            "ttadapter_sha256": "64ff2fa0dcf0529bc3a2ca249eee96c006ab68e49741b03de25d437199d4f03d",
+            "tt_atomic_rmw_occurrences": 1,
+            "ttadapter_atomic_add_occurrences": 1
+          }
+        },
+        "after": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.000244140625,
+                "max_tolerance_fraction": 0.0009055894333869219
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 0.0,
+                "max_tolerance_fraction": 0.0
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              159.34,
+              150.62,
+              145.46,
+              152.18,
+              145.8,
+              143.9,
+              141.78,
+              144.7,
+              138.4,
+              135.84
+            ],
+            "mean": 145.802,
+            "sample_sd": 6.8501902649975115
+          },
+          "active_union_us": {
+            "samples": [
+              7.88,
+              7.12,
+              6.92,
+              6.94,
+              7.04,
+              6.88,
+              6.78,
+              6.46,
+              6.52,
+              7.22
+            ],
+            "mean": 6.976,
+            "sample_sd": 0.39830753054504114
+          },
+          "idle_gap_us": {
+            "samples": [
+              151.46,
+              143.5,
+              138.54,
+              145.24,
+              138.76,
+              137.02,
+              135.0,
+              138.24,
+              131.88,
+              128.62
+            ],
+            "mean": 138.826,
+            "sample_sd": 6.61095420915586
+          },
+          "workspace_bytes": 262144,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "e398a49a06882cc4a246d04651ba7a1e0d25fe04290542ba00c1a77b2479d1fa"
+              },
+              "hash": "bfcadceab0fa68bb27af3ae665bd413127334985f3353e8d53d154af9d8bda64",
+              "name": "weighted_vjp"
+            },
+            {
+              "binaries": {
+                "npubin": "1dd73ee438094a718e0f042ae4d2408ad3ccb1b32213f7ba0b3c4adfaae7317b"
+              },
+              "hash": "e541ad278ca738e931f5e40e38681a33ffaf2561fb76f7fa92fd779e4bea42ad",
+              "name": "gradient_reduce"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_reduce": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 2.608,
+                "aiv_vec_ratio": 0.0866,
+                "aiv_scalar_ratio": 0.7116,
+                "aiv_mte2_ratio": 0.1705,
+                "aiv_mte3_ratio": 0.1036
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 4.368,
+                "aiv_vec_ratio": 0.2722,
+                "aiv_scalar_ratio": 0.6904,
+                "aiv_mte2_ratio": 0.0839,
+                "aiv_mte3_ratio": 0.0567
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "e737a1d8771751643b2db42237f7e6457bff5ea96f28411021209cbb769f539c",
+            "ttadapter_sha256": "af1eaa3d0c7d5de0f3c51615abbb8c3ed29ed6f1e22fffceff41535ffbd23621",
+            "tt_atomic_rmw_occurrences": 0,
+            "ttadapter_atomic_add_occurrences": 0
+          }
+        }
+      },
+      "span_speedup": 1.1516851620691075
+    },
+    {
+      "id": "e08-gradient-heldout-benefit",
+      "hypothesis": "benefit",
+      "case": {
+        "family": "E08",
+        "rows": 6144,
+        "width": 96,
+        "seed": 18083,
+        "eps": 1e-05
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.000244140625,
+                "max_tolerance_fraction": 0.0009300003293901682
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 0.0004119873046875,
+                "max_tolerance_fraction": 0.023456985130906105
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              809.02,
+              699.62,
+              695.14,
+              725.22,
+              670.66,
+              628.16,
+              621.96,
+              639.34,
+              622.02,
+              622.2
+            ],
+            "mean": 673.3340000000001,
+            "sample_sd": 60.88225068843043
+          },
+          "active_union_us": {
+            "samples": [
+              622.38,
+              621.74,
+              621.62,
+              621.88,
+              621.92,
+              621.76,
+              621.94,
+              622.22,
+              622.0,
+              622.18
+            ],
+            "mean": 621.9639999999999,
+            "sample_sd": 0.2371684820731613
+          },
+          "idle_gap_us": {
+            "samples": [
+              186.64,
+              77.88,
+              73.52,
+              103.34,
+              48.74,
+              6.4,
+              0.02,
+              17.12,
+              0.02,
+              0.02
+            ],
+            "mean": 51.37,
+            "sample_sd": 60.83219560579925
+          },
+          "workspace_bytes": 0,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "0c657d7e8044c1ecca4b5906e9b5977045b104213e27f538864c0750def3e734"
+              },
+              "hash": "c36a14fe35cc056759b905f7042c23e3df8113c8514da2610ba3719690ee5693",
+              "name": "gradient_zero"
+            },
+            {
+              "binaries": {
+                "npubin": "d1df7fac7e16d9a45dfa60a3c259aec0e9c30ab7f6a6a9ca911750210dc91dae"
+              },
+              "hash": "803ccecb85783938e0e322ef084d04c95589921e28307db59fa9a34069b1d067",
+              "name": "weighted_vjp"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_zero": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 1.08,
+                "aiv_vec_ratio": 0.0364,
+                "aiv_scalar_ratio": 0.4289,
+                "aiv_mte2_ratio": 0.0042,
+                "aiv_mte3_ratio": 0.3461
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 620.884,
+                "aiv_vec_ratio": 0.063,
+                "aiv_scalar_ratio": 0.096,
+                "aiv_mte2_ratio": 0.0483,
+                "aiv_mte3_ratio": 0.8142
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "9717fc9e1594f2dcfe372973f07db3f638090d49ce962462a26a150f495a8c16",
+            "ttadapter_sha256": "873da0422ed71e372823d72b8281badfe1f150b004504c4ad20fa1c66f134101",
+            "tt_atomic_rmw_occurrences": 1,
+            "ttadapter_atomic_add_occurrences": 1
+          }
+        },
+        "after": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.000244140625,
+                "max_tolerance_fraction": 0.0009300003293901682
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 6.103515625e-05,
+                "max_tolerance_fraction": 0.01003505103290081
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              173.24,
+              199.58,
+              147.16,
+              154.08,
+              133.74,
+              139.48,
+              131.52,
+              143.68,
+              130.4,
+              138.88
+            ],
+            "mean": 149.17600000000002,
+            "sample_sd": 21.80856467843158
+          },
+          "active_union_us": {
+            "samples": [
+              101.28,
+              100.96,
+              101.66,
+              100.58,
+              101.42,
+              101.2,
+              101.5,
+              101.44,
+              101.26,
+              101.44
+            ],
+            "mean": 101.274,
+            "sample_sd": 0.3095588258581346
+          },
+          "idle_gap_us": {
+            "samples": [
+              71.96,
+              98.62,
+              45.5,
+              53.5,
+              32.32,
+              38.28,
+              30.02,
+              42.24,
+              29.14,
+              37.44
+            ],
+            "mean": 47.902,
+            "sample_sd": 21.951669032976362
+          },
+          "workspace_bytes": 12288,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "8276f2ba88c9a1ca0eae1215f906bcd25db978f88d353d5cef63817478dc7e2f"
+              },
+              "hash": "65982125972f421790d11933ed346b4b915fa0dd311fd7700ab50f8569492cd9",
+              "name": "weighted_vjp"
+            },
+            {
+              "binaries": {
+                "npubin": "6d07a457a9c5ede6f55871950fb3419a4be3692a89b43efa569c6586215d9fdf"
+              },
+              "hash": "631d53c68d742a9b2adba4ca15fef9905d1f2e27261c1d216a4a7a188165deac",
+              "name": "gradient_reduce"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_reduce": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 1.694,
+                "aiv_vec_ratio": 0.1342,
+                "aiv_scalar_ratio": 0.4512,
+                "aiv_mte2_ratio": 0.1851,
+                "aiv_mte3_ratio": 0.1317
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 99.58,
+                "aiv_vec_ratio": 0.4851,
+                "aiv_scalar_ratio": 0.3255,
+                "aiv_mte2_ratio": 0.295,
+                "aiv_mte3_ratio": 0.3416
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "123b9bf7c92779d4a0304fa46448d7ffd22648510a3bf1e1f50130fc9e748176",
+            "ttadapter_sha256": "4bfae539d547d4f16f14671183e0524992af0caf956b52c596bf2317110da0b5",
+            "tt_atomic_rmw_occurrences": 0,
+            "ttadapter_atomic_add_occurrences": 0
+          }
+        }
+      },
+      "span_speedup": 4.513688528985896
+    },
+    {
+      "id": "e08-gradient-heldout-cost",
+      "hypothesis": "cost",
+      "case": {
+        "family": "E08",
+        "rows": 3,
+        "width": 4096,
+        "seed": 18084,
+        "eps": 1e-05
+      },
+      "arms": {
+        "before": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.0001220703125,
+                "max_tolerance_fraction": 0.000902320200111717
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 9.5367431640625e-07,
+                "max_tolerance_fraction": 0.000300104555208236
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              200.1,
+              184.34,
+              158.04,
+              176.64,
+              157.32,
+              168.26,
+              162.1,
+              155.48,
+              166.36,
+              155.34
+            ],
+            "mean": 168.398,
+            "sample_sd": 14.675483561974296
+          },
+          "active_union_us": {
+            "samples": [
+              5.6,
+              5.38,
+              4.62,
+              4.6,
+              4.48,
+              4.56,
+              4.72,
+              4.62,
+              5.0,
+              4.58
+            ],
+            "mean": 4.816,
+            "sample_sd": 0.384915575159021
+          },
+          "idle_gap_us": {
+            "samples": [
+              194.5,
+              178.96,
+              153.42,
+              172.04,
+              152.84,
+              163.7,
+              157.38,
+              150.86,
+              161.36,
+              150.76
+            ],
+            "mean": 163.582,
+            "sample_sd": 14.345998900196683
+          },
+          "workspace_bytes": 0,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "c2044efab4e9042ddf4fe5b3aa5a6e050bbca6cc13f775b1dbfd7a64bfb8e3e0"
+              },
+              "hash": "904ee9f0b1a1f5f27e01f48a747bea6fe2afa367aab1986a053223cc841bae41",
+              "name": "gradient_zero"
+            },
+            {
+              "binaries": {
+                "npubin": "56a74d9f8c2e3715bfbcc926c7f230fd5b34000988a527f2c5130e297ae783f0"
+              },
+              "hash": "21af380529d3abc4ab39acde9ccba9d039f5e76d425c4c4a358915f33f56ab9b",
+              "name": "weighted_vjp"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_zero": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 1.748,
+                "aiv_vec_ratio": 0.0296,
+                "aiv_scalar_ratio": 0.6435,
+                "aiv_mte2_ratio": 0.0036,
+                "aiv_mte3_ratio": 0.1938
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 3.068,
+                "aiv_vec_ratio": 0.4457,
+                "aiv_scalar_ratio": 0.2855,
+                "aiv_mte2_ratio": 0.1758,
+                "aiv_mte3_ratio": 0.2019
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "392e773f4f96853a901f24d87d5f429f52b1bbbe37a619a38bbcf551ffa63869",
+            "ttadapter_sha256": "556e00d83f5d43514bc7c7915ce7cabe3d5bf62434a2b0f4e11da6a931737215",
+            "tt_atomic_rmw_occurrences": 1,
+            "ttadapter_atomic_add_occurrences": 1
+          }
+        },
+        "after": {
+          "correctness": {
+            "passed": true,
+            "outputs": [
+              {
+                "passed": true,
+                "max_absolute_error": 0.0001220703125,
+                "max_tolerance_fraction": 0.000902320200111717
+              },
+              {
+                "passed": true,
+                "max_absolute_error": 9.5367431640625e-07,
+                "max_tolerance_fraction": 0.000300104555208236
+              }
+            ],
+            "rtol": 0.0002,
+            "atol": 0.002
+          },
+          "span_us": {
+            "samples": [
+              159.72,
+              147.98,
+              182.82,
+              151.12,
+              138.78,
+              138.6,
+              149.08,
+              136.74,
+              141.34,
+              139.4
+            ],
+            "mean": 148.558,
+            "sample_sd": 14.047735918803584
+          },
+          "active_union_us": {
+            "samples": [
+              7.84,
+              7.3,
+              7.38,
+              7.94,
+              8.0,
+              7.92,
+              7.8,
+              7.6,
+              7.52,
+              7.38
+            ],
+            "mean": 7.668,
+            "sample_sd": 0.26300823814727436
+          },
+          "idle_gap_us": {
+            "samples": [
+              151.88,
+              140.68,
+              175.44,
+              143.18,
+              130.78,
+              130.68,
+              141.28,
+              129.14,
+              133.82,
+              132.02
+            ],
+            "mean": 140.89,
+            "sample_sd": 14.115017219653367
+          },
+          "workspace_bytes": 524288,
+          "compiled": [
+            {
+              "binaries": {
+                "npubin": "da46c104c18d1f163ba2e24bba8303b4341cb0e3bde6f0e63f8ca15a9a300242"
+              },
+              "hash": "8fabdb43a24b56aa523dfd0e19c42a410429bf9eccc517dc0b0d06a8690a945c",
+              "name": "weighted_vjp"
+            },
+            {
+              "binaries": {
+                "npubin": "7d945bd743c69c50d34054fdfce16dfb2736b9b317dd9644befa352bcc47a113"
+              },
+              "hash": "31bf19dd28f6c5e553987e0a99c7053dd6bdef9eaef58529983b2f6fc4cb9ee3",
+              "name": "gradient_reduce"
+            }
+          ],
+          "metrics_status": "available",
+          "kernels": {
+            "gradient_reduce": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 2.996,
+                "aiv_vec_ratio": 0.10980000000000001,
+                "aiv_scalar_ratio": 0.6993,
+                "aiv_mte2_ratio": 0.257,
+                "aiv_mte3_ratio": 0.1401
+              }
+            },
+            "weighted_vjp": {
+              "task_count": 10,
+              "pmu_means": {
+                "Duration(us)": 4.672,
+                "aiv_vec_ratio": 0.3407,
+                "aiv_scalar_ratio": 0.5601,
+                "aiv_mte2_ratio": 0.1163,
+                "aiv_mte3_ratio": 0.0635
+              }
+            }
+          },
+          "backward_ir": {
+            "ttir_sha256": "ba80540d78370e73f285e420943bb94278e67da7cfcae62122e57f7823e09495",
+            "ttadapter_sha256": "2344b33d3607b577748266324274c335a7e5f8d66cdf0f8c9a962d0147f084f0",
+            "tt_atomic_rmw_occurrences": 0,
+            "ttadapter_atomic_add_occurrences": 0
+          }
+        }
+      },
+      "span_speedup": 1.1335505324519717
+    }
+  ],
+  "geomean_span_speedup": 2.2854538789875867,
+  "counts": {
+    "profiled_calls": 80,
+    "capture_calls": 8,
+    "correctness_calls": 8
+  },
+  "compiled_binary_count": 16
+}

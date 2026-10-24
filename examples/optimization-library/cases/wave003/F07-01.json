@@ -1,0 +1,21 @@
+{
+  "case_id": "F07-01",
+  "role": "gallery",
+  "seed": 7101,
+  "parameters": {
+    "B": 1,
+    "Hq": 8,
+    "Hkv": 2,
+    "Q": 1,
+    "KV": 4096,
+    "D": 64,
+    "Dv": 64,
+    "split": 4,
+    "blockN": 64
+  },
+  "purpose": "Few heads and long KV may benefit from independent range tasks plus nonlinear merge.",
+  "mathematical_work": 8388608,
+  "hypothesis_role": "benefit",
+  "scenario_designation": "gallery-benefit",
+  "hypothesis": "Few heads and long KV may benefit from independent range tasks plus nonlinear merge."
+}

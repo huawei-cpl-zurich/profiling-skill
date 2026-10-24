@@ -1,0 +1,21 @@
+{
+  "case_id": "F07-02",
+  "role": "gallery",
+  "seed": 7102,
+  "parameters": {
+    "B": 4,
+    "Hq": 16,
+    "Hkv": 4,
+    "Q": 1,
+    "KV": 256,
+    "D": 64,
+    "Dv": 64,
+    "split": 4,
+    "blockN": 64
+  },
+  "purpose": "Many heads and KV256 already provide tasks; split workspace and merge may cost more than they save.",
+  "mathematical_work": 4194304,
+  "hypothesis_role": "cost",
+  "scenario_designation": "gallery-cost",
+  "hypothesis": "Many heads and KV256 already provide tasks; split workspace and merge may cost more than they save."
+}

@@ -1,0 +1,21 @@
+{
+  "case_id": "F07-04",
+  "role": "heldout",
+  "seed": 7104,
+  "parameters": {
+    "B": 2,
+    "Hq": 16,
+    "Hkv": 4,
+    "Q": 1,
+    "KV": 449,
+    "D": 64,
+    "Dv": 32,
+    "split": 4,
+    "blockN": 64
+  },
+  "purpose": "KV449 and sufficient head tasks may expose merge overhead; all four split ranges remain occupied.",
+  "mathematical_work": 2758656,
+  "hypothesis_role": "cost",
+  "scenario_designation": "heldout-cost",
+  "hypothesis": "KV449 and sufficient head tasks may expose merge overhead; all four split ranges remain occupied."
+}

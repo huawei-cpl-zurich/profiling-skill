@@ -1,0 +1,95 @@
+{
+  "wave": 6,
+  "study_id": "N04",
+  "title": "Reciprocal sqrt primitive versus sqrt and division",
+  "study_kind": "source-backed-independent-format",
+  "new_unique_mechanism_claim": false,
+  "approval": "Standing waves003\u2013022, data first",
+  "source": "frontier/proposal.md N04: native ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 Sqrt+Div BEFORE and Triton7acb9c40a6ca827e885d902b7eaee5d45457b230 norm_gated.rsqrt AFTER; independent SAME-Triton-format adaptation. Native-after body arch35 is NOT910B proof; licenses/notices preserved.",
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "cases": [
+    {
+      "case_id": "W006-N04-01",
+      "role": "gallery",
+      "seed": 8401,
+      "parameters": {
+        "N": 65536,
+        "distribution": "loguniform",
+        "exp_low": -8,
+        "exp_high": 8
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N04-02",
+      "role": "gallery",
+      "seed": 8402,
+      "parameters": {
+        "N": 8,
+        "distribution": "powers-of-four"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N04-03",
+      "role": "heldout",
+      "seed": 8403,
+      "parameters": {
+        "N": 49152,
+        "distribution": "loguniform",
+        "exp_low": -6,
+        "exp_high": 6
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N04-04",
+      "role": "heldout",
+      "seed": 8404,
+      "parameters": {
+        "N": 17,
+        "distribution": "powers-of-four"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-N04-GA",
+      "role": "guard",
+      "seed": 8491,
+      "parameters": {
+        "N": 33,
+        "distribution": "powers-endpoints-and-neighbors"
+      },
+      "expected": "2^-8,2^8 and powers-of-four plus adjacentFP32values, oddtail, independentFP64accuracy; no assumed bit equality."
+    },
+    {
+      "case_id": "W006-N04-GB",
+      "role": "guard",
+      "seed": 8492,
+      "parameters": {
+        "N": 4097,
+        "distribution": "loguniform",
+        "exp_low": -8,
+        "exp_high": 8
+      },
+      "expected": "Valid large-tail numericalguard. Separate actualpublicCLI/prepareCPU tests reject0,-1,Inf,NaN BEFOREcache/device; no invalid operands even in maskedloadlanes."
+    }
+  ],
+  "contract": {
+    "interface": "Immutable contiguous FP32positivefinite x in[2^-8,2^8],FP32output. IndependentFP64 1/sqrt representedinputs fixedatol2e-6rtol2e-5. Domain/APIrejectsnonpositive/nonfinite/outofrange; no silentclamp/generalpath.",
+    "before": "Same-formatTriton y=1.0/tl.sqrt(x), sameblock/grid/load/store/dtype/roundingflags.",
+    "after": "Same-formatTriton y=tl.rsqrt(x), noNewtonrefinement/normalization/fusion. Maskedloads use safeother1.0botharms, notinvalidzero merelymaskedstore.",
+    "codegen": "Compile andcompare lowering/actualbinary/resources beforetiming. If full/qualifieddeviceequivalence is established, retaincompiler-noop0science/0profilesallcasesunattempted. Symbol/relocationambiguity is inconclusive, not a no-op or fabricatedphysicalchange; unresolvedalternativesmaystillrunfrozenpairedstudy withchangeconfidenceexplicit. No instruction/precisionbenefitclaimedifcanonicalized.",
+    "scope": "NativeBEFOREformula/TritonAFTERsource motivate independentSAME-Triton pair; neverbench differentlanguagesandattributegapsolelyprimitive. Nativeafterarch35not910Bproof. Preserveper-filenotices."
+  },
+  "protocol": "Six cached scientific payloads once, once-per-side correctness per case/source then exactly10 fullAPI profiled forwards/arm/four mainpairs =>8captures/80forwards. Guards0captures. Explicit component operations/host rejection tests counted separately. No warmup/autotune/extra timing/profiled IO checking. Compile/resource/engine audit all before any forwards; preserve all failures/nonconforming/equal/slower outcomes,10samples/taskPMU/source/compiler/binary/fixture identities."
+}

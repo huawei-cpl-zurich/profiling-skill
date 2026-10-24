@@ -56,3 +56,24 @@ The selected route is gz-a3 with observed 910B4-1 silicon; no A5/950 claim.
 Profiled spans include interkernel/caller gaps and are diagnostic, not ordinary
 application latency. Exported pipe percentages do not establish physical traffic,
 whole-device utilization or roofline distance. The latter is not estimated.
+
+## Retained measured cases
+
+All ten samples, event intervals and 200 task PMU rows are retained in the
+[token-mixing summary](../../../skills/ascend-optimization-library/references/token-mixing-summary.json)
+and its compressed evidence companion. Values below are profiled complete
+operation spans, mean ± sample deviation in microseconds. Ratios are before/after.
+
+| B × S × S | Before (µs) | After (µs) | Ratio |
+| --- | ---: | ---: | ---: |
+| 4 × 256 × 256 | 775.066 ± 3.174 | 764.336 ± 0.932 | 1.014× |
+| 1 × 16 × 16 | 343.266 ± 21.726 | 194.196 ± 18.831 | 1.768× |
+| 3 × 192 × 192 | 371.800 ± 24.670 | 332.536 ± 2.039 | 1.118× |
+| 1 × 32 × 32 | 349.002 ± 13.840 | 200.320 ± 15.960 | 1.742× |
+
+The four-case geomean is 1.367× for this instrumented boundary. The largest
+case has only a small mean improvement because both versions retain the same
+strided transpose. Small cases include substantial dispatch gaps, so their
+ratios do not establish unprofiled application speedups. All four prospective
+cost/benefit cases happened to have lower mean spans; no regression was forced
+by changing cases. Active-union and noncompute-gap samples remain separate.

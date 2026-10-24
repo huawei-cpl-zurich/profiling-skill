@@ -1,0 +1,1390 @@
+{
+  "study": "W005-B01",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "status": "complete",
+  "date": "2026-10-24",
+  "product": "Ascend910B4-1",
+  "physical_die": 5,
+  "logical_device": 0,
+  "collection_handle": "remote:gz-a3:job:c81647a0-e83f-4f0d-bb67-27c28e4fea91",
+  "matrix_sha256": "d258b7306739f3a5cc988fd1c7128a17d700c1a940f78daf97aa720190cdfcba",
+  "source_sha256": {
+    "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+    "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23"
+  },
+  "protocol": {
+    "CPU_scientific_oracles": 5,
+    "numerical_NPU_correctness_checks": 10,
+    "host_rejection_checks": 2,
+    "profiled_API_forwards": 80,
+    "captures": 8,
+    "guard_captures": 0,
+    "warmups": 0,
+    "extra_timing": 0,
+    "all_variants_compiled_before_forwards": true
+  },
+  "retained_archive": {
+    "name": "optimization-w005-token-mixing-fusion-compact.tgz",
+    "sha256": "ad82a36010df16d481a0760755ddc7fcbf823ee7f5eeece8e344c281ac0999ff",
+    "bytes": 4668735
+  },
+  "cases": [
+    {
+      "spec": {
+        "case_id": "W005-B01-01",
+        "role": "gallery",
+        "seed": 6301,
+        "parameters": {
+          "B": 4,
+          "S": 256
+        },
+        "scenario_designation": "gallery-benefit",
+        "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "fixture_sha256": "10157e7f8bbe5635673d62a78e0c248a236805c393799e0e49bcb4a30992099b",
+      "result_sha256": "d57f4bd27a306f7fcb9bc93db3098322c5812cbe77e0059e806ff17c237b8032",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 6.226412239129786e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 6.226412239129786e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                783.5,
+                775.82,
+                773.9,
+                774.04,
+                774.24,
+                773.96,
+                772.7,
+                772.94,
+                776.26,
+                773.3
+              ],
+              "count": 10,
+              "mean": 775.066,
+              "sample_sd": 3.1742162637238294
+            },
+            "operation_active_union_us": {
+              "samples": [
+                783.44,
+                775.78,
+                773.86,
+                774.0,
+                774.2,
+                773.92,
+                772.66,
+                772.88,
+                776.22,
+                773.26
+              ],
+              "count": 10,
+              "mean": 775.022,
+              "sample_sd": 3.1698082661960125
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.06,
+                0.04,
+                0.04,
+                0.04,
+                0.04,
+                0.04,
+                0.04,
+                0.06,
+                0.04,
+                0.04
+              ],
+              "count": 10,
+              "mean": 0.044,
+              "sample_sd": 0.008432740427115677
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.1312400102615356,
+              0.8797399997711182,
+              0.8585600256919861,
+              0.8223599791526794,
+              0.8062199950218201,
+              0.8034399747848511,
+              0.8247399926185608,
+              0.8210800290107727,
+              0.8045399785041809,
+              0.7839199900627136
+            ],
+            "count": 10,
+            "mean": 0.8535839974880218,
+            "sample_sd": 0.10147870281065884
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "before",
+            "B": 4,
+            "S": 256,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 2097152,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_add",
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "e58019b9f5f810cb088aff3bdd9af54990b3ea2da68f257f5cd5956470425fa4",
+                "ttadapter": "a20b68d559fc6f9e1f73f1fd1f83937e0e94ff6c198679215aa7a4b72e422e15",
+                "ttir": "daf72b71aa2f5183677bdfb9bf60066e0c017f6bd98906870ba3f2ad12c2f17b"
+              },
+              "hash": "8fa3f854715c66d291b411b044699706697ab5960f1135a9ca2fcc213bac1e0c"
+            },
+            {
+              "binaries": {
+                "npubin": "f347d8a8206921bceeb815f9fe5fb82c5a488f489d4bd8f4d48730e80011c71a",
+                "ttadapter": "438667f4a528da8c77819e22cf529cf50f1b64ef38c44108d065bd0097aeb886",
+                "ttir": "7a27897270d4d4d358b9383fa40150eace981e867533cbd343398233134635c8"
+              },
+              "hash": "6c90c0fed8f422c9465b848b03de495f140c7132bbe459f046825557ff362390"
+            },
+            {
+              "binaries": {
+                "npubin": "f8a5b9f24dad9d7dab63709edc63fbf5d04a96b8c7ead1aba44fd196128f9ce5",
+                "ttadapter": "58ca8d680cc187b1df2cf9fac8d5114e3b19b375c869dbe677a73c8afdb343f5",
+                "ttir": "01c26210959bc40ca309251f0d091f63ab31b57c89e85dea1844c06087c27e5f"
+              },
+              "hash": "d38658f00cdc0f81e0fb62ed88e9d528a0bf9271768aefccb81c4caf15cde688"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "daf72b71aa2f5183677bdfb9bf60066e0c017f6bd98906870ba3f2ad12c2f17b",
+            "0.ttadapter": "a20b68d559fc6f9e1f73f1fd1f83937e0e94ff6c198679215aa7a4b72e422e15",
+            "0.npubin": "e58019b9f5f810cb088aff3bdd9af54990b3ea2da68f257f5cd5956470425fa4",
+            "1.ttir": "7a27897270d4d4d358b9383fa40150eace981e867533cbd343398233134635c8",
+            "1.ttadapter": "438667f4a528da8c77819e22cf529cf50f1b64ef38c44108d065bd0097aeb886",
+            "1.npubin": "f347d8a8206921bceeb815f9fe5fb82c5a488f489d4bd8f4d48730e80011c71a",
+            "2.ttir": "01c26210959bc40ca309251f0d091f63ab31b57c89e85dea1844c06087c27e5f",
+            "2.ttadapter": "58ca8d680cc187b1df2cf9fac8d5114e3b19b375c869dbe677a73c8afdb343f5",
+            "2.npubin": "f8a5b9f24dad9d7dab63709edc63fbf5d04a96b8c7ead1aba44fd196128f9ce5"
+          },
+          "trace_sha256": "c16c324ca9ed0250951fcd670abc21fa75533c0a74861a859077cdbc1001a5e4",
+          "normalized_sha256": "e580d89898f035c3a324194e4cb15e406ed082d541cd2fee3ab03be4a83aa67f",
+          "accounting_sha256": "027529f407c4062a33b4fef2bdc319191c2a861302120d71ca8493f6339359c5",
+          "pmu_csv_sha256": "d41a4162f5260fe0dd5c1f01190fa4ff8e8c0807198e483ffa1e1b5f6f460069"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                766.78,
+                763.82,
+                764.1,
+                764.26,
+                764.22,
+                763.56,
+                764.04,
+                764.9,
+                763.84,
+                763.84
+              ],
+              "count": 10,
+              "mean": 764.336,
+              "sample_sd": 0.9317987384027028
+            },
+            "operation_active_union_us": {
+              "samples": [
+                766.76,
+                763.8,
+                764.06,
+                764.24,
+                764.2,
+                763.54,
+                764.02,
+                764.88,
+                763.82,
+                763.82
+              ],
+              "count": 10,
+              "mean": 764.314,
+              "sample_sd": 0.9323828493584466
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.02,
+                0.02,
+                0.04,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02
+              ],
+              "count": 10,
+              "mean": 0.022,
+              "sample_sd": 0.006324555320336759
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.4258400201797485,
+              0.7639999985694885,
+              0.7642999887466431,
+              0.764460027217865,
+              0.7644199728965759,
+              0.763759970664978,
+              0.764240026473999,
+              0.7650799751281738,
+              0.7640200257301331,
+              0.7640399932861328
+            ],
+            "count": 10,
+            "mean": 0.8304159998893738,
+            "sample_sd": 0.20921098427386653
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "after",
+            "B": 4,
+            "S": 256,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 1048576,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "e58019b9f5f810cb088aff3bdd9af54990b3ea2da68f257f5cd5956470425fa4",
+                "ttadapter": "a20b68d559fc6f9e1f73f1fd1f83937e0e94ff6c198679215aa7a4b72e422e15",
+                "ttir": "daf72b71aa2f5183677bdfb9bf60066e0c017f6bd98906870ba3f2ad12c2f17b"
+              },
+              "hash": "8fa3f854715c66d291b411b044699706697ab5960f1135a9ca2fcc213bac1e0c"
+            },
+            {
+              "binaries": {
+                "npubin": "92162f23a4c897191b45cc79b71070789b945ef65dc7419092f88b2523681d53",
+                "ttadapter": "a69891af0e1e35b32269d4698aeca610a0576641b7116816c30f0a7ab3401b89",
+                "ttir": "6d5fd201da9a27e77ed130fd3ac536a4abbf966431e93903674ecfaeda98b30b"
+              },
+              "hash": "640023fffcfdc72c7b9346d0fda540b23a9a44eb22e94dee25be55318fab5e4d"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "daf72b71aa2f5183677bdfb9bf60066e0c017f6bd98906870ba3f2ad12c2f17b",
+            "0.ttadapter": "a20b68d559fc6f9e1f73f1fd1f83937e0e94ff6c198679215aa7a4b72e422e15",
+            "0.npubin": "e58019b9f5f810cb088aff3bdd9af54990b3ea2da68f257f5cd5956470425fa4",
+            "1.ttir": "6d5fd201da9a27e77ed130fd3ac536a4abbf966431e93903674ecfaeda98b30b",
+            "1.ttadapter": "a69891af0e1e35b32269d4698aeca610a0576641b7116816c30f0a7ab3401b89",
+            "1.npubin": "92162f23a4c897191b45cc79b71070789b945ef65dc7419092f88b2523681d53"
+          },
+          "trace_sha256": "a64f628da21bed49b4f091bc5dfc93363b768dbb6a8a595fe2e0358889f7da46",
+          "normalized_sha256": "4bda59ceb0728dd3650f621bfd5e7be02e01e75073d18c4b853b48980b48e513",
+          "accounting_sha256": "8c1ad42a76de2d7ad5b4d69bb14689a80f1d70ce46741172e2930833f2f24aa8",
+          "pmu_csv_sha256": "1d171f1afdd5cd623dea849eb695cf9f625a9fd717d0cb63af5e2eb1c0a8b842"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 1.0140383286931403
+    },
+    {
+      "spec": {
+        "case_id": "W005-B01-02",
+        "role": "gallery",
+        "seed": 6302,
+        "parameters": {
+          "B": 1,
+          "S": 16
+        },
+        "scenario_designation": "gallery-cost",
+        "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "fixture_sha256": "9312acae7cb77ecbe6e6589ab999aa2b021371f08f7dfb0fc677ed583bf5ca9e",
+      "result_sha256": "0dcc2070c5e2d36224532fa7c1d5fa056466516233096b44d7cd7ebecbf73646",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 3.131432455560912e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 3.131432455560912e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                383.48,
+                343.54,
+                314.88,
+                373.88,
+                345.9,
+                349.06,
+                320.86,
+                326.88,
+                336.52,
+                337.66
+              ],
+              "count": 10,
+              "mean": 343.266,
+              "sample_sd": 21.72606432631348
+            },
+            "operation_active_union_us": {
+              "samples": [
+                12.28,
+                11.44,
+                11.5,
+                11.08,
+                10.92,
+                10.82,
+                10.78,
+                10.94,
+                10.92,
+                10.72
+              ],
+              "count": 10,
+              "mean": 11.14,
+              "sample_sd": 0.47935141365993444
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                371.2,
+                332.1,
+                303.38,
+                362.8,
+                334.98,
+                338.24,
+                310.08,
+                315.94,
+                325.6,
+                326.94
+              ],
+              "count": 10,
+              "mean": 332.126,
+              "sample_sd": 21.491670841410997
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9448400139808655,
+              0.6733599901199341,
+              0.6652399897575378,
+              0.6784200072288513,
+              0.6609799861907959,
+              0.6417999863624573,
+              0.6317399740219116,
+              0.6424000263214111,
+              0.6435400247573853,
+              0.6621800065040588
+            ],
+            "count": 10,
+            "mean": 0.6844500005245209,
+            "sample_sd": 0.09274656269615068
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "before",
+            "B": 1,
+            "S": 16,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 2048,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_add",
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "20f15550cfdd712e5ea1727e8d6a6b6d65775cd1bb2d65ce0d2937ffafa289e5",
+                "ttadapter": "f640da13cee0e51b381b85746459e19d4a723948bad350adc760188f89f5f441",
+                "ttir": "482436b3be6f83c4cf6859af0a58e5e106e65b50f489bb6d191375d01fd5b8a7"
+              },
+              "hash": "1b9b6db0a977891fa36ed9044e59a5fb513761ecd84283325da211708a1e28b6"
+            },
+            {
+              "binaries": {
+                "npubin": "87b1792dab0b6d473ae297027236f323d2145b8f63608cc4b3371da7f8f06308",
+                "ttadapter": "da5c2e25140a9ead15e11bd996257679058ce8f07ed2737d4f3665cbe8a34417",
+                "ttir": "5a83f10e6e3c08c39a51fedc49922d77db6d285b0d8b62195f58cea5588f36e2"
+              },
+              "hash": "247069211063b0b901c495b04f6d9bc9515e388e4dd0e7f992ceb141db4c0f91"
+            },
+            {
+              "binaries": {
+                "npubin": "05b7f1768095b42ddf98ecaac98edf8f52c4fa82cc3e34b9add60c71f3d54426",
+                "ttadapter": "2996c96eb13bfac4e44b0fc78596e5f72cdb3cca4e74e1624621747f5b8ec06f",
+                "ttir": "cf23e04ebbe0450c35afde0434654dc4b8cd9a6e8dd348daea85436d4fc98748"
+              },
+              "hash": "3d5231b278201f5ac258d0d9ac9a9a18aa15a1149f9e48d328c68f563b5d0ba3"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "482436b3be6f83c4cf6859af0a58e5e106e65b50f489bb6d191375d01fd5b8a7",
+            "0.ttadapter": "f640da13cee0e51b381b85746459e19d4a723948bad350adc760188f89f5f441",
+            "0.npubin": "20f15550cfdd712e5ea1727e8d6a6b6d65775cd1bb2d65ce0d2937ffafa289e5",
+            "1.ttir": "5a83f10e6e3c08c39a51fedc49922d77db6d285b0d8b62195f58cea5588f36e2",
+            "1.ttadapter": "da5c2e25140a9ead15e11bd996257679058ce8f07ed2737d4f3665cbe8a34417",
+            "1.npubin": "87b1792dab0b6d473ae297027236f323d2145b8f63608cc4b3371da7f8f06308",
+            "2.ttir": "cf23e04ebbe0450c35afde0434654dc4b8cd9a6e8dd348daea85436d4fc98748",
+            "2.ttadapter": "2996c96eb13bfac4e44b0fc78596e5f72cdb3cca4e74e1624621747f5b8ec06f",
+            "2.npubin": "05b7f1768095b42ddf98ecaac98edf8f52c4fa82cc3e34b9add60c71f3d54426"
+          },
+          "trace_sha256": "eb53747bf5014ae0c79f4dd1949351b68ce5ce712cad59e208cda50af0b6c1de",
+          "normalized_sha256": "1dea4a26a9b76d1cd62f05de831b5555a10fca651451e88918b0d73ece66b7a7",
+          "accounting_sha256": "25eb2023b527b5c9b9b17b17f6f4640f198e320c1330f0f6be416a07a62a259f",
+          "pmu_csv_sha256": "d197e4fc52e0b051891264005e0eac1add6e2e76a7b7c07f951ff1689b25bbe9"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                239.56,
+                189.24,
+                197.28,
+                171.7,
+                201.12,
+                184.28,
+                189.68,
+                198.72,
+                196.24,
+                174.14
+              ],
+              "count": 10,
+              "mean": 194.196,
+              "sample_sd": 18.831375237441726
+            },
+            "operation_active_union_us": {
+              "samples": [
+                10.24,
+                9.22,
+                9.36,
+                8.8,
+                8.54,
+                9.04,
+                8.98,
+                9.38,
+                8.4,
+                9.34
+              ],
+              "count": 10,
+              "mean": 9.13,
+              "sample_sd": 0.5185663999056545
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                229.32,
+                180.02,
+                187.92,
+                162.9,
+                192.58,
+                175.24,
+                180.7,
+                189.34,
+                187.84,
+                164.8
+              ],
+              "count": 10,
+              "mean": 185.066,
+              "sample_sd": 18.53555394370505
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0591800212860107,
+              0.5222399830818176,
+              0.5605199933052063,
+              0.5367199778556824,
+              0.5149400234222412,
+              0.5039600133895874,
+              0.5065199732780457,
+              0.4989199936389923,
+              0.49581998586654663,
+              0.5274400115013123
+            ],
+            "count": 10,
+            "mean": 0.5726259976625443,
+            "sample_sd": 0.172077364148941
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "after",
+            "B": 1,
+            "S": 16,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 1024,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "20f15550cfdd712e5ea1727e8d6a6b6d65775cd1bb2d65ce0d2937ffafa289e5",
+                "ttadapter": "f640da13cee0e51b381b85746459e19d4a723948bad350adc760188f89f5f441",
+                "ttir": "482436b3be6f83c4cf6859af0a58e5e106e65b50f489bb6d191375d01fd5b8a7"
+              },
+              "hash": "1b9b6db0a977891fa36ed9044e59a5fb513761ecd84283325da211708a1e28b6"
+            },
+            {
+              "binaries": {
+                "npubin": "e82b96a84821149c3a8c225387c01dd1750f4739ff1786ad74d2b4a255700382",
+                "ttadapter": "78cdc2c1e342d01340e0d40e94c949245ea93fc8a14eb7a88174bc2231dc4852",
+                "ttir": "c04e3e7b633eff453cd2e38f5a3830650278fcdc1c49680f9e3a76fdf44aeac9"
+              },
+              "hash": "a03ebc399f14faa803cd9ab50990f63482132ff75a2fa905655ff685dbe5cbed"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "482436b3be6f83c4cf6859af0a58e5e106e65b50f489bb6d191375d01fd5b8a7",
+            "0.ttadapter": "f640da13cee0e51b381b85746459e19d4a723948bad350adc760188f89f5f441",
+            "0.npubin": "20f15550cfdd712e5ea1727e8d6a6b6d65775cd1bb2d65ce0d2937ffafa289e5",
+            "1.ttir": "c04e3e7b633eff453cd2e38f5a3830650278fcdc1c49680f9e3a76fdf44aeac9",
+            "1.ttadapter": "78cdc2c1e342d01340e0d40e94c949245ea93fc8a14eb7a88174bc2231dc4852",
+            "1.npubin": "e82b96a84821149c3a8c225387c01dd1750f4739ff1786ad74d2b4a255700382"
+          },
+          "trace_sha256": "caac3c37dede3a58d039a34566e59ae697cc1bdc080064b5639f76a3fc3db2ae",
+          "normalized_sha256": "a664b7d70424839dac45414829848e1c35337082477c62eddeaffb810a9c4038",
+          "accounting_sha256": "5fa3a340bc2340ad862c1e0830f5fc06cb581e6b037e7751c72c7b9a5f76ea0a",
+          "pmu_csv_sha256": "631bcd2a461ef364c3338db2f9b592ae0d28e5ee0085716e1da87e9d119e9de9"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 1.7676265216585307
+    },
+    {
+      "spec": {
+        "case_id": "W005-B01-03",
+        "role": "heldout",
+        "seed": 6303,
+        "parameters": {
+          "B": 3,
+          "S": 192
+        },
+        "scenario_designation": "heldout-benefit",
+        "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "fixture_sha256": "65c4bdb389c512f917c66fb3e8ebf4e2214d6abe31906ff06ede22c1af8d6834",
+      "result_sha256": "7d0476e768447a9f47dd1932640462400ee56c8e7ed6d2e6a71997d9c4aaa9e6",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 6.361482243200101e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 6.361482243200101e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                428.44,
+                360.42,
+                368.0,
+                340.58,
+                380.04,
+                382.5,
+                358.88,
+                387.98,
+                352.98,
+                358.18
+              ],
+              "count": 10,
+              "mean": 371.8,
+              "sample_sd": 24.670102463418257
+            },
+            "operation_active_union_us": {
+              "samples": [
+                347.46,
+                340.62,
+                340.56,
+                340.54,
+                340.74,
+                340.62,
+                340.86,
+                341.18,
+                340.66,
+                340.54
+              ],
+              "count": 10,
+              "mean": 341.378,
+              "sample_sd": 2.145889093126659
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                80.98,
+                19.8,
+                27.44,
+                0.04,
+                39.3,
+                41.88,
+                18.02,
+                46.8,
+                12.32,
+                17.64
+              ],
+              "count": 10,
+              "mean": 30.422,
+              "sample_sd": 22.910724223481992
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0254600048065186,
+              0.6710399985313416,
+              0.6536399722099304,
+              0.6719599962234497,
+              0.6633800268173218,
+              0.6838200092315674,
+              0.656440019607544,
+              0.6894800066947937,
+              0.6356800198554993,
+              0.6571000218391418
+            ],
+            "count": 10,
+            "mean": 0.7008000075817108,
+            "sample_sd": 0.11512332273648081
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "before",
+            "B": 3,
+            "S": 192,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 884736,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_add",
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "9bb00b585246a31c9811979fe85d36cb5eff0bd81df56a532a3e03da4355ccc1",
+                "ttadapter": "b470db6b99ede9c8473ce17a75818ff9031059e89a415c146d788691cda9a184",
+                "ttir": "7beb57944d2205bc31a9ab6ea9af6bc46d6a291d6274e655b468ed19db8dca1e"
+              },
+              "hash": "c7c96c273b73d537d567a5be952c9e05322c05ff293345e64e863d8013d1a231"
+            },
+            {
+              "binaries": {
+                "npubin": "036bb893e587a8504d16029a0bb06c714a36f9d5778528897d7a5463f7f4eef4",
+                "ttadapter": "3cadae113c71725282d58a7943966e4dc38b93b808452559d16130cc43b4879b",
+                "ttir": "389d6043a7e31b7d5fad5fc72609bdc51852bcf57d77017c68b2190ef0c003bc"
+              },
+              "hash": "cb7d3e061c560b45f18e25b78121a40fbe0439c6f7869f6c34ba1d508859955c"
+            },
+            {
+              "binaries": {
+                "npubin": "58e9dd8c2d2921a55115681a05b99355b34b95f5b84941d719c2f15e09b7ba67",
+                "ttadapter": "8cb5559c6461a7884eab2fc81e6d6650fe1d63b1b896e96be6e568d9e78fa971",
+                "ttir": "d1a4f6c5e07a9fcd56fe63993d57225d2da992e5abdb09fdfc953639445e599f"
+              },
+              "hash": "4fd0dc229a26e13acf85d1159ddc5c432fe0122f6b826608759c89d57678058c"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "7beb57944d2205bc31a9ab6ea9af6bc46d6a291d6274e655b468ed19db8dca1e",
+            "0.ttadapter": "b470db6b99ede9c8473ce17a75818ff9031059e89a415c146d788691cda9a184",
+            "0.npubin": "9bb00b585246a31c9811979fe85d36cb5eff0bd81df56a532a3e03da4355ccc1",
+            "1.ttir": "389d6043a7e31b7d5fad5fc72609bdc51852bcf57d77017c68b2190ef0c003bc",
+            "1.ttadapter": "3cadae113c71725282d58a7943966e4dc38b93b808452559d16130cc43b4879b",
+            "1.npubin": "036bb893e587a8504d16029a0bb06c714a36f9d5778528897d7a5463f7f4eef4",
+            "2.ttir": "d1a4f6c5e07a9fcd56fe63993d57225d2da992e5abdb09fdfc953639445e599f",
+            "2.ttadapter": "8cb5559c6461a7884eab2fc81e6d6650fe1d63b1b896e96be6e568d9e78fa971",
+            "2.npubin": "58e9dd8c2d2921a55115681a05b99355b34b95f5b84941d719c2f15e09b7ba67"
+          },
+          "trace_sha256": "fa77a6790e04a113629b4464d6d65aa508e4c961432912e12bf8aeb1ef837a47",
+          "normalized_sha256": "e453aab192690273abdbdebc99ff7ba40cbd4cef245056515f28cea5c866dff3",
+          "accounting_sha256": "9b54422e248c76da694ffdc44bd17b9a235d793921ca6ae8082c6be07e690b95",
+          "pmu_csv_sha256": "910d7cd76e2415526db6b46b3311d5db3e52d205a9130a50682a4f61520ec7de"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                335.4,
+                332.64,
+                333.72,
+                333.6,
+                332.82,
+                329.2,
+                333.1,
+                328.72,
+                333.12,
+                333.04
+              ],
+              "count": 10,
+              "mean": 332.536,
+              "sample_sd": 2.039385528372044
+            },
+            "operation_active_union_us": {
+              "samples": [
+                335.38,
+                332.62,
+                333.7,
+                333.58,
+                332.8,
+                329.18,
+                333.06,
+                328.7,
+                333.1,
+                333.02
+              ],
+              "count": 10,
+              "mean": 332.514,
+              "sample_sd": 2.038780681355075
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.02,
+                0.04,
+                0.02,
+                0.02,
+                0.02
+              ],
+              "count": 10,
+              "mean": 0.022,
+              "sample_sd": 0.006324555320336759
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.050719976425171,
+              0.5211799740791321,
+              0.5154799818992615,
+              0.5255399942398071,
+              0.5202599763870239,
+              0.525439977645874,
+              0.5263599753379822,
+              0.5092999935150146,
+              0.5113400220870972,
+              0.5170199871063232
+            ],
+            "count": 10,
+            "mean": 0.5722639858722687,
+            "sample_sd": 0.1682159464255821
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "after",
+            "B": 3,
+            "S": 192,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 442368,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "9bb00b585246a31c9811979fe85d36cb5eff0bd81df56a532a3e03da4355ccc1",
+                "ttadapter": "b470db6b99ede9c8473ce17a75818ff9031059e89a415c146d788691cda9a184",
+                "ttir": "7beb57944d2205bc31a9ab6ea9af6bc46d6a291d6274e655b468ed19db8dca1e"
+              },
+              "hash": "c7c96c273b73d537d567a5be952c9e05322c05ff293345e64e863d8013d1a231"
+            },
+            {
+              "binaries": {
+                "npubin": "954e583fa05181f5a637e3056911b40bc5b310351eacab3a881b7f1313691d94",
+                "ttadapter": "10117db51471f69333db07825c66e2c9347c75c03b07d48d81817ed2d96cb62b",
+                "ttir": "fc22859371416390325a5b35b4d0112265a85d465fbf7bff539436ff0440fb6a"
+              },
+              "hash": "66e0fea95e2912bb4ba85291723b0dd98c12005de0f29705c6f8c12547ce0e0b"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "7beb57944d2205bc31a9ab6ea9af6bc46d6a291d6274e655b468ed19db8dca1e",
+            "0.ttadapter": "b470db6b99ede9c8473ce17a75818ff9031059e89a415c146d788691cda9a184",
+            "0.npubin": "9bb00b585246a31c9811979fe85d36cb5eff0bd81df56a532a3e03da4355ccc1",
+            "1.ttir": "fc22859371416390325a5b35b4d0112265a85d465fbf7bff539436ff0440fb6a",
+            "1.ttadapter": "10117db51471f69333db07825c66e2c9347c75c03b07d48d81817ed2d96cb62b",
+            "1.npubin": "954e583fa05181f5a637e3056911b40bc5b310351eacab3a881b7f1313691d94"
+          },
+          "trace_sha256": "dbb4ecd470f0cd43133e29bad35da4d03b5f01f9df918b620f401868bee3652f",
+          "normalized_sha256": "9fc49bfd6d67e540c55d6e8bdebc2e34ab7d7c8e5722de1467e1b248872f6bc5",
+          "accounting_sha256": "7c92d3d20141c5b18a769151ae34e0ccf0db6cd16d4ed466a0b835b21d0f4379",
+          "pmu_csv_sha256": "49b045f146b14503eb1bee5657a3cd5de97488faa0b640302677fc8bdf98e517"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 1.1180744340462387
+    },
+    {
+      "spec": {
+        "case_id": "W005-B01-04",
+        "role": "heldout",
+        "seed": 6304,
+        "parameters": {
+          "B": 1,
+          "S": 32
+        },
+        "scenario_designation": "heldout-cost",
+        "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "fixture_sha256": "324b850d1b7d7789fb3bf235c366d44af29fe3dc8fe3ebf6a92fdbd1e8757354",
+      "result_sha256": "037cfdaeb69777291928be04f66e27c6a1d975ab85cc8ed0d2a0a4c14ab17275",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 3.4514668412199967e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 3.4514668412199967e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        }
+      },
+      "arms": {
+        "before": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                374.52,
+                350.44,
+                348.36,
+                347.72,
+                353.18,
+                346.92,
+                355.8,
+                352.48,
+                342.32,
+                318.28
+              ],
+              "count": 10,
+              "mean": 349.002,
+              "sample_sd": 13.839885837679446
+            },
+            "operation_active_union_us": {
+              "samples": [
+                13.62,
+                13.78,
+                14.74,
+                14.96,
+                14.16,
+                13.76,
+                14.58,
+                14.54,
+                13.94,
+                14.16
+              ],
+              "count": 10,
+              "mean": 14.224,
+              "sample_sd": 0.45954566935422486
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                360.9,
+                336.66,
+                333.62,
+                332.76,
+                339.02,
+                333.16,
+                341.22,
+                337.94,
+                328.38,
+                304.12
+              ],
+              "count": 10,
+              "mean": 334.778,
+              "sample_sd": 13.921492416803272
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.980139970779419,
+              0.6555799841880798,
+              0.6642000079154968,
+              0.6639000177383423,
+              0.6711199879646301,
+              0.6513199806213379,
+              0.6713200211524963,
+              0.6739400029182434,
+              0.6477400064468384,
+              0.6384599804878235
+            ],
+            "count": 10,
+            "mean": 0.6917719960212707,
+            "sample_sd": 0.10197120161814074
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "before",
+            "B": 1,
+            "S": 32,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 8192,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_add",
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "f303337bee9ea29890b942e27b995352e2b633e9eca696fbde0e210425f5fc3a",
+                "ttadapter": "3e2f4b279e1f0de6c751757e9e22eb6f4fa705bdd07689f92f74d54c519ec07d",
+                "ttir": "880f2d229f9d31e99f2ca96e7a4c1d1b45b128810e2b55bec1168e610c9ac988"
+              },
+              "hash": "29db2e833c1d2436ba9c791bbc5c8ca261460cb11a9266da4bab023869c20b4b"
+            },
+            {
+              "binaries": {
+                "npubin": "3982a66498b2f22a4e4609031e1c63a2e63ceba5e029d52aa23d9fe5cff16164",
+                "ttadapter": "fe07b8caf00ea2eebc9597f448c68f984997ef732dd3d7410590feb28e78ec8f",
+                "ttir": "d1c45a54e0d4a323d59ef49b8bb0117b3f1eceebb3082cf46afbb6561a8029ef"
+              },
+              "hash": "989ba5ac1820747830ddb1b705d55c64525b5209ebcaf20c9110b2634c40fd25"
+            },
+            {
+              "binaries": {
+                "npubin": "1796b5a3218df46495da82854eb10d730c99f2d0e7017f5327cac6bb8ac75b36",
+                "ttadapter": "2e7e7519266d33fda71b26193251dfab0cb2cb08bcad7b65897683056ff44e9c",
+                "ttir": "cb787ee8c2d702a2846f875369cbb83d3ee11a5bfb232ff19219b0994b04e4ab"
+              },
+              "hash": "d1a3a3de7a9abe94ea744f1bc2ea4f4f433352b51ca048db232aee7e210e3fb3"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "880f2d229f9d31e99f2ca96e7a4c1d1b45b128810e2b55bec1168e610c9ac988",
+            "0.ttadapter": "3e2f4b279e1f0de6c751757e9e22eb6f4fa705bdd07689f92f74d54c519ec07d",
+            "0.npubin": "f303337bee9ea29890b942e27b995352e2b633e9eca696fbde0e210425f5fc3a",
+            "1.ttir": "d1c45a54e0d4a323d59ef49b8bb0117b3f1eceebb3082cf46afbb6561a8029ef",
+            "1.ttadapter": "fe07b8caf00ea2eebc9597f448c68f984997ef732dd3d7410590feb28e78ec8f",
+            "1.npubin": "3982a66498b2f22a4e4609031e1c63a2e63ceba5e029d52aa23d9fe5cff16164",
+            "2.ttir": "cb787ee8c2d702a2846f875369cbb83d3ee11a5bfb232ff19219b0994b04e4ab",
+            "2.ttadapter": "2e7e7519266d33fda71b26193251dfab0cb2cb08bcad7b65897683056ff44e9c",
+            "2.npubin": "1796b5a3218df46495da82854eb10d730c99f2d0e7017f5327cac6bb8ac75b36"
+          },
+          "trace_sha256": "bf7f21b20657912db73028fd4e208e38255bff59a6322546aad1c327e4f0aadb",
+          "normalized_sha256": "e9711c374eb12daefbb74839482d5037ea71cb4ad1c7ca12fcd9e531346f793e",
+          "accounting_sha256": "67298bd7274ddcd879220280efd5574797dac7a9dc7d61d6968786bfc61f2a8a",
+          "pmu_csv_sha256": "05e5a19a9d8cd285ecc619621b5ada982e9168d21f1fe9bfa6293bf4b2b84a44"
+        },
+        "after": {
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                234.42,
+                192.5,
+                191.36,
+                191.34,
+                213.18,
+                194.56,
+                218.02,
+                193.28,
+                188.94,
+                185.6
+              ],
+              "count": 10,
+              "mean": 200.32,
+              "sample_sd": 15.959935950860062
+            },
+            "operation_active_union_us": {
+              "samples": [
+                12.04,
+                11.62,
+                11.52,
+                11.58,
+                11.68,
+                11.42,
+                11.42,
+                11.64,
+                11.92,
+                11.74
+              ],
+              "count": 10,
+              "mean": 11.658,
+              "sample_sd": 0.20054370540552433
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                222.38,
+                180.88,
+                179.84,
+                179.76,
+                201.5,
+                183.14,
+                206.6,
+                181.64,
+                177.02,
+                173.86
+              ],
+              "count": 10,
+              "mean": 188.662,
+              "sample_sd": 15.900939035862699
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0946799516677856,
+              0.5264800190925598,
+              0.5005599856376648,
+              0.5164200067520142,
+              0.5168799757957458,
+              0.5136600136756897,
+              0.521120011806488,
+              0.5171599984169006,
+              0.4977400004863739,
+              0.4873799979686737
+            ],
+            "count": 10,
+            "mean": 0.5692079961299896,
+            "sample_sd": 0.1850208160358173
+          },
+          "event_instrumentation": "torch_npu profiler active",
+          "metadata": {
+            "arm": "after",
+            "B": 1,
+            "S": 32,
+            "language": "triton",
+            "eps": 1e-05,
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "workspace_logical_bytes": 4096,
+            "scope": "preallocated buffers; transpose and every residual/statistic computation inside each API",
+            "arithmetic": "FP32 residual and centered variance, FMA disabled"
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave005_token_norm",
+              "wave005_token_transpose"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "f303337bee9ea29890b942e27b995352e2b633e9eca696fbde0e210425f5fc3a",
+                "ttadapter": "3e2f4b279e1f0de6c751757e9e22eb6f4fa705bdd07689f92f74d54c519ec07d",
+                "ttir": "880f2d229f9d31e99f2ca96e7a4c1d1b45b128810e2b55bec1168e610c9ac988"
+              },
+              "hash": "29db2e833c1d2436ba9c791bbc5c8ca261460cb11a9266da4bab023869c20b4b"
+            },
+            {
+              "binaries": {
+                "npubin": "04954feff926148c7afb240427834dc9dedb50e9f91970c2919c84fcc89c1bef",
+                "ttadapter": "a373d64b3e9e29601751dd55ab424d191499463bb404f0769f326e5de2e819e1",
+                "ttir": "5e3f7ff0ade9ff637731160d1c259dd4ff35dc7a8a0e7d37df7c4c49ff767fac"
+              },
+              "hash": "bab43b9fa4343744dcd03ee6bebf4a70f81b0a04cc816bf6ff5a794d1f051826"
+            }
+          ],
+          "source_sha256": {
+            "token_mixing.py": "f034b8d41f9df557a608f8f691272fda559bf0b8a89224eab93269f14e9f109d",
+            "token_mixing_contract.py": "54b7c830a781b8628ab8a7799999f9eea36f6f967b6e6521c26288478caf2f23",
+            "0.ttir": "880f2d229f9d31e99f2ca96e7a4c1d1b45b128810e2b55bec1168e610c9ac988",
+            "0.ttadapter": "3e2f4b279e1f0de6c751757e9e22eb6f4fa705bdd07689f92f74d54c519ec07d",
+            "0.npubin": "f303337bee9ea29890b942e27b995352e2b633e9eca696fbde0e210425f5fc3a",
+            "1.ttir": "5e3f7ff0ade9ff637731160d1c259dd4ff35dc7a8a0e7d37df7c4c49ff767fac",
+            "1.ttadapter": "a373d64b3e9e29601751dd55ab424d191499463bb404f0769f326e5de2e819e1",
+            "1.npubin": "04954feff926148c7afb240427834dc9dedb50e9f91970c2919c84fcc89c1bef"
+          },
+          "trace_sha256": "1357c374e3cfff53d0c089856db6bc903f5684ed60d8c2e97c022385fbed8c96",
+          "normalized_sha256": "bd70c803f83f27f845330fe444def791d5147df7b01ddd1db70dc6bc556d5b7f",
+          "accounting_sha256": "d37be9ff60a2fd437e6e29fb77110c57bcab31f69bdadd9e41f192f54e15baca",
+          "pmu_csv_sha256": "49bba26bb197864e80202e2a7e6738d23c1e7ed2f8e84fd2747afb804868bc7e"
+        }
+      },
+      "profiled_span_ratio_before_over_after": 1.742222444089457
+    },
+    {
+      "spec": {
+        "case_id": "W005-B01-GB",
+        "role": "guard",
+        "seed": 6392,
+        "parameters": {
+          "B": 2,
+          "S": 17,
+          "distribution": "constant-and-symmetric"
+        },
+        "expected": "Constant/symmetricinput,nontrivialbeta verifiestranspose/zerovariance/tail."
+      },
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 0,
+        "capture_calls": 0,
+        "correctness_calls": 2
+      },
+      "fixture_sha256": "c02cd02b021fe6b922b1c6ff625d8458a24cf57459d77f9dfe85bdabd9bf792c",
+      "result_sha256": "c5bc5d016cbeefb80886b49e8672f621734af12293640f5ae701d1fc2b7250b5",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 4.036169385379651e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_abs_error": 4.036169385379651e-07,
+            "atol": 0.0001,
+            "rtol": 0.0001,
+            "oracle": "independent CPU FP64"
+          }
+        }
+      }
+    },
+    {
+      "spec": {
+        "case_id": "W005-B01-GA",
+        "role": "guard",
+        "seed": 6391,
+        "parameters": {
+          "B": 1,
+          "S": 16,
+          "malformed_nonsquare": true
+        },
+        "expected": "Both hostreject nonsquareinput beforelaunch; noCPUfallbackperformanceclaim."
+      },
+      "status": "complete",
+      "host_rejection": true,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "host_rejected": true,
+              "error": "square token/channel dimensions required",
+              "npu_calls": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "host_rejected": true,
+              "error": "square token/channel dimensions required",
+              "npu_calls": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      },
+      "counts": {
+        "profiled_calls": 0,
+        "capture_calls": 0,
+        "correctness_calls": 2
+      }
+    }
+  ],
+  "interpretation": [
+    "Profiled operation spans include interkernel/caller gaps, not ordinary application latency.",
+    "The transpose stays inside both APIs; only the residual temporary and add stage are eliminated.",
+    "Controlled separate-stage baseline is not the best native/vendor operator.",
+    "Logical workspace is preallocated; no measured peak-allocation, physical-traffic or roofline claim."
+  ],
+  "profiled_span_geomean_ratio": 1.3669568331423951,
+  "full_PMU_evidence": {
+    "file": "token-mixing-evidence.json.gz",
+    "sha256": "dee99c02f6913959eef5679b7fc13afebe21283762c344a3f72b44f4c4d53c0c",
+    "bytes": 45830,
+    "rows": 200
+  }
+}

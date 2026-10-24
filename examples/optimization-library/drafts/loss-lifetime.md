@@ -7,8 +7,8 @@ logits and gradients before moving to the next chunk. Stable source citations:
 - `ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/loss/fused_linear_cross_enrtopy.py:L49-L69`
 - `ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/loss/fused_linear_cross_enrtopy.py:L116-L187`
 
-No A3 correctness, compilation, timing or device peak-memory result is claimed
-by this CPU-qualified draft. The source implementation supports more options;
+A3 correctness, compilation and captured spans are qualified for the four frozen
+cases below. No device peak-memory result is claimed. The source implementation supports more options;
 this example does not implement ignore labels, weights, bias, smoothing,
 soft-capping, z-loss, autograd state or a configurable upstream gradient.
 
@@ -66,5 +66,39 @@ supported memory counters. Pipeline busy ratios alone cannot establish cache
 locality, useful MAC occupancy or distance to roofline. Retain complete dX/dW
 correctness evidence, tail chunks and immutable input checks. Profile once
 correct: exactly ten forwards, no measured output/input inspection, warmups,
-reference calls or hidden reset work. Four gallery/heldout hypotheses are frozen
-in the orchestration artifacts before A3 execution; none is a measured claim.
+reference calls or hidden reset work. Four gallery/heldout hypotheses were frozen
+in the orchestration artifacts before A3 execution; results retain the tradeoffs.
+
+## Four-case A3 qualification
+
+Frozen source `82e9d4` passed eight complete loss/dX/dW checks, eight captures and
+80 forwards on healthy isolated gz-a3 physical device 3, with four cached CPU oracles.
+No warmups, unprofiled forwards or runtime/compile/correctness failures occurred.
+Outputs/workspaces are **preallocated in prepare**; spans cover every required
+device operation and inter-kernel gap, not host allocations or application latency.
+
+| Case (T,D,V,C) | Before span µs ± SD | After span µs ± SD | Speedup | Logical workspace bytes before→after |
+| --- | ---: | ---: | ---: | ---: |
+| (1024,128,4096,64) | 1493.024 ± 32.790 | 12011.816 ± 106.059 | 0.124296× | 25169920→1576960 |
+| (16,64,128,4) | 690.194 ± 75.472 | 2873.488 ± 88.544 | 0.240194× | 12352→3136 |
+| (769,96,2049,64) | 697.324 ± 33.305 | 9466.024 ± 106.922 | 0.073666× | 9457162→789892 |
+| (9,32,257,2) | 685.826 ± 20.595 | 3694.678 ± 83.368 | 0.185625× | 13914→3120 |
+
+Complete-span geomean 0.142145× (7.035× slower). Logical temporary storage is
+smaller in every case, but physical peak memory/cache/capacity benefit remains
+unmeasured. Gallery memory case: before 5 tasks→after 65 per forward; active union
+1492.930→4564.950µs and internal gaps 0.094→7446.866µs. Both shorter GEMMs
+and extra dispatches have costs; do not promote this entry as a speed win.
+
+All 1,760 device tasks join same-capture PMU rows. 42 actual NPUBIN snapshots were
+independently SHA-verified, all compilation identities stable across capture.
+For gallery logits GEMM, exported MAC ratio falls 0.1054→0.027525, while exported
+MTE2 ratio is 0.9819→0.991994. Exported cube_utilization rises 87.149→97.297%;
+this does not imply more useful MAC work or greater distance to/from roofline.
+Task-local ratios have different task counts/denominators and are diagnostic.
+
+First job `remote:gz-a3:job:b0458d34-0343-4f0d-949a-ce5a23668da1`; remaining
+`remote:gz-a3:job:e57e1b7c-6ca8-42be-9b7f-bdf5e6ce8483`, both exit 0. Compact
+archive SHA256 `ab463b48a44771a53fae8ee5c7e831e1975d8c7c5f5047eecd9c9e7d1669348a`.
+Raw ten samples, SD, active/gap/caller distributions, matched PMU rows, original
+result hashes and binary snapshots are retained in orchestration evidence.

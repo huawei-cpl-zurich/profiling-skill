@@ -1,0 +1,100 @@
+{
+  "wave": 5,
+  "study_id": "T03",
+  "title": "Gated LayerNorm fusion",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "producer-consumer-fusion",
+  "approval": "standingwaves003\u2013022,datafirst",
+  "source": "triton/proposal.md T03 exactfilteredbody/interface/tests pinned7acb9c40a6ca;implementationactual910Bqualificationpending",
+  "cases": [
+    {
+      "case_id": "W005-T03-01",
+      "role": "gallery",
+      "seed": 6301,
+      "parameters": {
+        "R": 1024,
+        "N": 1024,
+        "gate_first": false,
+        "eps": 1e-05
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T03-02",
+      "role": "gallery",
+      "seed": 6302,
+      "parameters": {
+        "R": 1,
+        "N": 64,
+        "gate_first": true,
+        "eps": 1e-05
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T03-03",
+      "role": "heldout",
+      "seed": 6303,
+      "parameters": {
+        "R": 768,
+        "N": 768,
+        "gate_first": true,
+        "eps": 1e-05
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    },
+    {
+      "case_id": "W005-T03-04",
+      "role": "heldout",
+      "seed": 6304,
+      "parameters": {
+        "R": 2,
+        "N": 128,
+        "gate_first": false,
+        "eps": 1e-05
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Reducedintermediate/stateworkmayhelp; recomputation/live-state/gather/resourceoverheadcanerasegain."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32x,z[R,N],gamma,beta[N],x/zuniform[-2,2],gamma[.5,1.5],beta[-.25,.25],eps1e-5fullrow ONLY(group_size=N). Returny[R,N],mean[R],rstd[R].",
+    "mathematics": "u=silu(z). gate_firstTRUE: LN(x*u)*gamma+beta withstatisticsONx*u. gate_firstFALSE: (LN(x)*gamma+beta)*u withstatisticsONx. Canonicalgate_first=inverseofupstreamnorm_before_gate.",
+    "before": "Materializeu; gatefirstmaterializesv=x*u thenLN+affine;gatelastmaterializesLNaffineintermediate thenmultiplyu. Samecenteredvariance/tree/FP32association/gridasafter, noWelford/rowbatching.",
+    "after": "SinglekernelSAMEorderingandreturnedstats;allgate/reductions/affineinsideAPI. ExplicitmaskpaddinginCENTEREDvariance,invalidlanesmustnotcontribute(-mean)^2.",
+    "oracle": "IndependentCPUFP64aboveformula;ally/mean/rstdatol5e-5rtol3e-4, finiteandinputimmutable; alloutNaNs overwritten.",
+    "guards": [
+      {
+        "case_id": "W005-T03-GA",
+        "role": "guard",
+        "seed": 6391,
+        "parameters": {
+          "R": 2,
+          "N": 64,
+          "eps": 1e-05,
+          "gate_first": true,
+          "distribution": "constant-x-one-nonconstant-z"
+        },
+        "expected": "statisticsdistinguishgateorder,nonzerobeta"
+      },
+      {
+        "case_id": "W005-T03-GB",
+        "role": "guard",
+        "seed": 6392,
+        "parameters": {
+          "R": 3,
+          "N": 129,
+          "eps": 1e-05,
+          "gate_first": false,
+          "distribution": "bounded-uniform"
+        },
+        "expected": "odd/paddedtailsandally/mean/rstdcorrect"
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce,correctoncepercase/side/source+10profiles4pairs,guards0caps,no warmup/autotune/extratiming/discretionaryprofileIOvalidation."
+}

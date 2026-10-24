@@ -4,6 +4,7 @@ import math
 import torch
 
 RTOL, ATOL = 2e-4, 2e-3
+MIN_EPS = torch.finfo(torch.float32).tiny
 CASE_SOURCES = [Path(__file__)]
 
 
@@ -15,8 +16,8 @@ def check_spec(spec):
             and 0 <= seed < 2**64):
         raise ValueError('positive bounded matrix dimensions and uint64 seed required')
     eps = spec.get('eps', 1e-5)
-    if type(eps) not in (int, float) or not math.isfinite(eps) or not 0 < eps <= .1:
-        raise ValueError('finite epsilon in (0,.1] required')
+    if type(eps) not in (int, float) or not MIN_EPS <= eps <= .1 or not math.isfinite(eps):
+        raise ValueError('finite epsilon in [FP32 smallest normal,0.1] required')
     return rows, width, seed, float(eps)
 
 

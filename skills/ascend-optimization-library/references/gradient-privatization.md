@@ -21,6 +21,14 @@ statistic. The independently generated CPU oracle uses FP64 autograd. Fixed
 error limits are `atol=0.002`, `rtol=0.0002`; these permit FP32 reduction-order
 differences, not missing rows or missing gradients.
 
+The accepted epsilon range is `[2**-126, 0.1]`, inclusive. The lower bound is
+the smallest normal positive FP32 value (`1.1754943508222875e-38`); the
+existing upper bound remains 0.1. Subnormal or underflowing values are rejected
+before fixture generation because device conversion or flushing to zero can
+make zero-input rows produce nonfinite gradients. Nonfinite and overflowing
+values are also rejected. This is a host contract restriction; it does not
+change kernel arithmetic.
+
 The baseline includes output initialization inside every measured call:
 
 ```python
@@ -120,5 +128,9 @@ identities, IR hashes and compact PMU means are in
 [gradient-evidence.json](gradient-evidence.json). Measured source is
 `6e00b92054f8dacc161483d95e28e11976a1a5d4`; evidence archive SHA256 is
 `2c82ac0e7d08f3780c5fef6e926c00a4d6884d3fab45907d24950921f8e32c27`.
+The retained evidence binds that original contract source. A subsequent API
+guard narrows accepted epsilon to the normal FP32 range above; all four
+measured cases use `1e-5` and have unchanged arithmetic. The original fixtures,
+source hashes and captures are retained without regeneration or remeasurement.
 This entry is not added to the skill router during the frozen first coding
 study; its training data remains separate from that study's guidance.

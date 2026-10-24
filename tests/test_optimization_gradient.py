@@ -45,6 +45,27 @@ def test_invalid_spec_and_missing_or_malformed_gradient_rejected():
         pairs.configuration('unknown', spec())
 
 
+@pytest.mark.parametrize('epsilon', [torch.finfo(torch.float32).tiny, .1])
+def test_epsilon_boundaries_produce_finite_complete_cpu_oracles(epsilon):
+    value = spec(rows=2, width=3, seed=1809, eps=epsilon)
+    assert contract.check_spec(value)[3] == epsilon
+    fixture = contract.make_case(value)
+    assert torch.count_nonzero(fixture['inputs']['x'][0]) == 0
+    assert all(torch.isfinite(gradient).all() for gradient in fixture['expected'])
+    assert contract.diagnostics(fixture['expected'], fixture)['passed']
+
+
+@pytest.mark.parametrize('epsilon', [1e-50, torch.finfo(torch.float32).tiny / 2,
+                                   -.1, .10001, 1e100, float('inf'), float('nan')])
+def test_epsilon_underflow_overflow_and_nonfinite_rejected_before_oracle(epsilon):
+    value = spec(rows=2, width=3, seed=1809, eps=epsilon)
+    with pytest.raises(ValueError, match='epsilon'):
+        contract.check_spec(value)
+    with patch.object(torch, 'randn', side_effect=AssertionError('oracle must not start')):
+        with pytest.raises(ValueError, match='epsilon'):
+            contract.make_case(value)
+
+
 def test_strided_private_programs_cover_rows_once_including_empty_programs():
     for rows in (1, 3, 32, 33, 69, 8192):
         for programs in (rows, 32):

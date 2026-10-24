@@ -1,4 +1,6 @@
 import json
+import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -77,12 +79,116 @@ class PairTests(unittest.TestCase):
     def run_case(self, adapter, folder, name='out'):
         return pair.run_pair(adapter, {'id': 'one'}, folder / name, folder / 'cache', {'device': 'CPU fixture'})
 
+    def test_correctness_only_and_guard_never_capture_and_reuse_oracle(self):
+        for spec, options in (({'id': 'one'}, {'correctness_only': True}),
+                              ({'id': 'one', 'role': 'guard'}, {})):
+            with self.subTest(spec=spec), tempfile.TemporaryDirectory() as directory:
+                folder, adapter, closed = Path(directory), Adapter(), []
+                prepare = adapter.prepare
+                def prepare_closable(arm, *args):
+                    item = prepare(arm, *args)
+                    item.close = lambda: closed.append(arm)
+                    item.compilation_state = lambda: {'compiled': 1}
+                    return item
+                adapter.prepare = prepare_closable
+                def forbidden(*args, **kwargs):
+                    self.fail('correctness-only attempted capture')
+                adapter.capture = forbidden
+                for name in ('first', 'reuse'):
+                    result = pair.run_pair(adapter, spec, folder / name, folder / 'cache', {}, **options)
+                    self.assertEqual(result['status'], 'complete', result)
+                    self.assertEqual(result['mode'], 'correctness-only')
+                    self.assertEqual(result['profile_status'], 'not-requested')
+                    self.assertIsNone(result['timing_kind'])
+                    self.assertNotIn('speedup_before_over_after', result)
+                    self.assertEqual(result['counts'], dict(correctness_calls=2, capture_calls=0, profiled_calls=0))
+                    self.assertEqual(result, json.loads((folder / name / 'result.json').read_text()))
+                    for row in result['arms'].values():
+                        self.assertNotIn('capture', row)
+                        self.assertEqual(row['compilation_state_after_correctness'], {'compiled': 1})
+                        self.assertEqual(row['sources'], pair.sources([__file__]))
+                        self.assertEqual(row['cleanup']['status'], 'complete')
+                self.assertEqual(adapter.oracle_calls, 1)
+                self.assertEqual(closed, ['before', 'after'] * 2)
+                self.assertEqual(adapter.log, [('run', 'before'), ('validate', 'before'),
+                                               ('run', 'after'), ('validate', 'after')] * 2)
+                with self.assertRaises(FileExistsError):
+                    pair.run_pair(adapter, spec, folder / 'first', folder / 'cache', {}, **options)
+
+    def test_correctness_only_failure_retains_counts_cleanup_and_no_capture(self):
+        for mode in ('validation', 'mutation', 'source', 'cleanup'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                folder, adapter, closed = Path(directory), Adapter(), []
+                source = folder / 'kernel.bin'
+                source.write_bytes(b'original')
+                prepare = adapter.prepare
+                def prepare_checked(arm, *args):
+                    item = prepare(arm, *args)
+                    item.sources = [source]
+                    def close():
+                        closed.append(arm)
+                        if mode == 'cleanup':
+                            raise RuntimeError('release failed')
+                    item.close = close
+                    return item
+                adapter.prepare = prepare_checked
+                validate = adapter.validate
+                def validate_checked(arm, actual, fixture, spec):
+                    if mode == 'source':
+                        source.write_bytes(b'changed')
+                    if mode == 'mutation':
+                        fixture['inputs'].add_(1)
+                    if mode == 'validation':
+                        return {'passed': False}
+                    return validate(arm, actual, fixture, spec)
+                adapter.validate = validate_checked
+                result = pair.run_pair(adapter, {'role': 'guard'}, folder / 'out', folder / 'cache', {})
+                self.assertEqual(result['status'], 'failed', result)
+                self.assertEqual(result['profile_status'], 'not-requested')
+                self.assertEqual(result['counts']['capture_calls'], 0)
+                self.assertEqual(result['counts']['profiled_calls'], 0)
+                self.assertEqual(closed, ['before', 'after'] if mode == 'cleanup' else ['before'])
+                self.assertNotIn(('capture', None), adapter.log)
+
+    def test_cli_guard_and_explicit_mode_skip_capture_and_report_failure_exit(self):
+        for role, explicit, bad in ((None, True, False), ('guard', False, False), ('guard', False, True)):
+            with self.subTest(role=role, explicit=explicit, bad=bad), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                # Execute the real CLI across an import/process boundary. A capture
+                # tripwire raises BaseException, which cannot become a normal failure.
+                (folder / 'guard_adapter.py').write_text(
+                    'from test_optimization_pair import Adapter as Parent\n'
+                    'class Adapter(Parent):\n'
+                    '    def capture(self, *args):\n'
+                    '        raise SystemExit(91)\n')
+                pair.save(folder / 'case.json', {'role': role})
+                pair.save(folder / 'provenance.json', {'test': 'CPU only'})
+                command = [sys.executable, str(Path(pair.__file__)), '--adapter', 'guard_adapter:Adapter',
+                           '--case', str(folder / 'case.json'), '--provenance', str(folder / 'provenance.json'),
+                           '--output', str(folder / 'out'), '--cache', str(folder / 'cache')]
+                if explicit:
+                    command.append('--correctness-only')
+                if bad:
+                    with (folder / 'guard_adapter.py').open('a') as stream:
+                        stream.write('    def validate(self, *args): return False\n')
+                env = dict(os.environ, PYTHONPATH=os.pathsep.join(
+                    [str(folder), str(Path(__file__).parent), str(Path(pair.__file__).parent)]))
+                process = subprocess.run(command, env=env, capture_output=True, text=True)
+                self.assertEqual(process.returncode, 1 if bad else 0, process.stderr)
+                report = json.loads((folder / 'out/result.json').read_text())
+                self.assertEqual(report['mode'], 'correctness-only')
+                self.assertEqual(report['counts'], dict(correctness_calls=1 if bad else 2,
+                                                       capture_calls=0, profiled_calls=0))
+
     def test_symmetric_counts_oracle_reuse_and_layout_isolation(self):
         with tempfile.TemporaryDirectory() as directory:
             folder, adapter = Path(directory), Adapter()
             result = self.run_case(adapter, folder)
             self.assertEqual(result['status'], 'complete', result)
             self.assertEqual(adapter.oracle_calls, 1)
+            self.assertEqual(result['mode'], 'profile')
+            self.assertEqual(result['timing_kind'], 'profiled-device-events')
+            self.assertIn('speedup_before_over_after', result)
             self.assertEqual(adapter.log[:4], [('run', 'before'), ('validate', 'before'),
                                                ('run', 'after'), ('validate', 'after')])
             self.assertEqual(adapter.log.count(('run', 'before')), 11)

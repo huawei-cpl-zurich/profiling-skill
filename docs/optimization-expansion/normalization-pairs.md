@@ -1,9 +1,9 @@
 # Normalization mechanisms E01 and E07
 
-Status: independent CPU oracles, frontend checks and CPU-interpreted kernel
-math pass. A3 compilation, correctness, kernel identity and profiling have not
-run. These are source-backed experiment hypotheses, not measured speedups.
-They are separate from the frozen teaching snapshot used by the coding study.
+Status: CPU oracles, interpreted kernel math and eight predeclared paired A3
+experiments pass. All sixteen arms have one correctness check, ten profiled
+forwards, stable compiled identities and exact task-to-PMU joins. These examples
+remain separate from the frozen teaching snapshot used by the coding study.
 
 ## E01: batch short L2-normalization rows
 
@@ -79,3 +79,45 @@ or compile attempt is not a valid cost example. Use `norm_pairs:factory` with
 forwards without measured input/output inspection or warmups. Retain all samples,
 source/binary identities and missing-counter states. No unprofiled latency or
 calibrated roofline claim follows from a profile.
+
+
+## A3 gallery evidence
+
+Ascend910B4-1, Triton3.2.0, Torch-NPU2.10.0; implementation39d5e168.
+The first pair completed in retained job644ef19e-daad-4ec6-8118-e9197d730eac;
+the remaining seven completed in18236bc0-34a1-4ff8-9f86-eec6f7d0c66e.
+Both ran on the same healthy idle physical device. The compact receipt digest is
+`49966fca11c190586dd8aad3733b5185235c5741b712e0e18ffb21cf09248f9f`.
+It retains all samples, original report and trace digests, compiled identities,
+correctness diagnostics, PMU rows and the private holdout results.
+
+The primary measurement is the span from the first device task's start to the
+last task's completion per call. E07 includes the gap between forward and
+backward. Values below are mean ± sample standard deviation across all ten
+profiled calls; samples were neither warmed up nor discarded. These spans omit
+first enqueue and caller/profiler overhead and are not unprofiled end-to-end
+latencies. The separate caller event samples remain in the receipt.
+
+| Mechanism and predeclared regime | Before span (µs) | After span (µs) | Before / after |
+| --- | ---: | ---: | ---: |
+| E01 many short rows | 468.482 ± 6.897 | 93.058 ± 2.083 | 5.034× |
+| E01 few wide rows, expected cost | 3.284 ± 1.439 | 2.558 ± 0.272 | 1.284× |
+| E07 wide rows | 211.202 ± 8.114 | 193.986 ± 12.013 | 1.089× |
+| E07 narrow rows | 153.382 ± 7.726 | 169.192 ± 6.050 | 0.907× |
+
+E01's gallery cost hypothesis was not supported: batching also lowered this
+noisy three-microsecond mean. A separately predeclared private case did regress;
+this does not license a general width-based dispatch rule. For the many-short-row
+gallery, exported per-task vector time decreased138.031→55.629µs, while
+its reported vector ratio rose0.2994→0.6220. These ratios describe per-task
+pipeline composition; they are not measured whole-device occupancy.
+
+E07's wide-row active union decreased76.174→71.836µs, while its inter-kernel
+gap decreased135.028→122.150µs. Backward vector time decreased30.395→19.533µs,
+but forward MTE3 time increased8.131→19.446µs with the saved-statistic write.
+For narrow rows, active union increased6.390→6.744µs and the gap increased
+146.992→162.448µs. A private wide-row span improved despite worse active union;
+therefore the complete-span change cannot be attributed solely to arithmetic
+reuse. Counter values retain the vendor's per-task semantics, with no inferred
+physical bandwidth, occupancy or roofline percentage. No case was rerun to
+obtain a preferred result.

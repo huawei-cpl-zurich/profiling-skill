@@ -8,6 +8,14 @@ predicate with `flag.item()` on every API call, then either sorts the original
 diagonal or runs the unchanged baseline. No CPU fixture classification controls
 the algorithm. Both signs of zero pass; any nonzero off-diagonal value fails.
 The certificate is stricter than the source's approximate diagonal criterion.
+The filtered source receipts are
+`ref://profiling-skill/ascendc/perf-analysis/repos/gitcode-cann-ops-solver#src/cheevj/kernel/cheevj_diagonal.hpp:L30-L66`
+(certification), the same file at `L131-L176` (off-diagonal reduction), and
+`ref://profiling-skill/ascendc/perf-analysis/repos/gitcode-cann-ops-solver#src/cheevj/kernel/jacobi_large_impl_part1.inc:L92-L116`
+(integration), pinned to `8ee0617c8f1ffddcbbd219fe4fe5a06f9c8a62cd`
+under CANN Open Software License 2.0. The upstream complex squared-magnitude
+threshold is approximately `1e-12`; this real FP32 adaptation requires finite
+entries and exactly zero off-diagonals instead.
 
 The frozen domain is contiguous symmetric FP32 `[1,N,N]`, five sweeps and values
 only. Gallery cases are unsorted seeded diagonal N128 and bounded dense N32;

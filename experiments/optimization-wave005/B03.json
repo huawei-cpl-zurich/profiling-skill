@@ -1,0 +1,111 @@
+{
+  "wave": 5,
+  "study_id": "B03",
+  "title": "Bilinear coordinate reuse across channels",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "invariant-coefficient-reuse",
+  "approval": "Standing waves003\u2013022 data first.",
+  "source": "ascendc/proposal.md B03 ops-cv1e859a524a93d0a94b563cacaa067db6abbfd37c CANNOpenSoftware2.0; documentedformula/interface/examples only devicebodyUNSEEN; coordinate reuse independentinference. Noarch35 compilation for910B.",
+  "cases": [
+    {
+      "case_id": "W005-B03-01",
+      "role": "gallery",
+      "seed": 6501,
+      "parameters": {
+        "N": 1,
+        "H": 48,
+        "W": 64,
+        "C": 64,
+        "OH": 72,
+        "OW": 96
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B03-02",
+      "role": "gallery",
+      "seed": 6502,
+      "parameters": {
+        "N": 1,
+        "H": 8,
+        "W": 8,
+        "C": 1,
+        "OH": 12,
+        "OW": 12
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B03-03",
+      "role": "heldout",
+      "seed": 6503,
+      "parameters": {
+        "N": 1,
+        "H": 40,
+        "W": 56,
+        "C": 48,
+        "OH": 60,
+        "OW": 84
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B03-04",
+      "role": "heldout",
+      "seed": 6504,
+      "parameters": {
+        "N": 1,
+        "H": 10,
+        "W": 12,
+        "C": 2,
+        "OH": 15,
+        "OW": 18
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    }
+  ],
+  "contract": {
+    "interface": "FP32contiguousNHWC finitex[-1,1], output[N,OH,OW,C], immutable. ONLYalign_cornersFalse,half_pixel_centersFalse,noantialias. OthersHOSTrejectexplicitly.",
+    "geometry": "FP32scale=H/OH andW/OW;srcy=FP32(outy*scaleH),srcxanalogous; floorlo clamp[0,H-1],hi=min(lo+1,H-1); weight fractional coordinate unaltered. Bilinear two-stage sameoperationorderbotharms, fpFusionFalse. Allgeometry computedinsideAPI.",
+    "before": "Flattenoutputelementtile computes geometryperchannel element; compilerCSE possible discloseIR/codegen.",
+    "after": "Outputpixeltilecomputesspatialgeometryonce broadcastsacrosschannelvector. Necessarygrid/tilingchange disclosed. Allfourpixelgathers/masksincluded, nofreeprecompute.",
+    "oracle": "IndependentCPUFP64coords/weights onrepresentedinputs atol1e-5rtol1e-5; boundedshapes rationalrounding withinfrozengate mustverify, no outcome-basedrelaxation. ProductsourceA2/A3docsbutregistrationnewer;own910Bqualification."
+  },
+  "guards": [
+    {
+      "case_id": "W005-B03-GA",
+      "role": "guard",
+      "seed": 6591,
+      "parameters": {
+        "N": 1,
+        "H": 1,
+        "W": 3,
+        "C": 3,
+        "OH": 4,
+        "OW": 5
+      },
+      "expected": "One-pixelborderclamptail exactconstantaxis."
+    },
+    {
+      "case_id": "W005-B03-GB",
+      "role": "guard",
+      "seed": 6592,
+      "parameters": {
+        "N": 1,
+        "H": 4,
+        "W": 4,
+        "C": 2,
+        "OH": 7,
+        "OW": 7,
+        "half_pixel_centers": true
+      },
+      "expected": "Unsupportedcoordinateflaghostrejectboth, no silentformula."
+    }
+  ],
+  "protocol": "Six CPU payloads once, once-per-side correctness per source version then exactly10 profiled fullAPI forwards/arm/fourmaincases. Guards0captures. No warmup/autotuning/extratiming/profiledIOchecks. Complete operation span diagnostic, preserve all failures/negatives. Independent910Bqualification mandatory."
+}

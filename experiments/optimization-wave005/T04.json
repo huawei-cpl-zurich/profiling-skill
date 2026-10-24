@@ -1,0 +1,94 @@
+{
+  "wave": 5,
+  "study_id": "T04",
+  "title": "GRPO clipped-policy partial statistics",
+  "study_kind": "source-backed-implementation-study",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "sufficient-statistics",
+  "approval": "Standing user approval waves003\u2013022, collect data before synthesis.",
+  "source": "triton/proposal.md; filtered exact bodies/tests/interfaces pinned7acb9c40a6ca827e885d902b7eaee5d45457b230; per-file licenses/notices preserved. Actual910B support requires own gate.",
+  "cases": [
+    {
+      "case_id": "W005-T04-01",
+      "role": "gallery",
+      "seed": 6401,
+      "parameters": {
+        "T": 128,
+        "V": 4096,
+        "kl_type": "unbias"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T04-02",
+      "role": "gallery",
+      "seed": 6402,
+      "parameters": {
+        "T": 4,
+        "V": 32,
+        "kl_type": "kl"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T04-03",
+      "role": "heldout",
+      "seed": 6403,
+      "parameters": {
+        "T": 96,
+        "V": 3072,
+        "kl_type": "mse"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-T04-04",
+      "role": "heldout",
+      "seed": 6404,
+      "parameters": {
+        "T": 8,
+        "V": 64,
+        "kl_type": "unbias"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32logp,old,ref[T,V],adv[T]; logp/old/ref individually uniform[-1,1] => alldifferences[-2,2], adv[-1,1]. loss[T]FP32, immutableinputs, clip.2,kl_coef.1,loss_factor1/(T*V). FORWARDONLY.",
+    "objective": "p=max(-adv*exp(logp-old),-adv*clamp(exp(logp-old),.8,1.2)). loss[t]=loss_factor*(sum_ALLp + kl_coef*sum_v KL[t,v]). KLk=ref-logp; kl=k, unbias=exp(k)-k-1, mse=k*k/2. Note BOTH global policy and perrow KL multipliedbyloss_factor. Global policy scalar broadcasts everyrow.",
+    "before": "Materializefullp[T,V]; reduce usingdeclaredfixedtilethenfinalorder. KLrowpartswritten separately as needed.",
+    "after": "Writepolicytilepartialsonly thenfixedfinalreducer/broadcast, sameexp/clipping/KL and partialreductionstructure wherepossible; discloseassociationchanges. No arbitrary per-token objective substitution.",
+    "oracle": "IndependentCPUFP64 formula atol2e-5rtol2e-4, assert allrows; not upstreamprint-only allclose. Logicalworkspace vsmeasuredpeak distinguished."
+  },
+  "guards": [
+    {
+      "case_id": "W005-T04-GA",
+      "role": "guard",
+      "seed": 6491,
+      "parameters": {
+        "T": 3,
+        "V": 8,
+        "kl_type": "unbias",
+        "distribution": "advantage-sign-clip-boundaries"
+      },
+      "expected": "adv includesnegative0positive; construct logdiff nearestFP32log(.8),0,log(1.2), ties; expectedoracle usesactualrepresentedinputs; globalbroadcast tested againstdifferentrowKL."
+    },
+    {
+      "case_id": "W005-T04-GB",
+      "role": "guard",
+      "seed": 6492,
+      "parameters": {
+        "T": 5,
+        "V": 129,
+        "kl_type": "mse",
+        "kl_coef": 0
+      },
+      "expected": "Tailmasked bothaxes, KLzero stillretains globalpolicy repeatedallrows."
+    }
+  ],
+  "protocol": "Six CPU scientific oracle payloads once; once-per-side correctness per source version; exactly10 profiled full API forwards per arm of4maincases. Guards correctness-only0captures. No warmups/autotuning/extra timing/profiled tensor inspection. Preserve negative/failed/partial outcomes. Complete device-operation spans diagnostic, not ordinary application latency."
+}

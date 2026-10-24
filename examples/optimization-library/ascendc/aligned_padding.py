@@ -46,7 +46,7 @@ def make_case(spec):
     expected = x.clone()
     expected[:, width:] = 0.0
     result = dict(x=x, expected=expected)
-    if spec['parameters'].get('also_empty_rows'):
+    if spec.get('parameters', spec).get('also_empty_rows'):
         result['empty'] = torch.empty((0, pitch), dtype=torch.float32, device='cpu')
     return result
 

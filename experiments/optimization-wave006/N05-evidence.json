@@ -627,5 +627,17 @@
     "status": "unavailable",
     "handle": "remote:gz-a3:job:de9c0790-a2ab-449c-8ac9-cc56e0d936ed",
     "reason": "selected LLVM objdump recognizes elf64-hiipu but every disassembled address reports <not available>; no instruction-count inference"
+  },
+  "source_binding_note": "sources records original measured source hashes; publication_sources records the CPU-only flat-spec compatibility fix after collection. No native code, scientific fixture, binary or profile changed.",
+  "publication_sources": {
+    "examples/optimization-library/ascendc/aligned_padding.py": "86cb584b926502b7f5f247fa9edb52204555613424d1c5e2076dcdbc7c6a2360",
+    "tests/test_aligned_padding.py": "3340a8a37139f17503fad649027434d3e7f900040ed1d1a8cfed94a8e3a0479a"
+  },
+  "publication_validation": {
+    "handle": "remote:gz-a3:job:3c7204e2-f03a-4dc1-bd61-23974e848c96",
+    "status": "completed",
+    "exit_code": 0,
+    "tests_passed": 13,
+    "mode": "CPU-only flat/nested public CLI compatibility; zero new native compilation, scientific payloads, NPU calls or captures"
   }
 }

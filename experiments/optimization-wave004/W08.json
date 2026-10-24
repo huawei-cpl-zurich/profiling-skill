@@ -1,0 +1,102 @@
+{
+  "wave": 4,
+  "family_id": "W08",
+  "title": "Omit unused eigenvector accumulation",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.mdW08/W09 filteredcheevjmodeandkernelsource; independentreal-symmetricfixedsweepdeviceprojectsolverNOTnativepublicCPUdispatchbenchmark.",
+  "cases": [
+    {
+      "case_id": "W004-W08-01",
+      "role": "gallery",
+      "seed": 4801,
+      "parameters": {
+        "batch": 4,
+        "N": 64,
+        "sweeps": 5,
+        "want_vectors": false,
+        "distribution": "near-diagonal-spread"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "RemovingunconsumedVupdatesmayhelp;smallcasescouldbeoverheaddominated,no speeduppromised."
+    },
+    {
+      "case_id": "W004-W08-02",
+      "role": "gallery",
+      "seed": 4802,
+      "parameters": {
+        "batch": 1,
+        "N": 4,
+        "sweeps": 5,
+        "want_vectors": false,
+        "distribution": "near-diagonal-spread"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "RemovingunconsumedVupdatesmayhelp;smallcasescouldbeoverheaddominated,no speeduppromised."
+    },
+    {
+      "case_id": "W004-W08-03",
+      "role": "heldout",
+      "seed": 4803,
+      "parameters": {
+        "batch": 3,
+        "N": 96,
+        "sweeps": 5,
+        "want_vectors": false,
+        "distribution": "near-diagonal-spread"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "RemovingunconsumedVupdatesmayhelp;smallcasescouldbeoverheaddominated,no speeduppromised."
+    },
+    {
+      "case_id": "W004-W08-04",
+      "role": "heldout",
+      "seed": 4804,
+      "parameters": {
+        "batch": 1,
+        "N": 8,
+        "sweeps": 5,
+        "want_vectors": false,
+        "distribution": "near-diagonal-spread"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "RemovingunconsumedVupdatesmayhelp;smallcasescouldbeoverheaddominated,no speeduppromised."
+    }
+  ],
+  "contract": {
+    "input": "FP32contiguous[B,N,N], evensupportedN4..96. Seededsymmetricoffdiag=(raw+raw.T)/(2*64*N),rawuniform[-1,1];diag=1+arange(N)/N. No generalarbitrarymatrixconvergenceclaim; fixed5completecyclicround-robinsweeps. Originalinputimmutable.",
+    "before": "IdenticalA Jacobirotations,5sweeps(N-1roundseach), initializeV=I EVERYAPI andupdateV=V*J everyround thenDISCARDV whenonlyvaluesrequested. Source-modecontrolledbaseline,notvendorbest.",
+    "after": "SAMEArotationformulas/order/roundcount/precision/sortingbutNOVal location/initialization/updates whenwant_vectors=False. want_vectors=True routesunmodifiedbaselinepathandreturns\u03bb,V. No otherAalgorithmchange.",
+    "implementation": "ReuseparentPR207conflict-freestagekernels. Batchedwrappersmayoffsetpointersbyprogram_id(1) andCALLsharedparentJITfunctionsinlined; avoidBpythonloopmultiplyinglaunches. Compileonlyrepresentativerounds0/1provesamehash, notall315/475metadatainstances. Runtimepairmapsinput-independentpreparedonce;angles/initialization/allrealworkeveryforward. No iterationcounttuningaftertiming.",
+    "output": "SortedascendingFP32\u03bb[B,N]. ForrequestedguardalsoV[B,N,N] correspondingsortedcolumns; degeneratespaces anyorthonormalbasisaccepted. Usefixedassociation/fusiondisabledsameApath. ExplicitFP32allocdtype.",
+    "oracle": "IndependentCPUFP64eigvalshofrepresentedA;\u03bbatol=rtol2e-4, finiteandsorted,inputunchanged. Vguards relativeFrobeniusresidual||AV-Vdiag\u03bb||F/||A||F<=2e-3 and||V.T@V-I||inf<=2e-3; no arbitraryorientationcomparison. Signedzero numericalequal.",
+    "guards": [
+      {
+        "case_id": "W004-W08-GA",
+        "role": "guard",
+        "seed": 4891,
+        "parameters": {
+          "batch": 1,
+          "N": 4,
+          "sweeps": 5,
+          "want_vectors": true,
+          "distribution": "near-diagonal-spread"
+        },
+        "expected": "AFTERbaselinevectorfallback,valid\u03bb,V/fullfiniteoverwrite"
+      },
+      {
+        "case_id": "W004-W08-GB",
+        "role": "guard",
+        "seed": 4892,
+        "parameters": {
+          "batch": 1,
+          "N": 8,
+          "sweeps": 5,
+          "want_vectors": true,
+          "distribution": "repeated-diagonal"
+        },
+        "expected": "A=1.25I, sortedrepeated\u03bb, anyorthonormalvalidV"
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce,correctonceperside/source/case then10profiles4pairs,guards0captures,no warmup/autotune/extratiming/discretionaryprofileIOchecking."
+}

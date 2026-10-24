@@ -17,7 +17,7 @@ def configuration(arm, spec):
     direct = arm == 'after'
     return dict(rows=rows, width=width, direct=direct,
                 block=1 << (width - 1).bit_length(),
-                workspace_bytes=4 * rows * (1 if direct else width))
+                workspace_bytes=4 * rows * (2 if direct else width))
 
 
 @lru_cache(maxsize=1)
@@ -33,16 +33,17 @@ def kernels():
         col = tl.arange(0, BD)
         x = tl.load(X + row * D + col, col < D, -float('inf'))
         maximum = tl.max(x, 0)
-        lse = maximum + tl.log(tl.sum(tl.exp(x - maximum), 0))
+        shifted_lse = tl.log(tl.sum(tl.exp(x - maximum), 0))
         if DIRECT:
             # Public labels stay INT64; checked vocabulary<=8192 makes the
             # local index exact in INT32 and keeps comparison chains in INT32.
             target = tl.load(Targets + row).to(tl.int32)
             selected = tl.load(X + row * D + target)
-            tl.store(Scratch + row, lse)
-            tl.store(Loss + row, lse - selected)
+            tl.store(Scratch + 2 * row, maximum)
+            tl.store(Scratch + 2 * row + 1, shifted_lse)
+            tl.store(Loss + row, (maximum - selected) + shifted_lse)
         else:
-            tl.store(Scratch + row * D + col, x - lse, col < D)
+            tl.store(Scratch + row * D + col, (x - maximum) - shifted_lse, col < D)
 
     @triton.jit
     def ce_gradient(X, Targets, Scratch, Loss, Gradient, D: tl.constexpr,
@@ -52,7 +53,9 @@ def kernels():
         target = tl.load(Targets + row).to(tl.int32)
         if DIRECT:
             x = tl.load(X + row * D + col, col < D, -float('inf'))
-            log_probability = x - tl.load(Scratch + row)
+            maximum = tl.load(Scratch + 2 * row)
+            shifted_lse = tl.load(Scratch + 2 * row + 1)
+            log_probability = (x - maximum) - shifted_lse
         else:
             log_probability = tl.load(Scratch + row * D + col, col < D, -float('inf'))
             selected = tl.load(Scratch + row * D + target)
@@ -88,7 +91,7 @@ class Adapter:
             # Allocation is inside the complete caller; no initialization is free.
             loss = torch.empty((c['rows'],), dtype=torch.float32, device='npu:0')
             dx = torch.empty((c['rows'], c['width']), dtype=torch.float32, device='npu:0')
-            scratch = torch.empty((c['rows'],) if c['direct'] else dx.shape,
+            scratch = torch.empty((c['rows'], 2) if c['direct'] else dx.shape,
                                   dtype=torch.float32, device='npu:0')
             compiled['statistics'] = statistics[(c['rows'],)](
                 inputs['logits'], inputs['targets'], scratch, loss,

@@ -51,7 +51,7 @@ def test_invalid_contract_and_malformed_outputs_rejected():
 def test_workspace_capacity_tracks_only_the_removed_materialization():
     before, after = (pairs.configuration(arm, spec()) for arm in ('before', 'after'))
     assert before['workspace_bytes'] == 7 * 33 * 4
-    assert after['workspace_bytes'] == 7 * 4
+    assert after['workspace_bytes'] == 7 * 2 * 4
     assert before['block'] == after['block'] == 64
 
 
@@ -69,7 +69,7 @@ for rows,width in ((1,1),(3,33),(5,129),(2,513),(1,8192)):
  for arm in ('before','after'):
   cfg=p.configuration(arm,s)
   loss=torch.empty(rows);dx=torch.empty_like(x)
-  scratch=torch.empty(rows) if cfg['direct'] else torch.empty_like(x)
+  scratch=torch.empty((rows,2)) if cfg['direct'] else torch.empty_like(x)
   for repetition in range(2):
    loss.fill_(float('nan'));dx.fill_(float('nan'));scratch.fill_(float('nan'))
    statistics[(rows,)](x,y,scratch,loss,width,cfg['block'],cfg['direct'])
@@ -110,7 +110,7 @@ fixture=dict(expected=(expected_loss.float(),expected_dx.float()))
 for arm in ('before','after'):
  cfg=p.configuration(arm,dict(family='E10',rows=rows,width=width,seed=0))
  loss=torch.empty(rows);dx=torch.empty_like(x)
- scratch=torch.empty(rows) if cfg['direct'] else torch.empty_like(x)
+ scratch=torch.empty((rows,2)) if cfg['direct'] else torch.empty_like(x)
  statistics[(rows,)](x,y,scratch,loss,width,cfg['block'],cfg['direct'])
  gradient[(rows,)](x,y,scratch,loss,dx,width,cfg['block'],cfg['direct'])
  assert c.diagnostics((loss,dx),fixture)['passed']
@@ -165,3 +165,45 @@ def test_bad_physical_layout_rejected_before_launch():
             patch.object(torch.Tensor, 'npu', lambda self: self, create=True):
         with pytest.raises(ValueError, match='dense ND'):
             pairs.Adapter().prepare('before', spec(), contract.make_case(spec()), None)
+
+
+@pytest.mark.skipif(importlib.util.find_spec('triton') is None, reason='Triton unavailable')
+def test_large_common_offsets_preserve_loss_gradient_and_shift_invariance():
+    script = r'''
+import torch
+import crossentropy_contract as c
+import crossentropy_pairs as p
+statistics,gradient=p.kernels()
+# Exactly representable offsets expose cancellation independently of input rounding.
+base=torch.tensor([[0.,0.,0.],[0.,8.,-8.],[8.,0.,8.]])
+y=torch.tensor([0,2,2],dtype=torch.int64)
+for offset in (0.,1e8,-1e8):
+ x=(base+offset).contiguous()
+ original_x,original_y=x.clone(),y.clone()
+ expected_loss=-torch.log_softmax(x.double(),-1).gather(1,y[:,None]).squeeze(1)
+ expected_dx=torch.softmax(x.double(),-1)
+ expected_dx[torch.arange(3),y]-=1
+ fixture=dict(expected=(expected_loss.float(),expected_dx.float()))
+ for arm in ('before','after'):
+  cfg=p.configuration(arm,dict(family='E10',rows=3,width=3,seed=0))
+  loss=torch.empty(3);dx=torch.empty_like(x)
+  scratch=torch.full((3,2) if cfg['direct'] else x.shape,float('nan'))
+  statistics[(3,)](x,y,scratch,loss,3,cfg['block'],cfg['direct'])
+  assert torch.isfinite(scratch).all()
+  gradient[(3,)](x,y,scratch,loss,dx,3,cfg['block'],cfg['direct'])
+  assert c.diagnostics((loss,dx),fixture)['passed'],(offset,arm,loss,dx)
+  assert torch.equal(x,original_x) and torch.equal(y,original_y)
+# Exact two-class example from review.
+x=torch.full((1,2),1e8);y=torch.tensor([0],dtype=torch.int64)
+for direct in (False,True):
+ loss=torch.empty(1);dx=torch.empty_like(x);scratch=torch.empty((1,2))
+ statistics[(1,)](x,y,scratch,loss,2,2,direct)
+ gradient[(1,)](x,y,scratch,loss,dx,2,2,direct)
+ torch.testing.assert_close(loss,torch.tensor([2.]).log())
+ torch.testing.assert_close(dx,torch.tensor([[-.5,.5]]))
+'''
+    env = dict(os.environ, TRITON_INTERPRET='1',
+               PYTHONPATH=str(ROOT / 'examples/optimization-library/triton'))
+    result = subprocess.run([sys.executable, '-c', script], env=env,
+                            capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr

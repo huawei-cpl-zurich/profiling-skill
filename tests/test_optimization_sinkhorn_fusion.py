@@ -110,6 +110,55 @@ class SinkhornTests(unittest.TestCase):
         for data in (b'',elf()[:128]):
             with self.assertRaises(ValueError):screen_binary(data)
 
+    def test_exploratory_cli_order_and_provenance(self):
+        import contextlib
+        import io
+        import sinkhorn_fusion_cli as cli
+        events = []
+        admitted = cli.dimensions
+        def admission(value):
+            events.append('admission')
+            return admitted(value)
+        def run(adapter, case, output, cache, provenance):
+            events.append('runner')
+            self.assertEqual(provenance['qualification'], 'exploratory/unqualified')
+            self.assertIs(provenance['pre_oracle_pair_screen'], False)
+            self.assertEqual(provenance['note'], 'kept')
+            adapter.make_case(case)
+            return dict(status='complete')
+        original_case = Adapter.make_case
+        def oracle(case):
+            events.append('oracle')
+            return original_case(case)
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            case = folder/'case.json'; case.write_text(json.dumps(spec()))
+            prov = folder/'provenance.json'
+            prov.write_text(json.dumps(dict(note='kept', qualification='qualified', pre_oracle_pair_screen=True)))
+            argv = ['cli', '--case', str(case), '--output', str(folder/'out'),
+                    '--cache', str(folder/'cache'), '--provenance', str(prov)]
+            with patch.object(cli, 'dimensions', admission), patch.object(Adapter, 'make_case', staticmethod(oracle)), \
+                    patch('optimization_pair.run_pair', run), patch.object(sys, 'argv', argv):
+                self.assertEqual(cli.main(), 0)
+            self.assertEqual(events, ['admission', 'runner', 'oracle'])
+            events.clear()
+            output = io.StringIO()
+            with patch.object(cli, 'dimensions', admission), patch.object(Adapter, 'make_case', staticmethod(oracle)), \
+                    patch('optimization_pair.run_pair', run), patch.object(sys, 'argv', argv+['--validate-only']), contextlib.redirect_stdout(output):
+                self.assertEqual(cli.main(), 0)
+            self.assertEqual(events, ['admission'])
+            result = json.loads(output.getvalue())
+            self.assertEqual(result['qualification'], 'exploratory/unqualified')
+            self.assertIs(result['pre_oracle_pair_screen'], False)
+            events.clear()
+            case.write_text(json.dumps(dict(seed=22, BS=0, iters=1, eps=1e-5)))
+            with patch.object(cli, 'dimensions', admission), patch.object(Adapter, 'make_case', staticmethod(oracle)), \
+                    patch('optimization_pair.run_pair', run), patch.object(sys, 'argv', argv):
+                with self.assertRaises(ValueError): cli.main()
+            self.assertEqual(events, ['admission'])
+            self.assertFalse((folder/'out').exists())
+            self.assertFalse((folder/'cache').exists())
+
     def test_external_cli_admission(self):
         with tempfile.TemporaryDirectory() as folder:
             folder=Path(folder);case=folder/'case.json'

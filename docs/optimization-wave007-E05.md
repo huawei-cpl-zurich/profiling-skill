@@ -6,18 +6,20 @@ Source provenance is MindSpeedOps `4efe2b675c2d51517c3fdd14c721020b8d41e241`, `m
 
 The parent FP64 reference is reused unchanged. Six frozen cases each generate one cached CPU payload. Each arm executes one complete API correctness call per case, checks all three outputs against fixed 3e-6 absolute/relative bounds, and checks exact paired output bits before any capture. Output backing remains `[BS,4,8]`, with comb view `[BS,4,4]` and strides `(32,8,1)`; private output buffers are allocated during prepare and reused. Positive-zero padding, canaries, input immutability, finite FP32 ownership and nonaliasing remain required.
 
-The collector compiles and screens full binary identity, actual `.text` and relocations for every case before mathematics. Four main cases request ten prepared complete API forwards per arm; two guards request no captures. There are no warmups, extra timing forwards, or profiled output inspection. Before has two device components per API call; after has one.
+The retained controlled collector compiles and screens full binary identity, actual `.text` and relocations for every case before device mathematics. Its once-per-case CPU oracle construction precedes compilation; it does not claim a screen before CPU oracle construction. Four main cases request ten prepared complete API forwards per arm; two guards request no captures. There are no warmups, extra timing forwards, or profiled output inspection. Before has two device components per API call; after has one.
 
 Reported spans, task sums, union and gaps describe instrumented device events. They exclude allocation costs and do not establish ordinary Python latency, physical DRAM traffic, occupancy or roofline behavior. All slower, equal, unsupported and failed outcomes are retained without changing the frozen matrix or tolerance.
 
-Standalone admission works from any cwd:
+The standalone CLI and Adapter provide a generic exploratory single-case pair. They do not reproduce the controlled all-case paired codegen qualification before device correctness. The generic runner creates its CPU fixture before per-arm compilation and ELF prelaunch checks; it provides no pre-oracle paired screen. CLI result provenance explicitly records `qualification="exploratory/unqualified"` and `pre_oracle_pair_screen=false`, overriding caller-supplied values. Normal exploratory execution retains one correctness call then ten profiled calls per arm, with the paired-output check before captures.
+
+Standalone exploratory admission works from any cwd:
 
 ```bash
 python /path/to/examples/optimization-library/triton/sinkhorn_fusion_cli.py \
   --case case.json --output output --cache cache --provenance provenance.json --validate-only
 ```
 
-`--validate-only` accepts flat or nested parameters and does not create output/cache directories. Actual captures require a qualified A3 profile through the installed remote-access transport. The retained evidence is recorded in `docs/data/optimization-wave007-E05.json`.
+`--validate-only` accepts flat or nested parameters and does not create output/cache directories. Exploratory captures require a capable A3 profile through the installed remote-access transport. The retained evidence is recorded in `docs/data/optimization-wave007-E05.json`.
 
 A3 validation completed successfully on a healthy idle Ascend910B4-1. All six paired bit checks passed. Twelve correctness API calls and eighty profiled API calls produced 138 device kernel launches; guards had no captures. Seven functional host tests also passed on A3 (45.483 seconds).
 
@@ -31,3 +33,5 @@ The table retains all four planned main scenarios, including the prospectively d
 | 1, 20 | 179.598 → 15.608 | 16.868 → 15.608 | 162.730 → 0.000 |
 
 Fusion reduced both the profiled component sum and the intercomponent gap in this retained run. The large span changes include profiler-instrumented launch gaps; they are not ordinary latency speedups. All ten raw samples, supported PMU values, compiled binaries and resource metadata remain bound in the dataset and compact manifest.
+
+The exact controlled collector is retained as `optimization-study/wave007/optimization-w007-sinkhorn-launch-fusion-490a5ebcee2b-7fcbd048-v1-source/collect-v1.py` in the compact archive, SHA256 `787e2838515460dc411306cbcadaa930cfda7efff4346b1704a906d635b5a3e4`. Its path/hash, original archive binding and the separate publication CLI receipt are in `docs/data/optimization-wave007-E05-publication-cli.json`. The original scientific dataset and controlled collector are unchanged by the exploratory labeling fix.

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Standalone sinkhorn_fusion experiment; host validation precedes fixture caching."""
+"""Exploratory single-case Sinkhorn pair; admission precedes fixture caching.
+
+This generic runner does not reproduce the controlled pre-oracle paired screen."""
 import argparse
 import json
 from pathlib import Path
@@ -19,12 +21,14 @@ def main():
     spec = json.loads(Path(args.case).read_text())
     parameters, _, _, _ = dimensions(spec)
     if args.validate_only:
-        print(json.dumps(dict(status='supported', parameters=parameters)))
+        print(json.dumps(dict(status='supported', parameters=parameters,
+                              qualification='exploratory/unqualified', pre_oracle_pair_screen=False)))
         return 0
     sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
     from optimization_pair import run_pair
-    result = run_pair(Adapter(), spec, args.output, args.cache,
-                      json.loads(Path(args.provenance).read_text()))
+    provenance = json.loads(Path(args.provenance).read_text())
+    provenance.update(qualification='exploratory/unqualified', pre_oracle_pair_screen=False)
+    result = run_pair(Adapter(), spec, args.output, args.cache, provenance)
     return 0 if result['status'] == 'complete' else 1
 
 

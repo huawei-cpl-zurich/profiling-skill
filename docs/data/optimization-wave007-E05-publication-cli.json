@@ -1,0 +1,31 @@
+{
+  "study": "W007-E05",
+  "scope": "publication exploratory CLI clarification only",
+  "qualification": "exploratory/unqualified",
+  "pre_oracle_pair_screen": false,
+  "controlled_collector": {
+    "path": "optimization-study/wave007/optimization-w007-sinkhorn-launch-fusion-490a5ebcee2b-7fcbd048-v1-source/collect-v1.py",
+    "sha256": "787e2838515460dc411306cbcadaa930cfda7efff4346b1704a906d635b5a3e4",
+    "gate_order": "once CPU fixtures; all-case compile/full-text-relocation paired screen; once device correctness both arms all6; main-case profiles",
+    "pre_cpu_oracle_pair_screen": false,
+    "pre_device_correctness_pair_screen": true,
+    "compact_archive_sha256": "e9a95a333ff188845a5ba99d184717f83d94dab18583bdfdd25b4ea46e995e26"
+  },
+  "original_scientific_dataset_sha256": "44be91c6fa54ea8cd1f4ec4d347d83cc444606c3c693c566fe6650d4e6e0090a",
+  "publication_files": {
+    "examples/optimization-library/triton/sinkhorn_fusion_cli.py": "0675563cefaf225adf20e0f44de8b6c616c486d2c828ace963b688876c3733be",
+    "tests/test_optimization_sinkhorn_fusion.py": "1679e0f793671b2e0e29321b90e17c00d46a2d657c612387f5e3758df4f99e7b"
+  },
+  "validation": {
+    "local_tests": 8,
+    "local_elapsed_seconds": 4.911,
+    "a3_gate": "passed",
+    "new_frozen_oracle_calls": 0,
+    "new_device_forwards": 0,
+    "new_triton_compiles": 0,
+    "new_profiles": 0,
+    "a3_handle": "remote:gz-a3:job:e72051ec-e021-4f37-95ac-5fe558c356b6",
+    "a3_tests": 8,
+    "a3_elapsed_seconds": 46.108
+  }
+}

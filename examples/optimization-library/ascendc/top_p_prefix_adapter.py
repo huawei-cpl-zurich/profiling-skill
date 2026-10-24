@@ -11,6 +11,29 @@ from optimization_native_bridge import NativeArm,digest
 from top_p_prefix_contract import CASE_SOURCES,dimensions,make_case,diagnostics
 
 
+class FallbackAgreement:
+    """Compare one prepared pair per case, retiring snapshots when either arm closes."""
+    def __init__(self):
+        self.pending={}
+
+    def prepare(self,arm,spec):
+        key=json.dumps(spec,sort_keys=True)
+        state=self.pending.get(key)
+        if state is None or arm in state['prepared'] or len(state['outputs'])==2:
+            state=dict(prepared=set(),outputs={})
+            self.pending[key]=state
+        state['prepared'].add(arm)
+        def retire():
+            if self.pending.get(key) is state:self.pending.pop(key)
+        return retire
+
+    def validate(self,arm,spec,actual):
+        state=self.pending[json.dumps(spec,sort_keys=True)]
+        state['outputs'][arm]=tuple(t.detach().cpu().clone() for t in actual)
+        if len(state['outputs'])<2:return None
+        return all(torch.equal(a,b) for a,b in zip(state['outputs']['before'],state['outputs']['after']))
+
+
 class Adapter:
     case_sources=CASE_SOURCES
     make_case=staticmethod(make_case)
@@ -18,6 +41,7 @@ class Adapter:
     def __init__(self):
         self.directory=Path(os.environ['TOP_P_PREFIX_DIRECTORY']).resolve()
         self.prepared={}
+        self.fallback_agreement=FallbackAgreement()
 
     def prepare(self,arm,spec,fixture,output):
         import torch_npu
@@ -49,6 +73,12 @@ class Adapter:
         def run():native.run();return indices[:,:vocab],counts[:,0],tags[:,0]
         item=SimpleNamespace(run=run,expected_kernels=native.expected_kernels,sources=native.sources,
             metadata=native.metadata,compilation_state=native.compilation_state,native=native,inputs=device,close=native.close)
+        if spec.get('near_boundary'):
+            retire=self.fallback_agreement.prepare(arm,spec)
+            def close():
+                try:native.close()
+                finally:retire()
+            item.close=close
         self.prepared[arm]=item
         return item
 
@@ -61,11 +91,10 @@ class Adapter:
         if not torch.equal(self.prepared[arm].inputs.cpu(),fixture['scores']):result.update(passed=False,reason='input mutation')
         # The guard's uniform tied payload must match baseline support exactly.
         if spec.get('near_boundary'):
-            value=tuple(t.detach().cpu().clone() for t in actual)
-            if arm=='before':self.baseline=value
-            else:
-                result['exact_fallback_agreement']=all(torch.equal(a,b) for a,b in zip(value,self.baseline))
-                result['passed'] &= result['exact_fallback_agreement']
+            agreement=self.fallback_agreement.validate(arm,spec,actual)
+            if agreement is not None:
+                result['exact_fallback_agreement']=agreement
+                result['passed'] &= agreement
         return result
 
 

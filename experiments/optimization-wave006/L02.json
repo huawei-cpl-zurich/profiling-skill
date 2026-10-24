@@ -1,0 +1,92 @@
+{
+  "wave": 6,
+  "study_id": "L02",
+  "title": "Cube-to-Fixpipe unit completion flags",
+  "study_kind": "source-backed-control-or-synchronization-candidate",
+  "new_unique_mechanism_claim": false,
+  "standing_approval": "waves003\u2013022 data first",
+  "source": "lowlevel/proposal.md exact bounded bodies/host numerical comparison, CATLASS40aced927fdaaa0f3eaa9c6f5c5d859e06392f55 CANNOpenSoftware2.0; actual native AtlasA2/arch2201 code. Selected910B4-1/CANN9.1 support must be own-qualified. No PythonDSL/A5/950 support claim.",
+  "cases": [
+    {
+      "case_id": "W006-L02-01",
+      "role": "gallery",
+      "seed": 7201,
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 64
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    },
+    {
+      "case_id": "W006-L02-02",
+      "role": "gallery",
+      "seed": 7202,
+      "parameters": {
+        "M": 512,
+        "N": 1024,
+        "K": 256
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    },
+    {
+      "case_id": "W006-L02-03",
+      "role": "heldout",
+      "seed": 7203,
+      "parameters": {
+        "M": 64,
+        "N": 128,
+        "K": 128
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    },
+    {
+      "case_id": "W006-L02-04",
+      "role": "heldout",
+      "seed": 7204,
+      "parameters": {
+        "M": 384,
+        "N": 1024,
+        "K": 192
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Scalar/synchronization reduction may help; setup, compiler no-op, or compute dominance may erase benefit. Labels prospective, no forced sign."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-L02-GA",
+      "role": "guard",
+      "seed": 7291,
+      "parameters": {
+        "M": 128,
+        "N": 256,
+        "K": 192
+      },
+      "expected": "3L0Kstages: intermediateMmadflag0b10/final0b11, correctcompleteoutput. Exact dependency order no arbitraryeventdeletion."
+    },
+    {
+      "case_id": "W006-L02-GB",
+      "role": "guard",
+      "seed": 7292,
+      "parameters": {
+        "M": 64,
+        "N": 128,
+        "K": 128,
+        "consecutive_distinct_calls": 2
+      },
+      "expected": "OnecompositeguardAPI performsTWOdistinctGEMMs separateinputs+outputs (cachedexpectedtupleonce), catchesstalecompletion/accumulatorreuse. No extra mainprofiles, honestcomponentcounts."
+    }
+  ],
+  "contract": {
+    "interface": "PositiveM,N,K; FP16 A[M,K],B[K,N] represented bounded[-.25,.25], immutable, FP32accumulation and FP16C[M,N]. Exact physical A/B/C layouts/strides/padding must be declared/audited, not guessed from logical shapes. No preconversion free to one arm. Independent CPU FP64 represented-input GEMM oracle atol2e-3rtol2e-3, finitealloutputs, separateoutput sentinel fullyoverwritten.",
+    "common": "SameM128N256L1K256L0K64, SAMErowmajoroutputtaskorder/grid/movement/buffering/precision/terminalbarrier botharms. Actual Cube count queried once; tests up to16tasks must pass measured coreeligibility, not assumed20. Exact source/binary/compiler/nativebridge and dependency revisions retained. Any materially coupled kernel change requires explicit evidence/qualification, not silentbaseline change.",
+    "before": "Native SAMEblock_mmad_small body ENABLE_UNIT_FLAGfalse explicitFIX_M/M_FIX completionevents; allproducerbuffer eventsandterminalbarriers unchanged. Smallcontrolappliedidenticallybotharms, not conflatedwithL01.",
+    "after": "ToggleONLYENABLE_UNIT_FLAGtrue, preserveintermediate/final Mmad0b10/0b11 andFixpipefinal0b11 peractualarch2201 source. SAMEbody/resources/grid/precision. Hardwarepathsupport compile/runtimequalified notassumedfromexample.",
+    "dispatch": "Initialeligibleonewave/K<=256 maincases; avoidunsupportedmetadata/layout orprovideexplicitidenticalgeneralfallback. No deletionofbufferreusehazards."
+  },
+  "protocol": "Six cached fixture/oracle payloads once (guard composite expectedtuple once), correctness once/side/case/source then10fullAPIprofileforwards4pairs,guards0captures. No warmup/autotune/extratiming/profiledvalidation. Compile/resourcequalifyallresources first. Deviceoperation span diagnostic inclrequiredstages/gaps, no ordinarylatency/physicaltraffic/rooflineclaim. Preservefailed/partial/slower/no-effect outcomes and all10samples/taskPMU/bindings."
+}

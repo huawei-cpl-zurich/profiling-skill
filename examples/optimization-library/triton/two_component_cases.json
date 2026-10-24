@@ -1,0 +1,108 @@
+{
+  "family_id": "F11",
+  "name": "Residual two-component int8 dot",
+  "work_unit": "after integer MACs for two components; before has half as many floating MACs",
+  "cases": [
+    {
+      "case_id": "F11-01",
+      "role": "gallery",
+      "seed": 11101,
+      "parameters": {
+        "M": 128,
+        "N": 1024,
+        "K": 1024,
+        "amax": 1.0,
+        "weight_max": 8,
+        "scale": 0.0009765625
+      },
+      "purpose": "A larger fixed-group workload may amortize decomposition and exploit two integer dots.",
+      "mathematical_work": 268435456,
+      "hypothesis_role": "benefit",
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "A larger fixed-group workload may amortize decomposition and exploit two integer dots."
+    },
+    {
+      "case_id": "F11-02",
+      "role": "gallery",
+      "seed": 11102,
+      "parameters": {
+        "M": 8,
+        "N": 64,
+        "K": 128,
+        "amax": 1.0,
+        "weight_max": 8,
+        "scale": 0.0009765625
+      },
+      "purpose": "Tiny M/N/K may expose row-max, two-buffer and reconstruction costs.",
+      "mathematical_work": 131072,
+      "hypothesis_role": "cost",
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Tiny M/N/K may expose row-max, two-buffer and reconstruction costs."
+    },
+    {
+      "case_id": "F11-03",
+      "role": "heldout",
+      "seed": 11103,
+      "parameters": {
+        "M": 96,
+        "N": 768,
+        "K": 768,
+        "amax": 1.0,
+        "weight_max": 8,
+        "scale": 0.0009765625
+      },
+      "purpose": "A different larger geometry may amortize compensated integer decomposition.",
+      "mathematical_work": 113246208,
+      "hypothesis_role": "benefit",
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "A different larger geometry may amortize compensated integer decomposition."
+    },
+    {
+      "case_id": "F11-04",
+      "role": "heldout",
+      "seed": 11104,
+      "parameters": {
+        "M": 16,
+        "N": 128,
+        "K": 256,
+        "amax": 1.0,
+        "weight_max": 8,
+        "scale": 0.0009765625
+      },
+      "purpose": "A small heldout geometry may favor direct floating GEMM over two integer products.",
+      "mathematical_work": 1048576,
+      "hypothesis_role": "cost",
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "A small heldout geometry may favor direct floating GEMM over two integer products."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F11-G1",
+      "role": "guard",
+      "seed": 11105,
+      "parameters": {
+        "M": 2,
+        "N": 8,
+        "K": 128,
+        "amax": 1.0,
+        "weight_max": 8,
+        "scale": 0.0009765625
+      },
+      "distribution": "zero-row"
+    },
+    {
+      "case_id": "F11-G2",
+      "role": "guard",
+      "seed": 11106,
+      "parameters": {
+        "M": 1,
+        "N": 1,
+        "K": 262144,
+        "amax": 1.0,
+        "weight_max": 127,
+        "scale": 0.0009765625
+      }
+    }
+  ]
+}

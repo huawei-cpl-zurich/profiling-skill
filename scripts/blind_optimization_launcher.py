@@ -45,16 +45,17 @@ def write_json(path: Path, value: object) -> None:
 
 
 def execute(command: list[str], cwd: Path, timeout: float,
-            output_files: tuple[Path, Path] | None = None) -> dict:
+            output_files: tuple[Path, Path] | None = None, *, input_text: str | None = None) -> dict:
     """Retain partial diagnostics and terminate the complete local process group."""
     with ExitStack() as stack:
         sinks = [stack.enter_context(path.open("w")) for path in output_files] if output_files else []
         process = subprocess.Popen(command, cwd=cwd, text=True,
+                                   stdin=subprocess.PIPE if input_text is not None else None,
                                    stdout=sinks[0] if sinks else subprocess.PIPE,
                                    stderr=sinks[1] if sinks else subprocess.PIPE, start_new_session=True)
         timed_out = False
         try:
-            stdout, stderr = process.communicate(timeout=timeout)
+            stdout, stderr = process.communicate(input=input_text, timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
             os.killpg(process.pid, signal.SIGTERM)
@@ -95,7 +96,13 @@ class ToolHandler(socketserver.StreamRequestHandler):
                 args = ["help"]
             with owner.tool_lock:
                 remaining = getattr(owner, "deadline_monotonic", time.monotonic() + owner.tool_timeout) - time.monotonic()
-                if remaining <= 0 or self.peer_disconnected():
+                limit = getattr(owner, "max_tool_calls", None)
+                exhausted = (limit is not None and args != ["help"]
+                             and getattr(owner, "tool_calls", 0) >= limit)
+                if exhausted:
+                    result = {"returncode": 75, "stdout": "", "stderr": "Tool-call budget exhausted\n"}
+                    entry = {"arguments": args, "dispatched": False, **result}
+                elif remaining <= 0 or self.peer_disconnected():
                     reason = "deadline-expired" if remaining <= 0 else "client-disconnected"
                     result = {"returncode": 124 if remaining <= 0 else 125,
                               "stdout": "", "stderr": f"Request not dispatched: {reason}\n",
@@ -103,6 +110,8 @@ class ToolHandler(socketserver.StreamRequestHandler):
                     entry = {"arguments": args, "dispatched": False, **result}
                 else:
                     # A domain helper receives candidate files; it is not a transport adapter.
+                    if limit is not None and args != ["help"]:
+                        owner.tool_calls = getattr(owner, "tool_calls", 0) + 1
                     command = [*owner.tool_command, "--workspace", str(owner.workspace), *args]
                     result = execute(command, owner.workspace, min(owner.tool_timeout, remaining))
                     entry = {"command": command, "dispatched": True, **result}
@@ -260,6 +269,12 @@ class BlindLauncher(ProductionLauncher):
             raise LaunchError("isolation preflight failed: " + result["stderr"])
         return result
 
+    def agent_command(self) -> list[str]:
+        return [*self.base_command(), "/runtime/node/bin/codex", "exec", "--json",
+                "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
+                "-m", self.model["name"], "-c", f'model_reasoning_effort="{self.model["reasoning_effort"]}"',
+                (self.frozen / "prompt.md").read_text()]
+
     def before_agent(self) -> None:
         """Optional trusted work charged to the existing execution deadline."""
 
@@ -296,10 +311,7 @@ class BlindLauncher(ProductionLauncher):
                 command = [*self.base_command(), "experiment-tool", "help"]
             else:
                 self.before_agent()
-                command = [*self.base_command(), "/runtime/node/bin/codex", "exec", "--json",
-                           "--ignore-user-config", "--dangerously-bypass-approvals-and-sandbox",
-                           "-m", self.model["name"], "-c", f'model_reasoning_effort="{self.model["reasoning_effort"]}"',
-                           (self.frozen / "prompt.md").read_text()]
+                command = self.agent_command()
             remaining = self.deadline_monotonic - time.monotonic()
             if remaining <= 0:
                 result = dict(returncode=124, timed_out=True, stdout="", stderr="Original role deadline expired")

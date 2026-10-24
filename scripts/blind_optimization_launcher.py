@@ -88,16 +88,18 @@ class ToolHandler(socketserver.StreamRequestHandler):
             if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
                 raise ValueError("arguments must be a string array")
             managed = {"--workspace", "--bundle", "--target", "--runtime"}
+            managed.update(getattr(owner, "extra_managed_options", ()))
             overrides = sorted({arg.split("=", 1)[0] for arg in args} & managed)
             if overrides:
                 raise ValueError("Managed configuration " + ", ".join(overrides) +
                                  " is assigned by the harness; omit these flags. Use experiment-tool help.")
             if any(arg in {"-h", "--help"} for arg in args):
                 args = ["help"]
+            is_help = args[:1] == ["help"]
             with owner.tool_lock:
                 remaining = getattr(owner, "deadline_monotonic", time.monotonic() + owner.tool_timeout) - time.monotonic()
                 limit = getattr(owner, "max_tool_calls", None)
-                exhausted = (limit is not None and args != ["help"]
+                exhausted = (limit is not None and not is_help
                              and getattr(owner, "tool_calls", 0) >= limit)
                 if exhausted:
                     result = {"returncode": 75, "stdout": "", "stderr": "Tool-call budget exhausted\n"}
@@ -110,11 +112,12 @@ class ToolHandler(socketserver.StreamRequestHandler):
                     entry = {"arguments": args, "dispatched": False, **result}
                 else:
                     # A domain helper receives candidate files; it is not a transport adapter.
-                    if limit is not None and args != ["help"]:
+                    if limit is not None and not is_help:
                         owner.tool_calls = getattr(owner, "tool_calls", 0) + 1
                     command = [*owner.tool_command, "--workspace", str(owner.workspace), *args]
                     result = execute(command, owner.workspace, min(owner.tool_timeout, remaining))
-                    entry = {"command": command, "dispatched": True, **result}
+                    entry = {"command": command, "arguments": args, "is_help_request": is_help,
+                             "dispatched": True, **result}
                 with owner.journal.open("a") as stream:
                     stream.write(json.dumps(entry) + "\n")
         except (OSError, ValueError, KeyError) as error:

@@ -29,6 +29,8 @@ def skill_files(path):
 
 
 class CodingLauncher(BlindLauncher):
+    extra_managed_options = {"--config"}
+
     def __init__(self, *args, guidance, max_tool_calls, **kwargs):
         super().__init__(*args, skill=None, **kwargs)
         self.guidance, self.max_tool_calls = guidance, max_tool_calls
@@ -210,7 +212,7 @@ def evaluate(command, request, session):
     return json.loads(result['stdout'])
 
 
-def development_failures(session):
+def development_failures(session, tool_command=None):
     """Inspect only host-owned dispatched reports; help and budget refusals are free."""
     journal = session / 'commands.jsonl'
     failures = []
@@ -219,7 +221,17 @@ def development_failures(session):
             entry = json.loads(line)
             if not isinstance(entry, dict):
                 raise ValueError('invalid host journal row')
-            if not entry.get('dispatched') or entry.get('command', [])[-1:] == ['help']:
+            if not entry.get('dispatched'):
+                continue
+            arguments = entry.get('arguments')
+            command = entry.get('command', [])
+            if arguments is None and tool_command is not None:
+                prefix = [*tool_command, '--workspace']
+                if command[:len(prefix)] == prefix and len(command) > len(prefix):
+                    arguments = command[len(prefix) + 1:]
+            is_help = (isinstance(arguments, list) and all(isinstance(a, str) for a in arguments)
+                       and (arguments[:1] == ['help'] or any(a in ('-h', '--help') for a in arguments)))
+            if is_help and entry.get('returncode') == 0 and not entry.get('timed_out'):
                 continue
             report = json.loads(entry['stdout'])
             if (not isinstance(report, dict) or report.get('outcome') not in
@@ -265,7 +277,7 @@ def run_suite(manifest, output, *, launcher=CodingLauncher, evaluator=evaluate):
                 raise ValueError('submitted candidate changed during terminal evaluation')
             write_json(session / 'terminal-report.json', raw)
             result = adjudicate(raw, task, source_hash)
-            issues = development_failures(session)
+            issues = development_failures(session, task['tool_command'])
             # A harness-enforced wall expiry submits the last candidate by protocol.
             expired = receipt['actor'].get('timed_out') is True
             actor_failed = bool(receipt['actor'].get('returncode')) and not expired

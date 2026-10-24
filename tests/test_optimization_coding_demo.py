@@ -207,7 +207,7 @@ def test_development_backend_failure_invalidates_pair_despite_terminal_success(t
         def launch(self):
             (self.output / 'workspace').mkdir(parents=True)
             (self.output / 'workspace/candidate.py').write_text('kernel')
-            entries = [dict(dispatched=True, command=['tool', 'help'], stdout='help text'),
+            entries = [dict(dispatched=True, command=['tool', 'help'], arguments=['help'], stdout='help text', returncode=0),
                        dict(dispatched=False, arguments=['evaluate'], returncode=75)]
             if self.output.name == 'session-000':
                 entries.append(dict(dispatched=True, command=['tool', 'evaluate'],
@@ -272,3 +272,53 @@ def test_actual_rpc_helper_spawn_failure_is_journaled_and_invalidates_pair(tmp_p
     results = m.run_suite(config, tmp_path / 'run', launcher=Actor, evaluator=terminal)
     assert all(r['terminal_result']['solved'] and not r['paired_comparison_valid']
                and r['status'] == 'invalid-comparison' for r in results)
+
+
+def test_actual_rpc_help_with_options_is_free_and_keeps_terminal_pair_valid(tmp_path):
+    config = manifest(tmp_path)
+    helper = tmp_path / 'help.py'; helper.write_text('print("public help text")')
+    class Actor:
+        def __init__(self, output, bundle, *args, **kwargs): self.output, self.bundle = output, bundle
+        def launch(self):
+            self.workspace = self.output / 'workspace'; self.workspace.mkdir(parents=True)
+            shutil.copyfile(self.bundle / 'candidate.py', self.workspace / 'candidate.py')
+            self.tool_command, self.tool_lock = [sys.executable, str(helper)], threading.Lock()
+            self.tool_timeout, self.journal = 30, self.output / 'commands.jsonl'
+            self.max_tool_calls, self.tool_calls = 1, 0
+            server = socketserver.UnixStreamServer(str(self.output / 'rpc.sock'), ToolHandler)
+            server.owner = self
+            thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+            def request(arguments):
+                import socket
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    connection.connect(str(self.output / 'rpc.sock'))
+                    connection.sendall(json.dumps(dict(arguments=arguments)).encode()+b'\n')
+                    return json.loads(connection.makefile('rb').readline())
+            try:
+                assert request(['help', '--config', 'execution.json'])['returncode'] == 0
+                assert self.tool_calls == 0
+                self.extra_managed_options = m.CodingLauncher.extra_managed_options
+                assert request(['evaluate', '--config=execution.json'])['returncode'] == 2
+                assert self.tool_calls == 0
+            finally:
+                server.shutdown(); server.server_close(); thread.join()
+            rows = [json.loads(line) for line in self.journal.read_text().splitlines()]
+            assert rows[0]['is_help_request'] and rows[0]['arguments'][0] == 'help'
+            assert not rows[1]['dispatched']
+            return dict(returncode=0, timed_out=False)
+    def terminal(command, request, session): return report(request['candidate_sha256'])
+    results = m.run_suite(config, tmp_path / 'run', launcher=Actor, evaluator=terminal)
+    assert all(r['paired_comparison_valid'] and r['result']['solved'] for r in results)
+
+
+@pytest.mark.parametrize('arguments,returncode,expected', [
+    (['help', '--config', 'execution.json'], 0, 0),
+    (['help', '--config', 'execution.json'], 1, 1),
+    (['evaluate', '--config', 'help'], 0, 1)])
+def test_legacy_help_audit_requires_exact_host_prefix_and_success(tmp_path, arguments, returncode, expected):
+    prefix = ['python', 'backend.py', '--config', 'private.json']
+    entry = dict(dispatched=True, command=[*prefix, '--workspace', '/workspace', *arguments],
+                 stdout='public help text', returncode=returncode, timed_out=False)
+    (tmp_path / 'commands.jsonl').write_text(json.dumps(entry)+'\n')
+    assert len(m.development_failures(tmp_path, prefix)) == expected
+    assert len(m.development_failures(tmp_path, ['other-backend'])) == 1

@@ -1,0 +1,173 @@
+{
+  "study_id": "L03",
+  "outcome": "compile-noop",
+  "prospective_freeze_sha256": "40155d00179acffaf8582c8de0a2b6a38d026666b599ec8419e86e68fea67588",
+  "target": "gz-a3",
+  "runtime": "py311-torch",
+  "compiler_version": "CANN 9.1.0 native dav-c220 / CATLASS_ARCH2201",
+  "catlass_revision": "40aced927fdaaa0f3eaa9c6f5c5d859e06392f55",
+  "job_handle": "remote:gz-a3:job:1bd6310d-620e-4873-9867-5d1dd209ad4a",
+  "terminal_exit": 0,
+  "screen": {
+    "outcome": "compile-noop",
+    "sdk_default": 8,
+    "override": 0,
+    "device_sections_equal": true,
+    "scientific_oracles": 0,
+    "npu_api_forwards": 0,
+    "profiles": 0,
+    "cases": {
+      "W006-L03-01": "unattempted",
+      "W006-L03-02": "unattempted",
+      "W006-L03-03": "unattempted",
+      "W006-L03-04": "unattempted"
+    },
+    "latency_claim": null,
+    "physical_stack_peak_claim": null,
+    "source_bindings": {
+      "shape_metadata.cpp": "333b15a0e24779ddecb393267b4c78782795012595780041016825612f33dba1",
+      "shape_metadata_abi.h": "cd7dfa8c78e1b1ef0968b2fadd5069e4f41cb5bb918767254e527c00abc301cf"
+    }
+  },
+  "device_object_sha256": {
+    "before": "457a45ca009f847bc80780aad742440bd345981b8026b0dbcaba817428b75fdd",
+    "after": "457a45ca009f847bc80780aad742440bd345981b8026b0dbcaba817428b75fdd"
+  },
+  "device_sections": {
+    ".text": {
+      "type": 1,
+      "flags": 6,
+      "size": 4656,
+      "align": 4,
+      "sha256": "fb1c64fb3c52c82dbca2790a91b4e3ac75e2eecd440698fefd4425cb24e4d3a2"
+    },
+    ".rela.text": {
+      "type": 4,
+      "flags": 64,
+      "size": 24,
+      "align": 8,
+      "sha256": "b6cde0836d02504b613e96f8340f5072a072383288ebec7693a2123525b54763",
+      "raw_hex": "f400000000000000230100000c0000000000000000000000"
+    },
+    ".ascend.stack.size.record": {
+      "type": 7,
+      "flags": 0,
+      "size": 8,
+      "align": 1,
+      "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3",
+      "raw_hex": "0080000000000000"
+    },
+    ".data": {
+      "type": 1,
+      "flags": 3,
+      "size": 32768,
+      "align": 256,
+      "sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479"
+    },
+    ".bl.uninit.g_cubeTPipePtr": {
+      "type": 1,
+      "flags": 515,
+      "size": 8,
+      "align": 8,
+      "sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "raw_hex": "0000000000000000"
+    },
+    "__CCE_KernelArgSize": {
+      "type": 7,
+      "flags": 0,
+      "size": 4,
+      "align": 4,
+      "sha256": "dc765660b06ee03dd16fd7ca5b957e8c805161ac2c4af28c5a100ab2ab432ca1",
+      "raw_hex": "08000000"
+    },
+    "__CCE_KernelMetaData": {
+      "type": 7,
+      "flags": 0,
+      "size": 4,
+      "align": 4,
+      "sha256": "67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b7851d456d88d203d15aaa450",
+      "raw_hex": "01000000"
+    },
+    ".ascend.meta.wave006_shape_metadata": {
+      "type": 7,
+      "flags": 0,
+      "size": 8,
+      "align": 4,
+      "sha256": "9afd0cd047953038eb37965358e1487023da656d958cf73b5387bbe3a87bad17",
+      "raw_hex": "0100040002000000"
+    }
+  },
+  "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+  "source_archive_sha256": "d767844dd401e61b0d365c91b5cbdee15b56f8fc0f19c49791c90e86cfdfba9a",
+  "retained_evidence_archive_sha256": "a99c9061177a9963e97ba71a151edce57984c5abee2ea573a7f3bb151121053d",
+  "retained_namespace": "optimization-w006-shape-metadata-a3c49b490046-30d2fb84-v3",
+  "functional_tests": {
+    "count": 6,
+    "exit": 0,
+    "skipped": 0
+  },
+  "limitations": [
+    "No numerical runtime correctness claim: screen stopped before scientific fixtures and all NPU APIs.",
+    "Raw stack allocation note is not certified physical peak usage.",
+    "No latency or stack reduction claim."
+  ],
+  "review_followup": {
+    "job_handle": "remote:gz-a3:job:ca784f14-360b-46e5-ac24-e6569f1c97e1",
+    "terminal_exit": 0,
+    "reason": "Require full extracted device ELF identity to establish no-op; raw relocation indices alone cannot resolve target symbols.",
+    "retained_namespace": "optimization-w006-shape-metadata-0edf30239bc0-3741a7c3-review-fix",
+    "source_archive_sha256": "5366398b08f2a68119bcb369918ec5c72019cf86c40082cb5d3d37323d5ce6e7",
+    "retained_evidence_archive_sha256": "9fcd6020d03b5942fc98dbd168a8a90ee3bd1120c8800fd54582f5f9812e7c6a",
+    "report": {
+      "retained_classification": {
+        "outcome": "compile-noop",
+        "sdk_default": 8,
+        "override": 0,
+        "device_sections_equal": true,
+        "device_elf_equal": true,
+        "device_object_sha256": {
+          "before": "457a45ca009f847bc80780aad742440bd345981b8026b0dbcaba817428b75fdd",
+          "after": "457a45ca009f847bc80780aad742440bd345981b8026b0dbcaba817428b75fdd"
+        },
+        "scientific_oracles": 0,
+        "npu_api_forwards": 0,
+        "profiles": 0,
+        "cases": {
+          "W006-L03-01": "unattempted",
+          "W006-L03-02": "unattempted",
+          "W006-L03-03": "unattempted",
+          "W006-L03-04": "unattempted"
+        },
+        "latency_claim": null,
+        "physical_stack_peak_claim": null
+      },
+      "regression_classification": {
+        "outcome": "inconclusive-device-equivalence",
+        "sdk_default": 8,
+        "override": 0,
+        "device_sections_equal": true,
+        "device_elf_equal": false,
+        "device_object_sha256": {
+          "before": "1612575f051a36cf0732215d22f169616b75fcbae51fed34c3f88a4432d015b5",
+          "after": "cbc89c597f636a39b1a5eb48a35eaefddf266a364e518ec3cae206ccfc5e8687"
+        },
+        "scientific_oracles": 0,
+        "npu_api_forwards": 0,
+        "profiles": 0,
+        "cases": {
+          "W006-L03-01": "unattempted",
+          "W006-L03-02": "unattempted",
+          "W006-L03-03": "unattempted",
+          "W006-L03-04": "unattempted"
+        },
+        "latency_claim": null,
+        "physical_stack_peak_claim": null
+      },
+      "functional_tests": 7,
+      "native_recompiles": 0,
+      "scientific_oracles": 0,
+      "npu_api_forwards": 0,
+      "profiles": 0
+    }
+  }
+}

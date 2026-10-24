@@ -1,0 +1,98 @@
+{
+  "wave": 6,
+  "study_id": "N05",
+  "title": "Vector-fill required aligned padding instead of scalar stores",
+  "study_kind": "source-backed-aligned-instruction-selection-adaptation",
+  "new_unique_mechanism_claim": false,
+  "approval": "Standing waves003\u2013022 data first",
+  "source": "frontier/extension.md, query207c5923eed845cf8a9cc1d498401f5f and originalb339eb85c773462fbfc45ecb8dbc2587. Actual native ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 Apache2 and ops-nn7ed342d28b44b6291aceaf747796028c48d7304c CANNOpen2.0 LN4 non310P FP32transpose/AIV source with A2/A3 docs. Isolated standalone adaptation, not fullLN speed claim.",
+  "dependency": {
+    "base": "298b44a9b579f3c0b0b2ed04c23a250393aa6644",
+    "target_branch": "codex/optimization-w006-row-dma-aggregation"
+  },
+  "cases": [
+    {
+      "case_id": "W006-N05-01",
+      "role": "gallery",
+      "seed": 8501,
+      "parameters": {
+        "rows": 128,
+        "width": 64,
+        "pitch": 96
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-N05-02",
+      "role": "gallery",
+      "seed": 8502,
+      "parameters": {
+        "rows": 1,
+        "width": 64,
+        "pitch": 72
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-N05-03",
+      "role": "heldout",
+      "seed": 8503,
+      "parameters": {
+        "rows": 96,
+        "width": 96,
+        "pitch": 136
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-N05-04",
+      "role": "heldout",
+      "seed": 8504,
+      "parameters": {
+        "rows": 2,
+        "width": 32,
+        "pitch": 40
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost label; retain equal, uncertain, slower, unsupported and incorrect outcomes."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-N05-GA",
+      "role": "guard",
+      "seed": 8591,
+      "parameters": {
+        "rows": 3,
+        "width": 65,
+        "pitch": 72,
+        "distribution": "signedzero-and-poison-padding"
+      },
+      "expected": "Unaligned tail start must use scalarfallback, exactly7positive-zero paddingvalues and bit-preserved validlanes/canaries."
+    },
+    {
+      "case_id": "W006-N05-GB",
+      "role": "guard",
+      "seed": 8592,
+      "parameters": {
+        "rows": 2,
+        "width": 64,
+        "pitch": 64,
+        "also_empty_rows": true,
+        "distribution": "signedzero-and-poison-padding"
+      },
+      "expected": "No-tail identity and separateempty-rows result, no zero-countvectorcommand/invalidDMA; explicitcompositecomponents and no null-pointer alias assumption."
+    }
+  ],
+  "contract": {
+    "interface": "Contiguous immutable finiteFP32 x[rows,pitch], validcolumns[0,width), padding[width,pitch) contains nonzeropoison. ReturnNEWfullpadded y, exact validFP32bits including\u00b10 preserved, ALLpaddingpositivezero. Output/input GMcanaries andnonalias. IndependentCPUoracle copiesbitsandfillsrequiredzeros.",
+    "before": "Samefullpadded GM\u2192UBcopy, scalar SetValue zeroONLYrequiredpadding, samefullrow UB\u2192GMcopy.",
+    "after": "Count-form nativeDuplicate zeroexactSAMEpadding span perrow, ONLYif rowbase/pitch and tailstart32Baligned(width%8==0,pitch%8==0,tail%8==0,positive). Unaligned tail uses identicalscalarfallback, no arbitrarylanemask/repeat-stride optimization. Tail0 skipsfill inboth, emptyrows0returnsemptywithoutnativeDMA.",
+    "common": "Samegrid/rowbatch/localbuffers/layout/DMAcommands/GMbytes/allcrosspipeownership andterminalbarriers. No requiredzero omitted, validvalue overwritten, wholememset, DMAaggregation or no-op-elision attributed. Samecompilerflags; scalarloopalreadybulk-lowered meansnoeffect.",
+    "source_scope": "ActualnativeScalarSetValue andalignedDuplicate bodies supportpattern; originalLNwidth65\u2192pitch72 notoptimizedhere. Preexistinglargerpitch/fullblockpadding explicitstandaloneapplication. SelectedSDKcount/offsetalignment/capacityauditmandatory, no physicalbandwidthsavingclaim."
+  },
+  "protocol": "Six runtime scientific payloads cached once, once-per-side correctness per case/source then exactly10fullAPIprofileforwards/arm/four mainpairs. Guards0captures, component/caller-action counts explicit; no warmup/autotune/extra timing/profiled IOchecking. Compile/resource/actualAIVengineaudit before math. Preserveall failures/ten samples/PMU/source/compiler/dependency/binary/fixture bindings."
+}

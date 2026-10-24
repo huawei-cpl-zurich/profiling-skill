@@ -60,7 +60,7 @@ including unfavorable or noisy outcomes.
 
 All ten CPU functional tests, twelve once-only correctness checks and eighty profiled API forwards passed on the configured A3 route, observed Ascend910B4-1 physical device4. Eight captures contain eighty physical task rows; both guards have zero captures. There were no failed attempts or measurement retries. The compile-only erf/tanh capability screen passed before six scientific oracle payloads were constructed, and all twelve case/arm preparations compiled before any full API forward. Compiled identities remained stable.
 
-The empirical FP64 grid maximum error was 0.000473235519 at x=-2.6989, below the fixed0.0006 approximation budget. This is not a global proof.
+The empirical FP64 grid maximum error was 0.000473235519 at x=-2.6989, below the fixed 0.0006 approximation budget. This is not a global proof.
 
 | Case | Erf span, µs (mean ± sample SD) | Tanh span, µs (mean ± sample SD) | Erf/tanh ratio | Erf max absolute error | Tanh max absolute error |
 |---|---:|---:|---:|---:|---:|
@@ -71,4 +71,4 @@ The empirical FP64 grid maximum error was 0.000473235519 at x=-2.6989, below the
 
 The geometric mean span ratio is **1.2972×**. Compare each sample series and its dispersion; these are profiler-active single-kernel spans, not ordinary latency. Numerical error increases in exchange for any measured reduction in span. The exact-mode guard selects the same erf binary on both sides and retains its tighter correctness gate. The endpoint/near-zero guard also passes the frozen approximation gate. No tolerance was relaxed.
 
-[Readable summary](../../../skills/ascend-optimization-library/references/gelu-approximation-summary.json) and [complete compact evidence](../../../skills/ascend-optimization-library/references/gelu-approximation-evidence.json.gz) retain every span/event sample, task PMU field, source/binary identity, numerical diagnostic, CPU grid receipt, capability compilation and guard result. All six CPU payloads, compiled cache artifacts and raw trace/kernel rows are in the private archive:208 verified members,5,490,854bytes, SHA256 `a9c33995cb36ac17fd63d26d327653ebf91da3b3c0cd5e0db8d4af3e9304144a`. Full vendor reports remain in the retained remote run.
+[Readable summary](../../../skills/ascend-optimization-library/references/gelu-approximation-summary.json) and [complete compact evidence](../../../skills/ascend-optimization-library/references/gelu-approximation-evidence.json.gz) retain every span/event sample, task PMU field, source/binary identity, numerical diagnostic, CPU grid receipt, capability compilation and guard result. All six CPU payloads, compiled cache artifacts and raw trace/kernel rows are in the private archive: 208 verified payload files plus manifest, 5,490,854 bytes, SHA256 `a9c33995cb36ac17fd63d26d327653ebf91da3b3c0cd5e0db8d4af3e9304144a`. Full vendor reports remain in the retained remote run.

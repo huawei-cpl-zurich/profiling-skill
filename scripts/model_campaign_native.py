@@ -69,6 +69,8 @@ def check(root, env, remaining):
         return dict(passed=False, variants=[], diagnostics=[dict(state='failed',
             category='candidate-compile-or-runtime-error', diagnostic=detail)])
     # Each task owns its runtime-data qualification variants.
+    from benchmark_correctness import verifier_identity
+    policy = verifier_identity()
     results = []
     variants = check_variants(root)
     for variant in variants:
@@ -85,8 +87,9 @@ def check(root, env, remaining):
                 reference=lambda args, kwargs: case['expected'], compiler=audited_compiler())
             results.append(result)
             if result['state'] != 'passed':
-                return dict(passed=False, variants=variants[:variants.index(variant)], diagnostics=results)
-    return dict(passed=True, variants=variants, diagnostics=results)
+                return dict(passed=False, variants=variants[:variants.index(variant)], diagnostics=results,
+                            correctness_verifier=policy)
+    return dict(passed=True, variants=variants, diagnostics=results, correctness_verifier=policy)
 
 
 def benchmark(root, env, remaining):

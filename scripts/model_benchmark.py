@@ -19,6 +19,8 @@ sys.path.insert(0, str(HELPERS))
 from model_execution import CapabilityError, GraphCompiler, MeasurementError, benchmark_pair, prepare_model, prepare_eager_model
 from profile_accounting import AccountingError, account_profile
 from profile_capture import CaptureError
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from benchmark_correctness import verifier_identity, verify_outputs, snapshot, failure_details
 
 
 def load(spec):
@@ -128,6 +130,7 @@ def run(options, *, compiler_factory=None, clock=None):
         if policy not in ('required', 'optional'):
             raise ValueError('unknown profile policy')
         report['profile_policy'] = policy
+        report['correctness_verifier'] = verifier_identity()
         hooks = {name: load(getattr(options, name)) for name in (
             'baseline', 'candidate', 'cases_provider', 'validator', 'acquisition')}
         compiler_factory = compiler_factory or (lambda: GraphCompiler(backend_name=options.backend))
@@ -160,6 +163,23 @@ def run(options, *, compiler_factory=None, clock=None):
             guard = InputGuard((case['args'], case.get('kwargs', {}), case.get('init_args', ()),
                                 case.get('init_kwargs', {})), adapter.synchronize)
             models = {}
+            golden = None
+
+            def validate(result, arm):
+                nonlocal golden
+                if arm == 'baseline':
+                    golden = snapshot(result)
+                    hooks['validator'](case, arm, result)
+                else:
+                    try:
+                        verify_outputs(golden, result, (case['args'], case.get('kwargs', {})),
+                                       non_compute=case.get('non_compute', False))
+                        hooks['validator'](case, arm, result)
+                        row['correctness'] = dict(state='passed')
+                    except Exception as error:
+                        row['correctness'] = dict(state='failed', **failure_details(error))
+                        raise
+
             for arm in ('baseline', 'candidate'):
                 factory = hooks[arm]
                 eager = arm == 'baseline' and getattr(options, 'baseline_execution', 'compiled') == 'eager'
@@ -169,7 +189,7 @@ def run(options, *, compiler_factory=None, clock=None):
                     lambda factory=factory: factory(*case.get('init_args', ()),
                                                     **case.get('init_kwargs', {})),
                     case['args'], case.get('kwargs', {}),
-                    lambda result, arm=arm: hooks['validator'](case, arm, result),
+                    lambda result, arm=arm: validate(result, arm),
                     **preparation,
                     synchronize=adapter.synchronize)
                 guard(arm + ':prepare')

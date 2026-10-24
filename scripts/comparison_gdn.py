@@ -114,10 +114,10 @@ def validate(case, arm, result):
             if actual.dtype != expected.dtype or actual.device != expected.device or actual.shape != expected.shape:
                 errors.append(f'{name}: shape/dtype/device mismatch')
                 continue
-            try:
-                torch.testing.assert_close(actual, expected, rtol=0.02, atol=0.02)
-            except AssertionError as exc:
-                errors.append(f'{name}: {exc}')
     if errors:
         raise AssertionError('; '.join(errors))
+    from benchmark_correctness import verify_outputs
+    names = ('output', 'final_state')
+    verify_outputs(dict(zip(names, case['expected'])), dict(zip(names, result)),
+                   case['args'], non_compute=case.get('non_compute', False))
     return {'passed': True, 'arm': arm, 'case_id': case['id']}

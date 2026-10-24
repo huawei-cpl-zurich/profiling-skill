@@ -68,10 +68,13 @@ def prepare(output, task='matmul', reference_root=None, profile_index=None, chec
     helpers.mkdir(parents=True)
     for name in ('model_campaign_worker.py', 'profile_device.py', 'a3_memory_batch.py',
                  'private_campaign_cases.py', 'private_campaign_models.py', 'model_campaign_native.py',
-                 'model_device.py', 'phase_deadline.py', 'model_campaign_task.py'):
+                 'model_device.py', 'phase_deadline.py', 'model_campaign_task.py', 'benchmark_correctness.py'):
         shutil.copyfile(source / 'scripts' / name, private / 'scripts' / name)
     for name in ('model_execution.py', 'candidate_probe.py', 'profile_capture.py', 'profile_accounting.py'):
         shutil.copyfile(source / 'skills/ascend-model-benchmarking/scripts' / name, helpers / name)
+    shutil.copytree(source / 'third_party/cannbot_verifier',
+                    private / 'third_party/cannbot_verifier',
+                    ignore=shutil.ignore_patterns('__pycache__', '*.pyc'), copy_function=shutil.copyfile)
     for name in ('matmul', 'gdn', 'bsa'):
         folder = private / 'benchmarks' / name
         folder.mkdir(parents=True)

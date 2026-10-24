@@ -24,7 +24,7 @@ def qualification_key(root, adapter, runtime, source_sha256):
     from model_campaign_task import trusted_bundle_root
     bundle = trusted_bundle_root(root)
     digest = hashlib.sha256()
-    for name in ('scripts', 'reference', 'benchmarks', 'skills', 'private-task.json', 'task.json', 'API.md',
+    for name in ('scripts', 'reference', 'benchmarks', 'skills', 'third_party', 'private-task.json', 'task.json', 'API.md',
                  'candidate.py', 'execute.py', 'execute-phase.py'):
         path = bundle / name
         files = sorted(path.rglob('*')) if path.is_dir() else [path]

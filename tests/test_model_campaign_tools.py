@@ -678,3 +678,30 @@ def test_warm_launch_propagates_physical_allowance_to_actual_payload(tmp_path):
     result = warm.launch(client, receipt, folder)
     assert captured == [[2, 5]]
     assert result['handle'] == 'remote:fake:job:owned'
+
+
+def test_prepared_private_verifier_executes_and_public_stays_minimal(tmp_path):
+    import subprocess
+    prepared = tools.prepare(tmp_path / 'bundle')
+    private, public = Path(prepared['private']), Path(prepared['public'])
+    script = """
+import sys
+sys.path.insert(0, 'scripts')
+import torch
+from private_campaign_cases import validate
+from benchmark_correctness import verifier_identity
+assert verifier_identity()['revision'] == '4f03c3c2677c1a486b06b3cb04607271f645cc31'
+value = torch.ones(2)
+case = {'expected': (value, None), 'args': (value,)}
+validate(case, 'candidate', (value.clone(), None))
+try:
+    validate(case, 'candidate', (value + 9, None))
+except AssertionError as error:
+    assert '验证失败' in str(error)
+else:
+    raise AssertionError('incorrect output accepted')
+"""
+    completed = subprocess.run([sys.executable, '-c', script], cwd=private,
+                               capture_output=True, text=True, timeout=60)
+    assert completed.returncode == 0, completed.stderr
+    assert {path.name for path in public.iterdir()} == {'candidate.py', 'task.json', 'API.md'}

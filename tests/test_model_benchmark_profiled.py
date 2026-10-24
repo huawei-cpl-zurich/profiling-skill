@@ -86,6 +86,29 @@ class ProtocolTests(unittest.TestCase):
                 patch.object(torch, 'npu', N(synchronize=lambda: None, is_available=lambda: False), create=True):
             return controller.run(options, torch=torch, prepare=overrides.pop('prepare', Prepared),
                 compiler_factory=lambda: None, capture=overrides.pop('capture', capture), **overrides)
+    def test_verifier_identity_change_refuses_cached_baseline(self):
+        first = self.run_protocol('create', 'first-policy')
+        self.assertEqual(first['state'], 'complete')
+        calls = COUNTS['candidate']
+        with patch.object(controller, 'verifier_identity', return_value={'revision': 'changed'}):
+            second = self.run_protocol('reuse', 'second-policy')
+        self.assertEqual(second['state'], 'failed')
+        self.assertIn('identity mismatch', second['error'])
+        self.assertEqual(COUNTS['candidate'], calls)
+
+    def test_upstream_gate_rejects_when_private_validator_accepts(self):
+        self.hooks['validator'] = lambda *args: None
+        original = self.hooks['cases_provider']
+        def wrong_expected():
+            return [dict(case, expected=torch.tensor(99.)) for case in original()]
+        self.hooks['cases_provider'] = wrong_expected
+        report = self.run_protocol('create', 'wrong-output')
+        self.assertEqual(report['state'], 'failed')
+        self.assertEqual(COUNTS['capture'], 0)
+        self.assertEqual(COUNTS['candidate'], 1)
+        self.assertIn('验证失败', report['cases'][0]['correctness']['error_msg'])
+        self.assertIsInstance(report['cases'][0]['correctness']['metrics'], dict)
+
     def test_create_reuse_exact_counts_and_export_failure_separation(self):
         first = self.run_protocol('create', 'first')
         self.assertEqual(first['state'], 'complete')
@@ -193,7 +216,7 @@ class ProtocolTests(unittest.TestCase):
                           candidate=self.write_candidate(mutating=True))
         result = self.run_protocol('create', 'aliased')
         self.assertEqual(result['state'], 'failed')
-        self.assertEqual(COUNTS, dict(provider=1, baseline=1, candidate=1, validate=1, capture=0))
+        self.assertEqual(COUNTS, dict(provider=1, baseline=1, candidate=1, validate=0, capture=0))
     def test_baseline_uses_original_inputs_after_candidate_mutations(self):
         seen = []
         def recording_baseline():

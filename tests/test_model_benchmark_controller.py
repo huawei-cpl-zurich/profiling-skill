@@ -438,6 +438,20 @@ class ControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(controller.CapabilityError, 'inference tensors'):
             controller.InputGuard((tensor,), lambda: None)
 
+    def test_upstream_gate_rejects_before_timing_with_noop_validator(self):
+        import torch
+        tensor = torch.ones(3)
+        def wrong_candidate():
+            return lambda value: value + 9
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.dict(globals(), {'candidate': wrong_candidate,
+                    'cases': lambda: [dict(id='wrong', args=(tensor,))]}), \
+                patch.object(controller, 'benchmark_pair') as timing:
+            report = self.run_fixture(Path(temporary), validator=lambda *args: None)
+            self.assertEqual(report['state'], 'failed')
+            self.assertIn('验证失败', report['cases'][0]['correctness']['error_msg'])
+            timing.assert_not_called()
+
     def test_mutating_baseline_and_candidate_fail_before_timing(self):
         import torch
         for arm in ('baseline', 'candidate'):

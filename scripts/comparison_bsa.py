@@ -116,6 +116,6 @@ def validate(case, arm, result):
         raise AssertionError(f'{arm}: expected float32 tensor')
     if result.shape != expected.shape or result.device != expected.device:
         raise AssertionError(f'{arm}: output shape/device mismatch')
-    torch.testing.assert_close(result, expected, rtol=1e-3, atol=1e-3,
-                               equal_nan=False, check_dtype=True)
+    from benchmark_correctness import verify_outputs
+    verify_outputs(expected, result, case['args'], non_compute=case.get('non_compute', False))
     return {'passed': True, 'case_id': case['id']}

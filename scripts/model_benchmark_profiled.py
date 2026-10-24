@@ -14,6 +14,7 @@ from model_benchmark import load, identity, case_identity, HELPERS
 sys.path.insert(0, str(HELPERS))
 from model_execution import GraphCompiler, prepare_model
 from profile_ten import capture_ten, resolve_triton_names
+from benchmark_correctness import verifier_identity, verify_outputs, failure_details
 
 PROTOCOL = 'single-validation-ten-profile-v2'
 
@@ -116,11 +117,13 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
         hooks = {name: load(getattr(options, name)) for name in ('baseline', 'candidate', 'cases_provider', 'validator')}
         sources = {name: identity(hook) for name, hook in hooks.items()}
         report['sources'] = sources
+        report['correctness_verifier'] = verifier_identity()
         report['comparability'] = dict(comparable=False,
             reason='verify physical device, runtime and clock/load conditions across retained cache and candidate')
         shared = {name: value for name, value in sources.items() if name != 'candidate'}
+        shared['correctness_verifier'] = report['correctness_verifier']
         candidate_file = Path(inspect.getsourcefile(hooks['candidate'])).resolve()
-        if any(Path(inspect.getsourcefile(hooks[name])).resolve() == candidate_file for name in shared):
+        if any(Path(inspect.getsourcefile(hooks[name])).resolve() == candidate_file for name in hooks if name != 'candidate'):
             raise ValueError('candidate must use a separate source file from baseline, cases-provider and validator')
         compiler_factory = compiler_factory or (lambda: GraphCompiler(backend_name=options.backend))
         if options.cache_mode == 'create':
@@ -178,7 +181,15 @@ def run(options, *, torch=None, compiler_factory=None, prepare=prepare_model, ca
             def validate(result):
                 nonlocal validations
                 validations += 1
-                hooks['validator'](case, 'candidate', result)
+                try:
+                    verify_outputs(case['expected'], result,
+                                   (case['args'], case.get('kwargs', {})),
+                                   non_compute=case.get('non_compute', False))
+                    hooks['validator'](case, 'candidate', result)
+                    row['correctness'] = dict(state='passed')
+                except Exception as error:
+                    row['correctness'] = dict(state='failed', **failure_details(error))
+                    raise
             prepared = prepare(
                 lambda: hooks['candidate'](*case.get('init_args', ()), **case.get('init_kwargs', {})),
                 case['args'], case.get('kwargs', {}), validate,

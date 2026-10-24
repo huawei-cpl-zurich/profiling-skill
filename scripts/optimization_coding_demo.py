@@ -266,7 +266,12 @@ def run_suite(manifest, output, *, launcher=CodingLauncher, evaluator=evaluate):
             write_json(session / 'terminal-report.json', raw)
             result = adjudicate(raw, task, source_hash)
             issues = development_failures(session)
-            receipt.update(status='complete' if result['comparison_valid'] and not issues else 'invalid-comparison',
+            # A harness-enforced wall expiry submits the last candidate by protocol.
+            expired = receipt['actor'].get('timed_out') is True
+            actor_failed = bool(receipt['actor'].get('returncode')) and not expired
+            receipt.update(status='complete' if result['comparison_valid'] and not issues and not actor_failed
+                           else 'invalid-comparison',
+                           actor_budget_expiry_eligible=expired, actor_infrastructure_failure=actor_failed,
                            candidate_sha256=source_hash, terminal_result=result, result=dict(result),
                            development_infrastructure_failures=issues)
         except Exception as error:

@@ -120,9 +120,11 @@ class ToolHandler(socketserver.StreamRequestHandler):
         except (OSError, ValueError, KeyError) as error:
             result = {"returncode": 74 if isinstance(error, OSError) else 2,
                       "stdout": "", "stderr": str(error) + "\n"}
-            if command is None:
-                with owner.journal.open("a") as stream:
-                    stream.write(json.dumps({"arguments": args, "dispatched": False, **result}) + "\n")
+            entry = {"arguments": args, "dispatched": False, **result}
+            if command is not None:
+                entry.update(command=command, dispatched=True, dispatch_failed=True)
+            with owner.journal.open("a") as stream:
+                stream.write(json.dumps(entry) + "\n")
         try:
             self.wfile.write(json.dumps(result).encode() + b"\n")
         except BrokenPipeError:

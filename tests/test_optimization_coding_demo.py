@@ -222,3 +222,53 @@ def test_development_backend_failure_invalidates_pair_despite_terminal_success(t
     assert len(results[0]['development_infrastructure_failures']) == 1
     assert results[1]['development_infrastructure_failures'] == []
     assert json.loads((tmp_path / 'run/session-000-receipt.json').read_text()) == results[0]
+
+
+@pytest.mark.parametrize('timed_out', [False, True])
+def test_actor_failure_is_invalid_but_intentional_wall_expiry_submits_last_candidate(tmp_path, timed_out):
+    config = manifest(tmp_path)
+    class Actor:
+        def __init__(self, output, bundle, *args, **kwargs): self.output, self.bundle = output, bundle
+        def launch(self):
+            (self.output / 'workspace').mkdir(parents=True)
+            shutil.copyfile(self.bundle / 'candidate.py', self.output / 'workspace/candidate.py')
+            return dict(returncode=-15 if timed_out else 1, timed_out=timed_out, token_usage=[])
+    def terminal(command, request, session): return report(request['candidate_sha256'])
+    results = m.run_suite(config, tmp_path / 'run', launcher=Actor, evaluator=terminal)
+    assert all(r['terminal_result']['solved'] for r in results)
+    assert all(r['paired_comparison_valid'] is timed_out for r in results)
+    assert all(r['actor_budget_expiry_eligible'] is timed_out for r in results)
+    assert all(r['status'] == ('complete' if timed_out else 'invalid-comparison') for r in results)
+
+
+@pytest.mark.parametrize('failure', ['missing', 'permission'])
+def test_actual_rpc_helper_spawn_failure_is_journaled_and_invalidates_pair(tmp_path, failure):
+    config = manifest(tmp_path)
+    helper = tmp_path / 'unlaunchable'
+    if failure == 'permission': helper.write_text('#!/bin/sh\nexit 0\n'); helper.chmod(0o600)
+    class Actor:
+        def __init__(self, output, bundle, *args, **kwargs): self.output, self.bundle = output, bundle
+        def launch(self):
+            self.workspace = self.output / 'workspace'; self.workspace.mkdir(parents=True)
+            shutil.copyfile(self.bundle / 'candidate.py', self.workspace / 'candidate.py')
+            self.tool_command, self.tool_lock = [str(helper)], threading.Lock()
+            self.tool_timeout, self.journal = 30, self.output / 'commands.jsonl'
+            server = socketserver.UnixStreamServer(str(self.output / 'rpc.sock'), ToolHandler)
+            server.owner = self
+            thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+            try:
+                import socket
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    connection.connect(str(self.output / 'rpc.sock'))
+                    connection.sendall(b'{"arguments":["evaluate"]}\n')
+                    response = json.loads(connection.makefile('rb').readline())
+                assert response['returncode'] == 74
+            finally:
+                server.shutdown(); server.server_close(); thread.join()
+            entry = json.loads(self.journal.read_text())
+            assert entry['dispatched'] and entry['dispatch_failed'] and entry['returncode'] == 74
+            return dict(returncode=0, timed_out=False)
+    def terminal(command, request, session): return report(request['candidate_sha256'])
+    results = m.run_suite(config, tmp_path / 'run', launcher=Actor, evaluator=terminal)
+    assert all(r['terminal_result']['solved'] and not r['paired_comparison_valid']
+               and r['status'] == 'invalid-comparison' for r in results)

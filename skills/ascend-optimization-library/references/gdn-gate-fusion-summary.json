@@ -1,0 +1,537 @@
+{
+  "study": "W005-T05",
+  "study_kind": "new operator application of producer-consumer fusion",
+  "new_unique_mechanism_claim": false,
+  "full_evidence": "gdn-gate-fusion-evidence.json.gz",
+  "full_evidence_sha256": "6fb09ae10e54bee54a8094ec90d53344037d06479b5e44906bfd0e15e886f0d8",
+  "full_evidence_bytes": 59369,
+  "retained_archive_sha256": "a4c1539b201d738c31ca3d010014af74a4f8925a5f7010415f0decbf25f3f62a",
+  "product": "Ascend910B4-1",
+  "physical_die": 4,
+  "gate_job_handle": "remote:gz-a3:job:ac19de97-57e5-41fe-acbf-262b01951a70",
+  "gate_exit": 0,
+  "counts": {
+    "cpu_scientific_oracles": 6,
+    "correctness_calls": 12,
+    "profiled_forwards": 80,
+    "complete_captures": 8,
+    "guard_captures": 0,
+    "failed_attempts": 0,
+    "warmups": 0,
+    "unprofiled_timing_calls": 0
+  },
+  "matrix_sha256": "7c2825e89a8ca6bda930af38454591d24b12da0509b48226ee36554829eb50ce",
+  "summary": [
+    {
+      "case_id": "W005-T05-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 4.316064021736565e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 1.019768376409047e-07,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 4.316064021736565e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 1.019768376409047e-07,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            603.78,
+            593.88,
+            573.24,
+            580.2,
+            573.2,
+            582.22,
+            580.46,
+            574.4,
+            576.5,
+            579.84
+          ],
+          "count": 10,
+          "mean": 581.772,
+          "sample_sd": 9.817762587383235
+        },
+        "after": {
+          "samples": [
+            494.96,
+            501.88,
+            501.9,
+            501.7,
+            501.7,
+            502.0,
+            501.92,
+            501.82,
+            501.84,
+            501.6
+          ],
+          "count": 10,
+          "mean": 501.132,
+          "sample_sd": 2.1719463877156664
+        }
+      }
+    },
+    {
+      "case_id": "W005-T05-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 3.7014280529490406e-07,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 3.75875618408017e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 3.7014280529490406e-07,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 3.75875618408017e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            505.14,
+            460.56,
+            460.98,
+            457.28,
+            505.32,
+            465.72,
+            462.42,
+            469.34,
+            478.16,
+            448.94
+          ],
+          "count": 10,
+          "mean": 471.386,
+          "sample_sd": 19.384140252622327
+        },
+        "after": {
+          "samples": [
+            2.14,
+            1.98,
+            2.06,
+            2.06,
+            1.98,
+            2.06,
+            2.08,
+            2.1,
+            2.04,
+            2.16
+          ],
+          "count": 10,
+          "mean": 2.066,
+          "sample_sd": 0.05891613625409525
+        }
+      }
+    },
+    {
+      "case_id": "W005-T05-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 3.491183278470089e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 1.012182386794791e-07,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 3.491183278470089e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 1.012182386794791e-07,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            528.34,
+            461.3,
+            488.58,
+            458.4,
+            465.82,
+            482.6,
+            491.3,
+            463.3,
+            454.28,
+            453.28
+          ],
+          "count": 10,
+          "mean": 474.72,
+          "sample_sd": 23.422987758942202
+        },
+        "after": {
+          "samples": [
+            188.78,
+            193.36,
+            192.58,
+            193.12,
+            193.16,
+            193.06,
+            193.18,
+            193.04,
+            193.26,
+            193.1
+          ],
+          "count": 10,
+          "mean": 192.664,
+          "sample_sd": 1.3800418673198125
+        }
+      }
+    },
+    {
+      "case_id": "W005-T05-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 9.137417258386904e-07,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 6.74161502178805e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 9.137417258386904e-07,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 6.74161502178805e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            547.76,
+            501.96,
+            470.62,
+            444.0,
+            474.34,
+            481.12,
+            470.54,
+            455.72,
+            471.46,
+            466.6
+          ],
+          "count": 10,
+          "mean": 478.412,
+          "sample_sd": 28.66902656953047
+        },
+        "after": {
+          "samples": [
+            2.68,
+            2.48,
+            2.46,
+            2.66,
+            2.56,
+            2.62,
+            2.5,
+            2.54,
+            2.48,
+            2.62
+          ],
+          "count": 10,
+          "mean": 2.56,
+          "sample_sd": 0.08055363982396388
+        }
+      }
+    },
+    {
+      "case_id": "W005-T05-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 4.825450290013578e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 4.508360096355801e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 4.825450290013578e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 4.508360096355801e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-T05-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 2.202199731016208e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 7.062108053901284e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "metrics": {
+                "g": {
+                  "max_abs_error": 2.202199731016208e-06,
+                  "passed": true
+                },
+                "beta": {
+                  "max_abs_error": 7.062108053901284e-08,
+                  "passed": true
+                }
+              },
+              "tolerance": {
+                "atol": 2e-05,
+                "rtol": 0.0002
+              },
+              "oracle": "CPU FP64 represented inputs"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W005-T05-01": {
+      "before": 40,
+      "after": 10
+    },
+    "W005-T05-02": {
+      "before": 40,
+      "after": 10
+    },
+    "W005-T05-03": {
+      "before": 40,
+      "after": 10
+    },
+    "W005-T05-04": {
+      "before": 40,
+      "after": 10
+    }
+  }
+}

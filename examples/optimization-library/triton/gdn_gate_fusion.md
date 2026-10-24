@@ -37,7 +37,7 @@ FP64 outputs use represented FP32 inputs with `atol=2e-5, rtol=2e-4`.
 
 Source: triton-ascend-kernels commit
 `7acb9c40a6ca827e885d902b7eaee5d45457b230`, MIT with Huawei/vLLM notices;
-[license](GDN_GATE_MIT_LICENSE). Exact native source body/interface/test:
+[license](GDN_GATE_MIT_LICENSE). Exact upstream Triton source body/interface/test:
 
 - `ref://profiling-skill/triton/perf-analysis/repos/optimization-wave1-triton-kernels-7acb9c40a6ca#src/triton_ascend_kernels/moe/fused_gdn_gating.py:L12-L155`
 - `ref://profiling-skill/triton/perf-analysis/repos/optimization-wave1-triton-kernels-7acb9c40a6ca#tests/moe/test_fused_gdn_gating.py:L10-L53`
@@ -56,3 +56,43 @@ it is diagnostic, not ordinary application latency. Active union and the
 noncompute remainder are separate; the latter is not whole-device idle time.
 Roofline distance is not estimated without supported capacity and traffic
 denominators. All ten samples and original PMU fields are retained.
+
+All four pairs and both guards passed on gz-a3 physical4/logical0, observed
+Ascend910B4-1, CANN9.1.0, Torch2.10.0+cpu, Torch-NPU2.10.0 and Triton3.2.0.
+Eight functional CPU tests passed on the selected target. All12 logical arm
+compilations preceded forwards and remained stable across capture. There were
+no failed, discarded or retried attempts.
+
+| Case | R × H | BEFORE span µs ± SD | AFTER span µs ± SD | Before / after |
+|---|---:|---:|---:|---:|
+| W005-T05-01 | 8192 × 128 | 581.772 ± 9.818 | 501.132 ± 2.172 | 1.161× |
+| W005-T05-02 | 1 × 8 | 471.386 ± 19.384 | 2.066 ± 0.059 | 228.164× |
+| W005-T05-03 | 6144 × 64 | 474.720 ± 23.423 | 192.664 ± 1.380 | 2.464× |
+| W005-T05-04 | 2 × 16 | 478.412 ± 28.669 | 2.560 ± 0.081 | 186.880× |
+
+The geometric mean of these four profiled span ratios is **18.688×**.
+All four prospective benefit/cost examples improved; a timing reversal was not
+observed. In tiny cases, removal of three interkernel dispatch gaps dominates
+the span ratio. This does not establish a corresponding application latency
+speedup. Active compute union is smaller than the full span:
+
+| Case | BEFORE active union µs | AFTER active union µs |
+|---|---:|---:|
+| W005-T05-01 | 564.706 | 501.132 |
+| W005-T05-02 | 6.394 | 2.066 |
+| W005-T05-03 | 219.304 | 192.664 |
+| W005-T05-04 | 5.824 | 2.560 |
+
+BEFORE has four tasks and AFTER one per API, yielding200 retained task-PMU rows
+across80 profiled forwards. Supported original PMU fields, every span/event
+sample, sample deviation, task ownership, source/binary identities, guard
+results and oracle manifests are retained in
+`skills/ascend-optimization-library/references/gdn-gate-fusion-evidence.json.gz`.
+Its summary JSON indexes the digest and readable samples. All six cached CPU
+payloads, compiled binary cache and measured source snapshots are retained in
+the verified compact archive; full vendor profiler trees remain remote.
+
+Gate: `remote:gz-a3:job:ac19de97-57e5-41fe-acbf-262b01951a70`, exit0.
+Read-only compact job: `remote:gz-a3:job:8f78b55c-6c3e-4f11-8519-9cd8b7b83e05`,
+exit0, zero new NPU forwards. Compact SHA256
+`a4c1539b201d738c31ca3d010014af74a4f8925a5f7010415f0decbf25f3f62a`.

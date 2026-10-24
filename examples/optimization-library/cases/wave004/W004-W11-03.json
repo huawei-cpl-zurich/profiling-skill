@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W11-03",
+  "role": "heldout",
+  "seed": 5103,
+  "parameters": {
+    "m": 768,
+    "R": 48,
+    "ldb": 776
+  },
+  "scenario_designation": "heldout-benefit",
+  "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+}

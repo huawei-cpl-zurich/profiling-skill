@@ -1,0 +1,91 @@
+{
+  "wave": 4,
+  "family_id": "W11",
+  "title": "Reuse tridiagonal factors across RHS",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W11 exactfilteredreceipts; scopeadaptationexplicit",
+  "cases": [
+    {
+      "case_id": "W004-W11-01",
+      "role": "gallery",
+      "seed": 5101,
+      "parameters": {
+        "m": 512,
+        "R": 64,
+        "ldb": 520
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    },
+    {
+      "case_id": "W004-W11-02",
+      "role": "gallery",
+      "seed": 5102,
+      "parameters": {
+        "m": 128,
+        "R": 1,
+        "ldb": 136
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    },
+    {
+      "case_id": "W004-W11-03",
+      "role": "heldout",
+      "seed": 5103,
+      "parameters": {
+        "m": 768,
+        "R": 48,
+        "ldb": 776
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    },
+    {
+      "case_id": "W004-W11-04",
+      "role": "heldout",
+      "seed": 5104,
+      "parameters": {
+        "m": 64,
+        "R": 2,
+        "ldb": 72
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+    }
+  ],
+  "contract": {
+    "source_scope": "Nativehostlauncherprovesfactoronce+solveallRHSandREADMEgivesThomasalgorithm. IndependentguardedThomasimplementation, nottranscription/claimexecutionunseennativedevicehelper. Retainreferencepathmiss11501d... unresolved.",
+    "input": "FiniteFP32tridiagonal dl,d,du[m], dl[0]=du[-1]=0, seededoffdiagonals[-.25,.25], d=4, strongdominance/no-pivot. RHSlogicalB[m,R]columnmajorrepresentedbycontiguousCPU/NPUstorage[R,ldb]. ActiveBuniform[-.125,.125];paddingsentinel98765.25 unchanged. AandoriginalBimmutable, returnsseparatecolumnmajoroutputstorage.",
+    "before": "EveryRHS recomputesidenticalcprime/inversedenominator factors aspartofThomasforward/backsubstitute. Samearithmetic/RHSschedule asafter.",
+    "after": "FactorAonceEACHAPI thenallRHSforward/backsubstituteusingread-onlysharedfactors. No factorcacheacrossforwards. Necessaryoutput/RHSreset/copy includedAPI soall10calls computeSAMEoperation,notA^-10B. Paddingcopied/preservedinsideAPI orcallerownedsetupclearlydeclared.",
+    "oracle": "IndependentCPUFP64dense solve. Activeoutputatol2e-5rtol2e-4, relativeinfresidual||Ax-b||inf/max(||b||inf,1e-30)<=2e-5; paddingbitwiseunchanged;coefficientsandoriginalBimmutable.",
+    "guards": [
+      {
+        "case_id": "W004-W11-GA",
+        "role": "guard",
+        "seed": 5191,
+        "parameters": {
+          "m": 4,
+          "R": 2,
+          "ldb": 8,
+          "distribution": "nonsingular-zero-first-pivot"
+        },
+        "expected": "requiredpivotCPUdensefallbackbotharmscorrectness-onlyhostcount,no cachedoraclelookup/unguardedprofile"
+      },
+      {
+        "case_id": "W004-W11-GB",
+        "role": "guard",
+        "seed": 5192,
+        "parameters": {
+          "m": 17,
+          "R": 3,
+          "ldb": 24,
+          "distribution": "strong-dominance"
+        },
+        "expected": "paddinguntouched/tailrows solved; emptyRcoveredhostfunctionaltest"
+      }
+    ]
+  },
+  "protocol": "6CPUoraclesonce;oncecheckpercase/side/sourceversion then10fullprofileforwards4pairs;guards0captures,negativehostguards0NPU. No warmup/autotune/extratiming/profileIOinspection."
+}

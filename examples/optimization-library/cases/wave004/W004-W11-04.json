@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W11-04",
+  "role": "heldout",
+  "seed": 5104,
+  "parameters": {
+    "m": 64,
+    "R": 2,
+    "ldb": 72
+  },
+  "scenario_designation": "heldout-cost",
+  "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+}

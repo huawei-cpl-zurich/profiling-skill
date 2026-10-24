@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W11-02",
+  "role": "gallery",
+  "seed": 5102,
+  "parameters": {
+    "m": 128,
+    "R": 1,
+    "ldb": 136
+  },
+  "scenario_designation": "gallery-cost",
+  "hypothesis": "Independentownership/reuse may reduce serialwork; scratch/stages/coordination maycostmore onsmallcases."
+}

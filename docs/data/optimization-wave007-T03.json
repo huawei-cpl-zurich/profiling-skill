@@ -18338,5 +18338,19 @@
         "bytes": 3980
       }
     ]
+  },
+  "host_tests": {
+    "handle": "remote:gz-a3:job:e263f59c-5a2a-4a48-97e2-fd0c640a123b",
+    "status": "complete",
+    "exit": 0,
+    "tests": 9,
+    "seconds": 27.169,
+    "scientific_forwards": 0,
+    "scientific_oracle_calls": 0,
+    "bundle_sha256": "b1bd841c20a71929a6ab2e020f766216abef8b90e048959d02a27f7f8768cdf6",
+    "source_files": {
+      "tests/test_optimization_sampler.py": "7861ae353fd33aa2da98449f237deb7936615adf18e417a1dc3a36c6bf09fc46",
+      "examples/optimization-library/triton/sampler_cli.py": "81858e9d6f6ea9667e2f94dc577379c40e0f65ec004ab3e9ca6c388cb475d51c"
+    }
   }
 }

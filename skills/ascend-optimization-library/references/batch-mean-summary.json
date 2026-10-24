@@ -463,5 +463,21 @@
       "before": 20,
       "after": 10
     }
+  },
+  "toolchain_audit": {
+    "handle": "remote:gz-a3:job:1a92e39c-2cf6-4d5a-8dce-6fdba5da5bb0",
+    "original_audit_sha256": "777bc22fb64dcacdaa128960e1a801f0d59ee6d35356fe6e837a001cfa61b87e",
+    "distribution_versions": {
+      "torch": "2.10.0",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "imported_triton_version": "3.2.0",
+    "cann_version": "9.1.0",
+    "bisheng_clang": "15.0.5",
+    "bishengir_compile": "1.2.0,8796a8ac1508,2026-07-31",
+    "new_npu_forwards": 0,
+    "new_captures": 0
   }
 }

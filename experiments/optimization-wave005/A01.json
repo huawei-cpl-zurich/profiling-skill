@@ -1,0 +1,90 @@
+{
+  "wave": 5,
+  "study_id": "A01",
+  "title": "FastGELU sign-aware exponential rewrite",
+  "study_kind": "source-backed-implementation-study",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "range-aware-algebraic-rewrite",
+  "approval": "Standing user approval waves003\u2013022, collect data before synthesis.",
+  "source": "ascendc/proposal.md A01; ops-nn7ed342d28b44b6291aceaf747796028c48d7304c CANNOpenSoftware2.0; arch35 arithmetic body BEFORE plus READMEstableformula AFTER. Independent910B adaptation; upstream910Bbody unseen/currentregistrationsnewer.",
+  "cases": [
+    {
+      "case_id": "W005-A01-01",
+      "role": "gallery",
+      "seed": 6101,
+      "parameters": {
+        "elements": 65536,
+        "low": -65,
+        "high": -45
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-A01-02",
+      "role": "gallery",
+      "seed": 6102,
+      "parameters": {
+        "elements": 256,
+        "low": -4,
+        "high": 4
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-A01-03",
+      "role": "heldout",
+      "seed": 6103,
+      "parameters": {
+        "elements": 98304,
+        "low": -75,
+        "high": -50
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    },
+    {
+      "case_id": "W005-A01-04",
+      "role": "heldout",
+      "seed": 6104,
+      "parameters": {
+        "elements": 1024,
+        "low": -3,
+        "high": 3
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label; retain gains, regressions, no-effect and failures without outcome-based retuning."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32 finite x[-80,80], immutable, sameoutputshape. ApproximateFastGELU notexactGELU. Coeffa=representedFP32(1.702),half=representedFP32(.851); a==2*half inFP32 required.",
+    "before": "x/(1+exp(-a*x))",
+    "after": "(x/(1+exp(-a*abs(x))))*exp(half*(x-abs(x))) fixedFP32association. Allrequiredworktimed.",
+    "oracle": "IndependentFP64 evaluationofrepresentedcoefficient. Generalatol2e-5rtol2e-4; separatelyretain tinytailabsoluteerror/nonzero/subnormal/signedzero counts againstoracle, becausemixedgatehidesunderflow. Nativeflush-to-zeroallowedreported, no promisedoutputimprovement.",
+    "range_diagnostics": "Correctness-only independentlyrecordexponentrange/overflowexpectedfromsource; noextraNPUfullforward diagnostic replay. Capturecompileridentity/resources, identicalgeneratedwork=noeffect notspeedup."
+  },
+  "guards": [
+    {
+      "case_id": "W005-A01-GA",
+      "role": "guard",
+      "seed": 6191,
+      "parameters": {
+        "elements": 8,
+        "distribution": "signedzero"
+      },
+      "expected": "Use+0,-0,+1,-1,+2,-2,+4,-4; recordzerosign actualandreference, numericzerogate; no unpromisedsignedzerobitidentity."
+    },
+    {
+      "case_id": "W005-A01-GB",
+      "role": "guard",
+      "seed": 6192,
+      "parameters": {
+        "elements": 16,
+        "distribution": "finite-range-boundaries"
+      },
+      "expected": "Fixedx[-80,-75,-65,-60,-55,-52.2,-52,-50,0,1,20,40,50,60,75,80], allfiniteoutputs;tiny-tailqualityretainedincludingflush."
+    }
+  ],
+  "protocol": "Six CPU scientific oracle payloads once; once-per-side correctness per source version; exactly10 profiled full API forwards per arm of4maincases. Guards correctness-only0captures. No warmups/autotuning/extra timing/profiled tensor inspection. Preserve negative/failed/partial outcomes. Complete device-operation spans diagnostic, not ordinary application latency."
+}

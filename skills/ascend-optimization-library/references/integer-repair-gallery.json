@@ -1,0 +1,480 @@
+{
+  "v1": {
+    "evidence_sha256": "8d0b93661513dc6dd36df6dc1b65b00da4e7f6d072319a29aedcc69a73a6e1a3",
+    "arms": {
+      "before": {
+        "device_window_us": {
+          "device_operation_span_us": {
+            "samples": [
+              1883.1,
+              1742.36,
+              1740.16,
+              1740.66,
+              1740.64,
+              1740.14,
+              1740.72,
+              1740.54,
+              1740.58,
+              1739.98
+            ],
+            "count": 10,
+            "mean": 1754.888,
+            "sample_sd": 45.053907661328914
+          },
+          "operation_active_union_us": {
+            "samples": [
+              1756.58,
+              1742.32,
+              1740.14,
+              1740.64,
+              1740.6,
+              1740.12,
+              1740.7,
+              1740.5,
+              1740.54,
+              1739.96
+            ],
+            "count": 10,
+            "mean": 1742.21,
+            "sample_sd": 5.0911098986370105
+          },
+          "device_idle_gap_us": {
+            "samples": [
+              126.52,
+              0.04,
+              0.02,
+              0.02,
+              0.04,
+              0.02,
+              0.02,
+              0.04,
+              0.04,
+              0.02
+            ],
+            "count": 10,
+            "mean": 12.677999999999999,
+            "sample_sd": 40.00000272222213
+          }
+        },
+        "ce_gradient": {
+          "Duration(us)": {
+            "status": "complete",
+            "samples": [
+              1727.68,
+              1720.22,
+              1719.88,
+              1719.92,
+              1719.44,
+              1719.6,
+              1720.12,
+              1719.76,
+              1720.24,
+              1719.74
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 1720.66,
+            "sample_sd": 2.4802867217768
+          },
+          "aiv_scalar_ratio": {
+            "status": "complete",
+            "samples": [
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.976,
+            "sample_sd": 0.0
+          },
+          "aiv_vec_ratio": {
+            "status": "complete",
+            "samples": [
+              0.024,
+              0.024,
+              0.024,
+              0.024,
+              0.024,
+              0.024,
+              0.024,
+              0.024,
+              0.024,
+              0.024
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.024,
+            "sample_sd": 0.0
+          }
+        },
+        "source_sha256": {
+          "crossentropy_pairs.py": "44589884a898d6338477d874c541db3b7504c88d96c3019358c0584f45358856"
+        }
+      },
+      "after": {
+        "device_window_us": {
+          "device_operation_span_us": {
+            "samples": [
+              1892.68,
+              1744.32,
+              1743.9,
+              1743.6,
+              1743.52,
+              1742.7,
+              1743.2,
+              1742.84,
+              1742.92,
+              1743.64
+            ],
+            "count": 10,
+            "mean": 1758.332,
+            "sample_sd": 47.207761320453336
+          },
+          "operation_active_union_us": {
+            "samples": [
+              1753.02,
+              1744.3,
+              1743.88,
+              1743.56,
+              1743.5,
+              1742.68,
+              1743.18,
+              1742.82,
+              1742.9,
+              1743.6
+            ],
+            "count": 10,
+            "mean": 1744.344,
+            "sample_sd": 3.089448710260985
+          },
+          "device_idle_gap_us": {
+            "samples": [
+              139.66,
+              0.02,
+              0.02,
+              0.04,
+              0.02,
+              0.02,
+              0.02,
+              0.02,
+              0.02,
+              0.04
+            ],
+            "count": 10,
+            "mean": 13.988,
+            "sample_sd": 44.156640572700574
+          }
+        },
+        "ce_gradient": {
+          "Duration(us)": {
+            "status": "complete",
+            "samples": [
+              1719.18,
+              1720.18,
+              1719.84,
+              1719.7,
+              1719.6,
+              1719.4,
+              1719.52,
+              1719.52,
+              1719.42,
+              1719.66
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 1719.602,
+            "sample_sd": 0.27267400153132443
+          },
+          "aiv_scalar_ratio": {
+            "status": "complete",
+            "samples": [
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976,
+              0.976
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.976,
+            "sample_sd": 0.0
+          },
+          "aiv_vec_ratio": {
+            "status": "complete",
+            "samples": [
+              0.025,
+              0.025,
+              0.025,
+              0.025,
+              0.025,
+              0.025,
+              0.025,
+              0.025,
+              0.025,
+              0.025
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.025,
+            "sample_sd": 0.0
+          }
+        },
+        "source_sha256": {
+          "crossentropy_pairs.py": "44589884a898d6338477d874c541db3b7504c88d96c3019358c0584f45358856"
+        }
+      }
+    }
+  },
+  "v2": {
+    "evidence_sha256": "9947f641464996323f297075bed21419c163f697299570255bf6ac2e92edbc5d",
+    "arms": {
+      "before": {
+        "device_window_us": {
+          "device_operation_span_us": {
+            "samples": [
+              192.94,
+              209.28,
+              174.36,
+              174.38,
+              181.56,
+              195.14,
+              175.6,
+              179.1,
+              175.48,
+              193.62
+            ],
+            "count": 10,
+            "mean": 185.146,
+            "sample_sd": 11.93082301342945
+          },
+          "operation_active_union_us": {
+            "samples": [
+              58.78,
+              40.64,
+              40.76,
+              40.72,
+              41.72,
+              41.14,
+              41.26,
+              41.14,
+              40.94,
+              40.58
+            ],
+            "count": 10,
+            "mean": 42.768,
+            "sample_sd": 5.636596293666754
+          },
+          "device_idle_gap_us": {
+            "samples": [
+              134.16,
+              168.64,
+              133.6,
+              133.66,
+              139.84,
+              154.0,
+              134.34,
+              137.96,
+              134.54,
+              153.04
+            ],
+            "count": 10,
+            "mean": 142.378,
+            "sample_sd": 12.06941939135617
+          }
+        },
+        "ce_gradient": {
+          "Duration(us)": {
+            "status": "complete",
+            "samples": [
+              26.94,
+              20.2,
+              20.34,
+              19.78,
+              20.56,
+              20.46,
+              20.56,
+              20.18,
+              20.54,
+              20.3
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 20.986,
+            "sample_sd": 2.1055070648183545
+          },
+          "aiv_scalar_ratio": {
+            "status": "complete",
+            "samples": [
+              0.473,
+              0.337,
+              0.333,
+              0.344,
+              0.339,
+              0.339,
+              0.34,
+              0.337,
+              0.339,
+              0.339
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.35200000000000004,
+            "sample_sd": 0.042604120823121205
+          },
+          "aiv_vec_ratio": {
+            "status": "complete",
+            "samples": [
+              0.5,
+              0.631,
+              0.622,
+              0.644,
+              0.614,
+              0.621,
+              0.621,
+              0.628,
+              0.617,
+              0.625
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.6123,
+            "sample_sd": 0.04033760307978428
+          }
+        },
+        "source_sha256": {
+          "crossentropy_pairs.py": "477267c9653008b0c596fba4f52ba7be3c7f1e6be6a755e4b29b71730caf83a0"
+        }
+      },
+      "after": {
+        "device_window_us": {
+          "device_operation_span_us": {
+            "samples": [
+              197.5,
+              176.84,
+              176.18,
+              182.4,
+              190.1,
+              173.58,
+              187.48,
+              180.4,
+              176.7,
+              170.72
+            ],
+            "count": 10,
+            "mean": 181.19,
+            "sample_sd": 8.291710720150977
+          },
+          "operation_active_union_us": {
+            "samples": [
+              52.92,
+              46.54,
+              46.58,
+              46.02,
+              46.3,
+              45.62,
+              45.48,
+              45.44,
+              45.76,
+              46.32
+            ],
+            "count": 10,
+            "mean": 46.698,
+            "sample_sd": 2.2266357283279796
+          },
+          "device_idle_gap_us": {
+            "samples": [
+              144.58,
+              130.3,
+              129.6,
+              136.38,
+              143.8,
+              127.96,
+              142.0,
+              134.96,
+              130.94,
+              124.4
+            ],
+            "count": 10,
+            "mean": 134.492,
+            "sample_sd": 7.0490106476803644
+          }
+        },
+        "ce_gradient": {
+          "Duration(us)": {
+            "status": "complete",
+            "samples": [
+              21.32,
+              21.74,
+              21.54,
+              21.38,
+              21.36,
+              20.94,
+              20.96,
+              20.82,
+              20.86,
+              21.28
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 21.22,
+            "sample_sd": 0.31041191271527446
+          },
+          "aiv_scalar_ratio": {
+            "status": "complete",
+            "samples": [
+              0.534,
+              0.534,
+              0.534,
+              0.533,
+              0.536,
+              0.53,
+              0.53,
+              0.525,
+              0.526,
+              0.569
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.5351,
+            "sample_sd": 0.012449453357030916
+          },
+          "aiv_vec_ratio": {
+            "status": "complete",
+            "samples": [
+              0.538,
+              0.526,
+              0.53,
+              0.533,
+              0.534,
+              0.546,
+              0.546,
+              0.549,
+              0.549,
+              0.537
+            ],
+            "available_count": 10,
+            "unavailable_count": 0,
+            "mean": 0.5388000000000001,
+            "sample_sd": 0.008256983576208559
+          }
+        },
+        "source_sha256": {
+          "crossentropy_pairs.py": "477267c9653008b0c596fba4f52ba7be3c7f1e6be6a755e4b29b71730caf83a0"
+        }
+      }
+    }
+  }
+}

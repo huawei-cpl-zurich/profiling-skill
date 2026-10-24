@@ -27,15 +27,35 @@ not a universal dispatch threshold or a claim about every Ascend target.
 | Many cores begin the same multi-tile K traversal | [ShuffleK](references/shuffle-k.md) | Indexing and changed summation order |
 | Many output tiles have a plausible operand-locality problem | [Output-program ordering](references/program-order.md) | Mapping cost or worse reuse of the other operand |
 
+Additional source-backed mechanisms (each card retains unfavorable or uncertain
+outcomes as well as measured gains):
+
+| Source or profile symptom | Read | Main competing cost |
+| --- | --- | --- |
+| Many short independent row reductions | [E01 row batching](references/row-batching.md) | Larger live tiles and fewer programs |
+| Each ragged consumer recomputes earlier sequence lengths | [E02 prefix reuse](references/prefix-reuse.md) | Extra scan launch, dependency and workspace |
+| Padding store followed by valid-value overwrite | [E03 store elimination](references/store-elimination.md) | Selection work or compiler-already-eliminated stores |
+| Full low-bit dequantization materialized before GEMM | [E04 consumer INT4 decode](references/int4-consumer.md) | Repeated/scalarized decode in the K loop |
+| Dense attention traversal despite supplied block IDs | [E05 direct sparse indices](references/sparse-indices.md) | List handling, locality and changed reduction order |
+| Sequential launches update causal convolution state | [E06 immutable convolution windows](references/conv-windows.md) | Overlapping input/weight rereads |
+| RMS input backward recomputes the forward statistic | [E07 saved RMS statistic](references/saved-rms-stat.md) | Statistic stores/loads and lifetime |
+| Weight-gradient updates contend on shared atomics | [E08 private reduction partials](references/private-reduction.md) | Workspace, row scheduling and final reduction |
+| Rotary heads recompute identical sin/cos | [E09 coefficient reuse](references/rotary-reuse.md) | Reduced head parallelism and live coefficients |
+| Full log-probabilities have only loss/gradient consumers | [E10 CE sufficient statistics](references/crossentropy-statistics.md) | Logits reread and two-kernel gap |
+| Full-vocabulary logits survive through backward | [E11 bounded loss lifetime](references/loss-lifetime.md) | Smaller GEMMs, repeated launches and dW accumulation |
+| A GM-to-L1 copy policy is a plausible bottleneck | [E12 Interval DMA](references/interval-dma.md) | Copy granularity/setup; no reliable small-M gain |
+
 The recipes contain code formats, preconditions, falsifiers and gallery data.
 [Gallery evidence](references/gallery-evidence.md) defines the timing boundaries;
 its JSON companion retains every ten-sample series and original PMU field names.
-Only gallery examples belong to this skill snapshot. All 33 gallery pairs
-(28 original plus five supplements) have correctness and ten-forward identity
-evidence. Residency remains inconclusive; ShuffleK improves the thin pressure
-case but regresses the square case. Grouped-M output ordering improves the
-large gallery case; the original output rotation remains inconclusive. These
-observations support conditional choices, not universal speedup claims.
+The original twelve recipes retain their 33 gallery pairs (28 original plus five
+supplements). The [expansion ledger](references/expansion-gallery-evidence.md)
+adds twelve mechanisms and 24 public pairs, including corrected E10 v3. These
+are conditional choices, not twelve speed wins: prefix reuse and fused INT4
+regress in both captures; bounded loss lifetime reduces logical workspace while
+regressing timing; Interval DMA remains inconclusive. Residency and original
+output rotation also remain inconclusive. Read the relevant card's measured
+boundary and competing cost before recommending a transformation.
 
 ## Make a conditional decision
 
@@ -44,6 +64,14 @@ strides, physical layout, dtypes, required outputs, target capabilities and
 compiled resources. Logical shape does not establish physical storage. A tile
 that compiles is not yet a correct kernel; an admitted small case does not
 prove a larger resource envelope.
+
+Cover the task's valid physical-layout regimes explicitly. A fallback can be
+correct yet retain the dominant bottleneck on common large alternative layouts;
+calling it conservative does not establish useful optimization coverage. Audit
+which layouts receive the transformation and validate meaningful alternatives
+before choosing guards. Do not infer untested size or stride thresholds from
+a gallery. Preserve grouped semantics (including group/head counts and mapping),
+required outputs, accumulation precision and intermediate rounding in every path.
 
 Choose **apply**, **avoid**, or **insufficient evidence**. An actor should give
 concrete edits, dispatch predicates, numerical guards and a supported alternate

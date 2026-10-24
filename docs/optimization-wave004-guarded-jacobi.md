@@ -74,7 +74,11 @@ Provenance is **SOURCE-DOCUMENTED**, not a transcription of upstream device code
 The source proposal pins ops-sparse `bfc7c19d83ce246b03c65dc916ed4753e5467cf3`
 under CANN Open Software License Agreement 2.0. Algorithm documentation is
 `ref://profiling-skill/ascendc/perf-analysis/repos/gitcode-cann-ops-sparse#sparse/gtsv2/README.md:L26-L34`;
-architecture layout is `#sparse/gtsv2/arch22/gtsv2_tiling_data.h:L18-L42`, numerical
+The retrieved architecture header describes UB ping-pong storage; this candidate
+uses forty separate GPU step launches and global-memory ping-pong storage. Its
+negative outcomes apply to this staged independent implementation, not inherent
+Jacobi performance or the unseen native implementation. No fused retuning was
+performed. The architecture layout is `#sparse/gtsv2/arch22/gtsv2_tiling_data.h:L18-L42`, numerical
 tests `#test/gtsv2/arch22/gtsv2_test.cpp:L368-L414`, and public host launch boundary
 `#sparse/gtsv2/arch22/gtsv2_host.cpp:L143-L188`. The Jacobi device body was unseen.
 Source-path miss `11501d136a88a71c6d38ce1feaa9647e` and runtime-contract miss

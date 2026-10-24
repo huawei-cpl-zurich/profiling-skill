@@ -1,0 +1,3743 @@
+{
+  "protocol": "welford-frozen-four-pair-evidence-v1",
+  "matrix_sha256": "66a1aa6d957727edd8172939a4decd74cabfe8591b3cba83f7c6e3eb9dee6890",
+  "source_revision": "ff0bdc2",
+  "target": "gz-a3",
+  "product": "Ascend910B4-1",
+  "physical_die": 7,
+  "application_logical_device": 0,
+  "hardware": {
+    "cube_core_count": 20,
+    "vector_core_count": 40
+  },
+  "capture_job": "remote:gz-a3:job:ea2ec3e1-222a-420a-8d90-4c3b61c6929e",
+  "compact_archive_sha256": "af2c9308a677354612a8a64d3e8d7078b954ab84d5cfe902c77e165f2c1446be",
+  "counts": {
+    "profile_cases": 4,
+    "correctness_only_guards": 2,
+    "logical_correctness_checks": 12,
+    "device_correctness_forwards": 10,
+    "profile_captures": 8,
+    "profile_forwards": 80,
+    "warmups": 0,
+    "extra_timing_forwards": 0,
+    "oracle_payloads": 6
+  },
+  "rejected_attempt": {
+    "job": "remote:gz-a3:job:fb72226c-64f9-43d8-ab2b-2f77065d7ba7",
+    "reason": "wrong card/chip mapping rejected during pre-Torch health query",
+    "device_forwards": 0,
+    "oracle_payloads": 0
+  },
+  "measurement": "Profiled device-operation span, not unprofiled end-to-end latency; active union and gaps share the device clock.",
+  "pmu_semantics": "Exported per-task PipeUtilization fields; no ratio sums, whole-device utilization, traffic, bandwidth or roofline inference.",
+  "physical_traffic": "unavailable",
+  "profiler_build_version": "unavailable: installed msprof rejects --version",
+  "cases": [
+    {
+      "case": {
+        "case_id": "F08-01",
+        "seed": 8101,
+        "scenario": "gallery-benefit",
+        "N": 8,
+        "C": 32,
+        "H": 64,
+        "W": 64,
+        "distribution": "bounded-iid"
+      },
+      "status": "complete",
+      "fixture_sha256": "d681c2698fc4f6e85bdd1d3389b36210e65452888413e94dba3a0b943c7baec6",
+      "original_pair_sha256": "71108338a5188c56de9a946876c3e44f2e8deebf45e5882d8ef1727603c3db62",
+      "arms": {
+        "before": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 1.57160684466362e-09,
+                "max_tolerance_fraction": 7.853306327728768e-05
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 3.158198563779635e-08,
+                "max_tolerance_fraction": 4.734633962500417e-05
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-01",
+              "seed": 8101,
+              "scenario": "gallery-benefit",
+              "N": 8,
+              "C": 32,
+              "H": 64,
+              "W": 64,
+              "distribution": "bounded-iid"
+            },
+            "block": 256,
+            "arm": "before",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 2,
+            "logical_input_bytes": 8388608,
+            "logical_output_bytes": 256,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "5763b31665a3b9d9bd307efbeb61e6ad13275404c27cf32bc5af64ac24b8821a",
+                "ttadapter": "e92719c882b075eea4c2beae7ca408123ff3d4077056b4578fa2dbec32481d3c",
+                "ttir": "ed1a8b2c254e46d1d125b58e37b1f6a3c316761b7702ee43a46d73984a8474d4"
+              },
+              "hash": "4d3cb36f5c3dd654b36ed36968518352234112ede6a7fda761bb06e45133637d"
+            }
+          ],
+          "trace_sha256": "fe9a61b892881395008238e84d34070317cf7ade29f569a7c73bb8426137292a",
+          "normalized_sha256": "d3c06e2af6955f869dd98c77aca73e48795f4a1712a7f490221b8cb23126806e",
+          "accounting_sha256": "6983a5b7cfa4ac7a95bf519b3505cfb0607d7e940214372e4ff7f9fd1bc6d2b6",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_centered_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:3:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:6:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:9:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:12:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:15:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:18:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:21:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:24:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:27:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:30:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1066.76,
+                1064.18,
+                1064.34,
+                1064.7,
+                1063.72,
+                1064.1,
+                1064.56,
+                1064.5,
+                1065.36,
+                1064.66
+              ],
+              "count": 10,
+              "mean": 1064.688,
+              "sample_sd": 0.8471756999977359
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1066.76,
+                1064.18,
+                1064.34,
+                1064.7,
+                1063.72,
+                1064.1,
+                1064.56,
+                1064.5,
+                1065.36,
+                1064.66
+              ],
+              "count": 10,
+              "mean": 1064.688,
+              "sample_sd": 0.8471756999977359
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.5190399885177612,
+              1.0643800497055054,
+              1.064520001411438,
+              1.0648800134658813,
+              1.063920021057129,
+              1.0642999410629272,
+              1.0647599697113037,
+              1.0646799802780151,
+              1.0655399560928345,
+              1.0648599863052368
+            ],
+            "count": 10,
+            "mean": 1.1100879907608032,
+            "sample_sd": 0.143691722029852
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "0fdc37a874f166398738703ada26948b61eee0de0866fbd27d0b0a0286aea430",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  1051.605,
+                  1050.105,
+                  1048.444,
+                  1047.999,
+                  1048.703,
+                  1049.306,
+                  1049.998,
+                  1048.511,
+                  1049.487,
+                  1049.78
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 1049.3938,
+                "sample_sd": 1.0556694347927214
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  55524751.0,
+                  55445533.0,
+                  55357828.0,
+                  55334345.0,
+                  55371492.0,
+                  55403364.0,
+                  55439886.0,
+                  55361397.0,
+                  55412923.0,
+                  55428395.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 55407991.4,
+                "sample_sd": 55742.348830629264
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879,
+                  14.879
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 14.879,
+                "sample_sd": 0.0
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014,
+                  0.014
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.014,
+                "sample_sd": 0.0
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  1047.188,
+                  1046.154,
+                  1044.508,
+                  1044.061,
+                  1044.771,
+                  1045.377,
+                  1046.066,
+                  1044.574,
+                  1045.272,
+                  1045.836
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 1045.3807,
+                "sample_sd": 0.9474411210084954
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996,
+                  0.996
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.996,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.004,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0,
+                "sample_sd": 0.0
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.239,
+                  0.155,
+                  0.139,
+                  0.141,
+                  0.137,
+                  0.134,
+                  0.136,
+                  0.141,
+                  0.418,
+                  0.149
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1789,
+                "sample_sd": 0.08964305761060237
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0,
+                "sample_sd": 0.0
+              }
+            }
+          }
+        },
+        "after": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 1.4842953532934189e-09,
+                "max_tolerance_fraction": 7.418452068042095e-05
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 2.848754571127543e-08,
+                "max_tolerance_fraction": 4.262027150048569e-05
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-01",
+              "seed": 8101,
+              "scenario": "gallery-benefit",
+              "N": 8,
+              "C": 32,
+              "H": 64,
+              "W": 64,
+              "distribution": "bounded-iid"
+            },
+            "block": 256,
+            "arm": "after",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 1,
+            "logical_input_bytes": 4194304,
+            "logical_output_bytes": 256,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "7bcb2be5aefab1b49e34217f4e7f077f3e002975c8093c70ccd6d857b45c47fd",
+                "ttadapter": "2e0512fd784cb58ad502a769ed0727bed8d663d02853feb4f43efe8349424509",
+                "ttir": "f468d4bd52ff8c7498fa9eccba27eb1649f2c3fdad19682ccb38f39815b598e3"
+              },
+              "hash": "2b6c09b53cc3ffb1ccdd9c1858feeb9a6359f29355e1f3744219c667a341b93e"
+            }
+          ],
+          "trace_sha256": "5e9104e819d5f5bb0249a011c488c29c188665f3e1e3afcf244868ad16640580",
+          "normalized_sha256": "df7da06e8506244394a7fc298d33663930da1ce209d2a8198b4a09b1afaf97cc",
+          "accounting_sha256": "a18eb3a69aea7ac8a281048a9dfd994f24aa6422972576a4338ae7be270168e1",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_welford_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:33:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:36:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:39:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:42:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:45:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:48:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:51:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:54:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:57:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:60:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                560.14,
+                556.98,
+                557.12,
+                557.4,
+                555.1,
+                557.94,
+                557.08,
+                557.34,
+                557.5,
+                555.12
+              ],
+              "count": 10,
+              "mean": 557.172,
+              "sample_sd": 1.419646278322717
+            },
+            "operation_active_union_us": {
+              "samples": [
+                560.14,
+                556.98,
+                557.12,
+                557.4,
+                555.1,
+                557.94,
+                557.08,
+                557.34,
+                557.5,
+                555.12
+              ],
+              "count": 10,
+              "mean": 557.172,
+              "sample_sd": 1.419646278322717
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.2400399446487427,
+              0.5660799741744995,
+              0.5573199987411499,
+              0.5575799942016602,
+              0.5552999973297119,
+              0.5581200122833252,
+              0.5572800040245056,
+              0.5575199723243713,
+              0.557699978351593,
+              0.5553200244903564
+            ],
+            "count": 10,
+            "mean": 0.6262259900569915,
+            "sample_sd": 0.21569316663904248
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "fe4cbc351540fa40df9c747b3e21301d190afb1e6d4188f6c63aa3e5179f26db",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  551.654,
+                  550.341,
+                  549.471,
+                  549.421,
+                  549.633,
+                  549.989,
+                  550.185,
+                  549.555,
+                  549.566,
+                  549.682
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 549.9497,
+                "sample_sd": 0.6748101049760343
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  29127354.0,
+                  29058004.0,
+                  29012063.0,
+                  29009410.0,
+                  29020601.0,
+                  29039423.0,
+                  29049759.0,
+                  29016485.0,
+                  29017093.0,
+                  29023224.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 29037341.6,
+                "sample_sd": 35639.289736656276
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  40.408,
+                  40.403,
+                  40.403,
+                  40.403,
+                  40.403,
+                  40.403,
+                  40.403,
+                  40.403,
+                  40.403,
+                  40.403
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 40.4035,
+                "sample_sd": 0.0015811388300849985
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.073,
+                  0.073,
+                  0.074,
+                  0.074,
+                  0.074,
+                  0.073,
+                  0.073,
+                  0.074,
+                  0.074,
+                  0.074
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0736,
+                "sample_sd": 0.0005163977794943227
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  536.444,
+                  535.485,
+                  534.611,
+                  534.559,
+                  534.778,
+                  535.131,
+                  535.325,
+                  534.69,
+                  534.702,
+                  534.827
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 535.0552,
+                "sample_sd": 0.5795204530950964
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.972,
+                  0.973,
+                  0.973,
+                  0.973,
+                  0.973,
+                  0.973,
+                  0.973,
+                  0.973,
+                  0.973,
+                  0.973
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.9729,
+                "sample_sd": 0.0003162277660168382
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.004,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0,
+                "sample_sd": 0.0
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.129,
+                  0.128,
+                  0.131,
+                  0.131,
+                  0.126,
+                  0.128,
+                  0.129,
+                  0.134,
+                  0.134,
+                  0.126
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1296,
+                "sample_sd": 0.002875181153713046
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0,
+                "sample_sd": 0.0
+              }
+            }
+          }
+        }
+      },
+      "device_span_ratio_before_over_after": 1.9108785078934334
+    },
+    {
+      "case": {
+        "case_id": "F08-02",
+        "seed": 8102,
+        "scenario": "gallery-cost",
+        "N": 1,
+        "C": 64,
+        "H": 4,
+        "W": 16,
+        "distribution": "constant-plus-small-noise"
+      },
+      "status": "complete",
+      "fixture_sha256": "797fdc6b59d7d90c34d1c4e2a3490a0e02caef88c226f316e907d454099fa1b8",
+      "original_pair_sha256": "b3dd045a4c4c6e5ffac28de63e2c5b2bb29a21996902d4ec6bf20135a405cbaa",
+      "arms": {
+        "before": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 1.817941665649414e-06,
+                "max_tolerance_fraction": 0.03496043472009904
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 3.134381643121742e-12,
+                "max_tolerance_fraction": 2.8549748417809694e-05
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-02",
+              "seed": 8102,
+              "scenario": "gallery-cost",
+              "N": 1,
+              "C": 64,
+              "H": 4,
+              "W": 16,
+              "distribution": "constant-plus-small-noise"
+            },
+            "block": 256,
+            "arm": "before",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 1,
+            "logical_input_bytes": 16384,
+            "logical_output_bytes": 512,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "5570943a7f8b2afcc9af052f44a2965a47e4f284593a8b00af250ed596c15425",
+                "ttadapter": "98055017f51f09c39ab45fb1da511cf682ad6f965cf04a73038cc3c8d47194ed",
+                "ttir": "d41e7bba3b0f214c3d850f0ba0d66bc9850b3df275811a1b540d220661ae8fae"
+              },
+              "hash": "95c60f0039b8851b072edd32bc3b3fd8d547a791500c42ae1de81b62ede49af6"
+            }
+          ],
+          "trace_sha256": "cf1425b0e24607d97aa797e6a064c4a532dae51a2a185f1e3e4c726a852f98d4",
+          "normalized_sha256": "06e48e515231f031c5cbcefa0b737c8a61a545a4cb145affa16a97166b6d36bd",
+          "accounting_sha256": "5d949d47af7033610f15038e5165c898c80864cc95ca55adb87befb2ce93e308",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_centered_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:65:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:68:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:71:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:74:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:77:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:80:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:83:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:86:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:89:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:92:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                5.38,
+                5.58,
+                5.32,
+                5.3,
+                5.36,
+                5.36,
+                5.38,
+                5.36,
+                5.46,
+                5.46
+              ],
+              "count": 10,
+              "mean": 5.396,
+              "sample_sd": 0.08262364471909152
+            },
+            "operation_active_union_us": {
+              "samples": [
+                5.38,
+                5.58,
+                5.32,
+                5.3,
+                5.36,
+                5.36,
+                5.38,
+                5.36,
+                5.46,
+                5.46
+              ],
+              "count": 10,
+              "mean": 5.396,
+              "sample_sd": 0.08262364471909152
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.4975399971008301,
+              0.3135400116443634,
+              0.2916400134563446,
+              0.29137998819351196,
+              0.29387998580932617,
+              0.2969000041484833,
+              0.2879599928855896,
+              0.29434001445770264,
+              0.2773599922657013,
+              0.2581599950790405
+            ],
+            "count": 10,
+            "mean": 0.31026999950408934,
+            "sample_sd": 0.06731523285422117
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "7593b17460932bae488f764b42bd6048fd7426bd94795de58f1b435d7a74537a",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  3.494,
+                  3.587,
+                  3.549,
+                  3.503,
+                  3.421,
+                  3.426,
+                  3.44,
+                  3.547,
+                  3.452,
+                  3.375
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 3.4794,
+                "sample_sd": 0.06768095087327837
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  230614.0,
+                  236762.0,
+                  234220.0,
+                  231220.0,
+                  225807.0,
+                  226146.0,
+                  227065.0,
+                  234117.0,
+                  227830.0,
+                  222722.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 229650.3,
+                "sample_sd": 4470.299543779042
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296,
+                  0.296
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.296,
+                "sample_sd": 0.0
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.085,
+                  0.083,
+                  0.083,
+                  0.084,
+                  0.087,
+                  0.086,
+                  0.086,
+                  0.083,
+                  0.086,
+                  0.088
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0851,
+                "sample_sd": 0.0017919573407620768
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  2.445,
+                  2.468,
+                  2.32,
+                  2.418,
+                  2.446,
+                  2.49,
+                  2.373,
+                  2.378,
+                  2.531,
+                  2.562
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 2.4431000000000003,
+                "sample_sd": 0.0742599787533261
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.7,
+                  0.688,
+                  0.654,
+                  0.69,
+                  0.715,
+                  0.727,
+                  0.69,
+                  0.67,
+                  0.733,
+                  0.759
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.7026,
+                "sample_sd": 0.031298562267299115
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.005,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.002
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0011,
+                "sample_sd": 0.00031622776601683794
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  1.031,
+                  1.145,
+                  1.256,
+                  1.074,
+                  0.959,
+                  0.921,
+                  1.061,
+                  1.117,
+                  0.895,
+                  0.772
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 1.0231,
+                "sample_sd": 0.13984233185190303
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.295,
+                  0.319,
+                  0.354,
+                  0.307,
+                  0.28,
+                  0.269,
+                  0.308,
+                  0.315,
+                  0.259,
+                  0.229
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.2935,
+                "sample_sd": 0.035434603301167496
+              }
+            }
+          }
+        },
+        "after": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 1.817941665649414e-06,
+                "max_tolerance_fraction": 0.03496043472009904
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 3.134381643121742e-12,
+                "max_tolerance_fraction": 2.8549748417809694e-05
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-02",
+              "seed": 8102,
+              "scenario": "gallery-cost",
+              "N": 1,
+              "C": 64,
+              "H": 4,
+              "W": 16,
+              "distribution": "constant-plus-small-noise"
+            },
+            "block": 256,
+            "arm": "after",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 1,
+            "logical_input_bytes": 16384,
+            "logical_output_bytes": 512,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "702c0eb5026b41521a3a02568a157318797e22051cc76e2fb438833d93de9449",
+                "ttadapter": "7d8f466806c44c44fcb9ef903f3cc13e6351bdc00d07b168dee75c5abf2ebc12",
+                "ttir": "621218fab05b037906d5ca54cf516d5c4a7d3032a1ed976321b8d07880f51278"
+              },
+              "hash": "a764ec7cfce08c0053b085e55a6ecc22175711583b4ef8e6d405a8fed0df150f"
+            }
+          ],
+          "trace_sha256": "5e572e42da5d4c5bd42a23b5c2f405f1d712497823eabb6e8b5880595309f4f9",
+          "normalized_sha256": "3094cf6b8d20be417466f2880fd1d00ce1bd78ebf45c509fce85afbf1fdc0b96",
+          "accounting_sha256": "56706fd0131f5956c8831c426b2bef96ffa00e62273b812f6ef5962f28c502dd",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_welford_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:95:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:98:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:101:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:104:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:107:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:110:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:113:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:116:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:119:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:122:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                5.58,
+                5.38,
+                5.88,
+                5.56,
+                5.32,
+                5.4,
+                5.68,
+                5.62,
+                5.52,
+                5.52
+              ],
+              "count": 10,
+              "mean": 5.546,
+              "sample_sd": 0.16249444434947433
+            },
+            "operation_active_union_us": {
+              "samples": [
+                5.58,
+                5.38,
+                5.88,
+                5.56,
+                5.32,
+                5.4,
+                5.68,
+                5.62,
+                5.52,
+                5.52
+              ],
+              "count": 10,
+              "mean": 5.546,
+              "sample_sd": 0.16249444434947433
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.7785599827766418,
+              0.3445799946784973,
+              0.297760009765625,
+              0.2874799966812134,
+              0.28139999508857727,
+              0.27851998805999756,
+              0.34582000970840454,
+              0.30169999599456787,
+              0.28255999088287354,
+              0.2588599920272827
+            ],
+            "count": 10,
+            "mean": 0.3457239955663681,
+            "sample_sd": 0.15462080207909454
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "63a8e09eb99691a203f751d503db4d0ca2f8ea974f4f80aaa6a3590324e4553a",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  3.606,
+                  3.592,
+                  3.691,
+                  3.631,
+                  3.584,
+                  3.571,
+                  3.607,
+                  3.647,
+                  3.576,
+                  3.63
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 3.6135,
+                "sample_sd": 0.03704426781268283
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  237986.0,
+                  237042.0,
+                  243597.0,
+                  239647.0,
+                  236573.0,
+                  235697.0,
+                  238057.0,
+                  240717.0,
+                  235988.0,
+                  239574.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 238487.8,
+                "sample_sd": 2445.5988950675364
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673,
+                  0.673
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.673,
+                "sample_sd": 0.0
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.187,
+                  0.187,
+                  0.182,
+                  0.185,
+                  0.188,
+                  0.189,
+                  0.187,
+                  0.185,
+                  0.188,
+                  0.185
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1863,
+                "sample_sd": 0.0020575065816014638
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  2.596,
+                  2.472,
+                  2.826,
+                  2.579,
+                  2.5,
+                  2.491,
+                  2.636,
+                  2.637,
+                  2.559,
+                  2.597
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 2.5893,
+                "sample_sd": 0.10165743127451793
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.72,
+                  0.688,
+                  0.766,
+                  0.71,
+                  0.697,
+                  0.697,
+                  0.731,
+                  0.723,
+                  0.716,
+                  0.715
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.7162999999999999,
+                "sample_sd": 0.021939563451546736
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005,
+                  0.005
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.005,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001,
+                  0.001
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.001,
+                "sample_sd": 0.0
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.508,
+                  0.657,
+                  0.307,
+                  0.57,
+                  0.592,
+                  0.617,
+                  0.446,
+                  0.501,
+                  0.525,
+                  0.536
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.5259,
+                "sample_sd": 0.09840105012989783
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.141,
+                  0.183,
+                  0.083,
+                  0.157,
+                  0.165,
+                  0.173,
+                  0.124,
+                  0.137,
+                  0.147,
+                  0.148
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.14579999999999999,
+                "sample_sd": 0.028173273386905773
+              }
+            }
+          }
+        }
+      },
+      "device_span_ratio_before_over_after": 0.9729534799855751
+    },
+    {
+      "case": {
+        "case_id": "F08-03",
+        "seed": 8103,
+        "scenario": "heldout-benefit",
+        "N": 2,
+        "C": 48,
+        "H": 64,
+        "W": 32,
+        "distribution": "bounded-iid"
+      },
+      "status": "complete",
+      "fixture_sha256": "5699ee422cff6cff441cacce46e5279a2dd73d07da86167c99036abd8d323f7f",
+      "original_pair_sha256": "d5b0b3d90be9b9af3a448b6cfb6187e2179be47d128ff49eb54b8a7ec495a6f5",
+      "arms": {
+        "before": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 2.1245796233415604e-09,
+                "max_tolerance_fraction": 0.00010618969556635756
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 2.4524619390842162e-08,
+                "max_tolerance_fraction": 3.7158634471484824e-05
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-03",
+              "seed": 8103,
+              "scenario": "heldout-benefit",
+              "N": 2,
+              "C": 48,
+              "H": 64,
+              "W": 32,
+              "distribution": "bounded-iid"
+            },
+            "block": 256,
+            "arm": "before",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 2,
+            "logical_input_bytes": 1572864,
+            "logical_output_bytes": 384,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "8da8858d1a653babadbe7ce676a7316289289d546a0c73f881109d8d64c3a124",
+                "ttadapter": "4f6b316d291b9d3d997ea4d47b6c6fc5bbe4c47af2a5573ee793608733d7cb51",
+                "ttir": "0eb69dd992a585d398a949f343ac4631520967aea72e1c30c592b597f7f14098"
+              },
+              "hash": "0fbc81e3010254189dc152b7be592adc92aaf2e541186a9b5a8c76bc7f664746"
+            }
+          ],
+          "trace_sha256": "ef6c24aebb0f09b2b3047c5b2a2010575cba3e4d6f1f6c5e70f8471003e0d85a",
+          "normalized_sha256": "5655cf02c1972f62c6faccf12369a72a4673ca8eceb294c8c5e446be1a8d382d",
+          "accounting_sha256": "32eeaded9f30ffbbfb560b9d3d9e196c9e010a6ca0e1b56974073dba4b927e3d",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_centered_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:127:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:130:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:133:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:136:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:139:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:142:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:145:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:148:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:151:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:154:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                241.36,
+                241.32,
+                241.54,
+                241.36,
+                241.4,
+                241.2,
+                241.32,
+                241.3,
+                241.12,
+                241.0
+              ],
+              "count": 10,
+              "mean": 241.292,
+              "sample_sd": 0.15178932768808254
+            },
+            "operation_active_union_us": {
+              "samples": [
+                241.36,
+                241.32,
+                241.54,
+                241.36,
+                241.4,
+                241.2,
+                241.32,
+                241.3,
+                241.12,
+                241.0
+              ],
+              "count": 10,
+              "mean": 241.292,
+              "sample_sd": 0.15178932768808254
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.6592400074005127,
+              0.4260599911212921,
+              0.3937000036239624,
+              0.41034001111984253,
+              0.4178999960422516,
+              0.4045400023460388,
+              0.417959988117218,
+              0.4127199947834015,
+              0.4049200117588043,
+              0.415120005607605
+            ],
+            "count": 10,
+            "mean": 0.4362500011920929,
+            "sample_sd": 0.07885900674244488
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "6a73cb5c3290f6b53855e3073270eb0f6baf95c438f50b30d7d3992b77f8c7b7",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  143.232,
+                  143.174,
+                  143.308,
+                  143.313,
+                  143.275,
+                  143.141,
+                  143.253,
+                  143.211,
+                  143.093,
+                  143.053
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 143.2053,
+                "sample_sd": 0.08878569704631452
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  9453312.0,
+                  9449512.0,
+                  9458310.0,
+                  9458689.0,
+                  9456144.0,
+                  9447282.0,
+                  9454690.0,
+                  9451953.0,
+                  9444132.0,
+                  9441526.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 9451555.0,
+                "sample_sd": 5857.291068972641
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388,
+                  2.388
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 2.388,
+                "sample_sd": 0.0
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017,
+                  0.017
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.017,
+                "sample_sd": 0.0
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  142.202,
+                  142.163,
+                  142.284,
+                  142.302,
+                  142.242,
+                  142.115,
+                  142.193,
+                  142.193,
+                  142.055,
+                  142.058
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 142.1807,
+                "sample_sd": 0.08523438273372645
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993,
+                  0.993
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.993,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.004,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0,
+                "sample_sd": 0.0
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.228,
+                  0.204,
+                  0.223,
+                  0.212,
+                  0.256,
+                  0.222,
+                  0.26,
+                  0.218,
+                  0.234,
+                  0.191
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.2248,
+                "sample_sd": 0.02135311582780264
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.002,
+                  0.001,
+                  0.002,
+                  0.001,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.001
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0017000000000000001,
+                "sample_sd": 0.00048304589153964797
+              }
+            }
+          }
+        },
+        "after": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 2.7066562324762344e-09,
+                "max_tolerance_fraction": 0.0001352133691728349
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 3.518617280873215e-08,
+                "max_tolerance_fraction": 5.354430595147089e-05
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-03",
+              "seed": 8103,
+              "scenario": "heldout-benefit",
+              "N": 2,
+              "C": 48,
+              "H": 64,
+              "W": 32,
+              "distribution": "bounded-iid"
+            },
+            "block": 256,
+            "arm": "after",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 1,
+            "logical_input_bytes": 786432,
+            "logical_output_bytes": 384,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "33c46e99fb1044b44bbd10acde1934d9fbd26321f1478975a9ff669c6c73fd09",
+                "ttadapter": "db459ee29fcb71333db4cf5087d3e5681dfb4fff6a51fc481d1f41d301852956",
+                "ttir": "44461d0362d0f3e186ab9099e4c7bdc57a3a814441692d38da98b268c116f978"
+              },
+              "hash": "d226c290bfe2d7bca40f0d53728621ad14c6009b0b31a8380ab1f49fd58a8a7d"
+            }
+          ],
+          "trace_sha256": "f86f8c1f9567f7846244d14224dcb482b255c1487b7edfafdf4ceb2878f6114e",
+          "normalized_sha256": "23c17bdfbd2dc2d198dab23947bfde127d76d4229eabced30693edd49de2dfb0",
+          "accounting_sha256": "9a72b22c0cec5ad89a9befa7f791dbebccff8b733ed3b9b73773c4c3eef7b0fe",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_welford_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:157:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:160:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:163:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:166:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:169:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:172:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:175:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:178:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:181:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:184:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                154.76,
+                154.92,
+                154.74,
+                154.78,
+                154.76,
+                154.6,
+                154.74,
+                154.54,
+                154.7,
+                154.58
+              ],
+              "count": 10,
+              "mean": 154.712,
+              "sample_sd": 0.1124277545804392
+            },
+            "operation_active_union_us": {
+              "samples": [
+                154.76,
+                154.92,
+                154.74,
+                154.78,
+                154.76,
+                154.6,
+                154.74,
+                154.54,
+                154.7,
+                154.58
+              ],
+              "count": 10,
+              "mean": 154.712,
+              "sample_sd": 0.1124277545804392
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8440799713134766,
+              0.35877999663352966,
+              0.33542001247406006,
+              0.3313399851322174,
+              0.3264800012111664,
+              0.32791998982429504,
+              0.3333199918270111,
+              0.32745999097824097,
+              0.32183998823165894,
+              0.3255000114440918
+            ],
+            "count": 10,
+            "mean": 0.3832139939069748,
+            "sample_sd": 0.16225542697528147
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "43edc092d15b194409eb020174ab69dd7f2c177a1abc3229bc76c40a495f4efa",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  89.822,
+                  89.929,
+                  89.831,
+                  89.824,
+                  89.896,
+                  89.81,
+                  89.886,
+                  89.744,
+                  89.835,
+                  89.819
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 89.8396,
+                "sample_sd": 0.052083693332088996
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  5928267.0,
+                  5935336.0,
+                  5928830.0,
+                  5928360.0,
+                  5933164.0,
+                  5927472.0,
+                  5932492.0,
+                  5923077.0,
+                  5929077.0,
+                  5928083.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 5929415.8,
+                "sample_sd": 3451.059090256851
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354,
+                  6.354
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 6.354,
+                "sample_sd": 0.0
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071,
+                  0.071
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.071,
+                "sample_sd": 0.0
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  87.031,
+                  87.129,
+                  87.033,
+                  87.022,
+                  87.072,
+                  86.977,
+                  87.094,
+                  86.936,
+                  87.016,
+                  87.017
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 87.0327,
+                "sample_sd": 0.055449777075995584
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.969,
+                  0.969,
+                  0.969,
+                  0.969,
+                  0.969,
+                  0.968,
+                  0.969,
+                  0.969,
+                  0.969,
+                  0.969
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.9689,
+                "sample_sd": 0.0003162277660168382
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.004,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0,
+                "sample_sd": 0.0
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.182,
+                  0.19,
+                  0.185,
+                  0.191,
+                  0.211,
+                  0.228,
+                  0.179,
+                  0.194,
+                  0.213,
+                  0.195
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1968,
+                "sample_sd": 0.01564750601356154
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.003,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0021,
+                "sample_sd": 0.00031622776601683794
+              }
+            }
+          }
+        }
+      },
+      "device_span_ratio_before_over_after": 1.55962045607322
+    },
+    {
+      "case": {
+        "case_id": "F08-04",
+        "seed": 8104,
+        "scenario": "heldout-cost",
+        "N": 1,
+        "C": 16,
+        "H": 2,
+        "W": 16,
+        "distribution": "constant"
+      },
+      "status": "complete",
+      "fixture_sha256": "af3030aa610a735df6d4b67a62ab58ae8cb5ae86d033e9f2fe47d4047450758c",
+      "original_pair_sha256": "ca940353232002fdb54bbb8147f9669a2d30e2ab259d3fd64a0bb2fd5856040d",
+      "arms": {
+        "before": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 0.0,
+                "max_tolerance_fraction": 0.0
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 0.0,
+                "max_tolerance_fraction": 0.0
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-04",
+              "seed": 8104,
+              "scenario": "heldout-cost",
+              "N": 1,
+              "C": 16,
+              "H": 2,
+              "W": 16,
+              "distribution": "constant"
+            },
+            "block": 256,
+            "arm": "before",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 1,
+            "logical_input_bytes": 2048,
+            "logical_output_bytes": 128,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "edfcd319916bd2a6e6e99c15e3111e9ce981eda9a6e3a217e7ab5fbbfad85fca",
+                "ttadapter": "f8ba2b26011c40251cdd8dbe66b42810b8fda2fd448d220d501a5efb91363f48",
+                "ttir": "789a7556f00ee851c8c91855ea460011d9e3052aeaa943b13d20010f5cb0fbb0"
+              },
+              "hash": "d2dda7f9b666a4807160ade07ea0709ec5d37eabd58a43a00dc04f29b04bd54c"
+            }
+          ],
+          "trace_sha256": "98d9e6633e63bbe48cb29094ed9bb5862b94e9820c0bf17b6c75e6bf71d160bd",
+          "normalized_sha256": "9b260997803794a2efdc24eadf9c5b806be9be2aeb7fb655308d9f84ec51c729",
+          "accounting_sha256": "61472e805074511c1e23abbd75ec6940a09b40cfdb301cdf791805beda72fcb7",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_centered_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:189:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:192:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:195:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:198:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:201:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:204:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:207:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:210:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:213:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:216:0:4294967295",
+              "name": "wave003_centered_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                3.12,
+                2.84,
+                2.82,
+                2.44,
+                2.44,
+                2.44,
+                2.38,
+                2.74,
+                2.46,
+                2.36
+              ],
+              "count": 10,
+              "mean": 2.604,
+              "sample_sd": 0.2578199199268961
+            },
+            "operation_active_union_us": {
+              "samples": [
+                3.12,
+                2.84,
+                2.82,
+                2.44,
+                2.44,
+                2.44,
+                2.38,
+                2.74,
+                2.46,
+                2.36
+              ],
+              "count": 10,
+              "mean": 2.604,
+              "sample_sd": 0.2578199199268961
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.5368599891662598,
+              0.3044799864292145,
+              0.28356000781059265,
+              0.27605998516082764,
+              0.2883400022983551,
+              0.2818399965763092,
+              0.2802799940109253,
+              0.29947999119758606,
+              0.2608399987220764,
+              0.28279998898506165
+            ],
+            "count": 10,
+            "mean": 0.3094539940357208,
+            "sample_sd": 0.08079918781410786
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "6f5d8895b97fe567691a20e9c2915b495922d7a802b0cf4d627930d883d2f386",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  1.652,
+                  1.514,
+                  1.657,
+                  1.418,
+                  1.453,
+                  1.434,
+                  1.453,
+                  1.471,
+                  1.433,
+                  1.423
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 1.4908000000000001,
+                "sample_sd": 0.09059040910726819
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  43602.0,
+                  39979.0,
+                  43749.0,
+                  37435.0,
+                  38356.0,
+                  37850.0,
+                  38356.0,
+                  38822.0,
+                  37823.0,
+                  37559.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 39353.1,
+                "sample_sd": 2392.993032909949
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198,
+                  0.198
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.198,
+                "sample_sd": 0.0
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.12,
+                  0.131,
+                  0.12,
+                  0.14,
+                  0.136,
+                  0.138,
+                  0.136,
+                  0.135,
+                  0.138,
+                  0.139
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1333,
+                "sample_sd": 0.007439384681843287
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.905,
+                  0.856,
+                  0.912,
+                  1.023,
+                  1.075,
+                  1.077,
+                  1.052,
+                  0.993,
+                  1.05,
+                  1.014
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.9957,
+                "sample_sd": 0.07806841728751632
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.548,
+                  0.566,
+                  0.55,
+                  0.722,
+                  0.74,
+                  0.751,
+                  0.724,
+                  0.675,
+                  0.733,
+                  0.712
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.6721,
+                "sample_sd": 0.08359618545258043
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.004,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.003,
+                  0.003,
+                  0.003,
+                  0.003,
+                  0.002,
+                  0.003,
+                  0.003
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0026,
+                "sample_sd": 0.0005163977794943223
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.135,
+                  0.145,
+                  0.211,
+                  0.19,
+                  0.176,
+                  0.15,
+                  0.198,
+                  0.274,
+                  0.178,
+                  0.207
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1864,
+                "sample_sd": 0.040428812607951885
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.081,
+                  0.095,
+                  0.127,
+                  0.134,
+                  0.121,
+                  0.105,
+                  0.137,
+                  0.186,
+                  0.124,
+                  0.146
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.1256,
+                "sample_sd": 0.02913646054916989
+              }
+            }
+          }
+        },
+        "after": {
+          "status": "complete",
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "mean": {
+                "passed": true,
+                "atol": 2e-05,
+                "rtol": 2e-06,
+                "max_absolute_error": 0.0,
+                "max_tolerance_fraction": 0.0
+              },
+              "variance": {
+                "passed": true,
+                "atol": 1e-07,
+                "rtol": 0.002,
+                "max_absolute_error": 0.0,
+                "max_tolerance_fraction": 0.0
+              },
+              "constant_zero": true
+            }
+          },
+          "sources": {
+            "examples/optimization-library/triton/welford.py": "a4c74a05fcbf24bcf6ab68486e711b5ab2d90e764e04e647ac6402cc6224bd31",
+            "examples/optimization-library/triton/welford_contract.py": "27dbe0c5ad6c71ad68799f0541d1e2d8596a8bb62f78192eb96292604cd87077"
+          },
+          "metadata": {
+            "language": "triton",
+            "torch_version": "2.10.0+cpu",
+            "triton_version": "3.2.0",
+            "shape": {
+              "case_id": "F08-04",
+              "seed": 8104,
+              "scenario": "heldout-cost",
+              "N": 1,
+              "C": 16,
+              "H": 2,
+              "W": 16,
+              "distribution": "constant"
+            },
+            "block": 256,
+            "arm": "after",
+            "arithmetic": "FP32",
+            "workspace_bytes": 0,
+            "stages_per_forward": 1,
+            "logical_input_passes": 1,
+            "logical_input_bytes": 2048,
+            "logical_output_bytes": 128,
+            "traffic_claim": "logical algorithmic bytes only; physical traffic unavailable"
+          },
+          "compilation": [
+            {
+              "artifacts": {
+                "npubin": "0e770b844f87602d01e9c68b098e2d9ee9d9f44e9dcd83e61b0e0ac97e13840d",
+                "ttadapter": "40b738e57d8ba4b98afc95461322bd91f8446714d2fa09bf099d12f3478a4f77",
+                "ttir": "6743eb933cb1bd90c213166f0159da454e1d0d34f3be8583b5eda384cb3844bf"
+              },
+              "hash": "69b83e0226118ed04be3f97b675ffa6e4125a711cc0b88f16a60bd1c6bf0f243"
+            }
+          ],
+          "trace_sha256": "06d5d565f17fbf7b5f0654a408339f2eb44e42a6957e06b6fce9d79d811156e6",
+          "normalized_sha256": "f9dc5f5fc4b00f79fb08494fa2baf4e17a481250fa244b3526ca6e1995e5443d",
+          "accounting_sha256": "8b38b01cb1c59eb9212c7b68b2c93fd22e5fa1af4327e7269e252b2f10338824",
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "wave003_welford_statistics"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "task_count": 10,
+          "tasks": [
+            {
+              "task_id": "90253767:2:219:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_0"
+            },
+            {
+              "task_id": "90253767:2:222:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_1"
+            },
+            {
+              "task_id": "90253767:2:225:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_2"
+            },
+            {
+              "task_id": "90253767:2:228:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_3"
+            },
+            {
+              "task_id": "90253767:2:231:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_4"
+            },
+            {
+              "task_id": "90253767:2:234:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_5"
+            },
+            {
+              "task_id": "90253767:2:237:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_6"
+            },
+            {
+              "task_id": "90253767:2:240:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_7"
+            },
+            {
+              "task_id": "90253767:2:243:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_8"
+            },
+            {
+              "task_id": "90253767:2:246:0:4294967295",
+              "name": "wave003_welford_statistics",
+              "iteration_id": "model_iteration_9"
+            }
+          ],
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                4.82,
+                3.38,
+                2.96,
+                2.92,
+                2.78,
+                3.06,
+                2.86,
+                3.22,
+                2.78,
+                2.76
+              ],
+              "count": 10,
+              "mean": 3.154,
+              "sample_sd": 0.619465719614716
+            },
+            "operation_active_union_us": {
+              "samples": [
+                4.82,
+                3.38,
+                2.96,
+                2.92,
+                2.78,
+                3.06,
+                2.86,
+                3.22,
+                2.78,
+                2.76
+              ],
+              "count": 10,
+              "mean": 3.154,
+              "sample_sd": 0.619465719614716
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8109999895095825,
+              0.31112000346183777,
+              0.28582000732421875,
+              0.2955400049686432,
+              0.2975200116634369,
+              0.29787999391555786,
+              0.31665998697280884,
+              0.290120005607605,
+              0.3059000074863434,
+              0.32175999879837036
+            ],
+            "count": 10,
+            "mean": 0.35333200097084044,
+            "sample_sd": 0.16121645424960399
+          },
+          "metrics": {
+            "status": "available",
+            "csv_sha256": "e913553ddd254d4a11b9d8b38916eff30c2e0c59243edf1b1e396507a2186668",
+            "columns": [
+              "Step Id",
+              "Device_id",
+              "Model ID",
+              "Task ID",
+              "Stream ID",
+              "Name",
+              "Type",
+              "OP State",
+              "Accelerator Core",
+              "Start Time(us)",
+              "Duration(us)",
+              "Wait Time(us)",
+              "Block Num",
+              "Mix Block Num",
+              "HF32 Eligible",
+              "Input Shapes",
+              "Input Data Types",
+              "Input Formats",
+              "Output Shapes",
+              "Output Data Types",
+              "Output Formats",
+              "Context ID",
+              "aicore_time(us)",
+              "aic_total_cycles",
+              "aic_mac_time(us)",
+              "aic_mac_ratio",
+              "aic_scalar_time(us)",
+              "aic_scalar_ratio",
+              "aic_mte1_time(us)",
+              "aic_mte1_ratio",
+              "aic_mte2_time(us)",
+              "aic_mte2_ratio",
+              "aic_fixpipe_time(us)",
+              "aic_fixpipe_ratio",
+              "aic_icache_miss_rate",
+              "aiv_time(us)",
+              "aiv_total_cycles",
+              "aiv_vec_time(us)",
+              "aiv_vec_ratio",
+              "aiv_scalar_time(us)",
+              "aiv_scalar_ratio",
+              "aiv_mte2_time(us)",
+              "aiv_mte2_ratio",
+              "aiv_mte3_time(us)",
+              "aiv_mte3_ratio",
+              "aiv_icache_miss_rate",
+              "cube_utilization(%)"
+            ],
+            "selected_numeric_columns": {
+              "aiv_time(us)": {
+                "status": "complete",
+                "samples": [
+                  2.962,
+                  2.071,
+                  1.857,
+                  1.815,
+                  1.854,
+                  2.009,
+                  1.873,
+                  1.908,
+                  1.804,
+                  1.834
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 1.9987,
+                "sample_sd": 0.34914245739462224
+              },
+              "aiv_total_cycles": {
+                "status": "complete",
+                "samples": [
+                  78195.0,
+                  54672.0,
+                  49026.0,
+                  47921.0,
+                  48952.0,
+                  53050.0,
+                  49449.0,
+                  50360.0,
+                  47625.0,
+                  48422.0
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 52767.2,
+                "sample_sd": 9216.21325949245
+              },
+              "aiv_vec_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.512,
+                  0.511,
+                  0.51,
+                  0.51,
+                  0.51,
+                  0.51,
+                  0.51,
+                  0.51,
+                  0.51,
+                  0.51
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.5103,
+                "sample_sd": 0.0006749485577105535
+              },
+              "aiv_vec_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.173,
+                  0.247,
+                  0.275,
+                  0.281,
+                  0.275,
+                  0.254,
+                  0.272,
+                  0.268,
+                  0.283,
+                  0.278
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.2606,
+                "sample_sd": 0.03286741040402586
+              },
+              "aiv_scalar_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.922,
+                  1.042,
+                  1.176,
+                  1.171,
+                  1.187,
+                  1.372,
+                  1.224,
+                  1.13,
+                  1.129,
+                  1.116
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 1.1469,
+                "sample_sd": 0.11680701082459811
+              },
+              "aiv_scalar_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.311,
+                  0.503,
+                  0.633,
+                  0.645,
+                  0.64,
+                  0.683,
+                  0.654,
+                  0.592,
+                  0.626,
+                  0.608
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.5895,
+                "sample_sd": 0.1091128366009752
+              },
+              "aiv_mte2_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004,
+                  0.004
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.004,
+                "sample_sd": 0.0
+              },
+              "aiv_mte2_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.001,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002,
+                  0.002
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0019,
+                "sample_sd": 0.00031622776601683794
+              },
+              "aiv_mte3_time(us)": {
+                "status": "complete",
+                "samples": [
+                  0.116,
+                  0.169,
+                  0.173,
+                  0.134,
+                  0.161,
+                  0.126,
+                  0.143,
+                  0.269,
+                  0.165,
+                  0.211
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.16670000000000001,
+                "sample_sd": 0.0451738616655448
+              },
+              "aiv_mte3_ratio": {
+                "status": "complete",
+                "samples": [
+                  0.039,
+                  0.082,
+                  0.093,
+                  0.074,
+                  0.087,
+                  0.063,
+                  0.076,
+                  0.141,
+                  0.091,
+                  0.115
+                ],
+                "available_count": 10,
+                "unavailable_count": 0,
+                "mean": 0.0861,
+                "sample_sd": 0.027766686674662658
+              }
+            }
+          }
+        }
+      },
+      "device_span_ratio_before_over_after": 0.8256182625237793
+    }
+  ],
+  "guards": [
+    {
+      "case": {
+        "case_id": "F08-G01",
+        "N": 2,
+        "C": 3,
+        "H": 3,
+        "W": 47,
+        "seed": 8191,
+        "distribution": "constant",
+        "expected": "zero-variance"
+      },
+      "rows": [
+        {
+          "arm": "before",
+          "diagnostics": {
+            "passed": true,
+            "mean": {
+              "passed": true,
+              "atol": 2e-05,
+              "rtol": 2e-06,
+              "max_absolute_error": 0.0,
+              "max_tolerance_fraction": 0.0
+            },
+            "variance": {
+              "passed": true,
+              "atol": 1e-07,
+              "rtol": 0.002,
+              "max_absolute_error": 0.0,
+              "max_tolerance_fraction": 0.0
+            },
+            "constant_zero": true
+          },
+          "device_forwards": 1
+        },
+        {
+          "arm": "after",
+          "diagnostics": {
+            "passed": true,
+            "mean": {
+              "passed": true,
+              "atol": 2e-05,
+              "rtol": 2e-06,
+              "max_absolute_error": 0.0,
+              "max_tolerance_fraction": 0.0
+            },
+            "variance": {
+              "passed": true,
+              "atol": 1e-07,
+              "rtol": 0.002,
+              "max_absolute_error": 0.0,
+              "max_tolerance_fraction": 0.0
+            },
+            "constant_zero": true
+          },
+          "device_forwards": 1
+        }
+      ],
+      "profile_calls": 0
+    },
+    {
+      "case": {
+        "case_id": "F08-G02",
+        "N": 0,
+        "C": 3,
+        "H": 2,
+        "W": 16,
+        "seed": 8192,
+        "distribution": "bounded-iid",
+        "expected": "reject-empty"
+      },
+      "rows": [
+        {
+          "arm": "before",
+          "passed": true,
+          "rejected": "empty population or channel dimension is unsupported",
+          "device_forwards": 0
+        },
+        {
+          "arm": "after",
+          "passed": true,
+          "rejected": "empty population or channel dimension is unsupported",
+          "device_forwards": 0
+        }
+      ],
+      "profile_calls": 0
+    }
+  ],
+  "versions": {
+    "torch": "2.10.0",
+    "torch_npu": "2.10.0",
+    "triton_distribution": "3.5.0",
+    "triton_ascend_distribution": "3.2.2",
+    "triton_imported": "3.2.0",
+    "cann_install_version": "9.1.0 (observed bisheng installation)",
+    "bisheng": "clang15.0.5 clang-5c68a1cb1231 flang-5c68a1cb1231; build2026-07-30"
+  }
+}

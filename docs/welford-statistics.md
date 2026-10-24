@@ -43,3 +43,35 @@ availability and complete device-operation span with active union and gaps.
 Host validation: `python -m pytest -q tests/test_optimization_welford.py`.
 These functional CPU tests supplement, and do not establish, A3 correctness or
 performance. No performance gain is required for this controlled comparison.
+
+The frozen source passed the GZ-A3 gate on Ascend910B4-1 (20 Cube/40 Vector),
+Torch/Torch-NPU 2.10.0 and imported Triton-Ascend 3.2.2. All four prescribed
+pairs passed their frozen oracle gates, with exactly eight captures and eighty
+profile forwards. Constant guards returned exact zero; both empty-population
+interfaces rejected before a device call. The eighteen functional CPU tests
+also passed on that target. One earlier health-only attempt used an incorrect
+card/chip mapping and stopped before Torch import, with zero device calls.
+
+| Fixed case | Regime | Centered span us, mean ± sample SD | Welford span us, mean ± sample SD | Before/after |
+| --- | --- | ---: | ---: | ---: |
+| F08-01 | gallery benefit | 1064.688 ± 0.847 | 557.172 ± 1.420 | 1.911 |
+| F08-02 | gallery cost | 5.396 ± 0.083 | 5.546 ± 0.162 | 0.973 |
+| F08-03 | heldout benefit | 241.292 ± 0.152 | 154.712 ± 0.112 | 1.560 |
+| F08-04 | heldout cost | 2.604 ± 0.258 | 3.154 ± 0.619 | 0.826 |
+
+Each row uses one capture per side, ten samples per capture and before/after
+order. All observed forwards had exactly one matching kernel task; operation
+active union equals the device span and inter-task gap is zero for this one-stage
+pair. This does not measure host enqueue overhead or unprofiled application
+latency. These measurements retain the predicted cost regimes as well as
+benefits; they do not establish universal gains. The first profiled event
+sample includes substantial caller overhead, so the device-task span is the
+primary comparison.
+
+[Compact evidence](../experiments/optimization-library/w003-welford/evidence.json)
+retains all span/event samples, source and compiled npubin hashes, exact task
+identities, oracle errors and per-task PMU exports. Those exports show dominant
+scalar composition in the large streaming loops; their ratios do not prove
+physical input traffic or bandwidth savings. Both algorithms use FP32 and
+frozen tolerances. Raw vendor reports remain retained operationally; their
+trace/CSV hashes and the compact archive digest bind this published subset.

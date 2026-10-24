@@ -183,3 +183,20 @@ def test_trusted_nd_preparation_preserves_input_contract_before_capture(fault):
         assert prepared['offsets'] is untouched
         assert prepared['initial'].dtype == source.dtype and prepared['initial'].stride() == source.stride()
         assert torch.equal(prepared['initial'], source) and backend.get_npu_format(prepared['initial']) == 2
+
+
+def test_correct_values_in_strided_output_fail_before_any_capture(tmp_path, monkeypatch):
+    request = fixture_request(tmp_path, monkeypatch)
+    source = Path(request['candidate_path'])
+    source.write_text(source.read_text().replace('return inputs["x"]+1',
+        'return (inputs["x"]+1).repeat_interleave(2)[::2]'))
+    request['candidate_sha256'] = worker.sha(source)
+    def unexpected_capture(*args, **kwargs):
+        pytest.fail('a rejected output must never enter capture')
+    Jit.calls = 0
+    report = worker.evaluate_cases(request, tmp_path/'out', torch=torch, jit_class=Jit,
+        capture=unexpected_capture, synchronize=lambda:None, device='cpu')
+    assert report['outcome'] == 'candidate_failure' and Jit.calls == 1
+    assert report['cases'][0]['correctness_calls'] == 1 and report['cases'][0]['profiled_calls'] == 0
+    assert report['cases'][0]['output_metadata'] == [dict(shape=[6],strides=[2],dtype='torch.int64',contiguous=False)]
+    assert report['cases'][1]['status'] == 'not-run'

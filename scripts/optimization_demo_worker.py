@@ -185,6 +185,13 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
                 row['correctness_calls'] = 1
                 actual = module.run(inputs)
                 synchronize()
+                values = actual if isinstance(actual, (tuple, list)) else (actual,)
+                if any(not isinstance(value, torch.Tensor) for value in values):
+                    raise ValueError('candidate outputs must be tensors')
+                row['output_metadata'] = [dict(shape=list(value.shape), strides=list(value.stride()),
+                    dtype=str(value.dtype), contiguous=value.is_contiguous()) for value in values]
+                if any(not item['contiguous'] for item in row['output_metadata']):
+                    raise ValueError('candidate outputs must be contiguous')
                 diagnostic = validator.validate_actual(actual, fixture, request['operation_id'], inputs)
                 row['diagnostics'] = diagnostic
                 if diagnostic.get('passed') is not True:

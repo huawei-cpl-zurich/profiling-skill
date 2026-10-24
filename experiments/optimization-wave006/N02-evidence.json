@@ -1,0 +1,167 @@
+{
+  "study": "W006-N02",
+  "status": "unqualified",
+  "reason": "Once-only paired FP32 hashes differ; cause unestablished. Numerical FP64 checks pass.",
+  "qualification": "No accepted comparative profile evidence; paired gate was checked after two captures in v1 and stopped collection.",
+  "product": "Ascend 910B4-1",
+  "sdk": "CANN 9.1.0",
+  "matrix_sha256": "c9c3e008f9c80cc991e6bebbbd2156c2d939d73e1f5cbfabfaf6fba72b68e533",
+  "source_pin": "cann/ops-sparse bfc7c19d83ce246b03c65dc916ed4753e5467cf3",
+  "sources": {
+    "twoprod.py": "166e3850073123e6bb595439ec68258ef24d33af75cd815c302f4407ee04d622",
+    "twoprod.cpp": "912798cec88669fa54ea35446dabefd51489fc76551e4233fc27864d51586b58",
+    "twoprod_helpers.h": "fec61e5d6490113f97fa00041b374246a7f864fd1d5b147a1d09d7f05dac2d93"
+  },
+  "collection_handle": "remote:gz-a3:job:de44f8df-91a9-4027-ba01-cacc05e30324",
+  "terminal_result": {
+    "state": "failed",
+    "exit": 1
+  },
+  "counts": {
+    "runtime_scientific_payloads": 6,
+    "runtime_oracle_generations": 6,
+    "correctness_forwards": 2,
+    "nonconforming_captures": 2,
+    "nonconforming_profiled_forwards": 20,
+    "accepted_captures": 0,
+    "warmup": 0,
+    "ordinary_latency_calls": 0
+  },
+  "placement": {
+    "variants": 10,
+    "logical_prepared_references": 12,
+    "actual_sdk_aiv_kind": 3,
+    "vector_entry": true,
+    "cube_entry": false,
+    "qualified_before_any_forward": true
+  },
+  "case": {
+    "case_id": "W006-N02-01",
+    "status": "unqualified",
+    "arms": {
+      "before": {
+        "correctness": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "numerical_fp64": true,
+            "actual_fast_flags": [
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0
+            ],
+            "dispatch_verified": true,
+            "immutable_input": true,
+            "gm_canaries": true,
+            "nonalias_output": true,
+            "fp32_output_sha256": "181bf54eb998d4693f1d4355cf30deb4430390a646ef3a05417e8425e1aee845"
+          }
+        },
+        "profiled_calls": 10
+      },
+      "after": {
+        "correctness": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "numerical_fp64": true,
+            "actual_fast_flags": [
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ],
+            "dispatch_verified": true,
+            "immutable_input": true,
+            "gm_canaries": true,
+            "nonalias_output": true,
+            "fp32_output_sha256": "bcc7bfe1af8cefc4fc2ab7daff89c8d402888ae78651c7fabe73ef0857b2e170"
+          }
+        },
+        "profiled_calls": 10
+      }
+    }
+  },
+  "remaining_cases": "Three main cases and two guards not executed on NPU after gate failure; cached fixtures retained.",
+  "compact_archive_sha256": "1f7dcc9cf541c72a9021ce5ffb3aa591b4b84982bcf8e6022a0989ff88a8a2c5",
+  "diagnostic_limits": [
+    "Selected llvm-objdump cannot decode device instructions.",
+    "Compiler rejected -emit-llvm, device -S and -### probes.",
+    "No source-operation reassociation diagnosis, ordinary latency, speedup, traffic or full-range accuracy claim."
+  ],
+  "publication_gate": {
+    "kind": "adapter.capture fail-closed; correctness-only remains available",
+    "measured_kernel_unchanged": true,
+    "measured_fixture_unchanged": true,
+    "publication_adapter_sha256": "dee16e6e4905b5a3055b6413273816b0590256ae0d0aa849a7b5d9281d6b2a7c",
+    "new_npu_forwards": 0,
+    "new_frozen_oracle_evaluations": 0,
+    "cpu_only_a3_validation": {
+      "handle": "remote:gz-a3:job:336d18b4-103c-4662-a7d1-ccc470f85c02",
+      "state": "completed",
+      "exit": 0,
+      "tests_passed": 19,
+      "new_npu_forwards": 0,
+      "new_frozen_oracle_evaluations": 0
+    }
+  }
+}

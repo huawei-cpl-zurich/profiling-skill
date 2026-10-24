@@ -1,0 +1,92 @@
+{
+  "wave": 6,
+  "study_id": "N02",
+  "title": "Certify compensated-dot safety once per row",
+  "study_kind": "source-backed-independent-format",
+  "new_unique_mechanism_claim": false,
+  "approval": "Standing waves003\u2013022, data first",
+  "source": "frontier/proposal.md, exact broker-filtered bodies/tests, query b339eb85c773462fbfc45ecb8dbc2587. Ops-sparse bfc7c19d83ce246b03c65dc916ed4753e5467cf3 arch22/DAV2201 A2/A3 sources CANNOpenSoftware2.0; own CANN9.1/910B gate still required.",
+  "dependency": {
+    "base": "298b44a9b579f3c0b0b2ed04c23a250393aa6644",
+    "target_branch": "codex/optimization-w006-row-dma-aggregation"
+  },
+  "cases": [
+    {
+      "case_id": "W006-N02-01",
+      "role": "gallery",
+      "seed": 8201,
+      "parameters": {
+        "rows": 32,
+        "width": 256
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N02-02",
+      "role": "gallery",
+      "seed": 8202,
+      "parameters": {
+        "rows": 1,
+        "width": 8
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N02-03",
+      "role": "heldout",
+      "seed": 8203,
+      "parameters": {
+        "rows": 48,
+        "width": 192
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N02-04",
+      "role": "heldout",
+      "seed": 8204,
+      "parameters": {
+        "rows": 2,
+        "width": 16
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-N02-GA",
+      "role": "guard",
+      "seed": 8291,
+      "parameters": {
+        "rows": 1,
+        "width": 8,
+        "distribution": "splitter-unsafe-finite-products"
+      },
+      "expected": "Prefix a=[1e35,0,0,0],b=[1e-35,1e35,0,0], rest0. Whole row must use guarded fallback, finite scalar result; zero\u00d7huge cannot enter unchecked split."
+    },
+    {
+      "case_id": "W006-N02-GB",
+      "role": "guard",
+      "seed": 8292,
+      "parameters": {
+        "rows": 3,
+        "width": 8,
+        "distribution": "mixed-safe-unsafe-cancellation"
+      },
+      "expected": "Row0 a=[2^24,1,-2^24,2^-10],b=ones, rest0; Row1 same unsafe prefix asGA; Row2 a=[1,-1,2^-20,2^-20],b=ones, rest0. Actual AFTER flags[fast,guarded,fast]; preserve columnorder and compensated result."
+    }
+  ],
+  "contract": {
+    "interface": "Immutable contiguous FP32 a,b[rows,width], FP32 y[rows]. Mainuniform[-4,4]. Only declared larger finite-product guard distributions extend domain; no blanket full-range accuracy promise. Outputs finite. Independent represented-input FP64 dot atol1e-6rtol1e-6; exact paired FP32 agreement recorded from once-only correctness outputs when source operation sequences agree.",
+    "arithmetic": "Copy exact pinned guarded SpmvTwoProd, Fast, TwoSum and same sequential DS merge/finalization order. Preserve symbolic SPLITTER4097.0f, splitlimit8.0e34f, guarded productlimit1.7e38f and conservative certification productlimit1.6e38f fromsource; no retuning. Same FP32 association/contraction flags, no tree reduction or lostcompensation.",
+    "before": "Per-element guarded product in compensated scalar row loop.",
+    "after": "EveryAPI/row freshly vector-certifies max|a| and max|b| after SAMEinput staging, then unchecked SAMEarithmetic onlyifsafe; otherwise identical guarded body. SourceNpredicate: ifmaxB>splitlimit rowlimit=-1; elsemin(splitlimit, productlimit/maxB) with maxB0handled; safe iffmaxA<=rowlimit. Include max/min reductions, barriers and scan in fullspan; no upstream cross-row reuse granted.",
+    "diagnostics": "Actual GPU dispatch flags may be returned/stored using identical required publication work onbotharms (BEFOREconstantguarded, AFTERactualcertificate); CPUexpectedflags are validation/provenance only and MUSTNOT control algorithm. Capture FP32 output bits once in correctness diagnostics; paired agreement can be checked read-only after both are available, no extra forward solely tocompare. If required paired property fails, retain unqualified result, do not relaxgates.",
+    "resources": "Own AIV row work with bounded local width<=4096 and source reduction workspace>=256floats; all required scalar\u2194vector/MTE completion preserved. Native exact guard body sourcekind real, extracted dense-dot format independent of upstream sparse scheduling."
+  },
+  "protocol": "Six cached scientific payloads once, once-per-side correctness per case/source then exactly10 fullAPI profiled forwards/arm/four mainpairs =>8captures/80forwards. Guards0captures. Explicit component operations/host rejection tests counted separately. No warmup/autotune/extra timing/profiled IO checking. Compile/resource/engine audit all before any forwards; preserve all failures/nonconforming/equal/slower outcomes,10samples/taskPMU/source/compiler/binary/fixture identities."
+}

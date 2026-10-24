@@ -47,3 +47,42 @@ retains all ten diagnostic samples per arm. Mean device-operation spans in
 microseconds were 5.792→5.670 (128×65), 2.102→2.130 (1×65), 4.406→4.276
 (96×97), and 1.460→1.450 (2×9). These small changes overlap sample variation
 and establish no general performance benefit. Ordinary latency was not measured.
+
+`twoprod.cpp` is an independent dense compensated-dot extraction of the guarded
+and fast product bodies from `cann/ops-sparse` commit
+`bfc7c19d83ce246b03c65dc916ed4753e5467cf3`,
+`sparse/spmv/arch22/kernels/spmv_kernel.h` (CANN Open Software License 2.0;
+retained in `CANN_LICENSE`). The helper retains its copyright and arithmetic.
+Its vector/scalar ownership events are explicit in this adaptation. Dense
+staging, row iteration and the diagnostic flag publication are local code,
+not an upstream dense-dot implementation. Both arms stage each row and publish
+the result plus a dispatch flag. The after arm freshly computes two maxima per
+row on every call; CPU expected flags are used only by the validator.
+
+The bounded interface is contiguous immutable FP32 rows (1..64), width 1..4096,
+main data in [-4,4], plus the two declared finite-product guard distributions.
+Sequential dot compensation, DS merge and final addition match between arms.
+The independent represented-input FP64 dot uses atol=1e-6 and rtol=1e-6.
+Correctness diagnostics retain output hashes for read-only paired agreement.
+This does not establish accuracy across the full FP32 range.
+
+`twoprod.compile_all` retains compiler intermediates and uses identical `-O2`
+and `-ffp-contract=off` flags. Call `audit_placement` before any forward; it
+requires a generated vector function, absence of a Cube function, and metadata
+bound to the actual selected SDK's AIV enum. A generic AI_CORE profiler label
+alone does not qualify this execution engine. Width and scratch bounds come
+from the pinned reduction helper (256 floats, count <=4096).
+
+N02 remains **unqualified** on the selected CANN 9.1/910B4-1 gate. The first
+pair passed FP64 tolerance, dispatch, immutable-input and canary checks, but
+the once-only FP32 output hashes differed. The v1 controller checked this
+paired requirement after two captures; all 20 profiled forwards are retained
+as nonconforming, and the remaining cases/guards are unattempted. No speedup
+or comparative measurement is admitted. The cause is unestablished because
+the selected tools could not expose decoded instructions. See N02-evidence.json
+for the exact original source hashes and counters.
+
+The published adapter now fails closed before profiling with an explicit
+unqualified-preflight error. `--correctness-only` remains available. This
+publication-only gate changes no measured kernel/helper/fixture arithmetic;
+no new NPU runs or frozen CPU-oracle evaluations were made for that gate.

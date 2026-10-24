@@ -1,0 +1,95 @@
+{
+  "wave": 6,
+  "study_id": "N03",
+  "title": "Vector Gather replaces scalar indexed UB reads",
+  "study_kind": "source-backed-independent-format",
+  "new_unique_mechanism_claim": false,
+  "approval": "Standing waves003\u2013022, data first",
+  "source": "frontier/proposal.md, exact broker-filtered bodies/tests, query b339eb85c773462fbfc45ecb8dbc2587. Ops-sparse bfc7c19d83ce246b03c65dc916ed4753e5467cf3 arch22/DAV2201 A2/A3 sources CANNOpenSoftware2.0; own CANN9.1/910B gate still required.",
+  "dependency": {
+    "base": "298b44a9b579f3c0b0b2ed04c23a250393aa6644",
+    "target_branch": "codex/optimization-w006-row-dma-aggregation"
+  },
+  "cases": [
+    {
+      "case_id": "W006-N03-01",
+      "role": "gallery",
+      "seed": 8301,
+      "parameters": {
+        "N": 65536,
+        "K": 4096,
+        "pattern": "uniform"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N03-02",
+      "role": "gallery",
+      "seed": 8302,
+      "parameters": {
+        "N": 8,
+        "K": 64,
+        "pattern": "repeat-one"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N03-03",
+      "role": "heldout",
+      "seed": 8303,
+      "parameters": {
+        "N": 49152,
+        "K": 3072,
+        "pattern": "uniform"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    },
+    {
+      "case_id": "W006-N03-04",
+      "role": "heldout",
+      "seed": 8304,
+      "parameters": {
+        "N": 17,
+        "K": 128,
+        "pattern": "alternating-two"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost hypothesis, no promised sign or outcome-based retuning."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-N03-GA",
+      "role": "guard",
+      "seed": 8391,
+      "parameters": {
+        "N": 8,
+        "K": 64,
+        "pattern": "endpoints-and-signedzero"
+      },
+      "expected": "table0=+0,tableK-1=-0; indicesalternate0/K-1/repeats, compare raw FP32 bits and GM canaries."
+    },
+    {
+      "case_id": "W006-N03-GB",
+      "role": "guard",
+      "seed": 8392,
+      "parameters": {
+        "N": 4097,
+        "K": 4096,
+        "pattern": "uniform"
+      },
+      "expected": "Oddtail numericalguard; additional host tests explicitly rejectindex-1/K beforecache/device forbotharms. No invalid-index evaluation/clamping in this valid-index API."
+    }
+  ],
+  "contract": {
+    "interface": "Immutable contiguous FP32table[K] in[-4,4], signedzerosallowed; immutable contiguous int32indices[N] valid[0,K), duplicates/order retained; FP32output[N] exactbit equality toCPUindexedlookup. Validation beforedevice/fixturecache rejectsinvalidindices/layout, consistentbotharms.",
+    "common": "Stage SAMEcomplete table onceperAPI and SAMEindex tile repeatedly; tile4096, tableK<=4096, UBallocationbudget checked. Compute SAMEvectorbyte-offset conversion(index*sizeof(float))and required completion onBOTHarms forisolatedlocal-load comparison. No free input-dependent offsets or residencyonlyforcandidate.",
+    "before": "Scalar UB pointer indexed reads/writeoutputtile using byte-addressed table+offset (avoid artificial divide-by4 work).",
+    "after": "NativeGather into distinctoutputUB fromstagedtable withuint32byteoffsets/base0. Preserve all source-required PIPE_ALL cross-pipe/read-write transitions andcopyout. Samegrid/batch/GMtraffic/buffers/offsetconversion; no bank-conflict claim without evidence.",
+    "compiler": "Use SAMEcompileroptimizationflags, do not suppress baselineauto-vectorization. If compiler already performs equivalent Gather, retainno-effect. VerifyselectedCANN offsettype/units/count/tail andexplicitAIVkind3beforemath. ExactIEEEbits ratherthan numeric== so signedzero guard meaningful."
+  },
+  "protocol": "Six cached scientific payloads once, once-per-side correctness per case/source then exactly10 fullAPI profiled forwards/arm/four mainpairs =>8captures/80forwards. Guards0captures. Explicit component operations/host rejection tests counted separately. No warmup/autotune/extra timing/profiled IO checking. Compile/resource/engine audit all before any forwards; preserve all failures/nonconforming/equal/slower outcomes,10samples/taskPMU/source/compiler/binary/fixture identities."
+}

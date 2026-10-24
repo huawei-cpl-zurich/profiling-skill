@@ -55,8 +55,17 @@ filtered citations:
 - `ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/loss/cross_entropy.py:L157-L206`
 - `ref://profiling-skill/triton-ascend/perf-analysis/repos/optimization-wave1-triton-kernels-scope-7acb9c40a6ca#src/triton_ascend_kernels/loss/cross_entropy.py:L210-L249`
 
-CPU functional/interpreter qualification is complete. A3 before/after resource,
-correctness and profiling qualification is pending; no measured benefit or
-observed regression is claimed. The four-case matrix is frozen in the ignored
-orchestration record before any A3 call. Both successes and failed hypotheses
-must remain in the resulting evidence.
+CPU functional/interpreter qualification and four-case A3 correctness/capture
+qualification passed at source revision `e39d04b`. Neither large-vocabulary
+benefit hypothesis established a speed win: before/after ratios were0.99804×
+and0.99791×. All-case geometric mean was0.98171×; small-case means worsened
+but variability and inter-kernel gaps preclude a strong regression claim.
+
+The measured gradient tasks were scalar-heavy (about0.976 AIV scalar ratio).
+Retained intermediate compiler artifacts show the column mask promoted to
+INT64 by comparison with INT64 targets. This is a likely bottleneck requiring
+further compiler evidence, not proof that materialization removal saves time.
+The author's initial implementation missed the pinned mask-INT32 constraint;
+a common, contract-safe target cast in both arms is a possible future repair.
+The original negative version and all attempts remain retained. Scratch
+capacity savings are source facts, not measured physical traffic or peak memory.

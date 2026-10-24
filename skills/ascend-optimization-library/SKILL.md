@@ -18,6 +18,7 @@ not a universal dispatch threshold or a claim about every Ascend target.
 | GEMM result immediately consumed by an add | [Epilogue fusion](references/epilogue-fusion.md) | Live resources, synchronization and GM staging |
 | Nearby query programs reload the same K/V tiles | [Query blocking](references/query-blocking.md) | Padded work and live accumulators |
 | Eigenvectors accumulated for an eigenvalues-only request | [Omit optional V](references/eigenvalues-only.md) | Dispatch and no benefit if already specialized |
+| Exact diagonal input before fixed eigensweeps | [Device diagonal certificate](references/diagonal-eigensolve.md) | Full scan and mandatory predicate transfer; dense inputs fall back |
 | Serial disjoint Jacobi pivot updates | [One conflict-free round](references/jacobi-round.md) | Scratch traffic and launch barriers |
 | Long tokenwise state recurrence with few independent heads | [Chunked recurrence](references/chunk-recurrence.md) | Preparation, workspace and matrix-operand rounding |
 | Output-task count just exceeds the observed core count | [Tile balance](references/tile-balance.md) | Layout-dependent operand movement |

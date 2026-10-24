@@ -53,10 +53,12 @@ def kernels():
 
 class Solver:
     """Five full round-robin sweeps. Metadata is cached; numerical work is not."""
+    validate_input = staticmethod(validate_input)
+
     def __init__(self, arm, spec, fixture):
         if arm not in ('before','after'):
             raise ValueError('arm must be before or after')
-        self.batch,self.n,self.vectors = validate_input(spec,fixture)
+        self.batch,self.n,self.vectors = self.validate_input(spec,fixture)
         import torch
         import torch_npu
         self.track = arm=='before' or self.vectors

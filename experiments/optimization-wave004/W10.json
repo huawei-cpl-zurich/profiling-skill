@@ -1,0 +1,101 @@
+{
+  "wave": 4,
+  "family_id": "W10",
+  "title": "Certify exact diagonal matrix before eigensweeps",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.mdW10+filteredcheevj_diagonal/jacobi_largeintegration. OwnEXACTzero certificate stricterthanupstreamsquaredmagnitude1e-12approx, doNOTadoptapproxasexact. ParentPR210independentfive-sweeprealJacobi solver.",
+  "cases": [
+    {
+      "case_id": "W004-W10-01",
+      "role": "gallery",
+      "seed": 5001,
+      "parameters": {
+        "batch": 1,
+        "N": 128,
+        "sweeps": 5,
+        "want_vectors": false,
+        "structure": "diagonal"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Exactdiagonalcertificationmayskipiterativework;failedcertificatecostsscan/dispatchoverhead."
+    },
+    {
+      "case_id": "W004-W10-02",
+      "role": "gallery",
+      "seed": 5002,
+      "parameters": {
+        "batch": 1,
+        "N": 32,
+        "sweeps": 5,
+        "want_vectors": false,
+        "structure": "near-diagonal-dense"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Exactdiagonalcertificationmayskipiterativework;failedcertificatecostsscan/dispatchoverhead."
+    },
+    {
+      "case_id": "W004-W10-03",
+      "role": "heldout",
+      "seed": 5003,
+      "parameters": {
+        "batch": 1,
+        "N": 96,
+        "sweeps": 5,
+        "want_vectors": false,
+        "structure": "diagonal"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Exactdiagonalcertificationmayskipiterativework;failedcertificatecostsscan/dispatchoverhead."
+    },
+    {
+      "case_id": "W004-W10-04",
+      "role": "heldout",
+      "seed": 5004,
+      "parameters": {
+        "batch": 1,
+        "N": 64,
+        "sweeps": 5,
+        "want_vectors": false,
+        "structure": "near-diagonal-dense"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Exactdiagonalcertificationmayskipiterativework;failedcertificatecostsscan/dispatchoverhead."
+    }
+  ],
+  "contract": {
+    "input": "ContiguousFP32[B=1,N,N], finite/symmetric. Diagonalcase: seededuniformdiag[-2,2] shuffled/unsorted, OFFDIAGexact0. Densecost: parentnear-diagonal-spread recipe Diag1+i/N, symmetricoffdiag(raw+raw.T)/(2*64*N). Originalinputimmutable.",
+    "before": "ALWAYSparentvalues-onlyJacobi5fullsweeps+stableeigenvaluesort, no V, sameprecision. N128NEWscope qualifiedownW10compile+correctness; no blanketparentrangeextension.",
+    "after": "ReadALLcurrentmatrixentriesONDEVICE everyAPI; certificateONLYfinite diagonal/offdiagonalEXACTzero (+0/-0equal), then sortORIGINALdiagonal. FailureexecutesUNCHANGEDparentfive-sweepbaseline. No trustedknownDiagonal/freeCPUclassification/partialscan. Includecertificateandany1-bitGPUD2H/hostdispatchsynchronizationnecessarytocontrolmultikernellaunchesINSIDEownedAPI span. ThismandatoryalgorithmicpredicateisNOTdiscretionaryprofiling-timecorrectnessvalidation.",
+    "dispatch_accounting": "CPUfixtureexpecteddispatchmaydefineexpectedkernelidentityselectorsONLY;actualrunMUSTexecutedevicecertificateandbranchonactualflag eachtime, neveruseexpectedflagforalgorithm. Persistactualdispatchduringoncecorrectness. Completefirstcert-kernel->lastsort/solver-kernelspanincludesdispatchgaps; retainD2H/callerdiagnosticseparately, noordinarylatencyclaim.",
+    "oracle": "IndependentCPUFP64eigvalsh ofrepresentedA, \u03bbsortedfiniteFP32atol=rtol2e-4, originalinputunchanged. No convergenceclaimoutsideboundeddata. For tiny-nonzero guardactualafterfallbacktagrequired evenifdiagonalapproxwouldpasstolerance.",
+    "guards": [
+      {
+        "case_id": "W004-W10-GA",
+        "role": "guard",
+        "seed": 5091,
+        "parameters": {
+          "batch": 1,
+          "N": 32,
+          "sweeps": 5,
+          "want_vectors": false,
+          "structure": "one-tiny-symmetric-offdiagonal"
+        },
+        "expected": "onepairA[0,1]=A[1,0]=2^-20,otherwisefiniteDiag1+i/N; certificateFALSE/exactbaselinefallbacktag"
+      },
+      {
+        "case_id": "W004-W10-GB",
+        "role": "guard",
+        "seed": 5092,
+        "parameters": {
+          "batch": 1,
+          "N": 16,
+          "sweeps": 5,
+          "want_vectors": false,
+          "structure": "unsorted-repeated-diagonal"
+        },
+        "expected": "diagvaluesrepeats{-1,0,1,2},exactzerooffdiag;certificateTRUE/sorted\u03bbexactnumeric"
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce,correctonceperside/source/case+10profiles4pairs,guards0captures. No warmup/autotune/extratiming/discretionaryvalidationIO insideprofile; actualalgorithmiccertificateallworktimed."
+}

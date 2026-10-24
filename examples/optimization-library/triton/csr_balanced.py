@@ -6,7 +6,7 @@ from csr_balanced_contract import CASE_SOURCES, FAST_MAX_ROW, diagnostics, dimen
 
 
 def kernels():
-    global triton, tl
+    global triton, tl, segment_combine
     import triton
     import triton.language as tl
 

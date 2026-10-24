@@ -1,0 +1,212 @@
+"""Exercise a real shared-library ABI, not a mocked native kernel."""
+import ctypes
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import torch
+
+sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
+from optimization_native_bridge import NativeArm, audit_tensor, build_shared
+
+
+SOURCE = r'''
+#include <stdint.h>
+static int calls = 0;
+extern "C" uint32_t catlass_bridge_abi_version() { return 1; }
+extern "C" const char *catlass_bridge_kernel_names() { return "[\"native_add\"]"; }
+extern "C" int catlass_bridge_launch(void **p, uint64_t n, void *stream) {
+    if (n != 3 || stream != (void*)17) return 9;
+    ++calls;
+    for (int i = 0; i < 4; ++i) ((float*)p[2])[i] = ((float*)p[0])[i] + ((float*)p[1])[i];
+    return 0;
+}
+extern "C" int launch_count() { return calls; }
+extern "C" uint32_t catlass_bridge_b_column() { return 0; }
+'''
+
+
+@unittest.skipUnless(shutil.which('c++'), 'a host C++ compiler is required')
+class NativeBridgeTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.source = self.root / 'native.cpp'
+        self.source.write_text(SOURCE)
+        self.binary = self.root / 'native.so'
+        self.manifest = build_shared(['c++', '-std=c++17', '-shared', '-fPIC',
+            str(self.source), '-o', str(self.binary)], source_paths=[self.source],
+            binary=self.binary, output=self.root / 'build', source_revision='test-pin')
+        self.arms = []
+
+    def tearDown(self):
+        for arm in self.arms:
+            arm.close()
+        self.temp.cleanup()
+
+    def arm(self, **kwargs):
+        values = dict(binary=self.binary, inputs=[torch.arange(4.), torch.ones(4)],
+            output=torch.empty(4), sources=[self.source], source_revision='test-pin',
+            stream_provider=lambda: 17, build_manifest=self.manifest)
+        values.update(kwargs)
+        arm = NativeArm(**values)
+        self.arms.append(arm)
+        return arm
+
+    def test_pointer_launch_exact_counts_output_and_source_identity(self):
+        arm = self.arm()
+        expected = torch.tensor([1., 2., 3., 4.])  # Independent oracle.
+        original = [value.clone() for value in arm.inputs]
+        torch.testing.assert_close(arm.run(), expected)
+        for _ in range(10):
+            arm.run()  # The measurement loop never examines input or output.
+        self.assertEqual(arm._library.launch_count(), 11)
+        torch.testing.assert_close(arm.output, expected)
+        for actual, prior in zip(arm.inputs, original):
+            torch.testing.assert_close(actual, prior)
+        self.assertEqual(arm.expected_kernels, ['native_add'])
+        self.assertEqual(arm.compilation_state(), arm._initial_identity)
+        self.assertEqual(arm.metadata['binary_sha256'], self.manifest['binary_sha256'])
+        self.source.write_text(SOURCE + '\n// changed after preparation\n')
+        self.assertNotEqual(arm.compilation_state(), arm._initial_identity)
+
+    def test_current_stream_is_queried_and_native_error_propagates(self):
+        streams = iter([17, 18])
+        arm = self.arm(stream_provider=lambda: next(streams))
+        arm.run()
+        with self.assertRaisesRegex(RuntimeError, 'status 9'):
+            arm.run()
+        self.assertEqual(arm._library.launch_count(), 1)
+
+    def test_dispatcher_profiler_records_native_boundary(self):
+        arm = self.arm()
+        with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU]) as profile:
+            arm.run()
+        self.assertIn('optimization_native::launch', [item.key for item in profile.key_averages()])
+
+    def test_changed_build_source_is_rejected_before_launch(self):
+        self.source.write_text(SOURCE + '\n// uncompiled edit\n')
+        with self.assertRaisesRegex(ValueError, 'source identity mismatch'):
+            self.arm()
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(), 0)
+
+    def test_compiled_column_contract_cannot_be_overridden(self):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/tile_adapter.py'
+        spec = importlib.util.spec_from_file_location('native_tile_layout',path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.verify_b_layout(self.binary,False)
+        with self.assertRaisesRegex(ValueError,'compiled B layout'):
+            module.verify_b_layout(self.binary,True)
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(),0)
+
+    def test_swapped_arm_with_matching_manifest_is_rejected_before_transfer(self):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/tile_adapter.py'
+        spec = importlib.util.spec_from_file_location('native_tile_arm',path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        source = self.root/'swapped.cpp'
+        source.write_text(SOURCE.replace('native_add','wave1_tile_after'))
+        binary = self.root/'row-before.so'
+        build_shared(['c++','-shared','-fPIC',str(source),'-o',str(binary)],
+            source_paths=[source],binary=binary,output=self.root/'build-row-before',
+            source_revision=module.PIN)
+        adapter = module.Adapter(self.root,20)
+        case = dict(family='05',m=16,n=16,k=16,seed=71,b_layout='row')
+        fixture = adapter.make_case(case)
+        module.verify_b_layout(binary,False,'after')
+        with patch.dict(sys.modules,{'torch_npu':object()}), patch.object(torch.Tensor,'npu',
+                side_effect=AssertionError('transfer before arm validation'),create=True):
+            with self.assertRaisesRegex(ValueError,'compiled kernel arm'):
+                adapter.prepare('before',case,fixture,self.root)
+        self.assertEqual(ctypes.CDLL(str(binary)).launch_count(),0)
+
+    def test_explicit_column_input_uses_dense_physical_pointer_order(self):
+        column = torch.tensor([[10.,20.],[30.,40.]]).T.contiguous().T
+        arm = self.arm(inputs=[torch.arange(4.),column], column_major_inputs=(1,))
+        torch.testing.assert_close(arm.run(), torch.tensor([10.,31.,22.,43.]))
+        self.assertEqual(arm.metadata['tensor_layouts'][1]['stride'], [1,2])
+        self.assertEqual(arm.metadata['tensor_layouts'][1]['addressed_bytes'], 16)
+        with self.assertRaisesRegex(ValueError, 'contiguous'):
+            self.arm(inputs=[torch.arange(4.),column])
+        with self.assertRaisesRegex(ValueError, 'stride'):
+            self.arm(inputs=[torch.arange(4.),torch.ones(4,4)[::2, ::2]], column_major_inputs=(1,))
+
+    def test_format_and_physical_padding_guards_execute_before_launch(self):
+        value = torch.ones(2,2)
+        with self.assertRaisesRegex(ValueError, 'ND format2'):
+            audit_tensor(value, physical=dict(format=29,storage_numel=4))
+        with self.assertRaisesRegex(ValueError, 'unpadded columns'):
+            audit_tensor(value.T, column_major=True, physical=dict(format=2,storage_numel=32))
+        row = audit_tensor(value, physical=dict(format=2,storage_numel=4))
+        self.assertEqual(row['physical']['format'],2)
+        view = audit_tensor(torch.ones(8)[2:6], physical=dict(format=2,storage_numel=8))
+        self.assertEqual(view['storage_offset'],2)
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(),0)
+
+    def test_noncontiguous_input_is_rejected_without_launch(self):
+        with self.assertRaisesRegex(ValueError, 'contiguous'):
+            self.arm(inputs=[torch.arange(8.).reshape(2, 4).t(), torch.ones(4)])
+        self.assertEqual(ctypes.CDLL(str(self.binary)).launch_count(), 0)
+
+    def test_failed_build_retains_diagnostics_without_manifest_success(self):
+        bad = self.root / 'broken.cpp'
+        bad.write_text('not valid C++')
+        with self.assertRaisesRegex(RuntimeError, 'native build failed'):
+            build_shared(['c++', '-shared', str(bad), '-o', str(self.root / 'bad.so')],
+                source_paths=[bad], binary=self.root / 'bad.so', output=self.root / 'failed',
+                source_revision='test-pin')
+        self.assertTrue((self.root / 'failed/build.log').read_text())
+        self.assertNotEqual(json.loads((self.root / 'failed/build.json').read_text())['exit_code'], 0)
+
+
+class TileAdapterTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/tile_adapter.py'
+        spec = importlib.util.spec_from_file_location('native_tile_adapter', path)
+        cls.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.module)
+
+    def test_balance_uses_actual_core_count_and_preserves_problem(self):
+        for cores in (16, 20, 24, 32, 36, 48):
+            m,n,k = self.module.balanced_shape(cores)
+            before = ((m+127)//128)*((n+255)//256)
+            after = ((m+255)//256)*((n+127)//128)
+            self.assertLessEqual(after, cores)
+            self.assertGreater(before, cores)
+            self.assertEqual(k, 6144)
+        with self.assertRaises(ValueError):
+            self.module.balanced_shape(0)
+
+    def test_filtered_revision_rejected_before_compiler_discovery(self):
+        import importlib.util
+        path = Path(__file__).parents[1] / 'examples/optimization-library/catlass/compile_tile.py'
+        spec = importlib.util.spec_from_file_location('native_tile_compile',path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root/'header.hpp'
+            source.write_text('valid source bytes')
+            manifest = dict(files=[dict(file=source.name,sha256=module.digest(source))])
+            for revision in (None,'a-different-revision'):
+                with self.subTest(revision=revision):
+                    if revision is not None: manifest['revision']=revision
+                    (root/'manifest.json').write_text(json.dumps(manifest))
+                    with patch.object(module.shutil,'which',side_effect=AssertionError('compiler discovery reached')):
+                        with self.assertRaisesRegex(ValueError,'filtered source revision'):
+                            module.compile_pair(root,root/'output')
+
+
+
+if __name__ == '__main__':
+    unittest.main()

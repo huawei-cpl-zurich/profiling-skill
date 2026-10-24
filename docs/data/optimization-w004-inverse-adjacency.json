@@ -2987,5 +2987,14 @@
     "No paired ratio or candidate performance conclusion is available. Missing PMU values are unavailable, not zero.",
     "All six cases are frozen; the remaining five cases and both guards have not executed on the NPU.",
     "Failed raw vendor data remains retained remotely with its digest inventory in the compact archive."
-  ]
+  ],
+  "source_version": {
+    "name": "W06-v1-stable-counting-CSR",
+    "implementation_commit": "1dd0168",
+    "scientific_sources_sha256": {
+      "inverse_adjacency.py": "98b159ade484c932411d3e1ba36b98b58846f3b0f4f67d06c5e3ca10a7845c50",
+      "inverse_contract.py": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+    },
+    "unchanged_after_measurement": true
+  }
 }

@@ -30237,5 +30237,45 @@
     "new_device_forwards": 0,
     "new_captures": 0
   },
-  "measurement_scope": "Instrumented full API device operation span/task time/gaps with prepared output reuse and allocation excluded; not ordinary latency, physical DRAM traffic, occupancy, or roofline"
+  "measurement_scope": "Instrumented full API device operation span/task time/gaps with prepared output reuse and allocation excluded; not ordinary latency, physical DRAM traffic, occupancy, or roofline",
+  "dependency_readout": {
+    "handle": "remote:gz-a3:job:7cce3b60-257a-4282-916d-11665e39860b",
+    "raw_receipt_sha256": "9b9f5b1a9d86a900c998f9767681534057e0afa67bee7247cb41fe4008b0b735",
+    "new_compiles": 0,
+    "new_device_forwards": 0,
+    "receipt": {
+      "imported_torch": "2.10.0+cpu",
+      "imported_torch_npu": "2.10.0",
+      "imported_triton": "3.2.0",
+      "imported_triton_file_sha256": "e4073cc92ae1d07cd705daf68e46acd50f3d5f3e0c33a66abb810c32ecb9ac58",
+      "sdk_version_files": [
+        {
+          "name": "compiler/version.info",
+          "sha256": "f20359296d5a7127f841aa35f4a788137f444dc36d72641e948cb9e39e47e4f4",
+          "contents": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\"9.1\"\nrequired_package_ge-executor_version=\"9.1\"\nrequired_package_metadef_version=\"9.1\"\nrequired_package_bisheng-compiler_version=\"9.1\"\nrequired_package_tbe-tik_version=\"9.1\"\ntimestamp=20260730_231653901\n"
+        },
+        {
+          "name": "opp/version.info",
+          "sha256": "841279757459d4eabc1c8cfea69d3e1dc0fc9db3eb0c18100294cd5c1301b9e6",
+          "contents": "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+        }
+      ],
+      "compiler_executables": [
+        {
+          "name": "bishengir-compile",
+          "sha256": "4f5b28a5dd3b64724299c8ef220f4c27e02668237b93fe2aab04675d32ca2f62",
+          "exit": 0,
+          "stdout": "bishengir-compile 1.2.0 (${COMPILER_BUILD_ROOT} 8796a8ac1508 2026-07-31) \nllvm 19.1.7 2430ab069eb1\nRelease build\n\n",
+          "stderr": ""
+        },
+        {
+          "name": "bisheng",
+          "sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a",
+          "exit": 0,
+          "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: ${SELECTED_COMPILER_DIRECTORY}\n",
+          "stderr": ""
+        }
+      ]
+    }
+  }
 }

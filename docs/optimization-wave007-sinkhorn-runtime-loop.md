@@ -71,6 +71,9 @@ statistics. The artifact API did not expose a cache-hit flag; null values remain
 explicit, with previously seen hashes reported separately. Imported Triton was
 3.2.0 and the triton-ascend distribution 3.2.2; installed triton distribution
 metadata reported 3.5.0, which is retained separately from the imported version.
+A bounded read-only dependency query confirmed selected CANN 9.1.0,
+bishengir-compile 1.2.0 (LLVM 19.1.7), and bisheng clang 15.0.5; exact
+executable and SDK version-file hashes are retained in the evidence.
 
 | Case | Before mean span (µs) | After mean span (µs) | Before / after |
 | --- | ---: | ---: | ---: |

@@ -1,0 +1,467 @@
+{
+  "family": "W10",
+  "full_evidence": "diagonal-eigensolve-evidence.json.gz",
+  "full_evidence_sha256": "7fcb2d2319d26a271ef862321df02fc3698abb27e441500f2d1fbe4543e026dd",
+  "full_evidence_bytes": 4647443,
+  "retained_archive_sha256": "8895126413c0f969d60a151d3a661636620c8ed3affea2e7b9e660c092556f9d",
+  "product": "Ascend 910B4-1",
+  "physical_die": 6,
+  "matrix_sha256": "1f91b17d43a832dee4b99d756a7a3a236b3e768f25dda5bbdcde951e184b7844",
+  "summary": [
+    {
+      "case_id": "W004-W10-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-baseline"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "diagonal-sort"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            283913.98,
+            281783.92,
+            280798.64,
+            282272.78,
+            281833.94,
+            283815.36,
+            291467.14,
+            291389.4,
+            291896.42,
+            291832.64
+          ],
+          "count": 10,
+          "mean": 286100.422,
+          "sample_sd": 4862.826077987073
+        },
+        "after": {
+          "samples": [
+            967.52,
+            702.96,
+            690.96,
+            697.24,
+            689.6,
+            693.38,
+            694.7,
+            703.34,
+            684.54,
+            681.54
+          ],
+          "count": 10,
+          "mean": 720.578,
+          "sample_sd": 87.05140471136707
+        }
+      }
+    },
+    {
+      "case_id": "W004-W10-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.634518028539091e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-baseline"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.634518028539091e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-fallback"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            70933.12,
+            70239.86,
+            70289.12,
+            69955.62,
+            69951.54,
+            69458.56,
+            70239.44,
+            73318.74,
+            71423.88,
+            71750.82
+          ],
+          "count": 10,
+          "mean": 70756.07,
+          "sample_sd": 1142.9525379958343
+        },
+        "after": {
+          "samples": [
+            71395.44,
+            69637.42,
+            70131.74,
+            69878.96,
+            69727.48,
+            70054.62,
+            69712.92,
+            69675.28,
+            69799.62,
+            69461.38
+          ],
+          "count": 10,
+          "mean": 69947.486,
+          "sample_sd": 545.5392954214112
+        }
+      }
+    },
+    {
+      "case_id": "W004-W10-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-baseline"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "diagonal-sort"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            213936.74,
+            213147.08,
+            210619.34,
+            221004.56,
+            235630.6,
+            212774.62,
+            207373.84,
+            207763.44,
+            208087.88,
+            210931.52
+          ],
+          "count": 10,
+          "mean": 214126.962,
+          "sample_sd": 8548.013580665396
+        },
+        "after": {
+          "samples": [
+            685.76,
+            554.9,
+            529.0,
+            597.2,
+            523.16,
+            548.1,
+            526.52,
+            537.68,
+            520.7,
+            525.58
+          ],
+          "count": 10,
+          "mean": 554.86,
+          "sample_sd": 51.39103510232975
+        }
+      }
+    },
+    {
+      "case_id": "W004-W10-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.601869503157886e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-baseline"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.601869503157886e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-fallback"
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            142224.42,
+            140426.72,
+            140752.32,
+            141117.64,
+            139925.28,
+            139827.48,
+            140125.5,
+            139562.1,
+            143002.4,
+            141308.16
+          ],
+          "count": 10,
+          "mean": 140827.202,
+          "sample_sd": 1109.1111853471773
+        },
+        "after": {
+          "samples": [
+            148149.34,
+            143283.5,
+            142862.56,
+            141750.96,
+            144002.98,
+            144431.0,
+            143358.58,
+            146292.3,
+            144492.5,
+            147207.62
+          ],
+          "count": 10,
+          "mean": 144583.134,
+          "sample_sd": 2029.3705603911328
+        }
+      }
+    },
+    {
+      "case_id": "W004-W10-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.9103830456733704e-11,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-baseline"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.9103830456733704e-11,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-fallback"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W004-W10-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "five-sweep-baseline"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "actual_dispatch": "diagonal-sort"
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W004-W10-01": {
+      "before": 19070,
+      "after": 20
+    },
+    "W004-W10-02": {
+      "before": 4670,
+      "after": 4680
+    },
+    "W004-W10-03": {
+      "before": 14270,
+      "after": 20
+    },
+    "W004-W10-04": {
+      "before": 9470,
+      "after": 9480
+    }
+  },
+  "dispatch_diagnostic_row_counts": {
+    "W004-W10-01": {
+      "before": 0,
+      "after": 30
+    },
+    "W004-W10-02": {
+      "before": 0,
+      "after": 30
+    },
+    "W004-W10-03": {
+      "before": 0,
+      "after": 30
+    },
+    "W004-W10-04": {
+      "before": 0,
+      "after": 30
+    }
+  },
+  "generator_followup": {
+    "reason": "Fix repeated-diagonal even N not divisible by four (N6/N10)",
+    "generator_before_sha256": "2d57234caaa1b1aee94f0d15a3cbf9ef65de4652fe162d4bcbff1c42cfedeb70",
+    "generator_after_sha256": "9195af55302987b1c421d7d498293bf1e6a13c7ca5e059a3e3ebdab4eb485623",
+    "cpu_gate_handle": "remote:gz-a3:job:cf5fbd47-9cb4-4f2d-bff5-08d1e51423ca",
+    "cpu_gate_status": "complete",
+    "cpu_gate_exit": 0,
+    "npu_forwards": 0,
+    "captures": 0,
+    "scientific_oracle_regenerations": 0,
+    "frozen_input_byte_proof": [
+      {
+        "case_id": "W004-W10-02",
+        "input_bytes_sha256": "8f8494d537eb222ef6708935d47414ae97a948166f17bdfc5a17347b47c6b489",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-04",
+        "input_bytes_sha256": "d892dd7845451f2d105464bbeda9cb155ffad54acf4ca662a1a6bd89edd6ff1c",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-01",
+        "input_bytes_sha256": "55c5d22937da1527a7f2b42731cb5a63c857bf091253579167390b8433b3da68",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-GB",
+        "input_bytes_sha256": "34934e7d8d7679bc19c3a13d58ab18f7064783be8bb436ae4e67daeaa850ac4c",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-GA",
+        "input_bytes_sha256": "bebc80b92adfe6dd34d1cc4b77452090a37b6c095cb81eda424f2c03ef441253",
+        "byte_identical": true
+      },
+      {
+        "case_id": "W004-W10-03",
+        "input_bytes_sha256": "1057bf401975059cac03afc3004f63b80f9156e9778029cb3cf36cab6fd21bd6",
+        "byte_identical": true
+      }
+    ],
+    "unchanged_device_sources": [
+      {
+        "file": "diagonal_eigensolve.py",
+        "sha256": "258d3e757b32f5517b0b95a00aa4f084ed556b9b6764bee976f56ff94957ad05"
+      },
+      {
+        "file": "eigenvalues_only.py",
+        "sha256": "16ea398c2f3ef938b5495ca6a4798c2d6d474ce49bfd9c1ea280f7851cf9972e"
+      },
+      {
+        "file": "jacobi_round.py",
+        "sha256": "f77197b120bb969eda3a8da58a49010d9bef826725f423e7f1d72d29e4e86e33"
+      }
+    ],
+    "original_profile_evidence": "Unchanged; original generator version remains bound to retained timing evidence. All six represented matrices are byte-identical with the fixed generator."
+  }
+}

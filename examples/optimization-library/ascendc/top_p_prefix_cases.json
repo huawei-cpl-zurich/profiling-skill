@@ -1,0 +1,72 @@
+{
+  "proposal_sha256": "66a1aa6d957727edd8172939a4decd74cabfe8591b3cba83f7c6e3eb9dee6890",
+  "cases": [
+    {
+      "case_id": "F04-01",
+      "scenario": "gallery-benefit",
+      "role": "gallery",
+      "seed": 4101,
+      "rows": 4,
+      "V": 32768,
+      "p": 0.9,
+      "prefix": 256,
+      "distribution": "64-dominant-scores"
+    },
+    {
+      "case_id": "F04-02",
+      "scenario": "gallery-cost",
+      "role": "gallery",
+      "seed": 4102,
+      "rows": 4,
+      "V": 8192,
+      "p": 0.9,
+      "prefix": 256,
+      "distribution": "uniform"
+    },
+    {
+      "case_id": "F04-03",
+      "scenario": "heldout-benefit",
+      "role": "heldout",
+      "seed": 4103,
+      "rows": 3,
+      "V": 49152,
+      "p": 0.95,
+      "prefix": 512,
+      "distribution": "128-dominant-scores"
+    },
+    {
+      "case_id": "F04-04",
+      "scenario": "heldout-cost",
+      "role": "heldout",
+      "seed": 4104,
+      "rows": 5,
+      "V": 16384,
+      "p": 0.80002,
+      "prefix": 128,
+      "distribution": "uniform"
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F04-guard-uniform",
+      "role": "guard",
+      "rows": 2,
+      "V": 4096,
+      "p": 0.9,
+      "prefix": 32,
+      "seed": 4105,
+      "distribution": "uniform"
+    },
+    {
+      "case_id": "F04-guard-near-p",
+      "role": "guard",
+      "rows": 2,
+      "V": 4096,
+      "p": 0.5,
+      "prefix": 3072,
+      "seed": 4106,
+      "distribution": "uniform",
+      "near_boundary": true
+    }
+  ]
+}

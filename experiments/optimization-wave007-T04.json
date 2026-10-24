@@ -1,0 +1,121 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "proposal.md fourthstudy, additional-triton.json, additional-triton-tests.json, thirdparty.json androotLICENSE. PreserveHuawei/vLLM/SonglinYang/YuZhang notices; fullpinfromsamefilteredinventory.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T04",
+  "task": "optimization-w007-recurrent-norm-placement",
+  "title": "Fuse Q/K normalization into a bounded gated recurrence",
+  "source_file": "src__triton_ascend_kernels__moe__fused_recurrent.py",
+  "cases": [
+    {
+      "case_id": "W007-T04-01",
+      "role": "gallery",
+      "seed": 74001,
+      "parameters": {
+        "B": 4,
+        "T": 8,
+        "H": 4,
+        "HV": 4,
+        "K": 64,
+        "V": 64
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T04-02",
+      "role": "gallery",
+      "seed": 74002,
+      "parameters": {
+        "B": 1,
+        "T": 8,
+        "H": 1,
+        "HV": 4,
+        "K": 64,
+        "V": 256
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T04-03",
+      "role": "heldout",
+      "seed": 74003,
+      "parameters": {
+        "B": 2,
+        "T": 7,
+        "H": 2,
+        "HV": 2,
+        "K": 60,
+        "V": 63
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T04-04",
+      "role": "heldout",
+      "seed": 74004,
+      "parameters": {
+        "B": 1,
+        "T": 8,
+        "H": 1,
+        "HV": 4,
+        "K": 64,
+        "V": 512
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-T04-GA",
+      "role": "guard",
+      "seed": 74091,
+      "parameters": {
+        "B": 1,
+        "T": 3,
+        "H": 1,
+        "HV": 1,
+        "K": 5,
+        "V": 7,
+        "zeros_and_epsilon": true
+      },
+      "expected": "Include completelyzero q/k and components\u00b11e-4 andunequal near-epsilon values; sourceepsilon is inside sqrt(sum(x\u00b2)+1e-6), notF.normalize. Nonzero h0 unchanged, bothoutput+finalstate validcanaries; onefullAPI/arm,0captures."
+    },
+    {
+      "case_id": "W007-T04-GB",
+      "role": "guard",
+      "seed": 74092,
+      "parameters": {
+        "B": 2,
+        "T": 2,
+        "H": 2,
+        "HV": 4,
+        "K": 17,
+        "V": 65
+      },
+      "expected": "K/Vtails+groupedq/kheadmapping HV/H2, nonzero distinct h0 persequence/head; bothO+Htvalidated, h0/inputimmutable,0captures."
+    }
+  ],
+  "contract": {
+    "interface": "Contiguous FP32 q/k[B,T,H,K],v[B,T,HV,V],g/beta[B,T,HV], suppliedNONNONEFP32h0[B,HV,K,V]. UniformT>0, HdividesHV, K<=64,V<=512. q/k/vfinite[-.1,.1],g[-2,-.1],beta[.1,.9],h0[-.01,.01],scale=1/sqrt(K)positive. SourceIS_KDAFalse,IS_BETA_HEADWISEFalse,IS_VARLENFalse,IS_CONTINUOUS_BATCHINGFalse,IS_SPEC_DECODINGFalse,INPLACE_FINAL_STATEFalse,USE_INITIAL_STATETrue. SeparateallocatedO+Ht noalias/inputmutation; unsupportedoptional modesrejectbeforecache.",
+    "oracle": "IndependentCPUFP64 qn=q/sqrt(sum(q*q)+1e-6),kn=k/sqrt(sum(k*k)+1e-6); forseq/time/hv with h=hv//(HV/H): state*=exp(g), residual=v-sum_k(state*kn), residual*=beta, state+=kn outer residual, o=sum_k(state*(qn*scale)), finalstate copy. Cacheallinput+O/Ht expectedonce/case. Fixedatol1e-4rtol2e-4 BOTH O/Ht prospectiveboundedFP32gate, no baselinecalibrationorposthocrelaxation. Pairneednotbitwise ifroundingdiff, fixedsameaccuracygate.",
+    "before": "OneGPUpreprocessingkernelnormalizes BOTHq/k rows inFP32 withEXACTsourceexpression/reduction tree/sqrt/div+epsilon1e-6 andzero-maskedKtails; storesFP32qn/kn intointermediates. Then SAMErecurrence body withUSE_QK_L2NORM_IN_KERNELFalse. FullAPIincludespreprocessing EVERYcall, no CPUcachednormalization/freeinputdependentsetup.",
+    "after": "Sameoriginalq/k passed, no preprocesslaunch/intermediatewrites, SAMErecurrencebody withUSE_QK_L2NORM_IN_KERNELTrue. SameBKnextpower2K,BV=min(nextpower2V,64),grid(1,ceil(V/BV),B*HV), timeordering/hvmapping/stages/compilerflags. LiveFP32h tileBKxBV/resourcequalified. Isolateplacementofnormalization, notentirerecurrencealgorithmchange or h0drop.",
+    "claims": "Establishedfusion/residency application, zero noveltyclaim. BothfullAPIs invoked10times underprofile, primaryTOTALcomplete deviceoperationspan includingpreprocess-to-recurrencegap, NOTordinaryhostallocation/endtoendlatency. Preserveper-kernel tasks/gaps/PMU/rawsamples. LargeV/HV ratio repeatsnormperVtile/head maycostmore eveniflaunchsaving. No physicalbytes/occupancy/roofline claimedfromlogicalstorecount.",
+    "qualification": "Compile/resource actualsourcekernel allmain+guards beforemath; unsupportedcase preservednotretuned. Standalone scopedkernelmayremoveunusedoptionalbranches withattribution+equivalenceexplanation; no hiddenfullvendorAPIclaim. Testsnonfrozenseeds/shapes inclfalseepsilon/noinitialstateincorrectdefaults; no extrascientificbaselineforward."
+  },
+  "source_sha256": "cfd98e9e446b3535a6d12cb65c9f1aa9024757631c9b7f0c344a5bd8542cc43f"
+}

@@ -178,16 +178,25 @@ def check_capture(result, expected_kernels, count):
     return result['kernel_identity']['status'] == 'complete'
 
 
-def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'after'), *, torch=None):
-    """Run both correctness checks first; failures retain a machine-readable report."""
+def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'after'), *,
+             torch=None, correctness_only=False):
+    """Check each arm once, then profile unless explicitly disabled or role=guard.
+
+    Correctness-only runs retain fixture/source identity and cleanup diagnostics,
+    but never call a capture provider or produce latency/speedup evidence.
+    """
     if set(order) != {'before', 'after'} or len(order) != 2:
         raise ValueError('order must contain before and after exactly once')
+    correctness_only = correctness_only or case_spec.get('role') == 'guard'
     torch = torch or importlib.import_module('torch')
     output, cache = Path(output), Path(cache)
     output.mkdir(parents=True, exist_ok=False)
     report = dict(protocol=PROTOCOL, status='failed', case=case_spec, provenance=provenance,
-                  order=list(order), timing_kind='profiled-device-events', arms={},
+                  order=list(order), mode='correctness-only' if correctness_only else 'profile',
+                  timing_kind=None if correctness_only else 'profiled-device-events', arms={},
                   warmup_calls=0, discovery_calls=0, unprofiled_timing_calls=0)
+    if correctness_only:
+        report['profile_status'] = 'not-requested'
     prepared, expected = {}, {}
     try:
         shared, report['fixture'] = fixture(adapter, case_spec, cache, torch)
@@ -198,6 +207,8 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
             before = fingerprint(private, torch)
             row = report['arms'][arm] = dict(correctness=dict(status='incomplete', calls=0),
                                                 profiled_calls=0, capture_calls=0)
+            if correctness_only:
+                row['profile_status'] = 'not-requested'
             item = prepared[arm] = adapter.prepare(arm, case_spec, private, folder)
             if (not isinstance(item.expected_kernels, (list, tuple)) or not item.expected_kernels
                     or not all(isinstance(n, str) and n for n in item.expected_kernels)):
@@ -215,7 +226,15 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
                 raise ValueError('correctness mutated fixture: ' + arm)
             verify_sources(row['sources'])
             row['correctness'].update(status='complete', diagnostics=diagnostics)
-        for arm in order:
+        if correctness_only:
+            for arm in order:
+                item, row = prepared[arm], report['arms'][arm]
+                verify_sources(row['sources'])
+                state = getattr(item, 'compilation_state', lambda: None)
+                row.update(status='complete', profile_status='not-requested',
+                           compilation_state_after_correctness=json.loads(
+                               json.dumps(state(), sort_keys=True, allow_nan=False)))
+        for arm in (() if correctness_only else order):
             item, row = prepared[arm], report['arms'][arm]
             verify_sources(row['sources'])
             state = getattr(item, 'compilation_state', lambda: None)
@@ -246,7 +265,7 @@ def run_pair(adapter, case_spec, output, cache, provenance, order=('before', 'af
                            error=dict(type=type(error).__name__, message=str(error)))
         statuses = [row['status'] for row in report['arms'].values()]
         report['status'] = 'failed' if 'failed' in statuses else ('complete' if set(statuses) == {'complete'} else 'incomplete')
-        if report['status'] == 'complete':
+        if report['status'] == 'complete' and not correctness_only:
             report['speedup_before_over_after'] = (report['arms']['before']['capture']['event_latency']['mean_ms'] /
                                                    report['arms']['after']['capture']['event_latency']['mean_ms'])
     except Exception as error:
@@ -277,11 +296,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('adapter', 'case', 'output', 'cache', 'provenance'):
         parser.add_argument('--' + name, required=True)
+    parser.add_argument('--correctness-only', action='store_true',
+                        help='check each arm once without profiling; automatic for role=guard cases')
     args = parser.parse_args()
     module, name = args.adapter.split(':', 1)
     adapter = getattr(importlib.import_module(module), name)()
     report = run_pair(adapter, json.loads(Path(args.case).read_text()), args.output, args.cache,
-                      json.loads(Path(args.provenance).read_text()))
+                      json.loads(Path(args.provenance).read_text()), correctness_only=args.correctness_only)
     return 0 if report['status'] == 'complete' else 1
 
 

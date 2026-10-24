@@ -98,6 +98,11 @@ def test_real_candidate_sessions_are_paired_frozen_and_all_failures_retained(tmp
     def broken(*args): raise RuntimeError('retained backend failure')
     failed = m.run_suite(config, tmp_path / 'failed', launcher=Actor, evaluator=broken)
     assert len(failed) == 2 and all(row['status'] == 'failed' for row in failed)
+    def unavailable(command, request, session):
+        return {**report(request['candidate_sha256']), 'outcome': 'infrastructure_failure'}
+    invalid = m.run_suite(config, tmp_path / 'invalid', launcher=Actor, evaluator=unavailable)
+    assert all(row['status'] == 'invalid-comparison' and row['result']['solved'] is None
+               for row in invalid)
 
 
 def test_terminal_evaluator_executes_exact_json_stdin_and_retains_diagnostics(tmp_path):
@@ -156,3 +161,37 @@ assert b.returncode==75 and 'budget exhausted' in b.stderr
         assert [e['dispatched'] for e in entries] == [True, False]
     finally:
         server.shutdown(); server.server_close(); thread.join(); actor.socket_temporary.cleanup()
+
+
+def test_primary_gate_retains_all_case_regression_guard(tmp_path):
+    task = manifest(tmp_path)['tasks'][0]
+    task.update(performance_case_ids=['a'], minimum_geomean_speedup=3)
+    data = report()
+    result = m.adjudicate(data, task, 'source')
+    assert result['solved'] and result['primary_geomean_speedup'] == 4
+    assert result['all_case_geomean_speedup'] == pytest.approx(8 ** .5)
+    data['cases'][1]['candidate_samples_us'] = [30.] * 10
+    assert not m.adjudicate(data, task, 'source')['solved']
+
+
+@pytest.mark.parametrize('patch', [dict(performance_case_ids=[]),
+    dict(performance_case_ids=['a', 'a']), dict(performance_case_ids=['missing']),
+    dict(minimum_geomean_speedup=float('nan')), dict(maximum_case_regression=float('inf'))])
+def test_bad_gate_rejected_before_actor_dispatch(tmp_path, patch):
+    config = manifest(tmp_path); config['tasks'][0].update(patch)
+    with pytest.raises(ValueError): m.freeze(config, tmp_path / 'output')
+    assert not (tmp_path / 'output').exists()
+
+
+def test_infrastructure_failure_is_not_candidate_failure(tmp_path):
+    task = manifest(tmp_path)['tasks'][0]
+    data = report(); data['outcome'] = 'infrastructure_failure'
+    for row in data['cases']: row.update(correct=False, identity_verified=False)
+    result = m.adjudicate(data, task, 'source')
+    assert result['solved'] is None and not result['comparison_valid']
+    data['outcome'] = 'candidate_failure'
+    result = m.adjudicate(data, task, 'source')
+    assert result['solved'] is False and result['comparison_valid']
+    assert result['outcome'] == 'candidate_failure'
+    data['cases'].pop()
+    with pytest.raises(ValueError): m.adjudicate(data, task, 'source')

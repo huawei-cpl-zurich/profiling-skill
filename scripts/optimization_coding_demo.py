@@ -93,10 +93,13 @@ def adjudicate(report, task, candidate_sha256):
     if (not isinstance(rows, list) or any(not isinstance(r, dict) for r in rows) or len(rows) != len(expected)
             or {r.get('id') for r in rows} != set(expected)):
         raise ValueError('terminal evaluation must retain every expected case exactly once')
+    if report.get('outcome') == 'infrastructure_failure':
+        return dict(solved=None, comparison_valid=False, outcome='infrastructure_failure', cases=rows)
     ratios = {}
     for row in rows:
         if row.get('correct') is not True or row.get('identity_verified') is not True:
-            return dict(solved=False, reason='correctness or identity failure', cases=rows)
+            return dict(solved=False, comparison_valid=True, outcome='candidate_failure',
+                        reason='correctness or identity failure', cases=rows)
         for field in ('baseline_samples_us', 'candidate_samples_us'):
             values = row.get(field)
             if (not isinstance(values, list) or len(values) != 10 or any(
@@ -104,11 +107,15 @@ def adjudicate(report, task, candidate_sha256):
                 raise ValueError('exactly ten finite positive samples per implementation required')
         ratios[row['id']] = (statistics.mean(row['baseline_samples_us']) /
                              statistics.mean(row['candidate_samples_us']))
-    geomean = math.exp(statistics.mean(math.log(ratio) for ratio in ratios.values()))
+    geomean = math.exp(statistics.mean(math.log(ratios[key]) for key in
+                    task.get('performance_case_ids', expected)))
+    all_geomean = math.exp(statistics.mean(math.log(ratio) for ratio in ratios.values()))
     solved = (geomean >= task['minimum_geomean_speedup']
               and min(ratios.values()) >= 1 / task['maximum_case_regression'])
-    return dict(solved=solved, reason='performance gate passed' if solved else 'performance gate failed',
-                geomean_speedup=geomean, minimum_case_speedup=min(ratios.values()),
+    return dict(solved=solved, comparison_valid=True, outcome='measured',
+                reason='performance gate passed' if solved else 'performance gate failed',
+                geomean_speedup=geomean, primary_geomean_speedup=geomean,
+                all_case_geomean_speedup=all_geomean, minimum_case_speedup=min(ratios.values()),
                 case_speedups=ratios, cases=rows)
 
 
@@ -149,6 +156,10 @@ def freeze(manifest, output):
                 raise ValueError('finite predeclared performance thresholds >=1 required')
         if not task['expected_case_ids'] or len(set(task['expected_case_ids'])) != len(task['expected_case_ids']):
             raise ValueError('distinct terminal case identities required')
+        primary = task.get('performance_case_ids', task['expected_case_ids'])
+        if (not isinstance(primary, list) or not primary or len(set(primary)) != len(primary)
+                or not set(primary).issubset(task['expected_case_ids'])):
+            raise ValueError('distinct nonempty performance cases must be expected cases')
         for key in ('tool_command', 'evaluator_command'):
             if not task[key] or not all(isinstance(arg, str) and arg for arg in task[key]):
                 raise ValueError('trusted command argv required')
@@ -230,8 +241,9 @@ def run_suite(manifest, output, *, launcher=CodingLauncher, evaluator=evaluate):
             if sha(submitted) != source_hash:
                 raise ValueError('submitted candidate changed during terminal evaluation')
             write_json(session / 'terminal-report.json', raw)
-            receipt.update(status='complete', candidate_sha256=source_hash,
-                           result=adjudicate(raw, task, source_hash))
+            result = adjudicate(raw, task, source_hash)
+            receipt.update(status='complete' if result['comparison_valid'] else 'invalid-comparison',
+                           candidate_sha256=source_hash, result=result)
         except Exception as error:
             receipt.update(status='failed', error_type=type(error).__name__, error=str(error))
         write_json(receipt_path, receipt)

@@ -1,0 +1,387 @@
+{
+  "family": "W08",
+  "full_evidence": "eigenvalues-only-evidence.json.gz",
+  "full_evidence_sha256": "7ed6f65b3383bc9889187bc976ba2d031daf79a2056bc906de7935431d7b9884",
+  "full_evidence_bytes": 5543466,
+  "retained_archive_sha256": "85db0adb586448c3c405ce6eab3281a11ad54edfa68154b2b71478923047d6e3",
+  "product": "Ascend 910B4-1",
+  "physical_die": 6,
+  "matrix_sha256": "c89f90a87504594a5915d7565445ceaa3477a82b3e55813ec503e4ff94215177",
+  "summary": [
+    {
+      "case_id": "W004-W08-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 6.813659357174373e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 6.813659357174373e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            232607.72,
+            233729.98,
+            231614.12,
+            230648.82,
+            230784.58,
+            230980.36,
+            230873.98,
+            230965.12,
+            231507.02,
+            231072.1
+          ],
+          "count": 10,
+          "mean": 231478.38,
+          "sample_sd": 976.1436468061481
+        },
+        "after": {
+          "samples": [
+            144604.02,
+            146013.78,
+            145710.9,
+            145840.12,
+            143877.76,
+            144057.5,
+            147539.0,
+            145509.66,
+            145520.92,
+            145335.98
+          ],
+          "count": 10,
+          "mean": 145400.964,
+          "sample_sd": 1055.4752784219997
+        }
+      }
+    },
+    {
+      "case_id": "W004-W08-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.954779179109579e-07,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.954779179109579e-07,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            12177.86,
+            11864.26,
+            11714.1,
+            11670.2,
+            11673.68,
+            11655.3,
+            11719.82,
+            11610.92,
+            11682.34,
+            11613.04
+          ],
+          "count": 10,
+          "mean": 11738.152,
+          "sample_sd": 170.2140660593139
+        },
+        "after": {
+          "samples": [
+            7540.0,
+            7432.24,
+            7280.62,
+            7144.62,
+            7279.44,
+            7164.8,
+            7051.74,
+            7066.62,
+            7059.9,
+            7078.12
+          ],
+          "count": 10,
+          "mean": 7209.8099999999995,
+          "sample_sd": 169.9487947065887
+        }
+      }
+    },
+    {
+      "case_id": "W004-W08-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 8.191745574759324e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 8.191745574759324e-06,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            351286.64,
+            351786.22,
+            351225.58,
+            353072.92,
+            352565.2,
+            353137.2,
+            353363.86,
+            351164.88,
+            351877.92,
+            358730.46
+          ],
+          "count": 10,
+          "mean": 352821.088,
+          "sample_sd": 2237.255827406031
+        },
+        "after": {
+          "samples": [
+            235673.4,
+            228750.26,
+            228807.5,
+            223888.34,
+            224461.68,
+            224341.52,
+            223910.96,
+            222972.16,
+            223114.48,
+            224181.62
+          ],
+          "count": 10,
+          "mean": 226010.192,
+          "sample_sd": 3996.6700316827646
+        }
+      }
+    },
+    {
+      "case_id": "W004-W08-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 9.124394984016959e-07,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 9.124394984016959e-07,
+              "atol": 0.0002,
+              "rtol": 0.0002
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            27209.06,
+            26716.82,
+            26543.02,
+            26318.52,
+            26285.5,
+            26312.74,
+            26359.06,
+            26381.2,
+            26296.32,
+            26517.64
+          ],
+          "count": 10,
+          "mean": 26493.988,
+          "sample_sd": 286.9479353781411
+        },
+        "after": {
+          "samples": [
+            17134.04,
+            16825.48,
+            16779.3,
+            16538.24,
+            16514.76,
+            16329.08,
+            16342.32,
+            16329.5,
+            16382.48,
+            16449.46
+          ],
+          "count": 10,
+          "mean": 16562.466,
+          "sample_sd": 268.3539756946247
+        }
+      }
+    },
+    {
+      "case_id": "W004-W08-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.686290503956968e-07,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "residual_relative_frobenius": 1.5012939284125669e-07,
+              "orthogonality_inf": 1.5823974603630425e-07
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.686290503956968e-07,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "residual_relative_frobenius": 1.5012939284125669e-07,
+              "orthogonality_inf": 1.5823974603630425e-07
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W004-W08-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "residual_relative_frobenius": 0.0,
+              "orthogonality_inf": 0.0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 0.0,
+              "atol": 0.0002,
+              "rtol": 0.0002,
+              "residual_relative_frobenius": 0.0,
+              "orthogonality_inf": 0.0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "pmu_task_counts": {
+    "W004-W08-01": {
+      "before": 15780,
+      "after": 9470
+    },
+    "W004-W08-02": {
+      "before": 780,
+      "after": 470
+    },
+    "W004-W08-03": {
+      "before": 23780,
+      "after": 14270
+    },
+    "W004-W08-04": {
+      "before": 1780,
+      "after": 1070
+    }
+  }
+}

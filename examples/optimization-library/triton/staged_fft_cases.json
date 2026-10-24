@@ -1,0 +1,90 @@
+{
+  "wave": 4,
+  "family_id": "W02",
+  "name": "Factor complexDFT into two smallDFT stages",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W02; FFTnative910Bsource explicitly excludes910_93. Projectdevice-residentpedagogicaladaptationnotnativewrapperbenchmark. SmallN32/64generalizealgorithm outsideFFT-Bnative radixplan; explicitnarrowimplementation.",
+  "cases": [
+    {
+      "case_id": "W004-W02-01",
+      "role": "gallery",
+      "seed": 4201,
+      "parameters": {
+        "batch": 16,
+        "N": 256,
+        "input_amax": 0.125
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Staging may reduce directDFT arithmetic; tinytransforms maylose toextra launches/twiddle/permutation."
+    },
+    {
+      "case_id": "W004-W02-02",
+      "role": "gallery",
+      "seed": 4202,
+      "parameters": {
+        "batch": 1,
+        "N": 32,
+        "input_amax": 0.125
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Staging may reduce directDFT arithmetic; tinytransforms maylose toextra launches/twiddle/permutation."
+    },
+    {
+      "case_id": "W004-W02-03",
+      "role": "heldout",
+      "seed": 4203,
+      "parameters": {
+        "batch": 12,
+        "N": 512,
+        "input_amax": 0.125
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Staging may reduce directDFT arithmetic; tinytransforms maylose toextra launches/twiddle/permutation."
+    },
+    {
+      "case_id": "W004-W02-04",
+      "role": "heldout",
+      "seed": 4204,
+      "parameters": {
+        "batch": 1,
+        "N": 64,
+        "input_amax": 0.125
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Staging may reduce directDFT arithmetic; tinytransforms maylose toextra launches/twiddle/permutation."
+    }
+  ],
+  "contract": {
+    "input": "Contiguous real,imag FP32[B,N], seededboundeduniform[-.125,.125] represented values. Outputsameorderedreal/imagFP32 forwardunnormalizedcomplexDFT; no realpacking/nochangeFFTsign.",
+    "before": "FullNxNcomplexDFT via IEEEFP32 arithmetic (controlpedagogicalbaseline, notvendorFFT).",
+    "after": "Two-stage CooleyTukey smallcomplexDFTs, twiddle multiplication, requiredpermutation/movementallinsideAPI. Same IEEEFP32 precision, no TF32.",
+    "setup": "Input-independent mathematicaltwiddle coefficient tables may be builtpreallocation once forbotharms, fixedFP32roundedfromFP64 mathematicalcos/sin. No inputdependentpermutation/transforms cachedoutsideAPI; allrequiredscratchinit included.",
+    "oracle": "Independent CPUcomplex128 FFT ofrepresentedvalues, forwardnormbackward(defaultunnormalizedforward). Comparecomplexabsperoutput error <=2e-6*sum_n(abs(x_n)) +2e-5*abs(reference); no toleranceadjustmentaftertiming. Checkoutputorder/finite,inputunchanged.",
+    "scope": "PoweroftwoN32..512 admittedfastpath, otherpositiveN<=512explicitfullDFTfallback, zero/oversizehostreject.",
+    "guards": [
+      {
+        "case_id": "W004-W02-GA",
+        "role": "guard",
+        "seed": 4291,
+        "parameters": {
+          "batch": 2,
+          "N": 64,
+          "distribution": "oneimpulse andone exactsingle-frequency complexwave"
+        },
+        "expected": "phase/sign/outputordering matchescomplex128oracle"
+      },
+      {
+        "case_id": "W004-W02-GB",
+        "role": "guard",
+        "seed": 4292,
+        "parameters": {
+          "batch": 1,
+          "N": 17,
+          "distribution": "bounded-uniform"
+        },
+        "expected": "unsupportedprimefactorizationafterroutesidenticalfullDFTbaseline"
+      }
+    ]
+  },
+  "protocol": "6CPUoraclesonce,oncecorrectperside/source/case+10profiles eachside4pairs,guards0capture,no warmup/autotune/extratiming/profileIOinspection"
+}

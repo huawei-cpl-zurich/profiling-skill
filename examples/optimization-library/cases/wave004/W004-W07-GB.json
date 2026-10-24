@@ -1,0 +1,11 @@
+{
+  "case_id": "W004-W07-GB",
+  "role": "guard",
+  "seed": 4792,
+  "parameters": {
+    "N": 35,
+    "panel": 16,
+    "distribution": "strictdominance"
+  },
+  "expected": "nondivisibleNafterserialbaselinefallback/alltailwritten"
+}

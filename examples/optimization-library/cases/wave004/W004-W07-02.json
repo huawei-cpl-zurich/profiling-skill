@@ -1,0 +1,11 @@
+{
+  "case_id": "W004-W07-02",
+  "role": "gallery",
+  "seed": 4702,
+  "parameters": {
+    "N": 16,
+    "panel": 16
+  },
+  "scenario_designation": "gallery-cost",
+  "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+}

@@ -1,0 +1,11 @@
+{
+  "case_id": "W004-W07-GA",
+  "role": "guard",
+  "seed": 4791,
+  "parameters": {
+    "N": 4,
+    "panel": 16,
+    "distribution": "nonsingular-zero-first-pivot"
+  },
+  "expected": "partialpivotfallbackcorrectpermutation/residual"
+}

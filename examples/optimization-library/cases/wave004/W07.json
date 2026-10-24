@@ -1,0 +1,85 @@
+{
+  "wave": 4,
+  "family_id": "W07",
+  "title": "Panel LU and Cube Schur updates",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W07 andboundedbrokerreceipts. Independentprojectadaptationnotupstreamvendorbenchmark.",
+  "cases": [
+    {
+      "case_id": "W004-W07-01",
+      "role": "gallery",
+      "seed": 4701,
+      "parameters": {
+        "N": 256,
+        "panel": 16
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    },
+    {
+      "case_id": "W004-W07-02",
+      "role": "gallery",
+      "seed": 4702,
+      "parameters": {
+        "N": 16,
+        "panel": 16
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    },
+    {
+      "case_id": "W004-W07-03",
+      "role": "heldout",
+      "seed": 4703,
+      "parameters": {
+        "N": 192,
+        "panel": 16
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    },
+    {
+      "case_id": "W004-W07-04",
+      "role": "heldout",
+      "seed": 4704,
+      "parameters": {
+        "N": 32,
+        "panel": 16
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    }
+  ],
+  "contract": {
+    "input": "ContiguoussquareFP32 A[N,N]. Seededoffdiagonalsuniform[-1,1], diagonalzero theneachrowoffdiagscaledtoabsolute sum.125, diagonalset1.125. Strictlydominant positivebounded no-pivotdomain admittedCPUonce. ReturncompactLU andzero-basedpermutationp withA[p,:]=L@U; Lunitdiagimplicit.",
+    "before": "Unblockedrank-onepivotupdates, necessaryglobalbarriers/launchesincluded. No-pivotidentityp inadmitscope.",
+    "after": "Factorpanel16, solveblockrow, Schur A22-=L21*U12 withIEEEFP32Cube (noTF32). Allpanel/TRSM/updates/copies/zeroinginsideAPI. Sameprecision, distinctassociationallowedbynumericgate.",
+    "oracle": "IndependentCPUFP64LU/no-pivotelimination onrepresentedA. OutputcompactLU atol2e-5 rtol2e-4; relativeinfinityresidual ||A[p,:]-L@U||inf/||A||inf<=2e-5. Everyoutputfinite andinputunchanged. OutputNaNsentinelinpreparebeforeoncecheck, donotreadinitialoutputinmath.",
+    "fallback": "Nnotmultiple16 afterroutesunblockedbaseline. Required-pivotnonsingularmatrix guardroutesCPUpartialpivotdensebaseline botharms (correctness-onlyhostfallbackexplicit, no claimNPUkernel orprofiling); generalunsupportedprofilecasesreject. No silentpivotsemanticsdrop.",
+    "guards": [
+      {
+        "case_id": "W004-W07-GA",
+        "role": "guard",
+        "seed": 4791,
+        "parameters": {
+          "N": 4,
+          "panel": 16,
+          "distribution": "nonsingular-zero-first-pivot"
+        },
+        "expected": "partialpivotfallbackcorrectpermutation/residual"
+      },
+      {
+        "case_id": "W004-W07-GB",
+        "role": "guard",
+        "seed": 4792,
+        "parameters": {
+          "N": 35,
+          "panel": 16,
+          "distribution": "strictdominance"
+        },
+        "expected": "nondivisibleNafterserialbaselinefallback/alltailwritten"
+      }
+    ]
+  },
+  "protocol": "sixCPUoraclepayloadsonce;oncecorrectpercase/side/sourceversion then10profiles eachsidefourpairs;2guards0captures,no warmup/autotune/extratiming/profileIOinspection"
+}

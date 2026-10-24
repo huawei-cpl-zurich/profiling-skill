@@ -1,0 +1,2400 @@
+{
+  "status": "complete",
+  "family": "W07",
+  "matrix_sha256": "1c28c53f14eedb4a8d4e0ec225d029c14de8e77c2f488afd4ac065ec708c0d1f",
+  "provenance": {
+    "target": "gz-a3",
+    "runtime": "py311-torch",
+    "physical_die": 5,
+    "physical_card": 5,
+    "chip": 0,
+    "logical_device": 0,
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "triton": "3.2.0",
+    "device": "_NPUDeviceProperties(name='Ascend910B4-1', total_memory=62420MB, cube_core_num=20, vector_core_num=40, uuid=00000000-0000-0000-0000-000000000000, L2_cache_size=168MB)",
+    "source_version": "W07-v2-dynamic-pivots-one-stage-no-multibuffer",
+    "frozen_sha256": "1c28c53f14eedb4a8d4e0ec225d029c14de8e77c2f488afd4ac065ec708c0d1f",
+    "compile_handle": "remote:gz-a3:job:b0e16d33-9a14-4291-a86a-96ca994fd4f8",
+    "script_sha256": "e78807f5a409a26659da92395383e2b206503521f488432c20020cae7a0a7f09",
+    "cann_version": "9.1.0",
+    "cann_version_source": "eight retained profiler_info.json captures"
+  },
+  "collection_handle": "remote:gz-a3:job:ae4d9efb-6b2f-48bb-bbd0-df6a86688930",
+  "evidence_handle": "remote:gz-a3:job:d5a0d6ed-4029-40d3-82bc-25da6057fa8a",
+  "compact_archive_sha256": "d65677e432cfe8db4a3bbf74063c8f3cee209d049943ef92e33b00773824d51a",
+  "retained_evidence": "optimization-study/wave004/blocked-lu-run-v2",
+  "protocol": {
+    "planned_cpu_oracle_generations": 6,
+    "profiled_forwards": 80,
+    "captures": 8,
+    "npu_correctness_forwards": 10,
+    "host_guard_correctness_forwards": 2,
+    "guard_captures": 0,
+    "compile_forwards": 0,
+    "warmups": 0,
+    "extra_timing": 0
+  },
+  "compile_failure": {
+    "version": "v1",
+    "device_forwards": 0,
+    "reason": "tl.range rejected multibuffer keyword; options moved to compiler/launch kwargs in v2",
+    "handle": "remote:gz-a3:job:c70d76b1-5fcc-4575-ac23-30f506bd2e71"
+  },
+  "interpretation": "Instrumented operation spans include every task and inter-task gap. Busy sum and active union are separate. No application latency, physical traffic or roofline claim. All four cases improved in this capture, including the two frozen cost-designated cases.",
+  "cases": [
+    {
+      "case_id": "W004-W07-01",
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "host_correctness_forwards": 0,
+      "npu_correctness_forwards": 2,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.2069820480853366e-06,
+              "relative_infinity_residual": 9.866515164957043e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "before",
+            "blocked": false,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-01",
+              "role": "gallery",
+              "seed": 4701,
+              "parameters": {
+                "N": 256,
+                "panel": 16
+              },
+              "scenario_designation": "gallery-benefit",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 511,
+            "workspace_bytes": 264192,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              58.513118743896484,
+              57.84165954589844,
+              58.131919860839844,
+              58.583160400390625,
+              61.02587890625,
+              58.64413833618164,
+              58.964420318603516,
+              58.11503982543945,
+              58.13151931762695,
+              57.94581985473633
+            ],
+            "count": 10,
+            "mean": 58.58966751098633,
+            "sample_sd": 0.9251543171416495
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                57958.68,
+                57488.14,
+                57802.56,
+                58248.62,
+                60626.74,
+                58296.92,
+                58626.9,
+                57787.86,
+                57798.72,
+                57626.44
+              ],
+              "count": 10,
+              "mean": 58226.158,
+              "sample_sd": 910.3735659338478
+            },
+            "operation_active_union_us": {
+              "samples": [
+                10883.56,
+                10876.18,
+                10871.8,
+                10881.0,
+                10868.86,
+                10879.02,
+                10867.46,
+                10879.64,
+                10862.92,
+                10874.46
+              ],
+              "count": 10,
+              "mean": 10874.49,
+              "sample_sd": 6.639646911629478
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                47075.12,
+                46611.96,
+                46930.76,
+                47367.62,
+                49757.88,
+                47417.9,
+                47759.44,
+                46908.22,
+                46935.8,
+                46751.98
+              ],
+              "count": 10,
+              "mean": 47351.668000000005,
+              "sample_sd": 912.3110837964075
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                10883.56,
+                10876.18,
+                10871.8,
+                10881.0,
+                10868.86,
+                10879.02,
+                10867.46,
+                10879.64,
+                10862.92,
+                10874.46
+              ],
+              "count": 10,
+              "mean": 10874.49,
+              "sample_sd": 6.639646911629478
+            },
+            "device_active_union_us": {
+              "samples": [
+                10883.56,
+                10876.18,
+                10871.8,
+                10881.0,
+                10868.86,
+                10879.02,
+                10867.46,
+                10879.64,
+                10862.92,
+                10874.46
+              ],
+              "count": 10,
+              "mean": 10874.49,
+              "sample_sd": 6.639646911629478
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_column",
+              "lu_copy",
+              "lu_rank_one"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "9b107e6a10dbc17568f92bb88d85e5ab5fcbd6dde520a31e3511ca305bfba903",
+                "ttadapter": "6b22101541c9bf81f535404048b9ec4ad79008b6ab0595bc8db8241c75c94fe0",
+                "ttir": "bdd3abe208fbdf8b0df9b28b983c1e33a9054f7aeefb0b4e91b8c3652416e841"
+              },
+              "hash": "64efcf6fbedfa2e689b1abbf229a975a4ff7eff06c65987cb9f3dda2ef0f3faf"
+            },
+            {
+              "binaries": {
+                "npubin": "7a21df86da7e022f544059bd38c829864bfddbb0f73a4d33ef1bdd0e688a1e4a",
+                "ttadapter": "fd70cb8b02e518f9b6a9bdc0d0f123ad06b30f96f24bdacc2d6f952980dfa987",
+                "ttir": "c746aa470ba19498cb30d5e4df3d040652519b42bb98cedb8dfa908c33ba36c6"
+              },
+              "hash": "bb2ad8cbe87b2b3fe06f5533a0d98b0df96d4de0d512d08061ac7c387bbf9559"
+            },
+            {
+              "binaries": {
+                "npubin": "44ec1f06e5bf3c34f6f4fc77799388b08f7e43e2558af31465f23a961c762784",
+                "ttadapter": "0761ca1d20928e85f73b7d8a50fb19b42f2a8400204d1f549315231966622cb5",
+                "ttir": "c2b2a6b6e7f30085e9435dbc19e434e70f5fb375848ada9c284f5a39a7f21898"
+              },
+              "hash": "2789307dac837efeea737a60524ac0b124d3a736ea3c8b75f2fcf2c4df3c9a44"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "9b107e6a10dbc17568f92bb88d85e5ab5fcbd6dde520a31e3511ca305bfba903",
+                "ttadapter": "6b22101541c9bf81f535404048b9ec4ad79008b6ab0595bc8db8241c75c94fe0",
+                "ttir": "bdd3abe208fbdf8b0df9b28b983c1e33a9054f7aeefb0b4e91b8c3652416e841"
+              },
+              "hash": "64efcf6fbedfa2e689b1abbf229a975a4ff7eff06c65987cb9f3dda2ef0f3faf"
+            },
+            {
+              "binaries": {
+                "npubin": "7a21df86da7e022f544059bd38c829864bfddbb0f73a4d33ef1bdd0e688a1e4a",
+                "ttadapter": "fd70cb8b02e518f9b6a9bdc0d0f123ad06b30f96f24bdacc2d6f952980dfa987",
+                "ttir": "c746aa470ba19498cb30d5e4df3d040652519b42bb98cedb8dfa908c33ba36c6"
+              },
+              "hash": "bb2ad8cbe87b2b3fe06f5533a0d98b0df96d4de0d512d08061ac7c387bbf9559"
+            },
+            {
+              "binaries": {
+                "npubin": "44ec1f06e5bf3c34f6f4fc77799388b08f7e43e2558af31465f23a961c762784",
+                "ttadapter": "0761ca1d20928e85f73b7d8a50fb19b42f2a8400204d1f549315231966622cb5",
+                "ttir": "c2b2a6b6e7f30085e9435dbc19e434e70f5fb375848ada9c284f5a39a7f21898"
+              },
+              "hash": "2789307dac837efeea737a60524ac0b124d3a736ea3c8b75f2fcf2c4df3c9a44"
+            }
+          ],
+          "trace_sha256": "44b6d4339c848861176037e50f34a365878dc51c69a107fe14e4ddd3170a5ce1",
+          "normalized_sha256": "d25fab70d02eb03ee51d3d7c2525534d6845dc689a64b323ad0d38fa3c16a192",
+          "accounting_sha256": "ec14b907119be31146d7d4e86187106e9835cfbd7dc389b5915e534c626ca761",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "396aa8499c188dbf80d57af08b2cfafeabbc2902b6b70f09206c4514d65c0c74"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.11419640192301e-07,
+              "relative_infinity_residual": 4.176280311543149e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "after",
+            "blocked": true,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-01",
+              "role": "gallery",
+              "seed": 4701,
+              "parameters": {
+                "N": 256,
+                "panel": 16
+              },
+              "scenario_designation": "gallery-benefit",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 47,
+            "workspace_bytes": 264192,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              7.056359767913818,
+              6.629159927368164,
+              6.653500080108643,
+              6.545080184936523,
+              6.444320201873779,
+              6.480440139770508,
+              6.449820041656494,
+              6.408420085906982,
+              6.506800174713135,
+              6.553659915924072
+            ],
+            "count": 10,
+            "mean": 6.572756052017212,
+            "sample_sd": 0.18743648129911689
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                6566.58,
+                6400.06,
+                6416.84,
+                6292.44,
+                6221.04,
+                6249.76,
+                6208.22,
+                6178.58,
+                6286.6,
+                6332.76
+              ],
+              "count": 10,
+              "mean": 6315.2880000000005,
+              "sample_sd": 118.1460072960572
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1913.52,
+                1898.44,
+                1898.22,
+                1893.44,
+                1892.08,
+                1889.46,
+                1890.18,
+                1886.96,
+                1889.18,
+                1887.92
+              ],
+              "count": 10,
+              "mean": 1893.94,
+              "sample_sd": 7.940618503757874
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                4653.06,
+                4501.62,
+                4518.62,
+                4399.0,
+                4328.96,
+                4360.3,
+                4318.04,
+                4291.62,
+                4397.42,
+                4444.84
+              ],
+              "count": 10,
+              "mean": 4421.348,
+              "sample_sd": 111.04755785998485
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1913.52,
+                1898.44,
+                1898.22,
+                1893.44,
+                1892.08,
+                1889.46,
+                1890.18,
+                1886.96,
+                1889.18,
+                1887.92
+              ],
+              "count": 10,
+              "mean": 1893.94,
+              "sample_sd": 7.940618503757874
+            },
+            "device_active_union_us": {
+              "samples": [
+                1913.52,
+                1898.44,
+                1898.22,
+                1893.44,
+                1892.08,
+                1889.46,
+                1890.18,
+                1886.96,
+                1889.18,
+                1887.92
+              ],
+              "count": 10,
+              "mean": 1893.94,
+              "sample_sd": 7.940618503757874
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_block_row",
+              "lu_copy",
+              "lu_panel",
+              "lu_schur"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "9b107e6a10dbc17568f92bb88d85e5ab5fcbd6dde520a31e3511ca305bfba903",
+                "ttadapter": "6b22101541c9bf81f535404048b9ec4ad79008b6ab0595bc8db8241c75c94fe0",
+                "ttir": "bdd3abe208fbdf8b0df9b28b983c1e33a9054f7aeefb0b4e91b8c3652416e841"
+              },
+              "hash": "64efcf6fbedfa2e689b1abbf229a975a4ff7eff06c65987cb9f3dda2ef0f3faf"
+            },
+            {
+              "binaries": {
+                "npubin": "25111beb10c9dd51aac73159d415374040816ff98dd884f9e3e445dcfcfb0047",
+                "ttadapter": "c8b36e2e63301fe2d55dec5b177e9625ffa77ff2fe497808cd28f1a0e00e80b8",
+                "ttir": "0cd10e7cd9e15e6413e4c4dc7a572b5f8e817754113f57e990652cf1644f12cb"
+              },
+              "hash": "f596323890712bdf11c6ddf62f3183c4c5435c2ab0e6ff1d4c433112e48249c3"
+            },
+            {
+              "binaries": {
+                "npubin": "48f9692b0d8594fd8f12ecb750cc631237dea84f70fdec3aeb07315463fece37",
+                "ttadapter": "ce8a37177d11976e6b8939948128ee2dd58be97b882c331a4ad682c5560b32e4",
+                "ttir": "0eef8fde88f4256cda97a96e2236a891e13420c9f0edd11ead52f9812049df73"
+              },
+              "hash": "3c0d744332b78d11045152f19747b1678eae5245b512519413bc99992f223f6a"
+            },
+            {
+              "binaries": {
+                "npubin": "7878b48f60cd95d30ac2abba47568a46d1cbf1c4a6f59a993be4f04a9d36cc0a",
+                "ttadapter": "41b1988bd042e9abafdffbdd1afefae4b611eb6a8d3a74717d5b4bbbc85fb57d",
+                "ttir": "686e99d6cf028a64cda93b1dde9f9c343454ffaa333a478bd823a8fbc8b894ef"
+              },
+              "hash": "216313158b3bbc5ef42a2ae94ae5ab91293e64ebd072174dbde48b5d438696bd"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "9b107e6a10dbc17568f92bb88d85e5ab5fcbd6dde520a31e3511ca305bfba903",
+                "ttadapter": "6b22101541c9bf81f535404048b9ec4ad79008b6ab0595bc8db8241c75c94fe0",
+                "ttir": "bdd3abe208fbdf8b0df9b28b983c1e33a9054f7aeefb0b4e91b8c3652416e841"
+              },
+              "hash": "64efcf6fbedfa2e689b1abbf229a975a4ff7eff06c65987cb9f3dda2ef0f3faf"
+            },
+            {
+              "binaries": {
+                "npubin": "25111beb10c9dd51aac73159d415374040816ff98dd884f9e3e445dcfcfb0047",
+                "ttadapter": "c8b36e2e63301fe2d55dec5b177e9625ffa77ff2fe497808cd28f1a0e00e80b8",
+                "ttir": "0cd10e7cd9e15e6413e4c4dc7a572b5f8e817754113f57e990652cf1644f12cb"
+              },
+              "hash": "f596323890712bdf11c6ddf62f3183c4c5435c2ab0e6ff1d4c433112e48249c3"
+            },
+            {
+              "binaries": {
+                "npubin": "48f9692b0d8594fd8f12ecb750cc631237dea84f70fdec3aeb07315463fece37",
+                "ttadapter": "ce8a37177d11976e6b8939948128ee2dd58be97b882c331a4ad682c5560b32e4",
+                "ttir": "0eef8fde88f4256cda97a96e2236a891e13420c9f0edd11ead52f9812049df73"
+              },
+              "hash": "3c0d744332b78d11045152f19747b1678eae5245b512519413bc99992f223f6a"
+            },
+            {
+              "binaries": {
+                "npubin": "7878b48f60cd95d30ac2abba47568a46d1cbf1c4a6f59a993be4f04a9d36cc0a",
+                "ttadapter": "41b1988bd042e9abafdffbdd1afefae4b611eb6a8d3a74717d5b4bbbc85fb57d",
+                "ttir": "686e99d6cf028a64cda93b1dde9f9c343454ffaa333a478bd823a8fbc8b894ef"
+              },
+              "hash": "216313158b3bbc5ef42a2ae94ae5ab91293e64ebd072174dbde48b5d438696bd"
+            }
+          ],
+          "trace_sha256": "adb5773539fce11d200e3b68b0bc3abd88cfff63cc4ae112b84c92385023006c",
+          "normalized_sha256": "07dc0c3cbafa26783c2ae5f02014043c7fb900cc5e0df1e301052787ae14eec3",
+          "accounting_sha256": "9a360b18f2f779e62712db9460946dd2ff6a9a8b0d490bc197f05e78c880c3fd",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "e356d10324899a9ab1d371f6cde7f8dc35333f6072aeaadf61c5f8b1e43f13fa"
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            57958.68,
+            57488.14,
+            57802.56,
+            58248.62,
+            60626.74,
+            58296.92,
+            58626.9,
+            57787.86,
+            57798.72,
+            57626.44
+          ],
+          "count": 10,
+          "mean": 58226.158,
+          "sample_sd": 910.3735659338478
+        },
+        "after": {
+          "samples": [
+            6566.58,
+            6400.06,
+            6416.84,
+            6292.44,
+            6221.04,
+            6249.76,
+            6208.22,
+            6178.58,
+            6286.6,
+            6332.76
+          ],
+          "count": 10,
+          "mean": 6315.2880000000005,
+          "sample_sd": 118.1460072960572
+        }
+      },
+      "case": {
+        "case_id": "W004-W07-01",
+        "role": "gallery",
+        "seed": 4701,
+        "parameters": {
+          "N": 256,
+          "panel": 16
+        },
+        "scenario_designation": "gallery-benefit",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "original_result_sha256": "4d67a6d817ab2c8bb1544d4fcbfdde6e38618ff75ca2540d1ec04c8d05169d02",
+      "span_mean_ratio_before_over_after": 9.219873741308392
+    },
+    {
+      "case_id": "W004-W07-02",
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "host_correctness_forwards": 0,
+      "npu_correctness_forwards": 2,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.6224774685168484e-07,
+              "relative_infinity_residual": 2.1182322338688698e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "before",
+            "blocked": false,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-02",
+              "role": "gallery",
+              "seed": 4702,
+              "parameters": {
+                "N": 16,
+                "panel": 16
+              },
+              "scenario_designation": "gallery-cost",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 31,
+            "workspace_bytes": 1152,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              4.118480205535889,
+              3.841099977493286,
+              3.7961599826812744,
+              3.815579891204834,
+              3.848720073699951,
+              3.824320077896118,
+              3.8309600353240967,
+              3.8319199085235596,
+              3.7744200229644775,
+              3.762160062789917
+            ],
+            "count": 10,
+            "mean": 3.8443820238113404,
+            "sample_sd": 0.100392230789491
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                3616.06,
+                3520.06,
+                3485.64,
+                3483.58,
+                3513.24,
+                3507.32,
+                3523.6,
+                3505.14,
+                3471.58,
+                3463.2
+              ],
+              "count": 10,
+              "mean": 3508.942,
+              "sample_sd": 42.846957055185264
+            },
+            "operation_active_union_us": {
+              "samples": [
+                102.74,
+                96.76,
+                96.6,
+                93.14,
+                93.28,
+                93.0,
+                92.92,
+                93.08,
+                93.0,
+                92.42
+              ],
+              "count": 10,
+              "mean": 94.694,
+              "sample_sd": 3.2269015066055737
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                3513.32,
+                3423.3,
+                3389.04,
+                3390.44,
+                3419.96,
+                3414.32,
+                3430.68,
+                3412.06,
+                3378.58,
+                3370.78
+              ],
+              "count": 10,
+              "mean": 3414.248,
+              "sample_sd": 40.23344015451163
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                102.74,
+                96.76,
+                96.60000000000001,
+                93.14,
+                93.28,
+                93.0,
+                92.92,
+                93.08,
+                93.0,
+                92.42
+              ],
+              "count": 10,
+              "mean": 94.694,
+              "sample_sd": 3.2269015066055746
+            },
+            "device_active_union_us": {
+              "samples": [
+                102.74,
+                96.76,
+                96.6,
+                93.14,
+                93.28,
+                93.0,
+                92.92,
+                93.08,
+                93.0,
+                92.42
+              ],
+              "count": 10,
+              "mean": 94.694,
+              "sample_sd": 3.2269015066055737
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                1.4210854715202004e-14,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 1.4210854715202005e-15,
+              "sample_sd": 4.4938668397781774e-15
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_column",
+              "lu_copy",
+              "lu_rank_one"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "99f6dba5414287e341c2a888ec96855103d6eb740cddbd9bf1db76c93743cac4",
+                "ttadapter": "5603a6ac743985bbbe40a379b1e84b2be38fecd0d65047d773d4bc2ab47bc4a4",
+                "ttir": "5012a40cd075677479a7fe0647b43b3a694acb52edd4a1313468239a8b552f8d"
+              },
+              "hash": "f29b1b49d4556b0874aa38c5581ff16a326afd49a6487edc0087f9f9e7f2fafd"
+            },
+            {
+              "binaries": {
+                "npubin": "8766987c82437ab8bfdd78e9085bc69330a01c8d9c0c63849582b5ecb69fa176",
+                "ttadapter": "753b449d77ce24c874aa293adcd4001e7a9320226cb679d0db117e0ecfd4df32",
+                "ttir": "fc9ecec4ae59817d608483ca60864b8b1e9060c81188af67474d0561f8895825"
+              },
+              "hash": "dbab5ab8493e571aa2bf4d516c36ed317111a980fdbc7966f337df1ae616a8e2"
+            },
+            {
+              "binaries": {
+                "npubin": "177fd28ad70d3ffefb7d025f843d325b104fd435e82178b17447507fe963f49a",
+                "ttadapter": "ba85e03d888af396a43ed405ba2d478b94cdfd9b62fe8fcfec48db137a459656",
+                "ttir": "46b51f13b08118bfccf36f0ee03467daa6f461149641d28a012d8f6ca413c21e"
+              },
+              "hash": "e6cf9f12881718079e3a9b7bf7c601f5fcebaaafd718da08832bf2a1b875d923"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "99f6dba5414287e341c2a888ec96855103d6eb740cddbd9bf1db76c93743cac4",
+                "ttadapter": "5603a6ac743985bbbe40a379b1e84b2be38fecd0d65047d773d4bc2ab47bc4a4",
+                "ttir": "5012a40cd075677479a7fe0647b43b3a694acb52edd4a1313468239a8b552f8d"
+              },
+              "hash": "f29b1b49d4556b0874aa38c5581ff16a326afd49a6487edc0087f9f9e7f2fafd"
+            },
+            {
+              "binaries": {
+                "npubin": "8766987c82437ab8bfdd78e9085bc69330a01c8d9c0c63849582b5ecb69fa176",
+                "ttadapter": "753b449d77ce24c874aa293adcd4001e7a9320226cb679d0db117e0ecfd4df32",
+                "ttir": "fc9ecec4ae59817d608483ca60864b8b1e9060c81188af67474d0561f8895825"
+              },
+              "hash": "dbab5ab8493e571aa2bf4d516c36ed317111a980fdbc7966f337df1ae616a8e2"
+            },
+            {
+              "binaries": {
+                "npubin": "177fd28ad70d3ffefb7d025f843d325b104fd435e82178b17447507fe963f49a",
+                "ttadapter": "ba85e03d888af396a43ed405ba2d478b94cdfd9b62fe8fcfec48db137a459656",
+                "ttir": "46b51f13b08118bfccf36f0ee03467daa6f461149641d28a012d8f6ca413c21e"
+              },
+              "hash": "e6cf9f12881718079e3a9b7bf7c601f5fcebaaafd718da08832bf2a1b875d923"
+            }
+          ],
+          "trace_sha256": "2e03780d8b03a2757cfa64af9018a9c26d5d286dd2ff44e24e32ef2370c5c74c",
+          "normalized_sha256": "b8fbe02314924949812d99c320bec828bfb8dedcd038e9e60fba261f398820da",
+          "accounting_sha256": "210a6cf71911ab0b8c920c029feb22b8cc917fe85adc87901f5672b71887bf68",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "0450b510352575cb1b54cf61b7bcdcc4f4eef2b8cde9abc090c67a57ebe890a1"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 2.6224774685168484e-07,
+              "relative_infinity_residual": 2.1182322338688698e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "after",
+            "blocked": true,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-02",
+              "role": "gallery",
+              "seed": 4702,
+              "parameters": {
+                "N": 16,
+                "panel": 16
+              },
+              "scenario_designation": "gallery-cost",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 2,
+            "workspace_bytes": 1152,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9142600297927856,
+              0.4596000015735626,
+              0.4323999881744385,
+              0.43369999527931213,
+              0.4423399865627289,
+              0.44152000546455383,
+              0.4367400109767914,
+              0.44567999243736267,
+              0.447380006313324,
+              0.4501799941062927
+            ],
+            "count": 10,
+            "mean": 0.49038000106811525,
+            "sample_sd": 0.14915745359003418
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                186.6,
+                150.84,
+                151.64,
+                155.16,
+                148.38,
+                151.32,
+                152.68,
+                153.1,
+                180.24,
+                177.8
+              ],
+              "count": 10,
+              "mean": 160.776,
+              "sample_sd": 14.593818478307105
+            },
+            "operation_active_union_us": {
+              "samples": [
+                26.74,
+                26.52,
+                26.64,
+                26.82,
+                25.08,
+                26.38,
+                26.28,
+                26.5,
+                26.38,
+                26.7
+              ],
+              "count": 10,
+              "mean": 26.404,
+              "sample_sd": 0.4968165321994298
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                159.86,
+                124.32,
+                125.0,
+                128.34,
+                123.3,
+                124.94,
+                126.4,
+                126.6,
+                153.86,
+                151.1
+              ],
+              "count": 10,
+              "mean": 134.372,
+              "sample_sd": 14.414564239761892
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                26.740000000000002,
+                26.52,
+                26.64,
+                26.82,
+                25.08,
+                26.380000000000003,
+                26.28,
+                26.5,
+                26.38,
+                26.7
+              ],
+              "count": 10,
+              "mean": 26.404,
+              "sample_sd": 0.49681653219943
+            },
+            "device_active_union_us": {
+              "samples": [
+                26.74,
+                26.52,
+                26.64,
+                26.82,
+                25.08,
+                26.38,
+                26.28,
+                26.5,
+                26.38,
+                26.7
+              ],
+              "count": 10,
+              "mean": 26.404,
+              "sample_sd": 0.4968165321994298
+            },
+            "device_overlap_us": {
+              "samples": [
+                3.552713678800501e-15,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                3.552713678800501e-15,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 7.105427357601002e-16,
+              "sample_sd": 1.4979556132593924e-15
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_copy",
+              "lu_panel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "99f6dba5414287e341c2a888ec96855103d6eb740cddbd9bf1db76c93743cac4",
+                "ttadapter": "5603a6ac743985bbbe40a379b1e84b2be38fecd0d65047d773d4bc2ab47bc4a4",
+                "ttir": "5012a40cd075677479a7fe0647b43b3a694acb52edd4a1313468239a8b552f8d"
+              },
+              "hash": "f29b1b49d4556b0874aa38c5581ff16a326afd49a6487edc0087f9f9e7f2fafd"
+            },
+            {
+              "binaries": {
+                "npubin": "024202669443081b2fd61cea0b22ea44da0c2069fc5fce2fda3abda8fe153249",
+                "ttadapter": "5f8cb347364855989d3033c14586c03707b50b1584a37812736d19e21ef03642",
+                "ttir": "b707684beb2c465d6983641801060f5224f3468ac4048976923c03513fe86b25"
+              },
+              "hash": "561a429511a9f1acef891a0186b382a51de5c9cf0c64c43d8d194e636b77bb57"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "99f6dba5414287e341c2a888ec96855103d6eb740cddbd9bf1db76c93743cac4",
+                "ttadapter": "5603a6ac743985bbbe40a379b1e84b2be38fecd0d65047d773d4bc2ab47bc4a4",
+                "ttir": "5012a40cd075677479a7fe0647b43b3a694acb52edd4a1313468239a8b552f8d"
+              },
+              "hash": "f29b1b49d4556b0874aa38c5581ff16a326afd49a6487edc0087f9f9e7f2fafd"
+            },
+            {
+              "binaries": {
+                "npubin": "024202669443081b2fd61cea0b22ea44da0c2069fc5fce2fda3abda8fe153249",
+                "ttadapter": "5f8cb347364855989d3033c14586c03707b50b1584a37812736d19e21ef03642",
+                "ttir": "b707684beb2c465d6983641801060f5224f3468ac4048976923c03513fe86b25"
+              },
+              "hash": "561a429511a9f1acef891a0186b382a51de5c9cf0c64c43d8d194e636b77bb57"
+            }
+          ],
+          "trace_sha256": "f1ab9392d9ec4fb65fedf3b692cc78c28c3add15bfda062e64c0b6ec705183cb",
+          "normalized_sha256": "1fa55d95a20b78d5d6acc5b8f8daf90270cce3ff564cf87c8624bc104c0cc3e8",
+          "accounting_sha256": "5fdacd2aec6648477f7c90b0fd98625b3bdb2d6fe3a029e9488fc8731af9b302",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "011eb59486f65300700cca92bb293b76f105f3e45c0dfd89667041a0010e5101"
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            3616.06,
+            3520.06,
+            3485.64,
+            3483.58,
+            3513.24,
+            3507.32,
+            3523.6,
+            3505.14,
+            3471.58,
+            3463.2
+          ],
+          "count": 10,
+          "mean": 3508.942,
+          "sample_sd": 42.846957055185264
+        },
+        "after": {
+          "samples": [
+            186.6,
+            150.84,
+            151.64,
+            155.16,
+            148.38,
+            151.32,
+            152.68,
+            153.1,
+            180.24,
+            177.8
+          ],
+          "count": 10,
+          "mean": 160.776,
+          "sample_sd": 14.593818478307105
+        }
+      },
+      "case": {
+        "case_id": "W004-W07-02",
+        "role": "gallery",
+        "seed": 4702,
+        "parameters": {
+          "N": 16,
+          "panel": 16
+        },
+        "scenario_designation": "gallery-cost",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "original_result_sha256": "ec220369582efeca02d415c3943800557586b761c7ec3d6d119b60a1d59b73ee",
+      "span_mean_ratio_before_over_after": 21.825036075036074
+    },
+    {
+      "case_id": "W004-W07-03",
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "host_correctness_forwards": 0,
+      "npu_correctness_forwards": 2,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.511042607038604e-06,
+              "relative_infinity_residual": 1.2255195148365933e-06,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "before",
+            "blocked": false,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-03",
+              "role": "heldout",
+              "seed": 4703,
+              "parameters": {
+                "N": 192,
+                "panel": 16
+              },
+              "scenario_designation": "heldout-benefit",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 383,
+            "workspace_bytes": 148992,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              45.05575942993164,
+              44.24367904663086,
+              44.216758728027344,
+              44.82590103149414,
+              46.82495880126953,
+              45.529640197753906,
+              45.12474060058594,
+              44.65174102783203,
+              44.293479919433594,
+              43.8991813659668
+            ],
+            "count": 10,
+            "mean": 44.86658401489258,
+            "sample_sd": 0.8498182663554248
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                44460.34,
+                43907.9,
+                43896.52,
+                44476.68,
+                46485.22,
+                45167.46,
+                44809.1,
+                44317.46,
+                43976.42,
+                43569.5
+              ],
+              "count": 10,
+              "mean": 44506.659999999996,
+              "sample_sd": 841.4191009109423
+            },
+            "operation_active_union_us": {
+              "samples": [
+                7653.62,
+                7637.38,
+                7637.9,
+                7640.4,
+                7643.58,
+                7639.7,
+                7635.34,
+                7644.14,
+                7644.28,
+                7636.26
+              ],
+              "count": 10,
+              "mean": 7641.26,
+              "sample_sd": 5.427608435888952
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                36806.72,
+                36270.52,
+                36258.62,
+                36836.28,
+                38841.64,
+                37527.76,
+                37173.76,
+                36673.32,
+                36332.14,
+                35933.24
+              ],
+              "count": 10,
+              "mean": 36865.4,
+              "sample_sd": 840.361689062778
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                7653.62,
+                7637.38,
+                7637.9,
+                7640.4,
+                7643.58,
+                7639.7,
+                7635.34,
+                7644.14,
+                7644.28,
+                7636.26
+              ],
+              "count": 10,
+              "mean": 7641.26,
+              "sample_sd": 5.427608435888952
+            },
+            "device_active_union_us": {
+              "samples": [
+                7653.62,
+                7637.38,
+                7637.9,
+                7640.4,
+                7643.58,
+                7639.7,
+                7635.34,
+                7644.14,
+                7644.28,
+                7636.26
+              ],
+              "count": 10,
+              "mean": 7641.26,
+              "sample_sd": 5.427608435888952
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_column",
+              "lu_copy",
+              "lu_rank_one"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "5db0298bd07873d11becb68876c12d6002ebe6577cf9bc85d2ef552a0730fb9c",
+                "ttadapter": "316819c3052060a0f0858608bc1baefca2b7e6047f5e61cc3f05b9ea002e95db",
+                "ttir": "b845fe17031c3a22bd7488e6f3c388a48ccd7e043ddcc57feab07f9c80c1a7c2"
+              },
+              "hash": "9537a475c8ace890e279e732f6e04230b3cccba4e21cf47b1f5773990d475f04"
+            },
+            {
+              "binaries": {
+                "npubin": "5972b97f250e778ac677bf1895ceaf630c09b8528ac334f773d510768e2294dc",
+                "ttadapter": "a0049982ef49ffac0e2ace8b0bf1b880042e326dd2c7ee650c6c74ea6ca4ba72",
+                "ttir": "f761d60699ecaca5ca9c71098748a384b6c1e93113400ee840a9fb0bb73a5136"
+              },
+              "hash": "c25e77f7f7b0f8454e18eaa9e9a3cc43c71604df3490118ada7fb9f3674ef21c"
+            },
+            {
+              "binaries": {
+                "npubin": "f6ad1e2f618a7232213e51ef5955312ca13275e3f2f6192bd1d6d938da4599f7",
+                "ttadapter": "44d406af556d7320d495747afa519e6093750500d43beac95e128c6695cac8f7",
+                "ttir": "1dd5e0a52c7a7ae8ac6b1b70fa62a2dcf36056f7be2ab1ce62e2d4d0c3f01979"
+              },
+              "hash": "9b87dfc0f20c64d38ee5033db84f0a1833c27a13a6c4783fefa14aab820fa567"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "5db0298bd07873d11becb68876c12d6002ebe6577cf9bc85d2ef552a0730fb9c",
+                "ttadapter": "316819c3052060a0f0858608bc1baefca2b7e6047f5e61cc3f05b9ea002e95db",
+                "ttir": "b845fe17031c3a22bd7488e6f3c388a48ccd7e043ddcc57feab07f9c80c1a7c2"
+              },
+              "hash": "9537a475c8ace890e279e732f6e04230b3cccba4e21cf47b1f5773990d475f04"
+            },
+            {
+              "binaries": {
+                "npubin": "5972b97f250e778ac677bf1895ceaf630c09b8528ac334f773d510768e2294dc",
+                "ttadapter": "a0049982ef49ffac0e2ace8b0bf1b880042e326dd2c7ee650c6c74ea6ca4ba72",
+                "ttir": "f761d60699ecaca5ca9c71098748a384b6c1e93113400ee840a9fb0bb73a5136"
+              },
+              "hash": "c25e77f7f7b0f8454e18eaa9e9a3cc43c71604df3490118ada7fb9f3674ef21c"
+            },
+            {
+              "binaries": {
+                "npubin": "f6ad1e2f618a7232213e51ef5955312ca13275e3f2f6192bd1d6d938da4599f7",
+                "ttadapter": "44d406af556d7320d495747afa519e6093750500d43beac95e128c6695cac8f7",
+                "ttir": "1dd5e0a52c7a7ae8ac6b1b70fa62a2dcf36056f7be2ab1ce62e2d4d0c3f01979"
+              },
+              "hash": "9b87dfc0f20c64d38ee5033db84f0a1833c27a13a6c4783fefa14aab820fa567"
+            }
+          ],
+          "trace_sha256": "470bdce2b8516d49a2a6165afa114b5a581f0f3dcb6e2a8abfb085c30455ac1a",
+          "normalized_sha256": "efac31fc315a322e5d2ce9cd9fb155fa3b1e9570fffb788f02c88a7dbd461166",
+          "accounting_sha256": "df4ff7899c5b482abc8434df21c2d2d2120976e7b331646f1546057b141563ca",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "54638893ff149d4e9b9d5fdb714cdb8f49e95488a0c300aba98ab144e6ebbaa2"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.838957516322239e-07,
+              "relative_infinity_residual": 3.146774568287234e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "after",
+            "blocked": true,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-03",
+              "role": "heldout",
+              "seed": 4703,
+              "parameters": {
+                "N": 192,
+                "panel": 16
+              },
+              "scenario_designation": "heldout-benefit",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 35,
+            "workspace_bytes": 148992,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              5.682539939880371,
+              5.004059791564941,
+              5.097320079803467,
+              4.9268598556518555,
+              4.91618013381958,
+              4.934460163116455,
+              4.856060028076172,
+              4.856299877166748,
+              4.892859935760498,
+              4.882719993591309
+            ],
+            "count": 10,
+            "mean": 5.00493597984314,
+            "sample_sd": 0.24908221877546327
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                4962.72,
+                4746.18,
+                4852.78,
+                4675.1,
+                4693.74,
+                4675.96,
+                4637.36,
+                4633.6,
+                4667.86,
+                4639.7
+              ],
+              "count": 10,
+              "mean": 4718.5,
+              "sample_sd": 108.17297752519654
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1395.52,
+                1391.58,
+                1389.68,
+                1389.98,
+                1386.84,
+                1386.34,
+                1386.4,
+                1385.4,
+                1385.36,
+                1383.58
+              ],
+              "count": 10,
+              "mean": 1388.068,
+              "sample_sd": 3.5899637881182094
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                3567.2,
+                3354.6,
+                3463.1,
+                3285.12,
+                3306.9,
+                3289.62,
+                3250.96,
+                3248.2,
+                3282.5,
+                3256.12
+              ],
+              "count": 10,
+              "mean": 3330.432,
+              "sample_sd": 105.10004681254901
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1395.52,
+                1391.58,
+                1389.68,
+                1389.98,
+                1386.84,
+                1386.34,
+                1386.4,
+                1385.4,
+                1385.36,
+                1383.58
+              ],
+              "count": 10,
+              "mean": 1388.068,
+              "sample_sd": 3.5899637881182094
+            },
+            "device_active_union_us": {
+              "samples": [
+                1395.52,
+                1391.58,
+                1389.68,
+                1389.98,
+                1386.84,
+                1386.34,
+                1386.4,
+                1385.4,
+                1385.36,
+                1383.58
+              ],
+              "count": 10,
+              "mean": 1388.068,
+              "sample_sd": 3.5899637881182094
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_block_row",
+              "lu_copy",
+              "lu_panel",
+              "lu_schur"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "5db0298bd07873d11becb68876c12d6002ebe6577cf9bc85d2ef552a0730fb9c",
+                "ttadapter": "316819c3052060a0f0858608bc1baefca2b7e6047f5e61cc3f05b9ea002e95db",
+                "ttir": "b845fe17031c3a22bd7488e6f3c388a48ccd7e043ddcc57feab07f9c80c1a7c2"
+              },
+              "hash": "9537a475c8ace890e279e732f6e04230b3cccba4e21cf47b1f5773990d475f04"
+            },
+            {
+              "binaries": {
+                "npubin": "914ff555abfde78f83a4af410d9f025721e00a8f895d3c1a9ee58a167b2f9699",
+                "ttadapter": "56c36e7a28905d63dc552549c99db298ecdc63c768bb1a6cdda763341f2103ed",
+                "ttir": "69955e20cfafddb875eb6801d1be47e9189093abef93c69800724376c4d250c0"
+              },
+              "hash": "7918123f5fd371a2acd7e0b204de043516c94e21e2e77663c025b7cc3d6f1b37"
+            },
+            {
+              "binaries": {
+                "npubin": "e2cd3baa31c14eec94691b533660ca5ec856edd82fb133b81d745b1562cde27b",
+                "ttadapter": "c15005ea6e70a6f9b9c0ae7f6b7b1ad115e86c47560a35e633c359d14899a430",
+                "ttir": "2a0b9f7e695cc705cb0a8efb1b949732c0a9c94d2f20477b418d80c90cb4863f"
+              },
+              "hash": "61a7a5306b4c797ed5b3266c836e0ebed47c4516a40b75cb50acadbf336fd183"
+            },
+            {
+              "binaries": {
+                "npubin": "a5c57f5f04055020dcca0cdfda7bd7409a53236b87ccd39d3146df1c756e1fbc",
+                "ttadapter": "1af5c81e00a1b4ff8e9bbce1e309e4e2416661cefcd881fbde7a6e763e33eb34",
+                "ttir": "e37353d1e018804cb2f422f20c39dc865db9d90dca999a3b77677d64cec913a9"
+              },
+              "hash": "36c0cf0d7bc3699664c957145cd28e470403aa1a0136aa8a7da01907a29166ed"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "5db0298bd07873d11becb68876c12d6002ebe6577cf9bc85d2ef552a0730fb9c",
+                "ttadapter": "316819c3052060a0f0858608bc1baefca2b7e6047f5e61cc3f05b9ea002e95db",
+                "ttir": "b845fe17031c3a22bd7488e6f3c388a48ccd7e043ddcc57feab07f9c80c1a7c2"
+              },
+              "hash": "9537a475c8ace890e279e732f6e04230b3cccba4e21cf47b1f5773990d475f04"
+            },
+            {
+              "binaries": {
+                "npubin": "914ff555abfde78f83a4af410d9f025721e00a8f895d3c1a9ee58a167b2f9699",
+                "ttadapter": "56c36e7a28905d63dc552549c99db298ecdc63c768bb1a6cdda763341f2103ed",
+                "ttir": "69955e20cfafddb875eb6801d1be47e9189093abef93c69800724376c4d250c0"
+              },
+              "hash": "7918123f5fd371a2acd7e0b204de043516c94e21e2e77663c025b7cc3d6f1b37"
+            },
+            {
+              "binaries": {
+                "npubin": "e2cd3baa31c14eec94691b533660ca5ec856edd82fb133b81d745b1562cde27b",
+                "ttadapter": "c15005ea6e70a6f9b9c0ae7f6b7b1ad115e86c47560a35e633c359d14899a430",
+                "ttir": "2a0b9f7e695cc705cb0a8efb1b949732c0a9c94d2f20477b418d80c90cb4863f"
+              },
+              "hash": "61a7a5306b4c797ed5b3266c836e0ebed47c4516a40b75cb50acadbf336fd183"
+            },
+            {
+              "binaries": {
+                "npubin": "a5c57f5f04055020dcca0cdfda7bd7409a53236b87ccd39d3146df1c756e1fbc",
+                "ttadapter": "1af5c81e00a1b4ff8e9bbce1e309e4e2416661cefcd881fbde7a6e763e33eb34",
+                "ttir": "e37353d1e018804cb2f422f20c39dc865db9d90dca999a3b77677d64cec913a9"
+              },
+              "hash": "36c0cf0d7bc3699664c957145cd28e470403aa1a0136aa8a7da01907a29166ed"
+            }
+          ],
+          "trace_sha256": "3c819d05bfe70fae0d7dd9bc6ecc11a1c5778ce4c06a5676214ce65d5f1329db",
+          "normalized_sha256": "2c3ce6c453be5f0d22d19901c0d28250ee90ee240d7f0fc88beb5bcdb406f72f",
+          "accounting_sha256": "de23aec2bdf095cb600367909e11299f9486250fa5e25ed579ba4096ab346128",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "57113704b31f0d93e6860d8e93cff4d4799c363f9a375717cd98fa5cf1f42e57"
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            44460.34,
+            43907.9,
+            43896.52,
+            44476.68,
+            46485.22,
+            45167.46,
+            44809.1,
+            44317.46,
+            43976.42,
+            43569.5
+          ],
+          "count": 10,
+          "mean": 44506.659999999996,
+          "sample_sd": 841.4191009109423
+        },
+        "after": {
+          "samples": [
+            4962.72,
+            4746.18,
+            4852.78,
+            4675.1,
+            4693.74,
+            4675.96,
+            4637.36,
+            4633.6,
+            4667.86,
+            4639.7
+          ],
+          "count": 10,
+          "mean": 4718.5,
+          "sample_sd": 108.17297752519654
+        }
+      },
+      "case": {
+        "case_id": "W004-W07-03",
+        "role": "heldout",
+        "seed": 4703,
+        "parameters": {
+          "N": 192,
+          "panel": 16
+        },
+        "scenario_designation": "heldout-benefit",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "original_result_sha256": "413dd7f013345d77160ca0d82235428ca6154f78e74acc7ce9e9c465bfb889e1",
+      "span_mean_ratio_before_over_after": 9.432374695348097
+    },
+    {
+      "case_id": "W004-W07-04",
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 20,
+        "capture_calls": 2,
+        "correctness_calls": 2
+      },
+      "host_correctness_forwards": 0,
+      "npu_correctness_forwards": 2,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.9911690363194623e-07,
+              "relative_infinity_residual": 1.6791597030014703e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "before",
+            "blocked": false,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-04",
+              "role": "heldout",
+              "seed": 4704,
+              "parameters": {
+                "N": 32,
+                "panel": 16
+              },
+              "scenario_designation": "heldout-cost",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 63,
+            "workspace_bytes": 4352,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              7.916719913482666,
+              7.54617977142334,
+              17.329200744628906,
+              8.155799865722656,
+              7.519000053405762,
+              7.543700218200684,
+              7.582180023193359,
+              7.687900066375732,
+              7.518919944763184,
+              7.580359935760498
+            ],
+            "count": 10,
+            "mean": 8.637996053695678,
+            "sample_sd": 3.060861262296559
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                7390.08,
+                7236.64,
+                16778.76,
+                7474.16,
+                7190.3,
+                7222.02,
+                7264.86,
+                7338.02,
+                7191.7,
+                7223.74
+              ],
+              "count": 10,
+              "mean": 8231.028,
+              "sample_sd": 3004.802825096293
+            },
+            "operation_active_union_us": {
+              "samples": [
+                265.5,
+                254.02,
+                253.12,
+                252.76,
+                253.3,
+                253.22,
+                252.96,
+                252.92,
+                254.16,
+                253.38
+              ],
+              "count": 10,
+              "mean": 254.534,
+              "sample_sd": 3.8796798264232524
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                7124.58,
+                6982.62,
+                16525.64,
+                7221.4,
+                6937.0,
+                6968.8,
+                7011.9,
+                7085.1,
+                6937.54,
+                6970.36
+              ],
+              "count": 10,
+              "mean": 7976.494,
+              "sample_sd": 3005.26127781189
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                265.5,
+                254.01999999999998,
+                253.12,
+                252.76,
+                253.3,
+                253.22,
+                252.96,
+                252.92,
+                254.16,
+                253.38
+              ],
+              "count": 10,
+              "mean": 254.534,
+              "sample_sd": 3.879679826423253
+            },
+            "device_active_union_us": {
+              "samples": [
+                265.5,
+                254.02,
+                253.12,
+                252.76,
+                253.3,
+                253.22,
+                252.96,
+                252.92,
+                254.16,
+                253.38
+              ],
+              "count": 10,
+              "mean": 254.534,
+              "sample_sd": 3.8796798264232524
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_column",
+              "lu_copy",
+              "lu_rank_one"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "97707e68908bcc064ac0e2140e2039abec28cfb70c022366b3b52b0d483e0636",
+                "ttadapter": "55beac8604bd11086d5124b342b5560adf9d676fb472a30ff7db955910de900c",
+                "ttir": "ae8ebda94990174ec1d4a36632e175205f9049ec0973b3d2020ef6110f15a5ed"
+              },
+              "hash": "655a19572e4ac1416562afdb4223f323342816fff63d46a102de2030cb6e84d7"
+            },
+            {
+              "binaries": {
+                "npubin": "53d6ea3c73ce4cd0a754a69ac6b30d8da26873d78015f0f49253f179dfa6e2d5",
+                "ttadapter": "c751dda60515a2f26e19246618d0f541f1448a4b3ea4d83cc91a8e4a90745e17",
+                "ttir": "5c7e9c99e01c20cb3c0a434806e320169089503369730d493ed4db19cf291b73"
+              },
+              "hash": "b3a951d9b3858446fd5cfa274e9d74ec99d4d9eba6e2e6619a93d2db51053050"
+            },
+            {
+              "binaries": {
+                "npubin": "46dd764b39014c33fca6aeb2180658ecd5c6d97fa321bf42282a9e000ab2c00d",
+                "ttadapter": "d108da0fd97981572f10b18aa048daf9225edd0d022d4ad6c59ffe504e7df719",
+                "ttir": "4526c8e7e8f2ffec3aa3bc041dadc60547655ebc1e4184d8ddca6c74040369c7"
+              },
+              "hash": "4013587c679117f5a9840f682582ba51b54bfe0889bf4b90d3650a581e33d984"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "97707e68908bcc064ac0e2140e2039abec28cfb70c022366b3b52b0d483e0636",
+                "ttadapter": "55beac8604bd11086d5124b342b5560adf9d676fb472a30ff7db955910de900c",
+                "ttir": "ae8ebda94990174ec1d4a36632e175205f9049ec0973b3d2020ef6110f15a5ed"
+              },
+              "hash": "655a19572e4ac1416562afdb4223f323342816fff63d46a102de2030cb6e84d7"
+            },
+            {
+              "binaries": {
+                "npubin": "53d6ea3c73ce4cd0a754a69ac6b30d8da26873d78015f0f49253f179dfa6e2d5",
+                "ttadapter": "c751dda60515a2f26e19246618d0f541f1448a4b3ea4d83cc91a8e4a90745e17",
+                "ttir": "5c7e9c99e01c20cb3c0a434806e320169089503369730d493ed4db19cf291b73"
+              },
+              "hash": "b3a951d9b3858446fd5cfa274e9d74ec99d4d9eba6e2e6619a93d2db51053050"
+            },
+            {
+              "binaries": {
+                "npubin": "46dd764b39014c33fca6aeb2180658ecd5c6d97fa321bf42282a9e000ab2c00d",
+                "ttadapter": "d108da0fd97981572f10b18aa048daf9225edd0d022d4ad6c59ffe504e7df719",
+                "ttir": "4526c8e7e8f2ffec3aa3bc041dadc60547655ebc1e4184d8ddca6c74040369c7"
+              },
+              "hash": "4013587c679117f5a9840f682582ba51b54bfe0889bf4b90d3650a581e33d984"
+            }
+          ],
+          "trace_sha256": "520133891127c6cf862692ecda3c5a9a5101635290b80e6069dee559d3240cd4",
+          "normalized_sha256": "28c274a5ebd7b8519bd60e93fbb8484905c27577ff382ec8a6209655cfd2c016",
+          "accounting_sha256": "6426a0932c80b39f71b49bc88228ed37e99d9f52b0b80a6503dc49d0ae76f4c9",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "6e957678f88bf8af4d9bd119b013f172581b931bcf9301d29ad82088ee607c91"
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 1.9911690363194623e-07,
+              "relative_infinity_residual": 1.6414213754548023e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "after",
+            "blocked": true,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-04",
+              "role": "heldout",
+              "seed": 4704,
+              "parameters": {
+                "N": 32,
+                "panel": 16
+              },
+              "scenario_designation": "heldout-cost",
+              "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 5,
+            "workspace_bytes": 4352,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.6281800270080566,
+              0.9035599827766418,
+              0.9097999930381775,
+              0.879040002822876,
+              0.8946200013160706,
+              0.89410001039505,
+              0.9188799858093262,
+              0.8626999855041504,
+              0.8671600222587585,
+              0.860539972782135
+            ],
+            "count": 10,
+            "mean": 0.9618579983711243,
+            "sample_sd": 0.23498868153027327
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                761.7,
+                596.14,
+                624.78,
+                609.24,
+                591.8,
+                616.58,
+                610.02,
+                572.44,
+                575.96,
+                583.98
+              ],
+              "count": 10,
+              "mean": 614.264,
+              "sample_sd": 54.633375066081285
+            },
+            "operation_active_union_us": {
+              "samples": [
+                83.42,
+                83.48,
+                83.56,
+                83.44,
+                80.96,
+                81.34,
+                81.1,
+                81.68,
+                81.62,
+                80.64
+              ],
+              "count": 10,
+              "mean": 82.124,
+              "sample_sd": 1.2011031966025616
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                678.28,
+                512.66,
+                541.22,
+                525.8,
+                510.84,
+                535.24,
+                528.92,
+                490.76,
+                494.34,
+                503.34
+              ],
+              "count": 10,
+              "mean": 532.14,
+              "sample_sd": 54.0609376331726
+            }
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                83.42,
+                83.48,
+                83.56,
+                83.44,
+                80.96,
+                81.34,
+                81.1,
+                81.67999999999999,
+                81.62,
+                80.64
+              ],
+              "count": 10,
+              "mean": 82.124,
+              "sample_sd": 1.201103196602562
+            },
+            "device_active_union_us": {
+              "samples": [
+                83.42,
+                83.48,
+                83.56,
+                83.44,
+                80.96,
+                81.34,
+                81.1,
+                81.68,
+                81.62,
+                80.64
+              ],
+              "count": 10,
+              "mean": 82.124,
+              "sample_sd": 1.2011031966025616
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "lu_block_row",
+              "lu_copy",
+              "lu_panel",
+              "lu_schur"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "binaries": {
+                "npubin": "97707e68908bcc064ac0e2140e2039abec28cfb70c022366b3b52b0d483e0636",
+                "ttadapter": "55beac8604bd11086d5124b342b5560adf9d676fb472a30ff7db955910de900c",
+                "ttir": "ae8ebda94990174ec1d4a36632e175205f9049ec0973b3d2020ef6110f15a5ed"
+              },
+              "hash": "655a19572e4ac1416562afdb4223f323342816fff63d46a102de2030cb6e84d7"
+            },
+            {
+              "binaries": {
+                "npubin": "f6e2b8410932694f9825106132881ca16d0e741236ad5c41000c4ce80a859506",
+                "ttadapter": "c3b8b3a997303b66ea3034279259afd803555474679ec8a7d33316d8b077f1e8",
+                "ttir": "058f2345e2a6e9fc3e247fcc4972c0d7e6a09aa75e1b47f98b1ea4a3b8164369"
+              },
+              "hash": "748cdba83013247b14c39b00be44c41b891482566f15b905b6ac9050fad881c7"
+            },
+            {
+              "binaries": {
+                "npubin": "7cc04343478f0396c77125effafc8b5dd9251546bdce00c095db55eab744ffa1",
+                "ttadapter": "36edc5212ce52d1a0d422a6b9f6cd5bdeeff9e625dcbed2c99660a3e25c5f848",
+                "ttir": "0c89a9ee660bf094f15bb12be4d4136e06760f6b476d5b9afc3753a137540311"
+              },
+              "hash": "982a7bad8309db9b9b6cdde4b007a7c74778eb13e1df2e70f96a04428b493610"
+            },
+            {
+              "binaries": {
+                "npubin": "279e7a57191f9e37693094baaabe62864a63a7fdee8d19e2530809fff1f80ff5",
+                "ttadapter": "a54a59bf30414ac560b911fa953230630442e9812a88a0e93d7382a81136dbd6",
+                "ttir": "dc107e0774ea01f2436eb41660bbf87ce03c291e272018194b66e23bb669bd7c"
+              },
+              "hash": "d8a60c270d505896123b163cc78c8315ef054e9d4f2db6114bb578a971c3479f"
+            }
+          ],
+          "compilation_after": [
+            {
+              "binaries": {
+                "npubin": "97707e68908bcc064ac0e2140e2039abec28cfb70c022366b3b52b0d483e0636",
+                "ttadapter": "55beac8604bd11086d5124b342b5560adf9d676fb472a30ff7db955910de900c",
+                "ttir": "ae8ebda94990174ec1d4a36632e175205f9049ec0973b3d2020ef6110f15a5ed"
+              },
+              "hash": "655a19572e4ac1416562afdb4223f323342816fff63d46a102de2030cb6e84d7"
+            },
+            {
+              "binaries": {
+                "npubin": "f6e2b8410932694f9825106132881ca16d0e741236ad5c41000c4ce80a859506",
+                "ttadapter": "c3b8b3a997303b66ea3034279259afd803555474679ec8a7d33316d8b077f1e8",
+                "ttir": "058f2345e2a6e9fc3e247fcc4972c0d7e6a09aa75e1b47f98b1ea4a3b8164369"
+              },
+              "hash": "748cdba83013247b14c39b00be44c41b891482566f15b905b6ac9050fad881c7"
+            },
+            {
+              "binaries": {
+                "npubin": "7cc04343478f0396c77125effafc8b5dd9251546bdce00c095db55eab744ffa1",
+                "ttadapter": "36edc5212ce52d1a0d422a6b9f6cd5bdeeff9e625dcbed2c99660a3e25c5f848",
+                "ttir": "0c89a9ee660bf094f15bb12be4d4136e06760f6b476d5b9afc3753a137540311"
+              },
+              "hash": "982a7bad8309db9b9b6cdde4b007a7c74778eb13e1df2e70f96a04428b493610"
+            },
+            {
+              "binaries": {
+                "npubin": "279e7a57191f9e37693094baaabe62864a63a7fdee8d19e2530809fff1f80ff5",
+                "ttadapter": "a54a59bf30414ac560b911fa953230630442e9812a88a0e93d7382a81136dbd6",
+                "ttir": "dc107e0774ea01f2436eb41660bbf87ce03c291e272018194b66e23bb669bd7c"
+              },
+              "hash": "d8a60c270d505896123b163cc78c8315ef054e9d4f2db6114bb578a971c3479f"
+            }
+          ],
+          "trace_sha256": "39fb733077adbea40b478bb0cadda1f795596879cb9c1885de693255a2747288",
+          "normalized_sha256": "a006a0701303b505aba650d1e4a9c0b5abf60a978ed27d3cb65c16131c26864b",
+          "accounting_sha256": "bcc8a6a96b8d2c647aa51d4ff3392e5e06cad14d11b99d7469ced19b3476b2fd",
+          "pmu_status": "available",
+          "pmu_csv_sha256": "b12bee97f73a3c93a4c8ad7e5dfa8a698b63b6c3e97396bec7f5a534778e19de"
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            7390.08,
+            7236.64,
+            16778.76,
+            7474.16,
+            7190.3,
+            7222.02,
+            7264.86,
+            7338.02,
+            7191.7,
+            7223.74
+          ],
+          "count": 10,
+          "mean": 8231.028,
+          "sample_sd": 3004.802825096293
+        },
+        "after": {
+          "samples": [
+            761.7,
+            596.14,
+            624.78,
+            609.24,
+            591.8,
+            616.58,
+            610.02,
+            572.44,
+            575.96,
+            583.98
+          ],
+          "count": 10,
+          "mean": 614.264,
+          "sample_sd": 54.633375066081285
+        }
+      },
+      "case": {
+        "case_id": "W004-W07-04",
+        "role": "heldout",
+        "seed": 4704,
+        "parameters": {
+          "N": 32,
+          "panel": 16
+        },
+        "scenario_designation": "heldout-cost",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "original_result_sha256": "f1c822717d86fac3eb74bc815bcffc50e34531686261ede342f4cfbf5751dbff",
+      "span_mean_ratio_before_over_after": 13.399821575088236
+    },
+    {
+      "case_id": "W004-W07-GA",
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 0,
+        "capture_calls": 0,
+        "correctness_calls": 2
+      },
+      "host_correctness_forwards": 2,
+      "npu_correctness_forwards": 0,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.822252235887504e-08,
+              "relative_infinity_residual": 1.924491391486381e-08,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "host",
+            "host_forwards_per_call": 1,
+            "npu_forwards_per_call": 0,
+            "fallback": "dense CPU partial pivot; correctness-only"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          }
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 5.822252235887504e-08,
+              "relative_infinity_residual": 1.924491391486381e-08,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "host",
+            "host_forwards_per_call": 1,
+            "npu_forwards_per_call": 0,
+            "fallback": "dense CPU partial pivot; correctness-only"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          }
+        }
+      },
+      "case": {
+        "case_id": "W004-W07-GA",
+        "role": "guard",
+        "seed": 4791,
+        "parameters": {
+          "N": 4,
+          "panel": 16,
+          "distribution": "nonsingular-zero-first-pivot"
+        },
+        "expected": "partialpivotfallbackcorrectpermutation/residual"
+      },
+      "original_result_sha256": "35c844d02f4c0704705fe08d621cd0a97a220b65ab47bc3de2108aade0607536"
+    },
+    {
+      "case_id": "W004-W07-GB",
+      "status": "complete",
+      "counts": {
+        "profiled_calls": 0,
+        "capture_calls": 0,
+        "correctness_calls": 2
+      },
+      "host_correctness_forwards": 0,
+      "npu_correctness_forwards": 2,
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.151261211975509e-07,
+              "relative_infinity_residual": 2.5863886100837095e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "before",
+            "blocked": false,
+            "tail_fallback": false,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-GB",
+              "role": "guard",
+              "seed": 4792,
+              "parameters": {
+                "N": 35,
+                "panel": 16,
+                "distribution": "strictdominance"
+              },
+              "expected": "nondivisibleNafterserialbaselinefallback/alltailwritten"
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 69,
+            "workspace_bytes": 5180,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          }
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_absolute_error": 3.151261211975509e-07,
+              "relative_infinity_residual": 2.5863886100837095e-07,
+              "atol": 2e-05,
+              "rtol": 0.0002,
+              "residual_limit": 2e-05
+            }
+          },
+          "metadata": {
+            "execution": "npu",
+            "arm": "after",
+            "blocked": false,
+            "tail_fallback": true,
+            "panel": 16,
+            "shape": {
+              "case_id": "W004-W07-GB",
+              "role": "guard",
+              "seed": 4792,
+              "parameters": {
+                "N": 35,
+                "panel": 16,
+                "distribution": "strictdominance"
+              },
+              "expected": "nondivisibleNafterserialbaselinefallback/alltailwritten"
+            },
+            "precision": "FP32; IEEE FP32 Cube; no TF32",
+            "launches_per_forward": 69,
+            "workspace_bytes": 5180,
+            "triton_version": "3.2.0",
+            "torch_version": "2.10.0+cpu",
+            "allocation": "output preallocated; full input copy and permutation write in each forward"
+          },
+          "sources": {
+            "source/examples/optimization-library/triton/blocked_lu.py": "db3d06f5c5c3f63e939c2134b14ba128ba6c703911cb7313d80791c2f865c06e",
+            "source/examples/optimization-library/triton/blocked_lu_contract.py": "e132d2c3506828854d9aa17642ad02b545d59a0c4917fd8c6f75db1bc7587e8a"
+          }
+        }
+      },
+      "case": {
+        "case_id": "W004-W07-GB",
+        "role": "guard",
+        "seed": 4792,
+        "parameters": {
+          "N": 35,
+          "panel": 16,
+          "distribution": "strictdominance"
+        },
+        "expected": "nondivisibleNafterserialbaselinefallback/alltailwritten"
+      },
+      "original_result_sha256": "768dcea4692142bfce73f61b67081e91b31df7e75297bba5bcfc0cfd1e111368"
+    }
+  ],
+  "lossless_portable_evidence": {
+    "path": "optimization-wave004-blocked-lu-evidence.json.gz",
+    "sha256": "8a9c2219863165ae83dfce5479780b77d45ea910e2f1d799870c35ea34f18fa4",
+    "bytes": 871787,
+    "description": "All ten event/span/active/gap samples, per-iteration task rows and exact joined raw PMU rows; paths normalized, raw original digests retained"
+  },
+  "actual_binary_sha256": [
+    "024202669443081b2fd61cea0b22ea44da0c2069fc5fce2fda3abda8fe153249",
+    "177fd28ad70d3ffefb7d025f843d325b104fd435e82178b17447507fe963f49a",
+    "25111beb10c9dd51aac73159d415374040816ff98dd884f9e3e445dcfcfb0047",
+    "279e7a57191f9e37693094baaabe62864a63a7fdee8d19e2530809fff1f80ff5",
+    "44ec1f06e5bf3c34f6f4fc77799388b08f7e43e2558af31465f23a961c762784",
+    "46dd764b39014c33fca6aeb2180658ecd5c6d97fa321bf42282a9e000ab2c00d",
+    "48f9692b0d8594fd8f12ecb750cc631237dea84f70fdec3aeb07315463fece37",
+    "53d6ea3c73ce4cd0a754a69ac6b30d8da26873d78015f0f49253f179dfa6e2d5",
+    "5972b97f250e778ac677bf1895ceaf630c09b8528ac334f773d510768e2294dc",
+    "5db0298bd07873d11becb68876c12d6002ebe6577cf9bc85d2ef552a0730fb9c",
+    "7878b48f60cd95d30ac2abba47568a46d1cbf1c4a6f59a993be4f04a9d36cc0a",
+    "7a21df86da7e022f544059bd38c829864bfddbb0f73a4d33ef1bdd0e688a1e4a",
+    "7cc04343478f0396c77125effafc8b5dd9251546bdce00c095db55eab744ffa1",
+    "8766987c82437ab8bfdd78e9085bc69330a01c8d9c0c63849582b5ecb69fa176",
+    "914ff555abfde78f83a4af410d9f025721e00a8f895d3c1a9ee58a167b2f9699",
+    "97707e68908bcc064ac0e2140e2039abec28cfb70c022366b3b52b0d483e0636",
+    "99f6dba5414287e341c2a888ec96855103d6eb740cddbd9bf1db76c93743cac4",
+    "9b107e6a10dbc17568f92bb88d85e5ab5fcbd6dde520a31e3511ca305bfba903",
+    "9c30e19d59210a888d995bc80b72527016cfda67946050bd476e40e6fd31e7e3",
+    "a5c57f5f04055020dcca0cdfda7bd7409a53236b87ccd39d3146df1c756e1fbc",
+    "ac6356b2a98c085aace013f0b32252a6b9578b26c24990d4a6da73808ddb3e45",
+    "e2cd3baa31c14eec94691b533660ca5ec856edd82fb133b81d745b1562cde27b",
+    "f6ad1e2f618a7232213e51ef5955312ca13275e3f2f6192bd1d6d938da4599f7",
+    "f6e2b8410932694f9825106132881ca16d0e741236ad5c41000c4ce80a859506",
+    "fb70c644506d8b2fa08c44c83f740b97cde600aceed14136537288d1af875fec"
+  ]
+}

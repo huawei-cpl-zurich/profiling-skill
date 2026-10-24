@@ -1,0 +1,11 @@
+{
+  "case_id": "W004-W07-03",
+  "role": "heldout",
+  "seed": 4703,
+  "parameters": {
+    "N": 192,
+    "panel": 16
+  },
+  "scenario_designation": "heldout-benefit",
+  "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+}

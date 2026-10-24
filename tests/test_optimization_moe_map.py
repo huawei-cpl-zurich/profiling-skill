@@ -26,6 +26,20 @@ class MapContract(unittest.TestCase):
                 expected.append(int(i['output_cumsum'][i['inverse_sorted_indices'][chunk]])+token-int(i['input_cumsum'][chunk]))
             self.assertEqual(mapping.tolist(),expected)
 
+    def test_explicit_permutation_with_generated_sizes(self):
+        spec=dict(seed=314159,N=9,num_splits=3,sorted_indices=[2,1,0])
+        data=make_case(spec)
+        self.assertEqual(data['inputs']['split_sizes'].tolist(),[3,3,3])
+        self.assertEqual(data['inputs']['inverse_sorted_indices'].tolist(),[2,1,0])
+        self.assertEqual(data['expected'].tolist(),[6,7,8,3,4,5,0,1,2])
+        from moe_map import Adapter
+        from optimization_pair import fixture
+        for order in ([2,2,0],[3,1,0],[2,1],[2,True,0]):
+            with tempfile.TemporaryDirectory() as d:
+                cache=Path(d)/'cache'
+                with self.assertRaises(ValueError):fixture(Adapter(),dict(spec,sorted_indices=order),cache,torch)
+                self.assertFalse(cache.exists())
+
     def test_invalid_metadata(self):
         spec=self.spec();data=make_case(spec)
         for key,index,value in [('split_sizes',0,-1),('input_cumsum',0,1),('output_cumsum',1,-2),('inverse_sorted_indices',0,99)]:
@@ -93,6 +107,41 @@ class PublicBoundary(unittest.TestCase):
         with patch.dict(sys.modules,modules), patch.object(torch,'npu',types.SimpleNamespace(
                  get_device_properties=lambda _:types.SimpleNamespace(vector_core_num=65)),create=True):
             with self.assertRaises(ValueError):Adapter().prepare('before',spec,data,Path('.'))
+
+    def test_cli_explicit_permutation_uses_generated_sizes(self):
+        import subprocess,json,os
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            # Replace only the execution backend; retain the real provider,
+            # fixture cache, CLI, and correctness accounting in the subprocess.
+            (root/'cpu_map.py').write_text("""
+from types import SimpleNamespace
+from pathlib import Path
+from moe_map import Adapter
+import moe_map_contract
+class CPUAdapter(Adapter):
+    def prepare(self,arm,spec,fixture,output):
+        return SimpleNamespace(run=lambda:fixture['expected'],
+            expected_kernels=['cpu_map'],sources=[Path(moe_map_contract.__file__)],metadata={})
+    def validate(self,arm,actual,fixture,spec):
+        return dict(passed=actual.tolist()==[6,7,8,3,4,5,0,1,2],mapping=actual.tolist())
+def factory():return CPUAdapter()
+""")
+            env=dict(os.environ,PYTHONPATH=os.pathsep.join((str(root),str(ROOT/'examples/optimization-library/triton'))))
+            (root/'provenance.json').write_text('{}')
+            for index,order in enumerate(([2,1,0],[2,2,0])):
+                (root/'case.json').write_text(json.dumps(dict(seed=314159,N=9,num_splits=3,role='guard',sorted_indices=order)))
+                result=subprocess.run([sys.executable,str(ROOT/'scripts/optimization_pair.py'),'--adapter','cpu_map:factory',
+                    '--case',str(root/'case.json'),'--provenance',str(root/'provenance.json'),
+                    '--output',str(root/f'out{index}'),'--cache',str(root/f'cache{index}')],
+                    cwd=root,env=env,capture_output=True,text=True)
+                self.assertEqual(result.returncode,index,result.stderr)
+                report=json.loads((root/f'out{index}/result.json').read_text())
+                self.assertEqual(report['counts']['correctness_calls'],0 if index else 2)
+                if index:self.assertFalse((root/f'cache{index}').exists())
+                else:
+                    for arm in ('before','after'):
+                        self.assertEqual(report['arms'][arm]['correctness']['diagnostics']['mapping'],[6,7,8,3,4,5,0,1,2])
 
     def test_standalone_cli_rejects_before_cache(self):
         import subprocess,json,os

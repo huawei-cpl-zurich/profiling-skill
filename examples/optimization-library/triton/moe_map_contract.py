@@ -56,8 +56,9 @@ def make_case(spec):
             weights=torch.randint(0,17,(s,),generator=rng,dtype=torch.int64);weights[0]=1
             counts=weights*n//int(weights.sum());counts[0]+=n-int(counts.sum());sizes=counts.tolist()
         else: sizes=[n//s+int(i<n%s) for i in range(s)]
-        order=(torch.randperm(s,generator=rng).tolist() if kind=='uneven_zero_shuffle'
-               else list(reversed(range(s))) if kind=='reverse' else list(range(s)))
+        if order is None:
+            order=(torch.randperm(s,generator=rng).tolist() if kind=='uneven_zero_shuffle'
+                   else list(reversed(range(s))) if kind=='reverse' else list(range(s)))
     if (not isinstance(sizes,list) or len(sizes)!=s or any(type(x) is not int or x<0 or x>n for x in sizes)
             or sum(sizes)!=n or not isinstance(order,list) or any(type(x) is not int for x in order)
             or sorted(order)!=list(range(s))): raise ValueError('invalid split/permutation specification')

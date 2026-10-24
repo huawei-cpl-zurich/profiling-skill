@@ -70,3 +70,12 @@ payloads were generated once. The tested runtime imported Triton 3.2.0,
 triton-ascend 3.2.2, CANN 9.1.0, on 910B4-1 with 40 queried AIV cores.
 Distribution metadata separately reported Triton 3.5.0; the receipt explicitly
 separates this from the actual imported module version.
+
+A review follow-up fixes explicit `sorted_indices` supplied with generated
+split sizes: that permutation is now honored and validated instead of being
+replaced by the default order. Nonfrozen provider and external CLI tests cover
+reverse order and invalid permutations before cache/device preparation.
+The original six frozen payloads, measured provider binding, kernel binaries,
+and profiling receipt remain unchanged. `E08-publication.json` records the
+updated provider hash and the source proof that the frozen-case branches retain
+their original behavior; the follow-up gate runs CPU tests only.

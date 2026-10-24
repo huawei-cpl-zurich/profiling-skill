@@ -57,10 +57,15 @@ def _queue_placeholder(event):
 
 
 def _event_record(event):
-    """Observed timing-event command; still requires its complete host flow."""
+    """Timing command identity; its duration is retained, not a classifier.
+
+    Complete linkage to the observed record_event CPU op is required below.
+    Vendor clock conversion produces durations such as 0.01975 as well as
+    0.02 us; enumerating those values does not establish command identity.
+    """
     args = event['args']
     return (event.get('name') == 'EVENT_RECORD' and event.get('cat') is None
-            and _decimal(event.get('dur')) in (Decimal('0'), Decimal('0.02'))
+            and _decimal(event.get('dur')) >= 0
             and all(type(args.get(key)) is int and args[key] == value for key, value in
                     {'Model Id': 2**32 - 1, 'Subtask Id': 2**32 - 1}.items())
             and all(type(args.get(key)) is int and 0 <= args[key] < maximum for key, maximum in
@@ -90,6 +95,42 @@ def normalize_trace(events, iteration_names, *, export_completed):
         raise CaptureError(f'unsupported/incomplete vendor trace schema: {error}') from error
 
 
+def _native_host(node, task, host):
+    """Bridge the observed CANN launch-thread metadata to its CPU caller.
+
+    Device ownership still comes from an exact HostToDevice flow. Range
+    containment only identifies the CPU caller on the explicitly named thread.
+    """
+    args = node['args']
+    connection = args.get('connection_id')
+    if (node.get('name') != 'Node@launch' or node.get('ph') != 'X'
+            or args.get('Mode') != 'launch' or args.get('level') != 'node'
+            or type(args.get('Thread Id')) is not int or args['Thread Id'] != node['tid']
+            or type(connection) is not int or not 0 <= connection < 2**64 - 1
+            or type(task['args'].get('connection_id')) is not int
+            or task['args']['connection_id'] != connection
+            or args.get('item_id') != task['name']):
+        raise CaptureError('unvalidated native launch or mismatched connection identity')
+    start, end = _decimal(node['ts']), _decimal(node['ts']) + _decimal(node['dur'])
+    if end <= start:
+        raise CaptureError('native launch must have a closed positive duration')
+    callers = [op for values in host.values() for op in values
+               if op['tid'] == args['Thread Id']
+               and _decimal(op['ts']) <= start
+               and end <= _decimal(op['ts']) + _decimal(op['dur'])]
+    if not callers or len({(op['pid'], op['tid']) for op in callers}) != 1:
+        raise CaptureError('native launch lacks a unique CPU caller thread')
+    # Nested record_function / dispatcher scopes are ordinary. The innermost
+    # caller must be unique; never choose among overlapping peer CPU ranges.
+    inner = [op for op in callers if not any(other is not op
+             and _decimal(op['ts']) <= _decimal(other['ts'])
+             and _decimal(other['ts']) + _decimal(other['dur'])
+                 <= _decimal(op['ts']) + _decimal(op['dur']) for other in callers)]
+    if len(inner) != 1:
+        raise CaptureError('ambiguous native CPU caller scope')
+    return inner[0]
+
+
 def _normalize(events, names):
     markers = [e for e in events if e.get('name') in names and e.get('cat') == 'cpu_op']
     if (len(markers) != len(names) or {e['name'] for e in markers} != set(names)
@@ -102,11 +143,14 @@ def _normalize(events, names):
         if _decimal(first['ts']) + _decimal(first['dur']) > _decimal(second['ts']):
             raise CaptureError('overlapping iteration markers')
     host, task_at, endpoints = defaultdict(list), defaultdict(list), defaultdict(dict)
+    native_nodes, native_endpoints = defaultdict(list), defaultdict(dict)
     tasks, administrative = [], []
     placeholder_coordinates = set()
     for position, event in enumerate(events):
         if event.get('ph') == 'X' and event.get('cat') == 'cpu_op' and event not in markers:
             host[_coordinate(event)].append(event)
+        if event.get('ph') == 'X' and event.get('name') == 'Node@launch':
+            native_nodes[_coordinate(event)].append(event)
         if event.get('ph') == 'X' and 'Task Type' in event.get('args', {}):
             kind = event['args']['Task Type']
             if kind in ('PROFILER_TRACE_EX', 'MODEL_EXECUTE',
@@ -130,28 +174,62 @@ def _normalize(events, names):
             if phase in endpoints[key]:
                 raise CaptureError('duplicate async_npu flow endpoint')
             endpoints[key][phase] = event
+        if event.get('cat') == 'HostToDevice' and event.get('ph') in ('s', 'f'):
+            key, phase = str(event['id']), event['ph']
+            native_endpoints[key].setdefault(phase, []).append(event)
     index = {name: dict(iteration_id=name, correlation_ids=[]) for name in names}
     used, identities, normalized, links, excluded = set(), set(), [], [], []
     origin = min(_decimal(m['ts']) for m in markers)
-    for key, phases in endpoints.items():
+    flows = [('async_npu', key, phases) for key, phases in endpoints.items()]
+    # A Torch link already proves ownership of timing events and ordinary ops.
+    # Native CANN links to those same tasks are auxiliary, not extra tasks.
+    flows += [('HostToDevice', key, phases) for key, phases in native_endpoints.items()]
+    torch_linked, native_link_count, auxiliary = set(), 0, []
+    for schema, key, phases in flows:
+        if schema == 'HostToDevice':
+            if any(_coordinate(endpoint) in placeholder_coordinates
+                   for values in phases.values() for endpoint in values):
+                raise CaptureError('native flow must not identify a queue placeholder')
+            finishes = phases.get('f', [])
+            positions = {position for finish in finishes
+                         for position, _ in task_at[_coordinate(finish)]}
+            if positions and positions <= torch_linked:
+                auxiliary.append(dict(flow_id=key, reason='auxiliary CANN flow; task already has complete Torch proof'))
+                continue
+            if not positions:
+                # Unused vendor flows are not ownership evidence. Any uncovered
+                # device task still fails the complete-coverage check below.
+                continue
+            if any(len(values) != 1 for values in phases.values()):
+                raise CaptureError('duplicate native flow endpoint')
+            phases = {phase: values[0] for phase, values in phases.items()}
         if set(phases) != {'s', 'f'}:
-            raise CaptureError('incomplete async_npu flow')
+            raise CaptureError('incomplete CPU/NPU flow')
         start, finish = phases['s'], phases['f']
         if any(_coordinate(endpoint) in placeholder_coordinates for endpoint in (start, finish)):
             raise CaptureError('flow endpoint must identify exactly one CPU op and device task; '
                                'queue placeholder coordinate is ambiguous')
-        matches = host[_coordinate(start)]
+        matches = (host if schema == 'async_npu' else native_nodes)[_coordinate(start)]
         targets = task_at[_coordinate(finish)]
         if len(matches) != 1 or len(targets) != 1:
             raise CaptureError('flow endpoint must identify exactly one CPU op and device task')
         op, (position, task) = matches[0], targets[0]
+        node = None
+        if schema == 'HostToDevice':
+            if any(endpoint.get('name') != 'HostToDevice' + key for endpoint in (start, finish)):
+                raise CaptureError('unsupported native flow identity')
+            node = op
+            op = _native_host(node, task, host)
+            native_link_count += 1
         if position in used:
             raise CaptureError('device task assigned more than once')
         used.add(position)
-        if _decimal(finish['ts']) < _decimal(start['ts']):
+        if schema == 'async_npu':
+            torch_linked.add(position)
+        if schema == 'async_npu' and _decimal(finish['ts']) < _decimal(start['ts']):
             raise CaptureError('reversed CPU/NPU flow')
-        owners = [m for m in markers if (m['pid'], m['tid']) == (start['pid'], start['tid'])
-                  and _decimal(m['ts']) <= _decimal(start['ts'])
+        owners = [m for m in markers if (m['pid'], m['tid']) == (op['pid'], op['tid'])
+                  and _decimal(m['ts']) <= _decimal(op['ts'])
                   and _decimal(op['ts']) + _decimal(op['dur'])
                   <= _decimal(m['ts']) + _decimal(m['dur'])]
         if len(owners) > 1:
@@ -167,6 +245,15 @@ def _normalize(events, names):
             raise CaptureError('unrepresentable task duration')
         link = dict(flow_id=key, task_id=identity, host_start=str(start['ts']),
                     device_start=str(task['ts']), task_type=kind)
+        if node is not None:
+            # CANN host/device timestamps cross clock domains. The retained
+            # direct-launch trace contains a 43ns inversion despite an exact
+            # flow/connection match. Preserve it; do not invent a clock offset
+            # or use timestamp proximity as the ownership criterion.
+            link.update(flow_schema=schema, native_launch=dict(node), host=dict(op),
+                        host_device_start_delta_us=str(_decimal(task['ts']) - _decimal(node['ts'])),
+                        host_device_clock_order='device-before-host' if _decimal(task['ts']) < _decimal(node['ts'])
+                                               else 'host-before-device')
         if kind == 'EVENT_RECORD':
             if op.get('name') != 'record_event':
                 raise CaptureError('EVENT_RECORD requires the observed record_event CPU op')
@@ -178,7 +265,7 @@ def _normalize(events, names):
                                  task=dict(task), link=link))
             continue
         name = owners[0]['name']
-        correlation = 'async_npu:' + key
+        correlation = schema + ':' + key
         index[name]['correlation_ids'].append(correlation)
         normalized.append(dict(task_id=identity, correlation_id=correlation,
             name=task['name'], kind=TASK_KINDS[kind],
@@ -189,10 +276,12 @@ def _normalize(events, names):
     if any(not item['correlation_ids'] for item in index.values()):
         raise CaptureError('empty active iteration; no explicitly linked device work')
     return dict(iterations=list(index.values()), tasks=normalized, capture_complete=True,
-        acquisition_evidence=dict(export_completed=True, schema='torch_npu_trace_async_npu_v1',
+        acquisition_evidence=dict(export_completed=True,
+            schema='torch_npu_trace_cann_native_v1' if native_link_count else 'torch_npu_trace_async_npu_v1',
             association='explicit CPU/NPU flow + same-thread host scope nesting',
             observed_tasks=sum(task['args']['Task Type'] != 'EVENT_RECORD' for _, task in tasks),
-            paired_flows=len(endpoints), links=links,
+            paired_flows=len(endpoints) + native_link_count, links=links,
+            native_flow_count=native_link_count, auxiliary_native_flows=auxiliary,
             exclusions=excluded + administrative, silent_vendor_record_loss_detectable=False))
 
 

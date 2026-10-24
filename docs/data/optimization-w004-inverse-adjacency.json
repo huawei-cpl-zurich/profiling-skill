@@ -1,0 +1,2991 @@
+{
+  "family": "W004-W06",
+  "status": "incomplete-capture-failed",
+  "date": "2026-10-24",
+  "product": "Ascend910B4-1",
+  "physical_die": 3,
+  "logical_device": 0,
+  "frozen_matrix_sha256": "444a1a0d436076dac255679c740da2ed2fda0fcfa3f82d2886838ab4b52cd5d9",
+  "collection_handle": "remote:gz-a3:job:89c80a6a-0776-4d7f-a432-c0ca9a283097",
+  "terminal_exit": 1,
+  "protocol": {
+    "cpu_oracles_generated": 6,
+    "correctness_calls": 2,
+    "captures_started": 2,
+    "completed_profiled_forwards": 10,
+    "api_profile_forward_invocations": 20,
+    "after_api_invocations": 10,
+    "after_proven_completed_device_forwards": null,
+    "after_event_samples": 0,
+    "warmups": 0,
+    "extra_timings": 0,
+    "compile_all_before_first_forward": true,
+    "replays": 0
+  },
+  "failure": {
+    "stage": "first candidate capture device synchronization",
+    "error_type": "RuntimeError",
+    "error_code": 507034,
+    "error": "Vector core execution timed out",
+    "capture_entry_utc": "2026-10-24T17:01:36Z",
+    "structured_error_utc": "2026-10-24T17:10:46Z",
+    "approximate_capture_elapsed_seconds": 550,
+    "raw_capture_result_sha256": "387faff9e38640cf04d75e9db9f8fe2af1ae3bc3ca7279ac2981a7f5a5fd852b",
+    "no_latency_samples": true,
+    "no_paired_speedup": true,
+    "cause": "not established",
+    "remaining_cases": "unattempted",
+    "cleanup": "owned PID absent; no signals, reset, cancellation or retry",
+    "bookkeeping": "Outer result profiled_calls=10 omits failed callback attempts; raw candidate capture durably records forward_calls=10. API invocations do not prove completed device forwards."
+  },
+  "operational_limitations": [
+    "v1 export semaphore used leases/exports{index}.lock rather than canonical exports/{index}.lock, so cross-stream capture coordination was not guaranteed. Causation of the timeout is not established.",
+    "v1 had no 600-second capture watchdog; structured timeout terminated the job after approximately 550 seconds. Future unattempted work must use canonical locks and a bounded watchdog."
+  ],
+  "archive": {
+    "name": "optimization-w004-inverse-adjacency-compact.tgz",
+    "sha256": "292650991428087ec5102434b264245b049bdcfabdd0bb109712e484aff1e52a",
+    "bytes": 1943990,
+    "files": 156
+  },
+  "fixtures": [
+    {
+      "case_id": "W004-W06-03",
+      "fixture_sha256": "7e0996b915018741af6da21a8f18a75d0351f11c844b5697a9a0198f4bca5346",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+        }
+      ]
+    },
+    {
+      "case_id": "W004-W06-GB",
+      "fixture_sha256": "1087fdca519d2098d051ebe16a50caaf981f666357f923047504b0966658eed0",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+        }
+      ]
+    },
+    {
+      "case_id": "W004-W06-GA",
+      "fixture_sha256": "5f1abd9efc06a031c96b0a1b91869553f968c3dfaa169149b04340bdfdf5b925",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+        }
+      ]
+    },
+    {
+      "case_id": "W004-W06-04",
+      "fixture_sha256": "2026b52cea483a2f234a4f253d95b4845173ab24b6c17b57205a306a4bf477ba",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+        }
+      ]
+    },
+    {
+      "case_id": "W004-W06-02",
+      "fixture_sha256": "df9c92552a000e3856e77e4b798313279969200ef359915cb8d4cb5cb8490b87",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+        }
+      ]
+    },
+    {
+      "case_id": "W004-W06-01",
+      "fixture_sha256": "b54dd02e3b12537bd5d1565ff7fb2f5686874302518ebda531ffee57cbc8a8f9",
+      "source_identity": [
+        {
+          "position": 0,
+          "sha256": "9e219a6c18aed17cd24f079b43850b211fe00102b95ed4300e4b8d028c3dbba7"
+        }
+      ]
+    }
+  ],
+  "compile_only": [
+    {
+      "case": "W004-W06-01",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "f894e67a13562ef61018a6b075b12085c2143f7f183689ef87056143dc8a8ba6",
+          "binaries": {
+            "ttir": "03b72159398f2fce2e999a6f9b66d8c0b6e673bbe73887ad5fbaf6e7b56f1e64",
+            "ttadapter": "b90c3dc8d0b7d6948ce9dde807424aa7ce315fda3e805f35b4e38d9110c4ed63",
+            "npubin": "dd88f5f6b7c302d1db9d84b4eaac8e162f774912b9c67c50af59537898278b4b"
+          }
+        },
+        {
+          "hash": "a62ad46806bafd63d836c340f07c6a9197ec7f5caa3f30d919921f795e7965ef",
+          "binaries": {
+            "ttir": "75f1721b5c8c6b4ac198c64986546e54fec72fc9d83eaf9157807b92541520ba",
+            "ttadapter": "ebc4bd5911617063f41e4a17a32ca5c60dfc4e4d2943d4fb58e41adf70a4b754",
+            "npubin": "cad496fff9ea55cb6f564ce4fcbf59f2a27711630096fc4d1a7cd57dd8ca4887"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-01",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "a2b9c913d17c3231a93c0c0f9cc2c93a900e5ac0a6c002a5342033b410d29c2c",
+          "binaries": {
+            "ttir": "262ac445f7989627003af37d312fe44a345bcacc53509d39a841129835cd8db2",
+            "ttadapter": "50e9c39fbc6725a81421879a7695a4986eb819bfbc45c755d9879d59d5f2be34",
+            "npubin": "e727b2cf1eca6084c1be4085e80b3ee1eab19e575bb81936e6a80a367f36c264"
+          }
+        },
+        {
+          "hash": "96e38ff4ddbd6508819cd2ba056981722aeee9d8c65af8f4a0574aff41f3de4e",
+          "binaries": {
+            "ttir": "2294a877089ce14c741a6e7bb0a8a172b2e5cc016e41057cad670d290fcf42eb",
+            "ttadapter": "05e2815ed17d5bed3bfaeb197006455c40443bd7a65cf92ece77db668ddd2541",
+            "npubin": "ec67399b6488b0a24e5645785f17d6bf793c3a4125547d24a2c8c5fee4929e5e"
+          }
+        },
+        {
+          "hash": "a75623a7c6bd8e34cd50e788e2cbc84ddb2e9752b1ec677ab1032dbddd6de928",
+          "binaries": {
+            "ttir": "8d20354ce80d2bdb383c675be8650c58d0578b118224ccf6ad335dd11fb3e1a2",
+            "ttadapter": "b7a177f4744290c3c74c5feb873866a69d6b6e01687c05c0b42df87d32ad0062",
+            "npubin": "9e4fa235608c975afc0c3229f745305576b71358277caf2224e0e6b2c48ee976"
+          }
+        },
+        {
+          "hash": "d81e6316f2990310320d588444ea6fe7acfc0b627bad6ae4c3457a29b1f8e3ad",
+          "binaries": {
+            "ttir": "237647dc6511707e5ee39b0dbd8b0d4d11fbea6263d9d11dc5770681db4110aa",
+            "ttadapter": "ce476d5bec0ccce065524924fb238d0127439464fcea16018073e577206012e8",
+            "npubin": "f9e57e6a4327d705163dab07562d27f807d8e9656d37d9611c352b29fadc13bf"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-02",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "ec14f4ace6d37619eaec78d31bc423888c9d9971e3837e55fd05748a649db508",
+          "binaries": {
+            "ttir": "f9580997beff536a670b640b4a5dbabc90c33f443cf369518230ecb7440027fb",
+            "ttadapter": "c12e990ac6450616b0baa3dd3d02486fdbdeceea146c5469d20671c040007bbc",
+            "npubin": "7cf3560b3cf362bb880907abdad60b2e8e2b709264415bfac4e1e9f6c6a8fd98"
+          }
+        },
+        {
+          "hash": "6241f66c0ab68baa1561eaf171c3527cebd70cabfc5d506cd84af64b7e794abd",
+          "binaries": {
+            "ttir": "b98b5675fe2cf3652f00abab8e8548b219de553161c0b64cdcc6a697942112ea",
+            "ttadapter": "cd2b72e76a4b9cd8dd707019ea92a49cb5812595b80fd22ea852f1610c6d5cf5",
+            "npubin": "d49737f42029133770a21d74441b5dc65b0755e28af4f0a2063b847c437b66cc"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-02",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "6b48effe4e0d7884664802426f2734987cffa411e5ddf0a06ba880d598800208",
+          "binaries": {
+            "ttir": "d4319e365890794f90bbfeea78bc9d9a215118f7b410744c331037876a0afd5b",
+            "ttadapter": "db64d72fe481ae151bb18b506f668ca8c5e94b0544f1f4a6f534c45f5b19cfca",
+            "npubin": "1d7e2350ecc4836d0a6653ffec24bb3b4675561203423c50570a60c25eed85fe"
+          }
+        },
+        {
+          "hash": "d31fed10a66f0f3ee4446ccca5153d3a1cf1bad5a9d61d6dd3ff3e4cb114bb6d",
+          "binaries": {
+            "ttir": "5bdc74fb12d4e9858afccdbbe9b12d2a1af688b45644af4c90038138be77a76f",
+            "ttadapter": "74b27a850006302faff9d3e05beea128ed1b7adbf956a29e85774d58d8325886",
+            "npubin": "238a9a6dd1dbacbdefa6be891f15d3f1174ed31ab6736872c948ab7b30d94a66"
+          }
+        },
+        {
+          "hash": "747b98dd1ca2d7375ee5fec8326e120f9ef293f433723984429f8ed1f359e33d",
+          "binaries": {
+            "ttir": "61afc5157667f9bb862e88ffbddeceec47c11dde23d13f2571ce0608abf27911",
+            "ttadapter": "ca90108bd8b99a5de4e85d75a76008b48ecb78fb9e44bc88e6aaca11f7da2218",
+            "npubin": "35fa0213ff7463f4bd65f95927c7781442664d1c82b346f625946acac49b4909"
+          }
+        },
+        {
+          "hash": "b3086e0d8d8dadef5ebbb2441a7fe929e2fd2842d468dc354af481e4aa5e8dc8",
+          "binaries": {
+            "ttir": "02449c0c337deff97349cd105632f3635cba443fd5a3715d45bac31fab9482df",
+            "ttadapter": "a809d30533c372ce4813b08c88adac876e81a809b9737fbb46e4e85e299f6f9e",
+            "npubin": "cf2c668fb1274a62e1452fda96e9098dc22947a02d669656d382f60af6a7a13e"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-03",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "8442e436afe25f3207375d8fe052467936324ff77223de12f7199696f8e2bb5e",
+          "binaries": {
+            "ttir": "fcb38f36bca4f9349e04970be89d99b9b515975a186b3aa6f319d8519a8c9858",
+            "ttadapter": "0128b2df3134a8f962c5eb61009e6cf6d1f688926ec016b9d3b7ebbe037a438c",
+            "npubin": "e523f532ae5e3756f37ac1369420249e42fe6b7545cb594438d5021c9a3bd101"
+          }
+        },
+        {
+          "hash": "c8ac809b0798fc9361cdf5ef4981ea77fa27287f608bd1590fa0b54a2d08fe1c",
+          "binaries": {
+            "ttir": "bdbac39f989d6957d2e2cb61280ed6d8bb78de604e3ab85e8742e447d39a8a5e",
+            "ttadapter": "fae457cc780c4442c312bc32f0dfaa6bb677210e6fab018822b6ed4005076691",
+            "npubin": "9a357e63643622d9456f648576dd8306a8d5b1df4143007d9f9b0441a5928d70"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-03",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "b6f3a633415e27e2e91e969df7620b7f0e70ac1b2180ab94219d496dd1106c34",
+          "binaries": {
+            "ttir": "ec7573161102d78a57665dee82697e24d74406f11b11d994e5f1c45bb19228d2",
+            "ttadapter": "875bc0647f498db6c7f695bea494494de993d17e255525de4be4eb65a9171726",
+            "npubin": "0a27d3ef6dea33aac3d6ce44b23522b9b5879c32dcd48b29db6a98486c41c733"
+          }
+        },
+        {
+          "hash": "4e1869a8f5483a257c7e25c4dfa1b3ed20a117cde1bd0189ee6b66be258c1b40",
+          "binaries": {
+            "ttir": "e94016ac5903067b55242d83185b65eadd150ece6a244782b3680baadb106746",
+            "ttadapter": "efdbcfc499a8bcead6ed239743183ab5847fddd1d476f90b0bbeb70f17774b27",
+            "npubin": "de6e63f2fff88d04d6dea2b3cc78be471e722b8b17bfe64054b5502817ea9134"
+          }
+        },
+        {
+          "hash": "29accf85294efa7fed72bcc5ef5ed8c9cf828f13714cf535caba7f23814a4c2f",
+          "binaries": {
+            "ttir": "eb9377679e199d1d7dd4f0e6e0e7fe77310029b1304d67821e481cc88cbf0af3",
+            "ttadapter": "fe42879073b53460374bc300c854158c2310bd3c3be9f42176e85d4385a22bc0",
+            "npubin": "e58bfa261f47a4670e4f28c1d07f2b81fed2cd267baf31d9596f304cc2080d91"
+          }
+        },
+        {
+          "hash": "6d8b5218eb4cb36d77f0d73e247a57c340af3f33d8db8ab5902ac8b510d4ebe6",
+          "binaries": {
+            "ttir": "b28d78a0c0c5c2329300ee29881b122ef1c2f30f82c409f7c19dcff3383812ab",
+            "ttadapter": "c115411a9afe4578e30b89aeab8b3c2c7a121107abb4f50fd58dad76a65ceb42",
+            "npubin": "46e38c089a7aa75cc728d98c84748bc36c3623f4fe5dfc945d7f30ba3e9e6e5d"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-04",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "08e1d05e785f9739ba5c56fbaa7faa6c8f398f4210db13477da5a82bc8348139",
+          "binaries": {
+            "ttir": "cff3a020a100c134ef808ceb1b7d9a93346c65e3b6450c828daf41548ce47df8",
+            "ttadapter": "557290c86154a80d58f59f2281f47bde3a4b5699cd35241be7ab2c8687f9ec7a",
+            "npubin": "c45c7d19ebb7dedaa72f007758a7a91ab4280fb4fe4f88a8522d0dd83cf871d3"
+          }
+        },
+        {
+          "hash": "12ba903714285cd3e315ff70c82addb65056cf071ff49d569cd4dc4dc3bc59ef",
+          "binaries": {
+            "ttir": "2d04daf9bbc05c5de55b241060075491b269c8aa4305c722cca207d14bdafefe",
+            "ttadapter": "1ab79c33dc6b4cc07d861611d286c9c7e54991e7fa24dc005b87440c313e79b2",
+            "npubin": "6f7152768c1bb4e788e8091ab0d5495581daf1285b12911c446146f7ab533386"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-04",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "58078d73fbddcb0e97b13688c56ad22243968fe4ad57a7c87bee463e480b3fd4",
+          "binaries": {
+            "ttir": "9c21ac758e99321f5a3672ec90c538061c763fc46feffc426788f3826d8bb530",
+            "ttadapter": "ea5e0d61827b5c6e8295a8baea49bd086a49e9ac35a50e867c4297fac0d425eb",
+            "npubin": "192d1d1ae2d65754360c19a20a8aa4f891341fe6a85220c980135477758ae052"
+          }
+        },
+        {
+          "hash": "917e813bc4f68d1ffcacb77af9079856c9727d2216c32fe6b422d4f3a75c685c",
+          "binaries": {
+            "ttir": "2becd75629964f9d32da35a860c5a16f6bb7b76a9070c4536230a7773d1dddee",
+            "ttadapter": "5541f57fa674ae0569bd65739f7c1a2184d744a6850fd768da5fcdab5a8e30ec",
+            "npubin": "e6a112a58b1d1218727a380ded54584f97f38c2b11f741b296f59f2b84eadc43"
+          }
+        },
+        {
+          "hash": "df73304f6e16d2cfa13eaebf609326372d97b4186ff1fe0cebefeb9df8bdab56",
+          "binaries": {
+            "ttir": "36da2adca9a13135d7e1d3fdff16a2c2f993b9759f7453c65e6b177a20fa906f",
+            "ttadapter": "356a9f47e2e6a155d2311528eae2df9f9efa4242cac0278bf8b2072d73a29156",
+            "npubin": "0167868d6318dcfc40623a14661070200d70fd3670a587a49326d0872e289707"
+          }
+        },
+        {
+          "hash": "6d8b5218eb4cb36d77f0d73e247a57c340af3f33d8db8ab5902ac8b510d4ebe6",
+          "binaries": {
+            "ttir": "b28d78a0c0c5c2329300ee29881b122ef1c2f30f82c409f7c19dcff3383812ab",
+            "ttadapter": "c115411a9afe4578e30b89aeab8b3c2c7a121107abb4f50fd58dad76a65ceb42",
+            "npubin": "46e38c089a7aa75cc728d98c84748bc36c3623f4fe5dfc945d7f30ba3e9e6e5d"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-GA",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "6d2dbcde5cdf915e700b54b925606183ae9a917b7544a977b44614f6b7581fa9",
+          "binaries": {
+            "ttir": "dca88f6d9462ccbfeb140156fe8989232626c2831b2a551d72c4adb23dd90853",
+            "ttadapter": "e3651e09c0bd7c2c5893624c7aa1de163113f69a57f2b483a8750c3d67e48479",
+            "npubin": "bb813a03e1bbc945a163f60c0d99b8a66c80af2dfe07199a6ee112eab900f7fe"
+          }
+        },
+        {
+          "hash": "5ae47d32f9fe10d80360fdd47e6490c94fc0c5e1932789ae94afadce68054128",
+          "binaries": {
+            "ttir": "af84ff25fbd3cdf55ad6cb4db7cce0fe17aed71400a8bb36b0e51f98dee2f837",
+            "ttadapter": "909254b4366c8fa0f8be72fb82f5c53b894707fea25518828a7029a42a8a385b",
+            "npubin": "4cc2113a51baf1348c8bdb12465a12dfd1a8772451ebb795a91ebd8dfc74ccd3"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-GA",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "3a9ef5a821cf91b4b59a292975cebb3f08063b2ea54ddb4c4de199bb8332cf23",
+          "binaries": {
+            "ttir": "1d8406210832bdc4cbb83ae8087f62952cb85f90237599841e4cfa8c8e653956",
+            "ttadapter": "f71e7c982f47bf1ddab2ba01c6aa14cd3c138da5961a39c9d36ea821373f77ea",
+            "npubin": "4ca26a4f16c95ed0d99c05769d0e964037d0a94f5559fc2c79abe53da490cf76"
+          }
+        },
+        {
+          "hash": "de3820b4c3b0a63d0db28cf37563c3a7cda82cf76968fcf5dd688bc205249385",
+          "binaries": {
+            "ttir": "cbc0f6b853e893204dbd2287f7d71883415f14000c217dcdeaf44505d5d3e4c6",
+            "ttadapter": "7d65bdc456f2246f2d90942c902e3b9c452ec6828c8506c6cea62ee604129171",
+            "npubin": "9b53b6d6a66dbe7cbdaaeef5dade18fddb2b5b35a216d45ad0644bd2e12dc8ff"
+          }
+        },
+        {
+          "hash": "580a61547912482bbc79ae158467c97bc1b4d1c3a17d1d7b20a02ce2aa26a4b8",
+          "binaries": {
+            "ttir": "0e72f630633cd2d8534d7008986420c150c92ee0e9952cbff175a115b5185f62",
+            "ttadapter": "e460ea3befe24d858ec5b95c1b6564784fae578857f1955da3bb532b8b101c9d",
+            "npubin": "00b660c955c8e68b09dd397433c463a263188cb2bb4c0cc9a2780337b7a2e902"
+          }
+        },
+        {
+          "hash": "27b32db64aebf6693e679e9e751763a6f9a475ada545441d7de736b9a89e5d8f",
+          "binaries": {
+            "ttir": "7aa785bc571b7631915efba734d4c3d6e90c0329eba738e117d323a66afd27be",
+            "ttadapter": "fbf7328d41b71aed584acf6444fef8da4b9d0006d60ae7610572cf6062a2b093",
+            "npubin": "1d079d1f3732221a35c9171f7d980f88f91a8915453c570c59dd6d1e612739b6"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-GB",
+      "arm": "before",
+      "compilation": [
+        {
+          "hash": "3d8d6a8b69eb6f21f55ed167d467659cd9c0e8871d8c3182595e46bc624bc1e9",
+          "binaries": {
+            "ttir": "848d9f752a4e1ceed40b1a4e23187845ecf0d689b944f5ee98515a05185a5135",
+            "ttadapter": "2e68428d086e6e87b8042ebb2979eedfa5ab986e3fbafcb6b5b6b636c54ac9f9",
+            "npubin": "b082ab34f5962c5462ec48a98cfcbab25ff04805f903d02c6f9b0ca3dfb32c82"
+          }
+        },
+        {
+          "hash": "19bdb2bd3431b164130e9ae6caf706c0d8b422e32bd442eaa084f354039c3dee",
+          "binaries": {
+            "ttir": "bad520f494ec0bdae73b8543b1c0eb2c98b45fddbf6d96de19a79a30f7c52396",
+            "ttadapter": "056d33f8ad684dacaa60b8775b8cd4d32b86ce0e5c4df08c541f7ab90a72ff53",
+            "npubin": "770e9053563fe0cb8beff0218dfc314aaa06e449847df6d39877cdd5c3e221f7"
+          }
+        }
+      ]
+    },
+    {
+      "case": "W004-W06-GB",
+      "arm": "after",
+      "compilation": [
+        {
+          "hash": "8eb5a29cb503f1112f1ff6b22e1cb6fdd551a2589e6ee95e2e2f77a404866899",
+          "binaries": {
+            "ttir": "15aef49fbae2e26f68b175e488f0af6db2d542c79a2d7dec9797d425d3210da1",
+            "ttadapter": "863cf3ac26dc784247c81389c9d419f5fcf03a494d7ca07bcf24eab4098e1be4",
+            "npubin": "157eb3cb27f98242f5a291de6a35521b160f19a8b95305de41372da48771954b"
+          }
+        },
+        {
+          "hash": "0e7a35a52d71de232c767ddb892ba12db41546793b1eab39d338569763de3acd",
+          "binaries": {
+            "ttir": "5b31cb6c7aecd21371cc4cb71f5a8bbaa3ad7eb636f55b65d3ac593c36ec45af",
+            "ttadapter": "31806531b715c4e7c580b4fe3bc4eefdf6effada0306e851c4a09bb9153f30e2",
+            "npubin": "19157c13e0aea0164b22828db7e49862c49d0f7e9139ce1bcc687c160e8b7da0"
+          }
+        },
+        {
+          "hash": "ca2f79a3d1d3fb41eb0aa3fe60b7ae838c730bed6218fe928a8906f4acbc5cb1",
+          "binaries": {
+            "ttir": "5343a29268b47119715e72263c62d2abebc03380b040adbd666e054d609e2681",
+            "ttadapter": "8b3a2d7b03547419e2fca407de946ac05b9e823d80a1d9ccdd7c46be9ce85073",
+            "npubin": "641d58a8c2af5f00b37753dd19a234d7be61c3f92cbdfb33bd1b180870f26168"
+          }
+        },
+        {
+          "hash": "b3086e0d8d8dadef5ebbb2441a7fe929e2fd2842d468dc354af481e4aa5e8dc8",
+          "binaries": {
+            "ttir": "02449c0c337deff97349cd105632f3635cba443fd5a3715d45bac31fab9482df",
+            "ttadapter": "a809d30533c372ce4813b08c88adac876e81a809b9737fbb46e4e85e299f6f9e",
+            "npubin": "cf2c668fb1274a62e1452fda96e9098dc22947a02d669656d382f60af6a7a13e"
+          }
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "spec": {
+        "case_id": "W004-W06-01",
+        "role": "gallery",
+        "seed": 4601,
+        "parameters": {
+          "E": 8192,
+          "N": 128,
+          "D": 32,
+          "distribution": "half-to-destination-zero-remaining-uniform"
+        },
+        "scenario_designation": "gallery-benefit",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "status": "both-correctness-pass-candidate-capture-failed",
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "empty_rows_exact_zero": true,
+            "max_absolute_error": 1.9073486328125e-05,
+            "atol": 0.002,
+            "rtol": 0.002
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "empty_rows_exact_zero": true,
+            "max_absolute_error": 2.86102294921875e-06,
+            "atol": 0.002,
+            "rtol": 0.002
+          }
+        }
+      },
+      "before": {
+        "device_window_us": {
+          "device_operation_span_us": {
+            "samples": [
+              363.18,
+              361.74,
+              362.74,
+              364.26,
+              360.84,
+              361.16,
+              361.06,
+              362.26,
+              360.1,
+              363.08
+            ],
+            "count": 10,
+            "mean": 362.04200000000003,
+            "sample_sd": 1.2856628208394587
+          },
+          "operation_active_union_us": {
+            "samples": [
+              207.14,
+              204.04,
+              206.7,
+              204.74,
+              204.08,
+              203.92,
+              203.3,
+              204.3,
+              203.0,
+              205.54
+            ],
+            "count": 10,
+            "mean": 204.676,
+            "sample_sd": 1.3781404540579651
+          },
+          "device_idle_gap_us": {
+            "samples": [
+              156.04,
+              157.7,
+              156.04,
+              159.52,
+              156.76,
+              157.24,
+              157.76,
+              157.96,
+              157.1,
+              157.54
+            ],
+            "count": 10,
+            "mean": 157.36599999999999,
+            "sample_sd": 1.0143437944471012
+          }
+        },
+        "event_latency_ms": {
+          "status": "complete",
+          "count": 10,
+          "samples_ms": [
+            0.6937400102615356,
+            0.5395399928092957,
+            0.5294600129127502,
+            0.5293800234794617,
+            0.5253599882125854,
+            0.5281400084495544,
+            0.5253999829292297,
+            0.5345399975776672,
+            0.5309000015258789,
+            0.5278199911117554
+          ],
+          "instrumentation": "torch_npu profiler active",
+          "mean_ms": 0.5464280009269714,
+          "sample_sd_ms": 0.051935868241659314
+        },
+        "metrics": {
+          "status": "available",
+          "csv_sha256": "85509e50ad7426af9a97d45b4cf196f12a9ac92c38406272c5c1bfcfe008add5",
+          "columns": [
+            "Step Id",
+            "Device_id",
+            "Model ID",
+            "Task ID",
+            "Stream ID",
+            "Name",
+            "Type",
+            "OP State",
+            "Accelerator Core",
+            "Start Time(us)",
+            "Duration(us)",
+            "Wait Time(us)",
+            "Block Num",
+            "Mix Block Num",
+            "HF32 Eligible",
+            "Input Shapes",
+            "Input Data Types",
+            "Input Formats",
+            "Output Shapes",
+            "Output Data Types",
+            "Output Formats",
+            "Context ID",
+            "aicore_time(us)",
+            "aic_total_cycles",
+            "aic_mac_time(us)",
+            "aic_mac_ratio",
+            "aic_scalar_time(us)",
+            "aic_scalar_ratio",
+            "aic_mte1_time(us)",
+            "aic_mte1_ratio",
+            "aic_mte2_time(us)",
+            "aic_mte2_ratio",
+            "aic_fixpipe_time(us)",
+            "aic_fixpipe_ratio",
+            "aic_icache_miss_rate",
+            "aiv_time(us)",
+            "aiv_total_cycles",
+            "aiv_vec_time(us)",
+            "aiv_vec_ratio",
+            "aiv_scalar_time(us)",
+            "aiv_scalar_ratio",
+            "aiv_mte2_time(us)",
+            "aiv_mte2_ratio",
+            "aiv_mte3_time(us)",
+            "aiv_mte3_ratio",
+            "aiv_icache_miss_rate",
+            "cube_utilization(%)"
+          ],
+          "kernels": {
+            "wave004_inverse_atomic": {
+              "task_count": 10,
+              "tasks_per_iteration": {
+                "model_iteration_0": 1,
+                "model_iteration_1": 1,
+                "model_iteration_2": 1,
+                "model_iteration_3": 1,
+                "model_iteration_4": 1,
+                "model_iteration_5": 1,
+                "model_iteration_6": 1,
+                "model_iteration_7": 1,
+                "model_iteration_8": 1,
+                "model_iteration_9": 1
+              },
+              "rows": [
+                {
+                  "task_id": "276611523:2:20:0:4294967295",
+                  "iteration_id": "model_iteration_0",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "20",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290186658.470\t",
+                    "Duration(us)": "202.680",
+                    "Wait Time(us)": "156.040000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "222.999",
+                    "aiv_total_cycles": "11774341",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "6.254",
+                    "aiv_scalar_ratio": "0.028",
+                    "aiv_mte2_time(us)": "1.635",
+                    "aiv_mte2_ratio": "0.007",
+                    "aiv_mte3_time(us)": "218.631",
+                    "aiv_mte3_ratio": "0.98",
+                    "aiv_icache_miss_rate": "0.002",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:24:0:4294967295",
+                  "iteration_id": "model_iteration_1",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "24",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290187352.210\t",
+                    "Duration(us)": "202.180",
+                    "Wait Time(us)": "157.640000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "221.159",
+                    "aiv_total_cycles": "11677197",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.857",
+                    "aiv_scalar_ratio": "0.026",
+                    "aiv_mte2_time(us)": "0.925",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "218.376",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:28:0:4294967295",
+                  "iteration_id": "model_iteration_2",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "28",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290188016.570\t",
+                    "Duration(us)": "203.360",
+                    "Wait Time(us)": "155.910000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "220.428",
+                    "aiv_total_cycles": "11638605",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.817",
+                    "aiv_scalar_ratio": "0.026",
+                    "aiv_mte2_time(us)": "0.938",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "217.672",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:32:0:4294967295",
+                  "iteration_id": "model_iteration_3",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "32",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290188641.090\t",
+                    "Duration(us)": "202.420",
+                    "Wait Time(us)": "159.430000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "222.326",
+                    "aiv_total_cycles": "11738806",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "6.042",
+                    "aiv_scalar_ratio": "0.027",
+                    "aiv_mte2_time(us)": "0.95",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "219.333",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:36:0:4294967295",
+                  "iteration_id": "model_iteration_4",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "36",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290189257.230\t",
+                    "Duration(us)": "202.280",
+                    "Wait Time(us)": "156.700000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "221.713",
+                    "aiv_total_cycles": "11706445",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.997",
+                    "aiv_scalar_ratio": "0.027",
+                    "aiv_mte2_time(us)": "0.966",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "218.746",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:40:0:4294967295",
+                  "iteration_id": "model_iteration_5",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "40",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290189872.850\t",
+                    "Duration(us)": "202.260",
+                    "Wait Time(us)": "157.090000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "223.001",
+                    "aiv_total_cycles": "11774430",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.978",
+                    "aiv_scalar_ratio": "0.027",
+                    "aiv_mte2_time(us)": "0.929",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "220.093",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:44:0:4294967295",
+                  "iteration_id": "model_iteration_6",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "44",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290190483.330\t",
+                    "Duration(us)": "201.640",
+                    "Wait Time(us)": "157.590000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "221.745",
+                    "aiv_total_cycles": "11708150",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.958",
+                    "aiv_scalar_ratio": "0.027",
+                    "aiv_mte2_time(us)": "0.938",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "218.848",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:48:0:4294967295",
+                  "iteration_id": "model_iteration_7",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "48",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290191136.130\t",
+                    "Duration(us)": "202.600",
+                    "Wait Time(us)": "158.050000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "220.881",
+                    "aiv_total_cycles": "11662528",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.862",
+                    "aiv_scalar_ratio": "0.027",
+                    "aiv_mte2_time(us)": "0.92",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "218.1",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:52:0:4294967295",
+                  "iteration_id": "model_iteration_8",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "52",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290191745.630\t",
+                    "Duration(us)": "201.400",
+                    "Wait Time(us)": "157.150000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "221.636",
+                    "aiv_total_cycles": "11702357",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "5.996",
+                    "aiv_scalar_ratio": "0.027",
+                    "aiv_mte2_time(us)": "0.94",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "218.698",
+                    "aiv_mte3_ratio": "0.987",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:56:0:4294967295",
+                  "iteration_id": "model_iteration_9",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "56",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_atomic",
+                    "Type": "wave004_inverse_atomic",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290192354.570\t",
+                    "Duration(us)": "204.020",
+                    "Wait Time(us)": "157.480000",
+                    "Block Num": "128",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "\"8192;8192,32;128,32\"",
+                    "Input Data Types": "INT32;FLOAT;FLOAT",
+                    "Input Formats": "ND;ND;ND",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "222.407",
+                    "aiv_total_cycles": "11743071",
+                    "aiv_vec_time(us)": "0.034",
+                    "aiv_vec_ratio": "0.0",
+                    "aiv_scalar_time(us)": "6.175",
+                    "aiv_scalar_ratio": "0.028",
+                    "aiv_mte2_time(us)": "0.9",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "219.33",
+                    "aiv_mte3_ratio": "0.986",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                }
+              ],
+              "numeric_columns": {
+                "Duration(us)": {
+                  "status": "complete",
+                  "samples": [
+                    202.68,
+                    202.18,
+                    203.36,
+                    202.42,
+                    202.28,
+                    202.26,
+                    201.64,
+                    202.6,
+                    201.4,
+                    204.02
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 202.484,
+                  "sample_sd": 0.7640709681989312
+                },
+                "Wait Time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    156.04,
+                    157.64,
+                    155.91,
+                    159.43,
+                    156.7,
+                    157.09,
+                    157.59,
+                    158.05,
+                    157.15,
+                    157.48
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 157.308,
+                  "sample_sd": 1.0152810229466342
+                },
+                "aicore_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_total_cycles": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mac_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mac_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_scalar_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_scalar_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte1_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte1_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte2_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte2_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_fixpipe_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_fixpipe_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_icache_miss_rate": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aiv_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    222.999,
+                    221.159,
+                    220.428,
+                    222.326,
+                    221.713,
+                    223.001,
+                    221.745,
+                    220.881,
+                    221.636,
+                    222.407
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 221.8295,
+                  "sample_sd": 0.8622799558277028
+                },
+                "aiv_total_cycles": {
+                  "status": "complete",
+                  "samples": [
+                    11774341.0,
+                    11677197.0,
+                    11638605.0,
+                    11738806.0,
+                    11706445.0,
+                    11774430.0,
+                    11708150.0,
+                    11662528.0,
+                    11702357.0,
+                    11743071.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 11712593.0,
+                  "sample_sd": 45519.93331375705
+                },
+                "aiv_vec_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034,
+                    0.034
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.034,
+                  "sample_sd": 0.0
+                },
+                "aiv_vec_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aiv_scalar_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    6.254,
+                    5.857,
+                    5.817,
+                    6.042,
+                    5.997,
+                    5.978,
+                    5.958,
+                    5.862,
+                    5.996,
+                    6.175
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 5.9936,
+                  "sample_sd": 0.1381425994318108
+                },
+                "aiv_scalar_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.028,
+                    0.026,
+                    0.026,
+                    0.027,
+                    0.027,
+                    0.027,
+                    0.027,
+                    0.027,
+                    0.027,
+                    0.028
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.027,
+                  "sample_sd": 0.0006666666666666673
+                },
+                "aiv_mte2_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    1.635,
+                    0.925,
+                    0.938,
+                    0.95,
+                    0.966,
+                    0.929,
+                    0.938,
+                    0.92,
+                    0.94,
+                    0.9
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 1.0041,
+                  "sample_sd": 0.2223777816639463
+                },
+                "aiv_mte2_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.007,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0043,
+                  "sample_sd": 0.0009486832980505138
+                },
+                "aiv_mte3_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    218.631,
+                    218.376,
+                    217.672,
+                    219.333,
+                    218.746,
+                    220.093,
+                    218.848,
+                    218.1,
+                    218.698,
+                    219.33
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 218.7827,
+                  "sample_sd": 0.6847700425041318
+                },
+                "aiv_mte3_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.98,
+                    0.987,
+                    0.987,
+                    0.987,
+                    0.987,
+                    0.987,
+                    0.987,
+                    0.987,
+                    0.987,
+                    0.986
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.9862,
+                  "sample_sd": 0.002201009869229226
+                },
+                "aiv_icache_miss_rate": {
+                  "status": "complete",
+                  "samples": [
+                    0.002,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0002,
+                  "sample_sd": 0.0006324555320336759
+                },
+                "cube_utilization(%)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                }
+              }
+            },
+            "wave004_inverse_zero": {
+              "task_count": 10,
+              "tasks_per_iteration": {
+                "model_iteration_0": 1,
+                "model_iteration_1": 1,
+                "model_iteration_2": 1,
+                "model_iteration_3": 1,
+                "model_iteration_4": 1,
+                "model_iteration_5": 1,
+                "model_iteration_6": 1,
+                "model_iteration_7": 1,
+                "model_iteration_8": 1,
+                "model_iteration_9": 1
+              },
+              "rows": [
+                {
+                  "task_id": "276611523:2:19:0:4294967295",
+                  "iteration_id": "model_iteration_0",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "19",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290186497.970\t",
+                    "Duration(us)": "4.460",
+                    "Wait Time(us)": "0",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "2.869",
+                    "aiv_total_cycles": "75743",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.007",
+                    "aiv_scalar_time(us)": "0.729",
+                    "aiv_scalar_ratio": "0.254",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.001",
+                    "aiv_mte3_time(us)": "0.507",
+                    "aiv_mte3_ratio": "0.177",
+                    "aiv_icache_miss_rate": "0.143",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:23:0:4294967295",
+                  "iteration_id": "model_iteration_1",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "23",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290187192.650\t",
+                    "Duration(us)": "1.860",
+                    "Wait Time(us)": "331.570000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.647",
+                    "aiv_total_cycles": "17091",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.031",
+                    "aiv_scalar_time(us)": "0.369",
+                    "aiv_scalar_ratio": "0.569",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "0.14",
+                    "aiv_mte3_ratio": "0.217",
+                    "aiv_icache_miss_rate": "0.019",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:27:0:4294967295",
+                  "iteration_id": "model_iteration_2",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "27",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290187857.190\t",
+                    "Duration(us)": "3.340",
+                    "Wait Time(us)": "302.820000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "1.735",
+                    "aiv_total_cycles": "45803",
+                    "aiv_vec_time(us)": "0.025",
+                    "aiv_vec_ratio": "0.015",
+                    "aiv_scalar_time(us)": "0.15",
+                    "aiv_scalar_ratio": "0.086",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.001",
+                    "aiv_mte3_time(us)": "0.19",
+                    "aiv_mte3_ratio": "0.11",
+                    "aiv_icache_miss_rate": "0.155",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:31:0:4294967295",
+                  "iteration_id": "model_iteration_3",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "31",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290188479.250\t",
+                    "Duration(us)": "2.320",
+                    "Wait Time(us)": "259.390000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.797",
+                    "aiv_total_cycles": "21052",
+                    "aiv_vec_time(us)": "0.021",
+                    "aiv_vec_ratio": "0.026",
+                    "aiv_scalar_time(us)": "0.257",
+                    "aiv_scalar_ratio": "0.322",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.003",
+                    "aiv_mte3_time(us)": "0.141",
+                    "aiv_mte3_ratio": "0.177",
+                    "aiv_icache_miss_rate": "0.068",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:35:0:4294967295",
+                  "iteration_id": "model_iteration_4",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "35",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290189098.670\t",
+                    "Duration(us)": "1.800",
+                    "Wait Time(us)": "255.330000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.761",
+                    "aiv_total_cycles": "20084",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.026",
+                    "aiv_scalar_time(us)": "0.57",
+                    "aiv_scalar_ratio": "0.75",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.003",
+                    "aiv_mte3_time(us)": "0.144",
+                    "aiv_mte3_ratio": "0.189",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:39:0:4294967295",
+                  "iteration_id": "model_iteration_5",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "39",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290189713.950\t",
+                    "Duration(us)": "1.660",
+                    "Wait Time(us)": "254.470000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.653",
+                    "aiv_total_cycles": "17239",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.031",
+                    "aiv_scalar_time(us)": "0.465",
+                    "aiv_scalar_ratio": "0.712",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "0.14",
+                    "aiv_mte3_ratio": "0.215",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:43:0:4294967295",
+                  "iteration_id": "model_iteration_6",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "43",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290190323.910\t",
+                    "Duration(us)": "1.660",
+                    "Wait Time(us)": "248.990000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.656",
+                    "aiv_total_cycles": "17307",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.031",
+                    "aiv_scalar_time(us)": "0.465",
+                    "aiv_scalar_ratio": "0.709",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "0.14",
+                    "aiv_mte3_ratio": "0.214",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:47:0:4294967295",
+                  "iteration_id": "model_iteration_7",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "47",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290190976.470\t",
+                    "Duration(us)": "1.700",
+                    "Wait Time(us)": "291.610000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.686",
+                    "aiv_total_cycles": "18102",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.029",
+                    "aiv_scalar_time(us)": "0.501",
+                    "aiv_scalar_ratio": "0.73",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "0.136",
+                    "aiv_mte3_ratio": "0.199",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:51:0:4294967295",
+                  "iteration_id": "model_iteration_8",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "51",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290191586.930\t",
+                    "Duration(us)": "1.600",
+                    "Wait Time(us)": "248.150000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.608",
+                    "aiv_total_cycles": "16063",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.033",
+                    "aiv_scalar_time(us)": "0.423",
+                    "aiv_scalar_ratio": "0.696",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "0.138",
+                    "aiv_mte3_ratio": "0.227",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                },
+                {
+                  "task_id": "276611523:2:55:0:4294967295",
+                  "iteration_id": "model_iteration_9",
+                  "trace_batch_id": "0",
+                  "trace_subtask_id": "4294967295",
+                  "csv_context_id": "N/A",
+                  "raw": {
+                    "Step Id": "0",
+                    "Device_id": "3",
+                    "Model ID": "4294967295",
+                    "Task ID": "55",
+                    "Stream ID": "2",
+                    "Name": "wave004_inverse_zero",
+                    "Type": "wave004_inverse_zero",
+                    "OP State": "static",
+                    "Accelerator Core": "AI_VECTOR_CORE",
+                    "Start Time(us)": "1792861290192195.510\t",
+                    "Duration(us)": "1.520",
+                    "Wait Time(us)": "248.350000",
+                    "Block Num": "16",
+                    "Mix Block Num": "0",
+                    "HF32 Eligible": "NO",
+                    "Input Shapes": "N/A",
+                    "Input Data Types": "N/A",
+                    "Input Formats": "N/A",
+                    "Output Shapes": "\"128,32\"",
+                    "Output Data Types": "FLOAT",
+                    "Output Formats": "ND",
+                    "Context ID": "N/A",
+                    "aicore_time(us)": "0.0",
+                    "aic_total_cycles": "0",
+                    "aic_mac_time(us)": "0.0",
+                    "aic_mac_ratio": "0.0",
+                    "aic_scalar_time(us)": "0.0",
+                    "aic_scalar_ratio": "0.0",
+                    "aic_mte1_time(us)": "0.0",
+                    "aic_mte1_ratio": "0.0",
+                    "aic_mte2_time(us)": "0.0",
+                    "aic_mte2_ratio": "0.0",
+                    "aic_fixpipe_time(us)": "0.0",
+                    "aic_fixpipe_ratio": "0.0",
+                    "aic_icache_miss_rate": "0.0",
+                    "aiv_time(us)": "0.592",
+                    "aiv_total_cycles": "15633",
+                    "aiv_vec_time(us)": "0.02",
+                    "aiv_vec_ratio": "0.034",
+                    "aiv_scalar_time(us)": "0.4",
+                    "aiv_scalar_ratio": "0.676",
+                    "aiv_mte2_time(us)": "0.002",
+                    "aiv_mte2_ratio": "0.004",
+                    "aiv_mte3_time(us)": "0.143",
+                    "aiv_mte3_ratio": "0.242",
+                    "aiv_icache_miss_rate": "0.0",
+                    "cube_utilization(%)": "0.000"
+                  }
+                }
+              ],
+              "numeric_columns": {
+                "Duration(us)": {
+                  "status": "complete",
+                  "samples": [
+                    4.46,
+                    1.86,
+                    3.34,
+                    2.32,
+                    1.8,
+                    1.66,
+                    1.66,
+                    1.7,
+                    1.6,
+                    1.52
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 2.192,
+                  "sample_sd": 0.9633367935347315
+                },
+                "Wait Time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    331.57,
+                    302.82,
+                    259.39,
+                    255.33,
+                    254.47,
+                    248.99,
+                    291.61,
+                    248.15,
+                    248.35
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 244.068,
+                  "sample_sd": 90.34922994199293
+                },
+                "aicore_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_total_cycles": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mac_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mac_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_scalar_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_scalar_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte1_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte1_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte2_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_mte2_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_fixpipe_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_fixpipe_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aic_icache_miss_rate": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                },
+                "aiv_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    2.869,
+                    0.647,
+                    1.735,
+                    0.797,
+                    0.761,
+                    0.653,
+                    0.656,
+                    0.686,
+                    0.608,
+                    0.592
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 1.0004,
+                  "sample_sd": 0.7389025195066894
+                },
+                "aiv_total_cycles": {
+                  "status": "complete",
+                  "samples": [
+                    75743.0,
+                    17091.0,
+                    45803.0,
+                    21052.0,
+                    20084.0,
+                    17239.0,
+                    17307.0,
+                    18102.0,
+                    16063.0,
+                    15633.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 26411.7,
+                  "sample_sd": 19506.700735046576
+                },
+                "aiv_vec_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.02,
+                    0.02,
+                    0.025,
+                    0.021,
+                    0.02,
+                    0.02,
+                    0.02,
+                    0.02,
+                    0.02,
+                    0.02
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0206,
+                  "sample_sd": 0.0015776212754932313
+                },
+                "aiv_vec_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.007,
+                    0.031,
+                    0.015,
+                    0.026,
+                    0.026,
+                    0.031,
+                    0.031,
+                    0.029,
+                    0.033,
+                    0.034
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0263,
+                  "sample_sd": 0.008680117766738217
+                },
+                "aiv_scalar_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.729,
+                    0.369,
+                    0.15,
+                    0.257,
+                    0.57,
+                    0.465,
+                    0.465,
+                    0.501,
+                    0.423,
+                    0.4
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.4329,
+                  "sample_sd": 0.15965480122926323
+                },
+                "aiv_scalar_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.254,
+                    0.569,
+                    0.086,
+                    0.322,
+                    0.75,
+                    0.712,
+                    0.709,
+                    0.73,
+                    0.696,
+                    0.676
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.5504,
+                  "sample_sd": 0.23953018830851178
+                },
+                "aiv_mte2_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002,
+                    0.002
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.002,
+                  "sample_sd": 0.0
+                },
+                "aiv_mte2_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.001,
+                    0.004,
+                    0.001,
+                    0.003,
+                    0.003,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004,
+                    0.004
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0032,
+                  "sample_sd": 0.0012292725943057184
+                },
+                "aiv_mte3_time(us)": {
+                  "status": "complete",
+                  "samples": [
+                    0.507,
+                    0.14,
+                    0.19,
+                    0.141,
+                    0.144,
+                    0.14,
+                    0.14,
+                    0.136,
+                    0.138,
+                    0.143
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.1819,
+                  "sample_sd": 0.11531546104298225
+                },
+                "aiv_mte3_ratio": {
+                  "status": "complete",
+                  "samples": [
+                    0.177,
+                    0.217,
+                    0.11,
+                    0.177,
+                    0.189,
+                    0.215,
+                    0.214,
+                    0.199,
+                    0.227,
+                    0.242
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.19669999999999999,
+                  "sample_sd": 0.03707964401123614
+                },
+                "aiv_icache_miss_rate": {
+                  "status": "complete",
+                  "samples": [
+                    0.143,
+                    0.019,
+                    0.155,
+                    0.068,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0385,
+                  "sample_sd": 0.062036279707925746
+                },
+                "cube_utilization(%)": {
+                  "status": "complete",
+                  "samples": [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "available_count": 10,
+                  "unavailable_count": 0,
+                  "mean": 0.0,
+                  "sample_sd": 0.0
+                }
+              }
+            }
+          },
+          "semantics": "exported per-task values; no ratios summed, no denominator or roofline inferred"
+        },
+        "compilation": [
+          {
+            "binaries": {
+              "npubin": "dd88f5f6b7c302d1db9d84b4eaac8e162f774912b9c67c50af59537898278b4b",
+              "ttadapter": "b90c3dc8d0b7d6948ce9dde807424aa7ce315fda3e805f35b4e38d9110c4ed63",
+              "ttir": "03b72159398f2fce2e999a6f9b66d8c0b6e673bbe73887ad5fbaf6e7b56f1e64"
+            },
+            "hash": "f894e67a13562ef61018a6b075b12085c2143f7f183689ef87056143dc8a8ba6"
+          },
+          {
+            "binaries": {
+              "npubin": "cad496fff9ea55cb6f564ce4fcbf59f2a27711630096fc4d1a7cd57dd8ca4887",
+              "ttadapter": "ebc4bd5911617063f41e4a17a32ca5c60dfc4e4d2943d4fb58e41adf70a4b754",
+              "ttir": "75f1721b5c8c6b4ac198c64986546e54fec72fc9d83eaf9157807b92541520ba"
+            },
+            "hash": "a62ad46806bafd63d836c340f07c6a9197ec7f5caa3f30d919921f795e7965ef"
+          }
+        ],
+        "kernel_identity": {
+          "status": "complete",
+          "names": [
+            "wave004_inverse_atomic",
+            "wave004_inverse_zero"
+          ],
+          "missing": [],
+          "source": "same ten-forward capture"
+        }
+      },
+      "after": {
+        "api_forward_invocations": 10,
+        "event_samples": 0,
+        "profile_status": "failed",
+        "metrics_status": "unavailable",
+        "compilation": [
+          {
+            "hash": "a2b9c913d17c3231a93c0c0f9cc2c93a900e5ac0a6c002a5342033b410d29c2c",
+            "binaries": {
+              "ttir": "262ac445f7989627003af37d312fe44a345bcacc53509d39a841129835cd8db2",
+              "ttadapter": "50e9c39fbc6725a81421879a7695a4986eb819bfbc45c755d9879d59d5f2be34",
+              "npubin": "e727b2cf1eca6084c1be4085e80b3ee1eab19e575bb81936e6a80a367f36c264"
+            }
+          },
+          {
+            "hash": "96e38ff4ddbd6508819cd2ba056981722aeee9d8c65af8f4a0574aff41f3de4e",
+            "binaries": {
+              "ttir": "2294a877089ce14c741a6e7bb0a8a172b2e5cc016e41057cad670d290fcf42eb",
+              "ttadapter": "05e2815ed17d5bed3bfaeb197006455c40443bd7a65cf92ece77db668ddd2541",
+              "npubin": "ec67399b6488b0a24e5645785f17d6bf793c3a4125547d24a2c8c5fee4929e5e"
+            }
+          },
+          {
+            "hash": "a75623a7c6bd8e34cd50e788e2cbc84ddb2e9752b1ec677ab1032dbddd6de928",
+            "binaries": {
+              "ttir": "8d20354ce80d2bdb383c675be8650c58d0578b118224ccf6ad335dd11fb3e1a2",
+              "ttadapter": "b7a177f4744290c3c74c5feb873866a69d6b6e01687c05c0b42df87d32ad0062",
+              "npubin": "9e4fa235608c975afc0c3229f745305576b71358277caf2224e0e6b2c48ee976"
+            }
+          },
+          {
+            "hash": "d81e6316f2990310320d588444ea6fe7acfc0b627bad6ae4c3457a29b1f8e3ad",
+            "binaries": {
+              "ttir": "237647dc6511707e5ee39b0dbd8b0d4d11fbea6263d9d11dc5770681db4110aa",
+              "ttadapter": "ce476d5bec0ccce065524924fb238d0127439464fcea16018073e577206012e8",
+              "npubin": "f9e57e6a4327d705163dab07562d27f807d8e9656d37d9611c352b29fadc13bf"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "spec": {
+        "case_id": "W004-W06-02",
+        "role": "gallery",
+        "seed": 4602,
+        "parameters": {
+          "E": 256,
+          "N": 256,
+          "D": 8,
+          "distribution": "one-edge-per-destination-permutation"
+        },
+        "scenario_designation": "gallery-cost",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "status": "unattempted"
+    },
+    {
+      "spec": {
+        "case_id": "W004-W06-03",
+        "role": "heldout",
+        "seed": 4603,
+        "parameters": {
+          "E": 12288,
+          "N": 192,
+          "D": 16,
+          "distribution": "half-to-destination-zero-remaining-uniform"
+        },
+        "scenario_designation": "heldout-benefit",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "status": "unattempted"
+    },
+    {
+      "spec": {
+        "case_id": "W004-W06-04",
+        "role": "heldout",
+        "seed": 4604,
+        "parameters": {
+          "E": 512,
+          "N": 512,
+          "D": 16,
+          "distribution": "one-edge-per-destination-permutation"
+        },
+        "scenario_designation": "heldout-cost",
+        "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+      },
+      "status": "unattempted"
+    },
+    {
+      "spec": {
+        "case_id": "W004-W06-GA",
+        "role": "guard",
+        "seed": 4691,
+        "parameters": {
+          "E": 12,
+          "N": 8,
+          "D": 4,
+          "distribution": "duplicates-and-empty-destinations"
+        },
+        "expected": "duplicatescountandemptydestzero"
+      },
+      "status": "unattempted"
+    },
+    {
+      "spec": {
+        "case_id": "W004-W06-GB",
+        "role": "guard",
+        "seed": 4692,
+        "parameters": {
+          "E": 257,
+          "N": 17,
+          "D": 8,
+          "distribution": "seededpermuted-edge-order"
+        },
+        "expected": "partialedgeblock/multiplicity/orderchangednumericbound"
+      },
+      "status": "unattempted"
+    }
+  ],
+  "host_tests": {
+    "handle": "remote:gz-a3:job:5771cf27-adb1-4889-abee-367ffcd326ba",
+    "tests_passed": 5,
+    "receipt_sha256": "197c030bf56df17656e1ddbdb96c8d7e19d39398282698af00d23fa294795fe3",
+    "source_sha256": "672bdd72afa486e091d72c9aa7a10f23e4317e417cfdb7fc4f9b792a22446119",
+    "scientific_oracles_generated": 0,
+    "device_forwards": 0,
+    "profiles": 0
+  },
+  "notes": [
+    "Baseline profiled device spans include both kernels and their gaps; they are diagnostics, not ordinary application latency or physical traffic.",
+    "No paired ratio or candidate performance conclusion is available. Missing PMU values are unavailable, not zero.",
+    "All six cases are frozen; the remaining five cases and both guards have not executed on the NPU.",
+    "Failed raw vendor data remains retained remotely with its digest inventory in the compact archive."
+  ]
+}

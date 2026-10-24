@@ -1,5 +1,13 @@
 # Inverse adjacency with exclusive destination ownership
 
+Collection is incomplete: both implementations passed the first skewed case's
+correctness check, but the candidate's first capture failed with a structured
+vector core timeout (507034). Its retained counter proves ten API invocations,
+with zero event samples; it does not prove ten completed device forwards. The
+remaining five cases, including both guards, were not executed. There was no
+retry, device reset or paired speedup claim. See the
+[retained result](data/optimization-w004-inverse-adjacency.json).
+
 This experiment reduces FP32 edge vectors by int32 destination ID. The baseline
 zeros its output and uses floating atomic additions. The candidate constructs
 reverse adjacency from the current edge IDs, then gives each destination one
@@ -46,3 +54,17 @@ autotuning. CPU FP64 sums are compared with `atol=rtol=0.002`, and validation
 also checks finite outputs, exact empty zeros and unchanged inputs. Profiled
 device operation spans include stages and gaps; they are instrumented
 diagnostics, not ordinary application latency or physical memory traffic.
+
+All twelve arm specializations compiled before the first forward, and six CPU
+oracle payloads were generated once. The baseline's first ten captures yielded
+a mean device operation span of 362.042 us (sample SD 1.286 us), including
+204.676 us active union and 157.366 us gaps. This is one-arm diagnostic evidence.
+Candidate PMU and timing are unavailable. Five functional tests passed on the
+A3 runtime, and eighteen shared runner regression tests passed locally.
+
+The operational collector used an incorrect export semaphore path and lacked a
+bounded capture watchdog. Its locks therefore did not guarantee coordination
+with other streams. The structured timeout ended the job after approximately
+550 seconds. These limitations are preserved; they do not establish the cause
+of the vector timeout. Future unattempted work must use the shared canonical
+export slots and a bounded watchdog. The failed source/case was not replayed.

@@ -1,6 +1,7 @@
 """Functional coordinate oracle, contract rejection and nested fixture-cache tests."""
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -66,11 +67,11 @@ def test_public_nested_fixture_cli(tmp_path):
 
 def test_unsupported_mode_rejected_before_device_work(tmp_path):
     s=spec();s['parameters']['half_pixel_centers']=True
-    f=make_case(s)
-    assert f=={'expected_host_rejection':True}
+    with pytest.raises(ValueError,match='asymmetric'):
+        make_case(s)
     for arm in ('before','after'):
         with pytest.raises(ValueError,match='asymmetric'):
-            Adapter().prepare(arm,s,f,tmp_path)
+            Adapter().prepare(arm,s,{},tmp_path)
 
 
 @pytest.mark.parametrize('patch',[dict(H=0),dict(C=True),dict(align_corners=True),dict(antialias=True)])
@@ -83,3 +84,20 @@ def test_reject_layout_dtype_range():
     p=parameters(spec());x=make_case(spec())['x']
     for invalid in (x.double(),x.transpose(1,2),x+3,x*float('nan')):
         with pytest.raises(ValueError):checked_input(invalid,p)
+
+
+def test_public_runner_rejects_mode_without_poisoning_cache(tmp_path):
+    s=spec();s['parameters']['half_pixel_centers']=True
+    case=tmp_path/'case.json';case.write_text(json.dumps(s))
+    provenance=tmp_path/'provenance.json';provenance.write_text('{}')
+    output,cache=tmp_path/'output',tmp_path/'cache'
+    result=subprocess.run([sys.executable,str(ROOT/'scripts/optimization_pair.py'),
+        '--adapter','bilinear_reuse:Adapter','--case',str(case),'--output',str(output),
+        '--cache',str(cache),'--provenance',str(provenance)],
+        env=dict(os.environ,PYTHONPATH=str(ROOT/'examples/optimization-library/triton')),
+        capture_output=True,text=True)
+    assert result.returncode==1,result.stderr
+    report=json.loads((output/'result.json').read_text())
+    assert report['error']['type']=='ValueError' and 'asymmetric' in report['error']['message']
+    assert report['counts']==dict(profiled_calls=0,capture_calls=0,correctness_calls=0)
+    assert not list(cache.rglob('fixture.pt')) and not list(cache.rglob('manifest.json'))

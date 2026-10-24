@@ -36,12 +36,16 @@ def reference(x, p):
     return upper*(1-wy)[None,:,None,None] + lower*wy[None,:,None,None]
 
 
-def make_case(spec):
-    p = parameters(spec, modes=False)
-    if any(p.get(k, False) for k in ('align_corners','half_pixel_centers','antialias')):
-        return {'expected_host_rejection': True}
+def case_inputs(spec):
+    p = parameters(spec)
     rng = torch.Generator(device='cpu').manual_seed(spec.get('seed',0))
     x = torch.rand(tuple(p[k] for k in ('N','H','W','C')), generator=rng, dtype=torch.float32, device='cpu')*2-1
+    return x
+
+
+def make_case(spec):
+    p = parameters(spec)
+    x = case_inputs(spec)
     return {'x': x, 'expected': reference(x,p)}
 
 CASE_SOURCES = [Path(__file__)]

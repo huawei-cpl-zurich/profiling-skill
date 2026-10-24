@@ -1,0 +1,455 @@
+{
+  "study": "W005-B03",
+  "kind": "New operator application of coefficient reuse; no new unique mechanism claim",
+  "full_evidence": "bilinear-reuse-evidence.json.gz",
+  "full_evidence_sha256": "f01d3b557ea4ecaf3e0724e4ea1bcb5f1a74fae81aebd058697aa5e90726b2b2",
+  "full_evidence_bytes": 24817,
+  "retained_archive_sha256": "741422bfc58b0fc8fc119710fed4dea61e144a19ac64d55fe4561d346e5b813e",
+  "product": "Ascend910B4-1",
+  "physical_die": 5,
+  "numerical_device_correctness_checks": 10,
+  "host_mode_rejection_checks": 2,
+  "scientific_CPU_oracle_payloads": 5,
+  "summary": [
+    {
+      "case_id": "W005-B03-01",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 6.082985147592979e-06,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 6.082985147592979e-06,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            5591.46,
+            5590.78,
+            5591.12,
+            5591.5,
+            5591.1,
+            5591.32,
+            5591.04,
+            5591.24,
+            5591.14,
+            5591.06
+          ],
+          "count": 10,
+          "mean": 5591.176,
+          "sample_sd": 0.21329166259685117
+        },
+        "after": {
+          "samples": [
+            119.06,
+            118.16,
+            118.12,
+            118.1,
+            118.36,
+            118.22,
+            118.2,
+            117.94,
+            118.2,
+            118.08
+          ],
+          "count": 10,
+          "mean": 118.244,
+          "sample_sd": 0.30663767978946643
+        }
+      }
+    },
+    {
+      "case_id": "W005-B03-02",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 5.678998110103528e-07,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 5.678998110103528e-07,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            71.66,
+            71.72,
+            71.42,
+            70.68,
+            71.14,
+            71.18,
+            71.22,
+            71.16,
+            71.1,
+            70.96
+          ],
+          "count": 10,
+          "mean": 71.224,
+          "sample_sd": 0.31066952788381874
+        },
+        "after": {
+          "samples": [
+            5.12,
+            4.8,
+            4.78,
+            4.82,
+            4.68,
+            4.66,
+            4.92,
+            4.86,
+            4.68,
+            4.76
+          ],
+          "count": 10,
+          "mean": 4.808,
+          "sample_sd": 0.13766303465749669
+        }
+      }
+    },
+    {
+      "case_id": "W005-B03-03",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 5.935629219938621e-06,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 5.935629219938621e-06,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            3113.88,
+            3113.94,
+            3114.06,
+            3114.0,
+            3113.88,
+            3113.68,
+            3113.74,
+            3113.94,
+            3113.98,
+            3113.94
+          ],
+          "count": 10,
+          "mean": 3113.904,
+          "sample_sd": 0.11616080807806047
+        },
+        "after": {
+          "samples": [
+            99.16,
+            99.52,
+            100.14,
+            100.04,
+            98.0,
+            99.32,
+            100.54,
+            98.38,
+            99.16,
+            99.48
+          ],
+          "count": 10,
+          "mean": 99.374,
+          "sample_sd": 0.7740829700002761
+        }
+      }
+    },
+    {
+      "case_id": "W005-B03-04",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 1.1026859303986392e-06,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 1.1026859303986392e-06,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1
+        }
+      },
+      "span_us": {
+        "before": {
+          "samples": [
+            128.22,
+            127.92,
+            128.22,
+            127.94,
+            127.9,
+            128.02,
+            127.7,
+            128.02,
+            127.78,
+            128.02
+          ],
+          "count": 10,
+          "mean": 127.974,
+          "sample_sd": 0.16654662343553425
+        },
+        "after": {
+          "samples": [
+            10.36,
+            10.3,
+            10.42,
+            10.2,
+            10.4,
+            10.38,
+            10.26,
+            10.26,
+            10.34,
+            10.42
+          ],
+          "count": 10,
+          "mean": 10.334,
+          "sample_sd": 0.07604092465391417
+        }
+      }
+    },
+    {
+      "case_id": "W005-B03-GA",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 1.0728836086215665e-07,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "numerical": true,
+              "inputs_immutable": true,
+              "output_nonalias": true,
+              "max_absolute_error": 1.0728836086215665e-07,
+              "atol": 1e-05,
+              "rtol": 1e-05
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    },
+    {
+      "case_id": "W005-B03-GB",
+      "status": "complete",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "host_rejected": true,
+              "error": "only asymmetric coordinates without antialias are supported",
+              "npu_calls": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "host_rejected": true,
+              "error": "only asymmetric coordinates without antialias are supported",
+              "npu_calls": 0
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0
+        }
+      }
+    }
+  ],
+  "compilation_stable": true,
+  "publication_followup": {
+    "rows": [
+      {
+        "case_id": "W005-B03-04",
+        "input_sha256": "cb5b068d4d57c6a4a03480c017642ec7dd4300cb18a6a0373e019d5edb9ba831",
+        "original_input_sha256": "cb5b068d4d57c6a4a03480c017642ec7dd4300cb18a6a0373e019d5edb9ba831",
+        "fixture_pt_sha256": "01aabf4ccb6b80f7ad238f6e39dc672dcb1bb037ce557c59683a72cb6efc03b6"
+      },
+      {
+        "case_id": "W005-B03-GA",
+        "input_sha256": "a02a7eb5724170508c58f88e437422a30caa2640ea24ef81a2f65fed8e9b11a9",
+        "original_input_sha256": "a02a7eb5724170508c58f88e437422a30caa2640ea24ef81a2f65fed8e9b11a9",
+        "fixture_pt_sha256": "5d718683abb3e4a513b998011041a688e30a9b1fc8505bd0d94a95e9802174e6"
+      },
+      {
+        "case_id": "W005-B03-03",
+        "input_sha256": "ca0441f8f9141a823107a75c757ecd2d772fe4fa13e641f9b8ce07fb75d5f5c8",
+        "original_input_sha256": "ca0441f8f9141a823107a75c757ecd2d772fe4fa13e641f9b8ce07fb75d5f5c8",
+        "fixture_pt_sha256": "7acb0d9520b5e4f94d16b49aa3f642e41e99bf8cb7e58e71d515ea4fde7688b8"
+      },
+      {
+        "case_id": "W005-B03-02",
+        "input_sha256": "d5cc86d6667297df2eeb63a095747f55856c9ca39ca8fb197cca024eb438b27f",
+        "original_input_sha256": "d5cc86d6667297df2eeb63a095747f55856c9ca39ca8fb197cca024eb438b27f",
+        "fixture_pt_sha256": "f6578addffba2739148610b820df2d81b2f340ed86c94c0d189496fe25b42fe4"
+      },
+      {
+        "case_id": "W005-B03-01",
+        "input_sha256": "4935880bdb51bbe7d97c427d6a687568d87fb2c9b41714f2773cad585119dd64",
+        "original_input_sha256": "4935880bdb51bbe7d97c427d6a687568d87fb2c9b41714f2773cad585119dd64",
+        "fixture_pt_sha256": "2aa8a29829fbd658b04e8cb0662373b07ec23d16afa6a470e7bf860f492d1bda"
+      }
+    ],
+    "scientific_oracle_regenerations": 0,
+    "new_NPU_API_calls": 0,
+    "new_profile_captures": 0,
+    "reference_and_parameter_AST_identical": true,
+    "kernel_source_ABI_identical": true,
+    "original_provider_sha256": "455a863fe81b9f7bf8f60e0a07338d5583d65cb08fdadf0daae529ef4967d4db",
+    "publication_provider_sha256": "bb93f6e710ddde0e780ebe622b9a0fe9f1eff44485385b9947f4a4267b83cb61",
+    "kernel_sha256": "b7a9336a8d4f867c74e0f5d370c804f34e5585728a1c97fe7101d25650fde965",
+    "cpu_tests": 11
+  },
+  "pmu_task_counts": {
+    "W005-B03-01": {
+      "before": 10,
+      "after": 10
+    },
+    "W005-B03-02": {
+      "before": 10,
+      "after": 10
+    },
+    "W005-B03-03": {
+      "before": 10,
+      "after": 10
+    },
+    "W005-B03-04": {
+      "before": 10,
+      "after": 10
+    }
+  }
+}

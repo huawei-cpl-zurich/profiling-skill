@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W04-04",
+  "role": "heldout",
+  "scenario_designation": "heldout-cost",
+  "seed": 4404,
+  "parameters": {
+    "B": 1,
+    "T": 128,
+    "H": 1,
+    "chunk": 64
+  },
+  "hypothesis": "Reduced scan dependency may help; tiny chunks may expose scan-resource overhead."
+}

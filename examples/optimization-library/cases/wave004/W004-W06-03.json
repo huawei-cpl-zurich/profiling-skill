@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W06-03",
+  "role": "heldout",
+  "seed": 4603,
+  "parameters": {
+    "E": 12288,
+    "N": 192,
+    "D": 16,
+    "distribution": "half-to-destination-zero-remaining-uniform"
+  },
+  "scenario_designation": "heldout-benefit",
+  "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+}

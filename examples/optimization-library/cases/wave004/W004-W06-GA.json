@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W06-GA",
+  "role": "guard",
+  "seed": 4691,
+  "parameters": {
+    "E": 12,
+    "N": 8,
+    "D": 4,
+    "distribution": "duplicates-and-empty-destinations"
+  },
+  "expected": "duplicatescountandemptydestzero"
+}

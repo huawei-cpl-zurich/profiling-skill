@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W06-01",
+  "role": "gallery",
+  "seed": 4601,
+  "parameters": {
+    "E": 8192,
+    "N": 128,
+    "D": 32,
+    "distribution": "half-to-destination-zero-remaining-uniform"
+  },
+  "scenario_designation": "gallery-benefit",
+  "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+}

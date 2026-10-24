@@ -1,0 +1,94 @@
+{
+  "wave": 4,
+  "family_id": "W06",
+  "title": "Build inverse adjacency for exclusive destination ownership",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W06 andboundedbrokerreceipts. Independentprojectadaptationnotupstreamvendorbenchmark.",
+  "cases": [
+    {
+      "case_id": "W004-W06-01",
+      "role": "gallery",
+      "seed": 4601,
+      "parameters": {
+        "E": 8192,
+        "N": 128,
+        "D": 32,
+        "distribution": "half-to-destination-zero-remaining-uniform"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    },
+    {
+      "case_id": "W004-W06-02",
+      "role": "gallery",
+      "seed": 4602,
+      "parameters": {
+        "E": 256,
+        "N": 256,
+        "D": 8,
+        "distribution": "one-edge-per-destination-permutation"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    },
+    {
+      "case_id": "W004-W06-03",
+      "role": "heldout",
+      "seed": 4603,
+      "parameters": {
+        "E": 12288,
+        "N": 192,
+        "D": 16,
+        "distribution": "half-to-destination-zero-remaining-uniform"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    },
+    {
+      "case_id": "W004-W06-04",
+      "role": "heldout",
+      "seed": 4604,
+      "parameters": {
+        "E": 512,
+        "N": 512,
+        "D": 16,
+        "distribution": "one-edge-per-destination-permutation"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "High contention or largerfactorization may benefit; preprocessing/panel overhead may lose on smalloruncontendedcases."
+    }
+  ],
+  "contract": {
+    "input": "int32dest[E], FP32 values[E,D] contiguous, valid0<=dest<N, seededuniform values[-.125,.125]. OutputFP32[N,D]=sumedgevaluesbydest, emptydestzero, duplicatesmultiplicity, initialoutputNaN mustoverwrite.",
+    "before": "Zerooutput+floatatomic scatteradds.",
+    "after": "BuildinverseadjacencyFROMcurrentedgeIDs insideAPI thenexclusive-destinationgather/reduce. Count/sort/prefix/scatter/indexzeroing/alltransforms included; no freeCPUpreprocessing/precomputedindex. Sortingorstablecountingassemblyallowed explicitadaptation, preserveoriginaledgeorderwherepractical. No denseper-workergradientprivatization masqueradingasnewmechanism.",
+    "oracle": "IndependentCPUFP64sum thenFP32, atol=rtol2e-3; everyoutputfinite, emptyrowsEXACTzero, inputunchanged.",
+    "guards": [
+      {
+        "case_id": "W004-W06-GA",
+        "role": "guard",
+        "seed": 4691,
+        "parameters": {
+          "E": 12,
+          "N": 8,
+          "D": 4,
+          "distribution": "duplicates-and-empty-destinations"
+        },
+        "expected": "duplicatescountandemptydestzero"
+      },
+      {
+        "case_id": "W004-W06-GB",
+        "role": "guard",
+        "seed": 4692,
+        "parameters": {
+          "E": 257,
+          "N": 17,
+          "D": 8,
+          "distribution": "seededpermuted-edge-order"
+        },
+        "expected": "partialedgeblock/multiplicity/orderchangednumericbound"
+      }
+    ]
+  },
+  "protocol": "sixCPUoraclepayloadsonce;oncecorrectpercase/side/sourceversion then10profiles eachsidefourpairs;2guards0captures,no warmup/autotune/extratiming/profileIOinspection"
+}

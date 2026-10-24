@@ -29,9 +29,14 @@ def save(path, value):
 
 MEASUREMENT_VERSION = 2
 PREPARATION_VERSION = 2
+CLASSIFICATION_VERSION = 2
 
 
 class InfrastructureError(RuntimeError):
+    pass
+
+
+class CandidateForwardError(RuntimeError):
     pass
 
 
@@ -150,6 +155,7 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
     validator = load_module(request['provider_path'], 'trusted_fixture_provider')
     report = dict(schema='optimization-coding-evaluation-v1',
                   measurement_version=MEASUREMENT_VERSION, preparation_version=PREPARATION_VERSION,
+                  classification_version=CLASSIFICATION_VERSION,
                   candidate_sha256=sha(source), measurement_kind='profiled_device_operation_span_us',
                   outcome='success', cases=[dict(id=c['id'], correct=False, identity_verified=False,
                   correctness_calls=0, profiled_calls=0, status='not-run') for c in request['cases']],
@@ -165,22 +171,26 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
         folder = output / case['id']
         folder.mkdir()
         try:
-            if sha(case['fixture_path']) != case['fixture_sha256']:
-                raise InfrastructureError('private fixture changed')
-            fixture = torch.load(case['fixture_path'], map_location='cpu', weights_only=True)
-            inputs = {key: value.to(device=device, memory_format=torch.preserve_format)
-                      for key, value in fixture['inputs'].items()}
-            if any(inputs[key].stride() != value.stride() for key, value in fixture['inputs'].items()):
-                raise InfrastructureError('device transfer changed a required input stride')
-            if str(device).startswith('npu'):
-                import torch_npu
-                inputs, converted = prepare_nd_inputs(inputs, fixture['inputs'], torch_npu, torch)
-                row['input_preparation'] = dict(version=PREPARATION_VERSION, converted_to_nd=converted)
-                row['input_metadata'] = {key:dict(shape=list(value.shape),strides=list(value.stride()),
-                    format=torch_npu.get_npu_format(value),storage_bytes=value.untyped_storage().nbytes())
-                    for key,value in inputs.items()}
-                if any(item['format'] != 2 for item in row['input_metadata'].values()):
-                    raise InfrastructureError('candidate inputs require verified physical ND format')
+            try:
+                if sha(case['fixture_path']) != case['fixture_sha256']:
+                    raise InfrastructureError('private fixture changed')
+                fixture = torch.load(case['fixture_path'], map_location='cpu', weights_only=True)
+                inputs = {key: value.to(device=device, memory_format=torch.preserve_format)
+                          for key, value in fixture['inputs'].items()}
+                if any(inputs[key].stride() != value.stride() for key, value in fixture['inputs'].items()):
+                    raise InfrastructureError('device transfer changed a required input stride')
+                if str(device).startswith('npu'):
+                    import torch_npu
+                    inputs, converted = prepare_nd_inputs(inputs, fixture['inputs'], torch_npu, torch)
+                    row['input_preparation'] = dict(version=PREPARATION_VERSION, converted_to_nd=converted)
+                    row['input_metadata'] = {key:dict(shape=list(value.shape),strides=list(value.stride()),
+                        format=torch_npu.get_npu_format(value),storage_bytes=value.untyped_storage().nbytes())
+                        for key,value in inputs.items()}
+                    if any(item['format'] != 2 for item in row['input_metadata'].values()):
+                        raise InfrastructureError('candidate inputs require verified physical ND format')
+            except Exception as error:
+                row.update(error_stage='fixture_preparation', cause_type=type(error).__name__)
+                raise InfrastructureError('trusted fixture preparation failed: ' + str(error)) from error
             with LaunchAudit(source, jit_class) as audit:
                 row['correctness_calls'] = 1
                 actual = module.run(inputs)
@@ -202,23 +212,34 @@ def evaluate_cases(request, output, *, torch=None, jit_class=None, capture=captu
                     raise ValueError('no candidate-owned compiled kernel was executed')
                 audit.profile_mode()
                 calls = 0
+                forward_error = None
                 def forward():
-                    nonlocal calls
+                    nonlocal calls, forward_error
+                    if forward_error is not None:
+                        raise forward_error
                     if calls >= 10:
                         raise ValueError('capture attempted an extra forward')
                     calls += 1
-                    return module.run(inputs)
+                    try:
+                        return module.run(inputs)
+                    except Exception as error:
+                        forward_error = error
+                        raise
+                capture_error = None
                 try:
                     captured = capture(forward, folder / 'capture', expected_kernel=expected,
                                        metric_group='PipeUtilization')
                 except Exception as error:
-                    # Export/schema failures do not establish a model's performance failure.
-                    from profile_capture import CaptureError
-                    if isinstance(error, CaptureError):
-                        raise InfrastructureError(str(error)) from error
-                    raise
+                    capture_error = error
                 finally:
                     row['profiled_calls'] = calls
+                # Production capture retains/export failures instead of rethrowing.
+                # Classify the original candidate exception before inspecting that result.
+                if forward_error is not None:
+                    row.update(error_stage='profile_forward', cause_type=type(forward_error).__name__)
+                    raise CandidateForwardError(str(forward_error)) from forward_error
+                if capture_error is not None:
+                    raise InfrastructureError('profile capture failed: ' + str(capture_error)) from capture_error
                 row['capture'] = captured
                 if audit.snapshot() != compiled or sha(source) != request['candidate_sha256']:
                     raise ValueError('source or compiled binary changed during capture')
@@ -300,7 +321,8 @@ def remote_main(request):
         report = evaluate_cases(request, request['output_directory'], capture=serialized_capture)
         report.update(health=health, runtime_identity=runtime, elapsed_seconds=time.monotonic()-started)
     except Exception as error:
-        report = dict(schema='optimization-coding-evaluation-v1',candidate_sha256=request['candidate_sha256'],
+        report = dict(schema='optimization-coding-evaluation-v1',classification_version=CLASSIFICATION_VERSION,
+                      candidate_sha256=request['candidate_sha256'],
                       measurement_kind='profiled_device_operation_span_us',outcome='infrastructure_failure',
                       error=str(error),cases=[dict(id=c['id'],correct=False,identity_verified=False,status='not-run') for c in request['cases']])
     finally:

@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TERMINAL = {'completed', 'failed', 'cancelled', 'missing'}
 MEASUREMENT_VERSION = 2
 PREPARATION_VERSION = 2
+CLASSIFICATION_VERSION = 2
+PUBLIC_INTERFACE_VERSION = 2
 
 
 def sha(path):
@@ -26,7 +28,7 @@ def sha(path):
 
 
 def invalid(request, cases, reason):
-    return dict(schema='optimization-coding-evaluation-v1',
+    return dict(schema='optimization-coding-evaluation-v1', classification_version=CLASSIFICATION_VERSION,
                 measurement_kind='profiled_device_operation_span_us',
                 candidate_sha256=request['candidate_sha256'], outcome='infrastructure_failure',
                 error=reason, cases=[dict(id=c['id'], correct=False, identity_verified=False,
@@ -39,14 +41,14 @@ def cache_key(config, phase, source_sha256):
                ROOT/'scripts/optimization_pair.py', ROOT/'scripts/optimization_profile_evidence.py',
                *(ROOT/'skills/ascend-model-benchmarking/scripts').glob('*.py')]
     context = {k:v for k,v in config.items() if k not in ('cache_directory','observation_seconds')}
-    identity = dict(measurement_version=MEASUREMENT_VERSION, preparation_version=PREPARATION_VERSION, config=context, phase=phase, source=source_sha256,
+    identity = dict(measurement_version=MEASUREMENT_VERSION, preparation_version=PREPARATION_VERSION,
+                    classification_version=CLASSIFICATION_VERSION, public_interface_version=PUBLIC_INTERFACE_VERSION, config=context, phase=phase, source=source_sha256,
                     helpers={str(p.relative_to(ROOT)):sha(p) for p in helpers})
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
 def evaluate(config, request, *, remote=None):
     """A cache intent is never redispatched; an existing handle is only observed."""
-    remote = remote or CplRemote()
     cases = config['cases'][request['phase']]
     if not cases or len({c['id'] for c in cases}) != len(cases):
         raise ValueError('distinct configured cases required')
@@ -67,8 +69,12 @@ def evaluate(config, request, *, remote=None):
         if report_path.exists():
             return json.loads(report_path.read_text())
         receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
+        remote = remote or CplRemote()
+        preflight_only = (receipt.get('state') == 'preflight'
+            and receipt.get('remote_intent_created') is False
+            and not any(key in receipt for key in ('transfer', 'handle', 'archive_sha256')))
         try:
-            if receipt and not receipt.get('handle'):
+            if receipt and not preflight_only and not receipt.get('handle'):
                 transfer = receipt.get('transfer', {})
                 if receipt.get('state') == 'transfer-intent' and transfer.get('handle'):
                     observed = remote._call(['observe',transfer['handle'],'--wait'])
@@ -78,8 +84,14 @@ def evaluate(config, request, *, remote=None):
                     _write_json(receipt_path, receipt)
                 if receipt.get('state') != 'uploaded':
                     return invalid(request, cases, 'uncertain dispatch or transfer; inspect retained intent, never resubmit')
-            if not receipt:
+            if not receipt or preflight_only:
+                receipt.update(state='preflight', remote_intent_created=False,
+                               preflight_attempts=receipt.get('preflight_attempts', 0) + 1)
+                _write_json(receipt_path, receipt)
                 remote.preflight(dict(target=config['target']))
+                receipt['state'] = 'preparing'
+                receipt.pop('error_type', None); receipt.pop('error', None)
+                _write_json(receipt_path, receipt)
                 payload = dict(request, cases=cases, operation_id=config['operation_id'],
                     provider_path=config['provider_path'], provider_sha256=config['provider_sha256'],
                     physical_die=config['physical_die'], device_query=config['device_query'],
@@ -97,7 +109,7 @@ def evaluate(config, request, *, remote=None):
                 with tarfile.open(archive, 'w:gz') as tar:
                     for path in bundle.rglob('*'):
                         if path.is_file(): tar.add(path, arcname=str(path.relative_to(bundle)))
-                receipt.update(state='transfer-intent', archive_sha256=sha(archive))
+                receipt.update(state='transfer-intent', remote_intent_created=True, archive_sha256=sha(archive))
                 _write_json(receipt_path, receipt)
                 transfer = remote._call(['upload',config['target'],str(archive),
                     str(Path(config['remote_workspace'])/archive.name)])
@@ -156,24 +168,35 @@ def evaluate(config, request, *, remote=None):
             _write_json(report_path, report)
             return report
         except Exception as error:
+            if receipt.get('state') == 'preflight':
+                receipt.setdefault('preflight_errors', []).append(dict(
+                    error_type=type(error).__name__, error=str(error)))
             receipt.update(error_type=type(error).__name__, error=str(error))
             _write_json(receipt_path, receipt)
             return invalid(request, cases, str(error))
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, required=True)
-    parser.add_argument('--workspace', type=Path)
+    class ManagedArgument(argparse.Action):
+        def __call__(self, parser, namespace, value, option_string=None):
+            if getattr(namespace, self.dest) is not None:
+                raise argparse.ArgumentError(self, 'managed argument cannot be overridden')
+            setattr(namespace, self.dest, value)
+    parser = argparse.ArgumentParser(usage='experiment-tool {evaluate,help}', add_help=False)
+    parser.add_argument('-h', '--help', action='store_true', dest='public_help')
+    parser.add_argument('--config', type=Path, action=ManagedArgument)
+    parser.add_argument('--workspace', type=Path, action=ManagedArgument)
     parser.add_argument('action', nargs='?', choices=['evaluate', 'help'])
     args = parser.parse_args()
     def help_action():
-        parser.print_help()
+        print('Usage: experiment-tool evaluate | experiment-tool help')
         print('evaluate: one correctness check then ten profiled forwards per case. '
               'Identical candidates reuse cached evidence; interrupted jobs retain their handle.')
         return 0
-    if args.action == 'help':
+    if args.public_help or args.action == 'help':
         return help_action()
+    if args.config is None:
+        parser.error('managed configuration is required')
     if args.workspace:
         candidate = args.workspace.resolve()/'candidate.py'
         request = dict(action='evaluate', phase='development', candidate_path=str(candidate),

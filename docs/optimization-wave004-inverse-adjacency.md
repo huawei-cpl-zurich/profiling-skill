@@ -68,3 +68,10 @@ with other streams. The structured timeout ended the job after approximately
 550 seconds. These limitations are preserved; they do not establish the cause
 of the vector timeout. Future unattempted work must use the shared canonical
 export slots and a bounded watchdog. The failed source/case was not replayed.
+Future operational wrappers must anchor `ENTRY` at the profile entry working
+directory, use `ENTRY/optimization-study/exports/0.lock` or `1.lock` for the two
+shared capture/export slots, and keep device leases under
+`ENTRY/optimization-study/leases/die-N.lock`. The historical wrapper used
+`leases/exportsN.lock`; it remains unchanged as part of the retained evidence.
+Physical die 3 is excluded from further workloads pending an understood cause
+of the timeout. This exclusion does not establish a hardware fault.

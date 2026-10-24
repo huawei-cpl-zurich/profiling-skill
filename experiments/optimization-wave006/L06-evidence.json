@@ -1,0 +1,583 @@
+{
+  "study": "W006-L06",
+  "status": "complete",
+  "measurement_kind": "instrumented diagnostic spans and profiled events; ordinary latency unavailable",
+  "product": "Ascend 910B4-1",
+  "sdk": "CANN 9.1.0",
+  "kernel_type": "K_TYPE_AIV=3, verified for all twelve compiled variants before scientific forwards",
+  "matrix_sha256": "1d78b9c7dd0a05eacfecc282ad19e01aa0d3a5c713d151d2bbb74194ffc2266c",
+  "sources": {
+    "scratch_reuse.py": "080b9d670e6a246bd343d85ce6371e3f7d8488b5f7664c1db6e9c24a04e07d9c",
+    "scratch_reuse.cpp": "95eae85fab5c378110ebc29776e629a057d0c80f8164054a0148ca0fc2eb06ea"
+  },
+  "collection_handle": "remote:gz-a3:job:a984cb4a-e844-4487-a379-df541733c1ee",
+  "compact_archive_sha256": "b12a26d1a4a2482ec48b8b00830ea4db7e0d4858b639b2898e5d82af822e6fb8",
+  "counts": {
+    "numerical_checks": 12,
+    "captures": 8,
+    "profiled_calls": 80,
+    "scientific_payloads": 6,
+    "warmup": 0,
+    "ordinary_latency_calls": 0
+  },
+  "cases": [
+    {
+      "case_id": "W006-L06-01",
+      "status": "complete",
+      "numerical_checks": 2,
+      "captures": 2,
+      "profiled_calls": 20,
+      "fixture_sha256": "ccbc51b170b94d96f00075fbf626c1ea5e712f9014bc6d838a7c400820d415f2",
+      "logical_reserved_bytes": {
+        "before": 131072,
+        "after": 98304
+      },
+      "correctness": {
+        "before": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        },
+        "after": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        }
+      },
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            3.32,
+            2.42,
+            3.28,
+            3.26,
+            3.4,
+            2.52,
+            3.42,
+            2.52,
+            3.24,
+            2.44
+          ],
+          "count": 10,
+          "mean": 2.9819999999999998,
+          "sample_sd": 0.440953512288994
+        },
+        "after": {
+          "samples": [
+            3.08,
+            2.32,
+            3.18,
+            2.34,
+            3.14,
+            2.34,
+            3.24,
+            2.42,
+            3.26,
+            2.42
+          ],
+          "count": 10,
+          "mean": 2.774,
+          "sample_sd": 0.43195164338409725
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.6082199811935425,
+            0.43810001015663147,
+            0.4597199857234955,
+            0.46342000365257263,
+            0.3864400088787079,
+            0.38920000195503235,
+            0.3638800084590912,
+            0.3836199939250946,
+            0.38646000623703003,
+            0.3831999897956848
+          ],
+          "count": 10,
+          "mean": 0.4262259989976883,
+          "sample_sd": 0.07292062514580144
+        },
+        "after": {
+          "samples": [
+            0.7468000054359436,
+            0.5076000094413757,
+            0.3858799934387207,
+            0.41947999596595764,
+            0.3972199857234955,
+            0.3720000088214874,
+            0.39024001359939575,
+            0.38387998938560486,
+            0.38034000992774963,
+            0.3947199881076813
+          ],
+          "count": 10,
+          "mean": 0.4378159999847412,
+          "sample_sd": 0.11531964556501495
+        }
+      },
+      "pmu_csv_sha256": {
+        "before": "aa17b9279ae8a14747ff18eda79c4fb96bd3aaae7150b994d52b0ee49cbe4bc9",
+        "after": "92b32157ff1002902076a7f116e162f66ec459b7b6ed6ef9187067d8af4804de"
+      },
+      "raw_pmu_task_rows_retained": {
+        "before": 10,
+        "after": 10
+      }
+    },
+    {
+      "case_id": "W006-L06-02",
+      "status": "complete",
+      "numerical_checks": 2,
+      "captures": 2,
+      "profiled_calls": 20,
+      "fixture_sha256": "e42fddf6549d160088d97013719d5c758f36bf15b4e155f01e6481de3464415b",
+      "logical_reserved_bytes": {
+        "before": 1024,
+        "after": 768
+      },
+      "correctness": {
+        "before": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        },
+        "after": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        }
+      },
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            2.48,
+            1.68,
+            2.72,
+            1.84,
+            2.72,
+            1.86,
+            2.74,
+            1.74,
+            2.64,
+            1.76
+          ],
+          "count": 10,
+          "mean": 2.218,
+          "sample_sd": 0.4739854662563213
+        },
+        "after": {
+          "samples": [
+            2.7,
+            1.82,
+            2.64,
+            1.74,
+            2.48,
+            1.6,
+            2.88,
+            1.82,
+            2.68,
+            1.82
+          ],
+          "count": 10,
+          "mean": 2.218,
+          "sample_sd": 0.49624814581237703
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.6068999767303467,
+            0.4163999855518341,
+            0.3665600121021271,
+            0.3825399875640869,
+            0.3752000033855438,
+            0.39719998836517334,
+            0.3786599934101105,
+            0.37692001461982727,
+            0.37323999404907227,
+            0.3989799916744232
+          ],
+          "count": 10,
+          "mean": 0.40725999474525454,
+          "sample_sd": 0.07172530107143729
+        },
+        "after": {
+          "samples": [
+            0.7004799842834473,
+            0.3910199999809265,
+            0.39076000452041626,
+            0.37907999753952026,
+            0.3714999854564667,
+            0.39711999893188477,
+            0.3847599923610687,
+            0.38155999779701233,
+            0.36937999725341797,
+            0.38464000821113586
+          ],
+          "count": 10,
+          "mean": 0.4150299966335297,
+          "sample_sd": 0.10066403310675613
+        }
+      },
+      "pmu_csv_sha256": {
+        "before": "34d51464b25dc7ce475db4d5288fa7cf67bfa6ab1c85a7005c0dd95c9b48c2c5",
+        "after": "3975074067cc849fe747a9fa943e789491fcca569a8a757bce352573be842d4e"
+      },
+      "raw_pmu_task_rows_retained": {
+        "before": 10,
+        "after": 10
+      }
+    },
+    {
+      "case_id": "W006-L06-03",
+      "status": "complete",
+      "numerical_checks": 2,
+      "captures": 2,
+      "profiled_calls": 20,
+      "fixture_sha256": "3d712d7b83514ac500fe09bde6e6e460aa30471ecf8c2f79c657d29c42becaf9",
+      "logical_reserved_bytes": {
+        "before": 147456,
+        "after": 110592
+      },
+      "correctness": {
+        "before": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        },
+        "after": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        }
+      },
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            2.34,
+            2.28,
+            2.4,
+            2.34,
+            2.2,
+            2.2,
+            2.24,
+            2.22,
+            2.2,
+            2.22
+          ],
+          "count": 10,
+          "mean": 2.2640000000000002,
+          "sample_sd": 0.07229568912920498
+        },
+        "after": {
+          "samples": [
+            2.26,
+            2.28,
+            2.28,
+            2.3,
+            2.3,
+            2.34,
+            2.2,
+            2.22,
+            2.2,
+            2.22
+          ],
+          "count": 10,
+          "mean": 2.26,
+          "sample_sd": 0.04807401700618636
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.6080800294876099,
+            0.40713998675346375,
+            0.38405999541282654,
+            0.38934001326560974,
+            0.385699987411499,
+            0.38029998540878296,
+            0.38012000918388367,
+            0.3786199986934662,
+            0.37964001297950745,
+            0.3818199932575226
+          ],
+          "count": 10,
+          "mean": 0.40748200118541716,
+          "sample_sd": 0.07098210640773234
+        },
+        "after": {
+          "samples": [
+            0.7392200231552124,
+            0.387580007314682,
+            0.37775999307632446,
+            0.38651999831199646,
+            0.3873800039291382,
+            0.3889400064945221,
+            0.3819800019264221,
+            0.36423999071121216,
+            0.38023999333381653,
+            0.37470000982284546
+          ],
+          "count": 10,
+          "mean": 0.4168560028076172,
+          "sample_sd": 0.11351710301545039
+        }
+      },
+      "pmu_csv_sha256": {
+        "before": "950f25b5af739949faed8b8b42b38770f98cd86aff2f2350c315ebab17935ada",
+        "after": "1a0da48bae2a0850f364a2398503e6140ff4ecc0858176406faf261da4603678"
+      },
+      "raw_pmu_task_rows_retained": {
+        "before": 10,
+        "after": 10
+      }
+    },
+    {
+      "case_id": "W006-L06-04",
+      "status": "complete",
+      "numerical_checks": 2,
+      "captures": 2,
+      "profiled_calls": 20,
+      "fixture_sha256": "77162bbdef0d86c5cde3e33b0cb769addd96a2518ff92e0ad658864f8106f78e",
+      "logical_reserved_bytes": {
+        "before": 4096,
+        "after": 3072
+      },
+      "correctness": {
+        "before": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        },
+        "after": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        }
+      },
+      "profiled_device_operation_span_us": {
+        "before": {
+          "samples": [
+            1.6,
+            1.58,
+            1.58,
+            1.76,
+            1.5,
+            1.56,
+            1.64,
+            1.64,
+            1.64,
+            1.62
+          ],
+          "count": 10,
+          "mean": 1.612,
+          "sample_sd": 0.06811754546370558
+        },
+        "after": {
+          "samples": [
+            1.6,
+            1.6,
+            1.58,
+            1.58,
+            1.66,
+            1.6,
+            1.68,
+            1.62,
+            1.66,
+            1.72
+          ],
+          "count": 10,
+          "mean": 1.6300000000000001,
+          "sample_sd": 0.04737556801183959
+        }
+      },
+      "profiled_event_latency_ms": {
+        "before": {
+          "samples": [
+            0.6345199942588806,
+            0.4408000111579895,
+            0.3873800039291382,
+            0.37856000661849976,
+            0.38778001070022583,
+            0.3744400143623352,
+            0.36976000666618347,
+            0.3756200075149536,
+            0.49088001251220703,
+            0.37290000915527344
+          ],
+          "count": 10,
+          "mean": 0.42126400768756866,
+          "sample_sd": 0.08437133163582587
+        },
+        "after": {
+          "samples": [
+            0.6710000038146973,
+            0.3815000057220459,
+            0.37610000371932983,
+            0.40727999806404114,
+            1.354640007019043,
+            0.36695998907089233,
+            0.36875998973846436,
+            0.3679400086402893,
+            0.37084001302719116,
+            0.3843199908733368
+          ],
+          "count": 10,
+          "mean": 0.5049340009689331,
+          "sample_sd": 0.3126633170740097
+        }
+      },
+      "pmu_csv_sha256": {
+        "before": "bbfc240599e4e1c8980eacff9b033c38f88a3d23454126761734ead3aeef25be",
+        "after": "a263773993274731e0030126868f173ea5683c35ce76e7a042f265a9ebd6dce9"
+      },
+      "raw_pmu_task_rows_retained": {
+        "before": 10,
+        "after": 10
+      }
+    },
+    {
+      "case_id": "W006-L06-GA",
+      "status": "complete",
+      "numerical_checks": 2,
+      "captures": 0,
+      "profiled_calls": 0,
+      "fixture_sha256": "f65a38ac85c16f8e77dcd4ca1c99d0b836898ee4c15da0227ee66ba89a39952e",
+      "logical_reserved_bytes": {
+        "before": 2048,
+        "after": 2048
+      },
+      "correctness": {
+        "before": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        },
+        "after": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        }
+      }
+    },
+    {
+      "case_id": "W006-L06-GB",
+      "status": "complete",
+      "numerical_checks": 2,
+      "captures": 0,
+      "profiled_calls": 0,
+      "fixture_sha256": "b7d458b412bcfe8a90a3a805ab2121572a9f3c8d874968a0e8edf252a392af42",
+      "logical_reserved_bytes": {
+        "before": 1024,
+        "after": 768
+      },
+      "correctness": {
+        "before": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        },
+        "after": {
+          "passed": true,
+          "exact_bitwise": true,
+          "immutable_input": true,
+          "gm_canaries": true,
+          "nonalias_output": true
+        }
+      }
+    }
+  ],
+  "binary_builds": [
+    {
+      "variant": "1-64-64-0-after",
+      "binary_sha256": "fc8ae67b575cddcc865e9b5f86006ba43782be685eee0cf4025d4ed4e5e6a94d",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "1-64-64-0-before",
+      "binary_sha256": "e76a651aa2593b49c4419979a36998c2d123437b2952cb65c428c247024890a1",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "2-128-256-0-after",
+      "binary_sha256": "cc826ab26ac5db0629760f97ca4632fdd94bcffcc286f63a59b2fa45d08b97f9",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "2-128-256-0-before",
+      "binary_sha256": "54f915c2c26fffd4c2a159b0eaded215ede15470e03f7547f458eeff920aa137",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "2-64-128-1-after",
+      "binary_sha256": "f09bdade9c2ee652993b46bb3369ca5d6e99b6f83206bc05d2f127aac1867c8b",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "2-64-128-1-before",
+      "binary_sha256": "3929f253f61e60e60989edccab7d904e42adc74c22a73d4ed3e5921132a52cb0",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "3-33-64-0-after",
+      "binary_sha256": "5727560be4f01eb673ddd572ff1b5ad25da457d2939480314a615c40da04280c",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "3-33-64-0-before",
+      "binary_sha256": "731c015e3f04bdf9c1a0451f85dc7c3a7246b0c3fc02b4133ddf921e78cacb84",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "6-1536-9216-0-after",
+      "binary_sha256": "a2b8a32e3e6feb7b784ff665886410c34fbff4e7545bd2478448662a308a2e04",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "6-1536-9216-0-before",
+      "binary_sha256": "c3e3c1c0149e2618051111ab0d716c45ec72f58fc8a5dd2da0818f7d0374da9f",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "8-1024-8192-0-after",
+      "binary_sha256": "cde31cff52a3cbd82ccbad09bfcb6fd09657c95a95064208530c6094b9a187af",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    },
+    {
+      "variant": "8-1024-8192-0-before",
+      "binary_sha256": "4c3be9774ab84ec109423fa6d76931f409441274d14876144104d85216f7196e",
+      "compiler_sha256": "1cb33347c991d8ec143c0ba080ca126d9cc84167c4edea3e4953ff5865c5f60a"
+    }
+  ],
+  "qualification_notes": [
+    "One initial conforming source version; six numerical payloads generated once, no scientific replay or nonconforming captures.",
+    "BEFORE requests four owned local buffers; AFTER requests three for nonoverlapping scratch lifetimes. The late-first guard requests four on both arms and passes actual numerical output checks.",
+    "All source arithmetic, synchronization, tile partition and GM copies are identical. Input/output GM prefix and suffix canaries passed, including the 64+35 tail guard.",
+    "Logical requested reservation decreases 25% in the four main pairs; physical peak allocation, occupancy and traffic are not certified by this accounting. Compiler intermediates and binary resources are retained.",
+    "All ten per-arm diagnostic span and instrumented event samples plus supported raw PMU task rows are retained. AI_CORE is generic CSV labeling; engine placement is independently established by selected SDK enum and actual ELF kind3/vector entry/no Cube entry.",
+    "Observed span signs are mixed and small differences overlap sample variation. No ordinary latency, general performance win, bandwidth or roofline claim follows."
+  ]
+}

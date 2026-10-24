@@ -1,0 +1,99 @@
+{
+  "wave": 5,
+  "study_id": "B04",
+  "title": "Single-pass ragged reverse",
+  "study_kind": "new-operator-application-of-existing-technique",
+  "new_unique_mechanism_claim": false,
+  "mechanism_family": "redundant-store-elimination",
+  "approval": "Standing waves003\u2013022 data first.",
+  "source": "ascendc/proposal.md, ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 Apache2.0; documentedmapping/plugin/NPUexample; nativebodyunseen+A2/A3whitelist. Preserveattribution. Standalone910Bimplementation notnativeperformanceclaim.",
+  "cases": [
+    {
+      "case_id": "W005-B04-01",
+      "role": "gallery",
+      "seed": 6601,
+      "parameters": {
+        "B": 64,
+        "T": 256,
+        "D": 32,
+        "length_pattern": "mostly-full"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B04-02",
+      "role": "gallery",
+      "seed": 6602,
+      "parameters": {
+        "B": 1,
+        "T": 32,
+        "D": 8,
+        "length_pattern": "all-zero"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B04-03",
+      "role": "heldout",
+      "seed": 6603,
+      "parameters": {
+        "B": 48,
+        "T": 192,
+        "D": 48,
+        "length_pattern": "mixed-long"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    },
+    {
+      "case_id": "W005-B04-04",
+      "role": "heldout",
+      "seed": 6604,
+      "parameters": {
+        "B": 2,
+        "T": 64,
+        "D": 16,
+        "length_pattern": "short-zero"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective label, retain negative/no-effect/failed outcomes."
+    }
+  ],
+  "contract": {
+    "interface": "ContiguousFP32x[B,T,D]finiteuniform[-1,1],int32lengths[B],immutableinput,separatenonaliasoutput. ExplicitCLAMPlengthsto[0,T]botharms eachAPI, no mixwithstrictpluginvalidation.",
+    "mapping": "Atbatchb,timei,lengthL=clamp(lengths[b],0,T), src=L-1-i ifi<L elsei, channelunchanged. Bitwisepurepermutation.",
+    "before": "CloneALLx then kerneloverwritesvalidreversedprefix. BothoperationsinsideAPI; no skipcloneorzero-lengthspecialdispatch.",
+    "after": "Oneoutputwritingkernelstoreeachoutputonce usingmappingincludingidentitysuffix, sameblockvectorlayout.",
+    "oracle": "CPUintegerpermutationindependentcopy exactbitwise;inputunchanged/outputnonalias/entireoutputwritten. Recordlogicalstorecountdifference, noPMUphysicalbytesassumption.",
+    "involution": "GA correctness-onlyfullAPI applyreverseTWICE eacharm tosamecachedinput (extraoperation explicit guardcomponentonly) andcheckoriginal; mainforwardsoneapplication."
+  },
+  "guards": [
+    {
+      "case_id": "W005-B04-GA",
+      "role": "guard",
+      "seed": 6691,
+      "parameters": {
+        "B": 4,
+        "T": 17,
+        "D": 3,
+        "length_pattern": "clamp-extremes"
+      },
+      "expected": "Lengths[-3,0,T,T+5]exerciseclamp,botharmstwiceinvolutionoriginalexact."
+    },
+    {
+      "case_id": "W005-B04-GB",
+      "role": "guard",
+      "seed": 6692,
+      "parameters": {
+        "B": 3,
+        "T": 19,
+        "D": 5,
+        "length_pattern": "mixed-short"
+      },
+      "expected": "Lengths[1,7,0],oddmask,untouchedsuffix;outputinputsnonalias."
+    }
+  ],
+  "protocol": "Six CPU payloads once, once-per-side correctness per source version then exactly10 profiled fullAPI forwards/arm/fourmaincases. Guards0captures. No warmup/autotuning/extratiming/profiledIOchecks. Complete operation span diagnostic, preserve all failures/negatives. Independent910Bqualification mandatory."
+}

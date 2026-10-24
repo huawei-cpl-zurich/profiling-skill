@@ -163,3 +163,15 @@ def factory(): return CPU()
         else:
             assert result.returncode == 0 and report['status'] == 'complete'
             assert report['fixture']['oracle_calls'] == 0
+
+
+def test_standalone_import_from_outside_repository(tmp_path):
+    import os
+    environment = dict(os.environ, PYTHONPATH=str(ROOT/'examples/optimization-library/ascendc'))
+    result = subprocess.run(
+        [sys.executable, '-c',
+         "import twoprod; assert callable(twoprod.compile_all); "
+         "assert callable(twoprod.audit_placement); "
+         "assert twoprod.dimensions({'rows': 1, 'width': 3}) == (1, 3)"],
+        cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr

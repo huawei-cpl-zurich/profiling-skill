@@ -5,8 +5,10 @@ import json
 import os
 import re
 import struct
+import sys
 from pathlib import Path
 import torch
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
 from optimization_native_bridge import NativeArm, build_shared, digest
 
 

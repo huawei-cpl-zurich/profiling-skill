@@ -152,7 +152,7 @@
     "kind": "adapter.capture fail-closed; correctness-only remains available",
     "measured_kernel_unchanged": true,
     "measured_fixture_unchanged": true,
-    "publication_adapter_sha256": "dee16e6e4905b5a3055b6413273816b0590256ae0d0aa849a7b5d9281d6b2a7c",
+    "publication_adapter_sha256": "89b31b1676366e4dda63fd400a9420581c28b587e7190758a3f457e79e60c2f6",
     "new_npu_forwards": 0,
     "new_frozen_oracle_evaluations": 0,
     "cpu_only_a3_validation": {
@@ -162,6 +162,23 @@
       "tests_passed": 19,
       "new_npu_forwards": 0,
       "new_frozen_oracle_evaluations": 0
+    },
+    "standalone_import_fix": {
+      "prior_publication_adapter_sha256": "dee16e6e4905b5a3055b6413273816b0590256ae0d0aa849a7b5d9281d6b2a7c",
+      "publication_adapter_sha256": "89b31b1676366e4dda63fd400a9420581c28b587e7190758a3f457e79e60c2f6",
+      "scope": "source-relative scripts discovery plus external-cwd subprocess import test",
+      "new_native_compilations": 0,
+      "new_npu_forwards": 0,
+      "new_frozen_oracle_evaluations": 0,
+      "cpu_only_a3_validation": {
+        "handle": "remote:gz-a3:job:869816d9-421c-4c48-86a8-32aae80c3d15",
+        "state": "completed",
+        "exit": 0,
+        "tests_passed": 20,
+        "new_native_compilations": 0,
+        "new_npu_forwards": 0,
+        "new_frozen_oracle_evaluations": 0
+      }
     }
   }
 }

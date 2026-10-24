@@ -1,0 +1,84 @@
+{
+  "wave": 4,
+  "family_id": "W01",
+  "title": "Remove positive common normalization before argmax",
+  "status": "family-frozen-before-implementation",
+  "approval": "Standing user approval waves003\u2013022; datafirst",
+  "source_proposal": "proposal.md",
+  "measurement_protocol": "sixCPUoraclepayloadsonce, correctnessonce/side/case/sourceversion, fourprofilepairs10fullforwards/side,twoguards0profiles,noextra warmup/autotune/timing/IOinspection",
+  "cases": [
+    {
+      "case_id": "W004-W01-01",
+      "role": "gallery",
+      "scenario_designation": "gallery-benefit",
+      "seed": 4101,
+      "parameters": {
+        "rows": 64,
+        "V": 16384
+      },
+      "hypothesis": "Less normalization work may help; tiny cases may show no gain or overhead."
+    },
+    {
+      "case_id": "W004-W01-02",
+      "role": "gallery",
+      "scenario_designation": "gallery-cost",
+      "seed": 4102,
+      "parameters": {
+        "rows": 1,
+        "V": 64
+      },
+      "hypothesis": "Less normalization work may help; tiny cases may show no gain or overhead."
+    },
+    {
+      "case_id": "W004-W01-03",
+      "role": "heldout",
+      "scenario_designation": "heldout-benefit",
+      "seed": 4103,
+      "parameters": {
+        "rows": 96,
+        "V": 8192
+      },
+      "hypothesis": "Less normalization work may help; tiny cases may show no gain or overhead."
+    },
+    {
+      "case_id": "W004-W01-04",
+      "role": "heldout",
+      "scenario_designation": "heldout-cost",
+      "seed": 4104,
+      "parameters": {
+        "rows": 2,
+        "V": 128
+      },
+      "hypothesis": "Less normalization work may help; tiny cases may show no gain or overhead."
+    }
+  ],
+  "contract": {
+    "interface": "FP32 target,draft,q [rows,V], int32 lowest-index argmax output [rows]. r=max(target-draft,0). BEFORE argmax((r/sum(r))/q), AFTER argmax(r/q). q positive finite, no profiling-time admission or validation.",
+    "data_recipe": "Seeded permutation chooses active half. target=1/V everywhere; draft=0 on active half and2/V elsewhere (both distributions sum1). q=1 everywhere except one seeded active winner q=1/2. r andq dyadic, sumr=1/2, scores nonzero normal or exactzero, unique winner. All-zero residual returns index0, equal maxima choose lowest original index.",
+    "oracle": "Independent CPU FP32 explicit formula plus exact dyadic ordering proof; indices bitwise equal. Mathematical positive common normalization only, no claim arbitrary FP32 near-tie invariance.",
+    "guards": [
+      {
+        "case_id": "W004-W01-GA",
+        "role": "guard",
+        "seed": 4191,
+        "parameters": {
+          "rows": 2,
+          "V": 128,
+          "distribution": "target-equals-draft"
+        },
+        "expected": "allzero residual returns index0 botharms"
+      },
+      {
+        "case_id": "W004-W01-GB",
+        "role": "guard",
+        "seed": 4192,
+        "parameters": {
+          "rows": 2,
+          "V": 256,
+          "distribution": "dyadic-residual-q-all-one"
+        },
+        "expected": "tie lowest active original index botharms"
+      }
+    ]
+  }
+}

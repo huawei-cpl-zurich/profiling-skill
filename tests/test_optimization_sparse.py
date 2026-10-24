@@ -113,7 +113,9 @@ def test_preparation_has_no_launches_then_one_complete_operation_with_identity()
             return run
     case=contract.make_case(spec())
     def transfer(value,*args,**kwargs):return value
-    with patch.dict(sys.modules,torch_npu=SimpleNamespace(get_npu_format=lambda x:2)),\
+    with patch.dict(sys.modules,torch_npu=SimpleNamespace(get_npu_format=lambda x:2),
+                    triton=SimpleNamespace(__version__='fixture',
+                        next_power_of_2=lambda value:1 << (value-1).bit_length())),\
             patch.object(torch.Tensor,'to',transfer),\
             patch.object(torch,'empty_like',side_effect=lambda x,**kw:torch.empty(x.shape,dtype=x.dtype)),\
             patch.object(pairs,'kernels',return_value=Kernel()):

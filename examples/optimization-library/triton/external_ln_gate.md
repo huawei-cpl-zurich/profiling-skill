@@ -65,3 +65,27 @@ fixture CLI accepts nested case JSON: `external_ln_contract.py --case CASE
 --output FIXTURE`. Use the repository's `scripts/optimization_pair.py` and the
 configured remote/profiling workflow for device collection. Unsupported U
 shapes intentionally exit with ValueError and zero calls.
+
+## Retained results
+
+The selected route reported Ascend910B4-1, physical device 6 and application logical 0. Ten numerical device correctness checks and two host mismatch rejections passed. Five independent FP64 scientific oracle payloads were generated once. The four measured pairs contain eight captures, eighty profiled forwards and 120 compute-task PMU rows; both guards have zero captures. Ten CPU functional tests passed locally and on the A3 runtime, including actual public CLI rejection before fixture-cache writes. No retries, failed attempts, or scientific replays occurred.
+
+| Case | Two-stage span, µs (mean ± sample SD) | Fused span, µs (mean ± sample SD) | Before/after ratio |
+|---|---:|---:|---:|
+| W005-B02-01 | 151.322 ± 2.633 | 42.906 ± 0.326 | 3.5268× |
+| W005-B02-02 | 156.356 ± 21.725 | 1.956 ± 0.154 | 79.9366× |
+| W005-B02-03 | 160.554 ± 11.673 | 37.356 ± 0.291 | 4.2979× |
+| W005-B02-04 | 140.160 ± 14.401 | 1.710 ± 0.062 | 81.9649× |
+
+The geometric mean span ratio is **17.7523×**. All four prospective cases favor fusion; the cost labels did not yield regressions. These are profiler-active diagnostic spans. In particular, tiny-case ratios are dominated by the baseline's interkernel/caller gap and cannot be interpreted as ordinary application speedups or traffic ratios. Every sample, including the slower samples, is retained.
+
+| Case | Baseline active union, µs | Fused active union, µs | Baseline noncompute remainder, µs |
+|---|---:|---:|---:|
+| W005-B02-01 | 52.288 | 42.906 | 99.034 |
+| W005-B02-02 | 3.358 | 1.956 | 152.998 |
+| W005-B02-03 | 41.152 | 37.356 | 119.402 |
+| W005-B02-04 | 2.916 | 1.710 | 137.244 |
+
+A publication-only correction changes the source copyright year to match the retrieved upstream 2026 notice. The original measured adapter source is retained in the private archive. The complete Python AST is identical and the fixture provider is unchanged; old/new source digests and the common AST digest are recorded. No scientific oracle, correctness run or profile was repeated for this comment change.
+
+[Readable summary](../../../skills/ascend-optimization-library/references/external-ln-gate-summary.json) and [complete compact evidence](../../../skills/ascend-optimization-library/references/external-ln-gate-evidence.json.gz) retain all span/event samples, source/binary/fixture bindings, task PMU fields and guards. The private archive contains 233 verified payload files plus its manifest, 8,701,054bytes, SHA256 `895ea7b552ca648dc907a988fb08cffa53d0aba9baf893f2450feebc008f5d27`. The full vendor trees remain in the retained remote run.

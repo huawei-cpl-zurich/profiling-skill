@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "case_id": "F09-01",
+      "role": "gallery",
+      "seed": 9101,
+      "parameters": {
+        "Ms": [
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16
+        ],
+        "N": 256,
+        "K": 512
+      },
+      "purpose": "Many tiny groups may benefit from amortized launch/setup and core ownership across groups.",
+      "mathematical_work": 134217728,
+      "hypothesis_role": "benefit",
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Many tiny groups may benefit from amortized launch/setup and core ownership across groups."
+    },
+    {
+      "case_id": "F09-02",
+      "role": "gallery",
+      "seed": 9102,
+      "parameters": {
+        "Ms": [
+          512
+        ],
+        "N": 256,
+        "K": 512
+      },
+      "purpose": "One sizable group offers no launch aggregation benefit and may expose descriptor-loop overhead.",
+      "mathematical_work": 134217728,
+      "hypothesis_role": "cost",
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "One sizable group offers no launch aggregation benefit and may expose descriptor-loop overhead."
+    },
+    {
+      "case_id": "F09-03",
+      "role": "heldout",
+      "seed": 9103,
+      "parameters": {
+        "Ms": [
+          0,
+          17,
+          31,
+          65,
+          129,
+          0,
+          17,
+          31,
+          65,
+          129,
+          0,
+          17,
+          31,
+          65,
+          129,
+          0,
+          17,
+          31,
+          65,
+          129,
+          0,
+          17,
+          31,
+          65,
+          129,
+          0,
+          17,
+          31,
+          65,
+          129
+        ],
+        "N": 192,
+        "K": 256
+      },
+      "purpose": "Many groups with zero-M/tails may benefit from union scheduling if descriptor handling is correct.",
+      "mathematical_work": 142737408,
+      "hypothesis_role": "benefit",
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Many groups with zero-M/tails may benefit from union scheduling if descriptor handling is correct."
+    },
+    {
+      "case_id": "F09-04",
+      "role": "heldout",
+      "seed": 9104,
+      "parameters": {
+        "Ms": [
+          768
+        ],
+        "N": 320,
+        "K": 768
+      },
+      "purpose": "One larger unseen group may favor ordinary GEMM without resident group-management work.",
+      "mathematical_work": 377487360,
+      "hypothesis_role": "cost",
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "One larger unseen group may favor ordinary GEMM without resident group-management work."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "F09-guard-prefix",
+      "role": "guard",
+      "seed": 9191,
+      "parameters": {
+        "Ms": [
+          2,
+          3,
+          1
+        ],
+        "N": 64,
+        "K": 64
+      },
+      "invalid_prefix": [
+        0,
+        3,
+        2,
+        6
+      ]
+    },
+    {
+      "case_id": "F09-guard-zero",
+      "role": "guard",
+      "seed": 9192,
+      "parameters": {
+        "Ms": [
+          0,
+          3,
+          0,
+          17,
+          0,
+          2,
+          0
+        ],
+        "N": 65,
+        "K": 64
+      }
+    }
+  ]
+}

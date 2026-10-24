@@ -80,9 +80,24 @@ python examples/optimization-library/triton/sampler_cli.py \
 Add `--validate-only` for host metadata validation without the NPU backend or
 cache access. The supported envelope is owned, nonaliasing contiguous CPU fixture
 storage copied to exclusive device rows: FP32 target/q and optional draft
-probabilities, positive finite q, int32 valid draft IDs and cumulative endpoints
+probabilities, positive finite q whose modeled FP32 argmax agrees with the primary FP64 winner,
+int32 valid draft IDs and cumulative endpoints
 matching nonnegative request lengths. Unit tests use separate seeds/shapes and
 exercise scalar oracle behavior, invalid inputs/ownership, cache tampering,
 compile-only launch accounting, adapter reuse, and the external-cwd public CLI.
-The CLI was added separately after collection; measured adapter, kernel and oracle
-source bytes remained unchanged.
+The CLI was added separately after collection. Review then found that arbitrary
+positive q can create an FP32 tie absent in FP64: target `[.1,.3,.6]`,
+q `[3,9,1]`, draft ID 2 has FP64 winner 1 but modeled FP32 winner 0. Host
+admission now rejects that ambiguity before NPU transfer or generated-cache
+publication. Newly generated expected IDs still use the original FP64 oracle
+exactly once; preparation compares the FP32 model with cached FP64 expected IDs.
+True ties, allzero scores, cross-chunk ties and the draft-probability control
+remain supported. The primary FP64 oracle function and fixture input generator
+are unchanged. This publication-only hardening has separate source/CPU-test
+receipts; all six measured payloads, kernel bytes and original measured provider
+hashes remain retained. No frozen oracle, NPU, compiler or profiler replay was
+performed for this change.
+
+The follow-up CPU-only A3 gate passed all ten nonfrozen tests, including the
+public ambiguity rejection, under handle
+`remote:gz-a3:job:94e38f17-dacb-48fb-821e-cda159fa54a3` (exit 0).

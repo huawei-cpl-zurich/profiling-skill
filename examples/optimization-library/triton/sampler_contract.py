@@ -29,6 +29,27 @@ def reference(inputs):
     return (target / q).argmax(-1).to(torch.int32)
 
 
+def qualify_ranking(inputs, expected):
+    """Reject FP32 score ordering that disagrees with the trusted FP64 winner.
+
+    The FP64 oracle remains authoritative. Cached expected tensors are reused;
+    this admission check does not evaluate that oracle again during preparation.
+    """
+    target = inputs['target'].clone()
+    draft = inputs.get('draft')
+    if draft is None:
+        target[torch.arange(len(inputs['ids'])), inputs['ids'].long()] = 0
+    else:
+        target = (target - draft).clamp_min(0)
+    ends = inputs['ends']
+    lengths = torch.diff(torch.cat((torch.zeros(1, dtype=ends.dtype), ends)))
+    q = torch.repeat_interleave(inputs['q'], lengths.long(), dim=0)
+    modeled = (target / q).argmax(-1).to(torch.int32)
+    if (expected.device.type != 'cpu' or expected.dtype != torch.int32
+            or expected.shape != modeled.shape or not torch.equal(modeled, expected)):
+        raise ValueError('unsupported sampler ranking: FP32 scores disagree with FP64 oracle')
+
+
 def make_case(spec):
     p, lengths, vocab = dimensions(spec)
     rng = torch.Generator().manual_seed(spec['seed'])
@@ -49,7 +70,9 @@ def make_case(spec):
         inputs['target'][1, [0, 4095]] = .5
         inputs['q'].fill_(1)
         inputs['ids'] = torch.tensor(p.get('draft_ids', [0, 4096, 4095]), dtype=torch.int32)
-    return dict(inputs=inputs, expected=reference(inputs))
+    expected = reference(inputs)
+    qualify_ranking(inputs, expected)  # Before the generic cache writes a payload.
+    return dict(inputs=inputs, expected=expected)
 
 
 def validate_inputs(inputs, spec):

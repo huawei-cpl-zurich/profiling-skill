@@ -12,7 +12,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY = ROOT / 'examples/optimization-library/triton'
 sys.path.insert(0, str(DIRECTORY))
-from sampler_contract import make_case, reference, validate_inputs
+from sampler_contract import make_case, reference, qualify_ranking, validate_inputs
 from sampler import Adapter
 sys.path.insert(0, str(ROOT / 'scripts'))
 from optimization_pair import fixture
@@ -49,6 +49,30 @@ class SamplerContractTests(unittest.TestCase):
         x['draft'].copy_(x['target'])
         self.assertEqual(reference(x).tolist(), [0, 0, 0])
         validate_inputs(x, case)
+
+    def test_public_prepare_rejects_fp32_rounding_tie(self):
+        case = dict(seed=29, lengths=[1], vocab=3, draft_probs_present=False)
+        inputs = dict(target=torch.tensor([[.1, .3, .6]]), q=torch.tensor([[3., 9., 1.]]),
+                      ids=torch.tensor([2], dtype=torch.int32), ends=torch.tensor([1], dtype=torch.int32))
+        expected = reference(inputs)
+        self.assertEqual(expected.tolist(), [1])  # Preserve the unique FP64 winner.
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / 'not-created'
+            with patch.dict(sys.modules, {'torch_npu': None}):
+                with self.assertRaisesRegex(ValueError, 'FP32 scores disagree with FP64 oracle'):
+                    Adapter().prepare('before', case, dict(inputs=inputs, expected=expected), output)
+            self.assertFalse(output.exists())
+        for values in ([.25, .25, .5], [0., 0., 0.]):
+            inputs['target'] = torch.tensor([values])
+            inputs['q'].fill_(1)
+            qualify_ranking(inputs, reference(inputs))  # Exact ties and zero scores remain valid.
+        inputs['draft'] = inputs['target'].clone()
+        qualify_ranking(inputs, reference(inputs))  # Unchanged draft-probability control.
+        inputs = dict(target=torch.zeros(1, 8193), q=torch.ones(1, 8193),
+                      ids=torch.tensor([1], dtype=torch.int32), ends=torch.tensor([1], dtype=torch.int32))
+        inputs['target'][0, [4095, 8192]] = .5
+        self.assertEqual(reference(inputs).tolist(), [4095])
+        qualify_ranking(inputs, reference(inputs))
 
     def test_bad_inputs_rejected_before_backend_import(self):
         case = spec()

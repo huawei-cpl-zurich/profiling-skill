@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 # Also supports importlib loading from an unrelated working directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sampler_contract import CASE_SOURCES, dimensions, make_case, validate_inputs
+from sampler_contract import CASE_SOURCES, dimensions, make_case, qualify_ranking, validate_inputs
 
 
 class Adapter:
@@ -25,6 +25,7 @@ class Adapter:
             raise ValueError('arm must be before or after')
         p, lengths, vocab = dimensions(spec)
         validate_inputs(fixture['inputs'], spec)
+        qualify_ranking(fixture['inputs'], fixture['expected'])
         import torch
         import torch_npu
         import triton

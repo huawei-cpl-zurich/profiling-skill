@@ -18352,5 +18352,33 @@
       "tests/test_optimization_sampler.py": "7861ae353fd33aa2da98449f237deb7936615adf18e417a1dc3a36c6bf09fc46",
       "examples/optimization-library/triton/sampler_cli.py": "81858e9d6f6ea9667e2f94dc577379c40e0f65ec004ab3e9ca6c388cb475d51c"
     }
+  },
+  "source_files_semantics": "Original measured source hashes; later host admission hardening is separately bound in publication_qualification.",
+  "publication_qualification": {
+    "reason": "Review P2: FP32 division can introduce a tie absent in primary FP64 scores",
+    "status": "complete",
+    "behavior": "Reject FP32 modeled argmax disagreement with the trusted FP64 winner before generated cache publication or NPU input transfer. Primary FP64 oracle is unchanged and evaluated once per newly generated case; preparation reuses cached expected IDs.",
+    "new_source_files": {
+      "examples/optimization-library/triton/sampler.py": "4902d8f2f31eb8e8b2b1b22590dd343cfd9773e01dd548f48aab03fdbfc9b7ba",
+      "examples/optimization-library/triton/sampler_contract.py": "2440f35c7dd4058ce201b1e4be615c4edfe762abbe1f9fe14c6495517f78cf52",
+      "tests/test_optimization_sampler.py": "196899351b6017f33cdf685283ee458444dbd29d68b10326d9b6f02133506ba8"
+    },
+    "original_fp64_oracle_ast_sha256": "7233e56814915be56a3093a16504177f4415a786093ab96a9d960ead5f487d3b",
+    "published_fp64_oracle_ast_sha256": "7233e56814915be56a3093a16504177f4415a786093ab96a9d960ead5f487d3b",
+    "unchanged_fixture_input_generator_prefix_sha256": "30392e6d965ce6528cbc90e443fdd72415bfb3781bd90d922cd27716bba76d6c",
+    "unchanged_kernel_sha256": "ad775182106e288f531ad062917ffdb5dd3ba3fabe548cbf52e3308f1bd556f0",
+    "frozen_payloads": "All original six payloads retained unchanged; no frozen oracle reevaluation or scientific dispatch.",
+    "new_frozen_oracles": 0,
+    "new_npu_forwards": 0,
+    "new_compiles": 0,
+    "new_captures": 0,
+    "source_test_loc": 505,
+    "cpu_only_a3_gate": {
+      "handle": "remote:gz-a3:job:94e38f17-dacb-48fb-821e-cda159fa54a3",
+      "exit": 0,
+      "tests": 10,
+      "seconds": 26.478,
+      "bundle_sha256": "a8188a9103cbc0bf224e7d0f278f02c15b18dd8174d0eecf01cc9636bce7ecf1"
+    }
   }
 }

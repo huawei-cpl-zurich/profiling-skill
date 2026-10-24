@@ -1,0 +1,88 @@
+{
+  "wave": 6,
+  "study_id": "L04",
+  "title": "Aggregate regular GM-to-UB row copy commands",
+  "study_kind": "source-backed-command-aggregation-adaptation",
+  "new_unique_mechanism_claim": false,
+  "standing_approval": "waves003\u2013022, data first",
+  "source": "lowlevel/proposal.md L04; historical CATLASS550bbffa8b36bd554aa8b7451da65c26adc0942c copy_gm_to_ub.hpp explicit AtlasA2 multirow command; ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 ln_mul_kernel.h193\u2013207 perrow before; independent tiny consumer format, not upstream LN AFTER. CANNOpen2.0/Apache2 per files. Actual CANN9.1/910B support requires own compile/runtime qualification.",
+  "cases": [
+    {
+      "case_id": "W006-L04-01",
+      "role": "gallery",
+      "seed": 7401,
+      "parameters": {
+        "rows": 128,
+        "columns": 65
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Fewer MTE2 commands may reduce scalar issue; setup/remaining copies/compiler effects may erase benefit. No promised sign."
+    },
+    {
+      "case_id": "W006-L04-02",
+      "role": "gallery",
+      "seed": 7402,
+      "parameters": {
+        "rows": 1,
+        "columns": 65
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Fewer MTE2 commands may reduce scalar issue; setup/remaining copies/compiler effects may erase benefit. No promised sign."
+    },
+    {
+      "case_id": "W006-L04-03",
+      "role": "heldout",
+      "seed": 7403,
+      "parameters": {
+        "rows": 96,
+        "columns": 97
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Fewer MTE2 commands may reduce scalar issue; setup/remaining copies/compiler effects may erase benefit. No promised sign."
+    },
+    {
+      "case_id": "W006-L04-04",
+      "role": "heldout",
+      "seed": 7404,
+      "parameters": {
+        "rows": 2,
+        "columns": 9
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Fewer MTE2 commands may reduce scalar issue; setup/remaining copies/compiler effects may erase benefit. No promised sign."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-L04-GA",
+      "role": "guard",
+      "seed": 7491,
+      "parameters": {
+        "rows": 129,
+        "columns": 65
+      },
+      "expected": "Public conservative optimized cap128 exceeded: AFTER uses identical perrow native fallback, correct output and canaries. Cap128 is study dispatch policy, NOT claimed hardware max."
+    },
+    {
+      "case_id": "W006-L04-GB",
+      "role": "guard",
+      "seed": 7492,
+      "parameters": {
+        "rows": 3,
+        "columns": 9,
+        "destination_pitch_elements": 17
+      },
+      "expected": "Host reject nonrepresentable/non32byte UB pitch before device/fixture cache. Two actual prepare/interface checks, no numerical oracle or captures."
+    }
+  ],
+  "contract": {
+    "interface": "Immutable contiguous FP32 x[rows,columns] bounded[-1,1], y=x+1 FP32 same shape/nonalias. Positive rows/columns, columns<=128, local rows*ceil(columns/8)*8*4 <=65536 bytes. Public optimized rows<=128 else safe perrow fallback within bounded local scope; other invalid extents hostreject. These conservative software bounds are not hardware field maxima.",
+    "physical_layout": "UB pitch exactly ceil(columns/8)*8 elements. Only zero sourceStride bytes and zero destinationStride 32-byte blocks in aggregated command; blockLen=columns*4 bytes, blockCount=rows. Audit actual selected SDK declarations and native byte/block semantics. No guessed field overflow or underflow. Initialize UB padding identically both sides; padParams(false) alone does not prove zeros.",
+    "before": "One native DataCopyPad GM\u2192UB command per row at unchanged UB pitch; same tiny Adds(+1) consumer and identical copyout policy as AFTER.",
+    "after": "Replace only repeated row input copy commands with one DataCopyPad blockCount=rows command. Same row batch, grid, UB storage, padding, bytes, arithmetic, synchronization and copyout. All preparation and padding initialization inside fullAPI. Prefer one AIV block/kernel, native dependency barriers correct.",
+    "synchronization": "Explicit correct producer/consumer order among padding fill(V), input transfer(MTE2), consumer(V), copyout(MTE3). Hold all barriers/events identical between arms except DMA command encoding; do not overlap zero initialization with live input or elide reuse hazards.",
+    "oracle": "Independent CPU FP64 x+1 rounded to FP32; exact bitwise equality. Inspect input immutability/output nonalias/prefix and suffix GM canaries in once-only correctness. No profile IO inspection or extra mainforward.",
+    "profiling": "Source expected row-command count rows vs1 is not a measured PMU count. Preserve supported scalar/MTE/vector raw fields and actual code/resources. No physical bandwidth/roofline from pipe ratios. Same single kernel botharms; compile-noop/no timing benefit retained honestly."
+  },
+  "protocol": "Five cached scientific payloads once plus separate hostguard annotation;10 numerical NPU APIchecks+2hostpreparechecks;4mainpairs exactly10profileAPIforwards/side =>8captures/80forwards;guards0captures. No warmup/autotune/extratiming. All resources compile first, preserve failures/partial/slower/no-effect outcomes and source/binary/fixture bindings."
+}

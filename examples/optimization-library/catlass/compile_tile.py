@@ -44,7 +44,7 @@ def compile_pair(catlass, output, *, source=None, variants=None):
             *defines,*[f'-I{p}' for p in includes],str(source),'-o',str(binary)]
         try:
             result = build_shared(command, source_paths=[source,
-                source.parent/'catlass_bridge.h',catlass/'manifest.json',
+                source.parent/'catlass_bridge.h',*sorted(source.parent.glob('single_stage_*.hpp')),catlass/'manifest.json',
                 *[catlass/entry['file'] for entry in manifest['files']]],
                 binary=binary, output=output/f'build-{arm}', source_revision=PIN)
         except Exception:

@@ -1,0 +1,113 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "776f3e05ab940ea58e8263c59631cf0f5e101a06",
+    "target_branch": "codex/optimization-w007-sinkhorn-width",
+    "parent_task": "optimization-w007-sinkhorn-width",
+    "reason": "Reuseactualqualified8laneparentforwardkernels/CPUcontract; finalhostfix6CPU-onlyA3tests, originalJIT/providerunchanged."
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E04; exactmindspeed-bodies.json+test_sinkhorn.py+operator-docs/API. MindSpeedOpsfullpin4efe2b675c2d51517c3fdd14c721020b8d41e241 Apache2/perfiletestsMIT retained. ExposedsourceGROUP48 changed tosupportedGROUP32 BOTH beforemath, bounded source-style adaptation.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "source_file": "extension/mindspeed_ops__arch32__triton__sinkhorn.py",
+  "source_sha256": "eb3cfd9b0a411154bffd6fb1a347c83920eaec28e55ee491c6d2399140c2e83f",
+  "study_id": "E06",
+  "task": "optimization-w007-sinkhorn-runtime-loop",
+  "title": "Compare static and runtime Sinkhorn iteration binding",
+  "cases": [
+    {
+      "case_id": "W007-E06-01",
+      "role": "gallery",
+      "seed": 75601,
+      "parameters": {
+        "BS": 1024,
+        "iters": 20,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    },
+    {
+      "case_id": "W007-E06-02",
+      "role": "gallery",
+      "seed": 75602,
+      "parameters": {
+        "BS": 32,
+        "iters": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    },
+    {
+      "case_id": "W007-E06-03",
+      "role": "heldout",
+      "seed": 75603,
+      "parameters": {
+        "BS": 257,
+        "iters": 20,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    },
+    {
+      "case_id": "W007-E06-04",
+      "role": "heldout",
+      "seed": 75604,
+      "parameters": {
+        "BS": 33,
+        "iters": 4,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E06-GA",
+      "role": "guard",
+      "seed": 75691,
+      "parameters": {
+        "BS": 32,
+        "iters": 4,
+        "eps": 1e-06,
+        "counts_sequence": [
+          4,
+          20
+        ]
+      },
+      "expected": "ONEcompoundguard 2FULLAPIcalls perarm onSAMEinputmixes/scale/base, distinctiters4then20 andseparateoutputbuffers; aftersamecompiledruntimeCOMBhash bothcounts (nohiddenrespecialization). ExactCPUexpectedtupleoncefromsingleFP64normalizationtrajectorysnapshots4/20 (prepostcomputeonce), 2componentexpectationscachednotrecomputed,4componentAPIcallsTOTALbotharms,0profiles. Noextra empiricalrepeatforward."
+    },
+    {
+      "case_id": "W007-E06-GB",
+      "role": "guard",
+      "seed": 75692,
+      "parameters": {
+        "BS": 1,
+        "iters": 1,
+        "eps": 0.001,
+        "zero_scale_equal_logits": true
+      },
+      "expected": "Runtimecount1executesinitialsoftmax+eps+columnnormONCE andZEROlooprepetitions, staticcount1same, preserveEPS/pad/layout/immutable,0captures. Count0/negativehostrejectnonfrozencasebeforecache."
+    }
+  ],
+  "contract": {
+    "interface": "SameparentE04FP32domain/layout/prepost/8LANECOMB/GROUP32/eps,positiveBS,itersinteger1..20. No launchfusion,widthnarrowing,rowpartition/dtype/mathchange. Parentqualifiedhead776f3e05... suppliesbeforekernelsandunchangedCPUreference.",
+    "before": "Parentcomb SINKHORN_ITERS:tl.constexpr, exactsource for tl.static_range(0,iters-1), prepostseparatekernel. No forcedunrollcompilerflags/disabledCSE; thissourcealreadyusesstaticrange.",
+    "after": "ONLYiterationparameterbindingandloopcontrolchanges: iterationcountRUNTIMEscalarint, @triton.jit do_not_specialize forcount, ordinaryTritonrange/loop(0,iters-1), identicalinitialization/periterationROWthenCOLFP32math/sourceprepostseparate+layout+flags. Mustverifycount4/20samecompiledvariant inGA fromcompilemetadatawithoutadditionalmath; report1countspecializationifengineignoresannotation ratherthanclaimunified.",
+    "oracle": "ReuseparentindependentFP64sourcegolden fixed3e-6atol/rtol all3outputs. Crosspathbitwisenotprimaryrequirement; recordactualbitsread-onlyfromoncechecks. SixcachedCPUoraclePAYLOADS: fiveordinarycases+compoundGAdistinctcountoutputs, componentreferenceexpectationsSEVEN withtrajectorycalculatedonce/providerinvocation, no repeatedunchangedexpected-generation. Guardafter2runtimecalls returns2tuples3outputs, componentcounts explicit:12outercorrectnessops but14FULLcomputationAPIcomponents, mainprofiles80 FULLAPIs,guards0.",
+    "codegen_measurement": "Compile-screenFIRST actualfullELFidentity strongnoop, .text/reloc/effectivesymbolproof ifdifferent; same.text/differentELFmetadatainconclusive no inventedgain. Ifidenticaleffectivecode forallmeasuredpairs retaincompile-onlyscreen0oracles/NPU ratherthanforceflagdifferences. Ifrealcodechange/resourcesqualified thenfixed1+10 protocol. Runtime2D/3Dloopstateunsupported=>recordprescienceunsupported, no sourcecase/shape/tolerance retuning. Recordcompilewalltime/cachehit/uniquehashcodebytes fromREQUIREDcompilephase only(noextra coldcompilations forstatistics), neverconfusecachedwarmupswithcoldcompilerlatency. Noinstructioncountsfromundecodedobjdump, no sourcefilesizeasdevicecodeproof.",
+    "measurement": "BothpreparedfullAPIs2kernelseach/prepost+comb, exactly10profiles/arm/mainpair no warmup/extratiming/profileIO. ReportoperationSPAN+tasktime+gaps, notordinaryapplicationlatency; sourcearraysallocatedprepare/reusedboth. RequiredCwatchdogcoversrunandvalidatorCPU/GPU sync, fatalstop/countersretain."
+  },
+  "parent_source_bindings": {
+    "examples/optimization-library/triton/sinkhorn_kernel.py": "35ca1e6e1ddc214193c2c2dc6d39e8c0d52beabb9a6b786c803ba16344c6a263",
+    "examples/optimization-library/triton/sinkhorn_contract.py": "cb2075467a6324180198a86b738b2b2323c04bce77ec173e381f80310005b42f"
+  }
+}

@@ -30277,5 +30277,47 @@
         }
       ]
     }
+  },
+  "publication_host_followup": {
+    "scope": "Publication host-only clarification and cached first-launch per-arm compatibility check; generic interfaces remain exploratory/unqualified",
+    "qualification": "exploratory/unqualified",
+    "pre_oracle_pair_screen": false,
+    "paired_codegen_screen_before_device_math": false,
+    "controlled_collector": {
+      "filename": "collect-v1.py",
+      "sha256": "710ab4645c27e016614274878897785d98045185b609eeaed79b45fe5ab057cb",
+      "pre_oracle_pair_screen": true,
+      "paired_codegen_screen_before_device_math": true
+    },
+    "changed_host_bindings": {
+      "examples/optimization-library/triton/sinkhorn_runtime_loop.py": {
+        "scientific_source_sha256": "1dc1ad6a16207239b88e746b2b3bbd3447f8479d02d24dae26cca73100166c94",
+        "publication_source_sha256": "0e95595985b96a990aab26532573adb7ab87303b4766e1c56f1b557dc731a7f0"
+      },
+      "examples/optimization-library/triton/sinkhorn_runtime_loop_cli.py": {
+        "scientific_source_sha256": "78e9d9e5b7e5469c939a4db583753a25a5948c110381e77636b86f444ce3c74c",
+        "publication_source_sha256": "3b847e1915ea78aa2a4583302966799cfed69e7924b52e0579cda137fee418b1"
+      }
+    },
+    "unchanged_jit_and_oracle_provider_bindings": {
+      "examples/optimization-library/triton/sinkhorn_kernel.py": "35ca1e6e1ddc214193c2c2dc6d39e8c0d52beabb9a6b786c803ba16344c6a263",
+      "examples/optimization-library/triton/sinkhorn_runtime_kernel.py": "92fffa8c83da17ad3bab4bacb33e25d4f35311e79f6336ae16054e407f4d979d",
+      "examples/optimization-library/triton/sinkhorn_contract.py": "cb2075467a6324180198a86b738b2b2323c04bce77ec173e381f80310005b42f",
+      "examples/optimization-library/triton/sinkhorn_runtime_contract.py": "39e66daf95873a0a9943cdba464bf6be060a16068eef3ee56299e73376cab53f"
+    },
+    "test_source_sha256": "4ae14316397a1ebe77f753473b32ca578926d2c1e3afbd47ef56b51f097a2473",
+    "gate": {
+      "handle": "remote:gz-a3:job:23362740-ba33-43b4-8fb1-33941a16b8cf",
+      "status": "completed",
+      "exit_code": 0,
+      "tests": 11,
+      "duration_seconds": 82.596,
+      "log_sha256": "15da47273e792e597e72276531251b53f87303741e08b5773a6286509554b658",
+      "boundary": "CPU functional doubles; no device workload"
+    },
+    "new_triton_compiles": 0,
+    "new_device_forwards": 0,
+    "new_scientific_cpu_payloads": 0,
+    "new_captures": 0
   }
 }

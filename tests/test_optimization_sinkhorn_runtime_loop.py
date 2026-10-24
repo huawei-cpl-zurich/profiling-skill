@@ -37,14 +37,17 @@ class RuntimeTests(unittest.TestCase):
                     self.assertTrue(torch.equal(got,expected));self.assertTrue(torch.equal(got,cached))
 
     def test_public_prepared_and_pair_lifecycle(self):
-        launches = []
+        launches, events = [], []
         class Kernel:
             def __init__(self,name,runtime=False):self.fn=SimpleNamespace(__name__=name);self.runtime=runtime
             def artifact(self,count=None):
                 return SimpleNamespace(hash=('a' if self.runtime or count is None else str(count))*64,asm={'npubin':b'code'})
-            def warmup(self,*args,**flags):return self.artifact(flags.get('SINKHORN_ITERS'))
+            def warmup(self,*args,**flags):
+                events.append('compile')
+                return self.artifact(flags.get('SINKHORN_ITERS'))
             def __getitem__(self,grid):
                 def run(*args,**flags):
+                    events.append('launch')
                     launches.append((self.fn.__name__,flags))
                     mixes,scale,base = args[:3]
                     count=flags.get('SINKHORN_ITERS',1);eps=args[-2]
@@ -76,8 +79,14 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(diag['runtime_variant_unified'],True if compound else None)
                     self.assertEqual(adapter.pair_bits,{})
             value=make_case(case(True));prepared=adapter.prepare('after',case(True),value,root/'separate'/'after')
-            count=len(launches);prepared.compile_only();self.assertEqual(len(launches),count)
-            first=prepared.run();self.assertIs(first,prepared.run());self.assertEqual(len(first),2)
+            events.clear();first=prepared.run()
+            self.assertEqual(events,['compile']*4+['launch']*4)
+            self.assertEqual(prepared.metadata['basic_compile_qualification'],'complete')
+            self.assertTrue(prepared.metadata['selected_compile_state'])
+            self.assertIs(first,prepared.run());self.assertEqual(len(first),2)
+            prepared.compile_only()
+            self.assertEqual(events,['compile']*4+['launch']*8)
+            self.assertEqual(len(prepared.compile_records),4)
             self.assertNotEqual(first[0][0].data_ptr(),first[1][0].data_ptr())
             self.assertTrue(all(c.backing.stride()==(32,8,1) for c in prepared.components))
             self.assertTrue(adapter.validate('after',first,value,case(True))['passed'])
@@ -95,6 +104,30 @@ class RuntimeTests(unittest.TestCase):
                 cache=Path(folder)/'absent'
                 with self.assertRaises(ValueError):fixture(Adapter(),spec,cache,torch)
                 self.assertFalse(cache.exists())
+
+    def test_cli_labels_exploratory_before_generic_runner(self):
+        import sinkhorn_runtime_loop_cli as cli
+        events=[]
+        def generic_runner(adapter,spec,output,cache,provenance):
+            events.append(('generic-runner',provenance.copy()))
+            self.assertEqual(spec['parameters']['BS'],3)
+            self.assertEqual(provenance['caller'],'unit')
+            return dict(status='complete')
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);source=root/'case.json';provenance=root/'provenance.json'
+            source.write_text(json.dumps(case()))
+            provenance.write_text(json.dumps(dict(caller='unit',qualification='overridden-input')))
+            argv=['cli','--case',str(source),'--output',str(root/'out'),'--cache',str(root/'cache'),
+                  '--provenance',str(provenance)]
+            with patch.object(sys,'argv',argv),patch('optimization_pair.run_pair',generic_runner):
+                self.assertEqual(cli.main(),0)
+            self.assertEqual(events,[('generic-runner',dict(caller='unit',
+                qualification='exploratory/unqualified',pre_oracle_pair_screen=False,
+                paired_codegen_screen_before_device_math=False))])
+            source.write_text(json.dumps(dict(seed=174,BS=3,iters=0,eps=1e-5)))
+            with patch.object(sys,'argv',argv),patch('optimization_pair.run_pair',generic_runner):
+                with self.assertRaises(ValueError):cli.main()
+            self.assertEqual(len(events),1)
 
     def test_external_cli_flat_and_nested(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -10,8 +10,15 @@ zero padding remain identical. The licensed parent and its CPU reference are
 unchanged. This is a source-backed operator application, with no new unique
 mechanism claim.
 
-The prepared public adapter is `sinkhorn_runtime_loop:Adapter` and the standalone
-CLI is `examples/optimization-library/triton/sinkhorn_runtime_loop_cli.py`.
+The public `sinkhorn_runtime_loop:Adapter` and standalone
+`examples/optimization-library/triton/sinkhorn_runtime_loop_cli.py` are generic
+exploratory one-case interfaces. The CLI labels report provenance
+`qualification="exploratory/unqualified"`, `pre_oracle_pair_screen=false`, and
+`paired_codegen_screen_before_device_math=false`.
+Each prepared arm caches basic compile-only qualification before its first
+public launch, retains selected artifact identities, and performs no further
+compile warmups on subsequent calls. This per-arm compatibility check does not
+provide the controlled study's pre-oracle all-pair resource/code-noop screen.
 The CLI accepts `--case`, `--output`, `--cache`, `--provenance`, and optionally
 `--validate-only`; host admission works from an external working directory.
 Owned contiguous finite CPU FP32 mixes `[BS,24]`, scale `[3]`, and base `[24]`
@@ -29,8 +36,14 @@ payloads, seven component expectations, twelve outer correctness calls, fourteen
 complete computation components, and eighty profiled full API calls. GB verifies
 count 1 performs zero loop repetitions and preserves epsilon 1e-3 on equal logits.
 
-Actual code/resource qualification precedes CPU oracle generation and scientific
-forwards. A compiler rejection of runtime 3D state ends the study as unsupported;
+In the retained controlled collection, actual code/resource qualification
+preceded CPU oracle generation and scientific forwards. The pinned controller is
+`collect-v1.py`, SHA256
+`710ab4645c27e016614274878897785d98045185b609eeaed79b45fe5ab057cb`,
+retained in the verified archive and its `artifact_manifest` entry in the compact
+evidence. That controller defines the study-wide ordering; the generic CLI's
+ordinary once-correctness/ten-profile runner does not reproduce that qualification.
+A broader qualified public CLI is outside this PR's scope. A compiler rejection of runtime 3D state ends the study as unsupported;
 an effective code noop ends it without invented performance evidence. Required
 compile calls retain wall times and artifact identities; warm cache lookups are
 not presented as cold compilation latency. GA checks actual runtime artifact
@@ -95,3 +108,22 @@ bytes, SHA256 `bae105de0ed911614abefd79e481c9442751647c6a66ab5728ae07e1f6fb60dd`
 All manifest hashes verified after transfer. Full vendor reports and the fresh
 compiler cache remain retained remotely. Evidence extraction performed zero
 new computations or captures.
+
+
+## Public interface scope correction
+
+The public one-case CLI now labels exploratory qualification explicitly, and
+its prepared Adapter compiles each arm once before its first public launch.
+Selected compilation artifacts remain available in report metadata; later
+forwards reuse the prepared state without further warmups. This basic per-arm
+check does not supply the pinned collector's full study qualification.
+
+This host-only correction preserves the original JIT kernels, CPU provider,
+six cached scientific payloads, binary identities, and profiled results.
+The evidence records original scientific and publication host hashes separately.
+Functional tests verify compile/launch ordering, cached compilation, admission
+before the generic runner, and exploratory report provenance. All eleven
+parent/child tests passed locally and on the CPU-only A3 host gate
+`remote:gz-a3:job:23362740-ba33-43b4-8fb1-33941a16b8cf` (82.596 seconds,
+exit 0). No scientific compilation, device forward, oracle payload, or capture
+was repeated.

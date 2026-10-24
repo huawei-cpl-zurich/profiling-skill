@@ -1,4 +1,6 @@
-"""Static versus runtime iteration binding, using two kernels per complete API."""
+"""Exploratory one-case adapter; basic compilation precedes its first launch.
+Controlled study qualification belongs to the pinned retained collector.
+"""
 import hashlib
 import json
 from pathlib import Path
@@ -52,12 +54,16 @@ class Adapter:
         common = dict(BLOCK_HC=4,GROUP=32,num_stages=1,multibuffer=False,enable_fp_fusion=False)
         grid = ((bs+31)//32,)
         compiled, compile_records, run_records = {}, [], []
+        compiled_artifacts = None
         def remember(artifact):
             compiled[id(artifact)] = artifact
             return artifact
         def flags(count):
             return dict(common,BLOCK_ALIGN=8,SINKHORN_ITERS=count)
         def compile_only():
+            nonlocal compiled_artifacts
+            if compiled_artifacts is not None:
+                return compiled_artifacts
             artifacts = []
             for c in components:
                 for kind,kernel,args,options in (('prepost',prepost,c.pre_args,common),
@@ -67,9 +73,13 @@ class Adapter:
                     compile_records.append(dict(kind=kind,count=c.count,hash=artifact.hash,
                         wall_seconds=time.perf_counter()-start,cache_hit=getattr(artifact,'cache_hit',None)))
                     artifacts.append(artifact)
-            return artifacts
+            compiled_artifacts = tuple(artifacts)
+            item.metadata['basic_compile_qualification'] = 'complete'
+            item.metadata['selected_compile_state'] = compilation_state()
+            return compiled_artifacts
         result = tuple(c.result for c in components) if len(components)>1 else components[0].result
         def run():
+            compile_only()
             for c in components:
                 callback = getattr(item,'on_component',None)
                 if callback is not None: callback(c.count)
@@ -86,7 +96,8 @@ class Adapter:
             pair_key=(str(Path(output).resolve().parent),json.dumps(spec,sort_keys=True)),
             sources=[Path(__file__),Path(__file__).with_name('sinkhorn_kernel.py'),
                      Path(__file__).with_name('sinkhorn_runtime_kernel.py'),*CASE_SOURCES],
-            metadata=dict(language='triton',arm=arm,parameters=spec,full_api_components=len(components),
+            metadata=dict(qualification='exploratory/unqualified',pre_oracle_pair_screen=False,paired_codegen_screen_before_device_math=False,
+                basic_compile_qualification='pending',language='triton',arm=arm,parameters=spec,full_api_components=len(components),
                 kernels_per_full_api=2,counts=counts,grid=grid,flags=dict(common,BLOCK_ALIGN=8),
                 iteration_binding='constexpr-static_range' if arm=='before' else 'runtime-do_not_specialize-range',
                 allocator_cost_excluded=True,output_buffers_reused=True,output_strides=[32,8,1],

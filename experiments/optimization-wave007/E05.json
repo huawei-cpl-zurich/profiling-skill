@@ -1,0 +1,109 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "776f3e05ab940ea58e8263c59631cf0f5e101a06",
+    "target_branch": "codex/optimization-w007-sinkhorn-width",
+    "parent_task": "optimization-w007-sinkhorn-width",
+    "reason": "Reuseactualqualified8laneparentforwardkernels/CPUcontract; finalhostfix6CPU-onlyA3tests, originalJIT/providerunchanged."
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "extension/proposal.md E04; exactmindspeed-bodies.json+test_sinkhorn.py+operator-docs/API. MindSpeedOpsfullpin4efe2b675c2d51517c3fdd14c721020b8d41e241 Apache2/perfiletestsMIT retained. ExposedsourceGROUP48 changed tosupportedGROUP32 BOTH beforemath, bounded source-style adaptation.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "source_file": "extension/mindspeed_ops__arch32__triton__sinkhorn.py",
+  "source_sha256": "eb3cfd9b0a411154bffd6fb1a347c83920eaec28e55ee491c6d2399140c2e83f",
+  "study_id": "E05",
+  "task": "optimization-w007-sinkhorn-launch-fusion",
+  "title": "Fuse the two padded Sinkhorn forward launches",
+  "cases": [
+    {
+      "case_id": "W007-E05-01",
+      "role": "gallery",
+      "seed": 75501,
+      "parameters": {
+        "BS": 128,
+        "iters": 1,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    },
+    {
+      "case_id": "W007-E05-02",
+      "role": "gallery",
+      "seed": 75502,
+      "parameters": {
+        "BS": 4096,
+        "iters": 20,
+        "eps": 1e-06
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    },
+    {
+      "case_id": "W007-E05-03",
+      "role": "heldout",
+      "seed": 75503,
+      "parameters": {
+        "BS": 257,
+        "iters": 4,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    },
+    {
+      "case_id": "W007-E05-04",
+      "role": "heldout",
+      "seed": 75504,
+      "parameters": {
+        "BS": 1,
+        "iters": 20,
+        "eps": 1e-06
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly,retainallslower/equal/uncertain/unsupported/compile-noopresults; fullprofiledevice-span notordinarylatency."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-E05-GA",
+      "role": "guard",
+      "seed": 75591,
+      "parameters": {
+        "BS": 31,
+        "iters": 1,
+        "eps": 0.001,
+        "zero_scale_equal_logits": true
+      },
+      "expected": "Sourceinit/smoothing/initialcolumnnorm visibleeps, pre/postandcomb pairedexactbits beforeprofiling, bothnumericF64samefixedgate,0captures."
+    },
+    {
+      "case_id": "W007-E05-GB",
+      "role": "guard",
+      "seed": 75592,
+      "parameters": {
+        "BS": 33,
+        "iters": 4,
+        "eps": 1e-06,
+        "nontrivial_scales": true
+      },
+      "expected": "Group-tail/nonsymmetric/mixedscales; all3pairedoutputbits, paddedlayout/pad+0/GMcanaries/inputimmutability,0captures."
+    }
+  ],
+  "contract": {
+    "interface": "SAMEqualifiedparentE04FP32mixes[BS,24],scale[3],base[24],BS>0,GROUP32,hc_mult4,iters1..20,eps1e-6..1e-3. ALLcompute8columns/paddedoutputbacking[BS,4,8]+combview[BS,4,4]strides32/8/1 unchangedbotharms. Finiteinputdomainsparent[-3,3]/[-1,1], no narrowingto4/no loopbindingchange/no dtypeconversion.",
+    "oracle": "ReuseUNCHANGEDqualifiedparent sinkhorn_contract.reference FP64SOURCEalignedreturns3F32expected, oncepercase viafrozennewseeds/cached6payloads. Fixed3e-6atol/rtolALL3 +exactPAIRED FP32outputbits fordeclared6cases fromoncecorrectness. Scopepair-statebyexperiment/outputparent+spec, botharmorders; SECONDarmcompareBEFOREanycapture. IfsourcecompilerfusionchangesbitsSTOPunqualified/preservenottuneepsilon/flags/inputs.",
+    "before": "Exactparent8lane source-styleprepostkernel THENcombkernel everypreparedcompleteAPI2kernels; sourceinitialsoftmax+ENTRYeps+initialcolnorm theniters-1 row/colunchanged. SameGROUP32/commonflagsenable_fp_fusionFalse, source-faithfulinlinedsigmoid1/(1+exp) asqualifiedparent.",
+    "after": "ONEcombinedkernel SAMEprogramgroup/grid: executeexactprepostloads/math/STORESfirst sointendedliverangesend, thenEXACT8lanecombbody/sourceiterationsmath/store, preservingall3separateoutputs/paddedstrides. No addingwidth4/no recomputation/changeofrowownership/order/aliases. Sharedcoefficientload/CSEschedulingautomaticallowed, no baseline-onlydisabling orbarriers. Cancallqualifiedparent@jitbodyorfaithfullyinlineminimalcode, nofutureframework.",
+    "measurement": "FullpreparedcomputationAPI profiles10calls both, outputsprivateallocatedprepare/reusedboth, allocatorcostexcluded. RetainTOTALspan ANDsumtasks/union/gaps/rawPMU; fusionmayreducespanfromlaunchgapswhileincreasingbusywork/registerpressure. NoordinaryPythonlatency/roofline/physicalDRAMclaim. Actualcompile/resource/.text+relocproofbeforemath everycomponent/case; parent2kernels vsafter1componentcountsexplicit."
+  },
+  "parent_source_bindings": {
+    "examples/optimization-library/triton/sinkhorn_kernel.py": "35ca1e6e1ddc214193c2c2dc6d39e8c0d52beabb9a6b786c803ba16344c6a263",
+    "examples/optimization-library/triton/sinkhorn_contract.py": "cb2075467a6324180198a86b738b2b2323c04bce77ec173e381f80310005b42f"
+  }
+}

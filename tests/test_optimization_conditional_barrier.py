@@ -16,7 +16,7 @@ from conditional_barrier_compile import prepare_dependency,HEADER,PREDICATE,sha,
 
 class ConditionalBarrierTests(unittest.TestCase):
     def spec(self,**values):
-        return dict(dict(m=64,n=64,k=192,tile_m=64,tile_n=64,seed=7592),**values)
+        return dict(dict(m=64,n=64,k=192,tile_m=64,tile_n=64,seed=17592),**values)
 
     def test_all_regimes_and_exact_boundary_are_real_tiles(self):
         for m,n in TILES:

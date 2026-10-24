@@ -69,9 +69,12 @@ The retained ten-sample profiler operation spans were:
 | 2 | 2.380 ± 0.199 | 1.170 ± 0.022 |
 
 These are instrumented device-operation spans with prepared output reuse;
-they do not establish unprofiled API latency. All original event samples,
-per-iteration vendor PMU fields, compiler artifacts, selected binary hashes,
-fixture bindings and resource metadata are retained in the study manifest.
+they do not establish unprofiled API latency. The [portable structured evidence](data/optimization-wave007-E07.json) publishes
+all ten raw event and operation-span samples per capture, supported per-iteration
+vendor PMU fields, every component error/bound, compiler resource metadata,
+selected binary hashes, six fixture bindings and the verified artifact manifest.
+Original vendor reports, binaries and oracle payloads remain in the retained
+compact archive identified by its SHA256; they are not duplicated in this repository.
 The imported runtime reported Torch 2.10.0+cpu, torch-npu 2.10.0, Triton
 3.2.0 and triton-ascend distribution 3.2.2 on Ascend910B4-1. The installed
 Triton distribution metadata separately reported 3.5.0; imported compiler

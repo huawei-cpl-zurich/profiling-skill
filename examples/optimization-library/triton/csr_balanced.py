@@ -32,14 +32,14 @@ def kernels():
         return right_row, tl.where(left_row == right_row, left_value + right_value, right_value)
 
     @triton.jit
-    def wave003_csr_nnz(Ptr, Col, Val, X, Out, ROWS: tl.constexpr, NNZ: tl.constexpr, BLOCK: tl.constexpr):
+    def wave003_csr_nnz(Ptr, Col, Val, X, Out, ROWS: tl.constexpr, NNZ: tl.constexpr, BLOCK: tl.constexpr, STEPS: tl.constexpr):
         lane = tl.arange(0, BLOCK)
         index = tl.program_id(0) * BLOCK + lane
         valid = index < NNZ
         # Upper bound handles duplicate offsets from empty rows correctly.
         lo = tl.full((BLOCK,), 0, tl.int32)
         hi = tl.full((BLOCK,), ROWS + 1, tl.int32)
-        while tl.sum((lo < hi).to(tl.int32), 0) > 0:
+        for _ in range(STEPS):
             mid = (lo + hi) // 2
             offset = tl.load(Ptr + mid, mid <= ROWS, NNZ + 1)
             move = (lo < hi) & (offset <= index)
@@ -99,7 +99,7 @@ class Adapter:
             if balanced or nnz == 0:
                 launch(zero, (triton.cdiv(rows, 256),), out, rows, 256)
             if balanced:
-                launch(by_nnz, (triton.cdiv(nnz, 256),), *inputs, out, rows, nnz, 256)
+                launch(by_nnz, (triton.cdiv(nnz, 256),), *inputs, out, rows, nnz, 256, (rows + 1).bit_length())
             elif nnz:
                 launch(by_row, (rows,), *inputs, out, max(32, triton.next_power_of_2(maximum)))
             return out

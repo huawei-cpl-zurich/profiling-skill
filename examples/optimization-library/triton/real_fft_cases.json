@@ -1,0 +1,97 @@
+{
+  "wave": 4,
+  "family_id": "W03",
+  "title": "Pack even realinput into half-lengthcomplexFFT",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.mdW03+boundedrfft/ffthead/rfftrest receipts. HostN/2andA/Bcoefficientformula supportsprojectindependentreconstruction; unseenupstreamdevicehelperNOTclaimedcopied/compiled. Native910Bsourceexcludes910_93. Parent ComplexFFTprojectkernels fromPR202.",
+  "cases": [
+    {
+      "case_id": "W004-W03-01",
+      "role": "gallery",
+      "seed": 4301,
+      "parameters": {
+        "batch": 32,
+        "N": 1024,
+        "input_amax": 0.125,
+        "common_complex_algorithm": "two-stage"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Half-lengthcomplextransformmayreducework; pack/reconstruction launches/scratch maycostmore on tinycase."
+    },
+    {
+      "case_id": "W004-W03-02",
+      "role": "gallery",
+      "seed": 4302,
+      "parameters": {
+        "batch": 1,
+        "N": 32,
+        "input_amax": 0.125,
+        "common_complex_algorithm": "direct-dft"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Half-lengthcomplextransformmayreducework; pack/reconstruction launches/scratch maycostmore on tinycase."
+    },
+    {
+      "case_id": "W004-W03-03",
+      "role": "heldout",
+      "seed": 4303,
+      "parameters": {
+        "batch": 24,
+        "N": 512,
+        "input_amax": 0.125,
+        "common_complex_algorithm": "two-stage"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Half-lengthcomplextransformmayreducework; pack/reconstruction launches/scratch maycostmore on tinycase."
+    },
+    {
+      "case_id": "W004-W03-04",
+      "role": "heldout",
+      "seed": 4304,
+      "parameters": {
+        "batch": 1,
+        "N": 64,
+        "input_amax": 0.125,
+        "common_complex_algorithm": "two-stage"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Half-lengthcomplextransformmayreducework; pack/reconstruction launches/scratch maycostmore on tinycase."
+    }
+  ],
+  "contract": {
+    "input": "ContiguousrealFP32[B,N], uniformseeded[-.125,.125]. OutputorderedFP32real/imag[B,N//2+1] forwardunnormalizedRFFT.",
+    "before": "EmbedrealaslengthNcomplexwithinput-independentzeroimagtensor, commoncomplextransform, extractnonnegativefrequencies/forceDCandEVENNyquistimag0 insideAPI.",
+    "after": "EvenN pack z[j]=x[2j]+i*x[2j+1] INSIDEAPI, SAMEcomplextransformalgorithm on N/2, reconstruct nonnegativebins withconjugates/twiddles, endsimag0. Fullpack/reconstruct/permutation/scratchworktimed. No inputdependentsetup.",
+    "holdfixed": "Same complexalgorithm withinpair: two-stagebothfullN/halfN forN>=64; directDFTboth forN32(half16). ParentmaxFFT512notproofN1024; compile/qualifysharedkernelsatnewsizewithinthisRFFTscope, avoidadvertisingunverifiedgeneralcomplexFFTextension.",
+    "setup": "Input-independent mathematicaltables/constantsandzeroimagtensor mayallocateonce; anyrealpacking/reorderdependentX mustruneveryforward. PrecisionIEEEFP32 andnonfusion samepair.",
+    "oracle": "Independent CPUcomplex128rfft ofrepresentedFP32 values, complexabs error<=2e-6*rowL1norm+2e-5*absref; DC/evenNyquistimagEXACTzero, finiteoutput/inputunchanged. Numericgatefixed.",
+    "scope": "PositiveN<=1024, evenpowers2fastpathasabove, oddNsafeidenticalfullcomplexDFT/extractbaselinefallback, invalid0/oversizehostreject.",
+    "guards": [
+      {
+        "case_id": "W004-W03-GA",
+        "role": "guard",
+        "seed": 4391,
+        "parameters": {
+          "batch": 2,
+          "N": 64,
+          "distribution": "dc-constant-and-alternating-nyquist",
+          "common_complex_algorithm": "two-stage"
+        },
+        "expected": "DC/Nyquistmagnitude/sign/order andimag0"
+      },
+      {
+        "case_id": "W004-W03-GB",
+        "role": "guard",
+        "seed": 4392,
+        "parameters": {
+          "batch": 1,
+          "N": 63,
+          "distribution": "bounded-uniform",
+          "common_complex_algorithm": "direct-dft"
+        },
+        "expected": "oddNafterroutesidenticalfullcomplexbaselinefallback"
+      }
+    ]
+  },
+  "protocol": "6CPUoraclesonce,oncecheckperside/source/case+10profilefullforwards4pairs,2guards0captures,no warmup/autotune/extratiming/profileIOchecks"
+}

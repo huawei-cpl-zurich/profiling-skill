@@ -95,9 +95,12 @@ def adjudicate(report, task, candidate_sha256):
         raise ValueError('terminal evaluation must retain every expected case exactly once')
     if report.get('outcome') == 'infrastructure_failure':
         return dict(solved=None, comparison_valid=False, outcome='infrastructure_failure', cases=rows)
+    if report.get('outcome') not in (None, 'success', 'candidate_failure'):
+        raise ValueError('unknown trusted terminal outcome')
     ratios = {}
     for row in rows:
-        if row.get('correct') is not True or row.get('identity_verified') is not True:
+        if (report.get('outcome') == 'candidate_failure' or row.get('correct') is not True
+                or row.get('identity_verified') is not True):
             return dict(solved=False, comparison_valid=True, outcome='candidate_failure',
                         reason='correctness or identity failure', cases=rows)
         for field in ('baseline_samples_us', 'candidate_samples_us'):
@@ -207,6 +210,26 @@ def evaluate(command, request, session):
     return json.loads(result['stdout'])
 
 
+def development_failures(session):
+    """Inspect only host-owned dispatched reports; help and budget refusals are free."""
+    journal = session / 'commands.jsonl'
+    failures = []
+    for index, line in enumerate(journal.read_text().splitlines() if journal.exists() else []):
+        try:
+            entry = json.loads(line)
+            if not isinstance(entry, dict):
+                raise ValueError('invalid host journal row')
+            if not entry.get('dispatched') or entry.get('command', [])[-1:] == ['help']:
+                continue
+            report = json.loads(entry['stdout'])
+            if (not isinstance(report, dict) or report.get('outcome') not in
+                    ('success', 'candidate_failure') or entry.get('timed_out')):
+                raise ValueError('infrastructure or unknown backend outcome')
+        except (ValueError, KeyError, TypeError) as error:
+            failures.append(dict(journal_row=index + 1, reason=str(error)))
+    return failures
+
+
 def run_suite(manifest, output, *, launcher=CodingLauncher, evaluator=evaluate):
     output = Path(output).resolve()
     frozen = freeze(manifest, output)
@@ -242,12 +265,23 @@ def run_suite(manifest, output, *, launcher=CodingLauncher, evaluator=evaluate):
                 raise ValueError('submitted candidate changed during terminal evaluation')
             write_json(session / 'terminal-report.json', raw)
             result = adjudicate(raw, task, source_hash)
-            receipt.update(status='complete' if result['comparison_valid'] else 'invalid-comparison',
-                           candidate_sha256=source_hash, result=result)
+            issues = development_failures(session)
+            receipt.update(status='complete' if result['comparison_valid'] and not issues else 'invalid-comparison',
+                           candidate_sha256=source_hash, terminal_result=result, result=dict(result),
+                           development_infrastructure_failures=issues)
         except Exception as error:
             receipt.update(status='failed', error_type=type(error).__name__, error=str(error))
         write_json(receipt_path, receipt)
         results.append(receipt)
+    invalid = {r['task_id'] for r in results if r['status'] != 'complete'}
+    for position, receipt in enumerate(results):
+        receipt['paired_comparison_valid'] = receipt['task_id'] not in invalid
+        if not receipt['paired_comparison_valid']:
+            if receipt['status'] == 'complete':
+                receipt['status'] = 'invalid-comparison'
+            receipt.setdefault('result', {}).update(solved=None, comparison_valid=False,
+                                                    reason='paired infrastructure failure')
+        write_json(output / f'session-{position:03d}-receipt.json', receipt)
     write_json(output / 'results.json', results)
     return results
 

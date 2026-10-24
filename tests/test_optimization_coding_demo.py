@@ -195,3 +195,30 @@ def test_infrastructure_failure_is_not_candidate_failure(tmp_path):
     assert result['outcome'] == 'candidate_failure'
     data['cases'].pop()
     with pytest.raises(ValueError): m.adjudicate(data, task, 'source')
+
+
+@pytest.mark.parametrize('response', [json.dumps({'outcome': 'infrastructure_failure'}),
+    'malformed', json.dumps({'outcome': 'unknown'})])
+def test_development_backend_failure_invalidates_pair_despite_terminal_success(tmp_path, response):
+    config = manifest(tmp_path)
+    class Actor:
+        def __init__(self, output, *args, **kwargs):
+            self.output = output
+        def launch(self):
+            (self.output / 'workspace').mkdir(parents=True)
+            (self.output / 'workspace/candidate.py').write_text('kernel')
+            entries = [dict(dispatched=True, command=['tool', 'help'], stdout='help text'),
+                       dict(dispatched=False, arguments=['evaluate'], returncode=75)]
+            if self.output.name == 'session-000':
+                entries.append(dict(dispatched=True, command=['tool', 'evaluate'],
+                                    stdout=response, returncode=0, timed_out=False))
+            (self.output / 'commands.jsonl').write_text(''.join(json.dumps(e)+'\n' for e in entries))
+            return dict(returncode=0)
+    def terminal(command, request, session): return report(request['candidate_sha256'])
+    results = m.run_suite(config, tmp_path / 'run', launcher=Actor, evaluator=terminal)
+    assert all(r['status'] == 'invalid-comparison' and r['result']['solved'] is None
+               and not r['paired_comparison_valid'] for r in results)
+    assert all(r['terminal_result']['solved'] for r in results)
+    assert len(results[0]['development_infrastructure_failures']) == 1
+    assert results[1]['development_infrastructure_failures'] == []
+    assert json.loads((tmp_path / 'run/session-000-receipt.json').read_text()) == results[0]

@@ -35,7 +35,9 @@ def kernels():
         maximum = tl.max(x, 0)
         lse = maximum + tl.log(tl.sum(tl.exp(x - maximum), 0))
         if DIRECT:
-            target = tl.load(Targets + row)
+            # Public labels stay INT64; checked vocabulary<=8192 makes the
+            # local index exact in INT32 and keeps comparison chains in INT32.
+            target = tl.load(Targets + row).to(tl.int32)
             selected = tl.load(X + row * D + target)
             tl.store(Scratch + row, lse)
             tl.store(Loss + row, lse - selected)
@@ -47,7 +49,7 @@ def kernels():
                     BD: tl.constexpr, DIRECT: tl.constexpr):
         row = tl.program_id(0)
         col = tl.arange(0, BD)
-        target = tl.load(Targets + row)
+        target = tl.load(Targets + row).to(tl.int32)
         if DIRECT:
             x = tl.load(X + row * D + col, col < D, -float('inf'))
             log_probability = x - tl.load(Scratch + row)

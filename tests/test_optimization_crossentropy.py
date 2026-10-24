@@ -92,6 +92,37 @@ def test_lazy_frontend_has_resolvable_globals_without_launching():
         assert kernel.cache_key and kernel.fn.__closure__ is None
 
 
+@pytest.mark.skipif(importlib.util.find_spec('triton') is None, reason='Triton unavailable')
+def test_int64_public_target_boundaries_remain_exact_after_local_narrowing():
+    script = r'''
+import torch
+import crossentropy_contract as c
+import crossentropy_pairs as p
+statistics,gradient=p.kernels()
+rows,width=2,8192
+x=torch.linspace(-4,4,width).repeat(rows,1)
+y=torch.tensor([0,width-1],dtype=torch.int64)
+original_x,original_y=x.clone(),y.clone()
+expected_loss=-torch.log_softmax(x.double(),-1).gather(1,y[:,None]).squeeze(1)
+expected_dx=torch.softmax(x.double(),-1)
+expected_dx[torch.arange(rows),y]-=1
+fixture=dict(expected=(expected_loss.float(),expected_dx.float()))
+for arm in ('before','after'):
+ cfg=p.configuration(arm,dict(family='E10',rows=rows,width=width,seed=0))
+ loss=torch.empty(rows);dx=torch.empty_like(x)
+ scratch=torch.empty(rows) if cfg['direct'] else torch.empty_like(x)
+ statistics[(rows,)](x,y,scratch,loss,width,cfg['block'],cfg['direct'])
+ gradient[(rows,)](x,y,scratch,loss,dx,width,cfg['block'],cfg['direct'])
+ assert c.diagnostics((loss,dx),fixture)['passed']
+ assert y.dtype==torch.int64 and torch.equal(y,original_y) and torch.equal(x,original_x)
+'''
+    env = dict(os.environ, TRITON_INTERPRET='1',
+               PYTHONPATH=str(ROOT / 'examples/optimization-library/triton'))
+    result = subprocess.run([sys.executable, '-c', script], env=env,
+                            capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_adapter_preparation_is_work_free_and_each_forward_allocates_full_pipeline():
     calls, allocations = [], []
     class Kernel:

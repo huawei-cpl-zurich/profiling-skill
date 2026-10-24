@@ -66,7 +66,54 @@ not establish ordinary application latency. Noncompute gaps can contain caller
 dispatch and do not prove all-device idle. PMU percentages do not establish
 physical traffic, bandwidth or roofline distance.
 
-Collection is in progress; no performance result is claimed by this text yet.
+All four main pairs and both guards passed on gz-a3 physical6 / logical0,
+**Ascend910B4-1**, CANN9.1.0, Torch2.10.0+cpu, Torch-NPU2.10.0 and
+imported Triton3.2.0. Eight CPU functional tests and all twelve logical arm compile
+probes passed before scientific execution. Source/binary identities stayed stable.
+
+| Case | B × T × D | Length pattern | BEFORE span µs ± SD | AFTER span µs ± SD | Before / after |
+|---|---:|---|---:|---:|---:|
+| W005-B04-01 | 64 × 256 × 32 | mostly-full | 916.826 ± 69.081 | 768.250 ± 1.044 | 1.193× |
+| W005-B04-02 | 1 × 32 × 8 | all-zero | 193.186 ± 6.562 | 16.886 ± 0.452 | 11.441× |
+| W005-B04-03 | 48 × 192 × 48 | mixed-long | 812.442 ± 65.160 | 714.180 ± 0.132 | 1.138× |
+| W005-B04-04 | 2 × 64 × 16 | short-zero | 188.028 ± 18.916 | 16.688 ± 0.605 | 11.267× |
+
+Geometric mean of these four instrumented span ratios: **3.637×**.
+All four prospective benefit/cost cases favored the candidate; a timing regression
+was not observed in these frozen cases. The zero-length case has no net logical
+traffic saving. Changes in interkernel/caller gaps can dominate these diagnostic
+spans, so the ratios cannot be interpreted as ordinary application speedups or
+as measured bandwidth improvements.
+
+| Case | BEFORE compute union µs | AFTER compute union µs | BEFORE noncompute gap µs | AFTER noncompute gap µs |
+|---|---:|---:|---:|---:|
+| W005-B04-01 | 884.994 | 768.250 | 31.832 | 0.000 |
+| W005-B04-02 | 20.514 | 16.886 | 172.672 | 0.000 |
+| W005-B04-03 | 783.568 | 714.180 | 28.874 | 0.000 |
+| W005-B04-04 | 20.586 | 16.688 | 167.442 | 0.000 |
+
+The legacy JSON field `device_idle_gap_us` means the noncompute gap in this table;
+it does not prove all-device idle.
+
+BEFORE has two device tasks and AFTER one per measured API:120 tasks total across
+80 forwards. GA has two component reversals per correctness-only API (four
+BEFORE tasks or two AFTER tasks), with both intermediate and final outputs checked.
+Together the twelve correctness API calls contain fourteen component reversals.
+The guards made zero captures. Every entered-API capture counter is exactly ten;
+there were no failed, discarded or repeated measurement attempts.
+
+All ten span/event samples, deviations, task ownership, original PMU fields,
+source/binary identities, guard checks and six oracle manifests are retained in
+`skills/ascend-optimization-library/references/ragged-reverse-evidence.json.gz`;
+`ragged-reverse-summary.json` provides its digest and readable case index. Full
+vendor trees remain remote. The verified compact archive retains all six cached
+CPU payloads, source snapshots and compiled binary cache.
+
+Gate `remote:gz-a3:job:5f07bb68-3727-437a-9cdf-4a382a822451` exited0.
+Compact-only job `remote:gz-a3:job:490ff2c5-0da8-4862-9533-8016b22b91f4`
+exited0 with zero new device work. Compact SHA256
+`c2b091a36f2bd2947a3a0daf8dee78cf843f25c152e9f957b9b877748d95473b`.
+
 
 To generate one cached CPU payload using the public nested case format:
 

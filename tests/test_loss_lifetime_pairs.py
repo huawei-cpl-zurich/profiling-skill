@@ -1,5 +1,5 @@
 """Functional contract and real interpreter coverage for the complete E11 pipeline."""
-import json
+import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -45,6 +45,7 @@ def test_cpu_oracle_and_diagnostics_cover_complete_contract():
     with pytest.raises(ValueError,match='target'):contract.validate_inputs(fixture['inputs'],spec())
 
 
+@pytest.mark.skipif(importlib.util.find_spec('triton') is None, reason='Triton unavailable')
 def test_actual_interpreter_pipeline_resets_outputs_and_workspace():
     code = '''
 import torch

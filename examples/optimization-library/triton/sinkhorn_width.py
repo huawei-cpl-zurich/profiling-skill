@@ -1,5 +1,6 @@
 """Width-only Sinkhorn pair: two prepared kernels per full API call."""
 import hashlib
+import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ class Adapter:
 
     def __init__(self):
         self.prepared = {}
-        self.prepost_bits = None
+        self.pair_bits = {}
 
     def prepare(self, arm, spec, fixture, output):
         if arm not in ('before', 'after'):
@@ -58,6 +59,7 @@ class Adapter:
         item = SimpleNamespace(run=run, compile_only=compile_only, compilation_state=compilation_state,
             expected_kernels=[prepost.fn.__name__, comb.fn.__name__], inputs=inputs,
             output_storages=storages, backing=backing,
+            pair_key=(str(Path(output).resolve().parent), json.dumps(spec, sort_keys=True)),
             sources=[Path(__file__), Path(__file__).with_name('sinkhorn_kernel.py'), *CASE_SOURCES],
             metadata=dict(language='triton',arm=arm,parameters=spec,api_component_count=2,grid=grid,
                 flags=comb_flags,group_adaptation='source default48 unsupported; common GROUP32',
@@ -76,13 +78,18 @@ class Adapter:
         canaries = all(bool((s[[0,-1]].cpu() == -701).all()) for s in item.output_storages)
         immutable = all(torch.equal(v.cpu().view(torch.uint8), fixture['inputs'][k].view(torch.uint8)) for k,v in item.inputs.items())
         layout = isinstance(actual,tuple) and len(actual)==3 and tuple(actual[2].stride())==(32,8,1)
-        bits = tuple(v.detach().cpu().view(torch.int32) for v in actual[:2]) if layout else None
-        identical = bits is not None and (self.prepost_bits is None or all(torch.equal(a,b) for a,b in zip(bits,self.prepost_bits)))
-        if arm == 'before':
-            self.prepost_bits = bits
+        bits = tuple(v.detach().cpu().view(torch.int32).clone() for v in actual[:2]) if layout else None
+        identical = None
+        if bits is not None:
+            pair = self.pair_bits.setdefault(item.pair_key, {})
+            pair[arm] = bits
+            if set(pair) == {'before', 'after'}:
+                identical = all(torch.equal(a, b) for a, b in zip(pair['before'], pair['after']))
+                del self.pair_bits[item.pair_key]
         result['common_prepost_bitwise_equal'] = identical
+        result['common_prepost_comparison'] = 'pending' if identical is None else 'complete'
         result.update(padding_positive_zero=padding,canaries=canaries,input_immutable=immutable,layout=layout)
-        result['passed'] = result['passed'] and padding and canaries and immutable and layout and identical
+        result['passed'] = result['passed'] and padding and canaries and immutable and layout and bits is not None and identical is not False
         return result
 
 

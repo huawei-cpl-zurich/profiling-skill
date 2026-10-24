@@ -28845,5 +28845,21 @@
     "Both prepared outputs allocated once and reused; allocator cost excluded",
     "All padding writes retained",
     "No physical traffic, occupancy, roofline or decoded instruction-count claim"
-  ]
+  ],
+  "publication_host_adapter": {
+    "path": "examples/optimization-library/triton/sinkhorn_width.py",
+    "sha256": "2c68b5e64e39ed883d054b5774f8bf67c94bc6830a4649f7637291d276014571",
+    "test_sha256": "2479b94e9da1ed3f70dec1cf7589ebf52150db7910a6cd26e7acdfdffcf802ee",
+    "change": "Pair-scoped before/after prepost bit validation in either order; no execution/kernel/provider change",
+    "scientific_binding": "Original source_files/fixture/compiler/binaries/pairs unchanged; publication adapter separately bound",
+    "local_tests": 6,
+    "cpu_only_a3_handle": "remote:gz-a3:job:426cba5a-cc39-4d33-b943-a9b6b815bd06",
+    "cpu_only_a3_status": "complete",
+    "new_scientific_forwards": 0,
+    "new_frozen_oracle_evaluations": 0,
+    "new_captures": 0,
+    "cpu_only_a3_exit": 0,
+    "cpu_only_a3_tests": 6,
+    "cpu_only_a3_elapsed_seconds": 45.248
+  }
 }

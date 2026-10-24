@@ -10,9 +10,9 @@ import torch
 ROOT=Path(__file__).resolve().parents[1]
 DIRECTORY=ROOT/'examples/optimization-library/triton'
 sys.path[:0]=[str(DIRECTORY),str(ROOT/'scripts')]
-from sinkhorn_contract import make_case, check_outputs, validate_inputs
+from sinkhorn_contract import make_case, check_outputs, validate_inputs, reference
 from sinkhorn_width import Adapter
-from optimization_pair import fixture
+from optimization_pair import fixture, run_pair
 
 
 def spec(**changes):
@@ -104,5 +104,72 @@ class SinkhornTests(unittest.TestCase):
                 value=spec();value['parameters'].update(change);case.write_text(json.dumps(value))
                 self.assertNotEqual(subprocess.run(command,cwd=folder,capture_output=True).returncode,0)
             self.assertFalse((folder/'out').exists());self.assertFalse((folder/'cache').exists())
+
+class PublicPairLifecycleTests(unittest.TestCase):
+    def test_orders_reuse_and_one_ulp_mismatch(self):
+        artifact=SimpleNamespace(hash='c'*64,asm={'npubin':b'cpu-double'})
+        class Kernel:
+            def __init__(self,name):self.fn=SimpleNamespace(__name__=name)
+            def __getitem__(self,grid):
+                def launch(*args,**flags):
+                    mixes,scale,base=args[:3]
+                    if self.fn.__name__=='prepost':
+                        _,_,_,pre,post,bs,hc,eps,feat=args
+                        values=reference(dict(mixes=mixes,scale=scale,base=base),1,eps)
+                        pre.copy_(values[0]);post.copy_(values[1])
+                    else:
+                        _,_,_,backing,bs,hc,eps,feat=args
+                        value=reference(dict(mixes=mixes,scale=scale,base=base),flags['SINKHORN_ITERS'],eps)[2]
+                        backing[:,:,:4].copy_(value);backing[:,:,4:].zero_()
+                    return artifact
+                return launch
+        class BoundaryAdapter(Adapter):
+            mismatch=None
+            def prepare(self,arm,*args):
+                item=super().prepare(arm,*args)
+                original=item.run
+                def run():
+                    actual=original()
+                    if self.mismatch is not None and arm==self.mismatch[0]:
+                        output=actual[self.mismatch[1]]
+                        output[0,0]=torch.nextafter(output[0,0],torch.tensor(float('inf')))
+                    return actual
+                item.run=run
+                return item
+        original_empty=torch.empty
+        def allocate(*args,**kwargs):
+            kwargs.pop('device',None)
+            return original_empty(*args,**kwargs)
+        modules=dict(torch_npu=SimpleNamespace(),triton=SimpleNamespace(__version__='cpu-double'),
+            sinkhorn_kernel=SimpleNamespace(hc_split_sinkhorn_forward_prepost_kernel=Kernel('prepost'),
+                                          hc_split_sinkhorn_forward_comb_kernel=Kernel('comb')))
+        with tempfile.TemporaryDirectory() as folder, patch.dict(sys.modules,modules), \
+                patch.object(torch.Tensor,'npu',lambda self:self.clone(),create=True), \
+                patch.object(torch,'empty',allocate):
+            root=Path(folder);adapter=BoundaryAdapter()
+            for index,order in enumerate((('before','after'),('after','before'))):
+                for case_index,bs in enumerate((2,7,3)):
+                    case=dict(seed=120+case_index,BS=bs,iters=2,eps=1e-5,role='guard')
+                    report=run_pair(adapter,case,root/f'good-{index}-{case_index}',root/'cache',{},order=order,torch=torch)
+                    self.assertEqual(report['status'],'complete',report)
+                    first=report['arms'][order[0]]['correctness']['diagnostics']
+                    second=report['arms'][order[1]]['correctness']['diagnostics']
+                    self.assertIsNone(first['common_prepost_bitwise_equal'])
+                    self.assertEqual(first['common_prepost_comparison'],'pending')
+                    self.assertTrue(second['common_prepost_bitwise_equal'])
+                    self.assertEqual(adapter.pair_bits,{})
+                for output_index in (0,1):
+                    adapter.mismatch=(order[0],output_index)
+                    case=dict(seed=143+output_index,BS=4,iters=2,eps=1e-5,role='guard')
+                    report=run_pair(adapter,case,root/f'bad-{index}-{output_index}',root/'cache',{},order=order,torch=torch)
+                    self.assertEqual(report['status'],'failed')
+                    second=report['arms'][order[1]]['correctness']
+                    self.assertEqual(second['status'],'failed')
+                    self.assertFalse(second['diagnostics']['common_prepost_bitwise_equal'])
+                    self.assertTrue(all(x['passed'] for x in second['diagnostics']['outputs']))
+                    self.assertTrue(all(x['profiled_calls']==0 for x in report['arms'].values()))
+                    self.assertEqual(adapter.pair_bits,{})
+                adapter.mismatch=None
+
 
 if __name__=='__main__':unittest.main()

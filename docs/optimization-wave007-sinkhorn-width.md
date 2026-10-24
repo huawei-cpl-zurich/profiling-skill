@@ -78,3 +78,20 @@ raw supported PMU field, source/fixture/binary identity and compiler resource.
 The 332-file retained archive is 1,512,174 bytes, SHA256
 `70a4fef0a61b3cc5a39df9afcdb1468d047d46e1577769c164c33c46293ca7eb`.
 All manifest file hashes verified after transfer. Vendor reports remain remote.
+
+## Public runner lifecycle correction
+
+The publication host adapter now scopes common pre/post bit snapshots to each
+output parent and case specification. The first arm reports a pending comparison;
+the second compares in either arm order and drops the completed pair. Reusing an
+adapter across seeds and shapes no longer compares unrelated outputs. This fixes
+the review finding without changing the original kernel, CPU provider, six cached
+scientific payloads, compiled binaries, correctness calls or profiled samples.
+The evidence records the original scientific adapter hash and the publication
+host adapter hash separately. Six CPU functional tests cover public runner reuse
+and reversed order, including one-ULP pre/post mismatches that pass the numerical
+tolerance and fail the bit gate. No scientific execution was repeated.
+
+The CPU-only A3 follow-up gate completed with exit 0 at
+`remote:gz-a3:job:426cba5a-cc39-4d33-b943-a9b6b815bd06`; all six tests passed
+in 45.248 seconds. Device movement and kernels were CPU boundary doubles.

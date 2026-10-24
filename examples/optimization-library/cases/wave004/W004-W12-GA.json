@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W12-GA",
+  "role": "guard",
+  "seed": 5291,
+  "parameters": {
+    "m": 128,
+    "R": 1,
+    "ldb": 136,
+    "regime": "exact-dominance-boundary"
+  },
+  "expected": "GPUcertificatefailsstrict2xbutno-pivot-safestrict1xdominance,afterThomasfallbackmatchesbaseline"
+}

@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W12-GB",
+  "role": "guard",
+  "seed": 5292,
+  "parameters": {
+    "m": 129,
+    "R": 1,
+    "ldb": 137,
+    "regime": "boundary-impulses"
+  },
+  "expected": "zerooffdomainneighbors,tail129,paddingunchanged"
+}

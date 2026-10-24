@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W12-04",
+  "role": "heldout",
+  "seed": 5204,
+  "parameters": {
+    "m": 256,
+    "R": 1,
+    "ldb": 264,
+    "regime": "strong-contraction"
+  },
+  "scenario_designation": "heldout-cost",
+  "hypothesis": "Parallelrowsmayhelp versusfortypasses"
+}

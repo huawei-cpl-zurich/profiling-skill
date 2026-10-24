@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W12-02",
+  "role": "gallery",
+  "seed": 5202,
+  "parameters": {
+    "m": 128,
+    "R": 1,
+    "ldb": 136,
+    "regime": "strong-contraction"
+  },
+  "scenario_designation": "gallery-cost",
+  "hypothesis": "Parallelrowsmayhelp versusfortypasses"
+}

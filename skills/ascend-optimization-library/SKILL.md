@@ -27,6 +27,7 @@ not a universal dispatch threshold or a claim about every Ascend target.
 | Many cores begin the same multi-tile K traversal | [ShuffleK](references/shuffle-k.md) | Indexing and changed summation order |
 | Many output tiles have a plausible operand-locality problem | [Output-program ordering](references/program-order.md) | Mapping cost or worse reuse of the other operand |
 | Many RHS columns share one tridiagonal matrix | [Shared tridiagonal factors](references/shared-tridiagonal.md) | Extra factor launch and global factor reads |
+| Strongly contractive single-RHS tridiagonal solve | [Guarded forty-step Jacobi](references/guarded-jacobi.md) | Forty launch boundaries and ping-pong storage |
 
 The recipes contain code formats, preconditions, falsifiers and gallery data.
 [Gallery evidence](references/gallery-evidence.md) defines the timing boundaries;

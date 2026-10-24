@@ -1,0 +1,98 @@
+{
+  "wave": 4,
+  "family_id": "W12",
+  "title": "Guarded forty-step parallel Jacobi solve",
+  "approval": "standingwaves003\u2013022",
+  "source": "proposal.md W12 andboundedfinal-two-test-contract/gtsvguardreceipts",
+  "cases": [
+    {
+      "case_id": "W004-W12-01",
+      "role": "gallery",
+      "seed": 5201,
+      "parameters": {
+        "m": 2048,
+        "R": 1,
+        "ldb": 2056,
+        "regime": "strong-contraction"
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Parallelrowsmayhelp versusfortypasses"
+    },
+    {
+      "case_id": "W004-W12-02",
+      "role": "gallery",
+      "seed": 5202,
+      "parameters": {
+        "m": 128,
+        "R": 1,
+        "ldb": 136,
+        "regime": "strong-contraction"
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Parallelrowsmayhelp versusfortypasses"
+    },
+    {
+      "case_id": "W004-W12-03",
+      "role": "heldout",
+      "seed": 5203,
+      "parameters": {
+        "m": 1536,
+        "R": 1,
+        "ldb": 1544,
+        "regime": "strong-contraction"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Parallelrowsmayhelp versusfortypasses"
+    },
+    {
+      "case_id": "W004-W12-04",
+      "role": "heldout",
+      "seed": 5204,
+      "parameters": {
+        "m": 256,
+        "R": 1,
+        "ldb": 264,
+        "regime": "strong-contraction"
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Parallelrowsmayhelp versusfortypasses"
+    }
+  ],
+  "contract": {
+    "source_kind": "SOURCE-DOCUMENTEDalgorithm+actualcodeinterface/architecturelayout/numericaltests; upstreamdevicebodyUNSEEN, independentprojectimplementation. Notclaimextended-exponentnativebehavior. Rootacceptedprovenanceexplicitly understandingapproval; sourcepathmissremainsopen.",
+    "input": "FP32dl,d,du[m],dl0=duLast=0; logicalsingleRHScolumnmajorstorage[1,ldb],activeb uniform[-.125,.125],padding98765.25bitwiseunchanged;coefficients/originalbimmutable. Sameequations/initialThomasprimitivefromparentPR206.",
+    "oracle": "CPUFP64dense solve ofrepresentedcoefficients/b, outputactiveatol1e-5rtol1e-4; storeforwardmaxabserror,relativeL2error,FP64residualinf/componentwisebackwarderror independently. Neveracceptsolelysmallresidual. Everyoutputfinite, padding/inputunchanged.",
+    "measurement": "Allcopies/resets/certification/factors/solves/iterationpasses/finitechecksinsideAPI; no cross-forwardfactor/inputcaching. Algorithmiccertificate/finiteguard isrequiredoperationworknotextra correctnessvalidation; includeanymandatoryhostsync/dispatchinwholefirst-to-lastdeviceopspananddeclareit.",
+    "data_recipe": "Seededuniformdl/du[-.25,.25],d=2+abs(dl)+abs(du),boundedb. Sufficientstrictabs(d)>2*(abs(dl)+abs(du))holds, rho<.5. Fixed40Jacobiupdatesfromzero; no adaptiveiterationcount.",
+    "before": "Serialno-pivotThomas identicalparentarithmetic.",
+    "after": "Computeactualcurrentcoefficient/rangecertificateEVERYAPI (ondevice; ifhost1-bitdispatchneededitscostexplicitlyincluded), initializex0=0,fortysimultaneousold/newJacobiupdates,otherwiseUNCHANGEDThomasbaseline. No uncheckedtrustedknownDominantflag.",
+    "certificate": "128<=m<=6144,finitecoeff/RHS,strictdominance;2^-24<=minabsd<=maxabsd<=2^24,maxabsb<=2^24,maxabsb/minabsd<=4,conservativefinite-sumchecks. Exact-arithmetictruncation2^-40only\u2014notFP32roundoffproof; actualCPUoracleacceptancefixed.",
+    "guards": [
+      {
+        "case_id": "W004-W12-GA",
+        "role": "guard",
+        "seed": 5291,
+        "parameters": {
+          "m": 128,
+          "R": 1,
+          "ldb": 136,
+          "regime": "exact-dominance-boundary"
+        },
+        "expected": "GPUcertificatefailsstrict2xbutno-pivot-safestrict1xdominance,afterThomasfallbackmatchesbaseline"
+      },
+      {
+        "case_id": "W004-W12-GB",
+        "role": "guard",
+        "seed": 5292,
+        "parameters": {
+          "m": 129,
+          "R": 1,
+          "ldb": 137,
+          "regime": "boundary-impulses"
+        },
+        "expected": "zerooffdomainneighbors,tail129,paddingunchanged"
+      }
+    ]
+  },
+  "protocol": "6CPUcachedoraclepayloadsonce(GBcomponentexpectedoriginalcopyforW13),oncecheckside/case/sourceversionthen10profiles4pairs,2guards0capture,no warmup/autotune/extratiming/discretionaryprofilevalidationIO."
+}

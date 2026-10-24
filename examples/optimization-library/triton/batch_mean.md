@@ -57,3 +57,33 @@ No physical traffic or roofline estimate follows from busy percentages.
 Results and target/compiler/binary bindings are retained in the accompanying
 `batch-mean-summary.json` and compressed `batch-mean-evidence.json.gz` reference
 files. This is an implementation study, with no automatic new-technique claim.
+
+## Recorded results
+
+Qualified on gz-a3, actual Ascend 910B4-1 physical die 4 / logical device 0,
+CANN 9.1, Torch 2.10 / Torch-NPU 2.10 and imported Triton 3.2.
+All six CPU payloads were cached once. All twelve API correctness checks passed,
+then eighty profiled forwards produced eight complete captures and 120 physical
+device tasks. The two guards made zero captures. GA performs three component
+means per correctness API; the six component means are included in its two
+API calls, rather than hidden repetitions of measured cases.
+
+| R × N | Before span µs (sample SD) | After span µs (sample SD) | Span ratio | Active union before → after µs |
+| --- | ---: | ---: | ---: | ---: |
+| 128 × 512 | 152.034 (8.741) | 7.922 (0.092) | 19.191× | 14.734 → 7.922 |
+| 1 × 16384 | 131.038 (9.709) | 5.880 (0.089) | 22.285× | 3.980 → 5.880 |
+| 96 × 768 | 159.286 (18.523) | 5.530 (0.149) | 28.804× | 10.856 → 5.530 |
+| 2 × 12288 | 153.678 (16.220) | 4.938 (0.180) | 31.122× | 5.012 → 4.938 |
+
+The geometric mean of these four diagnostic span ratios is 24.883×.
+The baseline gaps dominate these large ratios. Active compute reductions are
+smaller; no ordinary latency or physical-traffic speedup is established. All
+ten samples and their sample deviations are retained without outlier removal.
+Both prospective cost cases also favored the candidate in this measurement.
+
+The cancellation guard returned the same designated-row FP32 bits (`847249408`)
+in all three contexts for **both** implementations. This does not demonstrate
+baseline batch instability or a unique numerical advantage. It does verify the
+candidate’s prospective bitwise property for these fixed contexts, and all
+context rows passed the independent FP64 error gate. No seeds, shapes or
+tolerances were changed to create a favorable counterexample.

@@ -69,3 +69,12 @@ invocation. The original vendor Python wrapper allocates fresh outputs each
 call; its allocator cost is excluded here. Device operation spans do not
 establish unmodified vendor Python API latency. All input-dependent movement
 and optional probability movement are included in each measured invocation.
+
+The public runner qualifies compilation before its first movement launch.
+If an importable `get_element` extension cannot lower, it selects the
+portable scalar-map specialization before executing movement. Successful
+qualification is cached for later calls. This host adapter correction was
+validated with CPU doubles; the retained scientific run used a supported
+extension. Its measured adapter hash remains separate from the published
+host adapter hash; JIT kernels, fixtures, and scientific measurements are
+unchanged.

@@ -14429,5 +14429,18 @@
       "bitcodes": [],
       "bs_task_type": 10
     }
+  },
+  "publication_interface_update": {
+    "reason": "Public runner qualifies the get_element lowering before first launch; cached portable fallback when unsupported.",
+    "new_scientific_forwards": 0,
+    "new_scientific_captures": 0,
+    "host_adapter_sha256": "c9fb337f03f40903ca64a1b626eb4d59640cd09f3e50dc9931b86ba6cd4002cc",
+    "measured_adapter_commit": "7ddf53c3b002928be11a90b7837fb40a740091ec",
+    "unchanged": [
+      "moe_rows_kernel.py",
+      "moe_rows_contract.py",
+      "E03.json",
+      "retained compiler binaries and scientific evidence"
+    ]
   }
 }

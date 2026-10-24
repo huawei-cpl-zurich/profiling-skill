@@ -41,19 +41,28 @@ class Adapter:
         flags = dict(PROBS=p['with_probs'],FORWARD=p['forward'],USE_ELEMENT=get_element is not None,
                      num_stages=1,multibuffer=False,enable_fp_fusion=False)
         compiled = {}
+        qualified = False
+        qualified_artifact = None
         def remember(artifact): compiled[id(artifact)]=artifact; return artifact
         def compile_only():
-            if not n: return None
+            nonlocal qualified, qualified_artifact
+            if qualified: return qualified_artifact
+            if not n:
+                qualified = True
+                return None
             try:
-                return remember(kernel.warmup(*args,grid=(blocks,1,1),**flags))
+                qualified_artifact = remember(kernel.warmup(*args,grid=(blocks,1,1),**flags))
             except Exception as error:
                 if arm != 'before' or not flags['USE_ELEMENT']: raise
                 # Probe the real extension lowering before selecting a portable baseline.
                 item.metadata['get_element_compile_failure'] = dict(type=type(error).__name__,message=str(error))
                 item.metadata['baseline'] = 'portable-source-style scalar map load; changed map traffic'
                 flags['USE_ELEMENT'] = False
-                return remember(kernel.warmup(*args,grid=(blocks,1,1),**flags))
+                qualified_artifact = remember(kernel.warmup(*args,grid=(blocks,1,1),**flags))
+            qualified = True
+            return qualified_artifact
         def run():
+            compile_only()  # Select a supported specialization before the first launch.
             if n: remember(kernel[(blocks,1,1)](*args,**flags))
             return out,probs
         def compilation_state():

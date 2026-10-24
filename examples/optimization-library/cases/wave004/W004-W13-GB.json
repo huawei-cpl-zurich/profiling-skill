@@ -1,0 +1,10 @@
+{
+  "case_id": "W004-W13-GB",
+  "role": "guard",
+  "seed": 5392,
+  "parameters": {
+    "m": 8,
+    "component": "whole-finite-update-rollback"
+  },
+  "expected": "explicitCOMPONENTguard:finiteoriginalx/finitecorrectionbutoneproposedelementoverflows;BEFOREcopyoriginal,AFTERupdatekernelrollbackENTIREvectorincludingfiniteproposedelements. No dense-solveaccuracyclaimforthiscomponentguard."
+}

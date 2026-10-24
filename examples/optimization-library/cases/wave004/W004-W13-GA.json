@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W13-GA",
+  "role": "guard",
+  "seed": 5391,
+  "parameters": {
+    "m": 16,
+    "R": 1,
+    "ldb": 24,
+    "regime": "diagonal-power-two-exact"
+  },
+  "expected": "twozeroresidualcorrectionsleavenumericexactsolutionunchanged,allow+0/-0"
+}

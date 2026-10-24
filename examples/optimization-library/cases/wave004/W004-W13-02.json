@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W13-02",
+  "role": "gallery",
+  "seed": 5302,
+  "parameters": {
+    "m": 32,
+    "R": 1,
+    "ldb": 40,
+    "regime": "easy"
+  },
+  "scenario_designation": "gallery-cost",
+  "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+}

@@ -1,0 +1,13 @@
+{
+  "case_id": "W004-W13-04",
+  "role": "heldout",
+  "seed": 5304,
+  "parameters": {
+    "m": 64,
+    "R": 1,
+    "ldb": 72,
+    "regime": "easy"
+  },
+  "scenario_designation": "heldout-cost",
+  "hypothesis": "Refinementmayimproveaccuracy atcost ofadditionalwork; no accuracysignpromised"
+}

@@ -91,7 +91,17 @@ class Adapter:
         expected = dict(q=((c['batch'], c['tokens'], c['q_heads'], c['width']), torch.float16),
             k=((c['batch'], c['tokens'], c['k_heads'], c['width']), torch.float16),
             positions=((c['batch'], c['tokens']), torch.int32), freq=((c['width']//2,), torch.float32))
+        converted = []
         for name, value in inputs.items():
+            if torch_npu.get_npu_format(value) != 2:
+                normalized = torch_npu.npu_format_cast(value, 2)
+                if (normalized.shape != value.shape or normalized.dtype != value.dtype
+                        or normalized.stride() != value.stride()
+                        or torch_npu.get_npu_format(normalized) != 2
+                        or not torch.equal(normalized.detach().cpu(), fixture['inputs'][name])):
+                    raise ValueError('trusted ND preparation changed input ABI or values: '+name)
+                inputs[name] = value = normalized
+                converted.append(name)
             shape, dtype = expected[name]
             if (value.shape != shape or value.dtype != dtype or not value.is_contiguous()
                     or value.stride() != fixture['inputs'][name].stride()
@@ -115,6 +125,7 @@ class Adapter:
         return SimpleNamespace(run=run, expected_kernels=[kernel.fn.__name__],
             sources=[__file__, gemm.__file__, *CASE_SOURCES],
             metadata=dict(configuration=c, workspace_bytes=0,
+                trusted_nd_preparation=converted,
                 coefficient_sets_per_valid_token=(c['q_heads']+c['k_heads'])
                     if c['head_parallel'] else 1,
                 operation='complete split-half Q/K rotary', arithmetic='FP16 coefficients; FP32 products; FP16 outputs',

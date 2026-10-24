@@ -111,11 +111,32 @@ def test_adapter_prepare_does_not_launch_and_both_results_measured_together():
 def test_adapter_rejects_wrong_format_dtype_and_physical_strides():
     with patch.object(torch.Tensor,'npu',lambda self:self.clone(),create=True):
         fixture=contract.make_case(spec())
-        with patch.dict(sys.modules,torch_npu=SimpleNamespace(get_npu_format=lambda x:29)):
-            with pytest.raises(ValueError,match='ND inputs'): pairs.Adapter().prepare('after',spec(),fixture,None)
+        with patch.dict(sys.modules,torch_npu=SimpleNamespace(get_npu_format=lambda x:29,
+                npu_format_cast=lambda value,fmt:value)):
+            with pytest.raises(ValueError,match='trusted ND preparation'): pairs.Adapter().prepare('after',spec(),fixture,None)
         with patch.dict(sys.modules,torch_npu=SimpleNamespace(get_npu_format=lambda x:2)):
             fixture['inputs']['q']=fixture['inputs']['q'].float()
             with pytest.raises(ValueError,match='ND inputs'): pairs.Adapter().prepare('after',spec(),fixture,None)
             fixture=contract.make_case(spec())
             fixture['inputs']['q']=fixture['inputs']['q'].transpose(2,3).contiguous().transpose(2,3)
             with pytest.raises(ValueError,match='ND inputs'): pairs.Adapter().prepare('after',spec(),fixture,None)
+
+
+def test_trusted_nd_preparation_preserves_values_and_rejects_silent_conversion_changes():
+    converted=set()
+    def normalize(value,fmt):
+        assert fmt==2
+        new=value.clone();converted.add(id(new));return new
+    backend=SimpleNamespace(get_npu_format=lambda value:2 if id(value) in converted else 0,
+                            npu_format_cast=normalize)
+    with patch.object(torch.Tensor,'npu',lambda self:self.clone(),create=True), \
+            patch.dict(sys.modules,torch_npu=backend):
+        fixture=contract.make_case(spec());adapter=pairs.Adapter()
+        prepared=adapter.prepare('after',spec(),fixture,None)
+        assert set(prepared.metadata['trusted_nd_preparation'])==set(fixture['inputs'])
+        assert all(torch.equal(value,fixture['inputs'][name]) for name,value in adapter.inputs['after'].items())
+        def corrupt(value,fmt):
+            new=normalize(value,fmt);new.reshape(-1)[0]+=1;return new
+        backend.npu_format_cast=corrupt
+        with pytest.raises(ValueError,match='trusted ND preparation changed input ABI or values'):
+            pairs.Adapter().prepare('after',spec(),fixture,None)

@@ -3,6 +3,8 @@
 `rotary_pairs:factory` provides E09. Both paths rotate every split-half Q and K
 head, preserve all inputs, and return contiguous FP16 Q/K tensors. Inputs are
 contiguous Q[B,T,Hq,D], K[B,T,Hk,D], int32 positions[B,T], and FP32 invfreq[D/2].
+Trusted preparation converts backend default formats to ND2 before either arm,
+checking unchanged shape, dtype, strides and values against the cached CPU data.
 The host scaling factor in [0.125,128] is identical under both paths. Supported D is
 32, 64, 128 or 256; the bounded case contract is in `rotary_contract.py`.
 

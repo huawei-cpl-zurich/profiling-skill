@@ -1,0 +1,93 @@
+{
+  "wave": 6,
+  "study_id": "L06",
+  "title": "Reuse one owned UB scratch buffer across disjoint lifetimes",
+  "study_kind": "source-backed-conservative-adaptation",
+  "new_unique_mechanism_claim": false,
+  "standing_approval": "waves003\u2013022, data first",
+  "source": "lowlevel/refinements.md L06; ops-rec e489c0bf6a2d5f2d05b3205fcacc01b62a908b10 ln_mul_kernel.h224\u2013278 actualsuccessiveTMP reuse Apache2, plusCATLASS40aced local_tensor_buffer.hpp209\u2013221 TBuf/InitBuffer/Get APIproof CANNOpen2.0. Tiny4stageoperator is independent adaptation, not upstream LN implementation.",
+  "dependency": {
+    "base": "298b44a9b579f3c0b0b2ed04c23a250393aa6644",
+    "target_branch": "codex/optimization-w006-row-dma-aggregation"
+  },
+  "cases": [
+    {
+      "case_id": "W006-L06-01",
+      "role": "gallery",
+      "seed": 7601,
+      "parameters": {
+        "rows": 8,
+        "width": 1024
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-L06-02",
+      "role": "gallery",
+      "seed": 7602,
+      "parameters": {
+        "rows": 1,
+        "width": 64
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-L06-03",
+      "role": "heldout",
+      "seed": 7603,
+      "parameters": {
+        "rows": 6,
+        "width": 1536
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    },
+    {
+      "case_id": "W006-L06-04",
+      "role": "heldout",
+      "seed": 7604,
+      "parameters": {
+        "rows": 2,
+        "width": 128
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective benefit/cost label, not a measured sign; retain equal, slower, unsupported and incorrect outcomes."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W006-L06-GA",
+      "role": "guard",
+      "seed": 7691,
+      "parameters": {
+        "rows": 2,
+        "width": 64,
+        "needs_first_late": true
+      },
+      "expected": "Late-first mode changes final operation to y=b+a; shared-storage path forbidden, AFTER dispatches identical two-scratch fallback, actual outputs checked."
+    },
+    {
+      "case_id": "W006-L06-GB",
+      "role": "guard",
+      "seed": 7692,
+      "parameters": {
+        "rows": 3,
+        "width": 33,
+        "tile_elements": 64
+      },
+      "expected": "Repeated loop over99valid elements with partial final35, different values and GM canaries; same masked/tail transfers, input immutable, no stale scratch."
+    }
+  ],
+  "contract": {
+    "interface": "Finite FP32 x[rows,width], deterministic seeded dyadic integers[-32,32]/16 =>[-2,2], output y same shape/nonalias, immutable source and GM canaries. Explicit AIV-only annotation actualSDKkind3/vectorentry/noCube before math.",
+    "arithmetic": "FOUR separate rounded FP32 stages: a=fl(x*x), y=fl(a+x), b=fl(0.5*y), y=fl(b-0.25). CPU oracle independently evaluates each product/add inFP64 then roundsFP32 at EVERY stage. Exact bitwise equality. No FMA, reassociation or stagefusion; all barriers identical. Late-first guard uses last y=fl(b+a), independent oracle similarly rounded.",
+    "before": "Separate fixed X/Y local buffers and scratchA/scratchB owned TBuf<VECCALC>, initialized/Get<float> within same liveTPipe. ScratchA lastread complete after stage2 before stage3 scratchB written.",
+    "after": "Same X/Y and operation/barrier sequence but ONE owned scratchTBuf/Get<float> reused forA thenB after lastread. No aliasingX, no TQue ownership tricks, no manual memory address rebinding. needs_first_late mode must use same two-scratch fallback asBEFORE.",
+    "synchronization": "Same MTE2\u2192V readiness, PIPE_V completion between all4stages, V\u2192MTE3 readiness and completion before next tile overwritesX/Y. Sameinput/copyout/grid/batch/tile, no larger optimized batch or traffic-reduction claim.",
+    "reservation": "E=tileElements, bytes=ceil(4E/32)*32. Before requests4buffers, after3; main reservations131072/98304,1024/768,147456/110592,4096/3072 bytes. These explicit logicallocal reservations are not certified physicalpeak/occupancy. Check actualSDKresource requirements before admitting; both profiles keep sameworkload.",
+    "guards": "One late-first numericalguard provesfallback, not just static selection. Repeatedtile/tailguard useslegal DataCopyPad/masking withinput/output canaries. All6scientificpayloads cachedonce, bothguardsnumerical0captures."
+  },
+  "protocol": "Cache six scientific payloads once (unless host guard explicitly has no numerical oracle). Correct each side once per case/source version, then exactly10 fullAPI profiled forwards per arm/four mainpairs. Guards0captures; no warmup/autotune/extra timing/profiled tensor inspection. Compile and verify engine/resource/ABI before any math; preserve all failures/nonconforming versions/ten samples/taskPMU/source/binary/fixture identities. Device-operation span diagnostic, not ordinary latency or physical traffic/roofline evidence."
+}

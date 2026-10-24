@@ -1,0 +1,172 @@
+{
+  "wave": 7,
+  "approval": "Standing user approval waves003\u2013022, collect data first; optional new model evaluations deferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "30c29d0af3324ab9b48c4c685e29a32c",
+  "source_receipts": "proposal.md, triton-candidates.json, triton-tests.json; prior filtered wave005 triton/inventory.json for full commit pin; preserve per-file attribution and MIT LICENSE.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T01",
+  "task": "optimization-w007-pack-selected-store",
+  "title": "Select packed input or padding before one output store",
+  "source_file": "src__triton_ascend_kernels__index__pack_unpack.py",
+  "cases": [
+    {
+      "case_id": "W007-T01-01",
+      "role": "gallery",
+      "seed": 71001,
+      "parameters": {
+        "lengths": [
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64,
+          64
+        ],
+        "D": 512,
+        "pad_value": 0.0
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T01-02",
+      "role": "gallery",
+      "seed": 71002,
+      "parameters": {
+        "lengths": [
+          64,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "D": 512,
+        "pad_value": -1.25
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T01-03",
+      "role": "heldout",
+      "seed": 71003,
+      "parameters": {
+        "lengths": [
+          63,
+          64,
+          65,
+          64,
+          62,
+          61,
+          65,
+          63,
+          64
+        ],
+        "D": 257,
+        "pad_value": "-inf"
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    },
+    {
+      "case_id": "W007-T01-04",
+      "role": "heldout",
+      "seed": 71004,
+      "parameters": {
+        "lengths": [
+          1
+        ],
+        "D": 32,
+        "pad_value": 0.0
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospective hypothesis only; retain slower/equal/uncertain results."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W007-T01-GA",
+      "role": "guard",
+      "seed": 71091,
+      "parameters": {
+        "lengths": [
+          0,
+          1,
+          0
+        ],
+        "D": 9,
+        "pad_value": "-inf",
+        "signedzero_and_infinity_input": true
+      },
+      "expected": "Full output valid IEEEbits incl+0/-0/Inf preserved, every padding value exact -Inf, empty requests retained."
+    },
+    {
+      "case_id": "W007-T01-GB",
+      "role": "guard",
+      "seed": 71092,
+      "parameters": {
+        "lengths": [
+          0,
+          0
+        ],
+        "D": 7,
+        "pad_value": 0.0,
+        "also_empty_batch": true
+      },
+      "expected": "All-empty [2,0,7] plus emptybatch [0,0,7] no launches/inputloads. One compound CPUexpected tuple; explicit API/component counts. Invalid length rejection beforecache covered nonfrozen units."
+    }
+  ],
+  "contract": {
+    "interface": "Contiguous FP32 x[sum(lengths),D], contiguous nonnegative int32 lengths, B>=0,D>0, cumulative offsets/product within signed address range. All main random normal finite values and explicit\u00b10 inserted; guard adds\u00b1Inf. Host validates sum=N and bounds beforecache. Lmax=max(lengths) or0 forB0. Output shape[B,Lmax,D], inputimmutable, outputnonalias, canaries, exactIEEEexpected bits inclpad cast asFP32. IndependentCPUragged-copy oracle cached once.",
+    "before": "Exact source pattern pad tl.store over full validoutput then tl.load input only validrows+featuremask and overwrite validoutput; define other=0 maskedlanes explicitly botharms.",
+    "after": "Same masked load other0, select tl.where(validrow,x,pad), one output store overallvalidoutput. SAME cumulative-length scan/grid/dtype/BT64/BD64/flags andvalid input loads. No prefixscan hoist, newlength metadata, tile retuning or roundtrip forwards.",
+    "empty": "B0 orLmax0 returns correctly shaped empty allocation withoutkernel; no pointer addressability assumptions or extra proof forwards.",
+    "codegen": "Beforeprofiling compare selectedcompiled bodies. Full identity =>record compiler-noop withoutmanufactured compiler flags; unavailable instructioncounts notproof of physical traffic. Logicalrequestwrites reduction disclosed aslogicalonly."
+  },
+  "source_sha256": "c405e98e9eb80382d4526b41612d6fc83a619c69619bd126af367aa2176468fd"
+}

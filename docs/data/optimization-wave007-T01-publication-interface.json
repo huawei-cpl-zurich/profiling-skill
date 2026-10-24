@@ -1,0 +1,32 @@
+{
+  "measured_module_sha256": "7cb1833a41927f423b04610069e0bf03785941ee53c262eb387c9a99f5f46a14",
+  "publication_module_sha256": "7059dd64571ef3ef7a08b82b0b29da006d2c1c60c17caced4438153e0623e2cf",
+  "unchanged_function_bytes_sha256": {
+    "kernels": "6a4699ddf264e0db9dc0dd2e031ce0bda12116d0a2f098fbe585fdcc2f2a8541",
+    "identity": "4d6c7ff6e059730fa8fc04d6d1c690ec9fb51f79180a0010a304e6a09af8e6b7",
+    "Adapter.prepare": "f6c35b975a58a12d7f5e4581bf0de10897ba42379b7ff9eb339361e7c288629b"
+  },
+  "cpu_provider_sha256": "0f80b5d80a9c96aacae335852507341d4233598aad71367b2caf331426f20772",
+  "test_sha256": "8ff3269de7c0bc611fca42a2bd85c3605605fb977eefb7886701834d57c8f27f",
+  "native_compile_calls": 0,
+  "triton_compile_calls": 0,
+  "npu_forwards": 0,
+  "frozen_oracle_calls": 0,
+  "profile_captures": 0,
+  "original_measured_head": "6fa76675bb07540b692bbb3c47e2a5970abd2ef6",
+  "changes": [
+    "Reject wrong output containers, tensor types and tuple arity before comparison.",
+    "Route unlabelled empty CLI cases through correctness-only; retain nonempty profiling."
+  ],
+  "validation": {
+    "target": "gz-a3",
+    "runtime": "py311-torch",
+    "kind": "CPU-only",
+    "handle": "remote:gz-a3:job:f90643bc-f2cc-4f9e-9e6d-59f1fcf4b31e",
+    "terminal": "completed",
+    "exit_code": 0,
+    "test_count": 7,
+    "device_imports": "torch_npu and triton blocked"
+  },
+  "source_binding_semantics": "Original source_files in optimization-wave007-T01.json bind the measured source. This separate receipt binds the current publication interface; no measured evidence was regenerated."
+}

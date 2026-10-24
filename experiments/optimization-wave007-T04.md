@@ -66,7 +66,9 @@ python /path/to/checkout/examples/optimization-library/triton/recurrent_norm.py 
 ```
 
 Case JSON accepts either the frozen `parameters` object or flat dimensions
-`B,T,H,HV,K,V`, plus a nonnegative `seed`. Conflicting forms and unsupported
+`B,T,H,HV,K,V`, plus a nonnegative `seed`. Top-level descriptive `expected`, `hypothesis` and scenario metadata are accepted.
+`--case /path/to/case.json --validate-only` validates metadata and dimensions
+without generating fixtures or touching a cache/device. Conflicting forms and unsupported
 bounds/modes reject before the generic cache through this standalone CLI.
 Explicit supported False/None defaults are accepted in either form. The generic
 `optimization_pair.py --adapter` CLI may inspect an existing cache before the
@@ -87,3 +89,13 @@ The publication host-parser fix changes no scientific inputs or kernel bodies.
 The measured source SHA remains preserved in the results; a separate interface
 revision receipt records the current module SHA and unchanged kernel-function
 text SHA. The frozen FP64 CPU provider is byte-identical.
+
+The interface review found that published guard `expected` metadata was rejected
+by the first publication parser. The same-PR correction accepts that descriptive
+field and adds a host-only validation CLI path, while rejecting active execution
+modes at both parameter levels. Read-only parsing of both original guard JSON
+objects succeeds; no frozen fixture, kernel compilation or measurement is repeated.
+
+The review-fix validation passes six nonfrozen functional tests locally and in
+CPU-only A3 job `remote:gz-a3:job:312fdc04-ba8a-4867-afc0-e501ba89e2a6`.
+That job performs no frozen-oracle generation, NPU launch, compile or capture.

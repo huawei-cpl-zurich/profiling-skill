@@ -1,4 +1,6 @@
-import importlib.util
+import contextlib
+import io
+from unittest.mock import patch
 import json
 from pathlib import Path
 import subprocess
@@ -12,7 +14,8 @@ ROOT=Path(__file__).resolve().parents[1]
 MODULE=ROOT/'examples/optimization-library/triton'
 sys.path.insert(0,str(MODULE))
 from recurrent_norm_contract import dimensions,make_case,reference,diagnostics,validate_inputs
-from recurrent_norm import Adapter, dimensions as public_dimensions
+import recurrent_norm
+from recurrent_norm import Adapter, dimensions as public_dimensions, normalize_spec
 
 
 class RecurrentNormTests(unittest.TestCase):
@@ -88,6 +91,29 @@ class RecurrentNormTests(unittest.TestCase):
         with self.assertRaises(ValueError):dimensions(bad)
         f=make_case(spec);f['inputs']['h0']=None
         with self.assertRaises(ValueError):validate_inputs(f['inputs'],spec)
+
+    def test_guard_metadata_validate_only_without_execution(self):
+        spec=self.spec();spec.update(seed=992,role='guard',expected='two outputs and immutable h0',
+                                    hypothesis='nonfrozen',scenario_designation='unit-guard')
+        self.assertEqual(normalize_spec(spec)['expected'],spec['expected'])
+        self.assertEqual(public_dimensions(spec),dimensions(self.spec()))
+        with tempfile.TemporaryDirectory() as folder:
+            p=Path(folder);case=p/'case.json';case.write_text(json.dumps(spec))
+            with patch.object(recurrent_norm,'contract_make_case',side_effect=AssertionError('oracle called')), \
+                 patch.object(recurrent_norm,'kernels',side_effect=AssertionError('kernel requested')), \
+                 patch.object(sys,'argv',['recurrent_norm.py','--case',str(case),'--validate-only']), \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(recurrent_norm.main(),0)
+            self.assertEqual(json.loads(output.getvalue())['status'],'valid')
+            result=subprocess.run([sys.executable,str(MODULE/'recurrent_norm.py'),'--case',str(case),
+                '--validate-only'],cwd=p,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(json.loads(result.stdout)['case']['role'],'guard')
+            self.assertEqual(list(p.iterdir()),[case])
+            for nested in (False,True):
+                bad=json.loads(json.dumps(spec))
+                (bad['parameters'] if nested else bad)['is_kda']=True
+                with self.assertRaises(ValueError):normalize_spec(bad)
 
     def test_external_cwd_cli_rejects_before_cache(self):
         with tempfile.TemporaryDirectory() as folder:

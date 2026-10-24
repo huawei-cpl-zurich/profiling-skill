@@ -23,7 +23,7 @@ def normalize_spec(spec):
     defaults = {'inplace_final_state':False,'is_kda':False,'is_beta_headwise':False,
                 'is_varlen':False,'is_continuous_batching':False,'is_spec_decoding':False,
                 'cu_seqlens':None,'ssm_state_indices':None,'num_accepted_tokens':None}
-    allowed = {'parameters','seed','case_id','role','scenario_designation','hypothesis',
+    allowed = {'parameters','seed','case_id','role','scenario_designation','hypothesis','expected',
                'B','T','H','HV','K','V','zeros_and_epsilon'}
     if not isinstance(spec,dict):
         raise ValueError('case must be an object')
@@ -206,15 +206,23 @@ class Adapter:
 
 def main():
     import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--case',required=True)
+    parser.add_argument('--validate-only',action='store_true',
+                        help='validate host case metadata without fixtures, cache or device work')
+    for name in ('output','cache','provenance'):
+        parser.add_argument('--'+name)
+    args = parser.parse_args()
+    spec = json.loads(Path(args.case).read_text())
+    shape = dimensions(spec)  # Reject unsupported modes before generic cache creation.
+    if args.validate_only:
+        print(json.dumps(dict(status='valid',dimensions=shape,case=normalize_spec(spec))))
+        return 0
+    if not all((args.output,args.cache,args.provenance)):
+        parser.error('--output, --cache and --provenance are required for execution')
     root = HERE.parents[2]
     sys.path.insert(0,str(root/'scripts'))
     from optimization_pair import run_pair
-    parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('case','output','cache','provenance'):
-        parser.add_argument('--'+name,required=True)
-    args = parser.parse_args()
-    spec = json.loads(Path(args.case).read_text())
-    dimensions(spec)  # Reject unsupported modes before generic cache creation.
     result = run_pair(Adapter(),spec,args.output,args.cache,json.loads(Path(args.provenance).read_text()))
     return 0 if result['status']=='complete' else 1
 

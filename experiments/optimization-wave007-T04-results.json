@@ -9461,10 +9461,10 @@
     "hivmc_version": "hivmc 0.3.0 (4ace068b0b12 2026-07-31)"
   },
   "interface_only_revision": {
-    "module_sha256": "22d8f9d789ead99ccc621293ef552e915351ac15087f89bf1c795f9d50e14ce9",
+    "module_sha256": "bef55ccbbbb0ab324f618151f8f72463266cd90bf06c189659cbc4306443f815",
     "kernel_function_sha256": "32e6f5096d43090809a793b879576cca547b3d4466c580f92874a11593bc761f",
     "provider_unchanged": true,
-    "cpu_only_a3_handle": "remote:gz-a3:job:45d4c4cb-f658-4bcc-b1ba-3693b54f0a8e",
+    "cpu_only_a3_handle": "remote:gz-a3:job:312fdc04-ba8a-4867-afc0-e501ba89e2a6",
     "new_scientific_payloads": 0,
     "new_npu_calls": 0,
     "new_compilations": 0,
@@ -9473,7 +9473,25 @@
       "recurrent_norm.py": "39b699d2ee03afd20e406f3f801a9f5f838607e702254cf49992cfa46a39b753",
       "recurrent_norm_contract.py": "80073d1dd2a2ba831bded1af0ef5474b4a1276580186a1f47bcfce1efb454b15"
     },
-    "description": "Host parsing rejects active optional modes in flat/nested specs, accepts explicit fixed defaults, normalizes metadata consistently; kernel function text and frozen CPU provider are unchanged.",
-    "cpu_only_a3_status": "completed-exit-0-five-tests-passed"
-  }
+    "description": "P2 review fix: accept published guard expected metadata and validate-only CLI without any fixture/kernel/cache work; active optional modes still reject at both levels. Kernel text and frozen provider unchanged.",
+    "cpu_only_a3_status": "completed-exit-0-six-tests-passed"
+  },
+  "interface_only_revision_history": [
+    {
+      "module_sha256": "22d8f9d789ead99ccc621293ef552e915351ac15087f89bf1c795f9d50e14ce9",
+      "kernel_function_sha256": "32e6f5096d43090809a793b879576cca547b3d4466c580f92874a11593bc761f",
+      "provider_unchanged": true,
+      "cpu_only_a3_handle": "remote:gz-a3:job:45d4c4cb-f658-4bcc-b1ba-3693b54f0a8e",
+      "new_scientific_payloads": 0,
+      "new_npu_calls": 0,
+      "new_compilations": 0,
+      "new_captures": 0,
+      "science_sources": {
+        "recurrent_norm.py": "39b699d2ee03afd20e406f3f801a9f5f838607e702254cf49992cfa46a39b753",
+        "recurrent_norm_contract.py": "80073d1dd2a2ba831bded1af0ef5474b4a1276580186a1f47bcfce1efb454b15"
+      },
+      "description": "Host parsing rejects active optional modes in flat/nested specs, accepts explicit fixed defaults, normalizes metadata consistently; kernel function text and frozen CPU provider are unchanged.",
+      "cpu_only_a3_status": "completed-exit-0-five-tests-passed"
+    }
+  ]
 }

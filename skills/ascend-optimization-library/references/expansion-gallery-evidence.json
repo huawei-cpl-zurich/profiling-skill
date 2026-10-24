@@ -1,0 +1,1017 @@
+{
+  "measurement": "profiled complete device-operation span, including inter-kernel gaps; not unprofiled application latency",
+  "cases": [
+    {
+      "id": "E05-triton-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            17061.16,
+            17051.08,
+            17058.38,
+            17062.7,
+            17052.3,
+            17065.36,
+            17066.6,
+            17054.72,
+            17081.2,
+            17053.94
+          ],
+          "count": 10,
+          "mean": 17060.744,
+          "sample_sd": 9.01179868592033
+        },
+        "after": {
+          "samples": [
+            157.32,
+            156.64,
+            156.06,
+            156.66,
+            157.16,
+            156.84,
+            157.72,
+            157.24,
+            167.1,
+            157.04
+          ],
+          "count": 10,
+          "mean": 157.978,
+          "sample_sd": 3.2370281294902434
+        }
+      },
+      "speedup": 107.99442960412208,
+      "evidence": "sparse/compact-receipt.json"
+    },
+    {
+      "id": "E05-triton-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            867.12,
+            863.76,
+            867.06,
+            862.64,
+            862.8,
+            873.82,
+            863.02,
+            861.7,
+            873.8,
+            875.0
+          ],
+          "count": 10,
+          "mean": 867.072,
+          "sample_sd": 5.247180830376127
+        },
+        "after": {
+          "samples": [
+            455.58,
+            451.74,
+            451.34,
+            454.58,
+            452.34,
+            450.94,
+            457.94,
+            451.8,
+            454.94,
+            452.52
+          ],
+          "count": 10,
+          "mean": 453.372,
+          "sample_sd": 2.276180035839774
+        }
+      },
+      "speedup": 1.9124956988962705,
+      "evidence": "sparse/compact-receipt.json"
+    },
+    {
+      "id": "e01-norm-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            488.1,
+            466.76,
+            466.06,
+            466.14,
+            466.5,
+            466.16,
+            466.04,
+            466.24,
+            466.48,
+            466.34
+          ],
+          "count": 10,
+          "mean": 468.482,
+          "sample_sd": 6.896765425424691
+        },
+        "after": {
+          "samples": [
+            98.94,
+            92.56,
+            92.2,
+            92.58,
+            92.06,
+            92.54,
+            92.0,
+            92.64,
+            92.3,
+            92.76
+          ],
+          "count": 10,
+          "mean": 93.058,
+          "sample_sd": 2.082529444903213
+        }
+      },
+      "speedup": 5.034301188506093,
+      "evidence": "norm/summary.json"
+    },
+    {
+      "id": "e01-norm-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            4.72,
+            5.1,
+            4.34,
+            4.82,
+            3.94,
+            2.84,
+            1.74,
+            1.82,
+            1.74,
+            1.78
+          ],
+          "count": 10,
+          "mean": 3.284,
+          "sample_sd": 1.4389440572864534
+        },
+        "after": {
+          "samples": [
+            2.76,
+            2.78,
+            2.94,
+            2.84,
+            2.04,
+            2.42,
+            2.38,
+            2.46,
+            2.54,
+            2.42
+          ],
+          "count": 10,
+          "mean": 2.558,
+          "sample_sd": 0.27153064079195344
+        }
+      },
+      "speedup": 1.2838154808444098,
+      "evidence": "norm/summary.json"
+    },
+    {
+      "id": "e02-triton-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            270.68,
+            260.42,
+            260.32,
+            260.14,
+            259.16,
+            259.46,
+            259.46,
+            259.16,
+            259.24,
+            259.74
+          ],
+          "count": 10,
+          "mean": 260.778,
+          "sample_sd": 3.5110549221945635
+        },
+        "after": {
+          "samples": [
+            397.0,
+            336.06,
+            338.92,
+            334.3,
+            352.78,
+            340.4,
+            340.24,
+            338.82,
+            337.62,
+            338.48
+          ],
+          "count": 10,
+          "mean": 345.462,
+          "sample_sd": 18.77574901598099
+        }
+      },
+      "speedup": 0.7548673949667403,
+      "evidence": "ragged/ragged-compact/receipt.json"
+    },
+    {
+      "id": "e02-triton-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            3.58,
+            4.32,
+            2.5,
+            4.28,
+            2.6,
+            4.64,
+            2.68,
+            4.3,
+            2.62,
+            4.42
+          ],
+          "count": 10,
+          "mean": 3.594,
+          "sample_sd": 0.8970098475862273
+        },
+        "after": {
+          "samples": [
+            200.38,
+            172.72,
+            173.2,
+            173.42,
+            155.24,
+            166.9,
+            170.48,
+            5.56,
+            13.92,
+            144.8
+          ],
+          "count": 10,
+          "mean": 137.662,
+          "sample_sd": 68.92752615771309
+        }
+      },
+      "speedup": 0.02610742252764016,
+      "evidence": "ragged/ragged-compact/receipt.json"
+    },
+    {
+      "id": "e03-triton-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            20.88,
+            21.42,
+            21.98,
+            21.14,
+            20.84,
+            21.1,
+            21.4,
+            21.24,
+            20.82,
+            21.34
+          ],
+          "count": 10,
+          "mean": 21.216,
+          "sample_sd": 0.35046635596968045
+        },
+        "after": {
+          "samples": [
+            13.82,
+            13.88,
+            13.88,
+            14.16,
+            14.7,
+            14.24,
+            14.0,
+            14.24,
+            14.56,
+            14.2
+          ],
+          "count": 10,
+          "mean": 14.168,
+          "sample_sd": 0.29123491854133426
+        }
+      },
+      "speedup": 1.4974590626764541,
+      "evidence": "ragged/ragged-compact/receipt.json"
+    },
+    {
+      "id": "e03-triton-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            1.5,
+            1.44,
+            1.48,
+            1.5,
+            1.72,
+            1.54,
+            1.56,
+            1.48,
+            1.48,
+            1.48
+          ],
+          "count": 10,
+          "mean": 1.518,
+          "sample_sd": 0.07857056276579247
+        },
+        "after": {
+          "samples": [
+            1.48,
+            1.46,
+            1.5,
+            1.5,
+            1.5,
+            1.52,
+            1.54,
+            1.54,
+            1.54,
+            1.5
+          ],
+          "count": 10,
+          "mean": 1.508,
+          "sample_sd": 0.02699794230842214
+        }
+      },
+      "speedup": 1.006631299734748,
+      "evidence": "ragged/ragged-compact/receipt.json"
+    },
+    {
+      "id": "e04-int4-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            14006.2,
+            14017.62,
+            14018.7,
+            14018.3,
+            14016.9,
+            14016.7,
+            14016.1,
+            14017.52,
+            14017.32,
+            14019.48
+          ],
+          "count": 10,
+          "mean": 14016.484,
+          "sample_sd": 3.747221785684621
+        },
+        "after": {
+          "samples": [
+            17283.56,
+            17282.1,
+            17282.02,
+            17283.58,
+            17282.48,
+            17284.8,
+            17283.78,
+            17282.52,
+            17284.8,
+            17284.22
+          ],
+          "count": 10,
+          "mean": 17283.386,
+          "sample_sd": 1.054516213457391
+        }
+      },
+      "speedup": 0.8109802095492169,
+      "evidence": "int4/int4-compact/receipt.json"
+    },
+    {
+      "id": "e04-int4-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            1057.36,
+            1060.06,
+            1059.78,
+            1058.12,
+            1057.42,
+            1056.78,
+            1057.68,
+            1059.14,
+            1059.34,
+            1058.0
+          ],
+          "count": 10,
+          "mean": 1058.368,
+          "sample_sd": 1.1305927648804337
+        },
+        "after": {
+          "samples": [
+            56238.72,
+            56271.08,
+            56222.1,
+            56220.96,
+            56224.6,
+            56220.0,
+            56230.48,
+            56226.68,
+            56231.42,
+            56228.8
+          ],
+          "count": 10,
+          "mean": 56231.484,
+          "sample_sd": 15.016964628935119
+        }
+      },
+      "speedup": 0.01882162668870699,
+      "evidence": "int4/int4-compact/receipt.json"
+    },
+    {
+      "id": "e06-gallery-multi-token",
+      "hypothesis": "gallery-multi-token",
+      "arms": {
+        "before": {
+          "samples": [
+            4744.28,
+            4691.76,
+            4562.14,
+            4598.36,
+            4589.1,
+            4632.8,
+            4588.88,
+            4568.14,
+            4511.62,
+            4512.14
+          ],
+          "count": 10,
+          "mean": 4599.9220000000005,
+          "sample_sd": 73.43658818630146
+        },
+        "after": {
+          "samples": [
+            405.9,
+            382.52,
+            397.48,
+            395.66,
+            402.5,
+            396.82,
+            403.12,
+            401.48,
+            404.36,
+            402.9
+          ],
+          "count": 10,
+          "mean": 399.274,
+          "sample_sd": 6.798549191637223
+        }
+      },
+      "speedup": 11.520715097902695,
+      "evidence": "conv/conv-compact/receipt.json"
+    },
+    {
+      "id": "e06-gallery-single-token",
+      "hypothesis": "gallery-single-token",
+      "arms": {
+        "before": {
+          "samples": [
+            193.46,
+            168.5,
+            172.96,
+            158.06,
+            174.98,
+            163.3,
+            168.96,
+            191.24,
+            156.28,
+            171.94
+          ],
+          "count": 10,
+          "mean": 171.96800000000002,
+          "sample_sd": 12.37887160536946
+        },
+        "after": {
+          "samples": [
+            12.96,
+            14.0,
+            12.32,
+            14.32,
+            12.36,
+            14.26,
+            12.46,
+            14.0,
+            12.34,
+            14.12
+          ],
+          "count": 10,
+          "mean": 13.314,
+          "sample_sd": 0.8943799838746143
+        }
+      },
+      "speedup": 12.916328676581044,
+      "evidence": "conv/conv-compact/receipt.json"
+    },
+    {
+      "id": "e07-norm-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            229.44,
+            206.32,
+            214.74,
+            205.98,
+            208.3,
+            211.38,
+            204.24,
+            212.78,
+            201.34,
+            217.5
+          ],
+          "count": 10,
+          "mean": 211.202,
+          "sample_sd": 8.114335462624156
+        },
+        "after": {
+          "samples": [
+            202.76,
+            196.94,
+            196.48,
+            185.16,
+            189.64,
+            185.52,
+            221.64,
+            179.3,
+            186.6,
+            195.82
+          ],
+          "count": 10,
+          "mean": 193.986,
+          "sample_sd": 12.012619475645874
+        }
+      },
+      "speedup": 1.0887486725846196,
+      "evidence": "norm/summary.json"
+    },
+    {
+      "id": "e07-norm-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            153.54,
+            154.52,
+            154.38,
+            151.88,
+            153.94,
+            154.16,
+            135.34,
+            152.98,
+            167.58,
+            155.5
+          ],
+          "count": 10,
+          "mean": 153.382,
+          "sample_sd": 7.726096901627196
+        },
+        "after": {
+          "samples": [
+            177.86,
+            173.72,
+            177.22,
+            168.96,
+            161.04,
+            163.68,
+            166.56,
+            161.42,
+            171.16,
+            170.3
+          ],
+          "count": 10,
+          "mean": 169.192,
+          "sample_sd": 6.049875664470767
+        }
+      },
+      "speedup": 0.9065558655255568,
+      "evidence": "norm/summary.json"
+    },
+    {
+      "id": "e08-gradient-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            843.7,
+            785.96,
+            692.62,
+            598.28,
+            739.44,
+            589.64,
+            697.04,
+            812.72,
+            579.88,
+            645.58
+          ],
+          "count": 10,
+          "mean": 698.486,
+          "sample_sd": 95.60164250099939
+        },
+        "after": {
+          "samples": [
+            183.46,
+            181.2,
+            139.44,
+            144.18,
+            138.94,
+            134.74,
+            140.24,
+            162.44,
+            139.24,
+            144.72
+          ],
+          "count": 10,
+          "mean": 150.86,
+          "sample_sd": 18.196031313326415
+        }
+      },
+      "speedup": 4.6300278403818105,
+      "evidence": "gradient/gradient-compact/receipt.json"
+    },
+    {
+      "id": "e08-gradient-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            192.22,
+            173.3,
+            160.38,
+            157.24,
+            175.7,
+            155.16,
+            179.62,
+            163.52,
+            161.72,
+            160.32
+          ],
+          "count": 10,
+          "mean": 167.918,
+          "sample_sd": 11.860974102773628
+        },
+        "after": {
+          "samples": [
+            159.34,
+            150.62,
+            145.46,
+            152.18,
+            145.8,
+            143.9,
+            141.78,
+            144.7,
+            138.4,
+            135.84
+          ],
+          "count": 10,
+          "mean": 145.802,
+          "sample_sd": 6.8501902649975115
+        }
+      },
+      "speedup": 1.1516851620691075,
+      "evidence": "gradient/gradient-compact/receipt.json"
+    },
+    {
+      "id": "e09-gallery-many-heads",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            836.4,
+            837.0,
+            839.16,
+            835.88,
+            837.22,
+            837.22,
+            839.0,
+            836.92,
+            835.96,
+            838.96
+          ],
+          "count": 10,
+          "mean": 837.372,
+          "sample_sd": 1.2437648938248371
+        },
+        "after": {
+          "samples": [
+            176.14,
+            174.28,
+            173.96,
+            173.82,
+            173.26,
+            174.1,
+            173.3,
+            172.66,
+            173.72,
+            174.08
+          ],
+          "count": 10,
+          "mean": 173.932,
+          "sample_sd": 0.9173488370782859
+        }
+      },
+      "speedup": 4.814364234298462,
+      "evidence": "rotary/rotary-compact/receipt.json"
+    },
+    {
+      "id": "e09-gallery-single-token",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            5.94,
+            6.12,
+            6.18,
+            6.08,
+            6.24,
+            6.1,
+            5.92,
+            5.92,
+            6.16,
+            6.14
+          ],
+          "count": 10,
+          "mean": 6.08,
+          "sample_sd": 0.11469767022723498
+        },
+        "after": {
+          "samples": [
+            6.36,
+            4.66,
+            6.48,
+            4.64,
+            6.48,
+            4.76,
+            6.98,
+            4.8,
+            6.28,
+            4.7
+          ],
+          "count": 10,
+          "mean": 5.614,
+          "sample_sd": 0.9690797467471683
+        }
+      },
+      "speedup": 1.083006768792305,
+      "evidence": "rotary/rotary-compact/receipt.json"
+    },
+    {
+      "id": "e11-gallery-memory",
+      "hypothesis": "lower-logical-workspace",
+      "arms": {
+        "before": {
+          "samples": [
+            1545.74,
+            1510.04,
+            1477.24,
+            1499.66,
+            1491.32,
+            1541.1,
+            1490.96,
+            1466.26,
+            1443.28,
+            1464.64
+          ],
+          "count": 10,
+          "mean": 1493.024,
+          "sample_sd": 32.789880281710204
+        },
+        "after": {
+          "samples": [
+            12253.56,
+            12028.92,
+            11949.8,
+            12134.82,
+            11943.14,
+            11991.12,
+            11955.68,
+            11896.1,
+            11990.38,
+            11974.64
+          ],
+          "count": 10,
+          "mean": 12011.815999999999,
+          "sample_sd": 106.0588904754753
+        }
+      },
+      "speedup": 0.12429627626663613,
+      "evidence": "loss-lifetime/loss-lifetime-compact/receipt.json"
+    },
+    {
+      "id": "e11-gallery-small",
+      "hypothesis": "runtime-cost",
+      "arms": {
+        "before": {
+          "samples": [
+            904.1,
+            663.96,
+            674.24,
+            665.14,
+            659.2,
+            658.58,
+            670.2,
+            659.92,
+            666.54,
+            680.06
+          ],
+          "count": 10,
+          "mean": 690.194,
+          "sample_sd": 75.47243090471294
+        },
+        "after": {
+          "samples": [
+            3113.66,
+            2860.04,
+            2906.04,
+            2842.72,
+            2829.78,
+            2849.68,
+            2829.96,
+            2863.42,
+            2834.8,
+            2804.78
+          ],
+          "count": 10,
+          "mean": 2873.488,
+          "sample_sd": 88.54412143106954
+        }
+      },
+      "speedup": 0.2401937993128908,
+      "evidence": "loss-lifetime/loss-lifetime-compact/receipt.json"
+    },
+    {
+      "id": "e12-gallery-many-rows",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            10.18,
+            5.38,
+            5.7,
+            5.5,
+            9.68,
+            5.6,
+            5.72,
+            5.7,
+            5.5,
+            5.78
+          ],
+          "count": 10,
+          "mean": 6.474,
+          "sample_sd": 1.829366617772999
+        },
+        "after": {
+          "samples": [
+            8.38,
+            6.26,
+            6.36,
+            6.38,
+            6.6,
+            6.44,
+            6.58,
+            6.62,
+            6.28,
+            6.26
+          ],
+          "count": 10,
+          "mean": 6.616,
+          "sample_sd": 0.6352462339737073
+        }
+      },
+      "speedup": 0.9785368802902057,
+      "evidence": "interval-dma/interval-runtime-compact/receipt.json"
+    },
+    {
+      "id": "e12-gallery-small-m",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            70.22,
+            29.54,
+            29.58,
+            30.1,
+            29.52,
+            29.38,
+            28.94,
+            28.98,
+            29.34,
+            28.78
+          ],
+          "count": 10,
+          "mean": 33.438,
+          "sample_sd": 12.929513009648378
+        },
+        "after": {
+          "samples": [
+            75.66,
+            28.16,
+            27.6,
+            28.16,
+            28.12,
+            28.76,
+            27.94,
+            28.02,
+            28.04,
+            28.22
+          ],
+          "count": 10,
+          "mean": 32.868,
+          "sample_sd": 15.03831609958745
+        }
+      },
+      "speedup": 1.0173420956553487,
+      "evidence": "interval-dma/interval-runtime-compact/receipt.json"
+    },
+    {
+      "id": "e10-crossentropy-gallery-benefit",
+      "hypothesis": "benefit",
+      "arms": {
+        "before": {
+          "samples": [
+            197.06,
+            193.38,
+            182.46,
+            184.9,
+            209.52,
+            193.6,
+            185.94,
+            190.38,
+            173.84,
+            191.56
+          ],
+          "count": 10,
+          "mean": 190.264,
+          "sample_sd": 9.531411461291787
+        },
+        "after": {
+          "samples": [
+            194.28,
+            183.92,
+            177.58,
+            231.2,
+            177.52,
+            182.2,
+            180.28,
+            180.3,
+            172.32,
+            177.16
+          ],
+          "count": 10,
+          "mean": 185.676,
+          "sample_sd": 17.005287543715465
+        }
+      },
+      "speedup": 1.0247097093862427,
+      "evidence": "crossentropy-gallery-v3.json",
+      "source_commit": "2316786089e975adaa2bad5692fcd00589b9dd66",
+      "kernel_source_sha256": "7ddef91a89b6c0d6304bc429a834a6bfcacccfd2186a960a67859420489227e4"
+    },
+    {
+      "id": "e10-crossentropy-gallery-cost",
+      "hypothesis": "cost",
+      "arms": {
+        "before": {
+          "samples": [
+            211.78,
+            183.02,
+            175.92,
+            199.84,
+            183.26,
+            165.2,
+            169.56,
+            173.8,
+            164.64,
+            174.56
+          ],
+          "count": 10,
+          "mean": 180.158,
+          "sample_sd": 15.172107302547003
+        },
+        "after": {
+          "samples": [
+            216.02,
+            184.08,
+            179.02,
+            190.22,
+            165.1,
+            168.24,
+            175.52,
+            171.9,
+            185.88,
+            165.2
+          ],
+          "count": 10,
+          "mean": 180.118,
+          "sample_sd": 15.344049733438116
+        }
+      },
+      "speedup": 1.000222076638648,
+      "evidence": "crossentropy-gallery-v3.json",
+      "source_commit": "2316786089e975adaa2bad5692fcd00589b9dd66",
+      "kernel_source_sha256": "7ddef91a89b6c0d6304bc429a834a6bfcacccfd2186a960a67859420489227e4"
+    }
+  ]
+}

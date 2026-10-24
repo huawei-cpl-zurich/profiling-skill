@@ -64,6 +64,15 @@ class CorrectnessTests(unittest.TestCase):
         value.add_(10)
         self.assertTrue(torch.equal(frozen['state'][0], torch.tensor([1., 2.])))
 
+    def test_campaign_rejects_wrong_output_dtype(self):
+        from private_campaign_cases import validate
+        value = self.tensor([1., 2.])
+        case = {'expected': value, 'args': (value.to(torch.float16),)}
+        validate(case, 'candidate', value.clone())
+        for dtype in (torch.float16, torch.int32):
+            with self.subTest(dtype=dtype), self.assertRaisesRegex(AssertionError, 'dtype 不一致'):
+                validate(case, 'candidate', value.to(dtype))
+
 
 if __name__ == '__main__':
     unittest.main()

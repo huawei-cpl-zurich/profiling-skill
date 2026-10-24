@@ -80,6 +80,9 @@ def verify_outputs(expected, actual, inputs=(), *, non_compute=False):
         if torch is not None and isinstance(reference, torch.Tensor):
             if not isinstance(result, torch.Tensor):
                 raise AssertionError(f'验证失败，{path} 输出类型不一致')
+            if reference.dtype != result.dtype:
+                raise AssertionError(f'验证失败，{path} 输出 dtype 不一致: '
+                                     f'framework={reference.dtype}, impl={result.dtype}')
             if reference.shape != result.shape:
                 raise AssertionError(f'验证失败，{path} 输出形状不一致: '
                                      f'framework={reference.shape}, impl={result.shape}')

@@ -1,0 +1,25 @@
+{
+  "original_head": "f05c8814aec1218ca9a60fd49e637325247bba92",
+  "measured_provider_sha256": "aaec66c1310d5acc82df8ba745da96c41e57c292f00ca1a184c35f07c3b7ffb6",
+  "publication_provider_sha256": "09624b9483f6dfde142b1fe988aba115a18ce863c2dbe7babf6f4c55db8842a5",
+  "retained_results_sha256": "a8f0f9d6a14adf1f1c1bc65f196230cdfa70ad548e71ad767a87c9e003edc8fd",
+  "kernel_sha256": "a3cca28fa9c8cd15877d350e0cf0637618e1de59788d5bb7e3c865db21448a25",
+  "source_proof": "ASTs identical after removing the new order-is-None guard. Four frozen main cases omit sizes and order, so the guard is true and the original RNG/assignment branch is unchanged. Both frozen guards provide sizes and order, skipping that branch. No frozen make_case/reference calls made.",
+  "preserved_scientific_payloads": 6,
+  "new_frozen_oracle_calls": 0,
+  "new_device_forwards": 0,
+  "new_real_triton_compiles": 0,
+  "new_captures": 0,
+  "kind": "publication-only-review-fix",
+  "behavior": "Honor and validate explicit sorted_indices when split_sizes are generated; default frozen-case branches unchanged.",
+  "validation": {
+    "target": "gz-a3",
+    "runtime": "py311-torch",
+    "status": "completed",
+    "exit_code": 0,
+    "functional_tests": 9,
+    "command": "python -m unittest discover -s tests -p test_optimization_moe_map.py -v",
+    "log_sha256": "d96cd8d53a298f80719bf0495881ae0d16e5e44747273fd366d0b805a380ad14",
+    "scope": "CPU-only; public CLI/backend doubles; nonfrozen shapes and seeds"
+  }
+}

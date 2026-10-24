@@ -52,3 +52,23 @@ def test_wrong_core_count_and_input_mutation():
     mutated={k:v.clone() for k,v in fixture['inputs'].items()};mutated['a'][0,0]+=1
     with pytest.raises(ValueError,match='input mutation'):
         contract.validate(fixture['expected'].half(),fixture,mutated)
+
+
+def test_native_configuration_checks_actual_binary_and_capacity():
+    from tail_streamk_adapter import configure
+    class Function:
+        def __init__(self, result):self.result=result
+        def __call__(self,*args):return self.result
+    class Library:pass
+    lib=Library()
+    lib.catlass_tail_after=Function(1)
+    lib.catlass_bridge_kernel_names=Function(b'["w003_tail_streamk_after"]')
+    lib.catlass_bridge_configure=Function(0)
+    lib.catlass_tail_workspace=Function(5242880)
+    assert configure(lib,'after',spec(),20)['split_tail']
+    with pytest.raises(ValueError,match='arm mismatch'):configure(lib,'before',spec(),20)
+    lib.catlass_tail_workspace.result=16
+    with pytest.raises(ValueError,match='workspace'):configure(lib,'after',spec(),20)
+    lib.catlass_tail_workspace.result=5242880
+    lib.catlass_bridge_configure.result=1
+    with pytest.raises(ValueError,match='configuration'):configure(lib,'after',spec(),20)

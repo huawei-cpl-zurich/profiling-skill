@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W11-GB",
+  "role": "guard",
+  "seed": 5192,
+  "parameters": {
+    "m": 17,
+    "R": 3,
+    "ldb": 24,
+    "distribution": "strong-dominance"
+  },
+  "expected": "paddinguntouched/tailrows solved; emptyRcoveredhostfunctionaltest"
+}

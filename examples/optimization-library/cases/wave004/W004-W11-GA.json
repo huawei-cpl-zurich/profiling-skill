@@ -1,0 +1,12 @@
+{
+  "case_id": "W004-W11-GA",
+  "role": "guard",
+  "seed": 5191,
+  "parameters": {
+    "m": 4,
+    "R": 2,
+    "ldb": 8,
+    "distribution": "nonsingular-zero-first-pivot"
+  },
+  "expected": "requiredpivotCPUdensefallbackbotharmscorrectness-onlyhostcount,no cachedoraclelookup/unguardedprofile"
+}

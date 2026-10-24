@@ -85,8 +85,15 @@ class Adapter:
     def validate(self,arm,actual,fixture,spec):
         import torch
         item=self.prepared[arm]
+        expected=fixture['expected']
+        if isinstance(actual,tuple) != isinstance(expected,tuple):
+            return dict(passed=False,reason='output container mismatch')
         actuals=actual if isinstance(actual,tuple) else (actual,)
-        expected=fixture['expected']; expected=expected if isinstance(expected,tuple) else (expected,)
+        expected=expected if isinstance(expected,tuple) else (expected,)
+        if (len(actuals)!=len(expected) or not expected
+                or not all(isinstance(a,torch.Tensor) and isinstance(e,torch.Tensor)
+                           for a,e in zip(actuals,expected))):
+            return dict(passed=False,reason='output arity or tensor type mismatch')
         exact=all(a.dtype==e.dtype and a.shape==e.shape and torch.equal(a.cpu().view(torch.int32),e.view(torch.int32)) for a,e in zip(actuals,expected))
         immutable=all(torch.equal(x.cpu().view(torch.int32),fixture[k].view(torch.int32)) for x,k in zip(item.inputs,('x','lengths')))
         canary=bool((item.storage[:16]==12345.).all() and (item.storage[-16:]==12345.).all())
@@ -101,13 +108,14 @@ def main():
     parser.add_argument('--validate-only',action='store_true')
     args=parser.parse_args()
     spec=json.loads(Path(args.case).read_text())
-    dimensions(spec)  # Public rejection precedes generic fixture cache lookup.
+    p=dimensions(spec)  # Public rejection precedes generic fixture cache lookup.
     if args.validate_only:
         print(json.dumps(dict(status='supported',parameters=dimensions(spec))))
         return 0
     sys.path.insert(0,str(Path(__file__).resolve().parents[3]/'scripts'))
     from optimization_pair import run_pair
-    result=run_pair(Adapter(),spec,args.output,args.cache,json.loads(Path(args.provenance).read_text()))
+    result=run_pair(Adapter(),spec,args.output,args.cache,json.loads(Path(args.provenance).read_text()),
+                    correctness_only=not any(p['lengths']))
     return 0 if result['status']=='complete' else 1
 
 

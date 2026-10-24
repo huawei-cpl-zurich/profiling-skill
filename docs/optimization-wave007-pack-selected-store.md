@@ -71,3 +71,17 @@ Use `--validate-only` to validate host case metadata without accessing the cache
 or importing the device runtime. The operator envelope is contiguous FP32 input,
 contiguous int32 nonnegative lengths with matching token count, positive feature
 width, and products within the signed address range.
+
+The publication interface rejects missing output components, incorrect containers,
+and nontensor outputs before comparing values. Ordinary empty cases also enter
+correctness-only mode automatically, so they create no captures or profiled
+forwards even when the case has no guard role. Nonempty cases retain their normal
+profile route. Seven functional CPU tests cover these paths.
+
+The [publication interface receipt](data/optimization-wave007-T01-publication-interface.json)
+binds these review fixes separately from the original measured module. The
+`kernels`, `identity`, and `Adapter.prepare` function bytes and CPU oracle provider
+are unchanged. Original numerical samples, compiled binaries, cached CPU payloads,
+and measured-source bindings remain the original retained evidence; the interface
+validation adds no native/Triton compilation, NPU forwards, frozen oracle calls,
+or profile captures.

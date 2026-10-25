@@ -1,0 +1,1872 @@
+{
+  "status": "complete",
+  "study_id": "T01",
+  "target_product": "Ascend910B4-1",
+  "physical_die": 0,
+  "logical_device": 0,
+  "cube_cores": 20,
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "matrix_sha256": "b7ac72cf038553bdd7add0bbc768a5a6db42fb78f7093f8881a8a32f2883943d",
+  "compact_archive_sha256": "f79fc724a210e71b57e6120e06ed1ca2b8f371fa0b4fb7b0f25d3921f5ce0169",
+  "compact_files": 321,
+  "distribution_versions": {
+    "torch": "2.10.0",
+    "torch-npu": "2.10.0",
+    "triton": "3.5.0",
+    "triton-ascend": "3.2.2"
+  },
+  "profiler_version": {
+    "command": [
+      "msprof",
+      "op",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "msopprof is part of MindStudio Operator-dev Tools.\nmsopprof vesion is 26.1.0-56632dc4a944410c791538451dc2156a151bd105\nmsopscommon version is b4ffdb3d6ba7acdb7bbfcf359f6e4dd5b587a4f4\n",
+    "stderr": ""
+  },
+  "counts": {
+    "status": "complete",
+    "oracle_payloads": 6,
+    "correctness_calls": 12,
+    "correctness_device_kernel_calls": 15,
+    "profiled_forwards": 80,
+    "profiled_device_kernel_calls": 120,
+    "captures": 8,
+    "guards_captures": 0
+  },
+  "timing_scope": "instrumented prepared component; no ordinary latency, allocation, physical traffic, or actual occupancy claim",
+  "cases": [
+    {
+      "case_id": "W008-T01-01",
+      "role": "gallery",
+      "M": 8,
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        }
+      },
+      "fixture_sha256": "c679a3a9b90fb733e1177b7b3ba754036f736f9262b420ed80c72f8b08134ffd",
+      "source_sha256": {
+        "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+        "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+        "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+        "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              8
+            ],
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.6517599821090698,
+              0.4853000044822693,
+              0.4684999883174896,
+              0.47064000368118286,
+              0.4723599851131439,
+              0.45938000082969666,
+              0.4616200029850006,
+              0.4784199893474579,
+              0.46347999572753906,
+              0.47262001037597656
+            ],
+            "count": 10,
+            "mean": 0.48840799629688264,
+            "sample_sd": 0.057921160007302006
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                50.34,
+                41.42,
+                44.48,
+                41.42,
+                41.94,
+                40.66,
+                42.14,
+                41.28,
+                40.760000000000005,
+                40.66
+              ],
+              "count": 10,
+              "mean": 42.51,
+              "sample_sd": 2.9711239923264365
+            },
+            "device_active_union_us": {
+              "samples": [
+                50.34,
+                41.42,
+                44.48,
+                41.42,
+                41.94,
+                40.66,
+                42.14,
+                41.28,
+                40.76,
+                40.66
+              ],
+              "count": 10,
+              "mean": 42.51,
+              "sample_sd": 2.971123992326437
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                7.105427357601002e-15,
+                0.0
+              ],
+              "count": 10,
+              "mean": 7.105427357601002e-16,
+              "sample_sd": 2.2469334198890887e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                165.12,
+                167.54,
+                172.0,
+                165.78,
+                169.5,
+                164.16,
+                166.64,
+                178.24,
+                168.9,
+                178.3
+              ],
+              "count": 10,
+              "mean": 169.618,
+              "sample_sd": 5.097471704460735
+            },
+            "operation_active_union_us": {
+              "samples": [
+                50.34,
+                41.42,
+                44.48,
+                41.42,
+                41.94,
+                40.66,
+                42.14,
+                41.28,
+                40.76,
+                40.66
+              ],
+              "count": 10,
+              "mean": 42.51,
+              "sample_sd": 2.971123992326437
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                114.78,
+                126.12,
+                127.52,
+                124.36,
+                127.56,
+                123.5,
+                124.5,
+                136.96,
+                128.14,
+                137.64
+              ],
+              "count": 10,
+              "mean": 127.108,
+              "sample_sd": 6.580700401764068
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+                "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+                "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+                "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+                "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "trace_sha256": "8671c94bd2943e094fd3b367d0f033569e5e05642c983bbbd751a8a63c1e458f",
+          "accounting_sha256": "7aea59a0ecf8cd3b659ed62b9d9c8e68aacf366e269cb7ae85d1726aa8ea6f41",
+          "raw_metrics_sha256": "186d92a3b0e8d10ab84ed2ef0b6b9ae7659a23da720718794da8522d9c853a45"
+        },
+        "after": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              16
+            ],
+            "device_kernel_calls": 1,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8034399747848511,
+              0.33823999762535095,
+              0.3169800043106079,
+              0.33522000908851624,
+              0.32986000180244446,
+              0.33180001378059387,
+              0.33371999859809875,
+              0.3287999927997589,
+              0.31869998574256897,
+              0.31817999482154846
+            ],
+            "count": 10,
+            "mean": 0.375493997335434,
+            "sample_sd": 0.15055415379811948
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                25.92,
+                22.5,
+                22.76,
+                22.74,
+                22.16,
+                22.26,
+                22.52,
+                22.56,
+                22.08,
+                22.3
+              ],
+              "count": 10,
+              "mean": 22.78,
+              "sample_sd": 1.1270019225064944
+            },
+            "device_active_union_us": {
+              "samples": [
+                25.92,
+                22.5,
+                22.76,
+                22.74,
+                22.16,
+                22.26,
+                22.52,
+                22.56,
+                22.08,
+                22.3
+              ],
+              "count": 10,
+              "mean": 22.78,
+              "sample_sd": 1.1270019225064944
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                25.92,
+                22.5,
+                22.76,
+                22.74,
+                22.16,
+                22.26,
+                22.52,
+                22.56,
+                22.08,
+                22.3
+              ],
+              "count": 10,
+              "mean": 22.78,
+              "sample_sd": 1.1270019225064944
+            },
+            "operation_active_union_us": {
+              "samples": [
+                25.92,
+                22.5,
+                22.76,
+                22.74,
+                22.16,
+                22.26,
+                22.52,
+                22.56,
+                22.08,
+                22.3
+              ],
+              "count": 10,
+              "mean": 22.78,
+              "sample_sd": 1.1270019225064944
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj2_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "1f02539eb68a6c71ee801e371888a8979dfa4ab784fc2dfbfa09f0fbcd775023",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "dc0ed2848f3d6cc8560b57056a4be76263105072c428bae8578d2cecc08f650b",
+                "ttadapter": "1d342b723269d12600124f0fc6ca0116a682e88ccd86eaca9ac214a13f303ba8",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "1f02539eb68a6c71ee801e371888a8979dfa4ab784fc2dfbfa09f0fbcd775023",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "dc0ed2848f3d6cc8560b57056a4be76263105072c428bae8578d2cecc08f650b",
+                "ttadapter": "1d342b723269d12600124f0fc6ca0116a682e88ccd86eaca9ac214a13f303ba8",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "trace_sha256": "fc3bd6a2c6e73451ee4ae4a206efd30d428fe3e93e0ff967a5bac60e758f5fb9",
+          "accounting_sha256": "02b4f61fc2c429768c84ddc0833fcea69d1e0d65f8576ab381a9c6ca90c2d69a",
+          "raw_metrics_sha256": "7d9464d8421e288a7bd3635d6bdcfe95eedab434db4ca6f6aa1b46b83216fcc3"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T01-02",
+      "role": "gallery",
+      "M": 128,
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        }
+      },
+      "fixture_sha256": "a22e11710819abfa7833466836fc27a09f0cf1d082079b0237f6bece35a14d05",
+      "source_sha256": {
+        "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+        "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+        "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+        "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              20
+            ],
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9728400111198425,
+              0.5275400280952454,
+              0.5224000215530396,
+              0.5074800252914429,
+              0.487419992685318,
+              0.464819997549057,
+              0.513159990310669,
+              0.4800199866294861,
+              0.48532000184059143,
+              0.48291999101638794
+            ],
+            "count": 10,
+            "mean": 0.544392004609108,
+            "sample_sd": 0.1519001297503928
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                67.52000000000001,
+                52.72,
+                53.400000000000006,
+                52.760000000000005,
+                53.44,
+                53.08,
+                53.56,
+                54.58,
+                54.1,
+                52.5
+              ],
+              "count": 10,
+              "mean": 54.766000000000005,
+              "sample_sd": 4.5265738822106
+            },
+            "device_active_union_us": {
+              "samples": [
+                67.52,
+                52.72,
+                53.4,
+                52.76,
+                53.44,
+                53.08,
+                53.56,
+                54.58,
+                54.1,
+                52.5
+              ],
+              "count": 10,
+              "mean": 54.766,
+              "sample_sd": 4.526573882210595
+            },
+            "device_overlap_us": {
+              "samples": [
+                1.4210854715202004e-14,
+                0.0,
+                7.105427357601002e-15,
+                7.105427357601002e-15,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 2.842170943040401e-15,
+              "sample_sd": 4.9681567217881264e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                193.66,
+                189.24,
+                218.12,
+                191.1,
+                193.88,
+                180.0,
+                205.14,
+                186.74,
+                180.5,
+                173.78
+              ],
+              "count": 10,
+              "mean": 191.216,
+              "sample_sd": 12.907237590678424
+            },
+            "operation_active_union_us": {
+              "samples": [
+                67.52,
+                52.72,
+                53.4,
+                52.76,
+                53.44,
+                53.08,
+                53.56,
+                54.58,
+                54.1,
+                52.5
+              ],
+              "count": 10,
+              "mean": 54.766,
+              "sample_sd": 4.526573882210595
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                126.14,
+                136.52,
+                164.72,
+                138.34,
+                140.44,
+                126.92,
+                151.58,
+                132.16,
+                126.4,
+                121.28
+              ],
+              "count": 10,
+              "mean": 136.45,
+              "sample_sd": 13.309392673346645
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "trace_sha256": "5167f0cddc08f7ac0613fea586d91bbb4e4650c5666bd7c5803be7c87ad252f6",
+          "accounting_sha256": "7ca681dcda052a461c4e5b8ac0ffbf82afa4a668801f97989777a1f98ab9c799",
+          "raw_metrics_sha256": "97dab493d9de76c9a6a3a2a662de3ba9b8b67074863e5427ef4aa07c8fe1c6ab"
+        },
+        "after": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              20
+            ],
+            "device_kernel_calls": 1,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8564199805259705,
+              0.3807600140571594,
+              0.333979994058609,
+              0.3416999876499176,
+              0.35749998688697815,
+              0.3382999897003174,
+              0.3197999894618988,
+              0.33616000413894653,
+              0.3339200019836426,
+              0.3419800102710724
+            ],
+            "count": 10,
+            "mean": 0.39405199587345124,
+            "sample_sd": 0.16328119415068396
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                63.48,
+                49.34,
+                49.0,
+                48.94,
+                49.7,
+                49.4,
+                49.1,
+                49.38,
+                49.28,
+                49.04
+              ],
+              "count": 10,
+              "mean": 50.666,
+              "sample_sd": 4.508244792722674
+            },
+            "device_active_union_us": {
+              "samples": [
+                63.48,
+                49.34,
+                49.0,
+                48.94,
+                49.7,
+                49.4,
+                49.1,
+                49.38,
+                49.28,
+                49.04
+              ],
+              "count": 10,
+              "mean": 50.666,
+              "sample_sd": 4.508244792722674
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                63.48,
+                49.34,
+                49.0,
+                48.94,
+                49.7,
+                49.4,
+                49.1,
+                49.38,
+                49.28,
+                49.04
+              ],
+              "count": 10,
+              "mean": 50.666,
+              "sample_sd": 4.508244792722674
+            },
+            "operation_active_union_us": {
+              "samples": [
+                63.48,
+                49.34,
+                49.0,
+                48.94,
+                49.7,
+                49.4,
+                49.1,
+                49.38,
+                49.28,
+                49.04
+              ],
+              "count": 10,
+              "mean": 50.666,
+              "sample_sd": 4.508244792722674
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj2_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+                "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+                "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "trace_sha256": "6886e1d678c7c9ad76686ad9e536fb66287ee56837ff7b04ffc79d320d9f7747",
+          "accounting_sha256": "f453eb08dbadae6c553e93e53a6b31173ea7be10bfa7771192ceb4891babbe61",
+          "raw_metrics_sha256": "0cee352e83394bc53fc7566d33c64ffbdb875995771453541f5e1d23bb201251"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T01-03",
+      "role": "heldout",
+      "M": 64,
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        }
+      },
+      "fixture_sha256": "5a878421651e4cdc2eb33bb708c7a6430b8403b45302eb82ab52a309cd5d839f",
+      "source_sha256": {
+        "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+        "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+        "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+        "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              16
+            ],
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0014599561691284,
+              0.48162001371383667,
+              0.4969399869441986,
+              0.4836199879646301,
+              0.49031999707221985,
+              0.5073000192642212,
+              0.47929999232292175,
+              0.47172001004219055,
+              0.45315998792648315,
+              0.4722599983215332
+            ],
+            "count": 10,
+            "mean": 0.5337699949741364,
+            "sample_sd": 0.16499568671723433
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                36.6,
+                28.9,
+                29.259999999999998,
+                28.5,
+                28.14,
+                28.68,
+                28.3,
+                28.200000000000003,
+                28.16,
+                27.94
+              ],
+              "count": 10,
+              "mean": 29.268,
+              "sample_sd": 2.6070536797098924
+            },
+            "device_active_union_us": {
+              "samples": [
+                36.6,
+                28.9,
+                29.26,
+                28.5,
+                28.14,
+                28.68,
+                28.3,
+                28.2,
+                28.16,
+                27.94
+              ],
+              "count": 10,
+              "mean": 29.268,
+              "sample_sd": 2.6070536797098924
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                3.552713678800501e-15,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 3.552713678800501e-16,
+              "sample_sd": 1.1234667099445444e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                172.78,
+                171.16,
+                179.56,
+                162.3,
+                181.34,
+                178.66,
+                173.74,
+                169.8,
+                168.28,
+                161.5
+              ],
+              "count": 10,
+              "mean": 171.912,
+              "sample_sd": 6.79891625350851
+            },
+            "operation_active_union_us": {
+              "samples": [
+                36.6,
+                28.9,
+                29.26,
+                28.5,
+                28.14,
+                28.68,
+                28.3,
+                28.2,
+                28.16,
+                27.94
+              ],
+              "count": 10,
+              "mean": 29.268,
+              "sample_sd": 2.6070536797098924
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                136.18,
+                142.26,
+                150.3,
+                133.8,
+                153.2,
+                149.98,
+                145.44,
+                141.6,
+                140.12,
+                133.56
+              ],
+              "count": 10,
+              "mean": 142.644,
+              "sample_sd": 7.006383121443216
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "trace_sha256": "ec0b245d51296616f31d2faf98dba35c229c7be54cfd7b2c7c033c2a0ea1f71a",
+          "accounting_sha256": "4beef02336f936fc5d72f0b828d91d633a39211db4b324f174459114eae77747",
+          "raw_metrics_sha256": "8b6eb026eab59b6c86b3a5626011fbd7b2351e1c8ed481a88c2119959b896aad"
+        },
+        "after": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              20
+            ],
+            "device_kernel_calls": 1,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8987200260162354,
+              0.35405999422073364,
+              0.3350200057029724,
+              0.34516000747680664,
+              0.339819997549057,
+              0.34404000639915466,
+              0.3474000096321106,
+              0.3536199927330017,
+              0.34272000193595886,
+              0.3401600122451782
+            ],
+            "count": 10,
+            "mean": 0.4000720053911209,
+            "sample_sd": 0.17530759032307897
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                34.1,
+                26.74,
+                26.58,
+                26.36,
+                26.46,
+                26.34,
+                26.3,
+                26.36,
+                26.46,
+                26.44
+              ],
+              "count": 10,
+              "mean": 27.214,
+              "sample_sd": 2.422983468554602
+            },
+            "device_active_union_us": {
+              "samples": [
+                34.1,
+                26.74,
+                26.58,
+                26.36,
+                26.46,
+                26.34,
+                26.3,
+                26.36,
+                26.46,
+                26.44
+              ],
+              "count": 10,
+              "mean": 27.214,
+              "sample_sd": 2.422983468554602
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                34.1,
+                26.74,
+                26.58,
+                26.36,
+                26.46,
+                26.34,
+                26.3,
+                26.36,
+                26.46,
+                26.44
+              ],
+              "count": 10,
+              "mean": 27.214,
+              "sample_sd": 2.422983468554602
+            },
+            "operation_active_union_us": {
+              "samples": [
+                34.1,
+                26.74,
+                26.58,
+                26.36,
+                26.46,
+                26.34,
+                26.3,
+                26.36,
+                26.46,
+                26.44
+              ],
+              "count": 10,
+              "mean": 27.214,
+              "sample_sd": 2.422983468554602
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj2_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+                "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+                "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "trace_sha256": "83d34dc55c9ce04ba97a72f41d183d00556990c15bf6374476177978afcfa1ae",
+          "accounting_sha256": "6c787522e34f04ecc575f4e1ea3d24c2df59aabd27d39ec38d5cb8d4109f5149",
+          "raw_metrics_sha256": "63a99aabedec13bcf265b014736073ad626efb162a85fc4e448bd5a74608943b"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T01-04",
+      "role": "heldout",
+      "M": 256,
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        }
+      },
+      "fixture_sha256": "5080cffe21dc60d82b7264404f3f067bd929829aca3e2810ba17111b92c26e0d",
+      "source_sha256": {
+        "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+        "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+        "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+        "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              20
+            ],
+            "device_kernel_calls": 2,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.1339600086212158,
+              0.49658000469207764,
+              0.5122399926185608,
+              0.5036600232124329,
+              0.4997200071811676,
+              0.48124000430107117,
+              0.493259996175766,
+              0.48076000809669495,
+              0.49235999584198,
+              0.4753600060939789
+            ],
+            "count": 10,
+            "mean": 0.5569140046834946,
+            "sample_sd": 0.20306574811972805
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                112.24,
+                99.82,
+                99.69999999999999,
+                98.52000000000001,
+                98.34,
+                98.62,
+                99.02000000000001,
+                99.46,
+                100.19999999999999,
+                98.86
+              ],
+              "count": 10,
+              "mean": 100.478,
+              "sample_sd": 4.17794686419059
+            },
+            "device_active_union_us": {
+              "samples": [
+                112.24,
+                99.82,
+                99.7,
+                98.52,
+                98.34,
+                98.62,
+                99.02,
+                99.46,
+                100.2,
+                98.86
+              ],
+              "count": 10,
+              "mean": 100.478,
+              "sample_sd": 4.177946864190591
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                1.4210854715202004e-14,
+                0.0,
+                0.0,
+                1.4210854715202004e-14,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 2.842170943040401e-15,
+              "sample_sd": 5.99182245303757e-15
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                228.18,
+                210.36,
+                202.68,
+                208.14,
+                220.56,
+                205.88,
+                208.5,
+                207.44,
+                204.58,
+                200.92
+              ],
+              "count": 10,
+              "mean": 209.724,
+              "sample_sd": 8.406588950209105
+            },
+            "operation_active_union_us": {
+              "samples": [
+                112.24,
+                99.82,
+                99.7,
+                98.52,
+                98.34,
+                98.62,
+                99.02,
+                99.46,
+                100.2,
+                98.86
+              ],
+              "count": 10,
+              "mean": 100.478,
+              "sample_sd": 4.177946864190591
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                115.94,
+                110.54,
+                102.98,
+                109.62,
+                122.22,
+                107.26,
+                109.48,
+                107.98,
+                104.38,
+                102.06
+              ],
+              "count": 10,
+              "mean": 109.24600000000001,
+              "sample_sd": 6.102182123361008
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            },
+            {
+              "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+              "name": "_proj_kernel",
+              "binaries": {
+                "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+                "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+                "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+              }
+            }
+          ],
+          "trace_sha256": "0cc5e77f70bfa3fbe426991b099609965a2105f615827cf14946d97cff4fb491",
+          "accounting_sha256": "4b416ffa9e85b2c8916c5edf8016c0b389aefa670f1e96450c7a982312da3997",
+          "raw_metrics_sha256": "4f23e5c6c7ed93a25472d21117d06f1e5a71501da6fe0a6f5f084b9aba5051f4"
+        },
+        "after": {
+          "metadata": {
+            "component": "two BF16 projections",
+            "cube_cores": 20,
+            "configuration": {
+              "BM": 32,
+              "BN": 64,
+              "BK": 128,
+              "GROUP": 8
+            },
+            "grid": [
+              20
+            ],
+            "device_kernel_calls": 1,
+            "reused_outputs": true,
+            "x_reuse": false,
+            "allocation_boundary": "outputs prepared; JIT scratch excluded",
+            "allocator_limit": "no allocator or full Compressor latency claim",
+            "address_bound_elements": 2621440,
+            "input_strides": {
+              "x": [
+                5120,
+                1
+              ],
+              "w0": [
+                5120,
+                1
+              ],
+              "w1": [
+                5120,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.8446599841117859,
+              0.3328799903392792,
+              0.3700200021266937,
+              0.3375200033187866,
+              0.3133600056171417,
+              0.35604000091552734,
+              0.3494400084018707,
+              0.3338199853897095,
+              0.3431999981403351,
+              0.34369999170303345
+            ],
+            "count": 10,
+            "mean": 0.3924639970064163,
+            "sample_sd": 0.15959436163446444
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                101.06,
+                87.94,
+                90.54,
+                89.4,
+                88.28,
+                88.42,
+                87.76,
+                87.48,
+                88.4,
+                87.6
+              ],
+              "count": 10,
+              "mean": 89.688,
+              "sample_sd": 4.101329865624889
+            },
+            "device_active_union_us": {
+              "samples": [
+                101.06,
+                87.94,
+                90.54,
+                89.4,
+                88.28,
+                88.42,
+                87.76,
+                87.48,
+                88.4,
+                87.6
+              ],
+              "count": 10,
+              "mean": 89.688,
+              "sample_sd": 4.101329865624889
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                101.06,
+                87.94,
+                90.54,
+                89.4,
+                88.28,
+                88.42,
+                87.76,
+                87.48,
+                88.4,
+                87.6
+              ],
+              "count": 10,
+              "mean": 89.688,
+              "sample_sd": 4.101329865624889
+            },
+            "operation_active_union_us": {
+              "samples": [
+                101.06,
+                87.94,
+                90.54,
+                89.4,
+                88.28,
+                88.42,
+                87.76,
+                87.48,
+                88.4,
+                87.6
+              ],
+              "count": 10,
+              "mean": 89.688,
+              "sample_sd": 4.101329865624889
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "_proj2_kernel"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+                "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+              "name": "_proj2_kernel",
+              "binaries": {
+                "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+                "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+                "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+              }
+            }
+          ],
+          "trace_sha256": "a50669c78ee6bf035cd3c55ecd61de87cf64ab2a3aedbdf7fd34769746a57d96",
+          "accounting_sha256": "dc965c0227f2571e70d22a3049b7e2980ca19c7e668c117db041004b4a3df5e5",
+          "raw_metrics_sha256": "8445f67842747447c9d964451605d1c4c2b4bcfc709358a998f2abc799f0c0c4"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T01-GA",
+      "role": "guard",
+      "M": 0,
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        }
+      },
+      "fixture_sha256": "453a8dd2906e14840936ee83f5545671a1386521bef032fe2ae5dc00b559a0c7",
+      "source_sha256": {
+        "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+        "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+        "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+        "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+      }
+    },
+    {
+      "case_id": "W008-T01-GB",
+      "role": "guard",
+      "M": 65,
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "exact_bits": true,
+            "outputs": 2,
+            "rtol": 0,
+            "atol": 0
+          }
+        }
+      },
+      "fixture_sha256": "59dca3d3b54056a1ba7c1ba194b7a34a8ddb4ec7a430afa765a2183c2dfd9866",
+      "source_sha256": {
+        "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+        "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+        "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+        "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+      }
+    }
+  ],
+  "imported_runtime_versions": {
+    "triton": "3.2.0",
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "cann": "9.1.0",
+    "note": "Read-only import receipt after collection; Triton distribution metadata differs from imported package. No scientific replay."
+  }
+}

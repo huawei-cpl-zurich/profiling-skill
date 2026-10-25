@@ -1,0 +1,24 @@
+[
+  {
+    "case_id": "W008-T09-GB",
+    "arm": "before",
+    "status": "expected-host-rejection",
+    "error_type": "ValueError",
+    "reason": "only D513..4096 given-state branch supported",
+    "logical_checks": 1,
+    "fixture_payloads": 0,
+    "device_forwards": 0,
+    "captures": 0
+  },
+  {
+    "case_id": "W008-T09-GB",
+    "arm": "after",
+    "status": "expected-host-rejection",
+    "error_type": "ValueError",
+    "reason": "only D513..4096 given-state branch supported",
+    "logical_checks": 1,
+    "fixture_payloads": 0,
+    "device_forwards": 0,
+    "captures": 0
+  }
+]

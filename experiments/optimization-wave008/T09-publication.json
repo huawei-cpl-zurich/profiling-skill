@@ -1,0 +1,38 @@
+{
+  "reason": "Single-wave P2 interface fix: compile probes reject run unconditionally before compilation or launch; metadata explicitly compile-only/zero calls. Ordinary prepared execution remains unchanged.",
+  "measured_head": "398d79c9e7cdfa9fa6a1c6f80301b9606fbc0229",
+  "measured_source_sha256": {
+    "l2_backward.py": "191d6726ad99a1962eeba2ff8a47ac397735bcdd6b3ad0ce74ee10200639c335",
+    "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+    "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+  },
+  "publication_source_sha256": {
+    "l2_backward.py": "cd2b391708d899d5a5e3546ec8b5e22d4b1f97e20c01d7e218bf58c45375e47a",
+    "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+    "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+  },
+  "publication_test_sha256": "947419b837c18c3e473c5fd73ca748882d90c201c0a0fda45322be84d38af37b",
+  "unchanged": [
+    "JIT source",
+    "CPU oracle provider",
+    "compiled binaries",
+    "five scientific fixture payloads",
+    "all ten samples per main arm",
+    "318 successful and25 failed-attempt compact artifact bindings"
+  ],
+  "cpu_only_a3_gate": {
+    "target": "bz-a3-1",
+    "runtime": "py311-torch",
+    "handle": "remote:bz-a3-1:job:20261025T010626Z-d3068bcbfc37",
+    "status": "completed",
+    "exit": 0,
+    "functional_tests": 4,
+    "seconds": 6.039
+  },
+  "new_actual_kernel_compiles": 0,
+  "new_device_forwards": 0,
+  "new_frozen_oracle_payloads": 0,
+  "new_frozen_host_scenario_checks": 0,
+  "new_captures": 0,
+  "review_scope": "One root3lens review wave; behavior/tests none, interfaceP2resolved. GitHubbot original398d79c completed nofindings. No recursive review wave requested."
+}

@@ -1,0 +1,1763 @@
+{
+  "status": "complete",
+  "study_id": "T09",
+  "target": "bz-a3-1",
+  "product": "9382 Ascend910 V1",
+  "physical_die": 0,
+  "npu": 0,
+  "chip": 0,
+  "logical_device": 0,
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "matrix_sha256": "5ee96582c0924b6d7918e5b29f4382b9400ce8472aee4789c71e6a44c4e42770",
+  "compact_archive_sha256": "6ec0ce1257a88f3c2d049247a1d5a7a9302018950e4b564d7aa116ea3146de71",
+  "compact_files": 318,
+  "counts": {
+    "scientific_oracle_payloads": 5,
+    "correctness_calls": 10,
+    "profiled_calls": 80,
+    "captures": 8,
+    "guards_captures": 0,
+    "host_checks_original": 2,
+    "host_checks_new": 0
+  },
+  "original_failed_attempt": {
+    "physical_runtime_device": 2,
+    "queried_health_endpoint": "NPU1/chip0; later npu-smi-m mapping confirms runtime2",
+    "status": "runtime-initialization-failed-before-kernel-compile",
+    "cause": "UNRESOLVED",
+    "error_code": 107020,
+    "compiled_kernels": 0,
+    "scientific_oracle_payloads": 0,
+    "numeric_calls": 0,
+    "profiled_calls": 0,
+    "captures": 0,
+    "host_checks": 2,
+    "cancelled": false,
+    "compact_sha256": "79680d42ae8795a54cdb2ae3fe2fb844325d6c354e67a0bd9d69fb085452188a"
+  },
+  "timing_scope": "Instrumented given-saved-state backward component; no source GPU-forward, ordinary latency, allocator, physical traffic, roofline, occupancy or training-speed claim",
+  "runtime": {
+    "packages": {
+      "torch": "2.10.0+cpu",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "tools": {
+      "msprof": {
+        "exit": 255,
+        "stdout": "\nUsage:\n      msprof [--options]\n\nThis is subcommand for operator optimization situation:\n      op                                Use binary msopprof to operator optimization (msprof op ...)\n\nOptions:\n      --output                          <Optional> Specify the directory that is used for storing data results.\n      --application                     <Optional> Specify application path, considering the risk of privilege escalation, please pay attention to\n\t\t\t\t\t\t   the group of the application and confirm whether it is the same as the user currently.\n\t\t\t\t\t\t   [Note] This option will be discarded in later versions.\n\t\t\t\t\t\t   you can try to use: msprof [msprof arguments] <app> [app arguments]\n      --ascendcl                        <Optional> Show acl profiling data, the default value is on.\n      --ge-api                          <Optional> Specify if report GE event, the default value is off. The possible parameters are 'l0', 'l1' or 'off'.\n      --runtime-api                     <Optional> Show runtime api profiling data, the default value is off.\n      --task-time                       <Optional> Show task profiling data, the default value is on. The possible parameters are 'l0', 'l1', 'l2', 'l3', 'on' or 'off'.\n      --task-memory                     <Optional> Show the memory usage of the operator, the default value is off. The possible parameters are 'on' or 'off'.\n      --ai-core                         <Optional> Turn on / off the ai core profiling, the default value is on when collecting app Profiling.\n      --aic-mode                        <Optional> Set the aic profiling mode to task-based or sample-based.\n\t\t\t\t\t\t   In task-based mode, profiling data will be collected by tasks.\n\t\t\t\t\t\t   In sample-based mode, profiling data will be collected in a specific interval.\n\t\t\t\t\t\t   The default value is task-based in AI task mode, sample-based in system mode.\n      --aic-freq                        <Optional> The aic sampling frequency in hertz, the default value is 100 Hz, the range is 1 to 100 Hz.\n      --environment                     <Optional> User app custom environment variable configuration.\n      --sys-period                      <Optional> Set total sampling period of system profiling in seconds.\n      --sys-devices                     <Optional> Specify the profiling scope by device ID when collect sys profiling.The value is all or ID list (split with ',').\n      --msproftx                        <Optional> Show msproftx and mstx data, the default value is off.\n      --mstx-domain-include             <Optional> Choose to only include mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` filters the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-exclude at the same time.\n      --mstx-domain-exclude             <Optional> Choose to exclude mstx events from a comma separated list of domains;\n\t\t\t\t\t\t   `default` excludes the mstx default domain;\n\t\t\t\t\t\t   The switch is only applicable when parameter msproftx is set to on;\n\t\t\t\t\t\t   The switch cannot be set with mstx-domain-include at the same time.\n      --storage-limit                   <Optional> Specify the output directory volume. range 200MB ~ 4294967295MB.\n      --hccl                            <Optional> Show hccl profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --model-execution                 <Optional> Show ge model execution profiling data, the default value is off. [Note] This option will be discarded in later versions.\n      --aic-metrics                     <Optional> The aic metrics groups, include ArithmeticUtilization, PipeUtilization, Memory, MemoryL0, ResourceConflictRatio, MemoryUB, L2Cache, MemoryAccess.\n\t\t\t\t\t\t   the default value is PipeUtilization.\n      --python-path                     <Optional> Specify the python interpreter path that is used for analysis, please ensure the python version is 3.7.5 or later.\n      --parse                           <Optional> Switch for using msprof to parse collecting data, the default value is off.\n      --query                           <Optional> Switch for using msprof to query collecting data, the default value is off.\n      --export                          <Optional> Switch for using msprof to export collecting data, the default value is off.\n      --clear                           <Optional> Switch for using msprof to analyze or export data in clear mode, the default value is off.\n      --analyze                         <Optional> Switch for using msprof to analyze collecting data, the default value is off.\n      --rule                            <Optional> Switch specified rule for using msprof to analyze collecting data, include communication, communication_matrix.\n\t\t\t\t\t\t   the default value is communication,communication_matrix.\n      --iteration-id                    <Optional> The export iteration id, only used when argument export is on, the default value is 1.\n      --model-id                        <Optional> The export model id, only used when argument export is on, msprof will export minium accessible model by default.\n      --summary-format                  <Optional> The export summary file format, only used when argument export is on, include csv, json, the default value is csv.\n      --type                            <Optional> The export type, only used when argument `export` is on \n\t\t\t\t\t\t   or when collecting data, include text, db.\n\t\t\t\t\t\t   the default value is text(which will also export the database).\n      --reports                         <Optional> Specify the path that is used for controlling the export scope of collecting results\n      --aicpu                           <Optional> Show aicpu profiling data, the default value is off.\n      --sys-hardware-mem                <Optional> LLC, DDR, HBM acquisition switch, optional on / off, the default value is off.\n      --sys-hardware-mem-freq           <Optional> LLC, DDR, HBM acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --llc-profiling                   <Optional> The llc profiling groups, include read, write. the default value is read.\n      --sys-cpu-profiling               <Optional> The CPU acquisition switch, optional on / off,the default value is off.\n      --sys-cpu-freq                    <Optional> The cpu sampling frequency in hertz. the default value is 50 Hz, the range is 1 to 50 Hz.\n      --sys-profiling                   <Optional> The System CPU usage and system memory acquisition switch,the default value is off.\n      --sys-sampling-freq               <Optional> The sys sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-pid-profiling               <Optional> The CPU usage of the process and the memory acquisition switch of the process,the default value is off.\n      --sys-pid-sampling-freq           <Optional> The pid sampling frequency in hertz. the default value is 10 Hz, the range is 1 to 10 Hz.\n      --sys-io-profiling                <Optional> NIC, ROCE acquisition switch, the default value is off.\n      --sys-io-sampling-freq            <Optional> NIC, ROCE acquisition frequency, range 1 ~ 100, the default value is 100, unit Hz.\n      --instr-profiling                 <Optional> Show instr profiling data, the default value is off.\n      --instr-profiling-freq            <Optional> The instr profiling sampling period in clock-cycle, the default value is 1000 cycle, the range is 300 to 30000 cycle.\n      --sys-interconnection-profiling   <Optional> PCIE, HCCS acquisition switch, the default value is off.\n      --sys-interconnection-freq        <Optional> PCIE, HCCS acquisition frequency, range 1 ~ 50, the default value is 50, unit Hz.\n      --dvpp-profiling                  <Optional> DVPP acquisition switch, the default value is off.\n      --dvpp-freq                       <Optional> DVPP acquisition frequency, range 1 ~ 100, the default value is 50, unit Hz.\n      --l2                              <Optional> L2 Cache and SMMU acquisition switch. The default value is off.\n      --host-sys                        <Optional> The host-sys data type, include cpu, mem, disk, network, osrt, numa\n      --host-sys-pid                    <Optional> Set the PID of the app process for which you want to collect performance data.\n      --host-sys-usage                  <Optional> The host-sys-usage data type, include cpu, mem.(full-platform)\n      --host-sys-usage-freq             <Optional> The sampling frequency in hertz. the default value is 50 Hz the range is 1 to 50 Hz.\n      --dynamic                         <Optional> Dynamic profiling switch, the default value is off.\n      --pid                             <Optional> Dynamic profiling pids of the target processes\n      --delay                           <Optional> Collect start delay time in seconds, range 1 ~ 4294967295s.\n      --duration                        <Optional> Collection duration in seconds, range 1 ~ 4294967295s.\n      --help                            <Optional> help message.\n",
+        "stderr": "<toolkit>/ascend-toolkit/latest/bin/msprof: unrecognized option '--version'\n"
+      },
+      "bishengir-compile": {
+        "exit": 0,
+        "stdout": "bishengir-compile 1.2.0 (/usr1/BiSheng/npuir-a3/bishengir 8796a8ac1508 2026-07-31) \nllvm 19.1.7 2430ab069eb1\nRelease build\n\n",
+        "stderr": ""
+      },
+      "hivmc": {
+        "exit": 0,
+        "stdout": "hivmc 0.3.0 (4ace068b0b12 2026-07-31)\nRelease build\n\n",
+        "stderr": ""
+      },
+      "bisheng": {
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <toolkit>/ascend-toolkit/latest/bin\n",
+        "stderr": ""
+      },
+      "ccec": {
+        "exit": 0,
+        "stdout": "2026-07-30T20:53:21+08:00 clang version 15.0.5 (clang-5c68a1cb1231 flang-5c68a1cb1231)\nTarget: aarch64-unknown-linux-gnu\nThread model: posix\nInstalledDir: <toolkit>/ascend-toolkit/latest/bin\n",
+        "stderr": ""
+      }
+    },
+    "torch_npu_metric": "'ACL_AICORE_PIPE_UTILIZATION'",
+    "triton_version": "3.2.0",
+    "profiler_supported_options": {
+      "exit": 0,
+      "stdout": "msopprof (MindStudio Profiler For Operator) is part of MindStudio Operator-dev Tools.\nUsed for Ascend C operator profiling by running on the board.\n\nOptions:\n\n  -v, --version                             Show version information.\n  -h, --help                                Show help message.\n      --config=<FILE>                       Json file for op config path.\n      --application=<FILE>                  Executable file path.\n      --output=<PATH>                       Output path.\n                                              PATH:default \"./\"\n      --aic-metrics=<TYPE>                  Enable collection ability type:\n                                              TYPE:ArithmeticUtilization | MemoryUB | Memory | MemoryL0 | L2Cache |\n                                                | PipeUtilization | ResourceConflictRatio | Default | BasicInfo | Roofline |\n                                                | Occupancy | TimelineDetail | KernelScale | Source | MemoryDetail |\n      --kernel-name=<NAME>                  Specify the kernel name to profile.\n                                              Not effective in config mode.\n      --launch-count=<LIMIT>                Number of kernel that can be collected.\n                                              LIMIT:1-5000, default: 1\n      --launch-skip-before-match=<SKIP>     Set the number of kernel launch to skip\n                                              before starting to analyze the kernel.\n                                              SKIP:0-1000, default: 0\n      --replay-mode=<MODE>                  Data collection replay mode.\n                                              MODE:application|kernel|range, default: kernel\n      --kill=<SWITCH>                       Kill op process when the number of kernel reaches launch-count.\n                                              SWITCH:on|off, default: off\n      --mstx=<SWITCH>                       Enable mstx API or not.\n                                              SWITCH:on|off, default: off\n      --mstx-include=<RANGE>                Specify the mstx range for msprof op to be collected.\n      --warm-up=<TIMES>                     Set the number of warm up times.\n                                              TIMES:0-500, default: 5\n      --dump=<SWITCH>                       Enable or disable dump flushed to disk mode. Only effective when\n                                              --aic-metrics=<TIMELINEDETAIL>.\n                                              SWITCH:on|off, default: off\n      --core-id=<ID>                        Specify the id of cores to be parsed.\n                                              Only effective when --aic-metrics=<TIMELINEDETAIL> and only\n                                              effective in simulation products.\n      --custom-input=<FILE>                 Json file for op custom input.\n",
+      "stderr": ""
+    },
+    "CANN_config_contents": [],
+    "pre_acquisition_toolkit_probe": {
+      "handle": "remote:bz-a3-1:job:20261025T003441Z-447db518ea5d",
+      "sha256": "e06c5ab07cc175de4cc94617838c46363c3b05c761cac06ba4a505061ea3dc1a",
+      "toolkit_version_contents": [
+        "Version=9.1.0\nversion_dir=cann\nrequired_package_runtime_version=\">=8.5\"\nrequired_package_ge-executor_version=\">=8.5\"\nrequired_package_metadef_version=\">=8.5\"\nrequired_package_asc-devkit_version=\">=8.5\"\nrequired_package_bisheng-compiler_version=\">=8.5\"\ntimestamp=20260730_231653901\n"
+      ],
+      "note": "Observed on the same named native runtime before acquisition; per-acquisition compiler executable versions are retained separately."
+    }
+  },
+  "cases": [
+    {
+      "case_id": "W008-T09-01",
+      "role": "gallery",
+      "parameters": {
+        "rows": 128,
+        "D": 1024
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06,
+            "paired_exact_bits": false,
+            "paired_max_absolute_error": 7.450580596923828e-09
+          }
+        }
+      },
+      "fixture_sha256": "9bff311683b1a5dbc20c1f0a4cba6a273a2d02c23cedbfa8d8a2f36610274dcf",
+      "source_sha256": {
+        "l2_backward.py": "191d6726ad99a1962eeba2ff8a47ac397735bcdd6b3ad0ce74ee10200639c335",
+        "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+        "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 1024,
+              "num_warps": 4
+            },
+            "grid": [
+              128
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                1024,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                1024,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.05113999918103218,
+              0.02864000014960766,
+              0.03449999913573265,
+              0.03824000060558319,
+              0.14710000157356262,
+              0.17409999668598175,
+              0.17445999383926392,
+              0.178739994764328,
+              0.16764000058174133,
+              0.179639995098114
+            ],
+            "count": 10,
+            "mean": 0.11741999816149473,
+            "sample_sd": 0.06905772878998286
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                10.53978125,
+                6.759859375,
+                7.159859375,
+                7.139859375,
+                6.679875,
+                6.719859375,
+                7.51984375,
+                7.539859375,
+                7.33984375,
+                7.47984375
+              ],
+              "count": 10,
+              "mean": 7.4878484375,
+              "sample_sd": 1.1225596621552902
+            },
+            "device_active_union_us": {
+              "samples": [
+                10.53978125,
+                6.759859375,
+                7.159859375,
+                7.139859375,
+                6.679875,
+                6.719859375,
+                7.51984375,
+                7.539859375,
+                7.33984375,
+                7.47984375
+              ],
+              "count": 10,
+              "mean": 7.4878484375,
+              "sample_sd": 1.1225596621552902
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                10.53978125,
+                6.759859375,
+                7.159859375,
+                7.139859375,
+                6.679875,
+                6.719859375,
+                7.51984375,
+                7.539859375,
+                7.33984375,
+                7.47984375
+              ],
+              "count": 10,
+              "mean": 7.4878484375,
+              "sample_sd": 1.1225596621552902
+            },
+            "operation_active_union_us": {
+              "samples": [
+                10.53978125,
+                6.759859375,
+                7.159859375,
+                7.139859375,
+                6.679875,
+                6.719859375,
+                7.51984375,
+                7.539859375,
+                7.33984375,
+                7.47984375
+              ],
+              "count": 10,
+              "mean": 7.4878484375,
+              "sample_sd": 1.1225596621552902
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_kernel1"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "7532df2d8fd0f1efc969b031501795dfd0e8d34cf001082220243f5ad130ddbf",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "f4349d6915f2b931361afb5ba9fffd9fa7421ac2153e5298ac702698dfa7f555",
+                "ttadapter": "1e1bf5eec3d39d90734b64c94d44e65fbeb4f117fce26ae62f12333b2f36f1e4",
+                "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "7532df2d8fd0f1efc969b031501795dfd0e8d34cf001082220243f5ad130ddbf",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "f4349d6915f2b931361afb5ba9fffd9fa7421ac2153e5298ac702698dfa7f555",
+                "ttadapter": "1e1bf5eec3d39d90734b64c94d44e65fbeb4f117fce26ae62f12333b2f36f1e4",
+                "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+              }
+            }
+          ],
+          "trace_sha256": "dcf26a9cc7b65ca9e7517916afc39b8da1369a021d412f1a3301e95816e021fb",
+          "accounting_sha256": "4e71a9eb51f3976dd55009634b676026abad223f5175104a1da9228f065c7690"
+        },
+        "after": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 1024,
+              "num_warps": 4
+            },
+            "grid": [
+              128
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                1024,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                1024,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.902400016784668,
+              0.17584000527858734,
+              0.167820006608963,
+              0.14005999267101288,
+              0.14438000321388245,
+              0.15162000060081482,
+              0.14791999757289886,
+              0.15192000567913055,
+              0.1362999975681305,
+              0.14735999703407288
+            ],
+            "count": 10,
+            "mean": 0.22656200230121612,
+            "sample_sd": 0.23776957258561543
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                10.459796875,
+                7.499859375,
+                7.059859375,
+                6.999859375,
+                7.43984375,
+                7.49984375,
+                7.239859375,
+                7.419859375,
+                7.67984375,
+                7.59984375
+              ],
+              "count": 10,
+              "mean": 7.689846875,
+              "sample_sd": 0.9979907942305499
+            },
+            "device_active_union_us": {
+              "samples": [
+                10.459796875,
+                7.499859375,
+                7.059859375,
+                6.999859375,
+                7.43984375,
+                7.49984375,
+                7.239859375,
+                7.419859375,
+                7.67984375,
+                7.59984375
+              ],
+              "count": 10,
+              "mean": 7.689846875,
+              "sample_sd": 0.9979907942305499
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                10.459796875,
+                7.499859375,
+                7.059859375,
+                6.999859375,
+                7.43984375,
+                7.49984375,
+                7.239859375,
+                7.419859375,
+                7.67984375,
+                7.59984375
+              ],
+              "count": 10,
+              "mean": 7.689846875,
+              "sample_sd": 0.9979907942305499
+            },
+            "operation_active_union_us": {
+              "samples": [
+                10.459796875,
+                7.499859375,
+                7.059859375,
+                6.999859375,
+                7.43984375,
+                7.49984375,
+                7.239859375,
+                7.419859375,
+                7.67984375,
+                7.59984375
+              ],
+              "count": 10,
+              "mean": 7.689846875,
+              "sample_sd": 0.9979907942305499
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_factored"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6e4ba76b764ca735d341475b719250e7343fce3c0fcd4f017e132e23338c0f67",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "7c1c96c894d1a72c6d16a8b882ef8a2eb20cede76f8abc1698e8956e94d3d330",
+                "ttadapter": "2d995fe11e7df3dcf6820ce714826502ea713fac52cbdec73ccad181c090020d",
+                "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6e4ba76b764ca735d341475b719250e7343fce3c0fcd4f017e132e23338c0f67",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "7c1c96c894d1a72c6d16a8b882ef8a2eb20cede76f8abc1698e8956e94d3d330",
+                "ttadapter": "2d995fe11e7df3dcf6820ce714826502ea713fac52cbdec73ccad181c090020d",
+                "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+              }
+            }
+          ],
+          "trace_sha256": "cc812f400b851d407424407daf69d2d8dd4327ddddcbe9d48f17f88c8071ea24",
+          "accounting_sha256": "50fc076a4d95c50d9cab4e8f3028be7fd16cb6eb4768f45a3662ef65ff6256f8"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T09-02",
+      "role": "gallery",
+      "parameters": {
+        "rows": 1,
+        "D": 1024
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06,
+            "paired_exact_bits": false,
+            "paired_max_absolute_error": 3.725290298461914e-09
+          }
+        }
+      },
+      "fixture_sha256": "09af5fd5d0a6019b5303517776cd3fd6b5e73a77a88c25f28fa7fdbbdc3118d2",
+      "source_sha256": {
+        "l2_backward.py": "191d6726ad99a1962eeba2ff8a47ac397735bcdd6b3ad0ce74ee10200639c335",
+        "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+        "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 1024,
+              "num_warps": 4
+            },
+            "grid": [
+              1
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                1024,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                1024,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.0500199794769287,
+              0.21318000555038452,
+              0.19526000320911407,
+              0.15612000226974487,
+              0.17924000322818756,
+              0.16288000345230103,
+              0.15372000634670258,
+              0.15275999903678894,
+              0.1806199997663498,
+              0.16106000542640686
+            ],
+            "count": 10,
+            "mean": 0.2604860007762909,
+            "sample_sd": 0.2781175354308607
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1.759953125,
+                1.53996875,
+                1.67996875,
+                1.47996875,
+                1.73996875,
+                1.53996875,
+                1.71996875,
+                1.51996875,
+                1.77996875,
+                1.55996875
+              ],
+              "count": 10,
+              "mean": 1.6319671875000001,
+              "sample_sd": 0.11438531384934895
+            },
+            "device_active_union_us": {
+              "samples": [
+                1.759953125,
+                1.53996875,
+                1.67996875,
+                1.47996875,
+                1.73996875,
+                1.53996875,
+                1.71996875,
+                1.51996875,
+                1.77996875,
+                1.55996875
+              ],
+              "count": 10,
+              "mean": 1.6319671875000001,
+              "sample_sd": 0.11438531384934895
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1.759953125,
+                1.53996875,
+                1.67996875,
+                1.47996875,
+                1.73996875,
+                1.53996875,
+                1.71996875,
+                1.51996875,
+                1.77996875,
+                1.55996875
+              ],
+              "count": 10,
+              "mean": 1.6319671875000001,
+              "sample_sd": 0.11438531384934895
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1.759953125,
+                1.53996875,
+                1.67996875,
+                1.47996875,
+                1.73996875,
+                1.53996875,
+                1.71996875,
+                1.51996875,
+                1.77996875,
+                1.55996875
+              ],
+              "count": 10,
+              "mean": 1.6319671875000001,
+              "sample_sd": 0.11438531384934895
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_kernel1"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "7532df2d8fd0f1efc969b031501795dfd0e8d34cf001082220243f5ad130ddbf",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "f4349d6915f2b931361afb5ba9fffd9fa7421ac2153e5298ac702698dfa7f555",
+                "ttadapter": "1e1bf5eec3d39d90734b64c94d44e65fbeb4f117fce26ae62f12333b2f36f1e4",
+                "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "7532df2d8fd0f1efc969b031501795dfd0e8d34cf001082220243f5ad130ddbf",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "f4349d6915f2b931361afb5ba9fffd9fa7421ac2153e5298ac702698dfa7f555",
+                "ttadapter": "1e1bf5eec3d39d90734b64c94d44e65fbeb4f117fce26ae62f12333b2f36f1e4",
+                "npubin": "90d20e4f3097afc5b2a3b4967633c51bdac1e54bc664905c74b4b3d21953aa51"
+              }
+            }
+          ],
+          "trace_sha256": "dec758cefbb22d193bd531c06bbde8ac7b0ed56f14f3b9d19d963b577a33d1e4",
+          "accounting_sha256": "5ae1fe00f6b5a2b87c5d3263afde4dae7432f3203bbfa785e1bfd9e30f1e52cd"
+        },
+        "after": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 1024,
+              "num_warps": 4
+            },
+            "grid": [
+              1
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                1024,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                1024,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.003980040550232,
+              0.2099200040102005,
+              0.19900000095367432,
+              0.20919999480247498,
+              0.18598000705242157,
+              0.19354000687599182,
+              0.20734000205993652,
+              0.1880200058221817,
+              0.19505999982357025,
+              0.1878799945116043
+            ],
+            "count": 10,
+            "mean": 0.2779920056462288,
+            "sample_sd": 0.2552444162577626
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                1.75996875,
+                1.65996875,
+                1.65996875,
+                1.53996875,
+                1.59996875,
+                1.45996875,
+                1.63996875,
+                1.49996875,
+                1.59996875,
+                1.49996875
+              ],
+              "count": 10,
+              "mean": 1.59196875,
+              "sample_sd": 0.09247221805013173
+            },
+            "device_active_union_us": {
+              "samples": [
+                1.75996875,
+                1.65996875,
+                1.65996875,
+                1.53996875,
+                1.59996875,
+                1.45996875,
+                1.63996875,
+                1.49996875,
+                1.59996875,
+                1.49996875
+              ],
+              "count": 10,
+              "mean": 1.59196875,
+              "sample_sd": 0.09247221805013173
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                1.75996875,
+                1.65996875,
+                1.65996875,
+                1.53996875,
+                1.59996875,
+                1.45996875,
+                1.63996875,
+                1.49996875,
+                1.59996875,
+                1.49996875
+              ],
+              "count": 10,
+              "mean": 1.59196875,
+              "sample_sd": 0.09247221805013173
+            },
+            "operation_active_union_us": {
+              "samples": [
+                1.75996875,
+                1.65996875,
+                1.65996875,
+                1.53996875,
+                1.59996875,
+                1.45996875,
+                1.63996875,
+                1.49996875,
+                1.59996875,
+                1.49996875
+              ],
+              "count": 10,
+              "mean": 1.59196875,
+              "sample_sd": 0.09247221805013173
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_factored"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "6e4ba76b764ca735d341475b719250e7343fce3c0fcd4f017e132e23338c0f67",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "7c1c96c894d1a72c6d16a8b882ef8a2eb20cede76f8abc1698e8956e94d3d330",
+                "ttadapter": "2d995fe11e7df3dcf6820ce714826502ea713fac52cbdec73ccad181c090020d",
+                "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "6e4ba76b764ca735d341475b719250e7343fce3c0fcd4f017e132e23338c0f67",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "7c1c96c894d1a72c6d16a8b882ef8a2eb20cede76f8abc1698e8956e94d3d330",
+                "ttadapter": "2d995fe11e7df3dcf6820ce714826502ea713fac52cbdec73ccad181c090020d",
+                "npubin": "7604f4837a7b258d18898997c4334eac79a87992ec5dd49396803deb39a21d1c"
+              }
+            }
+          ],
+          "trace_sha256": "274ad3f303aaf8e8f3c4cc53b207877590ff9b1d07afe366e71e221258902454",
+          "accounting_sha256": "26b75621a0a03e4d6bb76f947a463d892e8d7143435e9201d517e6f1face692b"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T09-03",
+      "role": "heldout",
+      "parameters": {
+        "rows": 512,
+        "D": 2048
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 3.725290298461914e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06,
+            "paired_exact_bits": false,
+            "paired_max_absolute_error": 7.450580596923828e-09
+          }
+        }
+      },
+      "fixture_sha256": "03872d25717a697418485d1c605ba36103ce08eed07c5b28f009a2691e70d497",
+      "source_sha256": {
+        "l2_backward.py": "191d6726ad99a1962eeba2ff8a47ac397735bcdd6b3ad0ce74ee10200639c335",
+        "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+        "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 2048,
+              "num_warps": 4
+            },
+            "grid": [
+              512
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                2048,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                2048,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.6252800226211548,
+              0.20625999569892883,
+              0.1975799947977066,
+              0.18286000192165375,
+              0.17900000512599945,
+              0.17550000548362732,
+              0.17521999776363373,
+              0.17737999558448792,
+              0.17893999814987183,
+              0.17244000732898712
+            ],
+            "count": 10,
+            "mean": 0.22704600244760514,
+            "sample_sd": 0.14033970617465752
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                17.659640625,
+                16.119671875,
+                15.6796875,
+                15.879671875,
+                15.319703125,
+                15.399703125,
+                15.0196875,
+                15.159703125,
+                15.8396875,
+                15.699671875
+              ],
+              "count": 10,
+              "mean": 15.7776828125,
+              "sample_sd": 0.7451865307829078
+            },
+            "device_active_union_us": {
+              "samples": [
+                17.659640625,
+                16.119671875,
+                15.6796875,
+                15.879671875,
+                15.319703125,
+                15.399703125,
+                15.0196875,
+                15.159703125,
+                15.8396875,
+                15.699671875
+              ],
+              "count": 10,
+              "mean": 15.7776828125,
+              "sample_sd": 0.7451865307829078
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                17.659640625,
+                16.119671875,
+                15.6796875,
+                15.879671875,
+                15.319703125,
+                15.399703125,
+                15.0196875,
+                15.159703125,
+                15.8396875,
+                15.699671875
+              ],
+              "count": 10,
+              "mean": 15.7776828125,
+              "sample_sd": 0.7451865307829078
+            },
+            "operation_active_union_us": {
+              "samples": [
+                17.659640625,
+                16.119671875,
+                15.6796875,
+                15.879671875,
+                15.319703125,
+                15.399703125,
+                15.0196875,
+                15.159703125,
+                15.8396875,
+                15.699671875
+              ],
+              "count": 10,
+              "mean": 15.7776828125,
+              "sample_sd": 0.7451865307829078
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_kernel1"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "3d2efda3f9c1c9523cfd486505f846d7801d0aedfe0e6cf0b10a759c57e7ae11",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "6b20b26128270d6301dd24986240d47046d3b1285a79110a24d08be20c17946b",
+                "ttadapter": "577219042cce76eb4068b85a74229625a24bf3b52c4a10586bdfcf0e625718b1",
+                "npubin": "47993d346dad1218fd559657e6cf1e1e3c2ca32891f6dc5e8caa14edd9796d79"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "3d2efda3f9c1c9523cfd486505f846d7801d0aedfe0e6cf0b10a759c57e7ae11",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "6b20b26128270d6301dd24986240d47046d3b1285a79110a24d08be20c17946b",
+                "ttadapter": "577219042cce76eb4068b85a74229625a24bf3b52c4a10586bdfcf0e625718b1",
+                "npubin": "47993d346dad1218fd559657e6cf1e1e3c2ca32891f6dc5e8caa14edd9796d79"
+              }
+            }
+          ],
+          "trace_sha256": "6176670efd4e3a4b38955183c3e3750ec27b711d4105a1cd384664f97558dd8d",
+          "accounting_sha256": "9fd4b0aa6b8dcdf6aed8d63c30f4030e1efd51d383c21187ec529b2801e689c2"
+        },
+        "after": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 2048,
+              "num_warps": 4
+            },
+            "grid": [
+              512
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                2048,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                2048,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9840999841690063,
+              0.18021999299526215,
+              0.17112000286579132,
+              0.16609999537467957,
+              0.16342000663280487,
+              0.15693999826908112,
+              0.1707800030708313,
+              0.17791999876499176,
+              0.1568399965763092,
+              0.15265999734401703
+            ],
+            "count": 10,
+            "mean": 0.24800999760627745,
+            "sample_sd": 0.25879531933414424
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                18.739625,
+                16.199671875,
+                15.6396875,
+                15.6596875,
+                14.8396875,
+                16.279671875,
+                15.8796875,
+                15.6196875,
+                16.259671875,
+                17.27965625
+              ],
+              "count": 10,
+              "mean": 16.2396734375,
+              "sample_sd": 1.0803920008053502
+            },
+            "device_active_union_us": {
+              "samples": [
+                18.739625,
+                16.199671875,
+                15.6396875,
+                15.6596875,
+                14.8396875,
+                16.279671875,
+                15.8796875,
+                15.6196875,
+                16.259671875,
+                17.27965625
+              ],
+              "count": 10,
+              "mean": 16.2396734375,
+              "sample_sd": 1.0803920008053502
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                18.739625,
+                16.199671875,
+                15.6396875,
+                15.6596875,
+                14.8396875,
+                16.279671875,
+                15.8796875,
+                15.6196875,
+                16.259671875,
+                17.27965625
+              ],
+              "count": 10,
+              "mean": 16.2396734375,
+              "sample_sd": 1.0803920008053502
+            },
+            "operation_active_union_us": {
+              "samples": [
+                18.739625,
+                16.199671875,
+                15.6396875,
+                15.6596875,
+                14.8396875,
+                16.279671875,
+                15.8796875,
+                15.6196875,
+                16.259671875,
+                17.27965625
+              ],
+              "count": 10,
+              "mean": 16.2396734375,
+              "sample_sd": 1.0803920008053502
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_factored"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "3fcd679635079fb55b52cc75edd5b16115f3c9fe12189d6203cfc619269a2363",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "d85885df15ecb6dd0234aa1125cfcedc5d57d2740bffdeb6860715b6e57da110",
+                "ttadapter": "be17575401956640b4b186d8d9b61035554ead1c70e89d4f3942754676f8862a",
+                "npubin": "463e2cf5c9369614a2f2460b2549c33c479aee36b91dd3150644f1852596f22e"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "3fcd679635079fb55b52cc75edd5b16115f3c9fe12189d6203cfc619269a2363",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "d85885df15ecb6dd0234aa1125cfcedc5d57d2740bffdeb6860715b6e57da110",
+                "ttadapter": "be17575401956640b4b186d8d9b61035554ead1c70e89d4f3942754676f8862a",
+                "npubin": "463e2cf5c9369614a2f2460b2549c33c479aee36b91dd3150644f1852596f22e"
+              }
+            }
+          ],
+          "trace_sha256": "e3ba3053c301b1b44436550f2664093a21e509ab4429b939e4b921a4ed9d5013",
+          "accounting_sha256": "542123324a348374dc39fee1999757d4ddd2d9bb9804e283a25a440e10f35890"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T09-04",
+      "role": "heldout",
+      "parameters": {
+        "rows": 33,
+        "D": 4096
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 1.862645149230957e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 1.862645149230957e-09,
+            "rtol": 2e-05,
+            "atol": 2e-06,
+            "paired_exact_bits": false,
+            "paired_max_absolute_error": 3.725290298461914e-09
+          }
+        }
+      },
+      "fixture_sha256": "cad9759c939c81656f42ffc42b73bde062e09a1b12b69318a995799959d6ff09",
+      "source_sha256": {
+        "l2_backward.py": "191d6726ad99a1962eeba2ff8a47ac397735bcdd6b3ad0ce74ee10200639c335",
+        "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+        "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+      },
+      "arms": {
+        "before": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 4096,
+              "num_warps": 4
+            },
+            "grid": [
+              33
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                4096,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                4096,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              1.136680006980896,
+              0.20360000431537628,
+              0.19499999284744263,
+              0.1685599982738495,
+              0.20338000357151031,
+              0.16062000393867493,
+              0.17455999553203583,
+              0.16264000535011292,
+              0.16913999617099762,
+              0.2120800018310547
+            ],
+            "count": 10,
+            "mean": 0.27862600088119505,
+            "sample_sd": 0.30208145093027083
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                10.019796875,
+                5.21990625,
+                4.519921875,
+                4.23990625,
+                4.179921875,
+                4.119921875,
+                4.43990625,
+                4.599921875,
+                4.27990625,
+                4.19990625
+              ],
+              "count": 10,
+              "mean": 4.9819015625,
+              "sample_sd": 1.7991102608178218
+            },
+            "device_active_union_us": {
+              "samples": [
+                10.019796875,
+                5.21990625,
+                4.519921875,
+                4.23990625,
+                4.179921875,
+                4.119921875,
+                4.43990625,
+                4.599921875,
+                4.27990625,
+                4.19990625
+              ],
+              "count": 10,
+              "mean": 4.9819015625,
+              "sample_sd": 1.7991102608178218
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                10.019796875,
+                5.21990625,
+                4.519921875,
+                4.23990625,
+                4.179921875,
+                4.119921875,
+                4.43990625,
+                4.599921875,
+                4.27990625,
+                4.19990625
+              ],
+              "count": 10,
+              "mean": 4.9819015625,
+              "sample_sd": 1.7991102608178218
+            },
+            "operation_active_union_us": {
+              "samples": [
+                10.019796875,
+                5.21990625,
+                4.519921875,
+                4.23990625,
+                4.179921875,
+                4.119921875,
+                4.43990625,
+                4.599921875,
+                4.27990625,
+                4.19990625
+              ],
+              "count": 10,
+              "mean": 4.9819015625,
+              "sample_sd": 1.7991102608178218
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_kernel1"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "9960d2b272482d703d98712e28168650aeb93bc716739e4cdf369c646e41f506",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "f162298216174aa9d88b23f5efcbb8524328a9be63165df3c583dd09780874fd",
+                "ttadapter": "1d76abe43430f208d90ceabef03cda68a18861cd143c4684952c1e4c5441af01",
+                "npubin": "6d7a49400ff93569dce87ce17f00874a4ee32150a14b5894000ef7139f7e96d9"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "9960d2b272482d703d98712e28168650aeb93bc716739e4cdf369c646e41f506",
+              "name": "l2norm_bwd_kernel1",
+              "binaries": {
+                "ttir": "f162298216174aa9d88b23f5efcbb8524328a9be63165df3c583dd09780874fd",
+                "ttadapter": "1d76abe43430f208d90ceabef03cda68a18861cd143c4684952c1e4c5441af01",
+                "npubin": "6d7a49400ff93569dce87ce17f00874a4ee32150a14b5894000ef7139f7e96d9"
+              }
+            }
+          ],
+          "trace_sha256": "dbd307499fb43508eddc121c56640e5607047514fb65f9e47212355477eb9bc7",
+          "accounting_sha256": "83907dac1e6d866a6711a12083163a9e458629d08067eea2e44616aef18b7716"
+        },
+        "after": {
+          "metadata": {
+            "component": "provided-saved-state L2 backward only",
+            "configuration": {
+              "BD": 4096,
+              "num_warps": 4
+            },
+            "grid": [
+              33
+            ],
+            "device_kernel_calls": 1,
+            "reused_output": true,
+            "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+            "allocator_limit": "no allocation or complete model latency claim",
+            "input_strides": {
+              "y": [
+                4096,
+                1
+              ],
+              "rstd": [
+                1
+              ],
+              "dy": [
+                4096,
+                1
+              ]
+            }
+          },
+          "event_latency_ms": {
+            "samples": [
+              0.9757000207901001,
+              0.20484000444412231,
+              0.190420001745224,
+              0.19915999472141266,
+              0.17343999445438385,
+              0.2033199965953827,
+              0.18644000589847565,
+              0.18104000389575958,
+              0.19130000472068787,
+              0.18637999892234802
+            ],
+            "count": 10,
+            "mean": 0.2692040026187897,
+            "sample_sd": 0.24842962240600097
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                9.3998125,
+                5.439890625,
+                3.819921875,
+                3.8399375,
+                4.25990625,
+                4.219921875,
+                3.919921875,
+                3.899921875,
+                4.139921875,
+                4.159921875
+              ],
+              "count": 10,
+              "mean": 4.7099078125,
+              "sample_sd": 1.7135770035529705
+            },
+            "device_active_union_us": {
+              "samples": [
+                9.3998125,
+                5.439890625,
+                3.819921875,
+                3.8399375,
+                4.25990625,
+                4.219921875,
+                3.919921875,
+                3.899921875,
+                4.139921875,
+                4.159921875
+              ],
+              "count": 10,
+              "mean": 4.7099078125,
+              "sample_sd": 1.7135770035529705
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                9.3998125,
+                5.439890625,
+                3.819921875,
+                3.8399375,
+                4.25990625,
+                4.219921875,
+                3.919921875,
+                3.899921875,
+                4.139921875,
+                4.159921875
+              ],
+              "count": 10,
+              "mean": 4.7099078125,
+              "sample_sd": 1.7135770035529705
+            },
+            "operation_active_union_us": {
+              "samples": [
+                9.3998125,
+                5.439890625,
+                3.819921875,
+                3.8399375,
+                4.25990625,
+                4.219921875,
+                3.919921875,
+                3.899921875,
+                4.139921875,
+                4.159921875
+              ],
+              "count": 10,
+              "mean": 4.7099078125,
+              "sample_sd": 1.7135770035529705
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "kernel_identity": {
+            "status": "complete",
+            "names": [
+              "l2norm_bwd_factored"
+            ],
+            "missing": [],
+            "source": "same ten-forward capture"
+          },
+          "compilation_before": [
+            {
+              "hash": "dc5fa5e20c691985bd3357cf22f3ab1b392bc451bed42e187a2e6b5c77b23673",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "d59694969f08d0ea59c6c7ae58c6858ece59df6bcb0d5573aae5d631541e1cbc",
+                "ttadapter": "a5f1289cb0c0ef03cf4fe4e59efa838b43c143df207af99196733173977f3de4",
+                "npubin": "82f2d891d1a6ae9b3f863d5a681d8f16a455837ef0512da1f9d9c692404f7747"
+              }
+            }
+          ],
+          "compilation_after": [
+            {
+              "hash": "dc5fa5e20c691985bd3357cf22f3ab1b392bc451bed42e187a2e6b5c77b23673",
+              "name": "l2norm_bwd_factored",
+              "binaries": {
+                "ttir": "d59694969f08d0ea59c6c7ae58c6858ece59df6bcb0d5573aae5d631541e1cbc",
+                "ttadapter": "a5f1289cb0c0ef03cf4fe4e59efa838b43c143df207af99196733173977f3de4",
+                "npubin": "82f2d891d1a6ae9b3f863d5a681d8f16a455837ef0512da1f9d9c692404f7747"
+              }
+            }
+          ],
+          "trace_sha256": "ad983e62c2e6be35b1433645566e7decaf7728967caf6b227b7f454e41656542",
+          "accounting_sha256": "f435947853f72ea91242b06b71dead9c1ee788f810c966231f4a3a071f65214d"
+        }
+      }
+    },
+    {
+      "case_id": "W008-T09-GA",
+      "role": "guard",
+      "parameters": {
+        "rows": 3,
+        "D": 513,
+        "zero_parallel_cancel": true
+      },
+      "correctness": {
+        "before": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 1.5397146058138134e-10,
+            "rtol": 2e-05,
+            "atol": 2e-06
+          }
+        },
+        "after": {
+          "status": "complete",
+          "calls": 1,
+          "diagnostics": {
+            "passed": true,
+            "max_absolute_error": 1.5397146058138134e-10,
+            "rtol": 2e-05,
+            "atol": 2e-06,
+            "paired_exact_bits": true,
+            "paired_max_absolute_error": 0.0
+          }
+        }
+      },
+      "fixture_sha256": "9c5df87f3ecec48f1d41d890a4eca7a0b8c57254b57e52a1d2a4669690cde63b",
+      "source_sha256": {
+        "l2_backward.py": "191d6726ad99a1962eeba2ff8a47ac397735bcdd6b3ad0ce74ee10200639c335",
+        "l2_backward_contract.py": "9ac60daa53c675ad97f69c8315572747c9b85efe0384e9dc2169996547488b72",
+        "l2_backward_kernels.py": "24aeb52d829ca630a899918972392ca3f30e2d06a7beac20730eaca854ea0617"
+      }
+    }
+  ]
+}

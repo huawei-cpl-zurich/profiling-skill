@@ -1,0 +1,89 @@
+{
+  "cases": [
+    {
+      "name": "W008-T09-01",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "contiguous-fp32",
+        "D=1024"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous Y/DY[rows,D] strides[D,1],RSTD[rows] stride1; private DX offset32 in rowsxD+64; masked BD padding, maxindex1048575<int32; immutability/canaries and fixed given-state CPU FP64 tolerance"
+      }
+    },
+    {
+      "name": "W008-T09-02",
+      "performance": true,
+      "scenario": [
+        "gallery",
+        "contiguous-fp32",
+        "D=1024"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous Y/DY[rows,D] strides[D,1],RSTD[rows] stride1; private DX offset32 in rowsxD+64; masked BD padding, maxindex1048575<int32; immutability/canaries and fixed given-state CPU FP64 tolerance"
+      }
+    },
+    {
+      "name": "W008-T09-03",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "contiguous-fp32",
+        "D=2048"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous Y/DY[rows,D] strides[D,1],RSTD[rows] stride1; private DX offset32 in rowsxD+64; masked BD padding, maxindex1048575<int32; immutability/canaries and fixed given-state CPU FP64 tolerance"
+      }
+    },
+    {
+      "name": "W008-T09-04",
+      "performance": true,
+      "scenario": [
+        "heldout",
+        "contiguous-fp32",
+        "D=4096"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous Y/DY[rows,D] strides[D,1],RSTD[rows] stride1; private DX offset32 in rowsxD+64; masked BD padding, maxindex1048575<int32; immutability/canaries and fixed given-state CPU FP64 tolerance"
+      }
+    },
+    {
+      "name": "W008-T09-GA",
+      "performance": false,
+      "scenario": [
+        "guard",
+        "contiguous-fp32",
+        "D=513"
+      ],
+      "correct": true,
+      "route": "optimized",
+      "compile_probe": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "contiguous Y/DY[rows,D] strides[D,1],RSTD[rows] stride1; private DX offset32 in rowsxD+64; masked BD padding, maxindex1048575<int32; immutability/canaries and fixed given-state CPU FP64 tolerance"
+      }
+    }
+  ]
+}

@@ -48,7 +48,7 @@ class Adapter:
         for shape in ((b,l,d),(n,d)):
             size=1
             for dim in shape:size*=dim
-            buffer=torch.full((size+64,),12345.).to(device);buffers.append(buffer);outputs.append(buffer[32:-32].view(shape))
+            buffer=torch.full((size+64,),12345.,dtype=torch.float32).to(device);buffers.append(buffer);outputs.append(buffer[32:-32].view(shape))
         prefix_buffer=torch.full((b+65,),-12345,dtype=torch.int32).to(device);starts=prefix_buffer[32:-32]
         grid=(b,(l+63)//64,(d+63)//64);flags=dict(num_warps=4,num_stages=1,multibuffer=False,enable_fp_fusion=False)
         if arm=='before':

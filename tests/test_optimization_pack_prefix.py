@@ -36,7 +36,10 @@ class PackTests(unittest.TestCase):
                 with self.assertRaises(ValueError):op.Adapter().compile_probe('before',dict(spec,lengths=lengths),None)
 
     def test_compile_atomic_retry_probe_no_launch_and_repeated_both_orders(self):
-        spec=dict(B=2,Lmax=7,D=5,lengths=[0,7],seed=190204);f=c.make_case(spec)
+        self._exercise_mocked_prepared()
+
+    def _exercise_mocked_prepared(self,seed=190204):
+        spec=dict(B=2,Lmax=7,D=5,lengths=[0,7],seed=seed);f=c.make_case(spec)
         class Kernel:
             def __init__(self,name):self.fn=NS(__name__=name);self.launches=0;self.compiles=0;self.fail=False
             def warmup(self,*a,**kw):
@@ -68,6 +71,7 @@ class PackTests(unittest.TestCase):
             for order in [('before','after'),('after','before')]:
                 for i,arm in enumerate(order):
                     item=adapter.prepare(arm,spec,f,None);actual=item.run();again=item.run()
+                    self.assertEqual([value.dtype for value in actual],[torch.float32,torch.float32])
                     self.assertTrue(all(a is b for a,b in zip(actual,again)))
                     result=adapter.validate(arm,actual,f,spec);self.assertTrue(result['passed']);self.assertEqual('paired_exact_bits' in result,i==1)
                     if arm=='after':self.assertTrue(result['prefix_exact'])
@@ -78,6 +82,17 @@ class PackTests(unittest.TestCase):
             self.assertFalse(adapter.validate('after',actual,f,spec)['passed']);state['inputs']['x'].copy_(f['inputs']['x'])
             adapter.state['after']['starts'][0]=1
             self.assertFalse(adapter.validate('after',actual,f,spec)['passed'])
+
+    def test_fp32_outputs_ignore_changed_global_default_dtype(self):
+        original=torch.get_default_dtype()
+        try:
+            for i,dtype in enumerate((torch.float64,torch.float16)):
+                with self.subTest(default_dtype=dtype):
+                    torch.set_default_dtype(dtype)
+                    self._exercise_mocked_prepared(seed=190207+i)
+        finally:
+            torch.set_default_dtype(original)
+        self.assertEqual(torch.get_default_dtype(),original)
 
     def test_cache_nested_role_and_external_cli_admission(self):
         sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))

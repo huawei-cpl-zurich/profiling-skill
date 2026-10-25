@@ -76,3 +76,13 @@ all samples and raw supported PMU columns; full vendor trees remain remote.
 Four functional CPU tests also passed on the native A3 target using nonfrozen
 cases and seeds above190000. The standalone public CLI is exploratory and does
 not implement the frozen all-case scientific collector.
+
+The single frozen-head review wave identified a host allocation bug under changed
+Torch global defaults. Publication now explicitly allocates both outputs as FP32.
+Nonfrozen CPU/mock regressions under float64 and float16 defaults pass and restore
+the caller default afterward. All five functional tests passed a native A3
+CPU-only followup gate, with no real compilation, scientific oracle generation,
+NPU numerical calls or profiles. R02-publication.json separates original measured
+adapter hashes from the updated host hash; provider, JIT, fixtures, binaries and
+all measured results remain unchanged. GitHub Codex reviewed the original
+measured head with no findings; no recursive review wave was requested.

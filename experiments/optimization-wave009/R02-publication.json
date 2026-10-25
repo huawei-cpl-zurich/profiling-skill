@@ -1,0 +1,63 @@
+{
+  "study": "R02",
+  "measured_head": "ee1aa33abae15405faab8cb2da07a61596c0a51a",
+  "measured_compact_sha256": "7738f00c9467d0df39acac5dc773508f82d3b6dc1ee82b46a199a62ab7645571",
+  "measured_samples_and_compilation": "unchanged original R02-results/metrics/compilation/codegen fixtures",
+  "host_fix": "explicit FP32 output allocation independent of torch global default dtype",
+  "source_bindings": {
+    "pack_prefix.py": {
+      "measured_sha256": "b5f7a7d8419c49461c018f3496df85968bca040b3df85a0238508a46cc905a3b",
+      "published_sha256": "e96b381ef6a76833d217cc50320f3807123de3c45a214226c705d6bd1baa6a74",
+      "unchanged": false
+    },
+    "pack_prefix_contract.py": {
+      "measured_sha256": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+      "published_sha256": "27d51c8d2d5724a109d1fe03d0cf3d5f85e73d0b4a418ea6788c21bc52c31bab",
+      "unchanged": true
+    },
+    "pack_prefix_kernels.py": {
+      "measured_sha256": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f",
+      "published_sha256": "8cf1cda72acfed780c679297c0f44cf0f0e0eb2a46664df0cac25fb3861b015f",
+      "unchanged": true
+    }
+  },
+  "validation": {
+    "local_tests": 5,
+    "local_passed": true,
+    "regression_baseline": "both float64 and float16 defaults failed before fix",
+    "remote_cpu_gate": {
+      "target": "bz-a3-2",
+      "handle": "remote:bz-a3-2:job:20261025T030103Z-bf7214b70d94",
+      "state": "completed",
+      "exit": 0,
+      "tests": 5,
+      "seconds": 5.956,
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "profiles": 0,
+      "fixture_scope": "NONFROZEN seeds1902xx only; CPU backend mocked; actual JIT module not imported",
+      "npu_runtime_module_present": true,
+      "receipt_sha256": "7071896d92c9f4d748b13cb9f3d25017aceeb857b4d54ece3716b1f3337add8c"
+    }
+  },
+  "new_scientific_oracles": 0,
+  "new_real_compiles": 0,
+  "new_npu_correctness_calls": 0,
+  "new_profile_calls": 0,
+  "review_consolidation": {
+    "head": "ee1aa33abae15405faab8cb2da07a61596c0a51a",
+    "behavior": "P2 explicit FP32 allocation; no further findings",
+    "tests": "same P2; no further findings",
+    "interfaces": "same P2; no further findings",
+    "resolution": "fixed host dtype allocation with both-global-dtype regressions and CPU-only native A3 gate",
+    "github": {
+      "head": "ee1aa33abae15405faab8cb2da07a61596c0a51a",
+      "status": "completed",
+      "findings": false,
+      "url": "https://github.com/huawei-cpl-zurich/profiling-skill/pull/259#issuecomment-6392605404"
+    },
+    "review_waves": 1,
+    "new_review_requested": false
+  },
+  "original_evidence_files_unchanged": true
+}

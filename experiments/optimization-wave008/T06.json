@@ -1,0 +1,101 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T06",
+  "task": "optimization-w008-compressor-ratio2-pooling",
+  "title": "Ratio-two source pooling specialization with preserved BF16 boundary",
+  "source_files": [
+    "source__src__triton_ascend_kernels__attention__compressor.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T06-01",
+      "role": "gallery",
+      "seed": 80601,
+      "parameters": {
+        "G": 128,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T06-02",
+      "role": "gallery",
+      "seed": 80602,
+      "parameters": {
+        "G": 1,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T06-03",
+      "role": "heldout",
+      "seed": 80603,
+      "parameters": {
+        "G": 1024,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T06-04",
+      "role": "heldout",
+      "seed": 80604,
+      "parameters": {
+        "G": 33,
+        "ratio": 2,
+        "start_pos": 0
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T06-GA",
+      "role": "guard",
+      "seed": 80691,
+      "parameters": {
+        "G": 3,
+        "ratio": 3,
+        "start_pos": 0
+      }
+    },
+    {
+      "case_id": "W008-T06-GB",
+      "role": "guard",
+      "seed": 80692,
+      "parameters": {
+        "G": 1,
+        "ratio": 2,
+        "start_pos": 1,
+        "used_len": 1,
+        "residual": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared pooling COMPONENT provided projected KV/SCORE FP32[used_len,512], norm_w BF16[512], cache FP32[1,8,1024] when residual. No projections/cache update/full compressor timing. Normal used_len=G*ratio,start0; residual guard one previous cached token plus one current token, exactly one complete group. Inputs KV q/128 q[-128,128],scores q/64 q[-192,192], norm weights dyadic BF16[.5,1]. Output BF16[G,512]. Cache/input immutable and output private.",
+    "before": "Exact source _pooled_blocked helper general three-pass max/exp/weighted sum, RATIO_PAD=nextpow2(ratio),CHUNK_ROWS=2. ONE group/program common gridG so helper1D and ratio2 vectors same group ownership, no task batching confound. Common _norm_store_1g unchanged.",
+    "after": "Source ratio2 scalar-row formula maximum(s0,s1),e0/e1,pooled=(e0/(e0+e1))*kv0+(e1/(e0+e1))*kv1. Only ratio2 and no residual; exact SAME general helper fallback for ratio3 or residual. Do not combine T01 projection/T07 cache/T11 initialization. BF16 pooled round->FP32 BEFORE variance/RMS eps1e-6 then final BF16 absolutely retained both.",
+    "oracle": "One CPU FP64 stable softmaxweightedpool with actually provided values, round pooled to BF16 then decodeFP64 and RMS normalization eps1e-6 then BF16 expected. Fixed output atol0.03125 rtol0.015625 covers bounded BF16 two-stage quantization and finite reduction rounding; record absolute/relative distributions and rounded-pool differences separately where correctness path can return diagnostic intermediates ONCE, never during profiles. No posthoc fixture margin filtering or tolerance changes. Numeric contract not paired bits on fast path; fallback exact paired bits required. All outputs finite, dtype/shape/canaries/immutability. Cache guard token0 in slot0 [KV|SCORE], token1 currentrow0; no out-of-bounds or cachewrites.",
+    "codegen": "Compile all main+guards before CPU oracle/math; source helper may compiler-CSE to same effective program, retain compiler noop, no artificial reload/barrier. ONE group/program both exact chosen common source helper component parameterization, no full public launcher speed claim. Resource evidence actual selected ELF/text/relocs and raw reported fields, no invented UB.",
+    "claims": "Prospective source specialization benefit versus live vectors/roundoff/compiler-noop. Four full pairs only once correctness then10 prepared complete API forwards each side, guards correctness only. No hidden source projection/cache maintenance omitted from claimed COMPONENT."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__attention__compressor.py",
+      "sha256": "5b1d0219bedea1e56615b69305fad9d464679a2ce9d0ae1ed0beaba4e60fb4c4"
+    }
+  ]
+}

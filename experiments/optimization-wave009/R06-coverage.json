@@ -1,0 +1,101 @@
+{
+  "status": "UNQUALIFIED-negative-inventory-audit-expected-to-fail",
+  "cases": [
+    {
+      "name": "W009-R06-01",
+      "performance": true,
+      "route": "unsupported",
+      "compile_probe": false,
+      "correct": false,
+      "reason": "first source compile requires unavailable triton.language.insert_slice; remaining cells/oracles/math/profiles unattempted",
+      "scenario": [
+        "gallery",
+        "FP32",
+        "seq1-width4-state3",
+        "contiguous-channel-major",
+        "indexed=False",
+        "silu=False"
+      ]
+    },
+    {
+      "name": "W009-R06-02",
+      "performance": true,
+      "route": "unattempted",
+      "compile_probe": false,
+      "correct": false,
+      "reason": "first source compile requires unavailable triton.language.insert_slice; remaining cells/oracles/math/profiles unattempted",
+      "scenario": [
+        "gallery",
+        "FP32",
+        "seq1-width4-state3",
+        "contiguous-channel-major",
+        "indexed=True",
+        "silu=True"
+      ]
+    },
+    {
+      "name": "W009-R06-03",
+      "performance": true,
+      "route": "unattempted",
+      "compile_probe": false,
+      "correct": false,
+      "reason": "first source compile requires unavailable triton.language.insert_slice; remaining cells/oracles/math/profiles unattempted",
+      "scenario": [
+        "heldout",
+        "FP32",
+        "seq1-width4-state3",
+        "contiguous-channel-major",
+        "indexed=False",
+        "silu=False"
+      ]
+    },
+    {
+      "name": "W009-R06-04",
+      "performance": true,
+      "route": "unattempted",
+      "compile_probe": false,
+      "correct": false,
+      "reason": "first source compile requires unavailable triton.language.insert_slice; remaining cells/oracles/math/profiles unattempted",
+      "scenario": [
+        "heldout",
+        "FP32",
+        "seq1-width4-state3",
+        "contiguous-channel-major",
+        "indexed=True",
+        "silu=True"
+      ]
+    },
+    {
+      "name": "W009-R06-GA",
+      "performance": false,
+      "route": "unattempted",
+      "compile_probe": false,
+      "correct": false,
+      "reason": "first source compile requires unavailable triton.language.insert_slice; remaining cells/oracles/math/profiles unattempted",
+      "scenario": [
+        "guard",
+        "FP32",
+        "seq1-width4-state3",
+        "contiguous-channel-major",
+        "indexed=True",
+        "silu=False"
+      ]
+    },
+    {
+      "name": "W009-R06-GB",
+      "performance": false,
+      "route": "unattempted",
+      "compile_probe": false,
+      "correct": false,
+      "reason": "first source compile requires unavailable triton.language.insert_slice; remaining cells/oracles/math/profiles unattempted",
+      "scenario": [
+        "guard",
+        "FP32",
+        "seq1-width4-state3",
+        "contiguous-channel-major",
+        "indexed=True",
+        "silu=True"
+      ]
+    }
+  ]
+}

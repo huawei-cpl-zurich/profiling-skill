@@ -1,0 +1,123 @@
+{
+  "study": "R06",
+  "status": "baseline-source-compile-unsupported",
+  "numeric_qualified": false,
+  "performance_qualified": false,
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "frozen_sha256": "dfa80508e00a7e588284e968645369813c23a543d2193c736ef50286ee0c60a6",
+  "target": "bz-a3-2",
+  "product": "9382 Ascend910V1",
+  "physical": 0,
+  "npu": 0,
+  "chip": 0,
+  "observed_cube_cores": 24,
+  "observed_vector_cores": 48,
+  "runtime_packages": {
+    "torch": "2.10.0+cpu",
+    "torch-npu": "2.10.0",
+    "triton": "3.5.0",
+    "triton-ascend": "3.2.2"
+  },
+  "imported_triton": "3.2.0",
+  "failure": {
+    "type": "AttributeError",
+    "message": "module 'triton.language' has no attribute 'insert_slice'"
+  },
+  "phase": {
+    "phase": "before-input-only-probe-and-compile",
+    "case_id": "W009-R06-01",
+    "arm": "before",
+    "scientific_api_entries": 0,
+    "preparation_entries": 2
+  },
+  "counts": {
+    "compile_qualification_attempts": 1,
+    "compiled_kernels": 0,
+    "scientific_cpu_payloads": 0,
+    "numeric_correctness_calls": 0,
+    "profiled_api_calls": 0,
+    "captures": 0
+  },
+  "cells": [
+    {
+      "case_id": "W009-R06-01",
+      "arm": "before",
+      "status": "failed-before-codegen"
+    },
+    {
+      "case_id": "W009-R06-01",
+      "arm": "after",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-02",
+      "arm": "before",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-02",
+      "arm": "after",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-03",
+      "arm": "before",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-03",
+      "arm": "after",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-04",
+      "arm": "before",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-04",
+      "arm": "after",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-GA",
+      "arm": "before",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-GA",
+      "arm": "after",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-GB",
+      "arm": "before",
+      "status": "unattempted"
+    },
+    {
+      "case_id": "W009-R06-GB",
+      "arm": "after",
+      "status": "unattempted"
+    }
+  ],
+  "identity_screen": "unattempted, source missing required language intrinsic before codegen",
+  "compact": {
+    "bytes": 62275,
+    "files": 33,
+    "sha256": "9d5d05ed378033d2c837c374c388d217dc3b7101591daf8020229eceb80a201a",
+    "all_verified": true
+  },
+  "release_proof_sha256": "44869b08f770360bd0e8a1c258b3ea1fa22f54a6704773316b120ef9610fb2ef",
+  "science_handle": "remote:bz-a3-2:job:20261025T033703Z-7276cef3fb85",
+  "source_retuned": false,
+  "scientific_replays": 0,
+  "observed_CANN": "9.1.0",
+  "attempted_source_sha256": {
+    "causal_window_contract.py": "15a9c8fb9db305b77bb042421f394ff9ab5ef0a4167ea66e50ee37845a8c2b88",
+    "causal_window.py": "cd62b6cf0d91bf62f396554f6a99bfe829251b8b2aeca630c2cb66eb3d44a68d",
+    "causal_window_kernels.py": "79006ee057a198a06f75528868236d3493493c5209087e96b1e6681842063be1",
+    "causal_window_screen.py": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+    "causal_window_source.py": "ee4ebe986c807a11c4f33a120170d6cbb71b338a5af9b3eb2c59bfe9eaa19e77"
+  },
+  "publication_host_receipt": "R06-publication.json"
+}

@@ -1,0 +1,51 @@
+{
+  "study": "R06",
+  "numeric_qualified": false,
+  "default_numeric_paths": "disabled before CPU oracle/cache/backend/NPU input transfer",
+  "inspection_only": "Adapter.compile_probe or --inspect-compile; compile_only/error artifacts retained, run rejects",
+  "source_bindings": {
+    "causal_window_contract.py": {
+      "attempted_sha256": "15a9c8fb9db305b77bb042421f394ff9ab5ef0a4167ea66e50ee37845a8c2b88",
+      "published_sha256": "15a9c8fb9db305b77bb042421f394ff9ab5ef0a4167ea66e50ee37845a8c2b88",
+      "unchanged": true
+    },
+    "causal_window.py": {
+      "attempted_sha256": "cd62b6cf0d91bf62f396554f6a99bfe829251b8b2aeca630c2cb66eb3d44a68d",
+      "published_sha256": "36dd32ac46ba2e9f5be504063c3625531911b451412c2aaa0a6ffec0038fd271",
+      "unchanged": false
+    },
+    "causal_window_kernels.py": {
+      "attempted_sha256": "79006ee057a198a06f75528868236d3493493c5209087e96b1e6681842063be1",
+      "published_sha256": "79006ee057a198a06f75528868236d3493493c5209087e96b1e6681842063be1",
+      "unchanged": true
+    },
+    "causal_window_screen.py": {
+      "attempted_sha256": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+      "published_sha256": "c20fac77c9648c0bb79ee780849e94bc1cb7f5061ec222fe5bd863318ae189a0",
+      "unchanged": true
+    },
+    "causal_window_source.py": {
+      "attempted_sha256": "ee4ebe986c807a11c4f33a120170d6cbb71b338a5af9b3eb2c59bfe9eaa19e77",
+      "published_sha256": "ee4ebe986c807a11c4f33a120170d6cbb71b338a5af9b3eb2c59bfe9eaa19e77",
+      "unchanged": true
+    }
+  },
+  "provider_and_both_JITs_unchanged": true,
+  "failed_original_compact_sha256": "9d5d05ed378033d2c837c374c388d217dc3b7101591daf8020229eceb80a201a",
+  "host_changes": "failclosed numeric factory/make_case/prepare/defaultCLI; explicit source-bound compile-inspection artifacts",
+  "cpu_gate": {
+    "target": "bz-a3-2",
+    "handle": "remote:bz-a3-2:job:20261025T034429Z-fdb78bda3be4",
+    "exit": 0,
+    "tests": 4,
+    "seconds": 11.835,
+    "scientific_oracles": 0,
+    "real_compiles": 0,
+    "npu_forwards": 0,
+    "profiles": 0,
+    "receipt_sha256": "c9e4997785d77580ff001621499ff1ab13cd28fb784aa0e9e8d6d1c5642315dc",
+    "actual_JIT_modules_imported": false,
+    "npu_runtime_module_present": true
+  },
+  "scientific_replays": 0
+}

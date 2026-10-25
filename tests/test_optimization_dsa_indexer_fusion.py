@@ -93,6 +93,47 @@ class DSATests(unittest.TestCase):
                 current[0]=selected;r=run_pair(adapter,self.spec(),root/str(i),root/'cache',{},torch=torch,correctness_only=True);self.assertEqual(r['status'],'complete');self.assertTrue(all(a['cleanup']['status']=='complete' for a in r['arms'].values()));self.assertEqual(adapter.state,{});self.assertEqual(current[0],selected)
             Kernel.fail='activate';r=run_pair(adapter,self.spec(),root/'error',root/'cache',{},torch=torch,correctness_only=True);self.assertEqual(r['status'],'failed');self.assertEqual(adapter.state,{});self.assertEqual(current[0],2)
 
+    def test_capture_entire_lifecycle_uses_prepared_device_and_restores(self):
+        import optimization_pair,profile_ten
+        current=[2];events=[]
+        def check(name):
+            self.assertEqual(current[0],0);events.append(name)
+        @contextmanager
+        def device(d):
+            old=current[0];current[0]=int(str(d).split(':')[-1])
+            try:yield
+            finally:current[0]=old
+        @contextmanager
+        def profile(**kw):
+            check('begin');self.assertEqual(kw['experimental_config']['aic_metrics'],'pipes')
+            try:yield NS(step=lambda:check('step'))
+            finally:check('end')
+        class Event:
+            def __init__(self,**kw):check('event')
+            def record(self):check('record')
+            def elapsed_time(self,end):check('elapsed');return 1.
+        profiler=NS(ProfilerLevel=NS(Level1=1),AiCMetrics=NS(PipeUtilization='pipes'),ProfilerActivity=NS(CPU=1,NPU=2),profile=profile,schedule=lambda **kw:kw,_ExperimentalConfig=lambda **kw:kw,tensorboard_trace_handler=lambda *a,**kw:None)
+        fake=NS(profiler=profiler)
+        item=NS(metadata={'prepared_device':'npu:0'},expected_kernels=['mock_fused'])
+        def analyse(path,**kw):
+            check('analyse');vendor=Path(path);vendor.mkdir();(vendor/'trace_view.json').write_text('[]')
+        capture=NS(CaptureError=RuntimeError,normalize_trace=lambda *a,**kw:dict(iterations=[{'iteration_id':0}],tasks=[{'kind':'device','name':'mock_fused','iteration_id':0}]))
+        accounting=NS(account_profile=lambda iterations,tasks,**kw:dict(iterations=iterations,tasks=tasks))
+        with tempfile.TemporaryDirectory() as tmp,patch.object(torch,'npu',NS(device=device,Event=Event,synchronize=lambda:check('sync')),create=True),patch.dict(sys.modules,{'torch_npu':fake,'torch_npu.profiler.profiler':NS(analyse=analyse),'profile_capture':capture,'profile_accounting':accounting}):
+            for selected,fail in ((1,False),(2,True)):
+                current[0]=selected;events.clear()
+                def run():
+                    check('kernel')
+                    if fail:raise RuntimeError('mock launch failure')
+                result=op.Adapter().capture(run,item,Path(tmp)/str(selected))
+                self.assertEqual(current[0],selected);self.assertIn('begin',events);self.assertIn('end',events)
+                self.assertEqual(result['profile']['status'],'failed' if fail else 'complete');self.assertEqual(result['kernel_identity']['expected'],item.expected_kernels)
+                if not fail:
+                    self.assertEqual(events.count('kernel'),10);self.assertEqual(events.count('event'),20);self.assertEqual(events.count('record'),20);self.assertIn('sync',events);self.assertIn('analyse',events)
+            with patch.object(profile_ten,'capture_ten',side_effect=RuntimeError('setup failure')):
+                with self.assertRaises(RuntimeError):op.Adapter().capture(run,item,Path(tmp)/'setup')
+                self.assertEqual(current[0],2)
+
     def test_signed_zeros_secondary_and_real_collect_pair_identity(self):
         import copy
         sys.path.insert(0,str(Path(__file__).parent));import test_optimization_profile_evidence as fixtures

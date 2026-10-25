@@ -88,6 +88,11 @@ class Adapter:
             if self.state.get(arm) is state:self.state.pop(arm);self.actual.pop(arm,None)
         return SimpleNamespace(run=run,close=close,compile_only=compile_only,compiled=lambda:list(compiled),compilation_state=lambda:identity(compiled),sources=[Path(__file__),*self.case_sources,*[Path(__file__).with_name(n) for n in ('dsa_indexer_source.py','dsa_indexer_kernels.py')]],expected_kernels=[kernel.fn.__name__ for kernel,_ in calls],metadata=dict(arm=arm,route='optimized' if arm=='after' else 'reference',component='prepared complete DSA score',prepared_device=str(device),grid=grid,flags=flags,BLOCK_SIZE_N=128,device_kernel_calls=len(calls),physical=physical,reused_outputs=True,scope='all QK/ReLU/weight/headsum stages charged; private allocations/initial copies outside both APIs; output/scratch reused; no per-profile IO checks'))
 
+    def capture(self,run,item,output):
+        from profile_ten import capture_ten
+        with guard(item.metadata['prepared_device']):
+            return capture_ten(run,output,expected_kernel=item.expected_kernels,metric_group='PipeUtilization')
+
     def validate(self,arm,actual,fixture,spec):
         s=self.state[arm];e=fixture['expected'];p=parameters(spec)
         if not isinstance(actual,torch.Tensor) or actual is not s['out'] or actual.dtype!=torch.float32 or actual.shape!=e.shape or not actual.is_contiguous():return dict(passed=False,reason='one private contiguous FP32 score required')

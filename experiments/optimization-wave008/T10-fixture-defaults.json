@@ -1,0 +1,16 @@
+{
+  "study_id": "T10",
+  "status": "prospective-frozen-before-scientific-oracle-and-device-math",
+  "bias_present_all_six": true,
+  "bias_values": "CPU torch.randint(-8,9,[N],generator=case_rng).float()/2",
+  "rng": "One CPU torch.Generator().manual_seed(case.seed)",
+  "order": [
+    "A: torch.randint(-8,9,[M,K],dtype=int8)",
+    "B: torch.randint(-8,9,[K,N],dtype=int8), or [N,K].T for transposed_b",
+    "ScaleA scalar FP32 .25 and ScaleB scalar FP32 .5, no RNG",
+    "Bias: torch.randint(-8,9,[N]).float()/2"
+  ],
+  "oracle": "Independent CPU INT64 dot, exact FP32 conversion, .25 first then .5 in FP32, cast to FP32 output then add FP32 bias; IEEE bits compared for every output.",
+  "unchanged_matrix_sha256": "916221b8495ce14a826bfc82d9b9144ac864329b7595701232991b305a960a7b",
+  "selection": "Optional-bias setting explicitly accepted by root before scientific acquisition. No new case or changed tolerance. Null bias tested only with nonfrozen CPU cases."
+}

@@ -1,0 +1,998 @@
+{
+  "study_id": "T10",
+  "status": "bounded-compiler-noop-screen",
+  "original_controller_status": "compiler-noop-or-inconclusive",
+  "contract_sha256": "916221b8495ce14a826bfc82d9b9144ac864329b7595701232991b305a960a7b",
+  "fixture_defaults_sha256": "dbf8d8b1a532fe9dfecd0ca8a82f170cbfb53c16bde2c4a31f87f21b59ec454c",
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "scope": "Six frozen compile-prototype parameter cells only. All whole selected ELF binaries identical per pair; no numerical execution, general all-domain or performance claim.",
+  "cases": [
+    {
+      "case_id": "W008-T10-01",
+      "numeric_status": "unattempted",
+      "screen_status": "compiler-noop-or-inconclusive",
+      "full_ELF_identical": true,
+      "index_bits": {
+        "before": 64,
+        "after": 32
+      },
+      "frontend_cache_keys": {
+        "before": "ed8f6f7be04f9c7723945660cef3945b63891572768e949b0415c9a9ee500060",
+        "after": "6f7c2d4eed4578df033fe3b843cb58c96908a95d5e4ec6bb2d7d3583f04bc3b0"
+      },
+      "executable_sha256": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e",
+      "text": {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 3680,
+        "info": 0,
+        "sha256": "b20519b390a67b454e6b0548a68d4a7cb91379b6f615dc85041f08ba817d1bff"
+      },
+      "readonly_allocated": [],
+      "relocations": [],
+      "ABI": "same pointer/scalar parameter interface; INDEX_DTYPE compile-time only",
+      "grid": [
+        2
+      ],
+      "actual_prototype_strides": {
+        "a": [
+          128,
+          1
+        ],
+        "b": [
+          64,
+          1
+        ],
+        "out": [
+          64,
+          1
+        ]
+      },
+      "index_audit": {
+        "actual": {
+          "fits_int32": true,
+          "bounds": {
+            "a_row": 3968,
+            "a_k": 255,
+            "b_k": 16320,
+            "b_col": 63,
+            "c_row": 1984,
+            "c_col": 63,
+            "a_sum": 4223,
+            "b_sum": 16383,
+            "c_sum": 2047,
+            "grid_programs": 2,
+            "pid_m_product": 16,
+            "pid_n_product": 0,
+            "bias_index": 63,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 8192,
+            "M": 32,
+            "N": 64,
+            "K": 128,
+            "N_cdiv_add": 127,
+            "K_cdiv_add": 255,
+            "K_after_final_increment": 255,
+            "a_stride_0": 128,
+            "a_stride_1": 1,
+            "b_stride_0": 64,
+            "b_stride_1": 1,
+            "c_stride_0": 64,
+            "c_stride_1": 1,
+            "a_byte_extent": 4223,
+            "b_byte_extent": 16383,
+            "c_byte_extent": 8195,
+            "bias_byte_extent": 255,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {},
+          "padded": [
+            32,
+            64,
+            255
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "synthetic": null,
+        "force64_audit": false,
+        "candidate_bits": 32,
+        "wide_guard_scope": null
+      },
+      "compilation": {
+        "before": [
+          {
+            "hash": "ed8f6f7be04f9c7723945660cef3945b63891572768e949b0415c9a9ee500060",
+            "binaries": {
+              "ttir": "a12261076910f66c3b3fc65745f5db1946cfb7649b94118f1e151c53acfb6493",
+              "ttadapter": "eea04c983a68271f7260bfa75b9cd6ffe528c3984d0472edb929d92ee13301bb",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ],
+        "after": [
+          {
+            "hash": "6f7c2d4eed4578df033fe3b843cb58c96908a95d5e4ec6bb2d7d3583f04bc3b0",
+            "binaries": {
+              "ttir": "24e9a8636c6d0a4a3aaea2c11b466e5705242c67b18f3d4a531477a2e0debd4b",
+              "ttadapter": "6fe640428d2f38a4e0b91b8e71f6c7972fee67e695d72368352db2d01a2fa30d",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ]
+      },
+      "resource_json_sha256": {
+        "before": "de192c686c4decf68c9acff7a0d7db9128e66d0062c187c247ccbd1c26b7f2a0",
+        "after": "03e045051d02a100edb14c781cce6f9bf5422f3792884a2898f0e5209292733a"
+      }
+    },
+    {
+      "case_id": "W008-T10-02",
+      "numeric_status": "unattempted",
+      "screen_status": "compiler-noop-or-inconclusive",
+      "full_ELF_identical": true,
+      "index_bits": {
+        "before": 64,
+        "after": 32
+      },
+      "frontend_cache_keys": {
+        "before": "ec0027488ef254f49c50723b276480341a8e8b435e58e833b477dadbdbec61da",
+        "after": "acc0bf4e6737f1748347fbd7a3fd44b5b7d1d31a7554fe7c6db6b73bb47b0e0e"
+      },
+      "executable_sha256": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e",
+      "text": {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 3680,
+        "info": 0,
+        "sha256": "b20519b390a67b454e6b0548a68d4a7cb91379b6f615dc85041f08ba817d1bff"
+      },
+      "readonly_allocated": [],
+      "relocations": [],
+      "ABI": "same pointer/scalar parameter interface; INDEX_DTYPE compile-time only",
+      "grid": [
+        4
+      ],
+      "actual_prototype_strides": {
+        "a": [
+          128,
+          1
+        ],
+        "b": [
+          96,
+          1
+        ],
+        "out": [
+          96,
+          1
+        ]
+      },
+      "index_audit": {
+        "actual": {
+          "fits_int32": true,
+          "bounds": {
+            "a_row": 3968,
+            "a_k": 255,
+            "b_k": 24480,
+            "b_col": 127,
+            "c_row": 2976,
+            "c_col": 127,
+            "a_sum": 4223,
+            "b_sum": 24607,
+            "c_sum": 3103,
+            "grid_programs": 4,
+            "pid_m_product": 16,
+            "pid_n_product": 64,
+            "bias_index": 127,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 12288,
+            "M": 17,
+            "N": 96,
+            "K": 128,
+            "N_cdiv_add": 159,
+            "K_cdiv_add": 255,
+            "K_after_final_increment": 255,
+            "a_stride_0": 128,
+            "a_stride_1": 1,
+            "b_stride_0": 96,
+            "b_stride_1": 1,
+            "c_stride_0": 96,
+            "c_stride_1": 1,
+            "a_byte_extent": 4223,
+            "b_byte_extent": 24607,
+            "c_byte_extent": 12419,
+            "bias_byte_extent": 511,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {},
+          "padded": [
+            32,
+            128,
+            255
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "synthetic": null,
+        "force64_audit": false,
+        "candidate_bits": 32,
+        "wide_guard_scope": null
+      },
+      "compilation": {
+        "before": [
+          {
+            "hash": "ec0027488ef254f49c50723b276480341a8e8b435e58e833b477dadbdbec61da",
+            "binaries": {
+              "ttir": "19017d08e9a15bf512bda53776b6272896b6efc8c743a0152d8e47d63eb7f233",
+              "ttadapter": "e1c969da0a672a645c0a95f679a17bc515db81641edf3bcd2319196bc533d8bf",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ],
+        "after": [
+          {
+            "hash": "acc0bf4e6737f1748347fbd7a3fd44b5b7d1d31a7554fe7c6db6b73bb47b0e0e",
+            "binaries": {
+              "ttir": "b76a64698e2e9230deafca7dacaf0bed68bb6ff15f8cdd701f6016e890cb2b69",
+              "ttadapter": "fb77fea239e2f075cdc8d5f6d2f3d521d8ade1b39644d3bda2dfa77f15275567",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ]
+      },
+      "resource_json_sha256": {
+        "before": "cbeddac3773ac67abfedaade6c5496768638396375716351f3f6a75fddbbbe84",
+        "after": "ebadfd49bfe8a10c244d1e38b1cf52779af7858061931d4b8fdf71f87321f69a"
+      }
+    },
+    {
+      "case_id": "W008-T10-03",
+      "numeric_status": "unattempted",
+      "screen_status": "compiler-noop-or-inconclusive",
+      "full_ELF_identical": true,
+      "index_bits": {
+        "before": 64,
+        "after": 32
+      },
+      "frontend_cache_keys": {
+        "before": "ed8f6f7be04f9c7723945660cef3945b63891572768e949b0415c9a9ee500060",
+        "after": "6f7c2d4eed4578df033fe3b843cb58c96908a95d5e4ec6bb2d7d3583f04bc3b0"
+      },
+      "executable_sha256": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e",
+      "text": {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 3680,
+        "info": 0,
+        "sha256": "b20519b390a67b454e6b0548a68d4a7cb91379b6f615dc85041f08ba817d1bff"
+      },
+      "readonly_allocated": [],
+      "relocations": [],
+      "ABI": "same pointer/scalar parameter interface; INDEX_DTYPE compile-time only",
+      "grid": [
+        16
+      ],
+      "actual_prototype_strides": {
+        "a": [
+          256,
+          1
+        ],
+        "b": [
+          128,
+          1
+        ],
+        "out": [
+          128,
+          1
+        ]
+      },
+      "index_audit": {
+        "actual": {
+          "fits_int32": true,
+          "bounds": {
+            "a_row": 32512,
+            "a_k": 383,
+            "b_k": 49024,
+            "b_col": 127,
+            "c_row": 16256,
+            "c_col": 127,
+            "a_sum": 32895,
+            "b_sum": 49151,
+            "c_sum": 16383,
+            "grid_programs": 16,
+            "pid_m_product": 112,
+            "pid_n_product": 64,
+            "bias_index": 127,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 16384,
+            "M": 128,
+            "N": 128,
+            "K": 256,
+            "N_cdiv_add": 191,
+            "K_cdiv_add": 383,
+            "K_after_final_increment": 383,
+            "a_stride_0": 256,
+            "a_stride_1": 1,
+            "b_stride_0": 128,
+            "b_stride_1": 1,
+            "c_stride_0": 128,
+            "c_stride_1": 1,
+            "a_byte_extent": 32895,
+            "b_byte_extent": 49151,
+            "c_byte_extent": 65539,
+            "bias_byte_extent": 511,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {},
+          "padded": [
+            128,
+            128,
+            383
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "synthetic": null,
+        "force64_audit": false,
+        "candidate_bits": 32,
+        "wide_guard_scope": null
+      },
+      "compilation": {
+        "before": [
+          {
+            "hash": "ed8f6f7be04f9c7723945660cef3945b63891572768e949b0415c9a9ee500060",
+            "binaries": {
+              "ttir": "a12261076910f66c3b3fc65745f5db1946cfb7649b94118f1e151c53acfb6493",
+              "ttadapter": "eea04c983a68271f7260bfa75b9cd6ffe528c3984d0472edb929d92ee13301bb",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ],
+        "after": [
+          {
+            "hash": "6f7c2d4eed4578df033fe3b843cb58c96908a95d5e4ec6bb2d7d3583f04bc3b0",
+            "binaries": {
+              "ttir": "24e9a8636c6d0a4a3aaea2c11b466e5705242c67b18f3d4a531477a2e0debd4b",
+              "ttadapter": "6fe640428d2f38a4e0b91b8e71f6c7972fee67e695d72368352db2d01a2fa30d",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ]
+      },
+      "resource_json_sha256": {
+        "before": "de192c686c4decf68c9acff7a0d7db9128e66d0062c187c247ccbd1c26b7f2a0",
+        "after": "03e045051d02a100edb14c781cce6f9bf5422f3792884a2898f0e5209292733a"
+      }
+    },
+    {
+      "case_id": "W008-T10-04",
+      "numeric_status": "unattempted",
+      "screen_status": "compiler-noop-or-inconclusive",
+      "full_ELF_identical": true,
+      "index_bits": {
+        "before": 64,
+        "after": 32
+      },
+      "frontend_cache_keys": {
+        "before": "ed8f6f7be04f9c7723945660cef3945b63891572768e949b0415c9a9ee500060",
+        "after": "6f7c2d4eed4578df033fe3b843cb58c96908a95d5e4ec6bb2d7d3583f04bc3b0"
+      },
+      "executable_sha256": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e",
+      "text": {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 3680,
+        "info": 0,
+        "sha256": "b20519b390a67b454e6b0548a68d4a7cb91379b6f615dc85041f08ba817d1bff"
+      },
+      "readonly_allocated": [],
+      "relocations": [],
+      "ABI": "same pointer/scalar parameter interface; INDEX_DTYPE compile-time only",
+      "grid": [
+        16
+      ],
+      "actual_prototype_strides": {
+        "a": [
+          512,
+          1
+        ],
+        "b": [
+          256,
+          1
+        ],
+        "out": [
+          256,
+          1
+        ]
+      },
+      "index_audit": {
+        "actual": {
+          "fits_int32": true,
+          "bounds": {
+            "a_row": 32256,
+            "a_k": 639,
+            "b_k": 163584,
+            "b_col": 255,
+            "c_row": 16128,
+            "c_col": 255,
+            "a_sum": 32895,
+            "b_sum": 163839,
+            "c_sum": 16383,
+            "grid_programs": 16,
+            "pid_m_product": 48,
+            "pid_n_product": 192,
+            "bias_index": 255,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 32768,
+            "M": 64,
+            "N": 256,
+            "K": 512,
+            "N_cdiv_add": 319,
+            "K_cdiv_add": 639,
+            "K_after_final_increment": 639,
+            "a_stride_0": 512,
+            "a_stride_1": 1,
+            "b_stride_0": 256,
+            "b_stride_1": 1,
+            "c_stride_0": 256,
+            "c_stride_1": 1,
+            "a_byte_extent": 32895,
+            "b_byte_extent": 163839,
+            "c_byte_extent": 65539,
+            "bias_byte_extent": 1023,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {},
+          "padded": [
+            64,
+            256,
+            639
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "synthetic": null,
+        "force64_audit": false,
+        "candidate_bits": 32,
+        "wide_guard_scope": null
+      },
+      "compilation": {
+        "before": [
+          {
+            "hash": "ed8f6f7be04f9c7723945660cef3945b63891572768e949b0415c9a9ee500060",
+            "binaries": {
+              "ttir": "a12261076910f66c3b3fc65745f5db1946cfb7649b94118f1e151c53acfb6493",
+              "ttadapter": "eea04c983a68271f7260bfa75b9cd6ffe528c3984d0472edb929d92ee13301bb",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ],
+        "after": [
+          {
+            "hash": "6f7c2d4eed4578df033fe3b843cb58c96908a95d5e4ec6bb2d7d3583f04bc3b0",
+            "binaries": {
+              "ttir": "24e9a8636c6d0a4a3aaea2c11b466e5705242c67b18f3d4a531477a2e0debd4b",
+              "ttadapter": "6fe640428d2f38a4e0b91b8e71f6c7972fee67e695d72368352db2d01a2fa30d",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ]
+      },
+      "resource_json_sha256": {
+        "before": "de192c686c4decf68c9acff7a0d7db9128e66d0062c187c247ccbd1c26b7f2a0",
+        "after": "03e045051d02a100edb14c781cce6f9bf5422f3792884a2898f0e5209292733a"
+      }
+    },
+    {
+      "case_id": "W008-T10-GA",
+      "numeric_status": "unattempted",
+      "screen_status": "exact-force64-manual-audit",
+      "full_ELF_identical": true,
+      "index_bits": {
+        "before": 64,
+        "after": 64
+      },
+      "frontend_cache_keys": {
+        "before": "e994c6184ca2c8980bde0c8ff87c3ba8e126b58541404ea0cdf86e9522df61c2",
+        "after": "e994c6184ca2c8980bde0c8ff87c3ba8e126b58541404ea0cdf86e9522df61c2"
+      },
+      "executable_sha256": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e",
+      "text": {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 3680,
+        "info": 0,
+        "sha256": "b20519b390a67b454e6b0548a68d4a7cb91379b6f615dc85041f08ba817d1bff"
+      },
+      "readonly_allocated": [],
+      "relocations": [],
+      "ABI": "same pointer/scalar parameter interface; INDEX_DTYPE compile-time only",
+      "grid": [
+        2
+      ],
+      "actual_prototype_strides": {
+        "a": [
+          128,
+          1
+        ],
+        "b": [
+          65,
+          1
+        ],
+        "out": [
+          65,
+          1
+        ]
+      },
+      "index_audit": {
+        "actual": {
+          "fits_int32": true,
+          "bounds": {
+            "a_row": 1920,
+            "a_k": 255,
+            "b_k": 16575,
+            "b_col": 127,
+            "c_row": 975,
+            "c_col": 127,
+            "a_sum": 2175,
+            "b_sum": 16702,
+            "c_sum": 1102,
+            "grid_programs": 2,
+            "pid_m_product": 0,
+            "pid_n_product": 64,
+            "bias_index": 127,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 8320,
+            "M": 3,
+            "N": 65,
+            "K": 128,
+            "N_cdiv_add": 128,
+            "K_cdiv_add": 255,
+            "K_after_final_increment": 255,
+            "a_stride_0": 128,
+            "a_stride_1": 1,
+            "b_stride_0": 65,
+            "b_stride_1": 1,
+            "c_stride_0": 65,
+            "c_stride_1": 1,
+            "a_byte_extent": 2175,
+            "b_byte_extent": 16702,
+            "c_byte_extent": 4415,
+            "bias_byte_extent": 511,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {},
+          "padded": [
+            16,
+            128,
+            255
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "synthetic": {
+          "fits_int32": false,
+          "bounds": {
+            "a_row": 32212254720,
+            "a_k": 255,
+            "b_k": 16575,
+            "b_col": 127,
+            "c_row": 975,
+            "c_col": 127,
+            "a_sum": 32212254975,
+            "b_sum": 16702,
+            "c_sum": 1102,
+            "grid_programs": 2,
+            "pid_m_product": 0,
+            "pid_n_product": 64,
+            "bias_index": 127,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 8320,
+            "M": 3,
+            "N": 65,
+            "K": 128,
+            "N_cdiv_add": 128,
+            "K_cdiv_add": 255,
+            "K_after_final_increment": 255,
+            "a_stride_0": 2147483648,
+            "a_stride_1": 1,
+            "b_stride_0": 65,
+            "b_stride_1": 1,
+            "c_stride_0": 65,
+            "c_stride_1": 1,
+            "a_byte_extent": 32212254975,
+            "b_byte_extent": 16702,
+            "c_byte_extent": 4415,
+            "bias_byte_extent": 511,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {
+            "a_row": 32212254720,
+            "a_sum": 32212254975,
+            "a_stride_0": 2147483648,
+            "a_byte_extent": 32212254975
+          },
+          "padded": [
+            16,
+            128,
+            255
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "force64_audit": true,
+        "candidate_bits": 64,
+        "wide_guard_scope": "Synthetic metadata only; actual device allocations remain small, both arms explicitly64."
+      },
+      "compilation": {
+        "before": [
+          {
+            "hash": "e994c6184ca2c8980bde0c8ff87c3ba8e126b58541404ea0cdf86e9522df61c2",
+            "binaries": {
+              "ttir": "8802c28017118deb3e797e3b1e522feb44ab53b01d78e8481083c26fc394d682",
+              "ttadapter": "a45c6e20d50b0fb9c7b613ff3750946c672ffa4f46e22f20f45442dc681cb9a8",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ],
+        "after": [
+          {
+            "hash": "e994c6184ca2c8980bde0c8ff87c3ba8e126b58541404ea0cdf86e9522df61c2",
+            "binaries": {
+              "ttir": "8802c28017118deb3e797e3b1e522feb44ab53b01d78e8481083c26fc394d682",
+              "ttadapter": "a45c6e20d50b0fb9c7b613ff3750946c672ffa4f46e22f20f45442dc681cb9a8",
+              "npubin": "0b17fcbdbe6938db70659fd1351356d7931534da96f92881b43066754a32d22e"
+            }
+          }
+        ]
+      },
+      "resource_json_sha256": {
+        "before": "c16af4bb87c16d8456d0c27601ba4c0f308f08a1ae3f1f11e4ce2e85cea4f323",
+        "after": "c16af4bb87c16d8456d0c27601ba4c0f308f08a1ae3f1f11e4ce2e85cea4f323"
+      }
+    },
+    {
+      "case_id": "W008-T10-GB",
+      "numeric_status": "unattempted",
+      "screen_status": "compiler-noop-or-inconclusive",
+      "full_ELF_identical": true,
+      "index_bits": {
+        "before": 64,
+        "after": 32
+      },
+      "frontend_cache_keys": {
+        "before": "851bb862633183cc881a9d4eef30c83979327d66a99882144839604c92a3eb51",
+        "after": "ebe67dfa207249396b01fe46fc67e15d31a1683e7e363d758880d452f133f121"
+      },
+      "executable_sha256": "5bb962cb7fcda341e1683e4be2ed52c206b8aa0a927086150a5ceb8ceb0efabc",
+      "text": {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 4344,
+        "info": 0,
+        "sha256": "35417bbe46d9fc3b8b6d7527eaf63f08b0683fe7a665912f3662c64b4413026a"
+      },
+      "readonly_allocated": [],
+      "relocations": [],
+      "ABI": "same pointer/scalar parameter interface; INDEX_DTYPE compile-time only",
+      "grid": [
+        4
+      ],
+      "actual_prototype_strides": {
+        "a": [
+          256,
+          1
+        ],
+        "b": [
+          1,
+          256
+        ],
+        "out": [
+          65,
+          1
+        ]
+      },
+      "index_audit": {
+        "actual": {
+          "fits_int32": true,
+          "bounds": {
+            "a_row": 7936,
+            "a_k": 383,
+            "b_k": 383,
+            "b_col": 32512,
+            "c_row": 2015,
+            "c_col": 127,
+            "a_sum": 8319,
+            "b_sum": 32895,
+            "c_sum": 2142,
+            "grid_programs": 4,
+            "pid_m_product": 16,
+            "pid_n_product": 64,
+            "bias_index": 127,
+            "scalar_scale_index": 0,
+            "k_increment": 128,
+            "a_pointer_increment": 128,
+            "b_pointer_increment": 128,
+            "M": 17,
+            "N": 65,
+            "K": 256,
+            "N_cdiv_add": 128,
+            "K_cdiv_add": 383,
+            "K_after_final_increment": 383,
+            "a_stride_0": 256,
+            "a_stride_1": 1,
+            "b_stride_0": 1,
+            "b_stride_1": 256,
+            "c_stride_0": 65,
+            "c_stride_1": 1,
+            "a_byte_extent": 8319,
+            "b_byte_extent": 32895,
+            "c_byte_extent": 8575,
+            "bias_byte_extent": 511,
+            "scale_byte_extent": 3
+          },
+          "unsafe": {},
+          "padded": [
+            32,
+            128,
+            383
+          ],
+          "note": "Nonnegative products/sums bound every intermediate and masked padded lane; pointer bases stay64bit. Byte extents include storage offset and final byte."
+        },
+        "synthetic": null,
+        "force64_audit": false,
+        "candidate_bits": 32,
+        "wide_guard_scope": null
+      },
+      "compilation": {
+        "before": [
+          {
+            "hash": "851bb862633183cc881a9d4eef30c83979327d66a99882144839604c92a3eb51",
+            "binaries": {
+              "ttir": "1d4d558013e833a8a111e39feac55ef3392d112ec54c84114008452b43e8ec06",
+              "ttadapter": "21176f03f89235981085cdfb09d2aa9d57d2fcafce8b8cf717806ef649bc47e3",
+              "npubin": "5bb962cb7fcda341e1683e4be2ed52c206b8aa0a927086150a5ceb8ceb0efabc"
+            }
+          }
+        ],
+        "after": [
+          {
+            "hash": "ebe67dfa207249396b01fe46fc67e15d31a1683e7e363d758880d452f133f121",
+            "binaries": {
+              "ttir": "e931e7542f3ddc7f276cd624a1688f32415eab6da320e97ed1eb908b7069916f",
+              "ttadapter": "0b5f8826fbd7e2fe48ecb14e6012bb5ad237129df700f1593dbde343d8f63192",
+              "npubin": "5bb962cb7fcda341e1683e4be2ed52c206b8aa0a927086150a5ceb8ceb0efabc"
+            }
+          }
+        ]
+      },
+      "resource_json_sha256": {
+        "before": "84f31c4473d0e53f9d0016914014847f8111bd67cb4390198546ab92bff02876",
+        "after": "df39c5fd330df5dc27a84eb1dbd29e7c6049471c99defc00d7a859ec5a03b334"
+      }
+    }
+  ],
+  "compiled_cells": 12,
+  "scientific_cpu_oracles": 0,
+  "correctness_calls": 0,
+  "api_forwards": 0,
+  "profiled_calls": 0,
+  "captures": 0,
+  "numeric_status": "All six mains/guards unattempted after codegen early stop",
+  "timing_samples": null,
+  "pmu": null,
+  "target": {
+    "profile": "bz-a3-1",
+    "physical_npu": 0,
+    "chip": 0,
+    "logical_device": 0,
+    "board": "9382",
+    "chip_name": "Ascend910 V1",
+    "compiler_target": "Ascend910_9382",
+    "queried_cube_cores": 24,
+    "queried_vector_cores": 48
+  },
+  "runtime": {
+    "imported_triton_version": "3.2.0",
+    "distribution_versions": {
+      "torch": "2.10.0+cpu",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "before_math_receipt_sha256": "23e002da0edecb0cb6ee0c8f54c7b3a0f0e599cf3096f68df3127f057e760c22"
+  },
+  "compiler_dependency_digests_after_acquisition": [
+    {
+      "name": "compiler.py",
+      "sha256": "253bdb0d9bf2d092c8c1ae40cc610b2d00c534b127f9d258e9e8e1a221934002",
+      "bytes": 53431
+    },
+    {
+      "name": "bishengir-compile",
+      "sha256": "89655a56941efe9a184e4d5dfccb783ad88458707827ff6fdd146e7bd2d4af5c",
+      "bytes": 94058360
+    },
+    {
+      "name": "hivmc",
+      "sha256": "48ff49ad8e86235679a2e06448d6bfad5d8ab8eaed230859d9089f4152262de4",
+      "bytes": 81407800
+    }
+  ],
+  "startup": {
+    "stage_counter": 16,
+    "phase": "compiler-noop-or-inconclusive-stop-before-scientific-oracles",
+    "watchdog_seconds": 600,
+    "started_before_NPU_import_and_input_moves": true
+  },
+  "count_evidence": "No scientific cache payloads and no correctness/capture entered-API counter files; original terminal clean early stop after12 screens.",
+  "handles": {
+    "acquisition": "remote:bz-a3-1:job:20261025T011453Z-31f4e2e742b0",
+    "read_only_compact": "remote:bz-a3-1:job:20261025T011903Z-84a06440a6dc",
+    "device_release": "remote:bz-a3-1:job:20261025T012136Z-289bd30c6930"
+  },
+  "compact_archive": {
+    "sha256": "86feda027b470ecbb80ee4065d3e1c4495c8ffda595f18ac307612e4b37ba221",
+    "bytes": 254284,
+    "verified_manifest_files": 108
+  },
+  "measured_source_sha256": {
+    "examples/optimization-library/triton/scaled_index.py": "5eff62f08be0a8b027e021f5356f6811e72f0dab4d7f1ee63e81450aa23d56e2",
+    "examples/optimization-library/triton/scaled_index_NOTICE.txt": "3421af925aaa95203a08a0a54e7fc8787fda8bc6e80fb5a37ba934e98b848e35",
+    "examples/optimization-library/triton/scaled_index_kernel.py": "8e17dd767d96f82261830c1a0411315707d906315a9c9e35061cd573ffa24f35",
+    "examples/optimization-library/triton/scaled_index_contract.py": "4325c5512a234653d6c824ac77db9fd8ba7e13d607c51e37f2b376f6d2f36de6",
+    "examples/optimization-library/triton/scaled_index_bounds.py": "d3f42f90b445f7eb3135ce58e6f05c54604d4766d2f93962da2f5b68cb2fe80e",
+    "experiments/optimization-wave008/T10.json": "916221b8495ce14a826bfc82d9b9144ac864329b7595701232991b305a960a7b",
+    "experiments/optimization-wave008/T10-fixture-defaults.json": "dbf8d8b1a532fe9dfecd0ca8a82f170cbfb53c16bde2c4a31f87f21b59ec454c"
+  },
+  "publication_interface_sha256": {
+    "examples/optimization-library/triton/scaled_index.py": "c75372f2c2684299dee78b2b10c122079f08f85653b9464e06dd87fabc64033b",
+    "tests/test_optimization_scaled_index.py": "f6a6017b04c4f1c5de7e0e5102b1d1d16deadf81d870e0e4b864bfb4aad5345a"
+  },
+  "coverage": {
+    "status": "failed-as-expected-no-numeric-gates",
+    "cases": [
+      {
+        "name": "W008-T10-01",
+        "performance": true,
+        "scenario": [
+          "int8-fp32",
+          "index-width",
+          "B-Corder"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": true,
+        "numeric_status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Compile-prototype strides asserted {'a': [128, 1], 'b': [64, 1], 'out': [64, 1]}; complete allocation-free padded/intermediate/byte certificate retained. GA synthetic wide metadata only with actual small64-bit prototype. No frozen input transfers or numeric/canary/immutability gate executed."
+        }
+      },
+      {
+        "name": "W008-T10-02",
+        "performance": true,
+        "scenario": [
+          "int8-fp32",
+          "index-width",
+          "B-Corder"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": true,
+        "numeric_status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Compile-prototype strides asserted {'a': [128, 1], 'b': [96, 1], 'out': [96, 1]}; complete allocation-free padded/intermediate/byte certificate retained. GA synthetic wide metadata only with actual small64-bit prototype. No frozen input transfers or numeric/canary/immutability gate executed."
+        }
+      },
+      {
+        "name": "W008-T10-03",
+        "performance": true,
+        "scenario": [
+          "int8-fp32",
+          "index-width",
+          "B-Corder"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": true,
+        "numeric_status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Compile-prototype strides asserted {'a': [256, 1], 'b': [128, 1], 'out': [128, 1]}; complete allocation-free padded/intermediate/byte certificate retained. GA synthetic wide metadata only with actual small64-bit prototype. No frozen input transfers or numeric/canary/immutability gate executed."
+        }
+      },
+      {
+        "name": "W008-T10-04",
+        "performance": true,
+        "scenario": [
+          "int8-fp32",
+          "index-width",
+          "B-Corder"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": true,
+        "numeric_status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Compile-prototype strides asserted {'a': [512, 1], 'b': [256, 1], 'out': [256, 1]}; complete allocation-free padded/intermediate/byte certificate retained. GA synthetic wide metadata only with actual small64-bit prototype. No frozen input transfers or numeric/canary/immutability gate executed."
+        }
+      },
+      {
+        "name": "W008-T10-GA",
+        "performance": false,
+        "scenario": [
+          "int8-fp32",
+          "index-width",
+          "B-Corder"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": true,
+        "numeric_status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Compile-prototype strides asserted {'a': [128, 1], 'b': [65, 1], 'out': [65, 1]}; complete allocation-free padded/intermediate/byte certificate retained. GA synthetic wide metadata only with actual small64-bit prototype. No frozen input transfers or numeric/canary/immutability gate executed."
+        }
+      },
+      {
+        "name": "W008-T10-GB",
+        "performance": false,
+        "scenario": [
+          "int8-fp32",
+          "index-width",
+          "B-Forder"
+        ],
+        "route": "unavailable",
+        "correct": false,
+        "compile_probe": true,
+        "numeric_status": "unattempted",
+        "layout_audit": {
+          "mode": "manual",
+          "passed": true,
+          "evidence": "Compile-prototype strides asserted {'a': [256, 1], 'b': [1, 256], 'out': [65, 1]}; complete allocation-free padded/intermediate/byte certificate retained. GA synthetic wide metadata only with actual small64-bit prototype. No frozen input transfers or numeric/canary/immutability gate executed."
+        }
+      }
+    ],
+    "audit_receipt_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "publication_tests": {
+    "local_count": 5,
+    "local": "passed",
+    "native_cpu_only": "passed",
+    "native_count": 5,
+    "handle": "remote:bz-a3-1:job:20261025T012433Z-2507db077edf",
+    "real_backend_imports": 0,
+    "real_compiles": 0,
+    "npu_forwards": 0,
+    "scientific_frozen_fixtures": 0,
+    "profiles": 0
+  },
+  "publication_scope": "Default factory/prepare/probe/run/capture fail closed; explicit compilation inspection never authorizes numerical execution.",
+  "authored_source_test_lines": 457
+}

@@ -1,0 +1,100 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T10",
+  "task": "optimization-w008-scaled-mm-index-width",
+  "title": "Guard signed32-bit offsets in scaled INT8 matmul",
+  "source_files": [
+    "source__src__triton_ascend_kernels__gemm__triton_scaled_mm.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T10-01",
+      "role": "gallery",
+      "seed": 81001,
+      "parameters": {
+        "M": 32,
+        "N": 64,
+        "K": 128
+      }
+    },
+    {
+      "case_id": "W008-T10-02",
+      "role": "gallery",
+      "seed": 81002,
+      "parameters": {
+        "M": 17,
+        "N": 96,
+        "K": 128
+      }
+    },
+    {
+      "case_id": "W008-T10-03",
+      "role": "heldout",
+      "seed": 81003,
+      "parameters": {
+        "M": 128,
+        "N": 128,
+        "K": 256
+      }
+    },
+    {
+      "case_id": "W008-T10-04",
+      "role": "heldout",
+      "seed": 81004,
+      "parameters": {
+        "M": 64,
+        "N": 256,
+        "K": 512
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T10-GA",
+      "role": "guard",
+      "seed": 81091,
+      "parameters": {
+        "M": 3,
+        "N": 65,
+        "K": 128,
+        "metadata_wide_stride": true
+      }
+    },
+    {
+      "case_id": "W008-T10-GB",
+      "role": "guard",
+      "seed": 81092,
+      "parameters": {
+        "M": 17,
+        "N": 65,
+        "K": 256,
+        "transposed_b": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "Prepared directkernel scaledMM component INT8A[M,K],B[K,N], finiteFP32scalar scaleA=.25,scaleB=.5, optionalFP32dyadicbias[N],FP32out. AllINT8[-8,8],Kmultiple128<=512, commonBM16BN64BK128. Defaultcontiguous;GB physicallytransposed storage viewpositiveBstrides[K,N]=(1,K), true allocationbounds. No T03factoring/runtimevalueguard/commonmode store. Original use_heuristicFalse wrapper bug notclaimedfixed.",
+    "before": "Exact source INT64 vector row/column/K index casts and sequentialFP32scale epilogue/castthenbias.",
+    "after": "Only INT32indexvectors when completehost bound EVERY paddedlane elementoffset,intermediateproduct/sum,K-loopincrements,bias/scaleaddress AND source byteconstraints fits signedINT32; pointerbase remains64bit. Otherwise exactINT64sourcefallback. No finalvalidindex-onlyproof or multiplybeforecastoverflow. Hostguard unit function accepts synthetic metadata without allocation. GA syntheticwide metadata forces fallbackdecision but doesNOTexecute fictitioushugeaddresses: device guard runs safely allocated actualsmallA/B through explicitforce64 auditmode botharms, disclosedmanualcoverage only. Allsyntheticproofcases CPU-only notNPUgiantaddressclaim.",
+    "oracle": "One CPUINT64dot followed exact prescribedFP32 sequential .25/.5 scaling pluspostcastbias, alloutputIEEEFP32bits exactboth; boundedconversionproofacc<=32768. GA real smallfallback/tails and GB transposed B must correctalloutput/inputimmutability/canaries. Sixcachedscientificpayloads, onceeacharm,10forwardprofilesfourmainpairs,guards0. Hostinvalidstrides/dtypes/domainrejectbeforecache NONFROZEN tests.",
+    "claims": "Compile/codegen/resource allcells beforemath, inspectselectedtext+relocs/importedbackendtypes. Compiler may narrow sourcealready; retain noop/unqualifiedinsteadforcedchange. .textdiff alone no instructioncount. Boundedindexguard cost/codevariants can cost, Cube dominates; no false guaranteedbenefit."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__gemm__triton_scaled_mm.py",
+      "sha256": "5529c180236ec71d0dc1f9c960f222c9fbdf6eaad7d55bcc27711658e6469c80"
+    }
+  ]
+}

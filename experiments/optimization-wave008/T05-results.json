@@ -1,0 +1,2939 @@
+{
+  "study": "W008-T05",
+  "status": "complete",
+  "claim": "source-backed prepared forward component; profiled diagnostic duration only; grid and padding differ",
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "matrix_sha256": "f670fdc1dba30535927f70b5ae430916ef45d28ada1a766b1af87dab28b492f0",
+  "counts": {
+    "oracle_payloads": 6,
+    "correctness_apis": 12,
+    "profiled_apis": 80,
+    "captures": 8,
+    "kernels_per_api": 1,
+    "warmups": 0
+  },
+  "compact_archive_sha256": "4c6b141c8f84b74e0913d3d93cd10b317911f0c6de42eb0996f85d9efcd4156b",
+  "coverage_sha256": "e1b2f88ace222e1eacf933e8e7b72e8199e1fd1584cad07466dae90938497f0d",
+  "codegen_screen": [
+    {
+      "case_id": "W008-T05-01",
+      "status": "code-distinct",
+      "arms": {
+        "before": [
+          {
+            "full_sha256": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2412,
+              "info": 0,
+              "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2412,
+                "info": 0,
+                "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "38aa317d2d1d67917221d77abaaa1e1874ccc434f64e135a34c9ae062e86c87d"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 371,
+                "info": 0,
+                "sha256": "4b73047ce1d6be6f291894d71218a25c22ae3cc25b8819a6b93b8cc0621a0927"
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "full_sha256": "05bd9d983086efa0d1287151ec648da35db70c45c3e0add28229c2186505bb25",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 3248,
+              "info": 0,
+              "sha256": "67839cb2ed479b1d5e7fb1299ca3cdb31aebc23e0d7d17185ce4846f9d131dba"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 3248,
+                "info": 0,
+                "sha256": "67839cb2ed479b1d5e7fb1299ca3cdb31aebc23e0d7d17185ce4846f9d131dba"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "222903fd5eb0304059b15188fb08d9ea6b9349d031ab1e82a5829e859c0f8981"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 356,
+                "info": 0,
+                "sha256": "7a59ba0e7fd694098fc81b430e61c7f7f7ed42f7a7984232967128c794fa5d95"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W008-T05-02",
+      "status": "code-distinct",
+      "arms": {
+        "before": [
+          {
+            "full_sha256": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2412,
+              "info": 0,
+              "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2412,
+                "info": 0,
+                "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "38aa317d2d1d67917221d77abaaa1e1874ccc434f64e135a34c9ae062e86c87d"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 371,
+                "info": 0,
+                "sha256": "4b73047ce1d6be6f291894d71218a25c22ae3cc25b8819a6b93b8cc0621a0927"
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "full_sha256": "05bd9d983086efa0d1287151ec648da35db70c45c3e0add28229c2186505bb25",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 3248,
+              "info": 0,
+              "sha256": "67839cb2ed479b1d5e7fb1299ca3cdb31aebc23e0d7d17185ce4846f9d131dba"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 3248,
+                "info": 0,
+                "sha256": "67839cb2ed479b1d5e7fb1299ca3cdb31aebc23e0d7d17185ce4846f9d131dba"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "222903fd5eb0304059b15188fb08d9ea6b9349d031ab1e82a5829e859c0f8981"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 356,
+                "info": 0,
+                "sha256": "7a59ba0e7fd694098fc81b430e61c7f7f7ed42f7a7984232967128c794fa5d95"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W008-T05-03",
+      "status": "code-distinct",
+      "arms": {
+        "before": [
+          {
+            "full_sha256": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2412,
+              "info": 0,
+              "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2412,
+                "info": 0,
+                "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "38aa317d2d1d67917221d77abaaa1e1874ccc434f64e135a34c9ae062e86c87d"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 371,
+                "info": 0,
+                "sha256": "4b73047ce1d6be6f291894d71218a25c22ae3cc25b8819a6b93b8cc0621a0927"
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "full_sha256": "05bd9d983086efa0d1287151ec648da35db70c45c3e0add28229c2186505bb25",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 3248,
+              "info": 0,
+              "sha256": "67839cb2ed479b1d5e7fb1299ca3cdb31aebc23e0d7d17185ce4846f9d131dba"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 3248,
+                "info": 0,
+                "sha256": "67839cb2ed479b1d5e7fb1299ca3cdb31aebc23e0d7d17185ce4846f9d131dba"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "222903fd5eb0304059b15188fb08d9ea6b9349d031ab1e82a5829e859c0f8981"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 356,
+                "info": 0,
+                "sha256": "7a59ba0e7fd694098fc81b430e61c7f7f7ed42f7a7984232967128c794fa5d95"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W008-T05-04",
+      "status": "code-distinct",
+      "arms": {
+        "before": [
+          {
+            "full_sha256": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2412,
+              "info": 0,
+              "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2412,
+                "info": 0,
+                "sha256": "aa30df474c849fe8cfa219d5515c68f9a82ea843cf1631f731321afe606015bf"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "38aa317d2d1d67917221d77abaaa1e1874ccc434f64e135a34c9ae062e86c87d"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 371,
+                "info": 0,
+                "sha256": "4b73047ce1d6be6f291894d71218a25c22ae3cc25b8819a6b93b8cc0621a0927"
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "full_sha256": "3e9dd9559e31b104de0d495917c5760812bb7483c2e59fbb0582a33c4e98a3f0",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 3244,
+              "info": 0,
+              "sha256": "bdad5ee16ca8cd18d3254d4dadcb79cc1ffea6cfb3b6138a96d1dadd34955daf"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 3244,
+                "info": 0,
+                "sha256": "bdad5ee16ca8cd18d3254d4dadcb79cc1ffea6cfb3b6138a96d1dadd34955daf"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "73c9dded8ba2aab5203884b8630db4730265b951f3af40b371e7f9d0ec70ade7"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 356,
+                "info": 0,
+                "sha256": "7a59ba0e7fd694098fc81b430e61c7f7f7ed42f7a7984232967128c794fa5d95"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W008-T05-GA",
+      "status": "code-distinct",
+      "arms": {
+        "before": [
+          {
+            "full_sha256": "305434d564dccf15edfbbc618e92fcda0c6a4da0a76083dab66b2464f7824976",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2500,
+              "info": 0,
+              "sha256": "9e1c9eb229c8ba030d1451aa8c5e05e803cba5e07143d39bb98a5760b45805ed"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2500,
+                "info": 0,
+                "sha256": "9e1c9eb229c8ba030d1451aa8c5e05e803cba5e07143d39bb98a5760b45805ed"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "6fea016a651b6460fdd05e8073e5114413e814d86781e4dc4e8c3592dc851128"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "87164ee188de1a8fdd2ee3b1e823ec2d93372325341a493a93ccde3b6537511f"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 371,
+                "info": 0,
+                "sha256": "4b73047ce1d6be6f291894d71218a25c22ae3cc25b8819a6b93b8cc0621a0927"
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "full_sha256": "35292fccf8868002f9b91bebf7c57472711c4ce316d4d725caa47cb42de5ddb1",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2880,
+              "info": 0,
+              "sha256": "d79144bca7480af2187d64145abfc2d8fa0da4f905c6f251e32e277a53b1d692"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2880,
+                "info": 0,
+                "sha256": "d79144bca7480af2187d64145abfc2d8fa0da4f905c6f251e32e277a53b1d692"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "6fea016a651b6460fdd05e8073e5114413e814d86781e4dc4e8c3592dc851128"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "4147c9eb99f6cef23e682a3f04d71c4f1403c5b14301c78b955abdda191ea33b"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 356,
+                "info": 0,
+                "sha256": "7a59ba0e7fd694098fc81b430e61c7f7f7ed42f7a7984232967128c794fa5d95"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "W008-T05-GB",
+      "status": "code-distinct",
+      "arms": {
+        "before": [
+          {
+            "full_sha256": "e8da8bb481626cdc6d65443a3a066f807a30c23827ed7edbaa9cc95dae9a3d2c",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 2520,
+              "info": 0,
+              "sha256": "dcce18e377fee908d24ea0e7f5c06fae0e19c1ae08a097b2015783e077770b67"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2520,
+                "info": 0,
+                "sha256": "dcce18e377fee908d24ea0e7f5c06fae0e19c1ae08a097b2015783e077770b67"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "40850fafa1efb4c201b8e62fbca4e9197bc5b8a561b07eb1a25d235057eadf1b"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 371,
+                "info": 0,
+                "sha256": "4b73047ce1d6be6f291894d71218a25c22ae3cc25b8819a6b93b8cc0621a0927"
+              }
+            ]
+          }
+        ],
+        "after": [
+          {
+            "full_sha256": "6e04701f40aecc55fb048bcb91bbc891c651a41ed7faf2e29ec840d7678db476",
+            "text": {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 3320,
+              "info": 0,
+              "sha256": "0a8165461c17b161cf6e5a991fd4ea530f150f9c64b1864848c3180d979214c3"
+            },
+            "text_relocations": [],
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 3320,
+                "info": 0,
+                "sha256": "0a8165461c17b161cf6e5a991fd4ea530f150f9c64b1864848c3180d979214c3"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "ac47128633748fcfca5812c240d1eedd05b100717e79bc0f4c290ee4b367f5f5"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 356,
+                "info": 0,
+                "sha256": "7a59ba0e7fd694098fc81b430e61c7f7f7ed42f7a7984232967128c794fa5d95"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T05-01",
+      "role": "gallery",
+      "status": "complete",
+      "fixture_sha256": "d1429388db899f34138dd99d5d9ec6bc2285a095237e9be67f713f982ec70644",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 6.008441374660833e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": null
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            96
+          ],
+          "layout": {
+            "block_m": 4,
+            "block_k": 1024,
+            "tile": 4096,
+            "flat_grid": [
+              96
+            ],
+            "source_grid": [
+              32,
+              3
+            ],
+            "max_padded_input_offset": 786431,
+            "max_padded_output_offset": 393215,
+            "max_padded_byte": 3145727,
+            "int64": false,
+            "valid_input_elements": 786432,
+            "valid_output_elements": 393216
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "5abc45546494260f707fa2e8694ee1ae93c34a640caa7cce90d476a30551f5d0",
+              "binaries": {
+                "ttir": "bea3d4480bf13c787b917da1c1ab9afee6c77cb323ce8da18e342c1cd1ac5c90",
+                "ttadapter": "6d52578d227b347f09d88489f51eb24049e980441a0b77d5f8918c519b275272",
+                "npubin": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              0.3043600022792816,
+              0.3001599907875061,
+              0.29993999004364014,
+              0.29989999532699585,
+              0.30013999342918396,
+              0.3009999990463257,
+              0.3016200065612793,
+              0.30008000135421753,
+              0.3001999855041504,
+              0.3001199960708618
+            ],
+            "count": 10,
+            "mean": 0.30075199604034425,
+            "sample_sd": 0.0013783504471731858
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                301.473984375,
+                299.454015625,
+                299.234015625,
+                299.174015625,
+                299.434015625,
+                300.274,
+                300.913984375,
+                299.354015625,
+                299.494015625,
+                299.394015625
+              ],
+              "count": 10,
+              "mean": 299.82000781249997,
+              "sample_sd": 0.7949181693795009
+            },
+            "device_active_union_us": {
+              "samples": [
+                301.473984375,
+                299.454015625,
+                299.234015625,
+                299.174015625,
+                299.434015625,
+                300.274,
+                300.913984375,
+                299.354015625,
+                299.494015625,
+                299.394015625
+              ],
+              "count": 10,
+              "mean": 299.82000781249997,
+              "sample_sd": 0.7949181693795009
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                301.473984375,
+                299.454015625,
+                299.234015625,
+                299.174015625,
+                299.434015625,
+                300.274,
+                300.913984375,
+                299.354015625,
+                299.494015625,
+                299.394015625
+              ],
+              "count": 10,
+              "mean": 299.82000781249997,
+              "sample_sd": 0.7949181693795009
+            },
+            "operation_active_union_us": {
+              "samples": [
+                301.473984375,
+                299.454015625,
+                299.234015625,
+                299.174015625,
+                299.434015625,
+                300.274,
+                300.913984375,
+                299.354015625,
+                299.494015625,
+                299.394015625
+              ],
+              "count": 10,
+              "mean": 299.82000781249997,
+              "sample_sd": 0.7949181693795009
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "6e9e2603c09ff2a059aa51612b4fd0540122765fc70c8a447891c83c9dc07030",
+          "raw_pmu_csv_sha256": "27a606f5cb9b1981a75f4ae2567c0266d6e8833f9d9d99dcff33f47a08f5d8ce",
+          "kernel_duration_us": {
+            "_clipped_swiglu_flat_kernel": [
+              "301.474",
+              "299.454",
+              "299.234",
+              "299.174",
+              "299.434",
+              "300.274",
+              "300.914",
+              "299.354",
+              "299.494",
+              "299.394"
+            ]
+          }
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 6.008441374660833e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            32,
+            3
+          ],
+          "layout": {
+            "block_m": 4,
+            "block_k": 1024,
+            "tile": 4096,
+            "flat_grid": [
+              96
+            ],
+            "source_grid": [
+              32,
+              3
+            ],
+            "max_padded_input_offset": 786431,
+            "max_padded_output_offset": 393215,
+            "max_padded_byte": 3145727,
+            "int64": false,
+            "valid_input_elements": 786432,
+            "valid_output_elements": 393216
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "964e19cefa2b04135264e0682ce1f444bf06508ef9e92e0535d8a656394629de",
+              "binaries": {
+                "ttir": "a1ad0f9273cc2214968fd63996ace417a4a356e5fe0c5ce7fa11e8ea8da9d0fe",
+                "ttadapter": "6361815d2d56a473d3e7fe48f710829c183a3af4ed0a1129222c639b45283497",
+                "npubin": "05bd9d983086efa0d1287151ec648da35db70c45c3e0add28229c2186505bb25"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              1.1812800168991089,
+              0.2224999964237213,
+              0.17472000420093536,
+              0.18401999771595,
+              0.17414000630378723,
+              0.17773999273777008,
+              0.14234000444412231,
+              0.16047999262809753,
+              0.1593800038099289,
+              0.16266000270843506
+            ],
+            "count": 10,
+            "mean": 0.2739260017871857,
+            "sample_sd": 0.3195058050974051
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                9.899796875,
+                5.819875,
+                6.199875,
+                6.219875,
+                5.979890625,
+                5.859875,
+                6.219875,
+                6.079875,
+                6.019875,
+                5.839890625
+              ],
+              "count": 10,
+              "mean": 6.4138703125,
+              "sample_sd": 1.2345518223618224
+            },
+            "device_active_union_us": {
+              "samples": [
+                9.899796875,
+                5.819875,
+                6.199875,
+                6.219875,
+                5.979890625,
+                5.859875,
+                6.219875,
+                6.079875,
+                6.019875,
+                5.839890625
+              ],
+              "count": 10,
+              "mean": 6.4138703125,
+              "sample_sd": 1.2345518223618224
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                9.899796875,
+                5.819875,
+                6.199875,
+                6.219875,
+                5.979890625,
+                5.859875,
+                6.219875,
+                6.079875,
+                6.019875,
+                5.839890625
+              ],
+              "count": 10,
+              "mean": 6.4138703125,
+              "sample_sd": 1.2345518223618224
+            },
+            "operation_active_union_us": {
+              "samples": [
+                9.899796875,
+                5.819875,
+                6.199875,
+                6.219875,
+                5.979890625,
+                5.859875,
+                6.219875,
+                6.079875,
+                6.019875,
+                5.839890625
+              ],
+              "count": 10,
+              "mean": 6.4138703125,
+              "sample_sd": 1.2345518223618224
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "ebefc90d79e0ce4b3c7d4c24b4a7bb9e53814ce4a981bb4930f359f075d3cfc4",
+          "raw_pmu_csv_sha256": "a5816a4e7cb2da0e9debfa3bf246421966a14d25b266f619751d96ef818fe7be",
+          "kernel_duration_us": {
+            "_clipped_swiglu_kernel": [
+              "9.899",
+              "5.820",
+              "6.200",
+              "6.220",
+              "5.980",
+              "5.860",
+              "6.220",
+              "6.080",
+              "6.020",
+              "5.840"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "W008-T05-02",
+      "role": "gallery",
+      "status": "complete",
+      "fixture_sha256": "2e144b4b4af58214d44be4841487d7afeb0bc5b5d54e64ecc838a8b161ead4be",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 5.603053253366852e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": null
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            9
+          ],
+          "layout": {
+            "block_m": 4,
+            "block_k": 1024,
+            "tile": 4096,
+            "flat_grid": [
+              9
+            ],
+            "source_grid": [
+              9,
+              1
+            ],
+            "max_padded_input_offset": 73727,
+            "max_padded_output_offset": 36863,
+            "max_padded_byte": 294911,
+            "int64": false,
+            "valid_input_elements": 67584,
+            "valid_output_elements": 33792
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "9d43181308849cc98c257e7f66aee7bc4b94bb9ffcd32070c0af337f40961827",
+              "binaries": {
+                "ttir": "05d2ff1ac9f462a468c98da8e47e4f714be952b80082c8d107b8242d221c8de4",
+                "ttadapter": "421e2419b3728dafcfe045cb3fcd9c4e09e40f3d8a3b7e386a1d627359bc4687",
+                "npubin": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              0.9978600144386292,
+              0.27483999729156494,
+              0.26263999938964844,
+              0.2522999942302704,
+              0.2533999979496002,
+              0.24658000469207764,
+              0.25189998745918274,
+              0.23510000109672546,
+              0.23997999727725983,
+              0.23919999599456787
+            ],
+            "count": 10,
+            "mean": 0.3253799989819527,
+            "sample_sd": 0.2365777205085364
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                146.237078125,
+                145.07709375,
+                145.05709375,
+                144.897109375,
+                146.5370625,
+                145.33709375,
+                144.037109375,
+                143.397140625,
+                144.597125,
+                145.797078125
+              ],
+              "count": 10,
+              "mean": 145.0970984375,
+              "sample_sd": 0.9560347799872405
+            },
+            "device_active_union_us": {
+              "samples": [
+                146.237078125,
+                145.07709375,
+                145.05709375,
+                144.897109375,
+                146.5370625,
+                145.33709375,
+                144.037109375,
+                143.397140625,
+                144.597125,
+                145.797078125
+              ],
+              "count": 10,
+              "mean": 145.0970984375,
+              "sample_sd": 0.9560347799872405
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                146.237078125,
+                145.07709375,
+                145.05709375,
+                144.897109375,
+                146.5370625,
+                145.33709375,
+                144.037109375,
+                143.397140625,
+                144.597125,
+                145.797078125
+              ],
+              "count": 10,
+              "mean": 145.0970984375,
+              "sample_sd": 0.9560347799872405
+            },
+            "operation_active_union_us": {
+              "samples": [
+                146.237078125,
+                145.07709375,
+                145.05709375,
+                144.897109375,
+                146.5370625,
+                145.33709375,
+                144.037109375,
+                143.397140625,
+                144.597125,
+                145.797078125
+              ],
+              "count": 10,
+              "mean": 145.0970984375,
+              "sample_sd": 0.9560347799872405
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "37f102cb6c8e822c78e83a0d46fd28895b611ef809839ce9076bdd79e9e78508",
+          "raw_pmu_csv_sha256": "20348b9884a989e6e3a273447c0e040404e456dc0e365fe013a24752e636435b",
+          "kernel_duration_us": {
+            "_clipped_swiglu_flat_kernel": [
+              "146.237",
+              "145.077",
+              "145.057",
+              "144.897",
+              "146.537",
+              "145.337",
+              "144.037",
+              "143.397",
+              "144.597",
+              "145.798"
+            ]
+          }
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 5.603053253366852e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            9,
+            1
+          ],
+          "layout": {
+            "block_m": 4,
+            "block_k": 1024,
+            "tile": 4096,
+            "flat_grid": [
+              9
+            ],
+            "source_grid": [
+              9,
+              1
+            ],
+            "max_padded_input_offset": 73727,
+            "max_padded_output_offset": 36863,
+            "max_padded_byte": 294911,
+            "int64": false,
+            "valid_input_elements": 67584,
+            "valid_output_elements": 33792
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "570df02dec226bd8ac9f30b0cfd23f2bd690036e6bb2bdc325c807b3f62d363e",
+              "binaries": {
+                "ttir": "a499bfa0726b30674abf3caa56dbd614b2704a8be72cfe1d28039fc757ac66b1",
+                "ttadapter": "2be827d56af80ad52c96d6cf58e853625a82be460c9bd5bc1d8dbdf47dae7529",
+                "npubin": "05bd9d983086efa0d1287151ec648da35db70c45c3e0add28229c2186505bb25"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              1.2614599466323853,
+              0.2341800034046173,
+              0.20166000723838806,
+              0.18807999789714813,
+              0.18213999271392822,
+              0.1736000031232834,
+              0.1817599982023239,
+              0.18262000381946564,
+              0.15335999429225922,
+              0.16769999265670776
+            ],
+            "count": 10,
+            "mean": 0.2926559939980507,
+            "sample_sd": 0.34108133324749845
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                3.779921875,
+                3.939921875,
+                4.69990625,
+                4.19990625,
+                4.23990625,
+                3.3599375,
+                3.2199375,
+                3.2199375,
+                3.279921875,
+                3.1599375
+              ],
+              "count": 10,
+              "mean": 3.7099234374999996,
+              "sample_sd": 0.5425125128290252
+            },
+            "device_active_union_us": {
+              "samples": [
+                3.779921875,
+                3.939921875,
+                4.69990625,
+                4.19990625,
+                4.23990625,
+                3.3599375,
+                3.2199375,
+                3.2199375,
+                3.279921875,
+                3.1599375
+              ],
+              "count": 10,
+              "mean": 3.7099234374999996,
+              "sample_sd": 0.5425125128290252
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                3.779921875,
+                3.939921875,
+                4.69990625,
+                4.19990625,
+                4.23990625,
+                3.3599375,
+                3.2199375,
+                3.2199375,
+                3.279921875,
+                3.1599375
+              ],
+              "count": 10,
+              "mean": 3.7099234374999996,
+              "sample_sd": 0.5425125128290252
+            },
+            "operation_active_union_us": {
+              "samples": [
+                3.779921875,
+                3.939921875,
+                4.69990625,
+                4.19990625,
+                4.23990625,
+                3.3599375,
+                3.2199375,
+                3.2199375,
+                3.279921875,
+                3.1599375
+              ],
+              "count": 10,
+              "mean": 3.7099234374999996,
+              "sample_sd": 0.5425125128290252
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "c0ea8419e427afd70c52bc34831aeeaf3ed817e33b60d5d5ea53dbb6308bb23e",
+          "raw_pmu_csv_sha256": "554261eb3cde97d7900a01c1a1633942f3148c7b020b0621dbed7ae14f17421c",
+          "kernel_duration_us": {
+            "_clipped_swiglu_kernel": [
+              "3.780",
+              "3.940",
+              "4.700",
+              "4.200",
+              "4.240",
+              "3.360",
+              "3.220",
+              "3.220",
+              "3.280",
+              "3.160"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "W008-T05-03",
+      "role": "heldout",
+      "status": "complete",
+      "fixture_sha256": "1b53d16198c41abab9a148de5a4e40841eb90c18811dad28dc0a613f260eedd7",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 6.38100782168749e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": null
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            250
+          ],
+          "layout": {
+            "block_m": 4,
+            "block_k": 1024,
+            "tile": 4096,
+            "flat_grid": [
+              250
+            ],
+            "source_grid": [
+              64,
+              4
+            ],
+            "max_padded_input_offset": 2048095,
+            "max_padded_output_offset": 1024095,
+            "max_padded_byte": 8192383,
+            "int64": false,
+            "valid_input_elements": 2048000,
+            "valid_output_elements": 1024000
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "5abc45546494260f707fa2e8694ee1ae93c34a640caa7cce90d476a30551f5d0",
+              "binaries": {
+                "ttir": "bea3d4480bf13c787b917da1c1ab9afee6c77cb323ce8da18e342c1cd1ac5c90",
+                "ttadapter": "6d52578d227b347f09d88489f51eb24049e980441a0b77d5f8918c519b275272",
+                "npubin": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              2.198240041732788,
+              0.9060999751091003,
+              0.906000018119812,
+              0.9061599969863892,
+              0.9060800075531006,
+              0.9061999917030334,
+              0.906059980392456,
+              0.9060999751091003,
+              0.9060800075531006,
+              0.906059980392456
+            ],
+            "count": 10,
+            "mean": 1.0353079974651336,
+            "sample_sd": 0.408612673017778
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                906.421890625,
+                905.34190625,
+                905.22190625,
+                905.38190625,
+                905.301921875,
+                905.40190625,
+                905.281921875,
+                905.32190625,
+                905.30190625,
+                905.281921875
+              ],
+              "count": 10,
+              "mean": 905.425909375,
+              "sample_sd": 0.35374127407830014
+            },
+            "device_active_union_us": {
+              "samples": [
+                906.421890625,
+                905.34190625,
+                905.22190625,
+                905.38190625,
+                905.301921875,
+                905.40190625,
+                905.281921875,
+                905.32190625,
+                905.30190625,
+                905.281921875
+              ],
+              "count": 10,
+              "mean": 905.425909375,
+              "sample_sd": 0.35374127407830014
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                906.421890625,
+                905.34190625,
+                905.22190625,
+                905.38190625,
+                905.301921875,
+                905.40190625,
+                905.281921875,
+                905.32190625,
+                905.30190625,
+                905.281921875
+              ],
+              "count": 10,
+              "mean": 905.425909375,
+              "sample_sd": 0.35374127407830014
+            },
+            "operation_active_union_us": {
+              "samples": [
+                906.421890625,
+                905.34190625,
+                905.22190625,
+                905.38190625,
+                905.301921875,
+                905.40190625,
+                905.281921875,
+                905.32190625,
+                905.30190625,
+                905.281921875
+              ],
+              "count": 10,
+              "mean": 905.425909375,
+              "sample_sd": 0.35374127407830014
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "2d9d12659a63c8f4aadb0da3b041376bc8ef9a9bd735574b92a471a63fd98d51",
+          "raw_pmu_csv_sha256": "98a381bcbc5992f1ffc106d4e0c86db9cb54cddc865d9c9c9ec902f644df5d9e",
+          "kernel_duration_us": {
+            "_clipped_swiglu_flat_kernel": [
+              "906.422",
+              "905.342",
+              "905.222",
+              "905.381",
+              "905.302",
+              "905.402",
+              "905.282",
+              "905.322",
+              "905.302",
+              "905.282"
+            ]
+          }
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 6.38100782168749e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            64,
+            4
+          ],
+          "layout": {
+            "block_m": 4,
+            "block_k": 1024,
+            "tile": 4096,
+            "flat_grid": [
+              250
+            ],
+            "source_grid": [
+              64,
+              4
+            ],
+            "max_padded_input_offset": 2048095,
+            "max_padded_output_offset": 1024095,
+            "max_padded_byte": 8192383,
+            "int64": false,
+            "valid_input_elements": 2048000,
+            "valid_output_elements": 1024000
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "964e19cefa2b04135264e0682ce1f444bf06508ef9e92e0535d8a656394629de",
+              "binaries": {
+                "ttir": "a1ad0f9273cc2214968fd63996ace417a4a356e5fe0c5ce7fa11e8ea8da9d0fe",
+                "ttadapter": "6361815d2d56a473d3e7fe48f710829c183a3af4ed0a1129222c639b45283497",
+                "npubin": "05bd9d983086efa0d1287151ec648da35db70c45c3e0add28229c2186505bb25"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              1.2430000305175781,
+              0.23965999484062195,
+              0.20363999903202057,
+              0.20348000526428223,
+              0.23863999545574188,
+              0.1406400054693222,
+              0.21417999267578125,
+              0.19189999997615814,
+              0.1855199933052063,
+              0.19429999589920044
+            ],
+            "count": 10,
+            "mean": 0.30549600124359133,
+            "sample_sd": 0.33060193874691074
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                16.1796875,
+                12.43975,
+                12.899734375,
+                13.139734375,
+                12.61975,
+                13.059734375,
+                13.079734375,
+                12.999734375,
+                12.699734375,
+                12.89975
+              ],
+              "count": 10,
+              "mean": 13.201734375,
+              "sample_sd": 1.0698717149437273
+            },
+            "device_active_union_us": {
+              "samples": [
+                16.1796875,
+                12.43975,
+                12.899734375,
+                13.139734375,
+                12.61975,
+                13.059734375,
+                13.079734375,
+                12.999734375,
+                12.699734375,
+                12.89975
+              ],
+              "count": 10,
+              "mean": 13.201734375,
+              "sample_sd": 1.0698717149437273
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                16.1796875,
+                12.43975,
+                12.899734375,
+                13.139734375,
+                12.61975,
+                13.059734375,
+                13.079734375,
+                12.999734375,
+                12.699734375,
+                12.89975
+              ],
+              "count": 10,
+              "mean": 13.201734375,
+              "sample_sd": 1.0698717149437273
+            },
+            "operation_active_union_us": {
+              "samples": [
+                16.1796875,
+                12.43975,
+                12.899734375,
+                13.139734375,
+                12.61975,
+                13.059734375,
+                13.079734375,
+                12.999734375,
+                12.699734375,
+                12.89975
+              ],
+              "count": 10,
+              "mean": 13.201734375,
+              "sample_sd": 1.0698717149437273
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "b69e688836da6ebdd5fedaafb3ff2c9ab6246b699b065a19669524296c3f1ec7",
+          "raw_pmu_csv_sha256": "daf5cb2f5d3277b70d8a5d5075c8117fa974105f0752a6155edc42ffc2aa3ef2",
+          "kernel_duration_us": {
+            "_clipped_swiglu_kernel": [
+              "16.180",
+              "12.439",
+              "12.900",
+              "13.140",
+              "12.620",
+              "13.060",
+              "13.079",
+              "13.000",
+              "12.700",
+              "12.900"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "W008-T05-04",
+      "role": "heldout",
+      "status": "complete",
+      "fixture_sha256": "0c0c577d12badbe47fa06ef55251123baad03b3e0ebccb398ebfcedeb04aff43",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 4.711146203817407e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": null
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            3
+          ],
+          "layout": {
+            "block_m": 8,
+            "block_k": 512,
+            "tile": 4096,
+            "flat_grid": [
+              3
+            ],
+            "source_grid": [
+              17,
+              1
+            ],
+            "max_padded_input_offset": 24637,
+            "max_padded_output_offset": 12287,
+            "max_padded_byte": 98551,
+            "int64": false,
+            "valid_input_elements": 16770,
+            "valid_output_elements": 8385
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "982d853ba027b610bf8659f89382ad74055a8d5b8334652d1e69cf4f6c7e5105",
+              "binaries": {
+                "ttir": "adb780bb2e875dc69f40cc0f7a5f822d00af191896c4cb7222b57440b85f3d7a",
+                "ttadapter": "91bf764830625198dc23666af0e0ea3738fe33a1863c1acfb7a6809152df7032",
+                "npubin": "2a2a5927aa81733ea09a6b4e5d7be7996e9e63fa2844c84ff87702437251c186"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              1.3019200563430786,
+              0.31779998540878296,
+              0.2831000089645386,
+              0.2577599883079529,
+              0.2671000063419342,
+              0.275299996137619,
+              0.25977998971939087,
+              0.27008000016212463,
+              0.2683199942111969,
+              0.262580007314682
+            ],
+            "count": 10,
+            "mean": 0.3763740032911301,
+            "sample_sd": 0.3256633942672163
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                158.216828125,
+                158.916828125,
+                156.816859375,
+                156.436875,
+                156.876875,
+                157.376859375,
+                155.27690625,
+                154.95690625,
+                157.236859375,
+                156.556859375
+              ],
+              "count": 10,
+              "mean": 156.866865625,
+              "sample_sd": 1.1963484375588416
+            },
+            "device_active_union_us": {
+              "samples": [
+                158.216828125,
+                158.916828125,
+                156.816859375,
+                156.436875,
+                156.876875,
+                157.376859375,
+                155.27690625,
+                154.95690625,
+                157.236859375,
+                156.556859375
+              ],
+              "count": 10,
+              "mean": 156.866865625,
+              "sample_sd": 1.1963484375588416
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                158.216828125,
+                158.916828125,
+                156.816859375,
+                156.436875,
+                156.876875,
+                157.376859375,
+                155.27690625,
+                154.95690625,
+                157.236859375,
+                156.556859375
+              ],
+              "count": 10,
+              "mean": 156.866865625,
+              "sample_sd": 1.1963484375588416
+            },
+            "operation_active_union_us": {
+              "samples": [
+                158.216828125,
+                158.916828125,
+                156.816859375,
+                156.436875,
+                156.876875,
+                157.376859375,
+                155.27690625,
+                154.95690625,
+                157.236859375,
+                156.556859375
+              ],
+              "count": 10,
+              "mean": 156.866865625,
+              "sample_sd": 1.1963484375588416
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "d51e57c1505330b44eef1e6fcd03a9405e8355ee457fe8fd3473e34c86f8c9ad",
+          "raw_pmu_csv_sha256": "8a4a5f78161d0c4192bcff6db45237eaf39f4c04c5efcca0194f6a94a9cd6468",
+          "kernel_duration_us": {
+            "_clipped_swiglu_flat_kernel": [
+              "158.217",
+              "158.916",
+              "156.817",
+              "156.437",
+              "156.877",
+              "157.377",
+              "155.277",
+              "154.957",
+              "157.237",
+              "156.557"
+            ]
+          }
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 4.711146203817407e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": true
+            }
+          },
+          "profiled_calls": 10,
+          "capture_calls": 1,
+          "grid": [
+            17,
+            1
+          ],
+          "layout": {
+            "block_m": 8,
+            "block_k": 512,
+            "tile": 4096,
+            "flat_grid": [
+              3
+            ],
+            "source_grid": [
+              17,
+              1
+            ],
+            "max_padded_input_offset": 24637,
+            "max_padded_output_offset": 12287,
+            "max_padded_byte": 98551,
+            "int64": false,
+            "valid_input_elements": 16770,
+            "valid_output_elements": 8385
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "hash": "6bc1e574e0324024bad6ee096475083a9b94f4a43dd504db135a16b153dbfd18",
+              "binaries": {
+                "ttir": "5ea703f2c013be4f7af399a42c125e87b1fb8b569839b3aac283087bb641921b",
+                "ttadapter": "e5a2da02fff3ddab111575e22eeb38f66e36a1e4c0e8ca968defe6ecf5c00907",
+                "npubin": "3e9dd9559e31b104de0d495917c5760812bb7483c2e59fbb0582a33c4e98a3f0"
+              }
+            }
+          ],
+          "event_latency_ms": {
+            "samples": [
+              1.2776399850845337,
+              0.23199999332427979,
+              0.1908400058746338,
+              0.19844000041484833,
+              0.17565999925136566,
+              0.1449200063943863,
+              0.1559000015258789,
+              0.1551000028848648,
+              0.17569999396800995,
+              0.20532000064849854
+            ],
+            "count": 10,
+            "mean": 0.29115199893712995,
+            "sample_sd": 0.34761684856445263
+          },
+          "device_work_us": {
+            "device_busy_us": {
+              "samples": [
+                6.259875,
+                5.679890625,
+                5.399890625,
+                4.199921875,
+                3.619921875,
+                3.6199375,
+                3.7399375,
+                3.639921875,
+                3.7199375,
+                3.899921875
+              ],
+              "count": 10,
+              "mean": 4.377915625,
+              "sample_sd": 1.004167655849703
+            },
+            "device_active_union_us": {
+              "samples": [
+                6.259875,
+                5.679890625,
+                5.399890625,
+                4.199921875,
+                3.619921875,
+                3.6199375,
+                3.7399375,
+                3.639921875,
+                3.7199375,
+                3.899921875
+              ],
+              "count": 10,
+              "mean": 4.377915625,
+              "sample_sd": 1.004167655849703
+            },
+            "device_overlap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "device_window_us": {
+            "device_operation_span_us": {
+              "samples": [
+                6.259875,
+                5.679890625,
+                5.399890625,
+                4.199921875,
+                3.619921875,
+                3.6199375,
+                3.7399375,
+                3.639921875,
+                3.7199375,
+                3.899921875
+              ],
+              "count": 10,
+              "mean": 4.377915625,
+              "sample_sd": 1.004167655849703
+            },
+            "operation_active_union_us": {
+              "samples": [
+                6.259875,
+                5.679890625,
+                5.399890625,
+                4.199921875,
+                3.619921875,
+                3.6199375,
+                3.7399375,
+                3.639921875,
+                3.7199375,
+                3.899921875
+              ],
+              "count": 10,
+              "mean": 4.377915625,
+              "sample_sd": 1.004167655849703
+            },
+            "device_idle_gap_us": {
+              "samples": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "count": 10,
+              "mean": 0.0,
+              "sample_sd": 0.0
+            }
+          },
+          "trace_sha256": "41e73915e9b60c60e6f856771f35e367a032744be3516c00d08234b36c77b0c2",
+          "raw_pmu_csv_sha256": "b4dd63d04edb60f7f6eda9f78fa813b0834714faaa0b48e3858d8a3d9f9e3b6f",
+          "kernel_duration_us": {
+            "_clipped_swiglu_kernel": [
+              "6.260",
+              "5.680",
+              "5.400",
+              "4.200",
+              "3.620",
+              "3.620",
+              "3.740",
+              "3.640",
+              "3.720",
+              "3.899"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "W008-T05-GA",
+      "role": "guard",
+      "status": "complete",
+      "fixture_sha256": "84c769f7fed607d2a830be39cba269a770ab9823fd8098ba44a0d50e0bdc0c39",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 1.8038144702359205e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": null
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0,
+          "grid": [
+            1
+          ],
+          "layout": {
+            "block_m": 1,
+            "block_k": 512,
+            "tile": 512,
+            "flat_grid": [
+              1
+            ],
+            "source_grid": [
+              1,
+              1
+            ],
+            "max_padded_input_offset": 1038,
+            "max_padded_output_offset": 511,
+            "max_padded_byte": 4155,
+            "int64": false,
+            "valid_input_elements": 34,
+            "valid_output_elements": 17
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "305434d564dccf15edfbbc618e92fcda0c6a4da0a76083dab66b2464f7824976",
+                "ttadapter": "1f055e286ee1ab2ba84a1f76d73ef34f53969cfdb46c0ad8e0c03629724092b5",
+                "ttir": "76e93f999594f35680b4bca1595c59fa3f833a4f55e5120c671c60e27d10d672"
+              },
+              "hash": "09e574bed92fb315f173ee4f9954467574af6c4034712be8e3ef957e0416cee0"
+            }
+          ]
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 1.8038144702359205e-06,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0,
+          "grid": [
+            1,
+            1
+          ],
+          "layout": {
+            "block_m": 1,
+            "block_k": 512,
+            "tile": 512,
+            "flat_grid": [
+              1
+            ],
+            "source_grid": [
+              1,
+              1
+            ],
+            "max_padded_input_offset": 1038,
+            "max_padded_output_offset": 511,
+            "max_padded_byte": 4155,
+            "int64": false,
+            "valid_input_elements": 34,
+            "valid_output_elements": 17
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "35292fccf8868002f9b91bebf7c57472711c4ce316d4d725caa47cb42de5ddb1",
+                "ttadapter": "a25c655b5f635c44b980e210790449154b3e6fe7475188430d400810c1f6676a",
+                "ttir": "43921937ea63bed7be5c820c959067a9bf0e6e0ee910880e7c90f5c30eda88ed"
+              },
+              "hash": "cd1a5c6ad3ce815b28ce2f9128cd3110360749c7400ae6bbc9082623e46fa7ab"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "W008-T05-GB",
+      "role": "guard",
+      "status": "complete",
+      "fixture_sha256": "466ef0c43294a52903f4ba60db136addb2dfbff72358c97b294de2e50d8f1e05",
+      "arms": {
+        "before": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 4.5157830252939846e-10,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": null
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0,
+          "grid": [
+            1
+          ],
+          "layout": {
+            "block_m": 2,
+            "block_k": 512,
+            "tile": 1024,
+            "flat_grid": [
+              1
+            ],
+            "source_grid": [
+              2,
+              1
+            ],
+            "max_padded_input_offset": 2063,
+            "max_padded_output_offset": 1023,
+            "max_padded_byte": 8255,
+            "int64": false,
+            "valid_input_elements": 390,
+            "valid_output_elements": 195
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "e8da8bb481626cdc6d65443a3a066f807a30c23827ed7edbaa9cc95dae9a3d2c",
+                "ttadapter": "356e6a1f960190d692c1801ef54f958917c87619cd7ca5a54c895e03ccb086f6",
+                "ttir": "ba5094e8630b8a26b3db6813474c0a0ada37cc0998822b5f1f9ba93e819ffa30"
+              },
+              "hash": "f1beaff32f6ba0bec92601b1cb42ab362d9b70355b6e8580f72efd44a962ae95"
+            }
+          ]
+        },
+        "after": {
+          "correctness": {
+            "status": "complete",
+            "calls": 1,
+            "diagnostics": {
+              "passed": true,
+              "max_abs_error": 4.5157830252939846e-10,
+              "atol": 3e-05,
+              "rtol": 2e-05,
+              "canaries": true,
+              "immutable": true,
+              "nonalias": true,
+              "paired_output_bits": true
+            }
+          },
+          "profiled_calls": 0,
+          "capture_calls": 0,
+          "grid": [
+            2,
+            1
+          ],
+          "layout": {
+            "block_m": 2,
+            "block_k": 512,
+            "tile": 1024,
+            "flat_grid": [
+              1
+            ],
+            "source_grid": [
+              2,
+              1
+            ],
+            "max_padded_input_offset": 2063,
+            "max_padded_output_offset": 1023,
+            "max_padded_byte": 8255,
+            "int64": false,
+            "valid_input_elements": 390,
+            "valid_output_elements": 195
+          },
+          "sources": {
+            "clipped_index.py": "a7093b328a7968798eeb9732b81e1cac441fd221a513a84954dbcb8c3d333d5e",
+            "clipped_index_kernel.py": "7a0518b78c6b6dad012b311e390e7858795d56367567890972714fb6e3ee5ecd",
+            "clipped_index_contract.py": "05310151b74eefbdf752cf7e94a1135d069b13e86c5a5031d2eb7bf48988d05b"
+          },
+          "compilation": [
+            {
+              "binaries": {
+                "npubin": "6e04701f40aecc55fb048bcb91bbc891c651a41ed7faf2e29ec840d7678db476",
+                "ttadapter": "001d3aa4435bd0093f524bee252f728082622c63a1e64b769992a9cd7c78fa0d",
+                "ttir": "bdba59c62c62d7a4d018baaa9a2fae986db3f39e0ef4b7ba4425e0a5ec17a4f8"
+              },
+              "hash": "5e6548a0e84ad36ab5631882ef43f5c9a830836e50b809171ffa5d633496f134"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

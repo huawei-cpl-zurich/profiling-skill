@@ -1,0 +1,1565 @@
+{
+  "schema_version": 1,
+  "status": "failed-bounded-recovery-partial-family",
+  "scope": "Evidence only; unchanged source, fixtures, seeds, tolerances and launch flags. No performance or full-family qualification.",
+  "authorization": "User requested: rerun whathever failed because of infra. One bounded infrastructure-suspected attempt; original and repeated failure causes unresolved.",
+  "source_execution_commit": "72e580d7426becceb870a31dd53c3bbb65d3dec6",
+  "publication_parent_commit": "4374eb27845ac5e3d499a7310d6b60afe227c1c9",
+  "operational_framework_commit": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+  "source_sha256": {
+    "paged_kv_pairs.py": "fb485e359e1043aa0625fec714f0a6c60f7f2dd8f4e6104dceee38339f69efc2",
+    "paged_kv_contract.py": "5fee24a1650642143b3ffafe187acb488c7b0261ba17e0a1bfd3b243732f6300"
+  },
+  "framework_sha256": {
+    "optimization_pair.py": "122f66c588c6e37048523cfb0d8f0bfb19e96b7e9d2b6bd29d0215e4a20aaddd",
+    "optimization_profile_evidence.py": "820cec72587387221ebfab2adcc5beff71d28fabcd97787c5e82f4c58784e6a3",
+    "profile_ten.py": "e2e10fe0a38a0ae9bdaa65089960ec9d5f7d6f0aef7cc102d0aa243a8826717e"
+  },
+  "runtime": {
+    "product": "Ascend910 V1",
+    "device_model": "9382",
+    "driver_properties": {
+      "max_shared_mem": 1,
+      "num_aicore": 24,
+      "num_vectorcore": 48
+    },
+    "physical_npu": 0,
+    "chip": 0,
+    "application_logical_device": 0,
+    "installed_distribution_versions": {
+      "torch": "2.10.0+cpu",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "imported_triton_version": "3.2.0",
+    "version_note": "Installed distribution metadata and imported module version are recorded separately.",
+    "metric_group": "PipeUtilization"
+  },
+  "handles": {
+    "scientific": "remote:bz-a3-1:job:20261025T014124Z-eb42cdfb6aeb",
+    "checkpoint_inspection": "remote:bz-a3-1:job:20261025T015127Z-1287facd650d",
+    "compact_and_release": "remote:bz-a3-1:job:20261025T015209Z-bf0b8b30b3b2"
+  },
+  "terminal": {
+    "state": "failed",
+    "exit_code": 1,
+    "error_code": 507034,
+    "error": "vector core execution timed out during first baseline capture synchronization",
+    "cause": "unresolved; neither algorithm nor infrastructure attribution established",
+    "watchdog_fired": false
+  },
+  "recovery_counts": {
+    "cpu_oracle_regeneration_calls": 0,
+    "correctness_calls": 2,
+    "correctness_passes": 2,
+    "profile_api_entered_before": 10,
+    "profile_api_entered_after": 0,
+    "profile_api_device_completion": "UNKNOWN",
+    "capture_attempts": 1,
+    "complete_captures": 0,
+    "complete_matched_pairs": 0,
+    "event_samples": 0,
+    "analysis_calls": 0
+  },
+  "cases": [
+    {
+      "case_id": "F01-01",
+      "compile_arms": 2,
+      "correctness": "passed once per arm",
+      "atol": 0.001,
+      "rtol": 0.001,
+      "max_absolute_error_per_arm": {
+        "before": 3.974438914291535e-06,
+        "after": 3.974438914291535e-06
+      },
+      "before_capture": "failed after 10 entered calls; device completion unknown; zero event samples",
+      "after_capture": "unattempted; zero calls"
+    },
+    {
+      "case_id": "F01-03",
+      "compile_arms": 2,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "status": "unattempted after fatal stop"
+    },
+    {
+      "case_id": "F01-04",
+      "compile_arms": 2,
+      "correctness_calls": 0,
+      "profile_calls": 0,
+      "status": "unattempted after fatal stop"
+    },
+    {
+      "case_id": "F01-02",
+      "status": "skipped; original successful evidence unchanged",
+      "new_correctness_calls": 0,
+      "new_profile_calls": 0
+    },
+    {
+      "case_id": "F01-GA",
+      "status": "skipped; original successful evidence unchanged",
+      "new_correctness_calls": 0,
+      "new_profile_calls": 0
+    },
+    {
+      "case_id": "F01-GB",
+      "status": "skipped; original successful evidence unchanged",
+      "new_correctness_calls": 0,
+      "new_profile_calls": 0
+    }
+  ],
+  "original_gz_history": {
+    "F01_01": "Both correctness passed; before 10 entered calls, zero samples,507034; after count UNKNOWN.",
+    "F01_02": "Only original complete cost pair: 10 forwards per arm,20 samples; before682.022us/after1349.814us; negative result unchanged.",
+    "F01_03": "Both correctness passed; before10 entered calls/zero samples/507034; after0 by fatal stop.",
+    "F01_04": "Unattempted.",
+    "guards": "GA/GB both arms correct; zero profiles. Successful cases never repeated.",
+    "original_cpu_payloads_generated": 6,
+    "cross_hardware_aggregation": false
+  },
+  "original_cache_bindings": [
+    {
+      "case_id": "F01-01",
+      "seed": 1101,
+      "payload_sha256": "09dabd898030f4d9a9548f3e31ed4917ac7ae2044702345befb8c2635b1c4a85",
+      "manifest_sha256": "0ce74dd72b985a235125ec9e7a0d4794e0f6733aa4d4e34e69ee09a99c1e5b60",
+      "folder": "06f8d8872682f704a22a4c3438a766e7d31c7c5e387d7ce0bd90ea483814eb1d"
+    },
+    {
+      "case_id": "F01-GA",
+      "seed": 1191,
+      "payload_sha256": "77ecb8bc60745a9e55540c8338c13ac3997b37cc7d641114b8121acbf9b72e7e",
+      "manifest_sha256": "ec23f16d19481091faa3030c4f8e27769480d5d8137e159d3b079b584ff59cbd",
+      "folder": "636e48959edbf29202dac05e4127f67ee57712d981f3074ef03ea16428227842"
+    },
+    {
+      "case_id": "F01-03",
+      "seed": 1103,
+      "payload_sha256": "aa105f36c6c6f5dd91a7a233426185a255065f2be9dfdcdf5013b354e21143bb",
+      "manifest_sha256": "9695b8b9cc4ab5ecbd9c0b85789ae916be6580ed9bb04f5ad53938d4e4cfce8b",
+      "folder": "8c7d728c5beb5df3cdfbd6fb7ea8ebc90f1fa514bf0fb326fba99417e5e9017a"
+    },
+    {
+      "case_id": "F01-02",
+      "seed": 1102,
+      "payload_sha256": "e9decb0331ddc0d6222ed41fa4a634bc9d2f4076597d2c7ba51d682bd0d6dce5",
+      "manifest_sha256": "be44ff34483dcb26193fe176d4cb02fd9c512b40320e5560fd74cd91a289edec",
+      "folder": "b473775ebb409b17c5df85df26d117e5f6b78b75d732cfa11e7d8d80eb4cf902"
+    },
+    {
+      "case_id": "F01-GB",
+      "seed": 1192,
+      "payload_sha256": "d5b8976a90d391c6756bc8d27e18b90f9e433558c4602924ffdec6b86e06af43",
+      "manifest_sha256": "d1b19c37e0a6c0ce94f04a28df9a4d01744676cc0c5f40a87d379d0c2ed9bd48",
+      "folder": "c9c17d3c3cce31213290c04f8dafa1ebbe62175d1fa2420a5acb56cdb4e1c8a6"
+    },
+    {
+      "case_id": "F01-04",
+      "seed": 1104,
+      "payload_sha256": "81bd277c5eaa502f1cad0a1476bc1dcb2867fe8e8e490b975ec754e3ef1028c8",
+      "manifest_sha256": "9ebaf9c38d92cc31056b8d9045c35fbb2b5ed4e3a1da31aa5c38fa1513bd6d3e",
+      "folder": "e03a32f827cec030d43e64de457209d81cbb6f113dd3407df0ac71e94fd81fab"
+    }
+  ],
+  "compile_screen": {
+    "completed_before_any_numerical_work": true,
+    "arm_cells": 6,
+    "linked_binaries": 9,
+    "original_launch_kwargs_unchanged": true,
+    "warmup_addition": "grid only",
+    "cells": [
+      {
+        "case_id": "F01-01",
+        "arm": "before",
+        "compilation": [
+          {
+            "hash": "e0b95874cdfc42795d26691a9841eb9707fa50f9e4f4f28888ced0024e9a1d31",
+            "artifacts": {
+              "ttir": "9e870449d6b48ba33e2934d98c76e8ad96d5a77c714dd6128e988b65d74afad3",
+              "ttadapter": "72c8bf3485c0f2ebccbea8db6fc2b33a17c78ef490ae4156723c099a1fa518f6",
+              "npubin": "fbda5157839c7c8f8768412726d2fe5966afd970b9df91ecd55dc0f8fceae977"
+            }
+          },
+          {
+            "hash": "d6c8a03ae25d4f5aafcff13c04e817e457c370a46261ddc3628e69fbc74c4d45",
+            "artifacts": {
+              "ttir": "eabb759c6a3b3fd554a6e27e55f6eabe4ea41912e6bd261559a8c8df893b960b",
+              "ttadapter": "cad55057cafdd74021c79280e1a7e800490c1ab7ae8264f0afc1233c41f26d37",
+              "npubin": "21916dc979f4e663ee4935f29a3f7c0475317bf2e77a9cd7bd8f494f4d0532a9"
+            }
+          }
+        ],
+        "linked_binaries": [
+          {
+            "file": "kernel-0.npubin",
+            "sha256": "fbda5157839c7c8f8768412726d2fe5966afd970b9df91ecd55dc0f8fceae977",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2208,
+                "info": 0,
+                "sha256": "a4508be0b3c64efd10231cd58d966df4bb5d64062a76ad4a8118e86ddd2df697"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "56d85dbb89803d6ec332acae7951075c4221104dd075f8fe244585c5f4b0fa57"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 350,
+                "info": 0,
+                "sha256": "1bdc1a5087dc37cd607b42a89d0ac6bb6a89b1b6c74f809a24f66252f7bbda13"
+              }
+            ]
+          },
+          {
+            "file": "kernel-1.npubin",
+            "sha256": "21916dc979f4e663ee4935f29a3f7c0475317bf2e77a9cd7bd8f494f4d0532a9",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 4752,
+                "info": 0,
+                "sha256": "2471df4b9668730212d5c3d3a0484b4f07fdcd7b7d7d11c46bcc538f91297620"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 16,
+                "info": 0,
+                "sha256": "f023fe6446334b0d361448f7d1739e771036185ed4c997ecc17860ab3c10809c"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "53d7746d68696a5ce378433424d1b2a2c6606fa8d45536ef9b286bac36833887"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1752,
+                "info": 69,
+                "sha256": "ad9a00e50cb94d860f2a357908494cfdbe998733281643aae95562e68300e758"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 585,
+                "info": 0,
+                "sha256": "ea4b269336991910352ec2f4f889c89d4a7cbd9faa7b1304b8e94a0b016b5bd8"
+              }
+            ]
+          }
+        ],
+        "input_layouts": [
+          {
+            "shape": [
+              2,
+              4,
+              16,
+              32
+            ],
+            "strides": [
+              2048,
+              512,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 8192,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              64,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 131072,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              64,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 131072,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              2,
+              32
+            ],
+            "strides": [
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 256,
+            "dtype": "torch.int32"
+          }
+        ],
+        "metadata": {
+          "language": "triton",
+          "arm": "before",
+          "torch_version": "2.10.0+cpu",
+          "triton_version": "3.2.0",
+          "query_tile": 16,
+          "key_tile": 32,
+          "causal_rule": "key_position <= KV-Q+query_position",
+          "probability_dtype": "fp16",
+          "gqa_group": 2,
+          "stages_per_forward": 2,
+          "num_autotune_trials": 0,
+          "workspace_bytes": 261120,
+          "empty_sequence": "shared attention kernel explicitly writes zeros"
+        },
+        "resource_records": [
+          {
+            "file": "resource-0.json",
+            "sha256": "0297ecd2aed76c97ed94341c498ede20ea9d14f5821efff1d0a882e07719b05f"
+          },
+          {
+            "file": "resource-1.json",
+            "sha256": "b09fd1af08456d31ec6f543300a34ba6993749c8f54300eaf3ff4a57570dbbd0"
+          }
+        ]
+      },
+      {
+        "case_id": "F01-01",
+        "arm": "after",
+        "compilation": [
+          {
+            "hash": "8eb05d1b727f1d1b213012fb62f3f77cb078f7eea9ac20f1afa1bac8c3962deb",
+            "artifacts": {
+              "ttir": "3f712e5400d5d002044b1fe025e36c484d6f625dfa252c6400a0b07dc49dff5f",
+              "ttadapter": "7f79e95c16cab6a429876d29b0eb7be4a3dde314eec4b2f8bb962f88f6479f2f",
+              "npubin": "e54c53e07e99572df465ac12304958244da1afcffb11551afac3224a8abbff39"
+            }
+          }
+        ],
+        "linked_binaries": [
+          {
+            "file": "kernel-0.npubin",
+            "sha256": "e54c53e07e99572df465ac12304958244da1afcffb11551afac3224a8abbff39",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 6104,
+                "info": 0,
+                "sha256": "5fdfb4d58269d3fce0e472756bb0c4a4bcc2e5238524f6d1a1113cbe1ec6f1b9"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 16,
+                "info": 0,
+                "sha256": "f023fe6446334b0d361448f7d1739e771036185ed4c997ecc17860ab3c10809c"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "53d7746d68696a5ce378433424d1b2a2c6606fa8d45536ef9b286bac36833887"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1752,
+                "info": 69,
+                "sha256": "5597c9cf4362e78fd9dfb65609fc9e720fff3acc3acbf94abc38202fe011f06e"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 585,
+                "info": 0,
+                "sha256": "ea4b269336991910352ec2f4f889c89d4a7cbd9faa7b1304b8e94a0b016b5bd8"
+              }
+            ]
+          }
+        ],
+        "input_layouts": [
+          {
+            "shape": [
+              2,
+              4,
+              16,
+              32
+            ],
+            "strides": [
+              2048,
+              512,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 8192,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              64,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 131072,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              64,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 131072,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              2,
+              32
+            ],
+            "strides": [
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 256,
+            "dtype": "torch.int32"
+          }
+        ],
+        "metadata": {
+          "language": "triton",
+          "arm": "after",
+          "torch_version": "2.10.0+cpu",
+          "triton_version": "3.2.0",
+          "query_tile": 16,
+          "key_tile": 32,
+          "causal_rule": "key_position <= KV-Q+query_position",
+          "probability_dtype": "fp16",
+          "gqa_group": 2,
+          "stages_per_forward": 1,
+          "num_autotune_trials": 0,
+          "workspace_bytes": 0,
+          "empty_sequence": "shared attention kernel explicitly writes zeros"
+        },
+        "resource_records": [
+          {
+            "file": "resource-0.json",
+            "sha256": "79d3a13299ab6b3fc6cb97300850819cddca3b61f38a961e31e577b0bc5b1680"
+          }
+        ]
+      },
+      {
+        "case_id": "F01-03",
+        "arm": "before",
+        "compilation": [
+          {
+            "hash": "4da0b1514bd3fe9fc8472cd007d7037bea2b1ab9add63718c55939ff779450a4",
+            "artifacts": {
+              "ttir": "8c2b63fbdfce68b6a47a35e3128f641f1b1c579602f9600bd652a74423d634ac",
+              "ttadapter": "6934335dc8291132876db023ff88d263954f7c4b2111d246bb14d28c6e331dd6",
+              "npubin": "a0d36a86c2cdfcd502364cc97c7a43f48834231d20a6f6d0229f739f4169420b"
+            }
+          },
+          {
+            "hash": "17d2b16bf4b2b45ca3237f5f7f86a4ff4e27c42a18148b5dd42ee8a6e9941af5",
+            "artifacts": {
+              "ttir": "855ae2e47f3932d77e70c7a3586451f2b65845939da3dccdb416f5a56e607ee3",
+              "ttadapter": "7ddb66a0846fd7706ec732873c5735e05e1829a8b518a4257c90f8142f2522ce",
+              "npubin": "1dd76c583bd87f3588d7d10426f230f7b88f188679cd9001b7acb3992e19cb7a"
+            }
+          }
+        ],
+        "linked_binaries": [
+          {
+            "file": "kernel-0.npubin",
+            "sha256": "a0d36a86c2cdfcd502364cc97c7a43f48834231d20a6f6d0229f739f4169420b",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2204,
+                "info": 0,
+                "sha256": "a1d54557ec810f1b369dc7380283047ac5851b3d84e8602e673a44956856dde9"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "a1fae193e86d78e0948c2a968f4bf7280d0ab041a0e8f190b2998507b8358248"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 350,
+                "info": 0,
+                "sha256": "1bdc1a5087dc37cd607b42a89d0ac6bb6a89b1b6c74f809a24f66252f7bbda13"
+              }
+            ]
+          },
+          {
+            "file": "kernel-1.npubin",
+            "sha256": "1dd76c583bd87f3588d7d10426f230f7b88f188679cd9001b7acb3992e19cb7a",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 4760,
+                "info": 0,
+                "sha256": "9c5f6d589769ab2c8a730f9dc8305e03f2c7e14711453802e67cb458db10d6f2"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 16,
+                "info": 0,
+                "sha256": "f023fe6446334b0d361448f7d1739e771036185ed4c997ecc17860ab3c10809c"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "53d7746d68696a5ce378433424d1b2a2c6606fa8d45536ef9b286bac36833887"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1752,
+                "info": 69,
+                "sha256": "627b2f4c82c67400da0e16f36a8a3ff8804c972339fa008ea0c5789c6704525b"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 585,
+                "info": 0,
+                "sha256": "ea4b269336991910352ec2f4f889c89d4a7cbd9faa7b1304b8e94a0b016b5bd8"
+              }
+            ]
+          }
+        ],
+        "input_layouts": [
+          {
+            "shape": [
+              1,
+              4,
+              24,
+              32
+            ],
+            "strides": [
+              3072,
+              768,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 6144,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              48,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              48,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              1,
+              48
+            ],
+            "strides": [
+              48,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 192,
+            "dtype": "torch.int32"
+          }
+        ],
+        "metadata": {
+          "language": "triton",
+          "arm": "before",
+          "torch_version": "2.10.0+cpu",
+          "triton_version": "3.2.0",
+          "query_tile": 16,
+          "key_tile": 32,
+          "causal_rule": "key_position <= KV-Q+query_position",
+          "probability_dtype": "fp16",
+          "gqa_group": 2,
+          "stages_per_forward": 2,
+          "num_autotune_trials": 0,
+          "workspace_bytes": 196096,
+          "empty_sequence": "shared attention kernel explicitly writes zeros"
+        },
+        "resource_records": [
+          {
+            "file": "resource-0.json",
+            "sha256": "5eb8c6e5f5eaf4d8027e4d530d294852cf514d7957842c18c322a1ce2a542bb9"
+          },
+          {
+            "file": "resource-1.json",
+            "sha256": "3801632e8083b75389e8447779ab4186d7b23e122ebe60dd6f54c03cc0586fc1"
+          }
+        ]
+      },
+      {
+        "case_id": "F01-03",
+        "arm": "after",
+        "compilation": [
+          {
+            "hash": "ebd282887fe324d5879977a2f8a5757965128b5c79d1de019709c8ff7d0fed0a",
+            "artifacts": {
+              "ttir": "b2e91f35ef82a80fd041ae497351eb62866725ef1c2a3eb980ac3b32f9725d99",
+              "ttadapter": "c6714d848e12e84c7808cd75f84ba69bb7df491f85fc8811e37bde027648b960",
+              "npubin": "942217ea1c20d90a0242982740baa6201883078082642353fe02051250ea9e64"
+            }
+          }
+        ],
+        "linked_binaries": [
+          {
+            "file": "kernel-0.npubin",
+            "sha256": "942217ea1c20d90a0242982740baa6201883078082642353fe02051250ea9e64",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 6100,
+                "info": 0,
+                "sha256": "5f6652abb24a59ff63d42e1cba02040873427f4e18d723f9417739600f68b162"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 16,
+                "info": 0,
+                "sha256": "f023fe6446334b0d361448f7d1739e771036185ed4c997ecc17860ab3c10809c"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "53d7746d68696a5ce378433424d1b2a2c6606fa8d45536ef9b286bac36833887"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1752,
+                "info": 69,
+                "sha256": "a27e8c8d09c9c20425d43d28ab3235af2c2df0bd81129b9dd787aec2aba10c51"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 585,
+                "info": 0,
+                "sha256": "ea4b269336991910352ec2f4f889c89d4a7cbd9faa7b1304b8e94a0b016b5bd8"
+              }
+            ]
+          }
+        ],
+        "input_layouts": [
+          {
+            "shape": [
+              1,
+              4,
+              24,
+              32
+            ],
+            "strides": [
+              3072,
+              768,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 6144,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              48,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              48,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              1,
+              48
+            ],
+            "strides": [
+              48,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 192,
+            "dtype": "torch.int32"
+          }
+        ],
+        "metadata": {
+          "language": "triton",
+          "arm": "after",
+          "torch_version": "2.10.0+cpu",
+          "triton_version": "3.2.0",
+          "query_tile": 16,
+          "key_tile": 32,
+          "causal_rule": "key_position <= KV-Q+query_position",
+          "probability_dtype": "fp16",
+          "gqa_group": 2,
+          "stages_per_forward": 1,
+          "num_autotune_trials": 0,
+          "workspace_bytes": 0,
+          "empty_sequence": "shared attention kernel explicitly writes zeros"
+        },
+        "resource_records": [
+          {
+            "file": "resource-0.json",
+            "sha256": "52356b801253618bed1bf6d4d588b1ba9792215d1cf25f29acaa1680e3c53c3e"
+          }
+        ]
+      },
+      {
+        "case_id": "F01-04",
+        "arm": "before",
+        "compilation": [
+          {
+            "hash": "91480f691cfd6d311fdf8aabf9b25506809d0eafdbc08110031b0edc74378150",
+            "artifacts": {
+              "ttir": "1c37b92b33db32dd7bacf67a2c45ab780600567f9b2e06fdf8765f166efc3f6d",
+              "ttadapter": "c93fa3b5294a29c71b47a65955ff1a3171d832cc1e5bcaa1f2d8a0cba492c0a1",
+              "npubin": "e638c146f1cf5d7da8a1987dc7169444be217b26f12027341302f7703e906630"
+            }
+          },
+          {
+            "hash": "a49248225fba0325d5309a7679024de66daa9099073aa0dfece99a6d1ee2895a",
+            "artifacts": {
+              "ttir": "6bf39d47af53fd3e8430349b51ff80b6e5a5fdead8550b92d794378b155ed668",
+              "ttadapter": "2d1c93f0d2654f814c6596f6e8c60ad074c0bc78e200b37925712ef23c3d6eb9",
+              "npubin": "da1f51f21f852de334efa82249f6e121fdb991d5c72d2771437c83ef1ebd8067"
+            }
+          }
+        ],
+        "linked_binaries": [
+          {
+            "file": "kernel-0.npubin",
+            "sha256": "e638c146f1cf5d7da8a1987dc7169444be217b26f12027341302f7703e906630",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 2504,
+                "info": 0,
+                "sha256": "65d68455a9534bcb16ecb803c7a872131bf41e60122970986cd4aa7b00d920a1"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 4,
+                "info": 0,
+                "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1296,
+                "info": 52,
+                "sha256": "45eb81e0a13723a15e7c6a7934e8ed1d2101b48cf09c7a3e07b46b5d6ffc654e"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 350,
+                "info": 0,
+                "sha256": "1bdc1a5087dc37cd607b42a89d0ac6bb6a89b1b6c74f809a24f66252f7bbda13"
+              }
+            ]
+          },
+          {
+            "file": "kernel-1.npubin",
+            "sha256": "da1f51f21f852de334efa82249f6e121fdb991d5c72d2771437c83ef1ebd8067",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 4532,
+                "info": 0,
+                "sha256": "3d2e03486bde63c3ae392c57005ad6e4f031649872269c353ddd4f34b44dcdad"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 16,
+                "info": 0,
+                "sha256": "f023fe6446334b0d361448f7d1739e771036185ed4c997ecc17860ab3c10809c"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "53d7746d68696a5ce378433424d1b2a2c6606fa8d45536ef9b286bac36833887"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1752,
+                "info": 69,
+                "sha256": "8b945753e7ba161cec0b3005a4ca7354d31540bdcc45ed4e80c9fd3034e873c9"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 585,
+                "info": 0,
+                "sha256": "ea4b269336991910352ec2f4f889c89d4a7cbd9faa7b1304b8e94a0b016b5bd8"
+              }
+            ]
+          }
+        ],
+        "input_layouts": [
+          {
+            "shape": [
+              3,
+              4,
+              64,
+              64
+            ],
+            "strides": [
+              16384,
+              4096,
+              64,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              24,
+              16,
+              2,
+              64
+            ],
+            "strides": [
+              2048,
+              128,
+              64,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              24,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 49152,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              3,
+              8
+            ],
+            "strides": [
+              8,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 96,
+            "dtype": "torch.int32"
+          }
+        ],
+        "metadata": {
+          "language": "triton",
+          "arm": "before",
+          "torch_version": "2.10.0+cpu",
+          "triton_version": "3.2.0",
+          "query_tile": 16,
+          "key_tile": 32,
+          "causal_rule": "key_position <= KV-Q+query_position",
+          "probability_dtype": "fp16",
+          "gqa_group": 2,
+          "stages_per_forward": 2,
+          "num_autotune_trials": 0,
+          "workspace_bytes": 147456,
+          "empty_sequence": "shared attention kernel explicitly writes zeros"
+        },
+        "resource_records": [
+          {
+            "file": "resource-0.json",
+            "sha256": "741e4e10ea6de85bfb975fa02fb6a9752d03c6fe7afbe9a474f7a77d95be5bc0"
+          },
+          {
+            "file": "resource-1.json",
+            "sha256": "be12c303b1f7eeb5ff4173973973d6429862625c22eec0c9abc2548ebed38c37"
+          }
+        ]
+      },
+      {
+        "case_id": "F01-04",
+        "arm": "after",
+        "compilation": [
+          {
+            "hash": "7bebe3261946bcf69bd406300e2a70497dd72b70788ab5325a80da2f2e11a903",
+            "artifacts": {
+              "ttir": "baeb081abf59b0288e731f2ccdc031e1fc6e0eef1303f371720916a889c72e3f",
+              "ttadapter": "eeae3c204898a6ecb1680251f76efff2b34911330c5be6dd70f09837d35a2039",
+              "npubin": "07face086254d797c8837bb19ca975cf56b9e056f3ada541f283596fc39831b2"
+            }
+          }
+        ],
+        "linked_binaries": [
+          {
+            "file": "kernel-0.npubin",
+            "sha256": "07face086254d797c8837bb19ca975cf56b9e056f3ada541f283596fc39831b2",
+            "sections": [
+              {
+                "index": 0,
+                "name": "",
+                "type": 0,
+                "flags": 0,
+                "bytes": 0,
+                "info": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              {
+                "index": 1,
+                "name": ".text",
+                "type": 1,
+                "flags": 6,
+                "bytes": 5492,
+                "info": 0,
+                "sha256": "607f560f88203d56e1e9320b3c43bfbbdf517d52cb29c39a49fbe17fe8e0fc64"
+              },
+              {
+                "index": 2,
+                "name": ".ascend.stack.size.record",
+                "type": 7,
+                "flags": 0,
+                "bytes": 16,
+                "info": 0,
+                "sha256": "f023fe6446334b0d361448f7d1739e771036185ed4c997ecc17860ab3c10809c"
+              },
+              {
+                "index": 3,
+                "name": "__CCE_KernelArgSize",
+                "type": 7,
+                "flags": 0,
+                "bytes": 8,
+                "info": 0,
+                "sha256": "53d7746d68696a5ce378433424d1b2a2c6606fa8d45536ef9b286bac36833887"
+              },
+              {
+                "index": 4,
+                "name": ".comment",
+                "type": 1,
+                "flags": 48,
+                "bytes": 107,
+                "info": 0,
+                "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+              },
+              {
+                "index": 5,
+                "name": ".symtab",
+                "type": 2,
+                "flags": 0,
+                "bytes": 1752,
+                "info": 69,
+                "sha256": "1158526e3b94fe4e97e8f8e08d0c1fbb78926c734dc8916cfc0db77763131d7f"
+              },
+              {
+                "index": 6,
+                "name": ".shstrtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 88,
+                "info": 0,
+                "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+              },
+              {
+                "index": 7,
+                "name": ".strtab",
+                "type": 3,
+                "flags": 0,
+                "bytes": 585,
+                "info": 0,
+                "sha256": "ea4b269336991910352ec2f4f889c89d4a7cbd9faa7b1304b8e94a0b016b5bd8"
+              }
+            ]
+          }
+        ],
+        "input_layouts": [
+          {
+            "shape": [
+              3,
+              4,
+              64,
+              64
+            ],
+            "strides": [
+              16384,
+              4096,
+              64,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              24,
+              16,
+              2,
+              64
+            ],
+            "strides": [
+              2048,
+              128,
+              64,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 98304,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              24,
+              16,
+              2,
+              32
+            ],
+            "strides": [
+              1024,
+              64,
+              32,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 49152,
+            "dtype": "torch.float16"
+          },
+          {
+            "shape": [
+              3,
+              8
+            ],
+            "strides": [
+              8,
+              1
+            ],
+            "storage_offset": 0,
+            "storage_bytes": 96,
+            "dtype": "torch.int32"
+          }
+        ],
+        "metadata": {
+          "language": "triton",
+          "arm": "after",
+          "torch_version": "2.10.0+cpu",
+          "triton_version": "3.2.0",
+          "query_tile": 16,
+          "key_tile": 32,
+          "causal_rule": "key_position <= KV-Q+query_position",
+          "probability_dtype": "fp16",
+          "gqa_group": 2,
+          "stages_per_forward": 1,
+          "num_autotune_trials": 0,
+          "workspace_bytes": 0,
+          "empty_sequence": "shared attention kernel explicitly writes zeros"
+        },
+        "resource_records": [
+          {
+            "file": "resource-0.json",
+            "sha256": "2d320e8b28d43fef1d028547986ec1ff26d78e5d353ccfa4fb09986017f7f570"
+          }
+        ]
+      }
+    ]
+  },
+  "cleanup": {
+    "no_live_owned_processes": true,
+    "owned_pgid": 1717005,
+    "retained_zombie_pids": [
+      1717005
+    ],
+    "die0_lease_acquired_then_released": true,
+    "both_export_locks_acquired_then_released": true,
+    "physical_mapping_verified": true,
+    "post_run_health": "OK",
+    "fault_code": "NA",
+    "device_processes": 0,
+    "utilization_percent": 0,
+    "hbm_usage_percent": 17,
+    "ecc_errors": 0,
+    "no_reset_or_kill": true
+  },
+  "retained_evidence": {
+    "archive_basename": "optimization-w003-paged-kv-native-recovery-v1-46f81c02-failure-compact.tgz",
+    "archive_bytes": 149905,
+    "archive_sha256": "299d7c200163d64fc02a3a7e3676979fdd66969dc5e63e004d7e0f10b8af169b",
+    "verified_manifest_files": 126,
+    "manifest_sha256": "6fa87ad4637b6e0af9e3ca6d4882fd21f7214cc3ae6cfc3867e883d13ba42cbe",
+    "contents": [
+      "actual source/framework/input/cache bindings",
+      "all selected compiler IR/binaries/resources and ELF section hashes",
+      "once-per-arm correctness proofs",
+      "mmap entered counters and phase records",
+      "partial raw vendor data and failed capture result",
+      "retained job metadata/stdout/stderr",
+      "under-lease process and health release proof"
+    ],
+    "portable_checkpoint_prefix": "output/",
+    "raw_evidence_available_in_retained_task": true
+  }
+}

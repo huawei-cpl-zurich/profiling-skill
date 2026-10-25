@@ -62,10 +62,32 @@ profiling gain.
 | F01-04 | Unattempted | Unattempted under the stop rule following the second timeout. |
 | F01-GA / F01-GB | Both arms passed for each guard | Correctness only; zero profiling forwards. |
 
-The timeouts' cause remains unresolved. Failed cases were retained without
-unchanged-payload replay. Only F01-02 provides a complete paired measurement;
+The timeouts' cause remains unresolved. These original failures remain retained.
+Only F01-02 provides a complete paired measurement;
 its values are profiled device-operation spans, not ordinary application latency.
 No four-pair success or general runtime coverage is claimed.
+
+### Bounded native recovery
+
+Following the user request to retry suspected infrastructure failures, one
+source-unchanged attempt used the six original cached CPU payloads on an isolated,
+healthy Ascend910 V1 (9382). Both canonical host profiler locks were held.
+All selected compile/resource screens completed before numerical work. F01-01
+passed once per arm with the original tolerance; its baseline then entered ten
+full API calls but produced zero event samples and returned timeout 507034.
+Device completion of those calls is unknown. The fatal stop prevented the after
+capture and all numerical/profiling work for F01-03/04; those cases were compile
+probed only. Successful F01-02 and both guards were skipped. No CPU oracle was
+regenerated, and source, fixtures, seeds, arithmetic and launch flags were unchanged.
+
+The repeat does not distinguish algorithm from infrastructure failure; the cause
+remains unresolved. There is no new complete paired measurement or performance
+claim. The original GZ results above, including F01-01's unknown after count,
+remain unchanged and are not aggregated across hardware. Device/process/lease
+cleanup was verified without a reset. The
+[portable recovery receipt](paged_kv_native_recovery.json) binds source, cache,
+compiler/binary and runtime identities, retained job handles and release evidence.
+Its failure archive has 126 verified file hashes. This PR remains a draft.
 
 Mechanism provenance:
 `ref://profiling-skill/triton/perf-analysis/repos/optimization-wave1-triton-kernels-7acb9c40a6ca#src/triton_ascend_kernels/attention/paged_attention.py:L381-L405`.

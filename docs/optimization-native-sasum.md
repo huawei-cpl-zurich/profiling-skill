@@ -1,61 +1,82 @@
 # Core-local native SASUM aggregation
 
-This is an unqualified failed study. All12 input-only compile/physical ABI cells
-completed before six CPU references were cached once. The first baseline API
-returned to validation, where its sole output transfer failed synchronization
-with ACL507015. No CPU output values or numerical comparisons were obtained.
-All remaining correctness APIs, profiles and captures were unattempted. The
-cause and native device completion remain unknown; no speedup is reported.
+The source-intended ASC version passed all twelve exact numerical gates on the
+same GZ A3 target. Performance qualification remains incomplete: the first
+BEFORE capture returned ten positive event samples and exported its trace, but
+strict CPU/NPU correlation was unavailable. No qualified capture, paired
+comparison, or speedup is reported. Public numerical workflows remain disabled.
 
-This source-derived Ascend C comparison retains the selected ops-blas SASUM tile
-Abs/ReduceSum, eight-block aligned-eight partition, output zeroing and SyncAll.
-The baseline issues an atomic scalar contribution for every source tile. The
-candidate accumulates those same tile sums locally and issues one atomic per
-nonempty core. V_S and S_MTE3 events order its scalar transfers. The extra local
-buffer occupies32bytes; declared UB is165216/165248bytes before/after.
-Compiler-managed scratch and peak resource usage remain unknown.
+The baseline retains the pinned ops-blas tile Abs/ReduceSum, eight-block aligned
+eight partition, result zeroing, SyncAll, and per-tile atomic contribution. The
+candidate accumulates the identical tile sums per core and emits one atomic per
+nonempty core, preserving the source synchronization and atomic-mode operations.
+Its extra local scalar buffer adds32bytes: declared UB is165216/165248bytes.
+The tile is20480elements; the tiling ABI retains forty-entry arrays and332bytes.
+Compiler-managed scratch and peak usage remain unknown.
 
-The prepared API reuses private aligned output and workspace, immutable input
-backing and tiling. Source zeroing and synchronization occur inside every call.
-Host allocation, input transfer, source-host allocation/tiling transfer and its
-final host synchronization are excluded. This is an extracted native attempt,
-not a full ops-blas build or a vendor library benchmark. Full CANN OSLA2 and
-unchanged selected source/host files are retained beside the adapter.
+The prepared interface reuses private aligned output/workspace, immutable input
+backing, and tiling. Source clearing/synchronization remain charged in every API.
+Allocation, input transfer, host tiling setup, and final host synchronization are
+excluded. This is a source-derived prepared experiment, not unmodified vendor
+BLAS host latency. Source/native C++, derivative, provider, cases, formulas, and
+tolerances are unchanged across the build repair.
 
-`experiments/optimization-wave010/P04.json` fixes all cases and exact dyadic
-CPU FP64 reference rules prospectively. The strided guard retains actual stride
-holes in physical backing. Nonzero outputs require FP32 bit identity; zeros
-require numeric identity, with zero sign secondary. The complete failure, runtime, binary and cached-fixture bindings are in
-`P04-result.json`; full sanitized logs and executed wrapper/controller are in
-`P04-diagnostics.json.gz`. No source, fixture or math retuning/replay occurred.
+The original legacy CCE/O2 attempt remains byte-preserved in
+`P04-legacy-result.json`, `P04-diagnostics.json.gz`, and `P04-v1.json`. Its first
+BEFORE output transfer failed ACL507015 before CPU values or comparison; native
+enqueue/completion and cause remain unresolved. That attempt had no profiles.
 
-The default factory, case generation, prepare, run/capture workflow and CLI
-reject before scientific expected generation, compilation or input transfer.
-Explicit `Adapter(compile_inspection=True).compile_probe(...)` retains native
-build/metadata inspection only; its `run()` always rejects. Inspection binds
-both actual MIX AIC and AIV objects through canonical binary identity lists.
-The executed pre-math collector qualified the selected AIV object; this was
-incomplete coverage of the generated MIX launch. Both device objects and their
-actual registrations are now retained with that limit explicit. SDK9.1 used
-`dav-c220` on actual Ascend910B4-1. The hardware SyncAll overload uses FFTS
-without an explicit user workspace; omitted-workspace or wrong-engine causes
-are unproved. Compiler-managed peak/scratch and target compatibility remain
-unresolved. No new compiler or device calls were used for that analysis.
+The prospectively frozen v2 repair uses actual installed FindASC/ascendc_library,
+ASC language, Release `-O3`, `--npu-arch=dav-2201`, documented explicit auto-sync
+with diagnostic logging and `-g`, and driver-scope saved temporaries. Both actual
+Cube and Vec objects, host ABI exports, actual verbose compiler commands, SDK
+module hashes, and insertion logs are retained. Cube text is empty in these ASC
+images; no execution engine is inferred from that fact. Mode, optimization, and
+SDK defaults changed together, so ASC numerical success does not isolate the old
+fault's cause or prove an auto-sync-only explanation.
 
-Six NONFROZEN CPU-only host tests cover default rejection, transactional compile
-inspection and zero-launch prototypes, dyadic references/partition ownership,
-strict domain/holes/dtype, external-cwd CLI, SDK registration ambiguity, and the
-real evidence collector/normalizer accepting both device identities and rejecting
-a changed component. This host gate is separate from failed native correctness. Diagnostic profiler event durations include instrumentation;
-they are not ordinary end-to-end latency. Missing diagnostics are unavailable,
-not zero. No physical traffic, occupancy or roofline claim is made.
+All twelve new input-only physical ABI/code/resource probes and a canonical
+whole-program identity consumer test preceded loading the original six cached
+CPU payloads. Payload and manifest hashes match exactly; zero new expected
+payloads were generated. All twelve numerical calls passed once before profiling,
+with exact nonzero FP32 bits, exact numeric zeros, unchanged input/stride holes,
+intact canaries, and nonaliasing. All six paired bit comparisons also matched.
+The guard's zero sign is secondary. Four main shapes and two guards are unchanged.
 
-The pinned filtered root CMake declares the BLAS sources as ASC, maps910B
-to `dav-2201`, and sets ASC Release optimization to `-O3`; its visible
-`--npu-arch` option belongs to the BLASLt target. The actual extracted recipe
-used `-xcce --cce-aicore-arch=dav-c220 -O2`. Semantic parity with the upstream
-ASC frontend and the complete effective SASUM command is unestablished. Exact
-filtered-source citation, line scopes and hashes are in `build_mode_evidence`.
-This distinction is a compatibility limitation, not a proved runtime cause.
-The executed source, compiler flags, matrix and cached references were retained
-without a compiler/device retry.
+The first BEFORE capture attempted ten APIs and returned ten positive instrumented
+event samples, mean0.273462ms. Its export contains ten generic `MIX_AIV` compute
+rows with sentinel connection IDs, twenty timing-event rows, and profiler control
+records. The compute rows lack HostToDevice finish flows and an exact sasum symbol
+link. Their iteration ownership, kernel identity, operation spans, and PMU
+attribution remain unqualified. Neither timestamps nor row order substitute for
+explicit linkage. The collector stopped; AFTER and the remaining seventy profile
+calls were unattempted. All twelve prepared handles were closed, and fresh release
+checks confirmed no owned live processes, free die/both export locks, and a healthy
+idle mapped device. No reset, replay, or further device work followed.
+
+Official Torch-NPU v2.10 parser evidence requires both explicit flow endpoints;
+no certified alternate join or installed9.1 zero-extra-execution collector recipe
+was found (query `a7f05dcaee804b84a09c0e4cf5fbf0a2`, miss
+`57e0325d11f8c24eda81242cf16a33bb`). The retained trace and event samples remain
+unmodified. No physical traffic, occupancy, instruction-count, roofline, ordinary
+latency, or performance speedup claim is made.
+
+The default factory, make_case, prepare, validate, capture, default probe, and CLI
+reject before cache access, expected generation, backend import, or input movement.
+Explicit `Adapter(compile_inspection=True).compile_probe(...)` supports ASC
+build/metadata inspection only; `run()` always rejects. The internal measured
+lifecycle is retained for controlled CPU mocks. Eight NONFROZEN CPU-only tests pass
+on A3, exercising quarantine, actual ASC metadata inspection with empty Cube text,
+precision/configuration rejection, canonical identity mutation, transactional build
+retry, zero-launch probes, domain/holes/dtype, CLI rejection, and real mocked
+dispatcher/device-restoration/idempotent cleanup through run_pair. This gate made
+zero real Ascend compiler, backend, NPU, frozen-fixture, or profiling calls.
+
+`experiments/optimization-wave010/P04-result.json` records the current separate
+numerical/performance statuses, all twelve diagnostics, original cache bindings,
+382 verified archive files, source/build/publication hashes, and release proof.
+`P04-v2-diagnostics.json.gz` retains sanitized raw trace/PMU data, logs, measured
+host/controller/tests, and primary correlation evidence. These additions preserve
+the earlier failure and distinguish legacy, measured ASC, and public quarantine
+host versions. Numerical dispatch coverage passing is separate from unavailable
+profile qualification.

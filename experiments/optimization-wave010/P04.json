@@ -121,5 +121,30 @@
       "main": false,
       "profile_forwards_per_arm": 0
     }
-  ]
+  ],
+  "version": 2,
+  "supersedes": {
+    "contract_sha256": "1993323c116c88eb6601cd361814e80f230afcdf90027ecbef109478693081a2",
+    "old_job": "remote:gz-a3:job:54078fcb-1d51-46f5-8836-2a1c803678a5",
+    "old_outcome": "ACL507015 first BEFORE output transfer; zero CPU values/comparisons/profiles; cause UNRESOLVED; preserve alloriginal evidence"
+  },
+  "build_requalification": {
+    "reason": "source-intended ASC build contract repair, not performance tuning",
+    "language": "actual installed FindASC/ascendc_library, .cpp LANGUAGE ASC",
+    "configuration": "Release -O3; --asc-aicore-lang; --npu-arch=dav-2201; documented explicit --cce-auto-sync=on and --cce-auto-sync-log=<unique>/auto-sync.log with -g in device group; -save-temps=obj driver scope",
+    "discovery": "actual GZ runtime ASC package/compiler/SDK includes+libraries; retain modules/verbose actual compiler command; compile_commands may be absent",
+    "causality": "mode/O3/SDK defaults change together; legacy defaults and failure cause unresolved",
+    "immutable": {
+      "native.cpp": "8b15cacc522b49f5c6bb60200afe148e6420b752342fde65c33db76703cf852e",
+      "sasum_contract.py": "4936375e64b34837f9a2f4df31cc0b8fb81655d2728db14136f52f0055d1c216",
+      "sasum_kernel.cpp": "52c78894e2ffb12c134ce6e9a55f481a827e38c5a72fc219f59282dad9e5c6ce",
+      "sasum_host.cpp": "8730302ac4f45b064e2c24489a4620e1deb4a1468cf9607cece79eb4e85340c4"
+    },
+    "derivative": "same exact derivative() byte-preserved; no source barriers/workspace/tilesize/math changes",
+    "identity": "both actual Cube+Vec ELFs, allsections and real metadata/nm; empty Cube text permitted if actual ASC build; host SO secondary; canonical list tested in generic consumer",
+    "host_changes": "restore original enabled numeric wrapper, prepared-device guarded allocations/run/stream/validate/cleanup restoring caller, idempotent close releases own global NativeArm registry handle and buffers",
+    "fixtures": "reuse all six existing immutable cached payload/manifests hashverified; generate0/cachemiss failfast",
+    "target": "same GZ physical0 under own fresh mapping/health lease; named runtime py311-torch; 20Cube40VEC actual query",
+    "protocol": "12new input-only compile/ABI/resource/code screens BEFORE sixcache load;12newonce correctness BEFORE80API8captures; guards0; stop fatal/no reset/replay/retune; C600 startup/run/validate/profile bounds; both host export locks"
+  }
 }

@@ -1,18 +1,10 @@
-"""Extracted native SASUM SDK build; no full ops-blas build or test stubs."""
-import ctypes
-import hashlib
-import json
-import os
+"""SDK-only source SASUM build and narrowly checked DMA derivative."""
+import ctypes,hashlib,json,os,re,shutil,struct,subprocess,sys,uuid
 from pathlib import Path
-import re
-import shutil
-import struct
-import subprocess
-import sys
-import uuid
-sys.path.insert(0,str(Path(__file__).resolve().parents[4]/'scripts'))
-from optimization_native_bridge import build_shared,digest
 HERE=Path(__file__).resolve().parent
+sys.path.insert(0,str(HERE.parents[3]/'scripts'))
+from optimization_native_bridge import build_shared,digest
+PIN='c2332551586763f8c2d27621f8bc119bd1c3a301'
 
 
 def derivative(source):
@@ -31,48 +23,83 @@ def derivative(source):
 def sections(data):
     if data[:6]!=b'\x7fELF\x02\x01':raise ValueError('ELF64LE required')
     offset=struct.unpack_from('<Q',data,40)[0];size,count,names=struct.unpack_from('<HHH',data,58)
-    if size!=64 or offset+size*count>len(data):raise ValueError('ELF sections invalid')
-    table=[struct.unpack_from('<IIQQQQIIQQ',data,offset+i*size) for i in range(count)];s=table[names];strings=data[s[4]:s[4]+s[5]]
-    return {strings[t[0]:].split(b'\0',1)[0].decode():dict(bytes=t[5],sha256=hashlib.sha256(data[t[4]:t[4]+t[5]]).hexdigest(),raw_hex=data[t[4]:t[4]+t[5]].hex() if t[5]<=64 else None) for t in table}
+    if size!=64 or offset+size*count>len(data):raise ValueError('ELF bounds')
+    rows=[struct.unpack_from('<IIQQQQIIQQ',data,offset+i*size) for i in range(count)];s=rows[names];strings=data[s[4]:s[4]+s[5]]
+    return [dict(index=i,name=strings[t[0]:].split(b'\0',1)[0].decode(),bytes=t[5],sha256=hashlib.sha256(data[t[4]:t[4]+t[5]]).hexdigest(),type=t[1],info=t[7]) for i,t in enumerate(rows)]
 
 
-def registered_selectors(meta,logical):
-    registered=[k.removeprefix('.ascend.meta.') for k in meta if k.startswith('.ascend.meta.')]
-    result=[]
-    for name in logical:
-        matches=[n for n in registered if n==name or n==name+'_mix_aiv' or n.startswith('_Z'+str(len(name))+name)]
-        if len(matches)!=1:raise RuntimeError('ambiguous or absent native registration: '+name)
-        result.append(matches[0])
+def registered_selectors(meta,names):
+    entries=set(k.removeprefix('.ascend.meta.') for k in (meta if isinstance(meta,dict) else [v['name'] for v in meta]) if k.startswith('.ascend.meta.'));result=[]
+    for name in names:
+        found=[n for n in entries if n in (name,name+'_mix_aiv',name+'_mix_aic') or n.startswith('_Z'+str(len(name))+name)]
+        if len(found)!=1:raise RuntimeError('native selector missing/ambiguous: '+name)
+        result+=found
     return result
+
+
+CMAKE='''cmake_minimum_required(VERSION 3.16)
+set(ASCEND_CANN_PACKAGE_PATH "$ENV{ASCEND_HOME_PATH}")
+set(CMAKE_ASC_FLAGS_RELEASE "-O3" CACHE STRING "Source Release flags" FORCE)
+set(CMAKE_ASC_ARCHITECTURES "dav-2201" CACHE STRING "Source arch22" FORCE)
+find_package(ASC CONFIG REQUIRED)
+project(sasum_build_qualification LANGUAGES ASC CXX)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ascendc_library(sasum_before SHARED native.cpp)
+target_compile_definitions(sasum_before PRIVATE BEFORE=@BEFORE@)
+target_include_directories(sasum_before PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
+get_target_property(sdk_includes sasum_before INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(sdk_linkdirs sasum_before INTERFACE_LINK_DIRECTORIES)
+get_target_property(sdk_libraries sasum_before INTERFACE_LINK_LIBRARIES)
+target_include_directories(sasum_before PRIVATE ${sdk_includes})
+target_link_directories(sasum_before PRIVATE ${sdk_linkdirs})
+target_link_libraries(sasum_before PRIVATE ${sdk_libraries})
+ascendc_compile_options(sasum_before PRIVATE --cce-auto-sync=on "--cce-auto-sync-log=@SYNC_LOG@" -g)
+target_compile_options(sasum_before PRIVATE -save-temps=obj)
+'''
 
 
 def build(arm,output):
     if arm not in ('before','after'):raise ValueError('arm')
-    output=Path(output).resolve()/('native-'+arm+'-'+uuid.uuid4().hex[:8]);output.mkdir(parents=True,exist_ok=False)
-    compiler=shutil.which('bisheng')
-    if not compiler:raise RuntimeError('selected runtime native compiler unavailable')
-    compiler=Path(compiler).resolve();roots=[Path(os.environ[k]).resolve() for k in ('ASCEND_HOME_PATH','ASCEND_TOOLKIT_HOME') if os.environ.get(k)]
-    sdk=next(p for p in roots+list(compiler.parents) if (p/'include/acl/acl.h').is_file());headers=list((sdk/'include').rglob('kernel_operator.h'))
-    if len(headers)!=1:raise RuntimeError('ambiguous SDK kernel_operator.h')
-    api=headers[0].resolve().parent;includes=[sdk/'include',api.parent,api,api/'interface',api/'impl',api/'basic_api',api.parent/'impl/basic_api',HERE,HERE/'vendor']
-    source=HERE/'vendor/sasum_kernel.cpp';(output/'sasum_partial.cpp').write_text(derivative(source.read_text()))
-    tu=output/'sasum.cpp';tu.write_bytes((HERE/'native.cpp').read_bytes());binary=output/'sasum.so'
-    command=[str(compiler),'-xcce','-std=c++17','-O2','-fPIC','-shared','-save-temps=obj','--cce-aicore-arch=dav-c220','-DBEFORE='+str(int(arm=='before')),*['-I'+str(p) for p in includes],str(tu),'-o',str(binary)]
-    sources=[headers[0],HERE/'native.cpp',Path(__file__),source,output/'sasum_partial.cpp',*sorted(p for p in (HERE/'vendor').rglob('*') if p.is_file())]
-    manifest=build_shared(command,source_paths=sources,binary=binary,output=output/'build',source_revision='c2332551586763f8c2d27621f8bc119bd1c3a301')
-    objects=list(output.glob('*-vec.o'))
-    if len(objects)!=1:raise RuntimeError('actual vector device object unavailable')
-    obj=objects[0];meta=sections(obj.read_bytes())
-    if not meta.get('.text',{}).get('bytes'):raise RuntimeError('device executable text missing')
-    selectors=registered_selectors(meta,['sasum_kernel'] if arm=='before' else ['sasum_core_partial'])
-    symbols=subprocess.run(['nm','--defined-only',str(obj)],capture_output=True,text=True,check=True).stdout
-    if not all(any(line.split()[-1]==name for line in symbols.splitlines()) for name in selectors):raise RuntimeError('selected native symbols missing')
-    disasm=subprocess.run(['llvm-objdump','-d',str(obj)],capture_output=True,text=True);(output/'device-disassembly.txt').write_text(disasm.stdout+'\n'+disasm.stderr)
-    import torch_npu # Load the selected native runtime symbols before host registration.
-    library=ctypes.CDLL(str(binary));library.catlass_bridge_kernel_names.restype=ctypes.c_char_p
-    if json.loads(library.catlass_bridge_kernel_names().decode())!=(['sasum_kernel'] if arm=='before' else ['sasum_core_partial']):raise RuntimeError('logical bridge selector mismatch')
-    library.catlass_bridge_abi_version.restype=ctypes.c_uint32
-    if library.catlass_bridge_abi_version()!=1:raise RuntimeError('native ABI mismatch')
-    resource=dict(device_object_sha256=digest(obj),device_sections=meta,selected_symbols=selectors,sdk_kernel_operator_sha256=digest(headers[0]),symbol_table=symbols,disassembly_exit=disasm.returncode,declared_UB_high_water_bytes=165216+(32 if arm=='after' else 0),compiler_managed_scratch='UNKNOWN; acceptance/static bounds/bounded correctness gate')
-    (output/'resources.json').write_text(json.dumps(resource,indent=2)+'\n')
-    return dict(binary=binary,object=obj,manifest=manifest,resources=resource,selectors=selectors,sources=sources+[output/'resources.json'],directory=output)
+    out=Path(output).resolve()/('native-'+arm+'-'+uuid.uuid4().hex[:8]);source=out/'source';source.mkdir(parents=True,exist_ok=False)
+    shutil.copytree(HERE/'vendor',source/'vendor');shutil.copy2(HERE/'native.cpp',source/'native.cpp')
+    (source/'sasum_partial.cpp').write_text(derivative((HERE/'vendor/sasum_kernel.cpp').read_text()))
+    (source/'CMakeLists.txt').write_text(CMAKE.replace('@BEFORE@',str(int(arm=='before'))).replace('@SYNC_LOG@',str(out/'auto-sync.log')))
+    for name,cmd,seconds in [('configure',['cmake','-S',str(source),'-B',str(out/'build'),'-DCMAKE_BUILD_TYPE=Release','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'],120),('build',['cmake','--build',str(out/'build'),'--parallel','1','--verbose'],300)]:
+        result=subprocess.run(cmd,capture_output=True,text=True,timeout=seconds);(out/(name+'.stdout')).write_text(result.stdout);(out/(name+'.stderr')).write_text(result.stderr)
+        if result.returncode:raise RuntimeError('source ASC '+name+' failed; retained '+str(out))
+    return qualify(arm,out,out)
+
+
+def qualify(arm,out,resource_directory):
+    out=Path(out);source=out/'source';build_dir=out/'build';binary=build_dir/'libsasum_before.so'
+    evidence=build_dir/'compile_commands.json'
+    if evidence.is_file():command=json.loads(evidence.read_text())[0]['command'];command_kind='compile_commands'
+    else:
+        evidence=out/'build.stdout';candidates=[line.strip() for line in evidence.read_text().splitlines() if '--asc-aicore-lang' in line and ' -c ' in line]
+        if len(candidates)!=1:raise RuntimeError('unique actual ASC verbose compile command required')
+        command=candidates[0];command_kind='retained-verbose-build; compile_commands unavailable for SDK ASC generator'
+    argv=__import__('shlex').split(command);compiler=Path(argv[0]).resolve()
+    for required in ('--asc-aicore-lang','--npu-arch=dav-2201','-O3','--cce-auto-sync=on','-g','-DBEFORE='+str(int(arm=='before'))):
+        if required not in argv:raise RuntimeError('unqualified ASC command: '+required)
+    source_paths=[p for p in source.rglob('*') if p.is_file()]+[Path(__file__),evidence]+[p for p in (build_dir/'CMakeFiles/sasum_before.dir').glob('*.make')]+list((build_dir/'CMakeFiles/sasum_before.dir').glob('link.txt'))
+    sdk=Path(os.environ['ASCEND_HOME_PATH'])/'compiler/tikcpp/ascendc_kernel_cmake'
+    source_paths += [p for folder in ('asc_modules','fwk_modules') for p in (sdk/folder).glob('*.cmake')]
+    manifest=dict(command=command,command_source=dict(kind=command_kind,path=str(evidence),sha256=digest(evidence)),source_revision=PIN,compiler=dict(path=str(compiler),sha256=digest(compiler)),binary=str(binary),binary_sha256=digest(binary),sources=[dict(path=str(p),sha256=digest(p)) for p in source_paths])
+    objects=[];details=[];selected=[]
+    names=['sasum_kernel' if arm=='before' else 'sasum_core_partial']
+    for kind,suffix in [('device_vec_o','-vec.o'),('device_cube_o','-cube.o')]:
+        matches=list(build_dir.rglob('*'+suffix))
+        if len(matches)!=1:raise RuntimeError('actual device object missing/ambiguous: '+kind)
+        obj=matches[0];meta=sections(obj.read_bytes());entries=[v for v in meta if v['name'].startswith('.ascend.meta.')];symbols=subprocess.run(['nm','--defined-only',str(obj)],capture_output=True,text=True,check=True).stdout
+        selectors=registered_selectors(meta,names) if entries else []
+        if not all(any(line.split()[-1]==n for line in symbols.splitlines()) for n in selectors):raise RuntimeError('device defined symbol missing')
+        if kind=='device_vec_o':
+            if not selectors or not any(v['name']=='.text' and v['bytes'] for v in meta):raise RuntimeError('vector executable missing')
+            selected=selectors
+        objects.append((kind,obj));details.append(dict(kind=kind,sha256=digest(obj),sections=meta,registrations=selectors,symbol_table=symbols))
+    exports=subprocess.run(['nm','-D','--defined-only',str(binary)],capture_output=True,text=True,check=True).stdout
+    if any(not any(line.split()[-1]==name for line in exports.splitlines()) for name in ('catlass_bridge_abi_version','catlass_bridge_kernel_names','catlass_bridge_launch')):raise RuntimeError('host ABI exports missing')
+    resources=dict(device_objects=details,selected_symbols=selected,host_binary_sha256=digest(binary),source_UB_bytes=165216+(32 if arm=='after' else 0),compiler_managed_scratch='UNKNOWN if unreported',tiling_size=332,CDLL_loaded=False,actual_executed_engine='not inferred from compile; require actual capture')
+    resource_directory=Path(resource_directory);resource_directory.mkdir(parents=True,exist_ok=True)
+    for name,value in [('resources.json',resources),('build.json',manifest)]: (resource_directory/name).write_text(json.dumps(value,indent=2)+'\n')
+    return dict(binary=binary,object=objects[0][1],objects=objects,manifest=manifest,resources=resources,selectors=selected,sources=source_paths+[resource_directory/'resources.json',resource_directory/'build.json'],directory=out)

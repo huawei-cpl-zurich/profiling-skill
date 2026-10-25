@@ -38,7 +38,7 @@ class Adapter:
         out_store=alloc(n,torch.bfloat16,-120.);out=out_store[1:-1].view(shape)
         cache_store=alloc(b*16*1024,torch.float32,-1234.);cache=cache_store[1:-1].view(b,16,1024)
         if not probe:cache.copy_(data['cache'])
-        data={**data,'cache':cache};kv=torch.empty((m,512),device=device);score=torch.empty_like(kv)
+        data={**data,'cache':cache};kv=torch.empty((m,512),device=device,dtype=torch.float32);score=torch.empty_like(kv,dtype=torch.float32,device=device)
         groups=(start+used)//r;rows=(s+r-1)//r
         meta=torch.tensor([start]*b+[used]*b+[i*(groups if packed else rows) for i in range(b)]+[i*s for i in range(b)]+table,dtype=torch.int32,device=device)
         mapping=meta[4*b:];cores=triton.runtime.driver.active.utils.get_device_properties(torch.npu.current_device())['num_aicore']
@@ -99,7 +99,8 @@ class Adapter:
         paired=torch.equal(host['output'].view(torch.int16),self.paired[other].view(torch.int16)) if other in self.paired else None
         ptrs=[v.untyped_storage().data_ptr() for v in item.inputs.values()]+[item.output.untyped_storage().data_ptr(),item.kv.untyped_storage().data_ptr(),item.score.untyped_storage().data_ptr()]
         nonalias=len(set(ptrs))==len(ptrs)
-        return dict(passed=numerical and exact and zero_rows and immutable and canaries and nonalias and paired is not False,unwritten_rows_exact_zero=zero_rows,exact_projection_cache_bits=exact,paired_output_bits=paired,canaries=canaries,inputs_immutable=immutable,nonalias=nonalias,max_absolute_error=float(err.max()),max_relative_error=float(relative.max()),absolute_error_quantiles=torch.quantile(err.flatten(),torch.tensor([0.,.5,.9,.99,1.])).tolist(),relative_error_quantiles=torch.quantile(relative.flatten(),torch.tensor([0.,.5,.9,.99,1.])).tolist())
+        quantiles=torch.tensor([0.,.5,.9,.99,1.],dtype=err.dtype,device=err.device)
+        return dict(passed=numerical and exact and zero_rows and immutable and canaries and nonalias and paired is not False,unwritten_rows_exact_zero=zero_rows,exact_projection_cache_bits=exact,paired_output_bits=paired,canaries=canaries,inputs_immutable=immutable,nonalias=nonalias,max_absolute_error=float(err.max()),max_relative_error=float(relative.max()),absolute_error_quantiles=torch.quantile(err.flatten(),quantiles).tolist(),relative_error_quantiles=torch.quantile(relative.flatten(),quantiles).tolist())
 
 
 def factory():return Adapter()

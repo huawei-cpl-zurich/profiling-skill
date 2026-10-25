@@ -105,6 +105,24 @@ class HostTests(unittest.TestCase):
             calls.clear()
             with self.assertRaises(ValueError):probe.run()
             self.assertFalse(calls)
+            # Changed process defaults must not alter the FP32 launch ABI or CPU diagnostics.
+            default_dtype=torch.get_default_dtype()
+            try:
+                for dtype in (torch.float64,torch.float16):
+                    torch.set_default_dtype(dtype)
+                    for arm in ('before','after'):
+                        changed=adapter.prepare(arm,spec(),self.data,Path('.'))
+                        self.assertEqual(changed.kv.dtype,torch.float32);self.assertEqual(changed.score.dtype,torch.float32)
+                        self.assertEqual(changed.kv.device.type,'cpu');self.assertEqual(changed.score.device.type,'cpu')
+                        changed.compile_only()
+                        for key in ('kv','score'):getattr(changed,key).copy_(self.data['expected'][key])
+                        changed.output.copy_(self.data['expected']['output']);changed.cache.copy_(self.data['expected']['cache'])
+                        diagnostics=adapter.validate(arm,dict(output=changed.output,cache=changed.cache),self.data,spec())
+                        self.assertTrue(diagnostics['passed'])
+                        self.assertEqual(diagnostics['absolute_error_quantiles'],[0.]*5)
+                        self.assertEqual(diagnostics['relative_error_quantiles'],[0.]*5)
+            finally:
+                torch.set_default_dtype(default_dtype)
             for case in [spec(1,12,4),spec(1,13,4),spec(1,19,4,packed=True),spec(1,19,4,start_pos=2)]:
                 data=make_case(case)
                 for order in [('before','after'),('after','before')]:

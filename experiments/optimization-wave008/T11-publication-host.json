@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "study_id": "T11",
+  "scope": "Public host compatibility follow-up; original scientific data unchanged",
+  "measured_head": "b37d931afa6632c1f776755acf1cf8e0777350a6",
+  "measured_source_sha256": {
+    "compressor_zero.py": "cec05649b93b6ac8573ce9880167c92881ee6e4e56701db242d9d5635325c631",
+    "compressor_zero_vendor.py": "622d83f9060d91b2c934c9ad170e3d3d7c823c9752d9d1fdd0ca650797fa39b6",
+    "compressor_zero_contract.py": "86a16db913ff3c1233e10d3d7b841a6039a66257250c781f4786f87eb87632ec"
+  },
+  "measured_result_sha256": "39d45ca8f5bef9a9b8e15e34540c30eb2ea5864d233cfcde292503970bd7af61",
+  "measured_profile_details_sha256": "2b604f46fd184c853e98e58e6c2cb369aec48aa5469fe41798920613935aa1b4",
+  "publication_host_sha256": {
+    "examples/optimization-library/triton/compressor_zero.py": "b721abd1480d49e1bf1f346325555c3a7701204993df009c59d39d34e3c59edb",
+    "tests/test_optimization_compressor_zero.py": "20268bf70582cb8df004854942070d964c0b26e231fd71d3ec4cfee449d11a44"
+  },
+  "changes": [
+    "Explicit FP32 projection workspaces on the input device, matching the original measured default-FP32 ABI.",
+    "Quantile probabilities use the CPU error tensor dtype/device.",
+    "NONFROZEN mocked-interface regression validates both arms under global float64/float16 and restores dtype in finally."
+  ],
+  "unchanged": [
+    "vendor/JIT kernel source",
+    "CPU provider",
+    "matrix/specs/seeds/tolerances/launch flags",
+    "six original scientific fixture payloads",
+    "compiled artifacts and original source bindings",
+    "12 correctness passes/80 profiled calls/8 captures"
+  ],
+  "new_scientific_activity": {
+    "frozen_cpu_oracles": 0,
+    "real_compilations": 0,
+    "npu_forwards": 0,
+    "profiles": 0
+  },
+  "cpu_only_gate": {
+    "handle": "remote:bz-a3-2:job:20261025T030204Z-40d4dfe8ec90",
+    "terminal_state": "completed",
+    "exit_code": 0,
+    "receipt": {
+      "status": "complete",
+      "tests": 5,
+      "real_backend_imports": [],
+      "real_compile_calls": 0,
+      "npu_forwards": 0,
+      "scientific_frozen_fixtures": 0,
+      "profiles": 0,
+      "scope": "CPU-only public host compatibility gate; original scientific qualification unchanged",
+      "bundle_sha256": "afd337f76c118defe62bf6f0000202cd4657bcfb3e65a98f7a2c96f9ecebbb89"
+    },
+    "bundle": {
+      "token": "optimization-w008-compressor-output-zero-publication-cpu-v1-02809230",
+      "sha256": "afd337f76c118defe62bf6f0000202cd4657bcfb3e65a98f7a2c96f9ecebbb89",
+      "bytes": 303641,
+      "files": 73
+    },
+    "stdout_receipt_sha256": "e7d9c50d0df93918bf846147ac45e5b609b8befefcdc4af4f247b046418822fa",
+    "stderr_receipt_sha256": "a60bb0d8b1f7f66364cf7a0fa82e19e4815fb080072207ac323b82ba30b346d2"
+  },
+  "review_scope": "Three original frozen-head reviews identified the same P2; no additional actionable findings. Host-only fix validated without a new review wave or review-request comment."
+}

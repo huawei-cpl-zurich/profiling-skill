@@ -111,3 +111,11 @@ hashes were verified, and raw trace accounting, spans and PMU joins were
 independently reproduced locally. Coverage matched the separate inventory.
 The selected device was released with no live owned processes, healthy idle
 status, empty device processes and zero ECC errors; no reset was used.
+
+The subsequent [host compatibility receipt](../../../experiments/optimization-wave008/T11-publication-host.json)
+separately binds the published wrapper and tests. Projection buffers now explicitly
+use FP32 regardless of the caller's global dtype, and CPU diagnostic quantile
+probabilities match the error tensor's dtype/device. The changed-default-dtype
+regression passed locally and in a CPU-only A3 gate. Vendor/JIT/provider source,
+original measured wrapper hashes, fixtures and all scientific results remain
+unchanged; no compilation, NPU execution or profiling was repeated for this fix.

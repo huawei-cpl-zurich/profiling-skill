@@ -720,6 +720,10 @@
       }
     ]
   },
+  "coverage_inventory": {
+    "file": "T04-inventory.json",
+    "sha256": "bc3d890ac63f24114dc2484e72b41f5e0235988f4ac1d2994e1ad9f889201437"
+  },
   "coverage_audit": {
     "expected_result": "FAIL",
     "actual_exit": 1,

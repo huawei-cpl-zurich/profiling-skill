@@ -1,0 +1,113 @@
+{
+  "cases": [
+    {
+      "name": "W011-02-01",
+      "performance": true,
+      "scenario": [
+        "FP16 Q/K, FP32 weights/output",
+        "exact bounded dyadic source score",
+        "N128 fixed source config",
+        "materialized three-stage vs source fused score"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "All input/output storage shape/strides/offset/span/ND2 audited in codegen-screen; before private contiguous FP32 score/activation buffers built from same flat ND allocation helper; all buffer canaries, immutable input bits and private FP32 score passed sole correctness. Source N masks preserve valid-address bounds; masked padded expressions signed32-bounded."
+      }
+    },
+    {
+      "name": "W011-02-02",
+      "performance": true,
+      "scenario": [
+        "FP16 Q/K, FP32 weights/output",
+        "exact bounded dyadic source score",
+        "N128 fixed source config",
+        "materialized three-stage vs source fused score"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "All input/output storage shape/strides/offset/span/ND2 audited in codegen-screen; before private contiguous FP32 score/activation buffers built from same flat ND allocation helper; all buffer canaries, immutable input bits and private FP32 score passed sole correctness. Source N masks preserve valid-address bounds; masked padded expressions signed32-bounded."
+      }
+    },
+    {
+      "name": "W011-02-03",
+      "performance": true,
+      "scenario": [
+        "FP16 Q/K, FP32 weights/output",
+        "exact bounded dyadic source score",
+        "N128 fixed source config",
+        "materialized three-stage vs source fused score"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "All input/output storage shape/strides/offset/span/ND2 audited in codegen-screen; before private contiguous FP32 score/activation buffers built from same flat ND allocation helper; all buffer canaries, immutable input bits and private FP32 score passed sole correctness. Source N masks preserve valid-address bounds; masked padded expressions signed32-bounded."
+      }
+    },
+    {
+      "name": "W011-02-04",
+      "performance": true,
+      "scenario": [
+        "FP16 Q/K, FP32 weights/output",
+        "exact bounded dyadic source score",
+        "N128 fixed source config",
+        "materialized three-stage vs source fused score"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "All input/output storage shape/strides/offset/span/ND2 audited in codegen-screen; before private contiguous FP32 score/activation buffers built from same flat ND allocation helper; all buffer canaries, immutable input bits and private FP32 score passed sole correctness. Source N masks preserve valid-address bounds; masked padded expressions signed32-bounded."
+      }
+    },
+    {
+      "name": "W011-02-GA",
+      "performance": false,
+      "scenario": [
+        "FP16 Q/K, FP32 weights/output",
+        "exact bounded dyadic source score",
+        "N128 fixed source config",
+        "N tail and materialized broadcast-valued guards"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "All input/output storage shape/strides/offset/span/ND2 audited in codegen-screen; before private contiguous FP32 score/activation buffers built from same flat ND allocation helper; all buffer canaries, immutable input bits and private FP32 score passed sole correctness. Source N masks preserve valid-address bounds; masked padded expressions signed32-bounded."
+      }
+    },
+    {
+      "name": "W011-02-GB",
+      "performance": false,
+      "scenario": [
+        "FP16 Q/K, FP32 weights/output",
+        "exact bounded dyadic source score",
+        "N128 fixed source config",
+        "N tail and materialized broadcast-valued guards"
+      ],
+      "route": "optimized",
+      "compile_probe": true,
+      "correct": true,
+      "layout_audit": {
+        "mode": "manual",
+        "passed": true,
+        "evidence": "All input/output storage shape/strides/offset/span/ND2 audited in codegen-screen; before private contiguous FP32 score/activation buffers built from same flat ND allocation helper; all buffer canaries, immutable input bits and private FP32 score passed sole correctness. Source N masks preserve valid-address bounds; masked padded expressions signed32-bounded."
+      }
+    }
+  ],
+  "scope": "Selected candidate dispatch, compiled types/resources/physical layout and numeric coverage; no direct instruction/physical-traffic/occupancy claim."
+}

@@ -1,0 +1,21 @@
+{
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "frozen_v2_sha256": "1a4ba44ae00e664d20261a6889aa207af6f49bc78375272b22de6578b94e5283",
+  "source_bundle_sha256": "dba8df746edc407d2853b02dcb9a2360dade2a8f8abc42440115e6c333b48769",
+  "controller_sha256": "b8db7e8c8308dead5af7cd604dd2f18ab3e00107d1a63fcc9d2ac4d39f0031ad",
+  "source_manifest_sha256": "44bc804159afe3cc04688ca9220ae6fb88429a3c1cfb89f9611ec55fa74b5905",
+  "compact_archive_sha256": "1c6e869dfe5abed6bd857de4fd3300b1d670b528235a8e4fbb4c64488d948fa4",
+  "compact_archive_bytes": 7156013,
+  "manifest_files": 1201,
+  "verified_local_files": 640,
+  "retained_remote_raw_or_duplicate_files": 561,
+  "science_handle": "remote:gz-a3:job:5b861902-b4e8-4816-8996-4ee27e9f4eb7",
+  "readout_handle": "remote:gz-a3:job:b2731445-f4c1-480c-98ed-dca78d72b282",
+  "archive_handle": "remote:gz-a3:job:ba4848c8-fea1-465f-af4b-0a956f3deab7",
+  "warmup": 0,
+  "autotune": 0,
+  "guards_profile_APIs": 0,
+  "primary": "exact nonzero FP32 bits and numeric zeros, all finite",
+  "zero_sign_and_all_paired_bits": "secondary; observed equal all6, not required",
+  "novelty_credit": 0
+}

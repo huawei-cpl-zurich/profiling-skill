@@ -1,0 +1,98 @@
+{
+  "original_stdout_pid": 781475,
+  "original_pid_observation": null,
+  "original_pgid": null,
+  "owned_prefix_processes": [],
+  "owned_live_prefix_processes": 0,
+  "die_and_both_exports_nonblocking": true,
+  "queries": [
+    {
+      "args": [
+        "-m"
+      ],
+      "exit": 0,
+      "stdout": "\tNPU ID                         Chip ID                        Chip Logic ID                  Chip Name                     \n\t0                              0                              0                              Ascend 910B4-1\n\t0                              1                              -                              Mcu                           \n\t1                              0                              1                              Ascend 910B4-1\n\t1                              1                              -                              Mcu                           \n\t2                              0                              2                              Ascend 910B4-1\n\t2                              1                              -                              Mcu                           \n\t3                              0                              3                              Ascend 910B4-1\n\t3                              1                              -                              Mcu                           \n\t4                              0                              4                              Ascend 910B4-1\n\t4                              1                              -                              Mcu                           \n\t5                              0                              5                              Ascend 910B4-1\n\t5                              1                              -                              Mcu                           \n\t6                              0                              6                              Ascend 910B4-1\n\t6                              1                              -                              Mcu                           \n\t7                              0                              7                              Ascend 910B4-1\n\t7                              1                              -                              Mcu                           \n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "-t",
+        "health",
+        "-i",
+        "0",
+        "-c",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "\tHealth Status                  : OK\n\tError Code                     : NA\n\tError Information              : NA\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "-t",
+        "usages",
+        "-i",
+        "0",
+        "-c",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "\tDDR Capacity(MB)               : 0\n\tDDR Usage Rate(%)              : 0\n\tDDR Hugepages Total(page)      : 0\n\tDDR Hugepages Usage Rate(%)    : 0\n\tHBM Capacity(MB)               : 65536\n\tHBM Usage Rate(%)              : 5\n\tAicore Usage Rate(%)           : 0\n\tAivector Usage Rate(%)         : 0\n\tAicpu Usage Rate(%)            : 0\n\tCtrlcpu Usage Rate(%)          : 0\n\tDDR Bandwidth Usage Rate(%)    : 0\n\tHBM Bandwidth Usage Rate(%)    : 0\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "-t",
+        "memory",
+        "-i",
+        "0",
+        "-c",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "\tDDR Capacity(MB)               : 0\n\tDDR Clock Speed(MHz)           : 0\n\tHBM Capacity(MB)               : 65536\n\tHBM Clock Speed(MHz)           : 1600\n\tHBM Temperature(C)             : 41\n\tHBM Manufacturer ID            : 0x57\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "-t",
+        "proc-mem",
+        "-i",
+        "0",
+        "-c",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "\tNo process in device.\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "-t",
+        "board",
+        "-i",
+        "0",
+        "-c",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "\tNPU ID                         : 0\n\tChip ID                        : 0\n\tChip Type                      : Ascend\n\tChip Name                      : 910B4-1\n\tChip Version                   : V1\n\tBoard ID                       : 0x38\n\tPCB ID                         : NA\n\tBOM ID                         : 1\n\tVDie ID                        : 30E6F66C 0060CC76 5C79CA93 87D28485 104301E3\n\tNDie ID                        : 00000000 00000000 00000000 00000000 00000000\n\tChip Position ID               : 0\n\tPCIe Bus Info                  : 0000:C1:00.0\n\tFirmware Version               : 7.7.0.1.231\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "-t",
+        "ecc",
+        "-i",
+        "0",
+        "-c",
+        "0"
+      ],
+      "exit": 0,
+      "stdout": "\tHBM Single Bit Error Count               : 0\n\tHBM Double Bit Error Count               : 0\n\tHBM Single Bit Aggregate Total Err Cnt   : 0\n\tHBM Double Bit Aggregate Total Err Cnt   : 0\n\tHBM Single Bit Isolated Pages Count      : 0\n\tHBM Double Bit Isolated Pages Count      : 0\n\tHBM Single Bit Next-Isolated Pages Count : 0\n\tHBM Double Bit Next-Isolated Pages Count : 0\n",
+      "stderr": ""
+    }
+  ],
+  "signals_sent": 0,
+  "new_scientific_APIs": 0
+}

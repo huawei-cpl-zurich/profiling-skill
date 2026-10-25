@@ -1,0 +1,35 @@
+{
+  "protocol": "optimization-pair-v1",
+  "fixture_cache_version": 2,
+  "case": {
+    "case_id": "W011-02-GA",
+    "role": "guard",
+    "seed": 112291,
+    "parameters": {
+      "B": 2,
+      "M": 3,
+      "H": 32,
+      "D": 64,
+      "N": 129,
+      "dtype": "float16"
+    },
+    "weight_pattern": "independent_integer_per_query_head",
+    "performance": false,
+    "scenario": "batch_index_and_N_tail_one"
+  },
+  "sources": {
+    "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_contract.py": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3"
+  },
+  "source_identity": [
+    {
+      "position": 0,
+      "sha256": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3"
+    }
+  ],
+  "sha256": "7fe44295f9db82f949683e1f26caeb42c09669ea0b2651fc2fea5f2d6bd8fb3a",
+  "current_sources": {
+    "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_contract.py": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3"
+  },
+  "cache": "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-out/oracles/6e90923cec9bddd29cc4f49342c5cd63ef69afecdf54984a87d3d0ec60d56680",
+  "oracle_calls": 1
+}

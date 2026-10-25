@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "name": "W011-02-01",
+      "performance": true
+    },
+    {
+      "name": "W011-02-02",
+      "performance": true
+    },
+    {
+      "name": "W011-02-03",
+      "performance": true
+    },
+    {
+      "name": "W011-02-04",
+      "performance": true
+    },
+    {
+      "name": "W011-02-GA",
+      "performance": false
+    },
+    {
+      "name": "W011-02-GB",
+      "performance": false
+    }
+  ]
+}

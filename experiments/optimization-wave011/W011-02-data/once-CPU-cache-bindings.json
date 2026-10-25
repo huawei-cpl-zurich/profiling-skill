@@ -1,0 +1,62 @@
+[
+  {
+    "path": "0c39bea3b7a3269733560a695b0909e0ecaa7059cd168e3fd0509bd72d7cb880/fixture.pt",
+    "sha256": "d04500f3a266dd3bd38b5d0b22e82a9fffe258ee64a6732043cb80c9ffd27e5d",
+    "bytes": 53401
+  },
+  {
+    "path": "0c39bea3b7a3269733560a695b0909e0ecaa7059cd168e3fd0509bd72d7cb880/manifest.json",
+    "sha256": "e9211823467c2949627cb96862980918578c24fceda57010f313417200d235ff",
+    "bytes": 863
+  },
+  {
+    "path": "424921d407d7acdcb53211a4f3f4d740633a704a909ea2ee2674f63e6b867a17/fixture.pt",
+    "sha256": "796852aeddd4f5a45226dd2ef9c71b494881e3ec86793e14c839131af27915e8",
+    "bytes": 10520985
+  },
+  {
+    "path": "424921d407d7acdcb53211a4f3f4d740633a704a909ea2ee2674f63e6b867a17/manifest.json",
+    "sha256": "15aed606013ca4ae8d55c55b5b49c930b18f0f5a8f606e8f0be0588d0d38c246",
+    "bytes": 865
+  },
+  {
+    "path": "4725e231d8b6c0c823e25d434661e25c0f8a6a4e2942fb8aa66a43436cb680de/fixture.pt",
+    "sha256": "666243d7899619feb9a1d12d28592b40dc9af0109d7847427e4c70bb2fb11e6a",
+    "bytes": 6169
+  },
+  {
+    "path": "4725e231d8b6c0c823e25d434661e25c0f8a6a4e2942fb8aa66a43436cb680de/manifest.json",
+    "sha256": "0cedb6bd86fabb557122bf5ec1d02f089ae6375148693910159059ad8b23f865",
+    "bytes": 984
+  },
+  {
+    "path": "69704e4dcc99a93cc32d1f327df9a3fd78f04a802d6a9edc38a19dba8c952e6e/fixture.pt",
+    "sha256": "34f67a31b00120d743d7bb7ec039420dd699caaafe1d2271f38afb210d00611e",
+    "bytes": 1190297
+  },
+  {
+    "path": "69704e4dcc99a93cc32d1f327df9a3fd78f04a802d6a9edc38a19dba8c952e6e/manifest.json",
+    "sha256": "d72f4d58042bb4a830ea9e31c8ff57800bf045b4df2b04ac5ac1b651c5ea03b1",
+    "bytes": 865
+  },
+  {
+    "path": "6e90923cec9bddd29cc4f49342c5cd63ef69afecdf54984a87d3d0ec60d56680/fixture.pt",
+    "sha256": "7fe44295f9db82f949683e1f26caeb42c09669ea0b2651fc2fea5f2d6bd8fb3a",
+    "bytes": 70105
+  },
+  {
+    "path": "6e90923cec9bddd29cc4f49342c5cd63ef69afecdf54984a87d3d0ec60d56680/manifest.json",
+    "sha256": "a5d57657b31b779cef28c617ce224546d560bfc174c0394ed32992783ffc3bbc",
+    "bytes": 910
+  },
+  {
+    "path": "aba93eae65713aabc0ddae6bfd877b6a0a9547c524b8c6e8c37f691310b95486/fixture.pt",
+    "sha256": "9ceb38be23615c12ab0c4ae3adb562407c36bb35d3a1ec387d06822a839be7fb",
+    "bytes": 3951001
+  },
+  {
+    "path": "aba93eae65713aabc0ddae6bfd877b6a0a9547c524b8c6e8c37f691310b95486/manifest.json",
+    "sha256": "ae03201fe1fed56323f51b379ca7c38ee15c98fe225ab329dd3d7fbc7d317aa5",
+    "bytes": 865
+  }
+]

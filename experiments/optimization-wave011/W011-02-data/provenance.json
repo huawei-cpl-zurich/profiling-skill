@@ -1,0 +1,16 @@
+{
+  "target": "gz-a3",
+  "runtime": "py311-torch",
+  "physical_die": 0,
+  "logical": 0,
+  "torch": "2.10.0+cpu",
+  "torch_npu": "2.10.0",
+  "triton": "3.2.0",
+  "cores": {
+    "max_shared_mem": "1",
+    "num_aicore": "20",
+    "num_vectorcore": "40"
+  },
+  "matrix_sha256": "1a4ba44ae00e664d20261a6889aa207af6f49bc78375272b22de6578b94e5283",
+  "source_version": "W011-02-v2-three-stage-materialization-vs-exact-source-fused"
+}

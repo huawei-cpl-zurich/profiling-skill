@@ -1,0 +1,6 @@
+{
+  "original_sha256": "30324f483024ebb1451bd6bbfe24557b54e555e4559150da55f26608e34827bf",
+  "fixed_sha256": "0aed2361f609daa9e4802ef7ec662b5db4cc7eae36e9bd63edfc87eff26700c3",
+  "arguments_and_body_AST_equal": true,
+  "change": "outer autotune removed, function renamed, source allocation wrapper common setup outside prepared scope"
+}

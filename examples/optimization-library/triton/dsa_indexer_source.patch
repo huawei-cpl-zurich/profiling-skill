@@ -1,0 +1,37 @@
+--- original
++++ fixed-source-component
+@@ -5,16 +5,8 @@
+ import triton.language as tl
+ 
+ 
+-@triton.autotune(
+-    configs=[
+-        triton.Config({"BLOCK_SIZE_N": 128}),
+-        triton.Config({"BLOCK_SIZE_N": 256}),
+-        triton.Config({"BLOCK_SIZE_N": 512}),
+-    ],
+-    key=["H", "N", "K"],
+-)
+ @triton.jit
+-def triton_index_kernel(
++def dsa_indexer_fused(
+     q_ptr,
+     k_ptr,
+     o_ptr,
+@@ -74,16 +66,3 @@
+         o_ptrs = o_ptr + pid_m * N + i * BLOCK_SIZE_N + offs_n
+         tl.store(o_ptrs, o, mask=mask)
+ 
+-
+-def dsa_lightning_indexer_forward(q: torch.Tensor, q_s: torch.Tensor, k: torch.Tensor):
+-    # due to unquant, there is no need for k_s
+-    assert q.is_contiguous() and k.is_contiguous(), "Input tensors must be contiguous"
+-
+-    B, M, H, K = q.size()
+-    N = k.size(1)
+-
+-    o = torch.zeros((B, M, N), dtype=torch.float32, device=q.device)
+-
+-    grid = (B * M,)
+-    triton_index_kernel[grid](q, k, o, q_s, B, H, M, N, K)
+-    return o

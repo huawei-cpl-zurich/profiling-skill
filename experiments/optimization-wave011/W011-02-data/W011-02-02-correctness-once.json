@@ -1,0 +1,384 @@
+{
+  "protocol": "optimization-pair-v1",
+  "status": "complete",
+  "case": {
+    "case_id": "W011-02-02",
+    "role": "main",
+    "seed": 112202,
+    "parameters": {
+      "B": 1,
+      "M": 32,
+      "H": 64,
+      "D": 128,
+      "N": 1024,
+      "dtype": "float16"
+    },
+    "weight_pattern": "independent_integer_per_query_head",
+    "performance": true
+  },
+  "provenance": {
+    "target": "gz-a3",
+    "runtime": "py311-torch",
+    "physical_die": 0,
+    "logical": 0,
+    "torch": "2.10.0+cpu",
+    "torch_npu": "2.10.0",
+    "triton": "3.2.0",
+    "cores": {
+      "max_shared_mem": "1",
+      "num_aicore": "20",
+      "num_vectorcore": "40"
+    },
+    "matrix_sha256": "1a4ba44ae00e664d20261a6889aa207af6f49bc78375272b22de6578b94e5283",
+    "source_version": "W011-02-v2-three-stage-materialization-vs-exact-source-fused"
+  },
+  "order": [
+    "before",
+    "after"
+  ],
+  "mode": "correctness-only",
+  "timing_kind": null,
+  "arms": {
+    "before": {
+      "correctness": {
+        "status": "complete",
+        "calls": 1,
+        "diagnostics": {
+          "passed": true,
+          "mismatch_count": 0,
+          "first_mismatches": [],
+          "nonfinite_count": 0,
+          "max_FP64_error": 0.0,
+          "immutable_inputs": true,
+          "canaries": true,
+          "private_output": true,
+          "paired_nonzero_bits_numeric_zeros": null,
+          "paired_all_bits_secondary": null,
+          "CPU_zero_sign_secondary": true
+        }
+      },
+      "profiled_calls": 0,
+      "capture_calls": 0,
+      "profile_status": "not-requested",
+      "sources": {
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer.py": "aeeeba4baf7b3caa5315a1e23486d0251c78df0ec2df7dfa924c8107cbc877a1",
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_contract.py": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3",
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_source.py": "0aed2361f609daa9e4802ef7ec662b5db4cc7eae36e9bd63edfc87eff26700c3",
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_kernels.py": "d81c07b518ae48df60ff60d256917d6806402a57d2f76376fd07979b3298e7c5"
+      },
+      "metadata": {
+        "arm": "before",
+        "route": "reference",
+        "component": "prepared complete DSA score",
+        "prepared_device": "npu:0",
+        "grid": [
+          32
+        ],
+        "flags": {
+          "num_warps": 4,
+          "num_stages": 1,
+          "multibuffer": false
+        },
+        "BLOCK_SIZE_N": 128,
+        "device_kernel_calls": 3,
+        "physical": {
+          "q": {
+            "shape": [
+              1,
+              32,
+              64,
+              128
+            ],
+            "strides": [
+              262144,
+              8192,
+              128,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 262175,
+            "storage_elements": 262208,
+            "format": 2
+          },
+          "k": {
+            "shape": [
+              1,
+              1024,
+              128
+            ],
+            "strides": [
+              131072,
+              128,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 131103,
+            "storage_elements": 131136,
+            "format": 2
+          },
+          "weights": {
+            "shape": [
+              1,
+              32,
+              64
+            ],
+            "strides": [
+              2048,
+              64,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 2079,
+            "storage_elements": 2112,
+            "format": 2
+          },
+          "out": {
+            "shape": [
+              1,
+              32,
+              1024
+            ],
+            "strides": [
+              32768,
+              1024,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 32799,
+            "storage_elements": 32832,
+            "format": 2
+          }
+        },
+        "reused_outputs": true,
+        "scope": "all QK/ReLU/weight/headsum stages charged; private allocations/initial copies outside both APIs; output/scratch reused; no per-profile IO checks",
+        "cleanup_ownership": "collector holds original prepared item through all correctness/profiles; generic proxy close is non-owning"
+      },
+      "expected_kernels": [
+        "dsa_indexer_qk",
+        "dsa_indexer_activate",
+        "dsa_indexer_headsum"
+      ],
+      "status": "complete",
+      "compilation_state_after_correctness": [
+        {
+          "binaries": {
+            "npubin": "e941ed64614537ffa8119fce2cd93ba4137428c29d7e7f730eae6df217cc75dd",
+            "ttadapter": "066f3eeebac1923e3495856b2aabe515510a3a550718eeda95ef58a87f9abf93",
+            "ttir": "e20d2a7125fd9ec10e0f3efcdf1173b5623f51cc40ebe18fcc28593796ba0a1c"
+          },
+          "format": "Triton-Ascend-npubin",
+          "hash": "f57b01a7caf46da6f3a0eddefcf66624e5916dca9d34951fc0020fe2c5cdff78",
+          "identity_source": "compiled executable npubin",
+          "name": "dsa_indexer_qk",
+          "sha256": "e941ed64614537ffa8119fce2cd93ba4137428c29d7e7f730eae6df217cc75dd"
+        },
+        {
+          "binaries": {
+            "npubin": "cecfce5dd2ef7132f7c5836c4bdf0ade1cd9e4b0689b20d5b3a54b3a52d26007",
+            "ttadapter": "ba2209aec5f70fb24c540df8fdb59feb77a3899b8ef29dd17479b7fd9b2ae4ab",
+            "ttir": "9661eb11e26c6048341b6cb382fc6ad65ef1139179f14e69ea708e4c7c07bee2"
+          },
+          "format": "Triton-Ascend-npubin",
+          "hash": "f233f2b04bff2720b85b7d95068a7b6626c3cfc0a0c5bce36ac53f615bf1f49e",
+          "identity_source": "compiled executable npubin",
+          "name": "dsa_indexer_activate",
+          "sha256": "cecfce5dd2ef7132f7c5836c4bdf0ade1cd9e4b0689b20d5b3a54b3a52d26007"
+        },
+        {
+          "binaries": {
+            "npubin": "8417847639ecb1c06e59de79c748838c09b8fda8be293188d5b4eb98ba9add72",
+            "ttadapter": "37e431ad7b6ca0fe3ea7a22feac765f3832ac64184059e24ba007c8b90a24940",
+            "ttir": "1958e8f939c38b78ed4cb2669483e496378f896076101ec4767681375e21f42a"
+          },
+          "format": "Triton-Ascend-npubin",
+          "hash": "c1da2b2b5d14cab5c39419b0ca9bbc5b7076ac4f0fdf5f1c8fc971544469162d",
+          "identity_source": "compiled executable npubin",
+          "name": "dsa_indexer_headsum",
+          "sha256": "8417847639ecb1c06e59de79c748838c09b8fda8be293188d5b4eb98ba9add72"
+        }
+      ],
+      "cleanup": {
+        "status": "complete"
+      }
+    },
+    "after": {
+      "correctness": {
+        "status": "complete",
+        "calls": 1,
+        "diagnostics": {
+          "passed": true,
+          "mismatch_count": 0,
+          "first_mismatches": [],
+          "nonfinite_count": 0,
+          "max_FP64_error": 0.0,
+          "immutable_inputs": true,
+          "canaries": true,
+          "private_output": true,
+          "paired_nonzero_bits_numeric_zeros": true,
+          "paired_all_bits_secondary": true,
+          "CPU_zero_sign_secondary": true
+        }
+      },
+      "profiled_calls": 0,
+      "capture_calls": 0,
+      "profile_status": "not-requested",
+      "sources": {
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer.py": "aeeeba4baf7b3caa5315a1e23486d0251c78df0ec2df7dfa924c8107cbc877a1",
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_contract.py": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3",
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_source.py": "0aed2361f609daa9e4802ef7ec662b5db4cc7eae36e9bd63edfc87eff26700c3",
+        "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_kernels.py": "d81c07b518ae48df60ff60d256917d6806402a57d2f76376fd07979b3298e7c5"
+      },
+      "metadata": {
+        "arm": "after",
+        "route": "optimized",
+        "component": "prepared complete DSA score",
+        "prepared_device": "npu:0",
+        "grid": [
+          32
+        ],
+        "flags": {
+          "num_warps": 4,
+          "num_stages": 1,
+          "multibuffer": false
+        },
+        "BLOCK_SIZE_N": 128,
+        "device_kernel_calls": 1,
+        "physical": {
+          "q": {
+            "shape": [
+              1,
+              32,
+              64,
+              128
+            ],
+            "strides": [
+              262144,
+              8192,
+              128,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 262175,
+            "storage_elements": 262208,
+            "format": 2
+          },
+          "k": {
+            "shape": [
+              1,
+              1024,
+              128
+            ],
+            "strides": [
+              131072,
+              128,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 131103,
+            "storage_elements": 131136,
+            "format": 2
+          },
+          "weights": {
+            "shape": [
+              1,
+              32,
+              64
+            ],
+            "strides": [
+              2048,
+              64,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 2079,
+            "storage_elements": 2112,
+            "format": 2
+          },
+          "out": {
+            "shape": [
+              1,
+              32,
+              1024
+            ],
+            "strides": [
+              32768,
+              1024,
+              1
+            ],
+            "storage_offset": 32,
+            "maximum_offset": 32799,
+            "storage_elements": 32832,
+            "format": 2
+          }
+        },
+        "reused_outputs": true,
+        "scope": "all QK/ReLU/weight/headsum stages charged; private allocations/initial copies outside both APIs; output/scratch reused; no per-profile IO checks",
+        "cleanup_ownership": "collector holds original prepared item through all correctness/profiles; generic proxy close is non-owning"
+      },
+      "expected_kernels": [
+        "dsa_indexer_fused"
+      ],
+      "status": "complete",
+      "compilation_state_after_correctness": [
+        {
+          "binaries": {
+            "npubin": "a638e362c7a26c12984392724c2e2f8db65a3b33ce410fab91e2e9c09347f856",
+            "ttadapter": "1a8e9c5ea8f63994ee1dcfba6a15ffbdab104bf53fb47a82abc82709eb78dcfb",
+            "ttir": "2ddc428439157115d61161b0798320168c44635aec64e02497df5b33c7549fca"
+          },
+          "format": "Triton-Ascend-npubin",
+          "hash": "8611d0d2851d2c103330dccfca7ad1af714e1fb183687a57b3f291559c742cc3",
+          "identity_source": "compiled executable npubin",
+          "name": "dsa_indexer_fused",
+          "sha256": "a638e362c7a26c12984392724c2e2f8db65a3b33ce410fab91e2e9c09347f856"
+        }
+      ],
+      "cleanup": {
+        "status": "complete"
+      }
+    }
+  },
+  "warmup_calls": 0,
+  "discovery_calls": 0,
+  "unprofiled_timing_calls": 0,
+  "profile_status": "not-requested",
+  "fixture": {
+    "protocol": "optimization-pair-v1",
+    "fixture_cache_version": 2,
+    "case": {
+      "case_id": "W011-02-02",
+      "role": "main",
+      "seed": 112202,
+      "parameters": {
+        "B": 1,
+        "M": 32,
+        "H": 64,
+        "D": 128,
+        "N": 1024,
+        "dtype": "float16"
+      },
+      "weight_pattern": "independent_integer_per_query_head",
+      "performance": true
+    },
+    "sources": {
+      "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_contract.py": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3"
+    },
+    "source_identity": [
+      {
+        "position": 0,
+        "sha256": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3"
+      }
+    ],
+    "sha256": "34f67a31b00120d743d7bb7ec039420dd699caaafe1d2271f38afb210d00611e",
+    "current_sources": {
+      "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-source/examples/optimization-library/triton/dsa_indexer_contract.py": "667a3a2db665140dc79597c5548721a176848e7fff5db15908a98b5b5d9f7af3"
+    },
+    "cache": "retained/optimization-study/wave011/optimization-w011-dsa-indexer-fusion-0a622373a8f1-v1-out/oracles/69704e4dcc99a93cc32d1f327df9a3fd78f04a802d6a9edc38a19dba8c952e6e",
+    "oracle_calls": 0
+  },
+  "counts": {
+    "profiled_calls": 0,
+    "capture_calls": 0,
+    "correctness_calls": 2
+  }
+}

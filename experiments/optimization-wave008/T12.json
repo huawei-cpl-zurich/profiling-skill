@@ -1,0 +1,99 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "4efe2b675c2d51517c3fdd14c721020b8d41e241",
+  "snapshot_digest": "92fb5efaf51aa786cdd8d1a5869dd952486dffcdb039897d790393947a2aad54",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T12",
+  "task": "optimization-w008-clipped-zero-limit",
+  "title": "Zero-limit compile screen for clipped SwiGLU forward",
+  "source_files": [
+    "mindspeed_ops__arch32__triton__clipped_swiglu.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T12-01",
+      "role": "gallery",
+      "seed": 81201,
+      "parameters": {
+        "M": 128,
+        "K": 1024,
+        "limit": 0
+      }
+    },
+    {
+      "case_id": "W008-T12-02",
+      "role": "gallery",
+      "seed": 81202,
+      "parameters": {
+        "M": 1,
+        "K": 17,
+        "limit": 0
+      }
+    },
+    {
+      "case_id": "W008-T12-03",
+      "role": "heldout",
+      "seed": 81203,
+      "parameters": {
+        "M": 1024,
+        "K": 1024,
+        "limit": 0
+      }
+    },
+    {
+      "case_id": "W008-T12-04",
+      "role": "heldout",
+      "seed": 81204,
+      "parameters": {
+        "M": 33,
+        "K": 1000,
+        "limit": 0
+      }
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T12-GA",
+      "role": "guard",
+      "seed": 81291,
+      "parameters": {
+        "M": 3,
+        "K": 65,
+        "limit": 7
+      }
+    },
+    {
+      "case_id": "W008-T12-GB",
+      "role": "guard",
+      "seed": 81292,
+      "parameters": {
+        "M": 1,
+        "K": 17,
+        "limit": 0,
+        "signed_zero": true
+      }
+    }
+  ],
+  "contract": {
+    "interface": "PreparedFP32forward GUP[M,2K]contiguous/privateOUT[M,K], sourcepickerBM/BKsameboth,alpha1.702,finitequantized1/64[-12,12]. limit0specializedor7fallback; rejectnonfiniteCPUinputs beforecache so NaNup doesnotinvalidate elimination. No T05flatlayout/T04saturation changes.",
+    "before": "Exactsourceforward LIMITconstexpr0/7, unchangedexpressionandflags/compileroptimizer.",
+    "after": "ONLYconstexprLIMIT==0 removeUPload/clamp and multiplyby1, preserve min(g,0),sigmoid(g*alpha),OUTPUTcast,signedzero; forlimit7 exactsourcefallback. Likelycompilerbaselinealreadyfolds: MUSTscreenallselectedELF/text+relocations beforeCPUpayload/math, fullELFidentitystrongnoop0measure, same.textaloneinconclusiveifrelocs/symboltargets differ. Noflags/artificialusepreventingoptimizer. Ifallmainnoop retaincompileonlyscreen and guardsunattempted,not0runtimeclaimedcorrect.",
+    "oracle": "Ifnonnoopscreenqualified, oneFP64 provider percase sourceclampformula (finiteUP), fixedatol3e-5rtol2e-5 plusallFP32pairedoutputbits, signedzeroexactGB. GA sourcefallbackbits expectedsamekernel. No needGPUbackward solelybecauseupstreamhaszero-limitgradienttest, scopeforward. NONFROZEN invalidNaN/InfincludingUP rejects beforecache (botharms), oddshape/strides/dtypes too.",
+    "claims": "Potential omittedinputload+clampgraph but no workclaim ifalreadyfolded. actualinstalledcompiler screen/sourceidentity/resource exports retained regardlessnegative. SourceMindSpeedApache2pin/perfileHuawei. No source-hardware-throughput transfer or broadmodelutilityclaim."
+  },
+  "source_files_manifest": [
+    {
+      "path": "mindspeed_ops__arch32__triton__clipped_swiglu.py",
+      "sha256": "786d6bcce46e49cd485f310da096df2075907f3454875a82ed08bd89e6ab1b01"
+    }
+  ]
+}

@@ -1,0 +1,458 @@
+[
+  {
+    "case_id": "W008-T12-01",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "9713efe4fe7dd8d6b153b07bc16ad07babac0ab85a48ee884a9e8bc71537b7d5",
+        "name": "_clipped_swiglu_kernel",
+        "binaries": {
+          "ttir": "e72f630ea63d3de1ac2490ccf32b3b182833e96a8f7617e55a915a5c65ddd859",
+          "ttadapter": "edb2f9c20aafb8c0f906feccb07d00b815f309916140158053005298443a8719",
+          "npubin": "7075b60702417e705cdf9f9df62046c472160e011e8aa095d4ce3fd79cb3de50"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 4,
+        "BLOCK_K": 1024,
+        "limit": 0
+      },
+      "grid": [
+        32,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          2048,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-01",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "bb8d4469a86c892e0bfad0509f03cebdf2f968013d2bb907e825433bf2d465ca",
+        "name": "_zero_limit_swiglu_kernel",
+        "binaries": {
+          "ttir": "466c317a07e775e0334d1e8d882b4df4c97fbc1c4b066200cc7313a14939aae2",
+          "ttadapter": "fd2472b78f2b823b64f93aeaedefc47a0c8abb6133afb7f6502b20703d3f2b17",
+          "npubin": "7eb9b16284c910c3e2b45efffe976c42f736719087c0614ee097aa5deeefb075"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 4,
+        "BLOCK_K": 1024,
+        "limit": 0
+      },
+      "grid": [
+        32,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          2048,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-02",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "e28907fafb5aec904af7f33f231a153cdd6f3e89a52ca64b468256246b79f326",
+        "name": "_clipped_swiglu_kernel",
+        "binaries": {
+          "ttir": "a1289f52b6fa3241360d495f6a25abaf7bdbe0dac796b0f9a1b91a79968015cb",
+          "ttadapter": "96940fac3145774b22b04d4fd1735584e121eb55ae43cf25d9b26c3d83949cf8",
+          "npubin": "793b611c823997449de0aa3b6d19d02faccdfbc9aadd4f3343b4d90395cec128"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 1,
+        "BLOCK_K": 512,
+        "limit": 0
+      },
+      "grid": [
+        1,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          34,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-02",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "3a40a45df3221e6ccfa84f9a8ba4cdfce1aa2bb5bd00289db5fe7859aa06a821",
+        "name": "_zero_limit_swiglu_kernel",
+        "binaries": {
+          "ttir": "f7ab9050503c37409ebb1d82dc72aac379e20f7dca4511434631db8d4b574460",
+          "ttadapter": "22c144f03f4fb6c5e847ecd484fea58d9bd5a9a0075544e20538c9357d611011",
+          "npubin": "63029266978bc73c4a76609660159a6c03e0012ebcc934bd9bb4a731f7abf13a"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 1,
+        "BLOCK_K": 512,
+        "limit": 0
+      },
+      "grid": [
+        1,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          34,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-03",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "9713efe4fe7dd8d6b153b07bc16ad07babac0ab85a48ee884a9e8bc71537b7d5",
+        "name": "_clipped_swiglu_kernel",
+        "binaries": {
+          "ttir": "e72f630ea63d3de1ac2490ccf32b3b182833e96a8f7617e55a915a5c65ddd859",
+          "ttadapter": "edb2f9c20aafb8c0f906feccb07d00b815f309916140158053005298443a8719",
+          "npubin": "7075b60702417e705cdf9f9df62046c472160e011e8aa095d4ce3fd79cb3de50"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 4,
+        "BLOCK_K": 1024,
+        "limit": 0
+      },
+      "grid": [
+        256,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          2048,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-03",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "bb8d4469a86c892e0bfad0509f03cebdf2f968013d2bb907e825433bf2d465ca",
+        "name": "_zero_limit_swiglu_kernel",
+        "binaries": {
+          "ttir": "466c317a07e775e0334d1e8d882b4df4c97fbc1c4b066200cc7313a14939aae2",
+          "ttadapter": "fd2472b78f2b823b64f93aeaedefc47a0c8abb6133afb7f6502b20703d3f2b17",
+          "npubin": "7eb9b16284c910c3e2b45efffe976c42f736719087c0614ee097aa5deeefb075"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 4,
+        "BLOCK_K": 1024,
+        "limit": 0
+      },
+      "grid": [
+        256,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          2048,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-04",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "890abbd04d08016b256a55fd8d7e3a06ae24595d4e4b623ff25539cc510c7509",
+        "name": "_clipped_swiglu_kernel",
+        "binaries": {
+          "ttir": "f612fcf1d992637f1ae680b00e64a21e7c3dc91af2d35928d35c368cc2d515f9",
+          "ttadapter": "a0036fb8cfcb36ebda206230335201be071b0726fc99b43ab854998accaba46c",
+          "npubin": "7075b60702417e705cdf9f9df62046c472160e011e8aa095d4ce3fd79cb3de50"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 4,
+        "BLOCK_K": 1024,
+        "limit": 0
+      },
+      "grid": [
+        9,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          2000,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-04",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "61c65f9115d30951cebe1a09a1659d9652b59f16e470587b742b74ebff3185c2",
+        "name": "_zero_limit_swiglu_kernel",
+        "binaries": {
+          "ttir": "fce3258d67e8104959877a75fc8a476205a5ede2cf6445dd9171c7708228d9e6",
+          "ttadapter": "633f143f6ecaf92fcc21d9afe562e0599b1290a4048422e953788733495791f9",
+          "npubin": "7eb9b16284c910c3e2b45efffe976c42f736719087c0614ee097aa5deeefb075"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 4,
+        "BLOCK_K": 1024,
+        "limit": 0
+      },
+      "grid": [
+        9,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          2000,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-GA",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "8f40110e5bd77923bea59abc3a7592679f3873162da8f9e7e3d52928b200a8d5",
+        "name": "_clipped_swiglu_kernel",
+        "binaries": {
+          "ttir": "73db5cf63aa2db7d0dcdb98c6689b5e11090fdfe5dcf55b3b55804ff0f0bc276",
+          "ttadapter": "0c88b007b006f05e1fa7ff1f9eaa00b82492bead097d95a19b3f967c4aec893a",
+          "npubin": "6e04701f40aecc55fb048bcb91bbc891c651a41ed7faf2e29ec840d7678db476"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 2,
+        "BLOCK_K": 512,
+        "limit": 7
+      },
+      "grid": [
+        2,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          130,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-GA",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "819998b562cefe8fb51ea19f3b8c82d5ae004f161ca9e05ba01708748ffdc6c4",
+        "name": "_zero_limit_swiglu_kernel",
+        "binaries": {
+          "ttir": "f0df03f24e044cf28b8aecbc29c4540e6eea46d9c03268e48fb02afaff03477b",
+          "ttadapter": "816e9974f664f7876da6e48afda79afb42ad00a07f52c47e6bf14a7330405eea",
+          "npubin": "6b6041f35444dfe335dbdbbf9d4f4142b9afdd269b8f6bf8a31d246de0ee6fbf"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 2,
+        "BLOCK_K": 512,
+        "limit": 7
+      },
+      "grid": [
+        2,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          130,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-GB",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "e28907fafb5aec904af7f33f231a153cdd6f3e89a52ca64b468256246b79f326",
+        "name": "_clipped_swiglu_kernel",
+        "binaries": {
+          "ttir": "a1289f52b6fa3241360d495f6a25abaf7bdbe0dac796b0f9a1b91a79968015cb",
+          "ttadapter": "96940fac3145774b22b04d4fd1735584e121eb55ae43cf25d9b26c3d83949cf8",
+          "npubin": "793b611c823997449de0aa3b6d19d02faccdfbc9aadd4f3343b4d90395cec128"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 1,
+        "BLOCK_K": 512,
+        "limit": 0
+      },
+      "grid": [
+        1,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          34,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  },
+  {
+    "case_id": "W008-T12-GB",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "3a40a45df3221e6ccfa84f9a8ba4cdfce1aa2bb5bd00289db5fe7859aa06a821",
+        "name": "_zero_limit_swiglu_kernel",
+        "binaries": {
+          "ttir": "f7ab9050503c37409ebb1d82dc72aac379e20f7dca4511434631db8d4b574460",
+          "ttadapter": "22c144f03f4fb6c5e847ecd484fea58d9bd5a9a0075544e20538c9357d611011",
+          "npubin": "63029266978bc73c4a76609660159a6c03e0012ebcc934bd9bb4a731f7abf13a"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "clipped forward zero-limit only",
+      "configuration": {
+        "BLOCK_M": 1,
+        "BLOCK_K": 512,
+        "limit": 0
+      },
+      "grid": [
+        1,
+        1
+      ],
+      "device_kernel_calls": 0,
+      "reused_output": true,
+      "workspace_scope": "prepared output; compiler-managed scratch retained by JIT",
+      "allocator_limit": "no allocation or complete model latency claim",
+      "input_strides": {
+        "gup": [
+          34,
+          1
+        ]
+      },
+      "compile_only_probe": true
+    }
+  }
+]

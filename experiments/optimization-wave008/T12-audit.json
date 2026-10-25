@@ -1,0 +1,8 @@
+{
+  "exit": 0,
+  "result": {
+    "errors": [],
+    "ok": true
+  },
+  "scope": "All six actual numeric cases; LIMIT0 candidate specialization, LIMIT7 actual compile-time source fallback. No mathematical guard or host scenario fabricated."
+}

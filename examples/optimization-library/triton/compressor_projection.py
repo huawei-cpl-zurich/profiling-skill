@@ -18,6 +18,14 @@ def identity(compiled):
             for item in compiled]
 
 
+def check_numeric_domain(inputs):
+    """Validate caller CPU values once before transfer; prepared runs inspect no IO."""
+    for name, tensor in inputs.items():
+        q = tensor.detach().float() * 128
+        if not bool(torch.all(torch.isfinite(q) & (q.abs() <= 16) & (q == q.round()))):
+            raise ValueError('values must be q/128 for integer q in [-16,16]: ' + name)
+
+
 class Adapter:
     case_sources = [Path(__file__).with_name('compressor_projection_contract.py')]
     make_case = staticmethod(make_case)
@@ -30,6 +38,7 @@ class Adapter:
         if arm not in ('before', 'after'):
             raise ValueError('paired arm required')
         check_inputs(fixture['inputs'], m, 'cpu')
+        check_numeric_domain(fixture['inputs'])
         if (not isinstance(fixture.get('expected'), (list, tuple)) or len(fixture['expected']) != 2
                 or any(v.shape != (m, N) or v.dtype != torch.float32 for v in fixture['expected'])):
             raise ValueError('two FP32 expected outputs required')

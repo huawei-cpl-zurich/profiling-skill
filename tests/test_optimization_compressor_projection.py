@@ -48,6 +48,26 @@ class ProjectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):contract.validate_actual(f['expected'],f,altered)
         with self.assertRaises(ValueError):contract.validate_actual([f['expected'][0]]*2,f)
 
+    def test_caller_numeric_domain_before_backend_import(self):
+        import builtins
+        fixture = contract.make_case(dict(M=2, seed=118))
+        original_import = builtins.__import__
+        def guarded_import(name, *args, **kwargs):
+            if name in ('torch_npu', 'compressor_projection_kernels', 'compressor_projection_utils'):
+                raise AssertionError('backend imported before invalid fixture rejection')
+            return original_import(name, *args, **kwargs)
+        for name in ('x', 'w0', 'w1'):
+            for bad in (float('nan'), float('inf'), -float('inf'), .25, -.25, 1/256, -1/256):
+                with self.subTest(name=name, bad=bad):
+                    inputs = dict(fixture['inputs']); inputs[name] = inputs[name].clone()
+                    inputs[name][0, 0] = bad
+                    with patch.object(builtins, '__import__', guarded_import), self.assertRaises(ValueError):
+                        op.Adapter().prepare('after', dict(M=2), dict(fixture, inputs=inputs), None)
+        for name in ('x', 'w0', 'w1'):
+            fixture['inputs'][name][0, :3] = torch.tensor([-.125, 0., .125], dtype=torch.bfloat16)
+        op.check_numeric_domain(fixture['inputs'])
+        op.check_numeric_domain(contract.make_case(dict(M=0, seed=119))['inputs'])
+
     def test_repeated_adapter_both_orders_compile_once_and_reuse_outputs(self):
         from types import SimpleNamespace as NS
         import struct
@@ -70,13 +90,16 @@ class ProjectionTests(unittest.TestCase):
         full=torch.full
         def cpu_full(*args,**kwargs):kwargs.pop('device',None);return full(*args,**kwargs)
         f=contract.make_case(dict(M=1,seed=117));adapter=op.Adapter()
-        with patch.dict(sys.modules,modules),patch.object(op,'check_inputs'),patch.object(torch.Tensor,'to',lambda self,*a,**k:self.clone()),patch.object(torch,'full',cpu_full):
+        with patch.dict(sys.modules,modules),patch.object(op,'check_inputs'),patch.object(torch.Tensor,'to',lambda self,*a,**k:self.clone()),patch.object(torch,'full',cpu_full),patch.object(op,'check_numeric_domain',wraps=op.check_numeric_domain) as numeric_guard:
             for order in [('before','after'),('after','before')]:
                 for arm in order:
+                    guard_calls=numeric_guard.call_count
                     item=adapter.prepare(arm,dict(M=1),f,None)
+                    self.assertEqual(numeric_guard.call_count,guard_calls+1)
                     kernel=k0 if arm=='before' else k1
                     before=(kernel.compiles,kernel.launches)
                     a=item.run();b=item.run()
+                    self.assertEqual(numeric_guard.call_count,guard_calls+1)
                     self.assertIs(a,b)
                     self.assertEqual(kernel.compiles-before[0],2 if arm=='before' else 1)
                     self.assertEqual(kernel.launches-before[1],4 if arm=='before' else 2)

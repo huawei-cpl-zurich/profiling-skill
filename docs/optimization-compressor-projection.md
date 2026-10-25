@@ -18,7 +18,10 @@ current logical device's `num_aicore` property, not its vector-core count.
 
 The supported contract is contiguous BF16 X[M,5120], W0/W1[512,5120], M in
 [0,256], distinct allocations, and values q/128 for integer q in [-16,16].
-The CPU fixture provider computes FP64 integer-valued dot products. The
+Caller-provided CPU fixtures are checked once during preparation for finite
+values, the bounds, and exact q/128 membership before backend import or
+transfer. Prepared forwards perform no input inspection. The CPU fixture
+provider computes FP64 integer-valued dot products. The
 conservative error bound gamma(5120, FP64) * 1310720 is below 0.5, recovering
 the exact integer dot; every possible integer prefix is below 2^24. Dividing
 by 16384 gives exactly representable FP32 results. Both output bit patterns
@@ -67,3 +70,8 @@ variation; no samples were discarded. Raw supported PMU rows are in
 are recorded separately. The selected runtime imports Triton 3.2.0 with
 triton-ascend 3.2.2 and CANN 9.1.0; installed distribution metadata reports
 Triton 3.5.0 and is retained separately. The device reports 20 Cube cores.
+
+`T01-publication.json` distinguishes the original measured adapter hash from
+the publication adapter with the CPU boundary guard. The JIT kernels, CPU
+oracle provider, frozen payloads, and original measurements are unchanged;
+the follow-up gate runs CPU functional tests only.

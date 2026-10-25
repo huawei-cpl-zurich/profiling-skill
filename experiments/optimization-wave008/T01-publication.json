@@ -1,0 +1,36 @@
+{
+  "reason": "P2 review fix: validate caller numeric domain once at CPU preparation boundary before backend imports; no prepared-run inspection",
+  "measured_head": "a36cad97dd1eabcc0a163a72ad6d33b6c6c2afa8",
+  "measured_source_sha256": {
+    "compressor_projection.py": "52e6e63e639f6ec4714583bc0e71a5cc8d92504767c53c1b8e9fd5897985f719",
+    "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+    "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+    "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+  },
+  "publication_source_sha256": {
+    "compressor_projection.py": "4a3831c95157b3e4d73482ce62f80bbb5874f3da7a50f73caf34d8b0c7879a20",
+    "compressor_projection_contract.py": "104687ded46fb0dfd3c02c2d9e965f1ac41cc427acaee7b5739c08290910f459",
+    "compressor_projection_kernels.py": "4a425045c53f638f20f7b4caaf179ef87e7e26e1b53d2634231776be77b2e335",
+    "compressor_projection_utils.py": "dbf3decda1dd366915dab0b0c3976a1ade926a0a035454db9cbaea228ac41ce1"
+  },
+  "publication_test_sha256": "747891b2067eb3265b29e2121c13583e75a78628f7255053a9403be388337906",
+  "unchanged": [
+    "JIT kernels",
+    "device helper",
+    "CPU oracle provider",
+    "frozen fixture payloads",
+    "original result samples and artifacts"
+  ],
+  "cpu_only_a3_gate": {
+    "target": "gz-a3",
+    "runtime": "py311-torch",
+    "handle": "remote:gz-a3:job:3a5c64a0-ecfe-47af-a637-d3cda172943a",
+    "status": "completed",
+    "exit": 0,
+    "functional_tests": 7
+  },
+  "new_frozen_oracle_payloads": 0,
+  "new_device_forwards": 0,
+  "new_compilations": 0,
+  "new_captures": 0
+}

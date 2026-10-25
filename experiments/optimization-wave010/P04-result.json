@@ -2713,7 +2713,8 @@
     "new_source_math_tuning": false,
     "correctness_or_performance_claim": false,
     "speedup": null,
-    "geometric_mean": null
+    "geometric_mean": null,
+    "upstream_build_recipe_parity": "NOT ESTABLISHED; see exact filtered CMake citation and extraction argv. Failure does not establish source-kernel defect or infrastructure exoneration."
   },
   "bindings": {
     "measured_sources": {
@@ -3096,7 +3097,7 @@
         "scope": "Raw fresh health retained; an unhealthy result is not hidden or repaired."
       }
     },
-    "diagnostics_sha256": "80ea57e1e6c0f12da3caee6a31cc2c212daf915dd118da33a2e7bfb5dd128bf8",
+    "diagnostics_sha256": "1745d434d7751fd7fa246d90c0c68c2e9ef7accf86b89b0785bdddbb4027ce79",
     "bundle": {
       "token": "optimization-w010-native-sasum-core-partial-v1-95205ee232",
       "sha256": "938bd33c1371a029b51c474a7b4f75b3ad6ff916fc65fecd932caf5a354a70c6",
@@ -3202,5 +3203,70 @@
     "download": "remote:gz-a3:transfer:6c85a44c-1028-45fc-abd7-90b4f693ad2d",
     "CPU_gate_upload": "remote:gz-a3:transfer:25653c0d-ae37-432b-9c2e-afbc325d0946",
     "initial_CPUgate": "remote:gz-a3:job:0d99d8f9-beed-4e13-be42-438230caec0b"
+  },
+  "build_mode_evidence": {
+    "source_pin": "c2332551586763f8c2d27621f8bc119bd1c3a301",
+    "query_id": "d41e042399894c02a7d400b6c6adc31a",
+    "citation": "ref://profiling-skill/ascendc/perf-analysis/repos/gitcode-cann-ops-blas-curated-text#CMakeLists.txt",
+    "filtered_scope": "L1-L260 retained; complete effective upstream SASUM command not available",
+    "filtered_body_sha256": "579c9bffbe3319476a3f01eb29f45e3dff639c7e28384786d6ff2d74716deb2b",
+    "selected_lines": [
+      {
+        "line": 20,
+        "text": "# SOC_VERSION -> NPU_ARCH \u6620\u5c04\uff08ascend910b->dav-2201, ascend950->dav-3101\uff09"
+      },
+      {
+        "line": 21,
+        "text": "if(SOC_VERSION_LOWER MATCHES \"^ascend910b\")"
+      },
+      {
+        "line": 22,
+        "text": "  set(NPU_ARCH \"dav-2201\")"
+      },
+      {
+        "line": 23,
+        "text": "elseif(SOC_VERSION_LOWER MATCHES \"^ascend910_93\")"
+      },
+      {
+        "line": 24,
+        "text": "  set(NPU_ARCH \"dav-2201\")"
+      },
+      {
+        "line": 69,
+        "text": "set(CMAKE_ASC_FLAGS_RELEASE \"-O3\" CACHE STRING \"AscendC compile flags (Release)\" FORCE)"
+      },
+      {
+        "line": 84,
+        "text": "project(${OPS_BLASLT} LANGUAGES ASC CXX)"
+      },
+      {
+        "line": 89,
+        "text": "    PROPERTIES LANGUAGE ASC"
+      },
+      {
+        "line": 106,
+        "text": "    PROPERTIES LANGUAGE ASC"
+      },
+      {
+        "line": 220,
+        "text": "    $<$<COMPILE_LANGUAGE:ASC>:--npu-arch=${NPU_ARCH} ${ASC_WARN_SUPPRESS} -DASC_DEVKIT_MAJOR=${ASC_DEVKIT_MAJOR} -DASC_DEVKIT_MINOR=${ASC_DEVKIT_MINOR}>"
+      },
+      {
+        "line": 239,
+        "text": "project(${OPS_BLAS} LANGUAGES ASC CXX)"
+      },
+      {
+        "line": 245,
+        "text": "    PROPERTIES LANGUAGE ASC"
+      }
+    ],
+    "upstream_observations": "Shared SOC mapping ascend910b*/ascend910_93* to dav-2201, Release ASC flags -O3; OPS_BLAS declares LANGUAGES ASC CXX and ALL_BLAS_SRC_FILES LANGUAGE ASC. Visible --npu-arch=${NPU_ARCH} compile option at L220 is specifically OPS_BLASLT, not proof of a complete SASUM effective command.",
+    "actual_extracted_recipe": [
+      "-xcce",
+      "--cce-aicore-arch=dav-c220",
+      "-O2"
+    ],
+    "semantic_parity": "NOT ESTABLISHED; ASC/new frontend vs extracted CCE mode may matter, but no actual cause established",
+    "prohibition": "No guessed auto-sync/manual PIPE_V barriers/flags/source rewrites/recompile/replay; current matrix and executed flags remain unchanged"
   }
 }

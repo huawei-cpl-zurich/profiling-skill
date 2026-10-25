@@ -49,3 +49,13 @@ real evidence collector/normalizer accepting both device identities and rejectin
 a changed component. This host gate is separate from failed native correctness. Diagnostic profiler event durations include instrumentation;
 they are not ordinary end-to-end latency. Missing diagnostics are unavailable,
 not zero. No physical traffic, occupancy or roofline claim is made.
+
+The pinned filtered root CMake declares the BLAS sources as ASC, maps910B
+to `dav-2201`, and sets ASC Release optimization to `-O3`; its visible
+`--npu-arch` option belongs to the BLASLt target. The actual extracted recipe
+used `-xcce --cce-aicore-arch=dav-c220 -O2`. Semantic parity with the upstream
+ASC frontend and the complete effective SASUM command is unestablished. Exact
+filtered-source citation, line scopes and hashes are in `build_mode_evidence`.
+This distinction is a compatibility limitation, not a proved runtime cause.
+The executed source, compiler flags, matrix and cached references were retained
+without a compiler/device retry.

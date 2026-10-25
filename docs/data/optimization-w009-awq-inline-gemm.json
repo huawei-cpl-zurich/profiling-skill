@@ -1,0 +1,740 @@
+{
+  "study": "W009-R09",
+  "status": "compiler-type-qualification-failed",
+  "draft": true,
+  "date": "2026-10-25",
+  "study_kind": "Exact-AWQ-format/typed-source variant of initial E04 natural-INT4, novelty0; no new fusion mechanism claim",
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "filtered_source_sha256": "0e0c64739bf1524918412fc166f5e0bf4e57fd38367a68c6930e0b5c2bbf385a",
+  "frozen_matrix_sha256": "d582462c574ba61a50c930962db5c78ae918c7bb77a0f14a25ede495eb100a9f",
+  "source_bindings": {
+    "awq_inline.py": {
+      "attempted_sha256": "4d6eb0c20c898ba694c6774467fb615aefb1fc9de88582eba3a0a7c952ce2b74",
+      "publication_sha256": "b386c4973e9770d80f39022022ccf6ecfad39469c7dbdc9a493b18ebed984eb3"
+    },
+    "awq_inline_cli.py": {
+      "attempted_sha256": "508113167dc978ba044553039f21f92312d568f4755932c2fd161380c603fe05",
+      "publication_sha256": "774b2c174a4063cda59593f9b3d7c7cbcebc28b57c67e3c34fe97b5f66770da3"
+    },
+    "awq_inline_kernel.py": {
+      "attempted_sha256": "1d2657338461b0c202e0820a280be4b8ca9df4f7d6676015e31b0241c414bd97",
+      "publication_sha256": "1d2657338461b0c202e0820a280be4b8ca9df4f7d6676015e31b0241c414bd97"
+    },
+    "awq_inline_contract.py": {
+      "attempted_sha256": "ec855822a77ffbbcd24e3781280cad7d5d97e1e6e756cfd2a9753f70ad607c39",
+      "publication_sha256": "ec855822a77ffbbcd24e3781280cad7d5d97e1e6e756cfd2a9753f70ad607c39"
+    },
+    "awq_inline_types.py": {
+      "attempted_sha256": "ce7798d005789214dc11570bfa1719a31ebcf5439caefc23af1c372133d67df1",
+      "publication_sha256": "ce7798d005789214dc11570bfa1719a31ebcf5439caefc23af1c372133d67df1"
+    }
+  },
+  "collection": {
+    "handle": "remote:gz-a3:job:e7620e28-345e-45d5-a8d9-60ad3845a11d",
+    "exit": 1
+  },
+  "target": {
+    "profile": "gz-a3",
+    "product": "Ascend910B4-1",
+    "physical_die": 0,
+    "npu": 0,
+    "chip": 0,
+    "logical_device": 0,
+    "properties": {
+      "max_shared_mem": 1,
+      "num_aicore": 20,
+      "num_vectorcore": 40
+    }
+  },
+  "runtime": {
+    "packages": {
+      "torch": "2.10.0",
+      "torch-npu": "2.10.0",
+      "triton": "3.5.0",
+      "triton-ascend": "3.2.2"
+    },
+    "imported_triton": "3.2.0",
+    "CANN": "9.1.0 loaded library directory, ldd receipt before math",
+    "compiler": {
+      "bishengir": "1.2.0,8796a8ac1508; LLVM19.1.7,2430ab069eb1",
+      "hivmc": "0.3.0,4ace068b0b12",
+      "bisheng_ccec": "clang15.0.5,5c68a1cb1231"
+    },
+    "profiler": {
+      "exit": 0,
+      "stdout": "msopprof is part of MindStudio Operator-dev Tools.\nmsopprof vesion is 26.1.0-56632dc4a944410c791538451dc2156a151bd105\nmsopscommon version is b4ffdb3d6ba7acdb7bbfcf359f6e4dd5b587a4f4\n",
+      "stderr": ""
+    },
+    "library_receipts": {
+      "torch_C": {
+        "sha256": "024765deaf4621ebded1189c464eadf6ed55c7e30e2cbce9712479c5db5b91c5"
+      },
+      "torch_npu_C": {
+        "sha256": "09714f921b8eee8e158f021784fba1b9bb102e26fe97aaff59ab9041aac9fe35"
+      }
+    }
+  },
+  "protocol": {
+    "status": "verified-compiler-unqualified",
+    "archive_sha256": "f3b6900b38afb66b409f4a48fbe0b45080a5d87d4477cf2346fded8453253c32",
+    "archive_members_verified": 43,
+    "planned_arm_cells": 12,
+    "planned_components": 18,
+    "qualified_arms": 0,
+    "attempted_arms": 1,
+    "successful_partial_components": 1,
+    "failed_components": 1,
+    "unattempted_components": 16,
+    "unattempted_arm_cells": 11,
+    "scientific_payloads": 0,
+    "numeric_calls": 0,
+    "profile_calls": 0,
+    "captures": 0,
+    "JIT_provider_typeclassifier_unchanged": true
+  },
+  "failure": {
+    "case_id": "W009-R09-01",
+    "arm": "before",
+    "error_type": "CompilationError",
+    "error": "at 10:20:\ndef materialized_gemm(A,B,C,M,N,K,BM:tl.constexpr,BN:tl.constexpr,BK:tl.constexpr):\n    pid=tl.program_id(0);pn=tl.cdiv(N,BN);rm=pid//pn*BM+tl.arange(0,BM)\n    rn=pid%pn*BN+tl.arange(0,BN);rk=tl.arange(0,BK)\n    accumulator_dtype=C.type.element_ty\n    accumulator=tl.zeros((BM,BN),dtype=accumulator_dtype)\n    for k in range(0,tl.cdiv(K,BK)):\n        kk=k*BK+rk\n        a=tl.load(A+rm[:,None]*K+kk[None,:],(rm[:,None]<M)&(kk[None,:]<K),0.)\n        b=tl.load(B+kk[:,None]*N+rn[None,:],(kk[:,None]<K)&(rn[None,:]<N),0.)\n        accumulator=tl.dot(a,b,accumulator)\n                    ^\nAssertionError()",
+    "compiled_partial_components": 1,
+    "qualified_cache": [],
+    "scientific_oracles": 0,
+    "scientific_apis": 0,
+    "captures": 0
+  },
+  "frontend_assertion": {
+    "location": "triton.language.semantic.dot:1615",
+    "expression": "assert acc.type == ret_ty",
+    "trigger": "First BEFORE materialized GEMM with C-element FP16 accumulator and DEFAULT tl.dot signature",
+    "classification": "Selected compiler/type contract unqualified before scientific math; not infrastructure/profile engine failure",
+    "after_incorrect_established": false,
+    "after_compile_attempted": false,
+    "precision_rewrite": false
+  },
+  "typed_qualification": {
+    "selected_model": null,
+    "dot_result_type": null,
+    "loop_carry_type": null,
+    "GEMM_engine": null,
+    "reason": "Frontend assertion prevented typed GEMM IR and CUBE/MIX proof; no oracle model selected",
+    "predeclared_models": [
+      "FP32carry exact FP64 full dot rounded FP16",
+      "FP16carry exact FP64 BK32 dot plus previous FP16, round each block"
+    ],
+    "zero_rule": "Nonzero FP16 bits exact; zero numeric exact, sign secondary; pre-math clarification",
+    "scientific_model_payloads_generated": 0
+  },
+  "cases": [
+    {
+      "case": {
+        "case_id": "W009-R09-01",
+        "role": "gallery",
+        "seed": 90901,
+        "parameters": {
+          "M": 16,
+          "K": 128,
+          "N": 128,
+          "group": 32
+        },
+        "scenario_designation": "gallery-benefit"
+      },
+      "before": {
+        "compile_status": "partial-dequant-success-GEMM-frontend-failure",
+        "numeric_calls": 0
+      },
+      "after": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "correctness": "unattempted",
+      "profiles": 0
+    },
+    {
+      "case": {
+        "case_id": "W009-R09-02",
+        "role": "gallery",
+        "seed": 90902,
+        "parameters": {
+          "M": 32,
+          "K": 256,
+          "N": 256,
+          "group": 64
+        },
+        "scenario_designation": "gallery-cost"
+      },
+      "before": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "after": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "correctness": "unattempted",
+      "profiles": 0
+    },
+    {
+      "case": {
+        "case_id": "W009-R09-03",
+        "role": "heldout",
+        "seed": 90903,
+        "parameters": {
+          "M": 64,
+          "K": 512,
+          "N": 512,
+          "group": 128
+        },
+        "scenario_designation": "heldout-benefit"
+      },
+      "before": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "after": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "correctness": "unattempted",
+      "profiles": 0
+    },
+    {
+      "case": {
+        "case_id": "W009-R09-04",
+        "role": "heldout",
+        "seed": 90904,
+        "parameters": {
+          "M": 128,
+          "K": 512,
+          "N": 256,
+          "group": 128
+        },
+        "scenario_designation": "heldout-cost"
+      },
+      "before": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "after": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "correctness": "unattempted",
+      "profiles": 0
+    },
+    {
+      "case": {
+        "case_id": "W009-R09-GA",
+        "role": "guard",
+        "seed": 90991,
+        "parameters": {
+          "M": 17,
+          "K": 96,
+          "N": 136,
+          "group": 32
+        }
+      },
+      "before": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "after": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "correctness": "unattempted",
+      "profiles": 0
+    },
+    {
+      "case": {
+        "case_id": "W009-R09-GB",
+        "role": "guard",
+        "seed": 90992,
+        "parameters": {
+          "M": 1,
+          "K": 33,
+          "N": 8,
+          "group": 33
+        }
+      },
+      "before": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "after": {
+        "compile_status": "unattempted",
+        "numeric_calls": 0
+      },
+      "correctness": "unattempted",
+      "profiles": 0
+    }
+  ],
+  "partial_artifact": {
+    "hash": "b0cd9b5b3ec45f0c149a278344d1d43abe659514c3a2dd01659afd4d88248298",
+    "qualified": false,
+    "binaries": {
+      "npubin": "c8e3252909c691dc26e2162c4e04ba8badc05ace46af89bd07fc617f35a72545",
+      "ttir": "1b558b1c7421171b44edb4b962b1e0e940a069c205aaf6100b79ff6962b22204",
+      "ttadapter": "449c13986ec2728a156674595b17d4517cc5ea62821d9c44a4d9a6cb92a30fea"
+    }
+  },
+  "partial_resource": {
+    "metadata": "KernelMetadata(allow_fp8e4nv=False, allowed_dot_input_precisions=['ieee', 'hf32'], arch='Ascend910B4-1', auto_blockify_size=1, auto_tile_and_bind_subblock=True, auto_vectorize_v2_max_fused_ops_num=None, bisheng_options='-cce-link-aicore-ll-module runtime/lib/python3.11/site-packages/triton/backends/ascend/lib/libdevice.10.bc', bitcodes=[], bs_task_type=10, cluster_dims=(1, 1, 1), coalesce_axis=-1, coalesce_factor=1, code_motion=None, compile_mode='unstructured_in_simt', compile_on_910_95=False, debug=False, default_dot_input_precision='ieee', deprecated_fp8_dtypes=[], disable_auto_inject_block_sync=None, disable_fma=False, disable_size_align_for_cast=None, disable_tightly_coupled_buffer_reuse=False, enable_auto_bind_sub_block=None, enable_auto_vectorize_v2=None, enable_bishengir_simt_optimization=0, enable_buffer_insert_optimization=False, enable_cce_vf_auto_sync=None, enable_cce_vf_remove_membar=None, enable_costmodel_backend=False, enable_cross_if_fusion=False, enable_cube_block_merge=False, enable_drop_unit_dims=None, enable_dynamic_cv_pipeline=False, enable_flatten=None, enable_fp_fusion=False, enable_hivm_auto_cv_balance=None, enable_mask_fallback_conversion=False, enable_mixed_cv=None, enable_nd2nz_on_vector=False, enable_persistent=False, enable_preload=None, enable_select_analysis=True, enable_simt_reorder_instruction=False, enable_sync_block_lock=False, enable_ub_refine_opt=False, enable_ubuf_saving=None, enable_vf_fusion=None, enable_vf_operand_substitution=False, enable_warp_specialization=False, extern_libs=None, force_simt_only=False, force_simt_template=True, has_auto_blockify_blacklist_op=False, hash='b0cd9b5b3ec45f0c149a278344d1d43abe659514c3a2dd01659afd4d88248298', hfusion_enable_multiple_consumer_fusion=False, inject_barrier_all=None, inject_block_all=None, inter_cache_num=None, intra_cache_num=None, kernel_name='awq_dequantize_kernel', limit_auto_multi_buffer_buffer=None, limit_auto_multi_buffer_of_local_buffer=None, limit_auto_multi_buffer_only_for_local_buffer=None, llvm_version=15, load_cache_num=None, max_num_imprecise_acc_default=0, mix_mode='aiv', multibuffer=False, name='awq_dequantize_kernel', num_buffers_warp_spec=0, num_consumer_groups=0, num_ctas=1, num_stages=1, num_warps=32, ops_reorder=None, optimize_dynamic_offset=False, optimize_epilogue=False, parallel_mode='simd', prevec_max_fused_ops_num=None, reg_dec_producer=0, reg_inc_consumer=0, required_ub_bits=0, sanitize_overflow=True, set_workspace_multibuffer=None, shared=1, shared_mem_dynamic_size=221184, simt_stack_limit=None, storage_align=None, stream=None, superblock_factor=1, supported_fp8_dtypes=['fp8e5', 'fp8e4b15', 'fp8e4nv', 'fp8e4b8', 'fp8e5b16'], sync_solver=None, target=GPUTarget(backend='npu', arch='Ascend910B4-1', warp_size=0), tensor_kinds=[0, 0, 0, 1], tile_mix_cube_loop=None, tile_mix_vector_loop=None, unit_flag=None, vf_fusion_mode=None, vf_merge_level=1, warp_size=32)",
+    "hash": "b0cd9b5b3ec45f0c149a278344d1d43abe659514c3a2dd01659afd4d88248298",
+    "qualified": false
+  },
+  "partial_ELF": {
+    "full_sha256": "c8e3252909c691dc26e2162c4e04ba8badc05ace46af89bd07fc617f35a72545",
+    "text": {
+      "index": 1,
+      "name": ".text",
+      "type": 1,
+      "flags": 6,
+      "bytes": 4648,
+      "info": 0,
+      "sha256": "ef4ac58d972dd97b8028a4c9e62817bbd9a91d52ee7626857f49574f648414ed"
+    },
+    "text_relocations": [],
+    "sections": [
+      {
+        "index": 0,
+        "name": "",
+        "type": 0,
+        "flags": 0,
+        "bytes": 0,
+        "info": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "index": 1,
+        "name": ".text",
+        "type": 1,
+        "flags": 6,
+        "bytes": 4648,
+        "info": 0,
+        "sha256": "ef4ac58d972dd97b8028a4c9e62817bbd9a91d52ee7626857f49574f648414ed"
+      },
+      {
+        "index": 2,
+        "name": ".ascend.stack.size.record",
+        "type": 7,
+        "flags": 0,
+        "bytes": 8,
+        "info": 0,
+        "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+      },
+      {
+        "index": 3,
+        "name": "__CCE_KernelArgSize",
+        "type": 7,
+        "flags": 0,
+        "bytes": 4,
+        "info": 0,
+        "sha256": "9855cda098dcac49935c7cea75d9960ef8fd001b8fac4d21db934116f50e33c0"
+      },
+      {
+        "index": 4,
+        "name": ".comment",
+        "type": 1,
+        "flags": 48,
+        "bytes": 107,
+        "info": 0,
+        "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+      },
+      {
+        "index": 5,
+        "name": ".symtab",
+        "type": 2,
+        "flags": 0,
+        "bytes": 1296,
+        "info": 52,
+        "sha256": "e27b254f27c1d7c7c0859d41a9e18e19cd7dc3ca8b7faba4a9eee6f9c9d73c28"
+      },
+      {
+        "index": 6,
+        "name": ".shstrtab",
+        "type": 3,
+        "flags": 0,
+        "bytes": 88,
+        "info": 0,
+        "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+      },
+      {
+        "index": 7,
+        "name": ".strtab",
+        "type": 3,
+        "flags": 0,
+        "bytes": 353,
+        "info": 0,
+        "sha256": "ca2f036c886e1576c063a8fe3c54a558642de3795fb14caf7bf47652f7dd8664"
+      }
+    ]
+  },
+  "negative_inventory_audit": {
+    "status": "expected-failure",
+    "exit": 1,
+    "coverage": {
+      "cases": [
+        {
+          "name": "W009-R09-01",
+          "performance": true,
+          "scenario": [
+            "exact-AWQ",
+            "typed-source",
+            "unqualified-no-math"
+          ],
+          "route": "unattempted",
+          "correct": false,
+          "compile_probe": false,
+          "observation": "No complete arm qualified; first before GEMM frontend assertion stopped study"
+        },
+        {
+          "name": "W009-R09-02",
+          "performance": true,
+          "scenario": [
+            "exact-AWQ",
+            "typed-source",
+            "unqualified-no-math"
+          ],
+          "route": "unattempted",
+          "correct": false,
+          "compile_probe": false,
+          "observation": "No complete arm qualified; first before GEMM frontend assertion stopped study"
+        },
+        {
+          "name": "W009-R09-03",
+          "performance": true,
+          "scenario": [
+            "exact-AWQ",
+            "typed-source",
+            "unqualified-no-math"
+          ],
+          "route": "unattempted",
+          "correct": false,
+          "compile_probe": false,
+          "observation": "No complete arm qualified; first before GEMM frontend assertion stopped study"
+        },
+        {
+          "name": "W009-R09-04",
+          "performance": true,
+          "scenario": [
+            "exact-AWQ",
+            "typed-source",
+            "unqualified-no-math"
+          ],
+          "route": "unattempted",
+          "correct": false,
+          "compile_probe": false,
+          "observation": "No complete arm qualified; first before GEMM frontend assertion stopped study"
+        },
+        {
+          "name": "W009-R09-GA",
+          "performance": false,
+          "scenario": [
+            "exact-AWQ",
+            "typed-source",
+            "unqualified-no-math"
+          ],
+          "route": "unattempted",
+          "correct": false,
+          "compile_probe": false,
+          "observation": "No complete arm qualified; first before GEMM frontend assertion stopped study"
+        },
+        {
+          "name": "W009-R09-GB",
+          "performance": false,
+          "scenario": [
+            "exact-AWQ",
+            "typed-source",
+            "unqualified-no-math"
+          ],
+          "route": "unattempted",
+          "correct": false,
+          "compile_probe": false,
+          "observation": "No complete arm qualified; first before GEMM frontend assertion stopped study"
+        }
+      ]
+    },
+    "diagnostics": "contract audit failed:\n- case 'W009-R09-01' lacks a passing correctness result\n- case 'W009-R09-01' route must be optimized or reference\n- case 'W009-R09-02' lacks a passing correctness result\n- case 'W009-R09-02' route must be optimized or reference\n- case 'W009-R09-03' lacks a passing correctness result\n- case 'W009-R09-03' route must be optimized or reference\n- case 'W009-R09-04' lacks a passing correctness result\n- case 'W009-R09-04' route must be optimized or reference\n- case 'W009-R09-GA' lacks a passing correctness result\n- case 'W009-R09-GA' route must be optimized or reference\n- case 'W009-R09-GB' lacks a passing correctness result\n- case 'W009-R09-GB' route must be optimized or reference\n"
+  },
+  "publication_host_guard": {
+    "default_make_case_factory": "reject before scientific CPU expected generation",
+    "default_prepare": "reject before compilation/input movement",
+    "default_probe": "reject unless explicit compile_inspection=True",
+    "explicit_probe_run": "always reject",
+    "CLI_numeric": "reject before cache access; only explicit input-only compile inspection or domain validation",
+    "A3_CPU_only_gate": {
+      "handle": "remote:gz-a3:job:81603a7c-8a52-402f-8814-9f7f46af88f2",
+      "exit": 0,
+      "tests": 6,
+      "NONFROZEN": true,
+      "real_compiles": 0,
+      "NPU_initializations": 0,
+      "frozen_oracle_calls": 0,
+      "backend_autoload": false,
+      "audit_guard": "Blocks real NPU/Triton/backend imports, NPU library dlopen and compiler/profiler calls in all Python subprocesses"
+    },
+    "prior_CPU_only_gate": {
+      "handle": "remote:gz-a3:job:c3e16d5d-29e4-4ccb-b00f-f6bc004f49ed",
+      "exit": 0,
+      "tests": 6,
+      "reason_for_second_gate": "Added explicit NONFROZEN dtype/stride/alias/output arity rejection assertions; no production source changes"
+    }
+  },
+  "archive": {
+    "name": "optimization-w009-awq-inline-gemm-1d2657338461-gz0-37f772d0-v1-compact.tgz",
+    "sha256": "f3b6900b38afb66b409f4a48fbe0b45080a5d87d4477cf2346fded8453253c32",
+    "bytes": 221912,
+    "files": 43,
+    "all_hashes_verified": true,
+    "manifest": [
+      {
+        "path": "output/actual-driver-properties.json",
+        "sha256": "1442f35e064ebf5539f4ba6c8262166c73f661626276933bce4586442cc98664",
+        "bytes": 98
+      },
+      {
+        "path": "output/compile/W009-R09-01/before/partial-kernel-0.npubin",
+        "sha256": "c8e3252909c691dc26e2162c4e04ba8badc05ace46af89bd07fc617f35a72545",
+        "bytes": 7200
+      },
+      {
+        "path": "output/compile/W009-R09-01/before/partial-kernel-0.ttadapter",
+        "sha256": "449c13986ec2728a156674595b17d4517cc5ea62821d9c44a4d9a6cb92a30fea",
+        "bytes": 26902
+      },
+      {
+        "path": "output/compile/W009-R09-01/before/partial-kernel-0.ttir",
+        "sha256": "1b558b1c7421171b44edb4b962b1e0e940a069c205aaf6100b79ff6962b22204",
+        "bytes": 24728
+      },
+      {
+        "path": "output/compile/W009-R09-01/before/partial-resource-0.json",
+        "sha256": "5e11494b2c8ca34d853495e5526e11edaed0fc51f36c785fa950dc989469dc49",
+        "bytes": 3052
+      },
+      {
+        "path": "output/compile-failure.json",
+        "sha256": "e1bd82ab13b4cb8bedd386f55d152477ce14be7c72a853a96a33eb8112a591aa",
+        "bytes": 852
+      },
+      {
+        "path": "output/failed-vendor-inventory.json",
+        "sha256": "3e464bc78bc82ca89095f1f824a285df2cdf99f784a7311019b7c80762c011c7",
+        "bytes": 68
+      },
+      {
+        "path": "output/fatal.json",
+        "sha256": "d6f788425aa38ee6cb3c4df04bbbbf3467180e4fc085bdcce872a23f24bfa191",
+        "bytes": 711
+      },
+      {
+        "path": "output/health.json",
+        "sha256": "005ac05dc3e13e1b571738f98a8c9f788b841372ca3e8b6dc49834d99a27a49a",
+        "bytes": 2329
+      },
+      {
+        "path": "output/inventory-mapping.json",
+        "sha256": "612b52045d8a09f0d28ac7b3b1c64ffdeadfe90b3875fc789e1d7f5a5553139d",
+        "bytes": 2948
+      },
+      {
+        "path": "output/inventory-receipt.json",
+        "sha256": "931991771fc9a6c3f4fb13b3567794e2bcac58d879df6781c5c2ed49c9859e54",
+        "bytes": 583
+      },
+      {
+        "path": "output/profiler-version.json",
+        "sha256": "1d25c6a616a2495abfc2153efb70eafa4b45c661a27f7fae94c4d4d0d558d268",
+        "bytes": 233
+      },
+      {
+        "path": "output/provenance.json",
+        "sha256": "50d1202e1cfe0b575bf5d5643589a8d3dfb30b3719d0a885d783d41609b171a2",
+        "bytes": 2896
+      },
+      {
+        "path": "output/release-proof.json",
+        "sha256": "38419c96e8662f16bc6cd3d84f7f73a884d747833ddf51dcaad1fa45202d12ec",
+        "bytes": 5674
+      },
+      {
+        "path": "output/runtime-before-math.json",
+        "sha256": "7f6d54d9ddc522d0e45c0e70a7d0649d7e0df180d06a0773ef0926c54ec50169",
+        "bytes": 14660
+      },
+      {
+        "path": "output/runtime-library-sources.json",
+        "sha256": "d139a7302560de30d14c2c0748c8b368e9955a5498d16bf0517bcbc20cd64352",
+        "bytes": 10334
+      },
+      {
+        "path": "output/startup-entry-counter.bin",
+        "sha256": "f0a0278e4372459cca6159cd5e71cfee638302a7b9ca9b05c34181ac0a65ac5d",
+        "bytes": 8
+      },
+      {
+        "path": "output/startup-phase.json",
+        "sha256": "0c27e22ed9228a60567a59819fb59d18cf5ed2ef023e13b9f705c7a0283a7ba5",
+        "bytes": 158
+      },
+      {
+        "path": "output/startup-watchdog.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "path": "output/triton-cache/qSQE4Gjv-gPv1ev8lxPAVg/lock",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      },
+      {
+        "path": "output/triton-cache/qSQE4Gjv-gPv1ev8lxPAVg/npu_utils.so",
+        "sha256": "3c0b5522c4d3f67da126dd57275fc76cdb2e46b595d871c3faf4aff99f4daac3",
+        "bytes": 671536
+      },
+      {
+        "path": "output/triton-cache/sM2bWz7EXwwUmieDRNHUOr5llRTDot0BZZr9TYgkgpg/__grp__awq_dequantize_kernel.json",
+        "sha256": "61d2889b05d218121f57ee351f8e04228d9e0764467e141eebce245ffe281f74",
+        "bytes": 991
+      },
+      {
+        "path": "output/triton-cache/sM2bWz7EXwwUmieDRNHUOr5llRTDot0BZZr9TYgkgpg/awq_dequantize_kernel.json",
+        "sha256": "7bd557052ae2a277b24a1ee16ae6eb66815153a24fa2f5361613bc13367db8d8",
+        "bytes": 3217
+      },
+      {
+        "path": "output/triton-cache/sM2bWz7EXwwUmieDRNHUOr5llRTDot0BZZr9TYgkgpg/awq_dequantize_kernel.npubin",
+        "sha256": "c8e3252909c691dc26e2162c4e04ba8badc05ace46af89bd07fc617f35a72545",
+        "bytes": 7200
+      },
+      {
+        "path": "output/triton-cache/sM2bWz7EXwwUmieDRNHUOr5llRTDot0BZZr9TYgkgpg/awq_dequantize_kernel.ttadapter",
+        "sha256": "449c13986ec2728a156674595b17d4517cc5ea62821d9c44a4d9a6cb92a30fea",
+        "bytes": 26902
+      },
+      {
+        "path": "output/triton-cache/sM2bWz7EXwwUmieDRNHUOr5llRTDot0BZZr9TYgkgpg/awq_dequantize_kernel.ttir",
+        "sha256": "1b558b1c7421171b44edb4b962b1e0e940a069c205aaf6100b79ff6962b22204",
+        "bytes": 24728
+      },
+      {
+        "path": "attempted-source/collect-v1.py",
+        "sha256": "982dc9de0604e2f9d7bd62c41d69a3f6cdc1528dce5ab835c88f7651512a8ba3",
+        "bytes": 19439
+      },
+      {
+        "path": "attempted-source/examples/optimization-library/triton/awq_inline.py",
+        "sha256": "4d6eb0c20c898ba694c6774467fb615aefb1fc9de88582eba3a0a7c952ce2b74",
+        "bytes": 6292
+      },
+      {
+        "path": "attempted-source/examples/optimization-library/triton/awq_inline_NOTICE",
+        "sha256": "c222a8edb331f35391f25e912e6e7dc34ca6d95819c93a1571cf92067ef70d42",
+        "bytes": 10774
+      },
+      {
+        "path": "attempted-source/examples/optimization-library/triton/awq_inline_cli.py",
+        "sha256": "508113167dc978ba044553039f21f92312d568f4755932c2fd161380c603fe05",
+        "bytes": 1588
+      },
+      {
+        "path": "attempted-source/examples/optimization-library/triton/awq_inline_contract.py",
+        "sha256": "ec855822a77ffbbcd24e3781280cad7d5d97e1e6e756cfd2a9753f70ad607c39",
+        "bytes": 4191
+      },
+      {
+        "path": "attempted-source/examples/optimization-library/triton/awq_inline_kernel.py",
+        "sha256": "1d2657338461b0c202e0820a280be4b8ca9df4f7d6676015e31b0241c414bd97",
+        "bytes": 8883
+      },
+      {
+        "path": "attempted-source/examples/optimization-library/triton/awq_inline_types.py",
+        "sha256": "ce7798d005789214dc11570bfa1719a31ebcf5439caefc23af1c372133d67df1",
+        "bytes": 1407
+      },
+      {
+        "path": "attempted-source/experiments/optimization-wave009/R09-inventory.json",
+        "sha256": "d99b9f7198380c3b50ccbcd58bf7ea0718035bc13d46e75217423088a3cfb303",
+        "bytes": 430
+      },
+      {
+        "path": "attempted-source/experiments/optimization-wave009/R09.json",
+        "sha256": "d582462c574ba61a50c930962db5c78ae918c7bb77a0f14a25ede495eb100a9f",
+        "bytes": 7001
+      },
+      {
+        "path": "attempted-source/scripts/optimization_pair.py",
+        "sha256": "122f66c588c6e37048523cfb0d8f0bfb19e96b7e9d2b6bd29d0215e4a20aaddd",
+        "bytes": 16252
+      },
+      {
+        "path": "attempted-source/scripts/optimization_profile_evidence.py",
+        "sha256": "820cec72587387221ebfab2adcc5beff71d28fabcd97787c5e82f4c58784e6a3",
+        "bytes": 20611
+      },
+      {
+        "path": "attempted-source/skills/ascend-model-benchmarking/scripts/candidate_probe.py",
+        "sha256": "15a273f575698bb31596e33a7ecad4ae53dbdd767be66431ea9ec7eadfb2d2b1",
+        "bytes": 13168
+      },
+      {
+        "path": "attempted-source/skills/ascend-model-benchmarking/scripts/model_execution.py",
+        "sha256": "a4a199a79313fa6ce0aa6dd5b424928ff084ce6a89a4fc37234dc72de9e7b576",
+        "bytes": 15369
+      },
+      {
+        "path": "attempted-source/skills/ascend-model-benchmarking/scripts/profile_accounting.py",
+        "sha256": "2b3516c09a6bd31260c1dd311404c645abda02ce49da7a0e191b6cc9277e0047",
+        "bytes": 8680
+      },
+      {
+        "path": "attempted-source/skills/ascend-model-benchmarking/scripts/profile_capture.py",
+        "sha256": "991d05af49828dd69f3157e044d166664bbf89acaecd6cc36ef310721a6697d9",
+        "bytes": 20240
+      },
+      {
+        "path": "attempted-source/skills/ascend-model-benchmarking/scripts/profile_ten.py",
+        "sha256": "e2e10fe0a38a0ae9bdaa65089960ec9d5f7d6f0aef7cc102d0aa243a8826717e",
+        "bytes": 8582
+      },
+      {
+        "path": "attempted-source/tests/test_optimization_awq_inline.py",
+        "sha256": "7b14b58c133b699c30fb27f2d11ad33b7dbf4a9b1b941603b9cb354092e2c8d0",
+        "bytes": 6983
+      }
+    ]
+  },
+  "release": {
+    "handle": "remote:gz-a3:job:11ac3270-f33f-4bb0-8214-d3ac01efc159",
+    "receipt_sha256": "38419c96e8662f16bc6cd3d84f7f73a884d747833ddf51dcaad1fa45202d12ec",
+    "stdout_pid": 745564,
+    "original_pid_absent": true,
+    "original_pgid": null,
+    "owned_prefix_processes": 0,
+    "die0_lease_and_both_export_locks_free": true,
+    "fresh_mapped_health": "NPU0chip0logic0, OK/NA, idle/no process/ECC0/HBM5%",
+    "signals_sent": 0,
+    "reset": false
+  },
+  "retained_operational_failures": [
+    {
+      "handle": "remote:gz-a3:job:e43b66a3-eccd-471f-9f44-c5681cc92675",
+      "stage": "health mapping host assertion used native schema; no runtime import/compiler/math",
+      "resolution": "GZ observed schema parser corrected; fresh mapped six-query health passed"
+    },
+    {
+      "stage": "GZ remote-agent rejected absolute cwd/dst before job/transfer creation",
+      "resolution": "Use required workspace-relative .cpl-remote transport paths; wrapper verifies absolute bundle SHA at actual entry root"
+    }
+  ],
+  "limitations": [
+    "No complete arm compiled; remaining eleven cells unattempted after first terminal failure.",
+    "One partial VEC dequantization artifact is not a qualified GEMM/type/engine result.",
+    "No scientific expected values, numeric outputs, captures, timings, PMUs or speedup exist.",
+    "Both prospective oracle models and type classifier were tested only on NONFROZEN CPU/mocks.",
+    "No accumulator promotion, dot precision flag, tiling change or scientific rerun was used to force compilation.",
+    "No numerical claim about AFTER, which was not compiled or run.",
+    "Prepared output reuse/zeros-allocation/split-one-sum exclusions do not establish full source wrapper allocator/Python latency."
+  ]
+}

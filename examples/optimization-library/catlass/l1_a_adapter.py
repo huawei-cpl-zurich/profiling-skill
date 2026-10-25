@@ -37,18 +37,29 @@ class Adapter:
             for n in shape:size*=n
             host=torch.full((size+64,),1024.,dtype=torch.float16)
             if value is not None:host[32:-32].view(shape).copy_(value)
-            tensor=host.to(device);buffers.append(tensor);return tensor[32:-32].view(shape)
+            with native_backend.device_guard(device):tensor=host.to(device)
+            buffers.append(tensor);return tensor[32:-32].view(shape)
         for key in ('a','b'):inputs[key]=allocate(cpu[key].shape,None if inspection else cpu[key])
-        out=allocate((p['M'],p['N']));native=[]
+        out=allocate((p['M'],p['N']));native=[];closed=False
         def compile_only():
+            if closed:raise RuntimeError('prepared item is closed')
             if not native:native.append(Native(arm,p,[inputs['a'],inputs['b']],out,self.directory/arm,stream))
             return native[0].manifest
         def run():compile_only();return native[0].run()
-        if arm in self.state:self.state.clear();self.actual.clear()
-        self.state[arm]=dict(inputs=inputs,out=out,buffers=buffers,native=native)
-        return SimpleNamespace(run=run,compile_only=compile_only,compilation_state=lambda:native_backend.binary_identity(native[0].manifest) if native else [],
+        if arm in self.state:self.actual.clear()
+        state=dict(inputs=inputs,out=out,buffers=buffers,native=native);self.state[arm]=state
+        def close():
+            nonlocal out,closed
+            if closed:return
+            closed=True
+            try:
+                for context in native:context.close()
+            finally:
+                native.clear();inputs.clear();buffers.clear();out=None;state.clear()
+                if self.state.get(arm) is state:self.state.pop(arm);self.actual.pop(arm,None)
+        return SimpleNamespace(run=run,close=close,compile_only=compile_only,compilation_state=lambda:native_backend.binary_identity(native[0].manifest) if native else [],
             sources=[*sources(),Path(__file__),Path(native_backend.__file__),*self.case_sources],expected_kernels=expected_names,
-            metadata=dict(native_compile_abi_resources=inspection_result,arm=arm,component='native source DeviceGemm FullLoadA',grid=24,L1=[128,256,256],L0=[128,256,64],stages=2,unit_flag=True,device_kernel_calls=1,reused_outputs=True,workspace_bytes=0,
+            metadata=dict(native_compile_abi_resources=inspection_result,arm=arm,component='native source DeviceGemm FullLoadA',prepared_device=str(device),grid=24,L1=[128,256,256],L0=[128,256,64],stages=2,unit_flag=True,device_kernel_calls=1,reused_outputs=True,workspace_bytes=0,
             scope='opaque source DeviceGemm Params initializedonce; currentACLstream eachAPI; noH2D/sync/reset/allocator insidepreparedAPI; allactualAIC/AIVtasktypescharged'))
 
     def validate(self,arm,actual,fixture,spec):

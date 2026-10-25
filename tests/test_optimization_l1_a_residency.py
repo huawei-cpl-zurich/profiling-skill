@@ -1,7 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace as NS
 from unittest.mock import patch
-import torch,sys,unittest,tempfile,json,subprocess
+import torch,sys,unittest,tempfile,json,subprocess,ctypes
+from contextlib import contextmanager,ExitStack
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'examples/optimization-library/catlass'))
 import l1_a_adapter as op
 import l1_a_contract as c
@@ -74,6 +75,70 @@ class NativeTests(unittest.TestCase):
             script="import sys;sys.path[:0]=sys.argv[1:3];import l1_a_adapter;sys.argv=[l1_a_adapter.__file__]+sys.argv[3:];l1_a_adapter.Adapter.compile_probe=lambda self,*args: __import__('types').SimpleNamespace(compile_only=lambda:None);l1_a_adapter.main()"
             args=['--case',str(case),'--output',str(root/'out'),'--inspect-compile'];p=subprocess.run([sys.executable,'-c',script,str(Path(op.__file__).parent),str(Path(c.__file__).parent),*args],cwd=tmp,capture_output=True);self.assertEqual(p.returncode,0,p.stderr)
             case.write_text(json.dumps(dict(self.spec(),N=47)));p=subprocess.run([sys.executable,op.__file__,*args],cwd=tmp,capture_output=True);self.assertNotEqual(p.returncode,0);self.assertFalse((root/'out').exists())
+
+
+    def library(self):
+        class Function:
+            def __init__(self,f):self.f=f
+            def __call__(self,*args):return self.f(*args)
+        state=NS(created=[],destroyed=[],fail=False,observed=[])
+        def inspect(m,n,k,proof,count):
+            for i,v in enumerate([112,8,0,16,24,48,56,80,88,128*k*2,262144,32768,65536,131072,4,0]):proof[i]=v
+            return 0
+        def create(*args):
+            handle=len(state.created)+1;state.created.append(handle);ctypes.cast(args[-1],ctypes.POINTER(ctypes.c_void_p))[0]=handle;return 0
+        def launch(handle,stream):
+            state.observed.append(stream)
+            if state.fail:raise RuntimeError('mock launch failure')
+            item=next(x for x in native._CONTEXTS.values() if x.context.value==handle.value)
+            if isinstance(item.output,torch.Tensor):item.output.copy_((item.inputs[0].double()@item.inputs[1].double()).half())
+            return 0
+        return NS(r12_inspect=Function(inspect),r12_create=Function(create),r12_launch=Function(launch),r12_destroy=Function(lambda h:state.destroyed.append(h.value))),state
+
+    def test_real_pair_cleanup_and_independent_live_items(self):
+        from optimization_pair import run_pair
+        library,ledger=self.library();baseline=set(native._CONTEXTS);spec=self.spec();fixture=c.make_case(spec);adapter=op.Adapter()
+        with tempfile.TemporaryDirectory() as tmp,patch.object(op,'backend',return_value=('cpu',lambda:0)),patch.object(op,'inspect_build',return_value=dict(entrypoints=dict(host_registered_selector='mock'))),patch.object(native,'compile_arm',return_value=dict(binary='mock.so')),patch.object(native.ctypes,'CDLL',return_value=library),patch.object(native,'binary_identity',return_value=[]),patch.object(native,'audit_tensor',return_value={}):
+            root=Path(tmp);live=adapter.prepare('before',spec,fixture,None);live.run();live_token=set(native._CONTEXTS)-baseline
+            for i,fail in enumerate((False,True,False)):
+                ledger.fail=fail;report=run_pair(adapter,spec,root/str(i),root/'cache',{},torch=torch,correctness_only=True)
+                self.assertEqual(report['status'],'failed' if fail else 'complete');self.assertTrue(all(x['cleanup']['status']=='complete' for x in report['arms'].values()));self.assertEqual(set(native._CONTEXTS),baseline|live_token);self.assertEqual(adapter.state,{})
+                ledger.fail=False;self.assertTrue(c.bits(live.run(),fixture['expected'][1]))
+            other=adapter.prepare('before',spec,fixture,None);other.run();live.close();live.close();self.assertIn('before',adapter.state);self.assertTrue(c.bits(other.run(),fixture['expected'][1]));other.close();other.close()
+            original_create=library.r12_create.f
+            library.r12_create.f=lambda *args:(original_create(*args),1)[1]
+            failed=adapter.prepare('after',spec,fixture,None)
+            with self.assertRaisesRegex(RuntimeError,'Initialize failed'):failed.run()
+            failed.close();failed.close()
+            self.assertEqual(set(native._CONTEXTS),baseline);self.assertEqual(sorted(ledger.created),sorted(ledger.destroyed));self.assertEqual(len(ledger.destroyed),len(set(ledger.destroyed)));self.assertEqual(adapter.state,{})
+            with self.assertRaisesRegex(RuntimeError,'closed'):other.run()
+
+    def test_explicit_device_stream_context_and_caller_restore(self):
+        library,ledger=self.library();current=[1];observed=[]
+        @contextmanager
+        def guard(device):
+            old=current[0];current[0]=int(str(device).split(':')[-1])
+            try:yield
+            finally:current[0]=old
+        def stream(device):observed.append((current[0],device));self.assertEqual((current[0],device),(0,0));return NS(npu_stream=100)
+        fake_npu=NS(device=guard,current_stream=stream)
+        destroy=library.r12_destroy.f
+        def guarded_destroy(handle):self.assertEqual(current[0],0);destroy(handle)
+        library.r12_destroy.f=guarded_destroy
+        class Buffer:
+            device='npu:0'
+            def data_ptr(self):return 123
+        original_to=torch.Tensor.to
+        def transfer(t,device,*args,**kw):
+            if device=='npu:0':self.assertEqual(current[0],0);return t
+            return original_to(t,device,*args,**kw)
+        with patch.dict(sys.modules,torch_npu=NS()),patch.object(torch,'npu',fake_npu,create=True),patch.object(native,'compile_arm',return_value=dict(binary='mock.so')),patch.object(native.ctypes,'CDLL',return_value=library),patch.object(native,'audit_tensor',return_value={}),patch.object(native,'register'),patch.object(torch.ops.catlass_r12,'launch',side_effect=lambda ins,out,token:native._CONTEXTS[token]._launch(),create=True),patch.object(op,'inspect_build',return_value=dict(entrypoints=dict(host_registered_selector='mock'))),patch.object(torch.Tensor,'to',transfer):
+            for selected in (1,2):
+                current[0]=selected;device,provider=native.backend();adapter=op.Adapter();item=adapter.prepare('before',self.spec(),c.make_case(self.spec()),None);self.assertEqual(current[0],selected);item.close()
+                context=native.Native('before',self.spec(),[Buffer(),Buffer()],Buffer(),Path('unused'),provider);self.assertEqual(current[0],selected);context.run();self.assertEqual(current[0],selected);ledger.fail=True
+                with self.assertRaisesRegex(RuntimeError,'launch failure'):context.run()
+                ledger.fail=False;self.assertEqual(current[0],selected);context.close();context.close();self.assertEqual(current[0],selected)
+            self.assertEqual(ledger.observed,[100,100,100,100]);self.assertEqual(ledger.created,ledger.destroyed);self.assertTrue(observed)
 
     def test_device_elf_identity_through_real_collect_pair(self):
         import copy

@@ -28,7 +28,7 @@ def main():
         item=adapter.probe(arm,spec);item.compile_only()
         rows.append(dict(arm=arm,metadata=item.metadata,compilation=item.compilation_state()))
     out=Path(args.output);out.mkdir(parents=True,exist_ok=False)
-    (out/'inspection.json').write_text(json.dumps(dict(status='compile-inspection-only',numeric_qualified=False,arms=rows),indent=2)+'\\n')
+    (out/'inspection.json').write_text(json.dumps(dict(status='compile-inspection-only',numeric_qualified=False,arms=rows),indent=2)+'\n')
     return 0
 
 

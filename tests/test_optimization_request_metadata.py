@@ -104,6 +104,40 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(len(calls),1);self.assertEqual(result['mismatch_count'],2)
         self.assertEqual(result['first_mismatch'],dict(index=[0,2],actual=19,expected=int(f['expected'][0,2])))
 
+    def test_compile_inspection_cli_artifacts_externalcwd(self):
+        cli=ROOT/'examples/optimization-library/triton/request_metadata_cli.py'
+        wrapper="""
+import os,runpy,sys
+from types import SimpleNamespace
+class FakeAdapter:
+    def __init__(self,*,compile_inspection):assert compile_inspection is True
+    def probe(self,arm,spec):
+        def compile_only():
+            if os.environ.get('FAIL_ARM')==arm:raise RuntimeError('mock compile failure')
+        return SimpleNamespace(compile_only=compile_only,metadata=dict(arm=arm),
+            compilation_state=lambda:[dict(hash=arm,binaries=dict(npubin='mock'))])
+sys.modules['request_metadata']=SimpleNamespace(Adapter=FakeAdapter)
+script=sys.argv.pop(1)
+runpy.run_path(script,run_name='__main__')
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            case=Path(tmp)/'case.json';case.write_text(json.dumps(spec()))
+            out=Path(tmp)/'ok'
+            command=[sys.executable,'-c',wrapper,str(cli),'--case',str(case),'--output',str(out),
+                '--cache',tmp+'/unused-cache','--provenance',tmp+'/missing-provenance','--compile-inspection']
+            done=subprocess.run(command,cwd=tmp,capture_output=True,text=True)
+            self.assertEqual(done.returncode,0,done.stderr)
+            original=(out/'inspection.json').read_bytes();report=json.loads(original)
+            self.assertEqual(report['status'],'compile-inspection-only');self.assertFalse(report['numeric_qualified'])
+            self.assertEqual([a['arm'] for a in report['arms']],['before','after'])
+            again=subprocess.run(command,cwd=tmp,capture_output=True,text=True)
+            self.assertNotEqual(again.returncode,0);self.assertEqual((out/'inspection.json').read_bytes(),original)
+            bad=list(command);bad[bad.index('--output')+1]=tmp+'/failed'
+            import os
+            failed=subprocess.run(bad,cwd=tmp,capture_output=True,text=True,env=dict(os.environ,FAIL_ARM='after'))
+            self.assertNotEqual(failed.returncode,0);self.assertIn('mock compile failure',failed.stderr)
+            self.assertFalse((Path(tmp)/'failed').exists());self.assertFalse((Path(tmp)/'unused-cache').exists())
+
     def test_flat_nested_externalcwd_cli(self):
         c=spec();self.assertEqual(dimensions(c),dimensions(dict(c['parameters'],seed=c['seed'])))
         with tempfile.TemporaryDirectory() as tmp:

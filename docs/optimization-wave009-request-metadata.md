@@ -71,3 +71,12 @@ first mismatch details; they do not recover the original missing actual values.
 Measured and publication host hashes are distinct; JIT/provider/cases/tolerances
 remain unchanged. Six functional host tests passed locally and on A3 without
 any real compilation, NPU initialization or frozen scientific replay.
+
+The single review wave found that successful compile inspection wrote a literal
+backslash-n suffix, making its JSON artifact invalid. The CLI now writes a real
+newline. A seventh functional test runs the actual CLI from an external working
+directory with mocked compilation, strictly parses the successful report, checks
+that a late compile failure produces no artifact, and preserves an existing
+report on refusal. Seven CPU-only tests passed on A3 with backend autoload off
+and audit guards blocking real backend/compiler/profiler activity. Original
+scientific results, JIT, CPU provider and cached expected values are unchanged.

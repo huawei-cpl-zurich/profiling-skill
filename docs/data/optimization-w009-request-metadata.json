@@ -2782,7 +2782,8 @@
       },
       "request_metadata_cli.py": {
         "measured_sha256": "9038f169b622f98c900b00fa74e631a629597ea2daf032d72c454460319dfacb",
-        "publication_sha256": "13e5744b1668ae717947200eaabc95eb73f72f8a256556c35f6adbfe89f8ea70"
+        "publication_sha256": "f5722224c72e6c3e5a71caa36ec714eb562b406f9ad9a2f11fdd22b53186b35d",
+        "prior_publication_sha256": "13e5744b1668ae717947200eaabc95eb73f72f8a256556c35f6adbfe89f8ea70"
       },
       "request_metadata_contract.py": {
         "measured_sha256": "81ecd5caf6e4e61e0506658a7622141fc4908adc316e6a8484d14afb511eebe3",
@@ -2801,6 +2802,28 @@
       "real_compiles": 0,
       "NPU_initializations": 0,
       "frozen_oracle_calls": 0
+    },
+    "review_fix": {
+      "issue": "P2 literal backslash-n made successful compile-inspection JSON invalid",
+      "resolution": "Real newline; strict json.loads successful artifact test plus late compile failure/no output and existing-artifact preservation from external cwd",
+      "source_numeric_changes": false,
+      "scientific_replays": 0,
+      "new_real_compiles": 0,
+      "NPU_initializations": 0,
+      "frozen_oracle_calls": 0,
+      "profile_calls": 0,
+      "test_sha256": "388987cc7254e7e1110074e2d7bda45321b7784c1a01a31ee717f9f4808f77a6",
+      "A3_CPU_only_gate": {
+        "target": "bz-a3-2",
+        "handle": "remote:bz-a3-2:job:20261025T040915Z-28185697b17f",
+        "exit": 0,
+        "tests": 7,
+        "NONFROZEN": true,
+        "backend_autoload": false,
+        "audit_guard": "Blocks real NPU/Triton/backend imports, NPU library dlopen and compiler/profiler execution in parent and Python subprocesses",
+        "bundle_sha256": "75ea6c29d2aed8e176371dc0ad2d0c033b5fa74b23df5ad729841094f17a12a1"
+      },
+      "reviews": "All three local lenses and original GitHub review reported this same P2; no other actionable local findings. Same review wave, no new request."
     }
   },
   "archive": {

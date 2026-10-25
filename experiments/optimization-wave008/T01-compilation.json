@@ -1,0 +1,603 @@
+[
+  {
+    "case_id": "W008-T01-01",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+          "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      },
+      {
+        "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+          "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        8
+      ],
+      "device_kernel_calls": 2,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-01",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "1f02539eb68a6c71ee801e371888a8979dfa4ab784fc2dfbfa09f0fbcd775023",
+        "name": "_proj2_kernel",
+        "binaries": {
+          "ttir": "dc0ed2848f3d6cc8560b57056a4be76263105072c428bae8578d2cecc08f650b",
+          "ttadapter": "1d342b723269d12600124f0fc6ca0116a682e88ccd86eaca9ac214a13f303ba8",
+          "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        16
+      ],
+      "device_kernel_calls": 1,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-02",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+          "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      },
+      {
+        "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+          "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 2,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-02",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+        "name": "_proj2_kernel",
+        "binaries": {
+          "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+          "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+          "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 1,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-03",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+          "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      },
+      {
+        "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+          "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        16
+      ],
+      "device_kernel_calls": 2,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-03",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+        "name": "_proj2_kernel",
+        "binaries": {
+          "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+          "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+          "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 1,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-04",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+          "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      },
+      {
+        "hash": "c4ca90aaabe83e6c674975f2e0af506106c41d7f7683607b6e4190adeb003b77",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "52e147075fcc0bef2f0c9a23ed106f30e046db5438ffd5d86ef5ff8febf90824",
+          "ttadapter": "0182e655840403751693f8ee6b4d735a653d66704a58c87f518d7d092ce6fc89",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 2,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-04",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "6ea8a4b3a0bd44adfd8bda89975e8ba5287e1a2d1643fa39e824cf8b1b61d544",
+        "name": "_proj2_kernel",
+        "binaries": {
+          "ttir": "ed4646bb6f8671f76e44bfe49471ffae5a07668e84b49574da8542c8c992f53a",
+          "ttadapter": "5c46b9b48aafe5eaa953406fe3b13b324d1a6c40f0e9199eb1e0c855c8df62a6",
+          "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 1,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-GA",
+    "arm": "before",
+    "compilation": [],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        0
+      ],
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-GA",
+    "arm": "after",
+    "compilation": [],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        0
+      ],
+      "device_kernel_calls": 0,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-GB",
+    "arm": "before",
+    "compilation": [
+      {
+        "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+          "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      },
+      {
+        "hash": "df31f500195d6500b07eda539dbef671d40027f926241193d284375cca732ec3",
+        "name": "_proj_kernel",
+        "binaries": {
+          "ttir": "c1b891da85e603f098b46f49bb898296aa03e85c67fc7b93f3c5112afc116c0f",
+          "ttadapter": "d7f0ff2a3e3c878e504c7cbecf8e776e3345e1d9ebc19e0b69cb986b6f207764",
+          "npubin": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 2,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  },
+  {
+    "case_id": "W008-T01-GB",
+    "arm": "after",
+    "compilation": [
+      {
+        "hash": "1f02539eb68a6c71ee801e371888a8979dfa4ab784fc2dfbfa09f0fbcd775023",
+        "name": "_proj2_kernel",
+        "binaries": {
+          "ttir": "dc0ed2848f3d6cc8560b57056a4be76263105072c428bae8578d2cecc08f650b",
+          "ttadapter": "1d342b723269d12600124f0fc6ca0116a682e88ccd86eaca9ac214a13f303ba8",
+          "npubin": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72"
+        }
+      }
+    ],
+    "metadata": {
+      "component": "two BF16 projections",
+      "cube_cores": 20,
+      "configuration": {
+        "BM": 32,
+        "BN": 64,
+        "BK": 128,
+        "GROUP": 8
+      },
+      "grid": [
+        20
+      ],
+      "device_kernel_calls": 1,
+      "reused_outputs": true,
+      "x_reuse": false,
+      "allocation_boundary": "outputs prepared; JIT scratch excluded",
+      "allocator_limit": "no allocator or full Compressor latency claim",
+      "address_bound_elements": 2621440,
+      "input_strides": {
+        "x": [
+          5120,
+          1
+        ],
+        "w0": [
+          5120,
+          1
+        ],
+        "w1": [
+          5120,
+          1
+        ]
+      }
+    }
+  }
+]

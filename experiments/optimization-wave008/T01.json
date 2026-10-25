@@ -1,0 +1,103 @@
+{
+  "wave": 8,
+  "approval": "Standing user approval waves003\u2013022; datafirst optionalmodeldemonstrationsdeferred.",
+  "study_kind": "source-backed-new-operator-application",
+  "new_unique_mechanism_claim": false,
+  "dependency": {
+    "base": "2b7cf996ce136db3c28f723c8d0e33637367f315",
+    "target_branch": "codex/optimization-pair-guard-mode"
+  },
+  "source_pin": "7acb9c40a6ca827e885d902b7eaee5d45457b230",
+  "snapshot_digest": "d4d58dabf81053a641187974ab638ccc7217607524a4080b86f02eeb592678ce",
+  "query": "c4b83c49cd88401a86f27c8a303a605c",
+  "source_receipts": "proposal.md/triton-leads.json/triton-tests-license.json/utils-query1.json +priorinventory fullpin; preserveMIT/thirdparty/Huawei/LinkedIn/vLLM notices, no rawlibrary traversal.",
+  "protocol": "Six cached scientific CPU payloads once per study, once-per-side correctness per case/source then exactly10profiled full-API forwards/arm on4mainpairs, guards0captures. No warmups/autotune/extra unprofiled timing/profiled IOinspection. Compile/codegen/resource screen before math, preserve compiler-noops/unsupported/negative/failed/partial results, do not retune cases/tolerances after timing. Compound component/API counts explicit. Unit tests nonfrozen seeds/shapes.",
+  "study_id": "T01",
+  "task": "optimization-w008-compressor-dual-projection",
+  "title": "Consolidate two bounded Compressor projections into one task pool",
+  "source_files": [
+    "source__src__triton_ascend_kernels__attention__compressor.py",
+    "utils-helper.py"
+  ],
+  "cases": [
+    {
+      "case_id": "W008-T01-01",
+      "role": "gallery",
+      "seed": 80101,
+      "parameters": {
+        "M": 8
+      },
+      "scenario_designation": "gallery-benefit",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T01-02",
+      "role": "gallery",
+      "seed": 80102,
+      "parameters": {
+        "M": 128
+      },
+      "scenario_designation": "gallery-cost",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T01-03",
+      "role": "heldout",
+      "seed": 80103,
+      "parameters": {
+        "M": 64
+      },
+      "scenario_designation": "heldout-benefit",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    },
+    {
+      "case_id": "W008-T01-04",
+      "role": "heldout",
+      "seed": 80104,
+      "parameters": {
+        "M": 256
+      },
+      "scenario_designation": "heldout-cost",
+      "hypothesis": "Prospectiveonly; retain slower/equal/uncertain/unsupported/noop outcomes, no retuning based ondata."
+    }
+  ],
+  "guards": [
+    {
+      "case_id": "W008-T01-GA",
+      "role": "guard",
+      "seed": 80191,
+      "parameters": {
+        "M": 0
+      },
+      "expected": "Empty2FP32[0,512]outputs no launch/no groupeddivision, sameweightsdtype/inputbinding. LogicalAPIchecks2,0devicekernelcalls/captures; publicordinaryM0auto correctness-only."
+    },
+    {
+      "case_id": "W008-T01-GB",
+      "role": "guard",
+      "seed": 80192,
+      "parameters": {
+        "M": 65,
+        "signed_cancelled_distinct_weights": true
+      },
+      "expected": "TailMrow/branchboundary65: row0Xallzero,row1alternating\u00b1dyadic, independentdistinctW0/W1 tocatchbothbranches/fixedpointers/outputalias. ExactFP32dotcertificate+canaries/immutability,0captures. UnsupportedIN_DIM/BK/OUT_DIM/BN hostguards NONFROZENunitsbeforecache."
+    }
+  ],
+  "contract": {
+    "interface": "PreparedprojectionCOMPONENTONLY: contiguousBF16 X[M,5120],W0/W1[512,5120], FP32Y0/Y1[M,512] separateprivateoutputs. M0..256, noalias. Allinputs q/128 whereqinteger[-16,16], exactBF16; no fullCompressor/pooling/cache/allocatorlatencyclaim. RootrestrictM/strides/paddedoffsetsint32safe soSOURCEseparate64bitrowbase andcombined32bitaddress agree.",
+    "before": "Two source-style _proj_kernel launches oneperweight, groupedtileorder and sourceint64rowbase preserved. Stripautotunedecorator and choose SAMEPREDECLARED BM32,BN64,BK128,GROUP8 bothimplementations. Thiscommonparameterization is ACCEPTEDkernelargsbutNOTpublic_small_m_cfg(BK1024) orlarge-Mautotunerbest; explicitboundedcontrolledcomparison,no vendor-defaultthroughputclaim. No baseline-onlyflags/autotuning/workarounds toslowbaseline.",
+    "after": "Exactsource _proj2_kernel onepersistentgrid for2projectiontile spaces, SAMEsharedtiling/mathperprojection, branchfixedW0pointerorW1pointer asSOURCEwarns(NEVERruntimepointerselect). Separategridmin(actualCubeCores,tiles) each, combinedmin(actualCubeCores,2tiles); retain task-spacedifference asparttechnique, notjustlaunchlatency. SAME X data loadedSEPARATELY inbranches, NOinputreuse/logicalbytetrafficreductionclaim.",
+    "oracle": "Independentdecodedinteger dotcertificate qX@qW.T. EfficientCPUFP64BLAS oninteger-valued q allowed; roundr_toInt andcertify rounddistance against conservativegamma_K64*K*16^2<0.5,integerabsolute<=K*256=1310720<2^24. Thus recoversEXACTint64dot withoutslowgenericint64GEMM, expectedFP32r_int/16384 exactlyrepresentable, everyFP32prefixsumabsolute<=sumabs<2^24. PrimaryALLIEEEFP32outputbits equalexpected forBOTHprojections, notjustsamepair; validatefirstoncebefore10profiles. Nofloat64idealrelaxation ifsourcehardwareviolatesboundedexactcontract. CPUexpectedpayloadonce/case, M0skipdot.",
+    "query_resource": "Usepinnedutils get_npu_aicore_num: torch.npu.current_device() thentriton.runtime.driver.active.utils.get_device_properties(device)[num_aicore], actualCube20measuredlaternotguessed. SourcehelperliteralMITretained, vectornum_vectorcore distinct. Verifyactualproduct/compiler/Cubeentryartifact beforemath; actualresources/codelowering allcases/sides no unsupportedGPUlaunch.",
+    "measure": "BothpreparedcompleteprojectionAPIs includeALLnecessaryGEMMkernels, outputsallocatedprepare/reusedboth, no freshPythonallocationincluded, profileSPAN/tasktime/union/gaps+rawsupportedPMU/all10samples. Expectedprofilekerneltasks before2/call,after1/call; dotmathoutputs2eachside; empty0. Cubeoccupancytaskfillhypothesis notcertifiedactualoccupancyfromblockcounts. No profilerPERCENT\u2192roofline/physicalbytes claims."
+  },
+  "source_files_manifest": [
+    {
+      "path": "source__src__triton_ascend_kernels__attention__compressor.py",
+      "sha256": "5b1d0219bedea1e56615b69305fad9d464679a2ce9d0ae1ed0beaba4e60fb4c4"
+    },
+    {
+      "path": "utils-helper.py",
+      "sha256": "62246bfddba73e17de3f954823749a13c4f5dfe45bac66bf442a242b06eba23d"
+    }
+  ]
+}

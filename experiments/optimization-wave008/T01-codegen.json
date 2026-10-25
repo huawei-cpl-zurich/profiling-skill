@@ -1,0 +1,1365 @@
+[
+  {
+    "case_id": "W008-T01-01",
+    "status": "code-distinct",
+    "arms": {
+      "before": [
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        },
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "full_sha256": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1660,
+            "info": 0,
+            "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1660,
+              "info": 0,
+              "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "d168f1352b1263a8411fceac58b5f9e9e629f9de5823b67df6c0327725a1ec01"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 149,
+              "info": 0,
+              "sha256": "2bb8b69d8b7bfbfdecaf139f8c5a05935ce5cc62322006254e6f86856043d507"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "W008-T01-02",
+    "status": "code-distinct",
+    "arms": {
+      "before": [
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        },
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "full_sha256": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1660,
+            "info": 0,
+            "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1660,
+              "info": 0,
+              "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "d168f1352b1263a8411fceac58b5f9e9e629f9de5823b67df6c0327725a1ec01"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 149,
+              "info": 0,
+              "sha256": "2bb8b69d8b7bfbfdecaf139f8c5a05935ce5cc62322006254e6f86856043d507"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "W008-T01-03",
+    "status": "code-distinct",
+    "arms": {
+      "before": [
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        },
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "full_sha256": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1660,
+            "info": 0,
+            "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1660,
+              "info": 0,
+              "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "d168f1352b1263a8411fceac58b5f9e9e629f9de5823b67df6c0327725a1ec01"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 149,
+              "info": 0,
+              "sha256": "2bb8b69d8b7bfbfdecaf139f8c5a05935ce5cc62322006254e6f86856043d507"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "W008-T01-04",
+    "status": "code-distinct",
+    "arms": {
+      "before": [
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        },
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "full_sha256": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1660,
+            "info": 0,
+            "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1660,
+              "info": 0,
+              "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "d168f1352b1263a8411fceac58b5f9e9e629f9de5823b67df6c0327725a1ec01"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 149,
+              "info": 0,
+              "sha256": "2bb8b69d8b7bfbfdecaf139f8c5a05935ce5cc62322006254e6f86856043d507"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case_id": "W008-T01-GA",
+    "status": "empty-no-kernel",
+    "arms": {
+      "before": [],
+      "after": []
+    }
+  },
+  {
+    "case_id": "W008-T01-GB",
+    "status": "code-distinct",
+    "arms": {
+      "before": [
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        },
+        {
+          "full_sha256": "410966c5fd1c1b255aa09508f74196167eab8ec3b46b5adb866596c04e7e579e",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1108,
+            "info": 0,
+            "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1108,
+              "info": 0,
+              "sha256": "5c3f60a6e73ef842bb8857ddf102de9584f2bded81e06e08ef257d83e226948e"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "c31425b44a7ed682a3356bf6820141e1584a15c43b6d6793f552e5d4621586f7"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "c639c35ce3f0da21b1432673891d51b560766d4b67ff130c1e5c54db7ed95a7e"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 146,
+              "info": 0,
+              "sha256": "9b1edc7839f84714a63156bf803c1d8efe92a8557244fb9578a533c497be1c2a"
+            }
+          ]
+        }
+      ],
+      "after": [
+        {
+          "full_sha256": "1f96ba3f245f02dfced43ec9e59f12abb36bdfbaf778c231437544707fec2f72",
+          "text": {
+            "index": 1,
+            "name": ".text",
+            "type": 1,
+            "flags": 6,
+            "bytes": 1660,
+            "info": 0,
+            "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+          },
+          "text_relocations": [],
+          "sections": [
+            {
+              "index": 0,
+              "name": "",
+              "type": 0,
+              "flags": 0,
+              "bytes": 0,
+              "info": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "index": 1,
+              "name": ".text",
+              "type": 1,
+              "flags": 6,
+              "bytes": 1660,
+              "info": 0,
+              "sha256": "3fcd3313c7a6f98f22ce3afa59fb66759f34fe69ab055461b6be06d3353ab673"
+            },
+            {
+              "index": 2,
+              "name": ".ascend.stack.size.record",
+              "type": 7,
+              "flags": 0,
+              "bytes": 8,
+              "info": 0,
+              "sha256": "b54b1a339e9f1b672af88b397362d05c99e30d790835dbfd74fc9117a6de76d3"
+            },
+            {
+              "index": 3,
+              "name": "__CCE_KernelArgSize",
+              "type": 7,
+              "flags": 0,
+              "bytes": 4,
+              "info": 0,
+              "sha256": "29374cfdd45d8433713bb3252954e48841401c4ee254a651cfffd2287f5360de"
+            },
+            {
+              "index": 4,
+              "name": ".comment",
+              "type": 1,
+              "flags": 48,
+              "bytes": 107,
+              "info": 0,
+              "sha256": "bab1d1ce720c8d205a362b1673b955554d1e303d6fb66f8a43d8f88a9961cd7f"
+            },
+            {
+              "index": 5,
+              "name": ".symtab",
+              "type": 2,
+              "flags": 0,
+              "bytes": 576,
+              "info": 22,
+              "sha256": "d168f1352b1263a8411fceac58b5f9e9e629f9de5823b67df6c0327725a1ec01"
+            },
+            {
+              "index": 6,
+              "name": ".shstrtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 88,
+              "info": 0,
+              "sha256": "663ec66ad560b0b70b3f3d88c11f5bd2bbf88e6f67d8701372033469d80d7e96"
+            },
+            {
+              "index": 7,
+              "name": ".strtab",
+              "type": 3,
+              "flags": 0,
+              "bytes": 149,
+              "info": 0,
+              "sha256": "2bb8b69d8b7bfbfdecaf139f8c5a05935ce5cc62322006254e6f86856043d507"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
